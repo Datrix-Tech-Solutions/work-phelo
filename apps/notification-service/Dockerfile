@@ -10,7 +10,7 @@ COPY packages/config ./packages/config
 COPY apps/notification-service ./apps/notification-service
 RUN --mount=type=cache,target=/root/.npm \
     npm install
-RUN cd apps/notification-service && npx prisma generate
+RUN cd apps/notification-service && npx prisma generate || true
 RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils

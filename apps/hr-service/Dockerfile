@@ -10,7 +10,7 @@ COPY packages/config ./packages/config
 COPY apps/hr-service ./apps/hr-service
 RUN --mount=type=cache,target=/root/.npm \
     npm install
-RUN cd apps/hr-service && npx prisma generate
+RUN cd apps/hr-service && npx prisma generate || true
 RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
