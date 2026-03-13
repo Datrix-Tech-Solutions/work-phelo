@@ -18,7 +18,7 @@ jobs:
           script: |
             set -e
 
-            DEPLOY_PATH="/var/www/apps/erp.datrix.com/work-phelo"
+            DEPLOY_PATH="/var/www/apps/work-phelo.com"
 
             cd $DEPLOY_PATH
 
