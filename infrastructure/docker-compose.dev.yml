@@ -29,6 +29,100 @@ services:
       timeout: 5s
       retries: 5
 
+  api-gateway:
+    build:
+      context: ..
+      dockerfile: apps/api-gateway/Dockerfile
+    container_name: erp-gateway-dev
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    env_file:
+      - ../apps/api-gateway/.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: apps/auth-service/Dockerfile
+    container_name: erp-auth-dev
+    restart: unless-stopped
+    ports:
+      - '4001:4001'
+    env_file:
+      - ../apps/auth-service/.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  hr-service:
+    build:
+      context: ..
+      dockerfile: apps/hr-service/Dockerfile
+    container_name: erp-hr-dev
+    restart: unless-stopped
+    ports:
+      - '4002:4002'
+    env_file:
+      - ../apps/hr-service/.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  notification-service:
+    build:
+      context: ..
+      dockerfile: apps/notification-service/Dockerfile
+    container_name: erp-notification-dev
+    restart: unless-stopped
+    ports:
+      - '4004:4004'
+    env_file:
+      - ../apps/notification-service/.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  subscription-service:
+    build:
+      context: ..
+      dockerfile: apps/subscription-service/Dockerfile
+    container_name: erp-subscription-dev
+    restart: unless-stopped
+    ports:
+      - '4005:4005'
+    env_file:
+      - ../apps/subscription-service/.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  marketing-service:
+    build:
+      context: ..
+      dockerfile: apps/marketing-service/Dockerfile
+    container_name: erp-marketing-dev
+    restart: unless-stopped
+    ports:
+      - '4006:4006'
+    env_file:
+      - ../apps/marketing-service/.env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   rabbitmq_data:
   redis_data:
