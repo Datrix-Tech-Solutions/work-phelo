@@ -15,19 +15,45 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          timeout: 30m
+          command_timeout: 60m
           script: |
             set -e
 
             DEPLOY_PATH="/var/www/apps/dev.work-phelo.com/work-phelo"
-
             cd $DEPLOY_PATH
 
             git fetch origin
             git checkout dev
             git pull origin dev
 
+            export DOCKER_BUILDKIT=1
+
+            # Bring down existing containers
             docker compose -f infrastructure/docker-compose.dev.yml down
-            docker compose -f infrastructure/docker-compose.dev.yml up -d --build
+
+            # Build each service image one at a time to avoid OOM
+            echo "Building api-gateway..."
+            docker compose -f infrastructure/docker-compose.dev.yml build api-gateway
+
+            echo "Building auth-service..."
+            docker compose -f infrastructure/docker-compose.dev.yml build auth-service
+
+            echo "Building hr-service..."
+            docker compose -f infrastructure/docker-compose.dev.yml build hr-service
+
+            echo "Building notification-service..."
+            docker compose -f infrastructure/docker-compose.dev.yml build notification-service
+
+            echo "Building subscription-service..."
+            docker compose -f infrastructure/docker-compose.dev.yml build subscription-service
+
+            echo "Building marketing-service..."
+            docker compose -f infrastructure/docker-compose.dev.yml build marketing-service
+
+            # Start everything
+            docker compose -f infrastructure/docker-compose.dev.yml up -d
+
+            # Clean up dangling images to free disk space
+            docker image prune -f
 
             echo "Dev deployment complete at $(date)"
