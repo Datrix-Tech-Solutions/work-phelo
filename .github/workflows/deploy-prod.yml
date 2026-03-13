@@ -18,7 +18,7 @@ jobs:
           script: |
             set -e
 
-            DEPLOY_PATH="/var/www/apps/work-phelo.com"
+            DEPLOY_PATH="/var/www/apps/work-phelo.com/work-phelo"
 
             cd $DEPLOY_PATH
 
