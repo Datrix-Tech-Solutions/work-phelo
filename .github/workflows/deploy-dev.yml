@@ -4,9 +4,94 @@ on:
   push:
     branches: [dev]
 
+env:
+  REGISTRY: ghcr.io
+  ORG: datrix-tech-solutions
+
 jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push api-gateway
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/api-gateway/Dockerfile
+          push: true
+          tags: ghcr.io/${{ env.ORG }}/work-phelo/api-gateway:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push auth-service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/auth-service/Dockerfile
+          push: true
+          tags: ghcr.io/${{ env.ORG }}/work-phelo/auth-service:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push hr-service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/hr-service/Dockerfile
+          push: true
+          tags: ghcr.io/${{ env.ORG }}/work-phelo/hr-service:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push notification-service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/notification-service/Dockerfile
+          push: true
+          tags: ghcr.io/${{ env.ORG }}/work-phelo/notification-service:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push subscription-service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/subscription-service/Dockerfile
+          push: true
+          tags: ghcr.io/${{ env.ORG }}/work-phelo/subscription-service:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push marketing-service
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: apps/marketing-service/Dockerfile
+          push: true
+          tags: ghcr.io/${{ env.ORG }}/work-phelo/marketing-service:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   deploy:
     runs-on: ubuntu-latest
+    needs: build-and-push
     steps:
       - name: Deploy to Dev Server
         uses: appleboy/ssh-action@master
@@ -15,7 +100,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          command_timeout: 60m
+          command_timeout: 10m
           script: |
             set -e
 
@@ -26,34 +111,18 @@ jobs:
             git checkout dev
             git pull origin dev
 
-            export DOCKER_BUILDKIT=1
+            echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u datrix-tech-solutions --password-stdin
 
-            # Bring down existing containers
+            docker pull ghcr.io/datrix-tech-solutions/work-phelo/api-gateway:dev
+            docker pull ghcr.io/datrix-tech-solutions/work-phelo/auth-service:dev
+            docker pull ghcr.io/datrix-tech-solutions/work-phelo/hr-service:dev
+            docker pull ghcr.io/datrix-tech-solutions/work-phelo/notification-service:dev
+            docker pull ghcr.io/datrix-tech-solutions/work-phelo/subscription-service:dev
+            docker pull ghcr.io/datrix-tech-solutions/work-phelo/marketing-service:dev
+
             docker compose -f infrastructure/docker-compose.dev.yml down
-
-            # Build each service image one at a time to avoid OOM
-            echo "Building api-gateway..."
-            docker compose -f infrastructure/docker-compose.dev.yml build api-gateway
-
-            echo "Building auth-service..."
-            docker compose -f infrastructure/docker-compose.dev.yml build auth-service
-
-            echo "Building hr-service..."
-            docker compose -f infrastructure/docker-compose.dev.yml build hr-service
-
-            echo "Building notification-service..."
-            docker compose -f infrastructure/docker-compose.dev.yml build notification-service
-
-            echo "Building subscription-service..."
-            docker compose -f infrastructure/docker-compose.dev.yml build subscription-service
-
-            echo "Building marketing-service..."
-            docker compose -f infrastructure/docker-compose.dev.yml build marketing-service
-
-            # Start everything
             docker compose -f infrastructure/docker-compose.dev.yml up -d
 
-            # Clean up dangling images to free disk space
             docker image prune -f
 
             echo "Dev deployment complete at $(date)"
