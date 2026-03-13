@@ -1,0 +1,19 @@
+{
+  "name": "@work-phelo/utils",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "date-fns": "^3.6.0",
+    "libphonenumber-js": "^1.11.0",
+    "@work-phelo/types": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

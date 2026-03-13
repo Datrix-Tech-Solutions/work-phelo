@@ -4,17 +4,35 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
+    "test": "turbo run test",
     "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "db:generate:all": "turbo run db:generate",
+    "db:migrate:all": "turbo run db:migrate",
+    "dev:gateway": "turbo run dev --filter=api-gateway",
+    "dev:auth": "turbo run dev --filter=auth-service",
+    "dev:hr": "turbo run dev --filter=hr-service",
+    "dev:notify": "turbo run dev --filter=notification-service",
+    "dev:billing": "turbo run dev --filter=subscription-service",
+    "dev:marketing": "turbo run dev --filter=marketing-service",
+    "dev:infra": "docker compose -f infrastructure/docker-compose.dev.yml up rabbitmq redis -d",
+    "prepare": "husky",
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
     "prettier": "^3.7.4",
     "turbo": "^2.8.16",
-    "typescript": "5.9.2"
+    "typescript": "5.9.2",
+    "@types/node": "^20.0.0",
+    "eslint": "^8.57.0",
+    "husky": "^9.1.0",
+    "@commitlint/cli": "^19.4.0",
+    "@commitlint/config-conventional": "^19.4.0",
+    "lint-staged": "^15.2.0"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   },
   "packageManager": "npm@11.10.0",
   "workspaces": [
