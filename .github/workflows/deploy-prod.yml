@@ -18,28 +18,15 @@ jobs:
           script: |
             set -e
 
-            DEPLOY_PATH="${{ secrets.DEPLOY_PATH_PROD }}"
-
-            # Clone repo if it doesn't exist yet
-            if [ ! -d "$DEPLOY_PATH/.git" ]; then
-              git clone git@github.com:Datrix-Tech-Solutions/work-phelo.git $DEPLOY_PATH
-            fi
+            DEPLOY_PATH="/var/www/apps/erp.datrix.com/work-phelo"
 
             cd $DEPLOY_PATH
 
-            # Pull latest prod branch
             git fetch origin
             git checkout prod
             git pull origin prod
 
-            # Install dependencies
-            npm install
-
-            # Build all services
-            npm run build
-
-            # Restart services via docker compose
             docker compose -f infrastructure/docker-compose.prod.yml down
             docker compose -f infrastructure/docker-compose.prod.yml up -d --build
 
-            echo "Production deployment complete"
+            echo "Production deployment complete at $(date)"
