@@ -1,44 +1,92 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth"]
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  HR_MANAGER
+  HR_STAFF
+  EMPLOYEE
+  ACCOUNTANT
+  MARKETING_MANAGER
+  MARKETING_STAFF
+
+  @@schema("auth")
+}
+
+enum TenantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+
+  @@schema("auth")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+
+  @@schema("auth")
 }
 
 model Tenant {
-  id         String       @id @default(uuid())
-  name       String
-  slug       String       @unique
-  subdomain  String?      @unique
-  logo       String?
-  status     TenantStatus @default(PENDING)
-  country    String       @default("GH")
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  users      User[]
+  id             String       @id @default(uuid())
+  name           String
+  slug           String       @unique
+  email          String       @unique
+  phone          String?
+  address        String?
+  country        String       @default("GH")
+  status         TenantStatus @default(PENDING)
+  logoUrl        String?
+  website        String?
+  industry       String?
+  size           String?
+  subscriptionId String?
+  trialEndsAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  @@map("tenants")
+  users          User[]
+
+  @@schema("auth")
 }
 
 model User {
-  id           String    @id @default(uuid())
-  tenantId     String
-  email        String    @unique
-  passwordHash String
-  roleType     RoleType  @default(EMPLOYEE)
-  isActive     Boolean   @default(true)
-  mfaEnabled   Boolean   @default(false)
-  mfaSecret    String?
-  lastLogin    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  id                String     @id @default(uuid())
+  tenantId          String
+  email             String
+  password          String
+  firstName         String
+  lastName          String
+  phone             String?
+  role              UserRole   @default(EMPLOYEE)
+  status            UserStatus @default(PENDING_VERIFICATION)
+  avatarUrl         String?
+  isMfaEnabled      Boolean    @default(false)
+  mfaSecret         String?
+  emailVerifiedAt   DateTime?
+  lastLoginAt       DateTime?
+  passwordChangedAt DateTime?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   refreshTokens RefreshToken[]
 
-  @@index([tenantId])
-  @@map("users")
+  @@unique([tenantId, email])
+  @@schema("auth")
 }
 
 model RefreshToken {
@@ -46,21 +94,12 @@ model RefreshToken {
   userId    String
   token     String   @unique
   expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  isRevoked Boolean  @default(false)
   createdAt DateTime @default(now())
+
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@map("refresh_tokens")
-}
-
-enum TenantStatus {
-  PENDING
-  ACTIVE
-  SUSPENDED
-  REJECTED
-}
-
-enum RoleType {
-  SUPER_ADMIN
-  TENANT_ADMIN
-  EMPLOYEE
+  @@schema("auth")
 }

@@ -14,11 +14,11 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+      'http://localhost:3000',
+    ],
     credentials: true,
   });
-
-  app.setGlobalPrefix('api');
 
   const port = process.env.PORT || 4001;
   await app.listen(port);
