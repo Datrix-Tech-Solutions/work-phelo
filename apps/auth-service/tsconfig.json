@@ -4,10 +4,10 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "paths": {
-      "@work-phelo/types": ["../../packages/types/src"],
-      "@work-phelo/schemas": ["../../packages/schemas/src"],
-      "@work-phelo/config": ["../../packages/config/src"],
-      "@work-phelo/utils": ["../../packages/utils/src"]
+      "@work-phelo/types": ["../../packages/types/dist"],
+      "@work-phelo/schemas": ["../../packages/schemas/dist"],
+      "@work-phelo/config": ["../../packages/config/dist"],
+      "@work-phelo/utils": ["../../packages/utils/dist"]
     }
   },
   "include": ["src/**/*"],

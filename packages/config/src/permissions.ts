@@ -1,0 +1,217 @@
+export enum Permission {
+  // ── Tenant ────────────────────────────────────────────────────────────────
+  READ_TENANT = 'read:tenant',
+  UPDATE_TENANT = 'update:tenant',
+
+  // ── Users ─────────────────────────────────────────────────────────────────
+  INVITE_USER = 'invite:user',
+  READ_USERS = 'read:users',
+  UPDATE_USER = 'update:user',
+  DEACTIVATE_USER = 'deactivate:user',
+  FORCE_RESET_USER = 'force_reset:user',
+  GRANT_PERMISSION = 'grant:permission',
+
+  // ── Employees ─────────────────────────────────────────────────────────────
+  CREATE_EMPLOYEE = 'create:employee',
+  READ_EMPLOYEES = 'read:employees',
+  READ_OWN_PROFILE = 'read:own_profile',
+  UPDATE_EMPLOYEE = 'update:employee',
+  DELETE_EMPLOYEE = 'delete:employee',
+  MANAGE_DOCUMENTS = 'manage:documents',
+
+  // ── Departments ───────────────────────────────────────────────────────────
+  CREATE_DEPARTMENT = 'create:department',
+  READ_DEPARTMENTS = 'read:departments',
+  UPDATE_DEPARTMENT = 'update:department',
+  DELETE_DEPARTMENT = 'delete:department',
+
+  // ── Leave ─────────────────────────────────────────────────────────────────
+  REQUEST_LEAVE = 'request:leave',
+  APPROVE_LEAVE = 'approve:leave',
+  READ_ALL_LEAVES = 'read:all_leaves',
+  READ_OWN_LEAVE = 'read:own_leave',
+  MANAGE_LEAVE_TYPES = 'manage:leave_types',
+
+  // ── Time Management ───────────────────────────────────────────────────────
+  CLOCK_IN_OUT = 'clock:in_out',
+  READ_TIMESHEETS = 'read:timesheets',
+  APPROVE_TIMESHEET = 'approve:timesheet',
+  MANAGE_SCHEDULES = 'manage:schedules',
+
+  // ── Payroll ───────────────────────────────────────────────────────────────
+  READ_PAYROLL = 'read:payroll',
+  RUN_PAYROLL = 'run:payroll',
+  APPROVE_PAYROLL = 'approve:payroll',
+  READ_OWN_PAYSLIP = 'read:own_payslip',
+  MANAGE_PAYROLL_SETTINGS = 'manage:payroll_settings',
+
+  // ── Appraisal ─────────────────────────────────────────────────────────────
+  CREATE_APPRAISAL = 'create:appraisal',
+  READ_APPRAISALS = 'read:appraisals',
+  SUBMIT_REVIEW = 'submit:review',
+  READ_OWN_REVIEW = 'read:own_review',
+
+  // ── Projects ──────────────────────────────────────────────────────────────
+  CREATE_PROJECT = 'create:project',
+  READ_PROJECTS = 'read:projects',
+  UPDATE_PROJECT = 'update:project',
+  ASSIGN_PROJECT = 'assign:project',
+
+  // ── Assets ────────────────────────────────────────────────────────────────
+  MANAGE_ASSETS = 'manage:assets',
+  READ_ASSETS = 'read:assets',
+  ASSIGN_ASSET = 'assign:asset',
+
+  // ── Marketing ─────────────────────────────────────────────────────────────
+  MANAGE_LEADS = 'manage:leads',
+  READ_LEADS = 'read:leads',
+  MANAGE_CAMPAIGNS = 'manage:campaigns',
+  READ_CAMPAIGNS = 'read:campaigns',
+  VIEW_ANALYTICS = 'view:analytics',
+}
+
+// Base permissions per role — hardcoded, always enforced
+export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  SUPER_ADMIN: Object.values(Permission), // All permissions
+
+  TENANT_ADMIN: [
+    Permission.READ_TENANT,
+    Permission.UPDATE_TENANT,
+    Permission.INVITE_USER,
+    Permission.READ_USERS,
+    Permission.UPDATE_USER,
+    Permission.DEACTIVATE_USER,
+    Permission.FORCE_RESET_USER,
+    Permission.GRANT_PERMISSION,
+    Permission.CREATE_EMPLOYEE,
+    Permission.READ_EMPLOYEES,
+    Permission.UPDATE_EMPLOYEE,
+    Permission.DELETE_EMPLOYEE,
+    Permission.MANAGE_DOCUMENTS,
+    Permission.CREATE_DEPARTMENT,
+    Permission.READ_DEPARTMENTS,
+    Permission.UPDATE_DEPARTMENT,
+    Permission.DELETE_DEPARTMENT,
+    Permission.APPROVE_LEAVE,
+    Permission.READ_ALL_LEAVES,
+    Permission.MANAGE_LEAVE_TYPES,
+    Permission.READ_TIMESHEETS,
+    Permission.APPROVE_TIMESHEET,
+    Permission.MANAGE_SCHEDULES,
+    Permission.READ_PAYROLL,
+    Permission.RUN_PAYROLL,
+    Permission.APPROVE_PAYROLL,
+    Permission.MANAGE_PAYROLL_SETTINGS,
+    Permission.READ_APPRAISALS,
+    Permission.CREATE_APPRAISAL,
+    Permission.CREATE_PROJECT,
+    Permission.READ_PROJECTS,
+    Permission.UPDATE_PROJECT,
+    Permission.ASSIGN_PROJECT,
+    Permission.MANAGE_ASSETS,
+    Permission.READ_ASSETS,
+    Permission.ASSIGN_ASSET,
+    Permission.MANAGE_LEADS,
+    Permission.READ_LEADS,
+    Permission.MANAGE_CAMPAIGNS,
+    Permission.READ_CAMPAIGNS,
+    Permission.VIEW_ANALYTICS,
+  ],
+
+  HR_MANAGER: [
+    Permission.INVITE_USER,
+    Permission.READ_USERS,
+    Permission.UPDATE_USER,
+    Permission.CREATE_EMPLOYEE,
+    Permission.READ_EMPLOYEES,
+    Permission.UPDATE_EMPLOYEE,
+    Permission.MANAGE_DOCUMENTS,
+    Permission.READ_DEPARTMENTS,
+    Permission.CREATE_DEPARTMENT,
+    Permission.UPDATE_DEPARTMENT,
+    Permission.REQUEST_LEAVE,
+    Permission.APPROVE_LEAVE,
+    Permission.READ_ALL_LEAVES,
+    Permission.MANAGE_LEAVE_TYPES,
+    Permission.READ_OWN_LEAVE,
+    Permission.CLOCK_IN_OUT,
+    Permission.READ_TIMESHEETS,
+    Permission.APPROVE_TIMESHEET,
+    Permission.MANAGE_SCHEDULES,
+    Permission.READ_PAYROLL,
+    Permission.RUN_PAYROLL,
+    Permission.READ_OWN_PAYSLIP,
+    Permission.CREATE_APPRAISAL,
+    Permission.READ_APPRAISALS,
+    Permission.SUBMIT_REVIEW,
+    Permission.READ_OWN_REVIEW,
+    Permission.CREATE_PROJECT,
+    Permission.READ_PROJECTS,
+    Permission.UPDATE_PROJECT,
+    Permission.ASSIGN_PROJECT,
+    Permission.READ_ASSETS,
+    Permission.ASSIGN_ASSET,
+  ],
+
+  HR_STAFF: [
+    Permission.READ_EMPLOYEES,
+    Permission.UPDATE_EMPLOYEE,
+    Permission.MANAGE_DOCUMENTS,
+    Permission.READ_DEPARTMENTS,
+    Permission.REQUEST_LEAVE,
+    Permission.READ_ALL_LEAVES,
+    Permission.READ_OWN_LEAVE,
+    Permission.CLOCK_IN_OUT,
+    Permission.READ_TIMESHEETS,
+    Permission.READ_OWN_PAYSLIP,
+    Permission.READ_APPRAISALS,
+    Permission.SUBMIT_REVIEW,
+    Permission.READ_OWN_REVIEW,
+    Permission.READ_PROJECTS,
+    Permission.READ_ASSETS,
+  ],
+
+  EMPLOYEE: [
+    Permission.READ_OWN_PROFILE,
+    Permission.REQUEST_LEAVE,
+    Permission.READ_OWN_LEAVE,
+    Permission.CLOCK_IN_OUT,
+    Permission.READ_OWN_PAYSLIP,
+    Permission.SUBMIT_REVIEW,
+    Permission.READ_OWN_REVIEW,
+    Permission.READ_PROJECTS,
+  ],
+
+  ACCOUNTANT: [
+    Permission.READ_EMPLOYEES,
+    Permission.READ_DEPARTMENTS,
+    Permission.READ_PAYROLL,
+    Permission.RUN_PAYROLL,
+    Permission.APPROVE_PAYROLL,
+    Permission.READ_OWN_PAYSLIP,
+    Permission.MANAGE_PAYROLL_SETTINGS,
+    Permission.READ_PROJECTS,
+  ],
+
+  MARKETING_MANAGER: [
+    Permission.INVITE_USER,
+    Permission.READ_USERS,
+    Permission.MANAGE_LEADS,
+    Permission.READ_LEADS,
+    Permission.MANAGE_CAMPAIGNS,
+    Permission.READ_CAMPAIGNS,
+    Permission.VIEW_ANALYTICS,
+    Permission.READ_PROJECTS,
+    Permission.CREATE_PROJECT,
+    Permission.UPDATE_PROJECT,
+    Permission.ASSIGN_PROJECT,
+  ],
+
+  MARKETING_STAFF: [
+    Permission.READ_LEADS,
+    Permission.MANAGE_LEADS,
+    Permission.READ_CAMPAIGNS,
+    Permission.VIEW_ANALYTICS,
+    Permission.READ_PROJECTS,
+  ],
+};

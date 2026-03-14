@@ -109,10 +109,12 @@ model User {
   createdAt          DateTime   @default(now())
   updatedAt          DateTime   @updatedAt
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  refreshTokens  RefreshToken[]
-  otpCodes       OtpCode[]
-  socialAccounts SocialAccount[]
+  tenant             Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  refreshTokens      RefreshToken[]
+  otpCodes           OtpCode[]
+  socialAccounts     SocialAccount[]
+  userPermissions    UserPermission[] @relation("UserPermissions")
+  grantedPermissions UserPermission[] @relation("GrantedPermissions")
 
   @@unique([tenantId, email])
   @@schema("auth")
@@ -160,5 +162,29 @@ model SocialAccount {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerId])
+  @@schema("auth")
+}
+
+enum PermissionEffect {
+  GRANT
+  REVOKE
+
+  @@schema("auth")
+}
+
+model UserPermission {
+  id         String           @id @default(uuid())
+  userId     String
+  tenantId   String
+  permission String
+  effect     PermissionEffect
+  grantedBy  String
+  reason     String?
+  createdAt  DateTime         @default(now())
+
+  user    User @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  granter User @relation("GrantedPermissions", fields: [grantedBy], references: [id])
+
+  @@unique([userId, permission])
   @@schema("auth")
 }

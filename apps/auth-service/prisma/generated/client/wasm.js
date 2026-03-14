@@ -197,6 +197,17 @@ exports.Prisma.SocialAccountScalarFieldEnum = {
   createdAt: 'createdAt'
 };
 
+exports.Prisma.UserPermissionScalarFieldEnum = {
+  id: 'id',
+  userId: 'userId',
+  tenantId: 'tenantId',
+  permission: 'permission',
+  effect: 'effect',
+  grantedBy: 'grantedBy',
+  reason: 'reason',
+  createdAt: 'createdAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -252,12 +263,18 @@ exports.SocialProvider = exports.$Enums.SocialProvider = {
   MICROSOFT: 'MICROSOFT'
 };
 
+exports.PermissionEffect = exports.$Enums.PermissionEffect = {
+  GRANT: 'GRANT',
+  REVOKE: 'REVOKE'
+};
+
 exports.Prisma.ModelName = {
   Tenant: 'Tenant',
   User: 'User',
   RefreshToken: 'RefreshToken',
   OtpCode: 'OtpCode',
-  SocialAccount: 'SocialAccount'
+  SocialAccount: 'SocialAccount',
+  UserPermission: 'UserPermission'
 };
 
 /**
