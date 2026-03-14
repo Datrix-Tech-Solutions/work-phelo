@@ -121,8 +121,11 @@ jobs:
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/subscription-service:dev
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/marketing-service:dev
 
-            # Force stop everything first — prevents port conflicts
-            docker compose -f infrastructure/docker-compose.dev.yml down --remove-orphans
+            # Stop and remove ALL containers including orphans and infra
+            docker compose -f infrastructure/docker-compose.dev.yml down --remove-orphans --volumes
+
+            # Force remove any lingering named containers that might conflict
+            docker rm -f erp-redis erp-rabbitmq erp-gateway-dev erp-auth-dev erp-hr-dev erp-notification-dev erp-subscription-dev erp-marketing-dev 2>/dev/null || true
 
             # Start fresh
             docker compose -f infrastructure/docker-compose.dev.yml up -d
