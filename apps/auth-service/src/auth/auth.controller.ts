@@ -6,14 +6,13 @@ import {
   HttpCode,
   HttpStatus,
   Req,
-  UseGuards,
   Res,
+  UseGuards,
   Query,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
@@ -25,6 +24,7 @@ import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { MicrosoftAuthGuard } from './guards/microsoft-auth.guard';
+import { setAuthCookies, clearAuthCookies } from '../common/cookie.helper';
 
 @Controller('auth')
 export class AuthController {
@@ -33,22 +33,44 @@ export class AuthController {
   // ── STANDARD AUTH ─────────────────────────────────────────────────────────
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto, @Req() req: any) {
-    return this.authService.login(dto, req.ip, req.headers['user-agent']);
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.login(
+      dto,
+      req.ip,
+      req.headers['user-agent'],
+    );
+
+    // If MFA or force reset required — return without setting cookies
+    if ('requiresMfa' in result || 'requiresPasswordReset' in result) {
+      return result;
+    }
+
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    const { accessToken, refreshToken, ...safeResult } = result;
+    return safeResult;
   }
 
   @Post('admin/login')
   @HttpCode(HttpStatus.OK)
-  adminLogin(
+  async adminLogin(
     @Body() body: { email: string; password: string },
-    @Req() req: any,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.authService.adminLogin(
+    const result = await this.authService.adminLogin(
       body.email,
       body.password,
       req.ip,
       req.headers['user-agent'],
     );
+
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    const { accessToken, refreshToken, ...safeResult } = result;
+    return safeResult;
   }
 
   @Post('verify-email')
@@ -63,23 +85,42 @@ export class AuthController {
     return this.authService.resendVerification(dto);
   }
 
+  // ── TOKEN MANAGEMENT ──────────────────────────────────────────────────────
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refresh(dto);
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Read refresh token from cookie
+    const refreshToken = req.cookies?.refresh_token;
+    if (!refreshToken) {
+      return res.status(401).json({ message: 'No refresh token provided' });
+    }
+
+    const result = await this.authService.refresh({ refreshToken });
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    return { message: 'Tokens refreshed successfully' };
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  logout(@Body() dto: RefreshTokenDto) {
-    return this.authService.logout(dto.refreshToken);
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const refreshToken = req.cookies?.refresh_token;
+    if (refreshToken) {
+      await this.authService.logout(refreshToken);
+    }
+    clearAuthCookies(res);
+    return { message: 'Logged out successfully' };
   }
 
   @Post('logout-all')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  logoutAll(@Req() req: any) {
-    return this.authService.logoutAll(req.user.id);
+  async logoutAll(@Req() req: any, @Res({ passthrough: true }) res: Response) {
+    await this.authService.logoutAll(req.user.id);
+    clearAuthCookies(res);
+    return { message: 'Logged out from all devices' };
   }
 
   // ── PASSWORD ──────────────────────────────────────────────────────────────
@@ -104,8 +145,14 @@ export class AuthController {
 
   @Post('force-reset-password')
   @HttpCode(HttpStatus.OK)
-  forceResetPassword(@Body() dto: ForceResetPasswordDto) {
-    return this.authService.forceResetPassword(dto);
+  async forceResetPassword(
+    @Body() dto: ForceResetPasswordDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.forceResetPassword(dto);
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    const { accessToken, refreshToken, ...safeResult } = result;
+    return safeResult;
   }
 
   // ── MFA ───────────────────────────────────────────────────────────────────
@@ -145,9 +192,7 @@ export class AuthController {
   // ── GOOGLE OAUTH ──────────────────────────────────────────────────────────
   @Get('google')
   @UseGuards(GoogleAuthGuard)
-  googleAuth(@Query('tenantSlug') tenantSlug: string) {
-    // Passport redirects to Google — tenantSlug passed as state
-  }
+  googleAuth(@Query('tenantSlug') tenantSlug: string) {}
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
@@ -159,17 +204,14 @@ export class AuthController {
       tenantSlug,
     );
     const frontendUrl = process.env.APP_URL || 'http://localhost:3000';
-    res.redirect(
-      `${frontendUrl}/auth/social-callback?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`,
-    );
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    res.redirect(`${frontendUrl}/auth/social-callback`);
   }
 
   // ── MICROSOFT OAUTH ───────────────────────────────────────────────────────
   @Get('microsoft')
   @UseGuards(MicrosoftAuthGuard)
-  microsoftAuth(@Query('tenantSlug') tenantSlug: string) {
-    // Passport redirects to Microsoft
-  }
+  microsoftAuth(@Query('tenantSlug') tenantSlug: string) {}
 
   @Get('microsoft/callback')
   @UseGuards(MicrosoftAuthGuard)
@@ -181,8 +223,7 @@ export class AuthController {
       tenantSlug,
     );
     const frontendUrl = process.env.APP_URL || 'http://localhost:3000';
-    res.redirect(
-      `${frontendUrl}/auth/social-callback?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`,
-    );
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    res.redirect(`${frontendUrl}/auth/social-callback`);
   }
 }
