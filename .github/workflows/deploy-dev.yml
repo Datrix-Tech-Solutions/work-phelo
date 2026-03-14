@@ -113,6 +113,7 @@ jobs:
 
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u datrix-tech-solutions --password-stdin
 
+            # Pull all images
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/api-gateway:dev
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/auth-service:dev
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/hr-service:dev
@@ -120,9 +121,13 @@ jobs:
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/subscription-service:dev
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/marketing-service:dev
 
-            docker compose -f infrastructure/docker-compose.dev.yml down
+            # Force stop everything first — prevents port conflicts
+            docker compose -f infrastructure/docker-compose.dev.yml down --remove-orphans
+
+            # Start fresh
             docker compose -f infrastructure/docker-compose.dev.yml up -d
 
+            # Clean up old images
             docker image prune -f
 
             echo "Dev deployment complete at $(date)"
