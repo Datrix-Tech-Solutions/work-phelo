@@ -4,12 +4,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { generateOtp, otpExpiresAt } from '../common/otp.helper';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class TenantsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rabbitmq: RabbitMQPublisher,
+  ) {}
 
   async register(dto: CreateTenantDto) {
     const existingTenant = await this.prisma.tenant.findFirst({
@@ -49,14 +54,36 @@ export class TenantsService {
       include: { users: true },
     });
 
+    const adminUser = tenant.users[0];
+
+    // Generate and store email verification OTP
+    const otp = generateOtp(6);
+    await this.prisma.otpCode.create({
+      data: {
+        userId: adminUser.id,
+        type: 'EMAIL_VERIFICATION',
+        code: otp,
+        expiresAt: otpExpiresAt(10),
+      },
+    });
+
+    // Publish to notification-service via RabbitMQ
+    this.rabbitmq.sendEmailVerification({
+      userId: adminUser.id,
+      tenantId: tenant.id,
+      email: adminUser.email,
+      firstName: adminUser.firstName,
+      otp,
+    });
+
+    const { password, mfaSecret, inviteToken, ...safeUser } = adminUser;
     const { users, ...tenantData } = tenant;
-    const { password, mfaSecret, ...adminUser } = users[0];
 
     return {
       tenant: tenantData,
-      adminUser,
+      adminUser: safeUser,
       message:
-        'Registration successful. Your account is pending approval by our team.',
+        'Registration successful. Please check your email to verify your account.',
     };
   }
 
@@ -73,7 +100,7 @@ export class TenantsService {
   }
 
   async approveTenant(id: string) {
-    const tenant = await this.findById(id);
+    await this.findById(id);
     return this.prisma.tenant.update({
       where: { id },
       data: { status: 'ACTIVE' },

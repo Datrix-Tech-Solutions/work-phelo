@@ -11,6 +11,13 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForceResetPasswordDto } from './dto/force-reset-password.dto';
+import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @Controller('auth')
@@ -21,6 +28,32 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   login(@Body() dto: LoginDto, @Req() req: any) {
     return this.authService.login(dto, req.ip, req.headers['user-agent']);
+  }
+
+  @Post('admin/login')
+  @HttpCode(HttpStatus.OK)
+  adminLogin(
+    @Body() body: { email: string; password: string },
+    @Req() req: any,
+  ) {
+    return this.authService.adminLogin(
+      body.email,
+      body.password,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerification(dto);
   }
 
   @Post('refresh')
@@ -35,17 +68,62 @@ export class AuthController {
     return this.authService.logout(dto.refreshToken);
   }
 
-  @Post('mfa/setup')
+  @Post('logout-all')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
-  setupMfa(@Req() req: any) {
-    return this.authService.setupMfa(req.user.id);
+  logoutAll(@Req() req: any) {
+    return this.authService.logoutAll(req.user.id);
   }
 
-  @Post('mfa/verify')
+  @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  verifyMfa(@Body() dto: VerifyMfaDto) {
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  changePassword(@Body() dto: ChangePasswordDto, @Req() req: any) {
+    return this.authService.changePassword(req.user.id, dto);
+  }
+
+  @Post('force-reset-password')
+  @HttpCode(HttpStatus.OK)
+  forceResetPassword(@Body() dto: ForceResetPasswordDto) {
+    return this.authService.forceResetPassword(dto);
+  }
+
+  @Post('mfa/setup-totp')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  setupTotp(@Req() req: any) {
+    return this.authService.setupTotp(req.user.id);
+  }
+
+  @Post('mfa/verify-totp')
+  @HttpCode(HttpStatus.OK)
+  verifyTotp(@Body() dto: VerifyMfaDto) {
     return this.authService.verifyAndEnableMfa(dto);
+  }
+
+  @Post('mfa/send-sms')
+  @HttpCode(HttpStatus.OK)
+  sendSmsOtp(@Body() dto: SendSmsOtpDto) {
+    return this.authService.sendSmsMfaOtp(dto);
+  }
+
+  @Post('mfa/verify-sms')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  verifySmsOtp(@Body('otpCode') otpCode: string, @Req() req: any) {
+    return this.authService.verifySmsMfaAndEnable(req.user.id, otpCode);
   }
 
   @Post('mfa/disable')

@@ -5,6 +5,7 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { TenantsModule } from '../tenants/tenants.module';
+import { RabbitMQModule } from '../messaging/rabbitmq.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { TenantsModule } from '../tenants/tenants.module';
       signOptions: { expiresIn: '15m' },
     }),
     TenantsModule,
+    RabbitMQModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],

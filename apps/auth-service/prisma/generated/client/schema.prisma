@@ -1,0 +1,164 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["auth"]
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  HR_MANAGER
+  HR_STAFF
+  EMPLOYEE
+  ACCOUNTANT
+  MARKETING_MANAGER
+  MARKETING_STAFF
+
+  @@schema("auth")
+}
+
+enum TenantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+
+  @@schema("auth")
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+
+  @@schema("auth")
+}
+
+enum OtpType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  MFA_SMS
+
+  @@schema("auth")
+}
+
+enum SocialProvider {
+  GOOGLE
+  MICROSOFT
+
+  @@schema("auth")
+}
+
+enum MfaMethod {
+  TOTP
+  SMS
+
+  @@schema("auth")
+}
+
+model Tenant {
+  id             String       @id @default(uuid())
+  name           String
+  slug           String       @unique
+  email          String       @unique
+  phone          String?
+  address        String?
+  country        String       @default("GH")
+  status         TenantStatus @default(PENDING)
+  logoUrl        String?
+  website        String?
+  industry       String?
+  size           String?
+  subscriptionId String?
+  trialEndsAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  users User[]
+
+  @@schema("auth")
+}
+
+model User {
+  id                 String     @id @default(uuid())
+  tenantId           String
+  email              String
+  password           String?
+  firstName          String
+  lastName           String
+  phone              String?
+  role               UserRole   @default(EMPLOYEE)
+  status             UserStatus @default(PENDING_VERIFICATION)
+  avatarUrl          String?
+  isMfaEnabled       Boolean    @default(false)
+  mfaMethod          MfaMethod?
+  mfaSecret          String?
+  forcePasswordReset Boolean    @default(false)
+  inviteToken        String?    @unique
+  inviteExpiresAt    DateTime?
+  emailVerifiedAt    DateTime?
+  lastLoginAt        DateTime?
+  passwordChangedAt  DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  refreshTokens  RefreshToken[]
+  otpCodes       OtpCode[]
+  socialAccounts SocialAccount[]
+
+  @@unique([tenantId, email])
+  @@schema("auth")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  userId     String
+  token      String   @unique
+  expiresAt  DateTime
+  ipAddress  String?
+  userAgent  String?
+  deviceName String?
+  deviceId   String?
+  isRevoked  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("auth")
+}
+
+model OtpCode {
+  id        String    @id @default(uuid())
+  userId    String
+  type      OtpType
+  code      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("auth")
+}
+
+model SocialAccount {
+  id         String         @id @default(uuid())
+  userId     String
+  provider   SocialProvider
+  providerId String
+  email      String?
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@schema("auth")
+}

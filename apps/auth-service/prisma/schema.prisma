@@ -1,6 +1,7 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
 }
 
 datasource db {
@@ -40,6 +41,28 @@ enum UserStatus {
   @@schema("auth")
 }
 
+enum OtpType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  MFA_SMS
+
+  @@schema("auth")
+}
+
+enum SocialProvider {
+  GOOGLE
+  MICROSOFT
+
+  @@schema("auth")
+}
+
+enum MfaMethod {
+  TOTP
+  SMS
+
+  @@schema("auth")
+}
+
 model Tenant {
   id             String       @id @default(uuid())
   name           String
@@ -64,42 +87,78 @@ model Tenant {
 }
 
 model User {
-  id                String     @id @default(uuid())
-  tenantId          String
-  email             String
-  password          String
-  firstName         String
-  lastName          String
-  phone             String?
-  role              UserRole   @default(EMPLOYEE)
-  status            UserStatus @default(PENDING_VERIFICATION)
-  avatarUrl         String?
-  isMfaEnabled      Boolean    @default(false)
-  mfaSecret         String?
-  emailVerifiedAt   DateTime?
-  lastLoginAt       DateTime?
-  passwordChangedAt DateTime?
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  id                  String      @id @default(uuid())
+  tenantId            String
+  email               String
+  password            String?
+  firstName           String
+  lastName            String
+  phone               String?
+  role                UserRole    @default(EMPLOYEE)
+  status              UserStatus  @default(PENDING_VERIFICATION)
+  avatarUrl           String?
+  isMfaEnabled        Boolean     @default(false)
+  mfaMethod           MfaMethod?
+  mfaSecret           String?
+  forcePasswordReset  Boolean     @default(false)
+  inviteToken         String?     @unique
+  inviteExpiresAt     DateTime?
+  emailVerifiedAt     DateTime?
+  lastLoginAt         DateTime?
+  passwordChangedAt   DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  refreshTokens RefreshToken[]
+  tenant              Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  refreshTokens       RefreshToken[]
+  otpCodes            OtpCode[]
+  socialAccounts      SocialAccount[]
 
   @@unique([tenantId, email])
   @@schema("auth")
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
+  id          String   @id @default(uuid())
+  userId      String
+  token       String   @unique
+  expiresAt   DateTime
+  ipAddress   String?
+  userAgent   String?
+  deviceName  String?
+  deviceId    String?
+  isRevoked   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("auth")
+}
+
+model OtpCode {
+  id        String    @id @default(uuid())
   userId    String
-  token     String   @unique
+  type      OtpType
+  code      String
   expiresAt DateTime
-  ipAddress String?
-  userAgent String?
-  isRevoked Boolean  @default(false)
-  createdAt DateTime @default(now())
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@schema("auth")
+}
+
+model SocialAccount {
+  id           String         @id @default(uuid())
+  userId       String
+  provider     SocialProvider
+  providerId   String
+  email        String?
+  createdAt    DateTime       @default(now())
+
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
   @@schema("auth")
 }
