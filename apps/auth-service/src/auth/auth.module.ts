@@ -4,6 +4,8 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
+import { MicrosoftStrategy } from './strategies/microsoft.strategy';
 import { TenantsModule } from '../tenants/tenants.module';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
 
@@ -18,7 +20,7 @@ import { RabbitMQModule } from '../messaging/rabbitmq.module';
     RabbitMQModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, GoogleStrategy, MicrosoftStrategy],
   exports: [AuthService, JwtModule],
 })
 export class AuthModule {}
