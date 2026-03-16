@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
-import { ROLE_PERMISSIONS } from '@erp/config';
+import { ROLE_PERMISSIONS } from '@work-phelo/config';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
