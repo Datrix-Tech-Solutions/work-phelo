@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
-import { ROLE_PERMISSIONS } from '@work-phelo/config';
+import { ROLE_PERMISSIONS } from '@erp/config';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -22,19 +22,21 @@ export class PermissionsGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    // No permissions required — allow through
     if (!required || required.length === 0) return true;
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    if (!user) throw new ForbiddenException('Not authenticated');
+    if (!user)
+      throw new ForbiddenException(
+        "You don't have permission to access this. Contact your administrator.",
+      );
 
     for (const permission of required) {
       const allowed = await this.hasPermission(user.id, user.role, permission);
       if (!allowed) {
         throw new ForbiddenException(
-          `You do not have permission to perform this action: ${permission}`,
+          "You don't have permission to access this. Contact your administrator.",
         );
       }
     }
@@ -47,20 +49,16 @@ export class PermissionsGuard implements CanActivate {
     role: string,
     permission: string,
   ): Promise<boolean> {
-    // 1. Check for personal REVOKE first — overrides everything
     const revoke = await this.prisma.userPermission.findUnique({
       where: { userId_permission: { userId, permission } },
     });
 
     if (revoke?.effect === 'REVOKE') return false;
 
-    // 2. Check if role has base permission
     const rolePerms = ROLE_PERMISSIONS[role] || [];
     const hasRolePermission = rolePerms.includes(permission as any);
-
     if (hasRolePermission) return true;
 
-    // 3. Check for personal GRANT
     if (revoke?.effect === 'GRANT') return true;
 
     return false;
