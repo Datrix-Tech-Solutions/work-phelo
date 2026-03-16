@@ -3,8 +3,7 @@ services:
     image: rabbitmq:3-management-alpine
     container_name: erp-rabbitmq
     ports:
-      - '5672:5672'
-      - '15672:15672'
+      - '127.0.0.1:15672:15672'
     environment:
       RABBITMQ_DEFAULT_USER: erp
       RABBITMQ_DEFAULT_PASS: erppassword
@@ -19,8 +18,6 @@ services:
   redis:
     image: redis:7-alpine
     container_name: erp-redis
-    ports:
-      - '6379:6379'
     volumes:
       - redis_data:/data
     healthcheck:
@@ -34,7 +31,7 @@ services:
     container_name: erp-gateway-dev
     restart: unless-stopped
     ports:
-      - '4010:4000'
+      - '127.0.0.1:4010:4000'
     env_file:
       - ../apps/api-gateway/.env
     depends_on:
@@ -48,7 +45,7 @@ services:
     container_name: erp-auth-dev
     restart: unless-stopped
     ports:
-      - '4001:4001'
+      - '127.0.0.1:4001:4001'
     env_file:
       - ../apps/auth-service/.env
     depends_on:
@@ -62,7 +59,7 @@ services:
     container_name: erp-hr-dev
     restart: unless-stopped
     ports:
-      - '4002:4002'
+      - '127.0.0.1:4002:4002'
     env_file:
       - ../apps/hr-service/.env
     depends_on:
@@ -76,7 +73,7 @@ services:
     container_name: erp-notification-dev
     restart: unless-stopped
     ports:
-      - '4004:4004'
+      - '127.0.0.1:4004:4004'
     env_file:
       - ../apps/notification-service/.env
     depends_on:
@@ -90,7 +87,7 @@ services:
     container_name: erp-subscription-dev
     restart: unless-stopped
     ports:
-      - '4005:4005'
+      - '127.0.0.1:4005:4005'
     env_file:
       - ../apps/subscription-service/.env
     depends_on:
@@ -102,7 +99,7 @@ services:
     container_name: erp-marketing-dev
     restart: unless-stopped
     ports:
-      - '4006:4006'
+      - '127.0.0.1:4006:4006'
     env_file:
       - ../apps/marketing-service/.env
     depends_on:
