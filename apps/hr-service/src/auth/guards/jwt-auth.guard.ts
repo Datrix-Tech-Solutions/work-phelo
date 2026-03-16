@@ -1,0 +1,35 @@
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
+import * as jwt from 'jsonwebtoken';
+
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+
+    // Read from cookie first, fallback to Authorization header
+    const token =
+      request.cookies?.access_token ||
+      request.headers.authorization?.replace('Bearer ', '');
+
+    if (!token) throw new UnauthorizedException('No token provided');
+
+    try {
+      const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
+      request.user = {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role,
+        tenantId: payload.tenantId,
+        tenantSlug: payload.tenantSlug,
+      };
+      return true;
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
+  }
+}

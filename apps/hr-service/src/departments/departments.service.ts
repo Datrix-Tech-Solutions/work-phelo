@@ -1,0 +1,73 @@
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { CreateDepartmentDto } from './dto/create-department.dto';
+import { UpdateDepartmentDto } from './dto/update-department.dto';
+
+@Injectable()
+export class DepartmentsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(tenantId: string, dto: CreateDepartmentDto) {
+    const existing = await this.prisma.department.findUnique({
+      where: { tenantId_name: { tenantId, name: dto.name } },
+    });
+    if (existing) throw new ConflictException('Department name already exists');
+
+    return this.prisma.department.create({
+      data: { tenantId, ...dto },
+    });
+  }
+
+  async findAll(tenantId: string) {
+    return this.prisma.department.findMany({
+      where: { tenantId, isActive: true },
+      include: { _count: { select: { employees: true } } },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async findById(tenantId: string, id: string) {
+    const dept = await this.prisma.department.findFirst({
+      where: { id, tenantId },
+      include: {
+        employees: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            jobTitle: true,
+            employmentStatus: true,
+          },
+        },
+        children: true,
+      },
+    });
+    if (!dept) throw new NotFoundException('Department not found');
+    return dept;
+  }
+
+  async update(tenantId: string, id: string, dto: UpdateDepartmentDto) {
+    await this.findById(tenantId, id);
+    return this.prisma.department.update({
+      where: { id },
+      data: dto,
+    });
+  }
+
+  async remove(tenantId: string, id: string) {
+    const dept = await this.findById(tenantId, id);
+    if (dept.employees.length > 0) {
+      throw new ConflictException(
+        'Cannot delete department with active employees',
+      );
+    }
+    return this.prisma.department.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+}
