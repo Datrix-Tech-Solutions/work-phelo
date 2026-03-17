@@ -1,14 +1,8 @@
 import { IsEmail, IsString, IsOptional, IsEnum } from 'class-validator';
 
-export enum UserRole {
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  TENANT_ADMIN = 'TENANT_ADMIN',
-  HR_MANAGER = 'HR_MANAGER',
-  HR_STAFF = 'HR_STAFF',
+export enum UserSystemRole {
   EMPLOYEE = 'EMPLOYEE',
-  ACCOUNTANT = 'ACCOUNTANT',
-  MARKETING_MANAGER = 'MARKETING_MANAGER',
-  MARKETING_STAFF = 'MARKETING_STAFF',
+  TENANT_ADMIN = 'TENANT_ADMIN',
 }
 
 export class InviteUserDto {
@@ -26,6 +20,10 @@ export class InviteUserDto {
   phone?: string;
 
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
+  @IsEnum(UserSystemRole)
+  role?: UserSystemRole;
+
+  @IsOptional()
+  @IsString()
+  companyRoleId?: string;
 }

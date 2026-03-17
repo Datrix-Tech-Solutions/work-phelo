@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
-import { ROLE_PERMISSIONS } from '@work-phelo/config';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
@@ -27,13 +26,23 @@ export class PermissionsGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    if (!user)
+    if (!user) {
       throw new ForbiddenException(
         "You don't have permission to access this. Contact your administrator.",
       );
+    }
+
+    // SUPER_ADMIN and TENANT_ADMIN bypass all permission checks
+    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
+      return true;
+    }
 
     for (const permission of required) {
-      const allowed = await this.hasPermission(user.id, user.role, permission);
+      const allowed = await this.hasPermission(
+        user.id,
+        user.companyRoleId,
+        permission,
+      );
       if (!allowed) {
         throw new ForbiddenException(
           "You don't have permission to access this. Contact your administrator.",
@@ -46,20 +55,27 @@ export class PermissionsGuard implements CanActivate {
 
   private async hasPermission(
     userId: string,
-    role: string,
+    companyRoleId: string | undefined,
     permission: string,
   ): Promise<boolean> {
-    const revoke = await this.prisma.userPermission.findUnique({
+    // 1. Check personal REVOKE — overrides everything
+    const override = await this.prisma.userPermission.findUnique({
       where: { userId_permission: { userId, permission } },
     });
+    if (override?.effect === 'REVOKE') return false;
 
-    if (revoke?.effect === 'REVOKE') return false;
+    // 2. Check company role permissions from DB
+    if (companyRoleId) {
+      const rolePermission = await this.prisma.companyRolePermission.findUnique(
+        {
+          where: { companyRoleId_permission: { companyRoleId, permission } },
+        },
+      );
+      if (rolePermission) return true;
+    }
 
-    const rolePerms = ROLE_PERMISSIONS[role] || [];
-    const hasRolePermission = rolePerms.includes(permission as any);
-    if (hasRolePermission) return true;
-
-    if (revoke?.effect === 'GRANT') return true;
+    // 3. Check personal GRANT
+    if (override?.effect === 'GRANT') return true;
 
     return false;
   }

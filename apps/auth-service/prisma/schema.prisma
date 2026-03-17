@@ -13,12 +13,7 @@ datasource db {
 enum UserRole {
   SUPER_ADMIN
   TENANT_ADMIN
-  HR_MANAGER
-  HR_STAFF
   EMPLOYEE
-  ACCOUNTANT
-  MARKETING_MANAGER
-  MARKETING_STAFF
 
   @@schema("auth")
 }
@@ -63,6 +58,13 @@ enum MfaMethod {
   @@schema("auth")
 }
 
+enum PermissionEffect {
+  GRANT
+  REVOKE
+
+  @@schema("auth")
+}
+
 model Tenant {
   id             String       @id @default(uuid())
   name           String
@@ -82,7 +84,38 @@ model Tenant {
   updatedAt      DateTime     @updatedAt
 
   users          User[]
+  companyRoles   CompanyRole[]
 
+  @@schema("auth")
+}
+
+model CompanyRole {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  permissions CompanyRolePermission[]
+  users       User[]
+
+  @@unique([tenantId, name])
+  @@schema("auth")
+}
+
+model CompanyRolePermission {
+  id            String      @id @default(uuid())
+  companyRoleId String
+  permission    String
+  createdAt     DateTime    @default(now())
+
+  companyRole   CompanyRole @relation(fields: [companyRoleId], references: [id], onDelete: Cascade)
+
+  @@unique([companyRoleId, permission])
   @@schema("auth")
 }
 
@@ -95,6 +128,7 @@ model User {
   lastName            String
   phone               String?
   role                UserRole    @default(EMPLOYEE)
+  companyRoleId       String?
   status              UserStatus  @default(PENDING_VERIFICATION)
   avatarUrl           String?
   isMfaEnabled        Boolean     @default(false)
@@ -110,6 +144,7 @@ model User {
   updatedAt           DateTime    @updatedAt
 
   tenant              Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  companyRole         CompanyRole?    @relation(fields: [companyRoleId], references: [id])
   refreshTokens       RefreshToken[]
   otpCodes            OtpCode[]
   socialAccounts      SocialAccount[]
@@ -162,13 +197,6 @@ model SocialAccount {
   user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerId])
-  @@schema("auth")
-}
-
-enum PermissionEffect {
-  GRANT
-  REVOKE
-
   @@schema("auth")
 }
 

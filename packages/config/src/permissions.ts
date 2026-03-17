@@ -13,6 +13,10 @@ export enum Permission {
   FORCE_RESET_USER = 'force_reset:user',
   GRANT_PERMISSION = 'grant:permission',
 
+  // ── Company Roles ─────────────────────────────────────────────────────────
+  MANAGE_COMPANY_ROLES = 'manage:company_roles',
+  READ_COMPANY_ROLES = 'read:company_roles',
+
   // ── Employees ─────────────────────────────────────────────────────────────
   CREATE_EMPLOYEE = 'create:employee',
   READ_EMPLOYEES = 'read:employees',
@@ -81,7 +85,7 @@ export enum Permission {
   READ_ASSETS = 'read:assets',
   ASSIGN_ASSET = 'assign:asset',
 
-  // ── Marketing (Sprint 5 — do not enforce yet) ─────────────────────────────
+  // ── Marketing (Sprint 5) ──────────────────────────────────────────────────
   MANAGE_LEADS = 'manage:leads',
   READ_LEADS = 'read:leads',
   MANAGE_CAMPAIGNS = 'manage:campaigns',
@@ -89,10 +93,16 @@ export enum Permission {
   VIEW_ANALYTICS = 'view:analytics',
 }
 
-export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
-  SUPER_ADMIN: Object.values(Permission),
+// System role platform access — controls WHERE you go after login
+export const SYSTEM_ROLE_ACCESS: Record<string, string[]> = {
+  SUPER_ADMIN: ['platform_admin'],
+  TENANT_ADMIN: ['company_admin'],
+  EMPLOYEE: ['employee_home'],
+};
 
-  TENANT_ADMIN: [
+// Default company role permissions — seeded for every new tenant
+export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
+  'Company Admin': [
     Permission.READ_TENANT,
     Permission.UPDATE_TENANT,
     Permission.VIEW_AUDIT_LOGS,
@@ -102,6 +112,8 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.DEACTIVATE_USER,
     Permission.FORCE_RESET_USER,
     Permission.GRANT_PERMISSION,
+    Permission.MANAGE_COMPANY_ROLES,
+    Permission.READ_COMPANY_ROLES,
     Permission.CREATE_EMPLOYEE,
     Permission.READ_EMPLOYEES,
     Permission.READ_OWN_PROFILE,
@@ -149,8 +161,9 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.ASSIGN_ASSET,
   ],
 
-  HR_MANAGER: [
+  Manager: [
     Permission.READ_USERS,
+    Permission.READ_COMPANY_ROLES,
     Permission.READ_EMPLOYEES,
     Permission.READ_TEAM_EMPLOYEES,
     Permission.READ_OWN_PROFILE,
@@ -175,23 +188,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.READ_ASSETS,
   ],
 
-  HR_STAFF: [
-    Permission.READ_EMPLOYEES,
-    Permission.READ_OWN_PROFILE,
-    Permission.UPDATE_OWN_PROFILE,
-    Permission.MANAGE_DOCUMENTS,
-    Permission.READ_DEPARTMENTS,
-    Permission.REQUEST_LEAVE,
-    Permission.READ_OWN_LEAVE,
-    Permission.CLOCK_IN_OUT,
-    Permission.SUBMIT_TIME_CORRECTION,
-    Permission.READ_OWN_PAYSLIP,
-    Permission.SUBMIT_SELF_ASSESSMENT,
-    Permission.READ_OWN_REVIEW,
-    Permission.READ_PROJECTS,
-  ],
-
-  EMPLOYEE: [
+  Employee: [
     Permission.READ_OWN_PROFILE,
     Permission.UPDATE_OWN_PROFILE,
     Permission.REQUEST_LEAVE,
@@ -201,43 +198,6 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.READ_OWN_PAYSLIP,
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.READ_OWN_REVIEW,
-    Permission.READ_PROJECTS,
-  ],
-
-  ACCOUNTANT: [
-    Permission.READ_EMPLOYEES,
-    Permission.READ_OWN_PROFILE,
-    Permission.UPDATE_OWN_PROFILE,
-    Permission.READ_DEPARTMENTS,
-    Permission.READ_PAYROLL,
-    Permission.RUN_PAYROLL,
-    Permission.APPROVE_PAYROLL,
-    Permission.READ_OWN_PAYSLIP,
-    Permission.MANAGE_PAYROLL_SETTINGS,
-    Permission.READ_PROJECTS,
-  ],
-
-  MARKETING_MANAGER: [
-    Permission.READ_OWN_PROFILE,
-    Permission.UPDATE_OWN_PROFILE,
-    Permission.MANAGE_LEADS,
-    Permission.READ_LEADS,
-    Permission.MANAGE_CAMPAIGNS,
-    Permission.READ_CAMPAIGNS,
-    Permission.VIEW_ANALYTICS,
-    Permission.READ_PROJECTS,
-    Permission.CREATE_PROJECT,
-    Permission.UPDATE_PROJECT,
-    Permission.ASSIGN_PROJECT,
-  ],
-
-  MARKETING_STAFF: [
-    Permission.READ_OWN_PROFILE,
-    Permission.UPDATE_OWN_PROFILE,
-    Permission.READ_LEADS,
-    Permission.MANAGE_LEADS,
-    Permission.READ_CAMPAIGNS,
-    Permission.VIEW_ANALYTICS,
     Permission.READ_PROJECTS,
   ],
 };

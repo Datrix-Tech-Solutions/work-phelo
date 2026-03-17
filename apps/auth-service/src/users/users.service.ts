@@ -41,7 +41,7 @@ export class UsersService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
-        role: dto.role || 'EMPLOYEE',
+        role: (dto.role as any) || 'EMPLOYEE',
         status: 'PENDING_VERIFICATION',
         forcePasswordReset: true,
         inviteToken,
