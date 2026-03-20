@@ -10,6 +10,13 @@ import {
   UseGuards,
   Query,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiBody,
+} from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
@@ -26,13 +33,23 @@ import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { MicrosoftAuthGuard } from './guards/microsoft-auth.guard';
 import { setAuthCookies, clearAuthCookies } from '../common/cookie.helper';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  // ── STANDARD AUTH ─────────────────────────────────────────────────────────
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Login with email and password' })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful — tokens set as HTTP-only cookies',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({
+    status: 403,
+    description: 'Tenant suspended or user inactive',
+  })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
@@ -43,12 +60,8 @@ export class AuthController {
       req.ip,
       req.headers['user-agent'],
     );
-
-    // If MFA or force reset required — return without setting cookies
-    if ('requiresMfa' in result || 'requiresPasswordReset' in result) {
+    if ('requiresMfa' in result || 'requiresPasswordReset' in result)
       return result;
-    }
-
     setAuthCookies(res, result.accessToken, result.refreshToken);
     const { accessToken, refreshToken, ...safeResult } = result;
     return safeResult;
@@ -56,6 +69,17 @@ export class AuthController {
 
   @Post('admin/login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'SuperAdmin login (platform owner only)' })
+  @ApiBody({
+    schema: {
+      properties: { email: { type: 'string' }, password: { type: 'string' } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Login successful' })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid credentials or not a SuperAdmin',
+  })
   async adminLogin(
     @Body() body: { email: string; password: string },
     @Req() req: Request,
@@ -67,7 +91,6 @@ export class AuthController {
       req.ip,
       req.headers['user-agent'],
     );
-
     setAuthCookies(res, result.accessToken, result.refreshToken);
     const { accessToken, refreshToken, ...safeResult } = result;
     return safeResult;
@@ -75,29 +98,32 @@ export class AuthController {
 
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify email with OTP sent on registration' })
+  @ApiResponse({ status: 200, description: 'Email verified' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto);
   }
 
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend email verification OTP' })
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
   }
 
-  // ── TOKEN MANAGEMENT ──────────────────────────────────────────────────────
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Refresh access token using refresh_token cookie' })
+  @ApiResponse({ status: 200, description: 'Tokens rotated' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
   async refresh(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    // Read refresh token from cookie
     const refreshToken = req.cookies?.refresh_token;
-    if (!refreshToken) {
+    if (!refreshToken)
       return res.status(401).json({ message: 'No refresh token provided' });
-    }
-
     const result = await this.authService.refresh({ refreshToken });
     setAuthCookies(res, result.accessToken, result.refreshToken);
     return { message: 'Tokens refreshed successfully' };
@@ -105,11 +131,12 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Logout current device — clears cookies and revokes refresh token',
+  })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.refresh_token;
-    if (refreshToken) {
-      await this.authService.logout(refreshToken);
-    }
+    if (refreshToken) await this.authService.logout(refreshToken);
     clearAuthCookies(res);
     return { message: 'Logged out successfully' };
   }
@@ -117,21 +144,26 @@ export class AuthController {
   @Post('logout-all')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Logout all devices — revokes all refresh tokens' })
   async logoutAll(@Req() req: any, @Res({ passthrough: true }) res: Response) {
     await this.authService.logoutAll(req.user.id);
     clearAuthCookies(res);
     return { message: 'Logged out from all devices' };
   }
 
-  // ── PASSWORD ──────────────────────────────────────────────────────────────
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request password reset via email link or SMS OTP' })
+  @ApiResponse({ status: 200, description: 'Reset instructions sent' })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password using email link token or SMS OTP' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
@@ -139,12 +171,18 @@ export class AuthController {
   @Post('change-password')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Change password — requires current password' })
   changePassword(@Body() dto: ChangePasswordDto, @Req() req: any) {
     return this.authService.changePassword(req.user.id, dto);
   }
 
   @Post('force-reset-password')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Force reset — used when login returns requiresPasswordReset: true',
+  })
   async forceResetPassword(
     @Body() dto: ForceResetPasswordDto,
     @Res({ passthrough: true }) res: Response,
@@ -155,22 +193,25 @@ export class AuthController {
     return safeResult;
   }
 
-  // ── MFA ───────────────────────────────────────────────────────────────────
   @Post('mfa/setup-totp')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Setup TOTP MFA — returns QR code and secret' })
   setupTotp(@Req() req: any) {
     return this.authService.setupTotp(req.user.id);
   }
 
   @Post('mfa/verify-totp')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify TOTP code and enable MFA' })
   verifyTotp(@Body() dto: VerifyMfaDto) {
     return this.authService.verifyAndEnableMfa(dto);
   }
 
   @Post('mfa/send-sms')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send SMS OTP to registered phone number' })
   sendSmsOtp(@Body() dto: SendSmsOtpDto) {
     return this.authService.sendSmsMfaOtp(dto);
   }
@@ -178,6 +219,8 @@ export class AuthController {
   @Post('mfa/verify-sms')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Verify SMS OTP and enable SMS MFA' })
   verifySmsOtp(@Body('otpCode') otpCode: string, @Req() req: any) {
     return this.authService.verifySmsMfaAndEnable(req.user.id, otpCode);
   }
@@ -185,17 +228,20 @@ export class AuthController {
   @Post('mfa/disable')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Disable MFA' })
   disableMfa(@Body('totpCode') totpCode: string, @Req() req: any) {
     return this.authService.disableMfa(req.user.id, totpCode);
   }
 
-  // ── GOOGLE OAUTH ──────────────────────────────────────────────────────────
   @Get('google')
   @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Initiate Google OAuth — open in browser only' })
   googleAuth(@Query('tenantSlug') tenantSlug: string) {}
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google OAuth callback' })
   async googleCallback(@Req() req: any, @Res() res: Response) {
     const { profile, tenantSlug } = req.user;
     const result = await this.authService.handleSocialLogin(
@@ -208,13 +254,14 @@ export class AuthController {
     res.redirect(`${frontendUrl}/auth/social-callback`);
   }
 
-  // ── MICROSOFT OAUTH ───────────────────────────────────────────────────────
   @Get('microsoft')
   @UseGuards(MicrosoftAuthGuard)
+  @ApiOperation({ summary: 'Initiate Microsoft OAuth — open in browser only' })
   microsoftAuth(@Query('tenantSlug') tenantSlug: string) {}
 
   @Get('microsoft/callback')
   @UseGuards(MicrosoftAuthGuard)
+  @ApiOperation({ summary: 'Microsoft OAuth callback' })
   async microsoftCallback(@Req() req: any, @Res() res: Response) {
     const { profile, tenantSlug } = req.user;
     const result = await this.authService.handleSocialLogin(

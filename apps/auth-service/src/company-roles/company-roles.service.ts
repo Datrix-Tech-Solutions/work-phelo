@@ -7,7 +7,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCompanyRoleDto } from './dto/create-company-role.dto';
 import { UpdateCompanyRoleDto } from './dto/update-company-role.dto';
-import { COMPANY_ROLE_PERMISSIONS } from '@work-phelo/config';
 
 @Injectable()
 export class CompanyRolesService {
@@ -15,19 +14,11 @@ export class CompanyRolesService {
 
   async seedDefaultRoles(tenantId: string) {
     const defaultRoles = ['Company Admin', 'Manager', 'Employee'];
-    for (const roleName of defaultRoles) {
-      const permissions = COMPANY_ROLE_PERMISSIONS[roleName] || [];
+    for (const name of defaultRoles) {
       await this.prisma.companyRole.upsert({
-        where: { tenantId_name: { tenantId, name: roleName } },
+        where: { tenantId_name: { tenantId, name } },
         update: {},
-        create: {
-          tenantId,
-          name: roleName,
-          isSystem: true,
-          permissions: {
-            create: permissions.map((p) => ({ permission: p })),
-          },
-        },
+        create: { tenantId, name, isSystem: true },
       });
     }
   }
@@ -35,10 +26,7 @@ export class CompanyRolesService {
   async findAll(tenantId: string) {
     return this.prisma.companyRole.findMany({
       where: { tenantId, isActive: true },
-      include: {
-        permissions: { select: { permission: true } },
-        _count: { select: { users: true } },
-      },
+      include: { _count: { select: { users: true } } },
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -46,10 +34,7 @@ export class CompanyRolesService {
   async findById(tenantId: string, id: string) {
     const role = await this.prisma.companyRole.findFirst({
       where: { id, tenantId },
-      include: {
-        permissions: { select: { permission: true } },
-        _count: { select: { users: true } },
-      },
+      include: { _count: { select: { users: true } } },
     });
     if (!role) throw new NotFoundException('Company role not found');
     return role;
@@ -68,31 +53,18 @@ export class CompanyRolesService {
         name: dto.name,
         description: dto.description,
         isSystem: false,
-        permissions: {
-          create: dto.permissions.map((p) => ({ permission: p })),
-        },
       },
-      include: { permissions: true },
     });
   }
 
   async update(tenantId: string, id: string, dto: UpdateCompanyRoleDto) {
     await this.findById(tenantId, id);
-    if (dto.permissions) {
-      await this.prisma.companyRolePermission.deleteMany({
-        where: { companyRoleId: id },
-      });
-      await this.prisma.companyRolePermission.createMany({
-        data: dto.permissions.map((p) => ({
-          companyRoleId: id,
-          permission: p,
-        })),
-      });
-    }
     return this.prisma.companyRole.update({
       where: { id },
-      data: { name: dto.name, description: dto.description },
-      include: { permissions: true },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.description !== undefined && { description: dto.description }),
+      },
     });
   }
 

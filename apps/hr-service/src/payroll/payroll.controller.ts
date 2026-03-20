@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import {
   Controller,
   Get,
@@ -14,6 +15,7 @@ import { PayrollService } from './payroll.service';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@ApiTags('upayroll')
 @Controller('payroll')
 @UseGuards(JwtAuthGuard)
 export class PayrollController {

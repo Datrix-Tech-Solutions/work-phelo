@@ -45,9 +45,15 @@ export class CreateTenantDto {
 
   @IsOptional()
   @IsString()
+  country?: string;
+
+  @IsOptional()
+  @IsString()
   industry?: string;
 
   @IsOptional()
   @IsString()
   size?: string;
 }
+
+// field already handled in service with default

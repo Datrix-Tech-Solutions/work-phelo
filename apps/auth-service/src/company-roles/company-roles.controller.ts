@@ -1,3 +1,4 @@
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import {
   Controller,
   Get,
@@ -19,6 +20,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
 
+@ApiTags('Company Roles')
 @Controller('company-roles')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class CompanyRolesController {

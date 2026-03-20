@@ -3,11 +3,10 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateTenantDto } from './dto/create-tenant.dto';
-import { generateOtp, otpExpiresAt } from '../common/otp.helper';
-import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class TenantsService {
@@ -18,17 +17,17 @@ export class TenantsService {
 
   async register(dto: CreateTenantDto) {
     const existingTenant = await this.prisma.tenant.findFirst({
-      where: { OR: [{ email: dto.email }, { slug: dto.slug }] },
+      where: {
+        OR: [{ email: dto.email }, { slug: dto.slug }],
+      },
     });
-
     if (existingTenant) {
-      if (existingTenant.email === dto.email) {
-        throw new ConflictException('A company with this email already exists');
-      }
-      throw new ConflictException('This company slug is already taken');
+      throw new ConflictException(
+        existingTenant.email === dto.email
+          ? 'A company with this email already exists'
+          : 'This company slug is already taken',
+      );
     }
-
-    const hashedPassword = await bcrypt.hash(dto.password, 12);
 
     const tenant = await this.prisma.tenant.create({
       data: {
@@ -36,59 +35,105 @@ export class TenantsService {
         slug: dto.slug,
         email: dto.email,
         phone: dto.phone,
+        country: dto.country || 'GH',
         industry: dto.industry,
         size: dto.size,
         status: 'PENDING',
-        users: {
-          create: {
-            email: dto.email,
-            password: hashedPassword,
-            firstName: dto.firstName,
-            lastName: dto.lastName,
-            phone: dto.phone,
-            role: 'TENANT_ADMIN',
-            status: 'PENDING_VERIFICATION',
-          },
-        },
       },
-      include: { users: true },
     });
 
-    const adminUser = tenant.users[0];
+    const hashedPassword = await bcrypt.hash(dto.password, 12);
+    const user = await this.prisma.user.create({
+      data: {
+        tenantId: tenant.id,
+        email: dto.email,
+        password: hashedPassword,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        phone: dto.phone,
+        role: 'TENANT_ADMIN',
+        status: 'PENDING_VERIFICATION',
+      },
+    });
 
-    // Generate and store email verification OTP
-    const otp = generateOtp(6);
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
     await this.prisma.otpCode.create({
       data: {
-        userId: adminUser.id,
+        userId: user.id,
         type: 'EMAIL_VERIFICATION',
-        code: otp,
-        expiresAt: otpExpiresAt(10),
+        code,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
       },
     });
 
-    // Publish to notification-service via RabbitMQ
-    this.rabbitmq.sendEmailVerification({
-      userId: adminUser.id,
-      tenantId: tenant.id,
-      email: adminUser.email,
-      firstName: adminUser.firstName,
-      otp,
+    await this.rabbitmq.emit('notification.email_verification', {
+      email: user.email,
+      firstName: user.firstName,
+      otp: code,
+      tenantName: tenant.name,
     });
 
-    const { password, mfaSecret, inviteToken, ...safeUser } = adminUser;
-    const { users, ...tenantData } = tenant;
+    return {
+      message:
+        'Registration submitted. Check your email for verification code.',
+      tenantId: tenant.id,
+      userId: user.id,
+    };
+  }
+
+  async findAll(filters: {
+    status?: string;
+    search?: string;
+    tenantId?: string;
+  }) {
+    const where: any = {};
+    if (filters.tenantId) {
+      where.id = filters.tenantId;
+    }
+
+    if (filters.status) {
+      where.status = filters.status;
+    }
+
+    if (filters.search) {
+      where.OR = [
+        { name: { contains: filters.search, mode: 'insensitive' } },
+        { email: { contains: filters.search, mode: 'insensitive' } },
+        { slug: { contains: filters.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const tenants = await this.prisma.tenant.findMany({
+      where,
+      include: {
+        _count: { select: { users: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
     return {
-      tenant: tenantData,
-      adminUser: safeUser,
-      message:
-        'Registration successful. Please check your email to verify your account.',
+      total: tenants.length,
+      tenants: tenants.map((t) => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        email: t.email,
+        phone: t.phone,
+        country: t.country,
+        industry: t.industry,
+        size: t.size,
+        status: t.status,
+        userCount: t._count.users,
+        createdAt: t.createdAt,
+      })),
     };
   }
 
   async findById(id: string) {
-    const tenant = await this.prisma.tenant.findUnique({ where: { id } });
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id },
+      include: { _count: { select: { users: true } } },
+    });
     if (!tenant) throw new NotFoundException('Tenant not found');
     return tenant;
   }
@@ -100,18 +145,44 @@ export class TenantsService {
   }
 
   async approveTenant(id: string) {
-    await this.findById(id);
-    return this.prisma.tenant.update({
+    const tenant = await this.prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const updated = await this.prisma.tenant.update({
       where: { id },
       data: { status: 'ACTIVE' },
     });
+
+    // Activate admin user
+    await this.prisma.user.updateMany({
+      where: { tenantId: id, role: 'TENANT_ADMIN' },
+      data: { status: 'ACTIVE', emailVerifiedAt: new Date() },
+    });
+
+    return { message: 'Tenant approved successfully', tenant: updated };
   }
 
   async suspendTenant(id: string) {
-    await this.findById(id);
-    return this.prisma.tenant.update({
+    const tenant = await this.prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const updated = await this.prisma.tenant.update({
       where: { id },
       data: { status: 'SUSPENDED' },
     });
+
+    // Revoke all active sessions
+    const users = await this.prisma.user.findMany({ where: { tenantId: id } });
+    for (const user of users) {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: user.id },
+        data: { isRevoked: true },
+      });
+    }
+
+    return {
+      message: 'Tenant suspended. All active sessions revoked.',
+      tenant: updated,
+    };
   }
 }

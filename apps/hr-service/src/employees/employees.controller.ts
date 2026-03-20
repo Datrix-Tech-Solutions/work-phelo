@@ -1,3 +1,4 @@
+import { ApiTags } from '@nestjs/swagger';
 import {
   Controller,
   Get,
@@ -18,6 +19,7 @@ import { OffboardEmployeeDto } from './dto/offboard-employee.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
+@ApiTags('uemployees')
 @Controller('employees')
 @UseGuards(JwtAuthGuard)
 export class EmployeesController {

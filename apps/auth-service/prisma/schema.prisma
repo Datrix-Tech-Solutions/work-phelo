@@ -10,6 +10,8 @@ datasource db {
   schemas  = ["auth"]
 }
 
+// ── Enums ──────────────────────────────────────────────────────────────────
+
 enum UserRole {
   SUPER_ADMIN
   TENANT_ADMIN
@@ -58,12 +60,20 @@ enum MfaMethod {
   @@schema("auth")
 }
 
-enum PermissionEffect {
-  GRANT
-  REVOKE
+enum PermissionAction {
+  VIEW
+  CREATE
+  EDIT
+  DELETE
+  APPROVE
+  RUN
+  EXPORT
+  ASSIGN
 
   @@schema("auth")
 }
+
+// ── Tenant ─────────────────────────────────────────────────────────────────
 
 model Tenant {
   id             String       @id @default(uuid())
@@ -83,11 +93,114 @@ model Tenant {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  users          User[]
-  companyRoles   CompanyRole[]
+  users           User[]
+  companyRoles    CompanyRole[]
+  permissionSets  PermissionSet[]
+  userPermissions UserPermission[]
 
   @@schema("auth")
 }
+
+// ── Resource ───────────────────────────────────────────────────────────────
+// Platform-wide resource definitions. Seeded once, never per-tenant.
+// resource.tenantId = null means it is a platform resource available to all tenants.
+
+model Resource {
+  id          String   @id @default(uuid())
+  name        String   @unique  // e.g. "employees", "leave", "payroll"
+  module      String            // e.g. "HR", "AUTH", "FINANCE"
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  userPermissions       UserPermission[]
+  permissionSetResources PermissionSetResource[]
+
+  @@schema("auth")
+}
+
+// ── UserPermission ─────────────────────────────────────────────────────────
+// Direct per-user permission grants. Never hard-deleted.
+// Revoke = soft update: is_active=false, revoked_by, revoked_at.
+
+model UserPermission {
+  id         String           @id @default(uuid())
+  tenantId   String                               // leading filter — always scope by this first
+  userId     String
+  resourceId String
+  action     PermissionAction
+  grantedBy  String                               // userId of who granted
+  grantedAt  DateTime         @default(now())
+  expiresAt  DateTime?                            // null = never expires
+  revokedBy  String?                              // userId of who revoked
+  revokedAt  DateTime?
+  isActive   Boolean          @default(true)      // false = soft-revoked
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User     @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id])
+  granter  User     @relation("GrantedPermissions", fields: [grantedBy], references: [id])
+
+  @@unique([userId, resourceId, action])
+  @@schema("auth")
+}
+
+// ── PermissionSet ──────────────────────────────────────────────────────────
+// A named bundle of resource+action permissions. Per-tenant.
+// e.g. "HR Manager Set" = VIEW employees + APPROVE leave + VIEW attendance
+
+model PermissionSet {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)   // system sets cannot be deleted
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  resources PermissionSetResource[]
+  users     UserPermissionSet[]
+
+  @@unique([tenantId, name])
+  @@schema("auth")
+}
+
+// ── PermissionSetResource ──────────────────────────────────────────────────
+// Which resource+action combinations belong to a permission set.
+
+model PermissionSetResource {
+  id              String           @id @default(uuid())
+  permissionSetId String
+  resourceId      String
+  action          PermissionAction
+
+  permissionSet PermissionSet @relation(fields: [permissionSetId], references: [id], onDelete: Cascade)
+  resource      Resource      @relation(fields: [resourceId], references: [id])
+
+  @@unique([permissionSetId, resourceId, action])
+  @@schema("auth")
+}
+
+// ── UserPermissionSet ──────────────────────────────────────────────────────
+// Which users are assigned to which permission sets.
+
+model UserPermissionSet {
+  id              String   @id @default(uuid())
+  userId          String
+  permissionSetId String
+  grantedBy       String
+  grantedAt       DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionSet PermissionSet @relation(fields: [permissionSetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionSetId])
+  @@schema("auth")
+}
+
+// ── CompanyRole ────────────────────────────────────────────────────────────
 
 model CompanyRole {
   id          String   @id @default(uuid())
@@ -99,25 +212,14 @@ model CompanyRole {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant      Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  permissions CompanyRolePermission[]
-  users       User[]
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users   User[]
 
   @@unique([tenantId, name])
   @@schema("auth")
 }
 
-model CompanyRolePermission {
-  id            String      @id @default(uuid())
-  companyRoleId String
-  permission    String
-  createdAt     DateTime    @default(now())
-
-  companyRole   CompanyRole @relation(fields: [companyRoleId], references: [id], onDelete: Cascade)
-
-  @@unique([companyRoleId, permission])
-  @@schema("auth")
-}
+// ── User ───────────────────────────────────────────────────────────────────
 
 model User {
   id                  String      @id @default(uuid())
@@ -135,6 +237,8 @@ model User {
   mfaMethod           MfaMethod?
   mfaSecret           String?
   forcePasswordReset  Boolean     @default(false)
+  failedLoginAttempts Int         @default(0)
+  lockedUntil         DateTime?
   inviteToken         String?     @unique
   inviteExpiresAt     DateTime?
   emailVerifiedAt     DateTime?
@@ -143,17 +247,20 @@ model User {
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  tenant              Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  companyRole         CompanyRole?    @relation(fields: [companyRoleId], references: [id])
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  companyRole         CompanyRole?        @relation(fields: [companyRoleId], references: [id])
   refreshTokens       RefreshToken[]
   otpCodes            OtpCode[]
   socialAccounts      SocialAccount[]
-  userPermissions     UserPermission[] @relation("UserPermissions")
-  grantedPermissions  UserPermission[] @relation("GrantedPermissions")
+  userPermissions     UserPermission[]    @relation("UserPermissions")
+  grantedPermissions  UserPermission[]    @relation("GrantedPermissions")
+  permissionSets      UserPermissionSet[]
 
   @@unique([tenantId, email])
   @@schema("auth")
 }
+
+// ── RefreshToken ───────────────────────────────────────────────────────────
 
 model RefreshToken {
   id          String   @id @default(uuid())
@@ -167,10 +274,12 @@ model RefreshToken {
   isRevoked   Boolean  @default(false)
   createdAt   DateTime @default(now())
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@schema("auth")
 }
+
+// ── OtpCode ────────────────────────────────────────────────────────────────
 
 model OtpCode {
   id        String    @id @default(uuid())
@@ -181,38 +290,23 @@ model OtpCode {
   usedAt    DateTime?
   createdAt DateTime  @default(now())
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@schema("auth")
 }
+
+// ── SocialAccount ──────────────────────────────────────────────────────────
 
 model SocialAccount {
-  id           String         @id @default(uuid())
-  userId       String
-  provider     SocialProvider
-  providerId   String
-  email        String?
-  createdAt    DateTime       @default(now())
+  id         String         @id @default(uuid())
+  userId     String
+  provider   SocialProvider
+  providerId String
+  email      String?
+  createdAt  DateTime       @default(now())
 
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerId])
-  @@schema("auth")
-}
-
-model UserPermission {
-  id         String           @id @default(uuid())
-  userId     String
-  tenantId   String
-  permission String
-  effect     PermissionEffect
-  grantedBy  String
-  reason     String?
-  createdAt  DateTime         @default(now())
-
-  user       User             @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
-  granter    User             @relation("GrantedPermissions", fields: [grantedBy], references: [id])
-
-  @@unique([userId, permission])
   @@schema("auth")
 }

@@ -5,8 +5,20 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
+
+export const REQUIRE_PERMISSION_KEY = 'require_permission';
+
+export interface RequiredPermission {
+  resource: string;
+  action: string;
+}
+
+export const RequirePermission = (resource: string, action: string) =>
+  require('@nestjs/common').SetMetadata(REQUIRE_PERMISSION_KEY, {
+    resource,
+    action,
+  });
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -16,12 +28,13 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<string[]>(
-      PERMISSIONS_KEY,
+    const required = this.reflector.getAllAndOverride<RequiredPermission>(
+      REQUIRE_PERMISSION_KEY,
       [context.getHandler(), context.getClass()],
     );
 
-    if (!required || required.length === 0) return true;
+    // No permission decorator — endpoint is protected by JwtAuthGuard only
+    if (!required) return true;
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
@@ -32,51 +45,63 @@ export class PermissionsGuard implements CanActivate {
       );
     }
 
-    // SUPER_ADMIN and TENANT_ADMIN bypass all permission checks
-    if (user.role === 'SUPER_ADMIN' || user.role === 'TENANT_ADMIN') {
-      return true;
-    }
+    // ── Step 1: SUPER_ADMIN bypass (global) ─────────────────────────────────
+    if (user.role === 'SUPER_ADMIN') return true;
 
-    for (const permission of required) {
-      const allowed = await this.hasPermission(
-        user.id,
-        user.companyRoleId,
-        permission,
-      );
-      if (!allowed) {
-        throw new ForbiddenException(
-          "You don't have permission to access this. Contact your administrator.",
-        );
-      }
-    }
+    // ── Step 2: TENANT_ADMIN bypass (within their own tenant) ───────────────
+    if (user.role === 'TENANT_ADMIN') return true;
 
-    return true;
-  }
-
-  private async hasPermission(
-    userId: string,
-    companyRoleId: string | undefined,
-    permission: string,
-  ): Promise<boolean> {
-    // 1. Check personal REVOKE — overrides everything
-    const override = await this.prisma.userPermission.findUnique({
-      where: { userId_permission: { userId, permission } },
+    // ── Step 3: Resolve resource by name ────────────────────────────────────
+    const resource = await this.prisma.resource.findUnique({
+      where: { name: required.resource },
     });
-    if (override?.effect === 'REVOKE') return false;
 
-    // 2. Check company role permissions from DB
-    if (companyRoleId) {
-      const rolePermission = await this.prisma.companyRolePermission.findUnique(
-        {
-          where: { companyRoleId_permission: { companyRoleId, permission } },
-        },
+    if (!resource) {
+      throw new ForbiddenException(
+        "You don't have permission to access this. Contact your administrator.",
       );
-      if (rolePermission) return true;
     }
 
-    // 3. Check personal GRANT
-    if (override?.effect === 'GRANT') return true;
+    const tenantId = user.tenantId;
+    const userId = user.id;
 
-    return false;
+    // ── Step 4: Check direct user_permissions ───────────────────────────────
+    // Leading filter: tenantId first, then userId, then resource+action
+    const directPermission = await this.prisma.userPermission.findFirst({
+      where: {
+        tenantId,
+        userId,
+        resourceId: resource.id,
+        action: required.action as any,
+        isActive: true,
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+    });
+
+    if (directPermission) return true;
+
+    // ── Step 5: Check permission sets ────────────────────────────────────────
+    const setPermission = await this.prisma.userPermissionSet.findFirst({
+      where: {
+        userId,
+        permissionSet: {
+          tenantId,
+          isActive: true,
+          resources: {
+            some: {
+              resourceId: resource.id,
+              action: required.action as any,
+            },
+          },
+        },
+      },
+    });
+
+    if (setPermission) return true;
+
+    // ── Step 6: Deny ──────────────────────────────────────────────────────────
+    throw new ForbiddenException(
+      "You don't have permission to access this. Contact your administrator.",
+    );
   }
 }
