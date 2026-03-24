@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { AuditModule } from './audit/audit.module';
 import { CompanyRolesModule } from './company-roles/company-roles.module';
 
 @Module({
@@ -17,6 +18,8 @@ import { CompanyRolesModule } from './company-roles/company-roles.module';
     TenantsModule,
     UsersModule,
     PermissionsModule,
+    AuditModule,
+    AuditModule,
     CompanyRolesModule,
   ],
   providers: [

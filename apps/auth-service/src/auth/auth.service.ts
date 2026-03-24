@@ -11,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -32,6 +33,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly rabbitmq: RabbitMQPublisher,
+    private readonly audit: AuditService,
   ) {}
 
   // ── Token Generation ────────────────────────────────────────────────────
@@ -181,6 +183,17 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: 'LOGIN',
+      resource: 'auth',
+      resourceId: user.id,
+      status: 'SUCCESS',
+    });
+
     return {
       accessToken,
       refreshToken,
@@ -226,6 +239,17 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
+    });
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: 'LOGIN',
+      resource: 'auth',
+      resourceId: user.id,
+      status: 'SUCCESS',
     });
 
     return {

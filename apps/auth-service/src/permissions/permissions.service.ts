@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   GrantPermissionDto,
@@ -14,7 +15,10 @@ import { PermissionAction } from './dto/grant-permission.dto';
 
 @Injectable()
 export class PermissionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ── Resources ─────────────────────────────────────────────────────────────
 
@@ -101,6 +105,15 @@ export class PermissionsService {
       },
     });
 
+    await this.audit.log({
+      tenantId: tenantId,
+      userId: grantedBy,
+      action: 'ASSIGN',
+      resource: 'permission-sets',
+      resourceId: dto.userId,
+      changes: { after: { resourceId: dto.resourceId, action: dto.action } },
+      status: 'SUCCESS',
+    });
     return { message: 'Permission granted', permission };
   }
 
@@ -138,6 +151,15 @@ export class PermissionsService {
       include: { resource: true },
     });
 
+    await this.audit.log({
+      tenantId: tenantId,
+      userId: revokedBy,
+      action: 'REVOKE',
+      resource: 'permission-sets',
+      resourceId: dto.userId,
+      changes: { after: { resourceId: dto.resourceId, action: dto.action } },
+      status: 'SUCCESS',
+    });
     return { message: 'Permission revoked', permission: updated };
   }
 
