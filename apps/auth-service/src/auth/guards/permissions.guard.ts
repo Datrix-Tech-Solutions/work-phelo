@@ -25,6 +25,9 @@ type AuthenticatedRequest = {
   user?: AuthenticatedUser;
 };
 
+const DENY_MESSAGE =
+  "You don't have permission to access this. Contact your administrator.";
+
 const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.INVITE_USER]: [
     { resource: 'users', actions: [PermissionAction.CREATE] },
@@ -66,6 +69,71 @@ export class PermissionsGuard implements CanActivate {
     private readonly prisma: PrismaService,
   ) {}
 
+  private async getResourceIdByName(
+    resourceName: string,
+    resourceIdCache: Map<string, string | null>,
+  ): Promise<string | null> {
+    if (resourceIdCache.has(resourceName)) {
+      return resourceIdCache.get(resourceName) ?? null;
+    }
+
+    const resource = await this.prisma.resource.findUnique({
+      where: { name: resourceName },
+      select: { id: true },
+    });
+
+    const resourceId = resource?.id ?? null;
+    resourceIdCache.set(resourceName, resourceId);
+    return resourceId;
+  }
+
+  private async hasPermissionForRule(
+    tenantId: string,
+    userId: string,
+    rule: PermissionRule,
+    resourceIdCache: Map<string, string | null>,
+  ): Promise<boolean> {
+    const resourceId = await this.getResourceIdByName(
+      rule.resource,
+      resourceIdCache,
+    );
+
+    if (!resourceId) return false;
+
+    const hasDirectPermission = Boolean(
+      await this.prisma.userPermission.findFirst({
+        where: {
+          tenantId,
+          userId,
+          resourceId,
+          action: { in: rule.actions },
+          isActive: true,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+      }),
+    );
+
+    if (hasDirectPermission) return true;
+
+    return Boolean(
+      await this.prisma.userPermissionSet.findFirst({
+        where: {
+          userId,
+          permissionSet: {
+            tenantId,
+            isActive: true,
+            resources: {
+              some: {
+                resourceId,
+                action: { in: rule.actions },
+              },
+            },
+          },
+        },
+      }),
+    );
+  }
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
       PERMISSIONS_KEY,
@@ -79,9 +147,7 @@ export class PermissionsGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      throw new ForbiddenException(
-        "You don't have permission to access this. Contact your administrator.",
-      );
+      throw new ForbiddenException(DENY_MESSAGE);
     }
 
     // ── Step 1: SUPER_ADMIN bypass (global) ─────────────────────────────────
@@ -92,72 +158,32 @@ export class PermissionsGuard implements CanActivate {
 
     const tenantId = user.tenantId;
     const userId = user.id;
+    const resourceIdCache = new Map<string, string | null>();
 
     // ── Step 3: Enforce each declared permission (fail closed if unknown) ───
     for (const permission of requiredPermissions) {
       const rules = PERMISSION_TO_RULES[permission];
       if (!rules || rules.length === 0) {
-        throw new ForbiddenException(
-          "You don't have permission to access this. Contact your administrator.",
-        );
+        throw new ForbiddenException(DENY_MESSAGE);
       }
 
       let hasPermission = false;
       for (const rule of rules) {
-        const resource = await this.prisma.resource.findUnique({
-          where: { name: rule.resource },
-        });
-
-        if (!resource) continue;
-
-        // Check direct user permissions
-        const hasDirectPermission = Boolean(
-          await this.prisma.userPermission.findFirst({
-            where: {
-              tenantId,
-              userId,
-              resourceId: resource.id,
-              action: { in: rule.actions },
-              isActive: true,
-              OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-            },
-          }),
-        );
-
-        if (hasDirectPermission) {
-          hasPermission = true;
-          break;
-        }
-
-        // Check permission sets
-        const hasSetPermission = Boolean(
-          await this.prisma.userPermissionSet.findFirst({
-            where: {
-              userId,
-              permissionSet: {
-                tenantId,
-                isActive: true,
-                resources: {
-                  some: {
-                    resourceId: resource.id,
-                    action: { in: rule.actions },
-                  },
-                },
-              },
-            },
-          }),
-        );
-
-        if (hasSetPermission) {
+        if (
+          await this.hasPermissionForRule(
+            tenantId,
+            userId,
+            rule,
+            resourceIdCache,
+          )
+        ) {
           hasPermission = true;
           break;
         }
       }
 
       if (!hasPermission) {
-        throw new ForbiddenException(
-          "You don't have permission to access this. Contact your administrator.",
-        );
+        throw new ForbiddenException(DENY_MESSAGE);
       }
     }
 

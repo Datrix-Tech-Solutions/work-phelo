@@ -21,6 +21,14 @@ build/
 # Logs
 *.log
 npm-debug.log*
+*.pid
+*.pid.lock
+
+# Local caches and temp files
+.eslintcache
+*.tsbuildinfo
+*.tmp
+*.swp
 
 # OS
 .DS_Store
