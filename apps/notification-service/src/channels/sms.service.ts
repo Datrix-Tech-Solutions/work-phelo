@@ -27,9 +27,13 @@ export class SmsService {
         }),
       });
 
-      const data: any = await response.json();
+      const data: unknown = await response.json();
+      const statusCode =
+        data && typeof data === 'object' && 'code' in data
+          ? String((data as { code: unknown }).code)
+          : undefined;
 
-      if (!response.ok || data.code !== 'ok') {
+      if (!response.ok || statusCode !== 'ok') {
         this.logger.error(
           `Termii SMS failed for ${to}: ${JSON.stringify(data)}`,
         );

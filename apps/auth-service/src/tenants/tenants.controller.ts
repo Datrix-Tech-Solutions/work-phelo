@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiQuery,
+  ApiBody,
 } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
@@ -36,6 +37,23 @@ export class TenantsController {
     description: 'Tenant created — email OTP sent for verification',
   })
   @ApiResponse({ status: 409, description: 'Email or slug already exists' })
+  @ApiBody({
+    description: 'Tenant registration payload',
+    schema: {
+      example: {
+        name: 'Acme Ghana Ltd',
+        slug: 'acme-ghana',
+        email: 'admin@acmeghana.com',
+        password: 'Admin123!',
+        firstName: 'Abena',
+        lastName: 'Mensah',
+        phone: '+233244111001',
+        country: 'GH',
+        industry: 'Manufacturing',
+        size: '100-500',
+      },
+    },
+  })
   register(@Body() dto: CreateTenantDto) {
     return this.tenantsService.register(dto);
   }
@@ -68,6 +86,9 @@ export class TenantsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get tenant by ID' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Tenant retrieved successfully' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
   findOne(@Param('id') id: string) {
     return this.tenantsService.findById(id);
   }
@@ -77,6 +98,9 @@ export class TenantsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Approve pending tenant — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Tenant approved successfully' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
   approve(@Param('id') id: string) {
     return this.tenantsService.approveTenant(id);
   }
@@ -86,6 +110,9 @@ export class TenantsController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Suspend active tenant — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Tenant suspended successfully' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
   suspend(@Param('id') id: string) {
     return this.tenantsService.suspendTenant(id);
   }

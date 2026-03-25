@@ -64,5 +64,5 @@ All frontend requests go through this gateway at port **4000**.
     swaggerOptions: { persistAuthorization: true },
   });
 
-  console.log('📖 API Gateway docs: http://localhost:4000/docs');
+  console.log(' API Gateway docs: http://localhost:4000/docs');
 }

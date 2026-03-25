@@ -4,13 +4,13 @@ import {
   ForbiddenException,
   BadRequestException,
   NotFoundException,
-  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { LoginDto } from './dto/login.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
@@ -32,6 +32,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly rabbitmq: RabbitMQPublisher,
+    private readonly audit: AuditService,
   ) {}
 
   // ── Token Generation ────────────────────────────────────────────────────
@@ -181,18 +182,28 @@ export class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: 'LOGIN',
+      resource: 'auth',
+      resourceId: user.id,
+      status: 'SUCCESS',
+    });
+
     return {
       accessToken,
       refreshToken,
+      expiresIn: 900,
       user: {
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        companyRoleId: user.companyRoleId,
-        tenantId: tenant.id,
-        tenantSlug: tenant.slug,
+        tenantId: user.tenantId,
       },
     };
   }
@@ -226,6 +237,17 @@ export class AuthService {
     await this.prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
+    });
+
+    await this.audit.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: 'LOGIN',
+      resource: 'auth',
+      resourceId: user.id,
+      status: 'SUCCESS',
     });
 
     return {
@@ -280,8 +302,17 @@ export class AuthService {
   }
 
   async resendVerification(dto: ResendVerificationDto) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: dto.tenantSlug },
+    });
+
+    if (!tenant)
+      return {
+        message: 'If that email exists, a verification code has been sent',
+      };
+
     const user = await this.prisma.user.findFirst({
-      where: { email: dto.email },
+      where: { tenantId: tenant.id, email: dto.email },
       include: { tenant: true },
     });
     if (!user)
@@ -304,11 +335,12 @@ export class AuthService {
       },
     });
 
-    await this.rabbitmq.emit('notification.email_verification', {
+    this.rabbitmq.sendEmailVerification({
+      userId: user.id,
+      tenantId: user.tenantId,
       email: user.email,
       firstName: user.firstName,
       otp: code,
-      tenantName: user.tenant.name,
     });
 
     return {
@@ -362,8 +394,17 @@ export class AuthService {
 
   // ── Password Reset ──────────────────────────────────────────────────────
   async forgotPassword(dto: ForgotPasswordDto) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: dto.tenantSlug },
+    });
+
+    if (!tenant)
+      return {
+        message: 'If that email exists, reset instructions have been sent',
+      };
+
     const user = await this.prisma.user.findFirst({
-      where: { email: dto.email },
+      where: { tenantId: tenant.id, email: dto.email },
       include: { tenant: true },
     });
     if (!user)
@@ -382,23 +423,25 @@ export class AuthService {
         userId: user.id,
         type: 'PASSWORD_RESET',
         code,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
       },
     });
 
     if (dto.method === 'sms' && user.phone) {
-      await this.rabbitmq.emit('notification.password_reset_otp', {
-        phone: user.phone,
-        otp: code,
-        firstName: user.firstName,
-      });
-    } else {
-      const resetLink = `${process.env.APP_URL}/reset-password?token=${code}&userId=${user.id}`;
-      await this.rabbitmq.emit('notification.password_reset_link', {
+      this.rabbitmq.sendPasswordResetOtp({
+        userId: user.id,
+        tenantId: user.tenantId,
         email: user.email,
         firstName: user.firstName,
-        resetLink,
-        tenantName: user.tenant.name,
+        otp: code,
+      });
+    } else {
+      this.rabbitmq.sendPasswordResetLink({
+        userId: user.id,
+        tenantId: user.tenantId,
+        email: user.email,
+        firstName: user.firstName,
+        resetToken: code,
       });
     }
 
@@ -588,7 +631,9 @@ export class AuthService {
       },
     });
 
-    await this.rabbitmq.emit('notification.sms_otp', {
+    this.rabbitmq.sendSmsOtp({
+      userId: user.id,
+      tenantId: user.tenantId,
       phone: user.phone,
       otp: code,
       context: 'login',

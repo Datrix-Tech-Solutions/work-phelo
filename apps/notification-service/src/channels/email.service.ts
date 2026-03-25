@@ -95,7 +95,7 @@ export class EmailService {
             <h2 style="color: #4F46E5;">Password Reset Request</h2>
             <p>Hi ${firstName},</p>
             <p>We received a request to reset your password. Click the button below to proceed.</p>
-            <p>This link expires in <strong>1 hour</strong>.</p>
+            <p>This link expires in <strong>15 minutes</strong>.</p>
             <div style="text-align: center; margin: 30px 0;">
               <a href="${resetUrl}"
                 style="background: #4F46E5; color: white; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px;">
@@ -132,7 +132,7 @@ export class EmailService {
             <div style="background: #f4f4f4; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
               <h1 style="letter-spacing: 8px; color: #333; font-size: 36px;">${otp}</h1>
             </div>
-            <p>This code expires in <strong>1 hour</strong>.</p>
+            <p>This code expires in <strong>15 minutes</strong>.</p>
             <p style="color: #666; font-size: 12px;">If you did not request this, please ignore this email.</p>
           </div>
         `,

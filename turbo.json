@@ -11,6 +11,11 @@
       "persistent": true
     },
     "lint": {
+      "dependsOn": ["build", "^build"],
+      "outputs": []
+    },
+    "check-types": {
+      "dependsOn": ["build", "^build"],
       "outputs": []
     },
     "test": {

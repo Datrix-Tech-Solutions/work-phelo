@@ -310,3 +310,50 @@ model SocialAccount {
   @@unique([provider, providerId])
   @@schema("auth")
 }
+
+// ── AuditLog ───────────────────────────────────────────────────────────────
+// Immutable — no updates or deletes ever. Append-only.
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REVOKE
+  LOGIN
+  LOGOUT
+  EXPORT
+  ASSIGN
+  RUN
+
+  @@schema("auth")
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILURE
+
+  @@schema("auth")
+}
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  tenantId      String
+  userId        String?
+  userEmail     String?
+  userRole      String?
+  action        AuditAction
+  resource      String
+  resourceId    String?
+  changes       Json?
+  ipAddress     String?
+  userAgent     String?
+  status        AuditStatus @default(SUCCESS)
+  failureReason String?
+  createdAt     DateTime    @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, resource])
+  @@index([tenantId, userId])
+  @@schema("auth")
+}

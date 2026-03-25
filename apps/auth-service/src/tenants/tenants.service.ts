@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 
@@ -13,6 +14,7 @@ export class TenantsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
+    private readonly audit: AuditService,
   ) {}
 
   async register(dto: CreateTenantDto) {
@@ -159,6 +161,17 @@ export class TenantsService {
       data: { status: 'ACTIVE', emailVerifiedAt: new Date() },
     });
 
+    await this.audit.log({
+      tenantId: id,
+      action: 'APPROVE',
+      resource: 'tenants',
+      resourceId: id,
+      changes: {
+        before: { status: tenant.status },
+        after: { status: 'ACTIVE' },
+      },
+      status: 'SUCCESS',
+    });
     return { message: 'Tenant approved successfully', tenant: updated };
   }
 

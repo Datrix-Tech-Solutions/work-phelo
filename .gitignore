@@ -12,12 +12,23 @@ build/
 .env.local
 .env.*.local
 
+# Local session/cookie artifacts
+*.cookies
+
 # Turbo cache
 .turbo/
 
 # Logs
 *.log
 npm-debug.log*
+*.pid
+*.pid.lock
+
+# Local caches and temp files
+.eslintcache
+*.tsbuildinfo
+*.tmp
+*.swp
 
 # OS
 .DS_Store
