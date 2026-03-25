@@ -302,8 +302,17 @@ export class AuthService {
   }
 
   async resendVerification(dto: ResendVerificationDto) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: dto.tenantSlug },
+    });
+
+    if (!tenant)
+      return {
+        message: 'If that email exists, a verification code has been sent',
+      };
+
     const user = await this.prisma.user.findFirst({
-      where: { email: dto.email },
+      where: { tenantId: tenant.id, email: dto.email },
       include: { tenant: true },
     });
     if (!user)
@@ -385,8 +394,17 @@ export class AuthService {
 
   // ── Password Reset ──────────────────────────────────────────────────────
   async forgotPassword(dto: ForgotPasswordDto) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { slug: dto.tenantSlug },
+    });
+
+    if (!tenant)
+      return {
+        message: 'If that email exists, reset instructions have been sent',
+      };
+
     const user = await this.prisma.user.findFirst({
-      where: { email: dto.email },
+      where: { tenantId: tenant.id, email: dto.email },
       include: { tenant: true },
     });
     if (!user)
