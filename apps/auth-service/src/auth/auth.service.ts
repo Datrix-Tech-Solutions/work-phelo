@@ -4,7 +4,6 @@ import {
   ForbiddenException,
   BadRequestException,
   NotFoundException,
-  ConflictException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -327,11 +326,12 @@ export class AuthService {
       },
     });
 
-    await this.rabbitmq.emit('notification.email_verification', {
+    this.rabbitmq.sendEmailVerification({
+      userId: user.id,
+      tenantId: user.tenantId,
       email: user.email,
       firstName: user.firstName,
       otp: code,
-      tenantName: user.tenant.name,
     });
 
     return {
@@ -410,18 +410,20 @@ export class AuthService {
     });
 
     if (dto.method === 'sms' && user.phone) {
-      await this.rabbitmq.emit('notification.password_reset_otp', {
-        phone: user.phone,
-        otp: code,
-        firstName: user.firstName,
-      });
-    } else {
-      const resetLink = `${process.env.APP_URL}/reset-password?token=${code}&userId=${user.id}`;
-      await this.rabbitmq.emit('notification.password_reset_link', {
+      this.rabbitmq.sendPasswordResetOtp({
+        userId: user.id,
+        tenantId: user.tenantId,
         email: user.email,
         firstName: user.firstName,
-        resetLink,
-        tenantName: user.tenant.name,
+        otp: code,
+      });
+    } else {
+      this.rabbitmq.sendPasswordResetLink({
+        userId: user.id,
+        tenantId: user.tenantId,
+        email: user.email,
+        firstName: user.firstName,
+        resetToken: code,
       });
     }
 
@@ -611,7 +613,9 @@ export class AuthService {
       },
     });
 
-    await this.rabbitmq.emit('notification.sms_otp', {
+    this.rabbitmq.sendSmsOtp({
+      userId: user.id,
+      tenantId: user.tenantId,
       phone: user.phone,
       otp: code,
       context: 'login',
