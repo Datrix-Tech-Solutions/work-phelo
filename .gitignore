@@ -12,6 +12,9 @@ build/
 .env.local
 .env.*.local
 
+# Local session/cookie artifacts
+*.cookies
+
 # Turbo cache
 .turbo/
 
