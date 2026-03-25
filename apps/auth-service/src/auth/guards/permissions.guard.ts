@@ -6,19 +6,58 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
+import { PermissionAction } from '../../../prisma/generated/client';
 
-export const REQUIRE_PERMISSION_KEY = 'require_permission';
-
-export interface RequiredPermission {
+type PermissionRule = {
   resource: string;
-  action: string;
-}
+  actions: PermissionAction[];
+};
 
-export const RequirePermission = (resource: string, action: string) =>
-  require('@nestjs/common').SetMetadata(REQUIRE_PERMISSION_KEY, {
-    resource,
-    action,
-  });
+type AuthenticatedUser = {
+  id: string;
+  tenantId: string;
+  role: string;
+};
+
+type AuthenticatedRequest = {
+  user?: AuthenticatedUser;
+};
+
+const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
+  [Permission.INVITE_USER]: [
+    { resource: 'users', actions: [PermissionAction.CREATE] },
+  ],
+  [Permission.READ_USERS]: [
+    { resource: 'users', actions: [PermissionAction.VIEW] },
+  ],
+  [Permission.UPDATE_USER]: [
+    { resource: 'users', actions: [PermissionAction.EDIT] },
+  ],
+  [Permission.DEACTIVATE_USER]: [
+    { resource: 'users', actions: [PermissionAction.DELETE] },
+  ],
+  [Permission.FORCE_RESET_USER]: [
+    { resource: 'users', actions: [PermissionAction.EDIT] },
+  ],
+  [Permission.READ_COMPANY_ROLES]: [
+    { resource: 'company-roles', actions: [PermissionAction.VIEW] },
+  ],
+  [Permission.MANAGE_COMPANY_ROLES]: [
+    {
+      resource: 'company-roles',
+      actions: [
+        PermissionAction.CREATE,
+        PermissionAction.EDIT,
+        PermissionAction.DELETE,
+      ],
+    },
+  ],
+  [Permission.ASSIGN_ROLE]: [
+    { resource: 'company-roles', actions: [PermissionAction.ASSIGN] },
+  ],
+};
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -28,15 +67,15 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const required = this.reflector.getAllAndOverride<RequiredPermission>(
-      REQUIRE_PERMISSION_KEY,
+    const requiredPermissions = this.reflector.getAllAndOverride<string[]>(
+      PERMISSIONS_KEY,
       [context.getHandler(), context.getClass()],
     );
 
     // No permission decorator — endpoint is protected by JwtAuthGuard only
-    if (!required) return true;
+    if (!requiredPermissions || requiredPermissions.length === 0) return true;
 
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = request.user;
 
     if (!user) {
@@ -51,57 +90,77 @@ export class PermissionsGuard implements CanActivate {
     // ── Step 2: TENANT_ADMIN bypass (within their own tenant) ───────────────
     if (user.role === 'TENANT_ADMIN') return true;
 
-    // ── Step 3: Resolve resource by name ────────────────────────────────────
-    const resource = await this.prisma.resource.findUnique({
-      where: { name: required.resource },
-    });
-
-    if (!resource) {
-      throw new ForbiddenException(
-        "You don't have permission to access this. Contact your administrator.",
-      );
-    }
-
     const tenantId = user.tenantId;
     const userId = user.id;
 
-    // ── Step 4: Check direct user_permissions ───────────────────────────────
-    // Leading filter: tenantId first, then userId, then resource+action
-    const directPermission = await this.prisma.userPermission.findFirst({
-      where: {
-        tenantId,
-        userId,
-        resourceId: resource.id,
-        action: required.action as any,
-        isActive: true,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
-      },
-    });
+    // ── Step 3: Enforce each declared permission (fail closed if unknown) ───
+    for (const permission of requiredPermissions) {
+      const rules = PERMISSION_TO_RULES[permission];
+      if (!rules || rules.length === 0) {
+        throw new ForbiddenException(
+          "You don't have permission to access this. Contact your administrator.",
+        );
+      }
 
-    if (directPermission) return true;
+      let hasPermission = false;
+      for (const rule of rules) {
+        const resource = await this.prisma.resource.findUnique({
+          where: { name: rule.resource },
+        });
 
-    // ── Step 5: Check permission sets ────────────────────────────────────────
-    const setPermission = await this.prisma.userPermissionSet.findFirst({
-      where: {
-        userId,
-        permissionSet: {
-          tenantId,
-          isActive: true,
-          resources: {
-            some: {
+        if (!resource) continue;
+
+        // Check direct user permissions
+        const hasDirectPermission = Boolean(
+          await this.prisma.userPermission.findFirst({
+            where: {
+              tenantId,
+              userId,
               resourceId: resource.id,
-              action: required.action as any,
+              action: { in: rule.actions },
+              isActive: true,
+              OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
             },
-          },
-        },
-      },
-    });
+          }),
+        );
 
-    if (setPermission) return true;
+        if (hasDirectPermission) {
+          hasPermission = true;
+          break;
+        }
 
-    // ── Step 6: Deny ──────────────────────────────────────────────────────────
-    throw new ForbiddenException(
-      "You don't have permission to access this. Contact your administrator.",
-    );
+        // Check permission sets
+        const hasSetPermission = Boolean(
+          await this.prisma.userPermissionSet.findFirst({
+            where: {
+              userId,
+              permissionSet: {
+                tenantId,
+                isActive: true,
+                resources: {
+                  some: {
+                    resourceId: resource.id,
+                    action: { in: rule.actions },
+                  },
+                },
+              },
+            },
+          }),
+        );
+
+        if (hasSetPermission) {
+          hasPermission = true;
+          break;
+        }
+      }
+
+      if (!hasPermission) {
+        throw new ForbiddenException(
+          "You don't have permission to access this. Contact your administrator.",
+        );
+      }
+    }
+
+    return true;
   }
 }
