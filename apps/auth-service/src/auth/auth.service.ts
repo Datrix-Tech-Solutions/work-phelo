@@ -197,15 +197,14 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
+      expiresIn: 900,
       user: {
         id: user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        companyRoleId: user.companyRoleId,
-        tenantId: tenant.id,
-        tenantSlug: tenant.slug,
+        tenantId: user.tenantId,
       },
     };
   }
@@ -406,7 +405,7 @@ export class AuthService {
         userId: user.id,
         type: 'PASSWORD_RESET',
         code,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
       },
     });
 

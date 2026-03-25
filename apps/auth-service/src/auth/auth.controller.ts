@@ -50,6 +50,16 @@ export class AuthController {
     status: 403,
     description: 'Tenant suspended or user inactive',
   })
+  @ApiBody({
+    description: 'Login payload',
+    schema: {
+      example: {
+        tenantSlug: 'acme-ghana',
+        email: 'admin@acmeghana.com',
+        password: 'Admin123!',
+      },
+    },
+  })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
@@ -108,6 +118,16 @@ export class AuthController {
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend email verification OTP' })
+  @ApiBody({
+    description: 'Resend verification payload',
+    schema: {
+      example: {
+        tenantSlug: 'acme-ghana',
+        email: 'admin@acmeghana.com',
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Verification OTP sent' })
   resendVerification(@Body() dto: ResendVerificationDto) {
     return this.authService.resendVerification(dto);
   }
@@ -122,8 +142,11 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const refreshToken = req.cookies?.refresh_token;
-    if (!refreshToken)
-      return res.status(401).json({ message: 'No refresh token provided' });
+    if (!refreshToken) {
+      res.status(HttpStatus.UNAUTHORIZED);
+      return { message: 'No refresh token provided' };
+    }
+
     const result = await this.authService.refresh({ refreshToken });
     setAuthCookies(res, result.accessToken, result.refreshToken);
     return { message: 'Tokens refreshed successfully' };
@@ -134,6 +157,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Logout current device — clears cookies and revokes refresh token',
   })
+  @ApiResponse({ status: 200, description: 'Logged out successfully' })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.refresh_token;
     if (refreshToken) await this.authService.logout(refreshToken);
@@ -146,6 +170,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Logout all devices — revokes all refresh tokens' })
+  @ApiResponse({ status: 200, description: 'Logged out from all devices' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   async logoutAll(@Req() req: any, @Res({ passthrough: true }) res: Response) {
     await this.authService.logoutAll(req.user.id);
     clearAuthCookies(res);
@@ -156,6 +182,29 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset via email link or SMS OTP' })
   @ApiResponse({ status: 200, description: 'Reset instructions sent' })
+  @ApiBody({
+    description: 'Forgot password request payload',
+    schema: {
+      examples: {
+        emailLink: {
+          summary: 'Email reset flow',
+          value: {
+            tenantSlug: 'acme-ghana',
+            email: 'kofi.boateng@acmeghana.com',
+            method: 'email',
+          },
+        },
+        smsOtp: {
+          summary: 'SMS OTP reset flow',
+          value: {
+            tenantSlug: 'acme-ghana',
+            email: 'kofi.boateng@acmeghana.com',
+            method: 'sms',
+          },
+        },
+      },
+    },
+  })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
@@ -164,6 +213,32 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password using email link token or SMS OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiBody({
+    description: 'Reset password payload',
+    schema: {
+      examples: {
+        tokenFlow: {
+          summary: 'Reset by token',
+          value: {
+            tenantSlug: 'acme-ghana',
+            email: 'kofi.boateng@acmeghana.com',
+            token: '123456',
+            newPassword: 'Employee123!New',
+          },
+        },
+        otpFlow: {
+          summary: 'Reset by OTP code',
+          value: {
+            tenantSlug: 'acme-ghana',
+            email: 'kofi.boateng@acmeghana.com',
+            otpCode: '123456',
+            newPassword: 'Employee123!New',
+          },
+        },
+      },
+    },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid reset request payload' })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
@@ -173,6 +248,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Change password — requires current password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  @ApiResponse({
+    status: 401,
+    description: 'Missing/invalid token or password',
+  })
   changePassword(@Body() dto: ChangePasswordDto, @Req() req: any) {
     return this.authService.changePassword(req.user.id, dto);
   }
@@ -182,6 +262,23 @@ export class AuthController {
   @ApiOperation({
     summary:
       'Force reset — used when login returns requiresPasswordReset: true',
+  })
+  @ApiBody({
+    description: 'Force reset payload',
+    schema: {
+      example: {
+        userId: 'replace-with-user-id-from-login-response',
+        newPassword: 'TempPass123!Updated',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password reset and login successful',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'No reset pending or invalid request',
   })
   async forceResetPassword(
     @Body() dto: ForceResetPasswordDto,
@@ -198,6 +295,8 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Setup TOTP MFA — returns QR code and secret' })
+  @ApiResponse({ status: 200, description: 'TOTP setup data generated' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   setupTotp(@Req() req: any) {
     return this.authService.setupTotp(req.user.id);
   }
@@ -205,6 +304,16 @@ export class AuthController {
   @Post('mfa/verify-totp')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify TOTP code and enable MFA' })
+  @ApiBody({
+    schema: {
+      example: {
+        userId: 'replace-with-user-id',
+        totpCode: '123456',
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'MFA enabled successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid TOTP code' })
   verifyTotp(@Body() dto: VerifyMfaDto) {
     return this.authService.verifyAndEnableMfa(dto);
   }
@@ -212,6 +321,15 @@ export class AuthController {
   @Post('mfa/send-sms')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send SMS OTP to registered phone number' })
+  @ApiBody({
+    schema: {
+      example: {
+        userId: 'replace-with-user-id',
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'SMS OTP sent' })
+  @ApiResponse({ status: 400, description: 'No phone number on file' })
   sendSmsOtp(@Body() dto: SendSmsOtpDto) {
     return this.authService.sendSmsMfaOtp(dto);
   }
@@ -221,6 +339,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Verify SMS OTP and enable SMS MFA' })
+  @ApiBody({
+    schema: {
+      example: {
+        otpCode: '123456',
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'SMS MFA enabled successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid or expired OTP' })
   verifySmsOtp(@Body('otpCode') otpCode: string, @Req() req: any) {
     return this.authService.verifySmsMfaAndEnable(req.user.id, otpCode);
   }
@@ -230,6 +357,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Disable MFA' })
+  @ApiBody({
+    schema: {
+      example: {
+        totpCode: '123456',
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'MFA disabled successfully' })
+  @ApiResponse({ status: 401, description: 'Invalid TOTP code' })
   disableMfa(@Body('totpCode') totpCode: string, @Req() req: any) {
     return this.authService.disableMfa(req.user.id, totpCode);
   }
@@ -237,11 +373,19 @@ export class AuthController {
   @Get('google')
   @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Initiate Google OAuth — open in browser only' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to Google consent screen',
+  })
   googleAuth(@Query('tenantSlug') tenantSlug: string) {}
 
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
   @ApiOperation({ summary: 'Google OAuth callback' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to frontend callback URL',
+  })
   async googleCallback(@Req() req: any, @Res() res: Response) {
     const { profile, tenantSlug } = req.user;
     const result = await this.authService.handleSocialLogin(
@@ -257,11 +401,19 @@ export class AuthController {
   @Get('microsoft')
   @UseGuards(MicrosoftAuthGuard)
   @ApiOperation({ summary: 'Initiate Microsoft OAuth — open in browser only' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to Microsoft consent screen',
+  })
   microsoftAuth(@Query('tenantSlug') tenantSlug: string) {}
 
   @Get('microsoft/callback')
   @UseGuards(MicrosoftAuthGuard)
   @ApiOperation({ summary: 'Microsoft OAuth callback' })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirects to frontend callback URL',
+  })
   async microsoftCallback(@Req() req: any, @Res() res: Response) {
     const { profile, tenantSlug } = req.user;
     const result = await this.authService.handleSocialLogin(

@@ -4,6 +4,7 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiQuery,
+  ApiResponse,
 } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -41,6 +42,9 @@ export class AuditController {
   @ApiQuery({ name: 'to', required: false, description: 'ISO date string' })
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
+  @ApiResponse({ status: 200, description: 'Audit logs retrieved' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   query(
     @Req() req: any,
     @Query('resource') resource?: string,

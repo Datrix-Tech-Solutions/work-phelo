@@ -123,14 +123,16 @@ async function main() {
     where: {
       tenantId_email: {
         tenantId: datrixTenant.id,
-        email: 'superadmin@datrix.com',
+        email: process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com',
       },
     },
     update: {},
     create: {
       tenantId: datrixTenant.id,
-      email: 'superadmin@datrix.com',
-      password: await hash('SuperAdmin123!'),
+      email: process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com',
+      password: await hash(
+        process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin123!',
+      ),
       firstName: 'Super',
       lastName: 'Admin',
       role: 'SUPER_ADMIN',
@@ -138,7 +140,9 @@ async function main() {
       emailVerifiedAt: new Date(),
     },
   });
-  console.log('  ✅ superadmin@datrix.com / SuperAdmin123!');
+  console.log(
+    `  ✅ ${process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com'} (from env or default)`,
+  );
 
   // ── 2. ACME GHANA ──────────────────────────────────────────────────────────
   console.log('\nCreating Acme Ghana Ltd...');
@@ -545,12 +549,12 @@ async function main() {
     });
   }
 
-  console.log('  ✅ admin@stellartech.com.gh / Admin123!');
+  console.log('  admin@stellartech.com.gh / Admin123!');
   console.log(
-    '  ✅ manager@stellartech.com.gh / Manager123! → Manager Set assigned',
+    '  manager@stellartech.com.gh / Manager123! → Manager Set assigned',
   );
   console.log(
-    '  ✅ dev@stellartech.com.gh / Employee123! → Employee Set assigned',
+    '  dev@stellartech.com.gh / Employee123! → Employee Set assigned',
   );
 
   // ── 4. GOLDEN HARVEST (PENDING) ───────────────────────────────────────────
@@ -586,7 +590,7 @@ async function main() {
       status: 'PENDING_VERIFICATION',
     },
   });
-  console.log('  ✅ PENDING — approve via: PATCH /tenants/{id}/approve');
+  console.log('  PENDING — approve via: PATCH /tenants/{id}/approve');
 
   // ── 5. SUNRISE IMPORTS (SUSPENDED) ────────────────────────────────────────
   console.log('\nCreating Sunrise Imports (suspended)...');
@@ -622,11 +626,11 @@ async function main() {
       emailVerifiedAt: new Date(),
     },
   });
-  console.log('  ✅ SUSPENDED — login returns 403');
+  console.log('  SUSPENDED — login returns 403');
 
   // ── SUMMARY ────────────────────────────────────────────────────────────────
   console.log('\n' + '='.repeat(65));
-  console.log('✅ SEED COMPLETE\n');
+  console.log(' SEED COMPLETE\n');
   console.log('Resources seeded:     ' + Object.keys(resources).length);
   console.log('System Roles (3):     SUPER_ADMIN | TENANT_ADMIN | EMPLOYEE');
   console.log(
@@ -636,7 +640,18 @@ async function main() {
     'Permission Sets:      Company Admin Set | Manager Set | Employee Set (per tenant)',
   );
   console.log('='.repeat(65));
-  console.log('\nSuperAdmin:           superadmin@datrix.com / SuperAdmin123!');
+  const superAdminEmail =
+    process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com';
+  const superAdminPasswordSource = process.env.SUPER_ADMIN_PASSWORD
+    ? 'environment variable'
+    : 'default seed value';
+  console.log(
+    '\nSuperAdmin:           ' +
+      superAdminEmail +
+      ' / [password from ' +
+      superAdminPasswordSource +
+      ']',
+  );
   console.log('\nAcme Ghana (acme-ghana):');
   console.log('  Admin (TENANT_ADMIN): admin@acmeghana.com / Admin123!');
   console.log('  Manager + Set:        hr.manager@acmeghana.com / Manager123!');
