@@ -9,8 +9,30 @@ env:
   ORG: datrix-tech-solutions
 
 jobs:
+  quality-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type checks
+        run: npm run check-types
+
+      - name: Build validation
+        run: npm run build
+
   build-and-push:
     runs-on: ubuntu-latest
+    needs: quality-gates
     permissions:
       contents: read
       packages: write
@@ -94,7 +116,7 @@ jobs:
     needs: build-and-push
     steps:
       - name: Deploy to Dev Server
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
@@ -121,14 +143,11 @@ jobs:
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/subscription-service:dev
             docker pull ghcr.io/datrix-tech-solutions/work-phelo/marketing-service:dev
 
-            # Stop and remove ALL containers including orphans and infra
-            docker compose -f infrastructure/docker-compose.dev.yml down --remove-orphans --volumes
+            # Recreate only what changed and keep persistent volumes intact.
+            docker compose -f infrastructure/docker-compose.dev.yml up -d --remove-orphans
 
-            # Force remove any lingering named containers that might conflict
-            docker rm -f erp-redis erp-rabbitmq erp-gateway-dev erp-auth-dev erp-hr-dev erp-notification-dev erp-subscription-dev erp-marketing-dev 2>/dev/null || true
-
-            # Start fresh
-            docker compose -f infrastructure/docker-compose.dev.yml up -d
+            # Basic health and status check
+            docker compose -f infrastructure/docker-compose.dev.yml ps
 
             # Clean up old images
             docker image prune -f

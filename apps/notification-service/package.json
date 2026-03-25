@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "nest start --watch",
+    "prebuild": "npm run db:generate",
     "build": "nest build",
+    "check-types": "tsc --noEmit -p tsconfig.build.json",
     "start": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate"
