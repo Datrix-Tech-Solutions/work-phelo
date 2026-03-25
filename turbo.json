@@ -14,7 +14,7 @@
       "outputs": []
     },
     "check-types": {
-      "dependsOn": ["^check-types"],
+      "dependsOn": ["^build"],
       "outputs": []
     },
     "test": {
