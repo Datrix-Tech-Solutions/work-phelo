@@ -122,7 +122,7 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
-          command_timeout: 30m
+          command_timeout: 90m
           script: |
             set -e
 
@@ -135,16 +135,11 @@ jobs:
 
             echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u datrix-tech-solutions --password-stdin
 
-            # Pull all images
-            docker pull ghcr.io/datrix-tech-solutions/work-phelo/api-gateway:dev
-            docker pull ghcr.io/datrix-tech-solutions/work-phelo/auth-service:dev
-            docker pull ghcr.io/datrix-tech-solutions/work-phelo/hr-service:dev
-            docker pull ghcr.io/datrix-tech-solutions/work-phelo/notification-service:dev
-            docker pull ghcr.io/datrix-tech-solutions/work-phelo/subscription-service:dev
-            docker pull ghcr.io/datrix-tech-solutions/work-phelo/marketing-service:dev
+            # Pull images via compose (faster/more maintainable than individual pulls).
+            docker compose -f infrastructure/docker-compose.dev.yml pull
 
             # Recreate only what changed and keep persistent volumes intact.
-            docker compose -f infrastructure/docker-compose.dev.yml up -d --remove-orphans
+            docker compose -f infrastructure/docker-compose.dev.yml up -d --remove-orphans --no-build
 
             # Basic health and status check
             docker compose -f infrastructure/docker-compose.dev.yml ps
