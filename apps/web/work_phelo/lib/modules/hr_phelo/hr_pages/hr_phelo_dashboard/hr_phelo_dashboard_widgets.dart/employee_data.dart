@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 
-import '../../../../../Functions/company_functions/onboarding_function/onboarding_model.dart';
-import '../../../../../Functions/company_functions/onboarding_function/user_state.dart';
-import '../../../../../components/app_widgets/cards/stat_card.dart';
+import '../../../../../work_phelo_components/widgets/custom_cards/stats_card.dart';
 
 class EmployeeDataSummary extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   const EmployeeDataSummary({super.key, required this.currentUser});
 
   @override

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/login_functions/auth_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
 
-import '../../components/app_theme/misc.dart';
-import '../../components/app_theme/text_styles.dart';
+import '../../work_phelo_components/theme/app_text_theme.dart';
+import '../../work_phelo_components/theme/miscellaneouse.dart';
 
 void logoutConfirmationPopup(BuildContext context, WidgetRef ref) {
   final authNotifier = ref.read(authNotifierProvider.notifier);
@@ -67,6 +67,11 @@ void logoutConfirmationPopup(BuildContext context, WidgetRef ref) {
                   children: [
                     OutlinedButton(
                       onPressed: () => Navigator.pop(context),
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(appRadius),
+                        ),
+                      ),
                       child: Text(
                         'Cancel',
                         style: myNoInfoStyle(
@@ -77,14 +82,22 @@ void logoutConfirmationPopup(BuildContext context, WidgetRef ref) {
                     const SizedBox(width: 8),
                     FilledButton(
                       style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(appRadius),
+                        ),
                         backgroundColor: cs.primary,
-                        foregroundColor: cs.error,
+                        foregroundColor: cs.surface,
                       ),
                       onPressed: () {
                         Navigator.pop(context);
                         authNotifier.logout();
                       },
-                      child: const Text('Sign out'),
+                      child: Text(
+                        'Sign out',
+                        style: myNoInfoStyle(
+                          context,
+                        ).copyWith(color: cs.onPrimary),
+                      ),
                     ),
                   ],
                 ),

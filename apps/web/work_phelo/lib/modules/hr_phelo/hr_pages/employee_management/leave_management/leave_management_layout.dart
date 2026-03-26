@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-
-import '../../../../../Functions/company_functions/leave_function/leave_state.dart';
-import '../../../../../Functions/company_functions/onboarding_function/user_state.dart';
-import '../../../../../components/app_theme/colors.dart';
-import '../../../../../components/app_widgets/lists/app_lists.dart';
-import '../../../../../components/form_components/my_buttons.dart';
-import '../../../../../components/form_components/my_side_panel.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_leave_functions/employee_leave_request_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../../../work_phelo_components/theme/app.colors.dart';
+import '../../../../../work_phelo_components/widgets/custom_lists/app_table_widget.dart';
+import '../../../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../../../work_phelo_components/widgets/form_components/side_form_panel.dart';
 import 'leave_management_widgets/employee_leave_list.dart';
 import 'leave_management_widgets/leave_form.dart';
 
 class LeaveManagementLayout extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   const LeaveManagementLayout({super.key, required this.currentUser});
 
   @override
@@ -40,11 +39,13 @@ class _LeaveManagementLayoutState extends ConsumerState<LeaveManagementLayout> {
     return AppTableWidget(
       headerTitle: 'Employees',
       details: 'Manage your workforce',
+      noDataText: 'No leave requests found.',
       headerTrailing: MyOutlinedButton(
         btnText: 'Request Leave',
         btnIcon: UniconsLine.user_plus,
         btnAccent: myMainColor,
         isHovered: false,
+        
         onPressed: () => _panel.show(
           context: context,
           formTitle: 'Leave Form',

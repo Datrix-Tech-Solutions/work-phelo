@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-
-import '../../../../../components/app_theme/text_styles.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../../../work_phelo_components/theme/app_text_theme.dart';
 import '../../management_widgets/mgt_tab.dart';
 import 'pr_subpages/assign_roles_tab.dart';
 import 'pr_subpages/roles_templates_tab.dart';
 
 class RolesPermissionsPage extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   final VoidCallback onBack;
   const RolesPermissionsPage({super.key, required this.onBack,required this.currentUser});
 

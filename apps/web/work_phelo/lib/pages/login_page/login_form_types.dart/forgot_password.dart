@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../Components/app_theme/text_styles.dart';
-import '../../../components/app_theme/app_images.dart';
-import '../../../components/app_theme/padding.dart';
-import '../../../components/form_components/my_buttons.dart';
-import '../../../components/form_components/text_fields.dart';
+import '../../../work_phelo_components/theme/app_images.dart';
+import '../../../work_phelo_components/theme/app_padding.dart';
+import '../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 import '../auth_layout.dart';
 import '../login_utils/validators.dart';
 import 'login_page.dart';

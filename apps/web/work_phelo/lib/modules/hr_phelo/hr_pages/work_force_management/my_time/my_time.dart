@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import '../../../../../components/app_widgets/lists/app_lists.dart';
+import '../../../../../work_phelo_components/widgets/custom_lists/app_table_widget.dart';
 import 'my_time_widgets/employee_logs_list.dart';
 
 class MyTimePlanner extends StatelessWidget {
@@ -9,6 +8,7 @@ class MyTimePlanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppTableWidget(
+      noDataText: 'No attendance records found.',
       headerTitle: 'Attendance log',
       // search: CustomSearchField(hinttext: 'search employees'),
       // search: CustomSearchField(hinttext: 'Search employee...'),

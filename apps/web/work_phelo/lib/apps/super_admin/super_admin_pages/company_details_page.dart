@@ -1,18 +1,17 @@
 import 'package:flutter/material.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-import 'package:work_phelo/functions/super_admin_functions/company_model.dart';
-
-import '../../../components/app_theme/padding.dart';
-import '../../../components/app_theme/text_styles.dart';
-import '../../../components/app_widgets/cards/company_details_card.dart';
-import '../../../components/app_widgets/cards/display_card.dart';
-import '../../../components/app_widgets/cards/title_card.dart';
-import '../../../components/app_widgets/lists/app_lists.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../work_phelo_components/theme/app_padding.dart';
+import '../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../work_phelo_components/widgets/custom_cards/company_card.dart';
+import '../../../work_phelo_components/widgets/custom_cards/display_card.dart';
+import '../../../work_phelo_components/widgets/custom_cards/title_card.dart';
+import '../../../work_phelo_components/widgets/custom_lists/app_list.dart';
 import 'module_config_card.dart';
 
 class CompanyDetailPage extends StatelessWidget {
   final CompanyModel company;
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   final VoidCallback onBack;
 
   const CompanyDetailPage({

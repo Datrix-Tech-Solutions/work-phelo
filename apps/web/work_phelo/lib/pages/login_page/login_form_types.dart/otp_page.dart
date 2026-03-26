@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-import '../../../Components/Form_Components/text_fields.dart';
-import '../../../Components/app_theme/text_styles.dart';
-import '../../../components/app_theme/app_images.dart';
-import '../../../components/app_theme/padding.dart';
-import '../../../components/app_widgets/snack_bar.dart';
-import '../../../components/form_components/my_buttons.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../work_phelo_components/theme/app_images.dart';
+import '../../../work_phelo_components/theme/app_padding.dart';
+import '../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
+import '../../../work_phelo_components/widgets/misc/snack_bar.dart';
 import '../auth_layout.dart';
 import 'login_page.dart';
 import 'reset_password.dart';
@@ -84,7 +84,7 @@ class _OTPPageState extends State<OTPPage> {
 
     if (otp == _mockCorrectOtp) {
       String routeName;
-      final user = AppUser(
+      final user = AppUserModel(
         uid: "mock_${widget.email.trim().toLowerCase().hashCode}",
         email: widget.email,
         fullName: widget.fullName,
@@ -195,6 +195,7 @@ class ResetPasswordCodePage extends StatefulWidget {
   final String role;
   final String fullName;
   final String companyName;
+  
   const ResetPasswordCodePage({
     super.key,
     required this.email,

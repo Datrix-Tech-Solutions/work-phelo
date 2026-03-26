@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 
-import '../../../../../../Components/App_Theme/text_styles.dart';
-import '../../../../../../Functions/company_functions/departments/department_model.dart';
-import '../../../../../../Functions/company_functions/departments/department_state.dart';
-import '../../../../../../Functions/company_functions/onboarding_function/onboarding_model.dart';
+import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
+
 
 class DepartmentMemberSideBar extends ConsumerStatefulWidget {
-  final DepartmentModel dept;
-  final AppUser currentUser;
-  final List<UserModel> tenantUsers;
-  final List<UserModel> currentMembers;
+  final CompanyDepartmentsModel dept;
+  final AppUserModel currentUser;
+  final List<EmployeeModel> tenantUsers;
+  final List<EmployeeModel> currentMembers;
 
   const DepartmentMemberSideBar({
     super.key,

@@ -1,13 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:unicons/unicons.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_asset_management_functions/asset_icons.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_asset_management_functions/company_asset_model.dart';
 
-import '../../../../../components/App_Theme/text_styles.dart';
-import '../../../../../components/app_theme/misc.dart';
-import '../../../../../components/app_theme/padding.dart';
-import '../../../../../components/app_widgets/cards/employee_card.dart';
+import '../../../../../work_phelo_components/theme/app_padding.dart';
+import '../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../work_phelo_components/theme/miscellaneouse.dart';
+import '../../../../../work_phelo_components/widgets/custom_cards/employee_card.dart';
+
 
 class AssetCard extends StatefulWidget {
-  const AssetCard({super.key});
+  final AssetModel asset;
+  final VoidCallback? onEdit;
+  final VoidCallback? onAssign;
+  final VoidCallback? onDelete;
+
+  const AssetCard({
+    super.key,
+    required this.asset,
+    this.onEdit,
+    this.onAssign,
+    this.onDelete,
+  });
 
   @override
   State<AssetCard> createState() => _AssetCardState();
@@ -15,9 +29,12 @@ class AssetCard extends StatefulWidget {
 
 class _AssetCardState extends State<AssetCard> {
   bool _hovered = false;
+
   @override
   Widget build(BuildContext context) {
     final cs = ColorScheme.of(context);
+    final icon = getAssetIcon(widget.asset.assetType);
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -37,45 +54,55 @@ class _AssetCardState extends State<AssetCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── details ─────────────────────────────────────
             Padding(
               padding: myDisplayContentPadding,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ListTile(
-                    leading: CircleAvatar(child: Icon(UniconsLine.monitor)),
+                    leading: CircleAvatar(
+                      backgroundColor: cs.primaryContainer.withAlpha(80),
+                      child: Icon(
+                        icon,
+                        color: cs.primary,
+                        size: 28,
+                      ),
+                    ),
                     title: Text(
-                      'Asset name',
-                      style: myMainTextStyle(
-                        context,
-                      ).copyWith(fontWeight: FontWeight.w500),
+                      widget.asset.assetName,
+                      style: myMainTextStyle(context).copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     subtitle: Text(
-                      'asset type',
-                      style: myNoInfoStyle(
-                        context,
-                      ).copyWith(color: cs.onSurfaceVariant),
+                      widget.asset.assetType,
+                      style: myNoInfoStyle(context).copyWith(
+                        color: cs.onSurfaceVariant,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     trailing: StatusBadge(
                       bg: Colors.green.withAlpha(10),
                       fg: Colors.green,
-                      label: '• assigned',
+                      label: '• ${widget.asset.availability}',
                     ),
                   ),
+
                   Row(
                     children: [
                       Expanded(
                         child: MetaCell(
                           label: 'serial number',
-                          value: 'J2323NUB4',
+                          value: widget.asset.serialNumber,
                         ),
                       ),
                       Expanded(
-                        child: MetaCell(label: 'assetID', value: 'LPT-001'),
+                        child: MetaCell(
+                          label: 'assetID',
+                          value: widget.asset.id,
+                        ),
                       ),
                     ],
                   ),
@@ -85,11 +112,14 @@ class _AssetCardState extends State<AssetCard> {
                       Expanded(
                         child: MetaCell(
                           label: 'date purchased',
-                          value: 'dd/mm/yyy',
+                          value: _formatDate(widget.asset.purchaseDate),
                         ),
                       ),
                       Expanded(
-                        child: MetaCell(label: 'condition', value: 'good'),
+                        child: MetaCell(
+                          label: 'condition',
+                          value: widget.asset.assetCondition,
+                        ),
                       ),
                     ],
                   ),
@@ -97,24 +127,25 @@ class _AssetCardState extends State<AssetCard> {
                   const SizedBox(height: 20),
                   myDivider(context),
                   const SizedBox(height: 10),
+
                   Row(
                     children: [
                       ActionsRow(
-                        btnIcon: UniconsLine.abacus,
+                        btnIcon: UniconsLine.edit,
                         btnText: 'Edit',
-                        onPressed: () {},
+                        onPressed: (){},
                         btnAccent: Colors.blue,
                       ),
                       ActionsRow(
-                        btnIcon: UniconsLine.abacus,
+                        btnIcon: UniconsLine.user_plus,
                         btnText: 'Assign',
-                        onPressed: () {},
+                        onPressed: (){},
                         btnAccent: Colors.orange,
                       ),
                       ActionsRow(
-                        btnIcon: UniconsLine.abacus,
+                        btnIcon: UniconsLine.trash,
                         btnText: 'Delete',
-                        onPressed: () {},
+                        onPressed: (){},
                         btnAccent: Colors.red,
                       ),
                     ],
@@ -126,6 +157,12 @@ class _AssetCardState extends State<AssetCard> {
         ),
       ),
     );
+  }
+
+  String _formatDate(DateTime date) {
+    return "${date.day.toString().padLeft(2, '0')}/"
+           "${date.month.toString().padLeft(2, '0')}/"
+           "${date.year}";
   }
 }
 

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 
-import '../../../../../../Components/App_Theme/text_styles.dart';
-import '../../../../../../Functions/company_functions/departments/department_model.dart';
-import '../../../../../../Functions/company_functions/departments/department_state.dart';
-import '../../../../../../Functions/company_functions/onboarding_function/user_state.dart';
-import '../../../../../../components/app_theme/misc.dart';
+import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../../work_phelo_components/theme/miscellaneouse.dart';
 
 class EditForm extends ConsumerStatefulWidget {
-  final DepartmentModel dept;
-  final AppUser currentUser;
+  final CompanyDepartmentsModel dept;
+  final AppUserModel currentUser;
 
   const EditForm({super.key, required this.dept, required this.currentUser});
 

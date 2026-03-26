@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-import 'package:work_phelo/functions/app_users/login_functions/auth_state.dart';
-import 'package:work_phelo/functions/super_admin_functions/company_model.dart';
-
-import '../../../Components/Form_Components/text_fields.dart';
-import '../../../Components/app_theme/text_styles.dart';
-import '../../../Functions/Super_Admin_Functions/company_state.dart';
-import '../../../components/app_theme/app_images.dart';
-import '../../../components/app_theme/colors.dart';
-import '../../../components/app_theme/misc.dart';
-import '../../../components/app_theme/padding.dart';
-import '../../../components/app_widgets/snack_bar.dart';
-import '../../../components/form_components/my_buttons.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../work_phelo_components/theme/app.colors.dart';
+import '../../../work_phelo_components/theme/app_images.dart';
+import '../../../work_phelo_components/theme/app_padding.dart';
+import '../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../work_phelo_components/theme/miscellaneouse.dart';
+import '../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
+import '../../../work_phelo_components/widgets/misc/snack_bar.dart';
 import '../auth_layout.dart';
 import '../login_utils/validators.dart';
 import 'forgot_password.dart';
@@ -53,12 +52,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       return;
     }
 
-    setState(() => showLoginState = false); // 👈 clear banner on new attempt
+    setState(() => showLoginState = false);
 
     await ref.read(authNotifierProvider.notifier).login(email, password);
   }
 
-  void _routeToDashboard(AppUser user) {
+  void _routeToDashboard(AppUserModel user) {
     // Pending platform owner → get started flow
     if (user.isPlatformOwner) {
       final companies = ref.read(companyProvider).companies;
@@ -95,7 +94,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+    ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
       if (next.error != null) {
         setState(() => _errorMessage = next.error);
         showLoginState = true;

@@ -2,11 +2,12 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
 
-import '../../../../../../Functions/company_functions/onboarding_function/user_state.dart';
-import '../../../../../../components/app_theme/text_styles.dart';
-import '../../../../../../components/form_components/my_buttons.dart';
-import '../../../../../../components/form_components/text_fields.dart';
+import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
+
 
 class OffBoardingForm extends ConsumerStatefulWidget {
   const OffBoardingForm({super.key});

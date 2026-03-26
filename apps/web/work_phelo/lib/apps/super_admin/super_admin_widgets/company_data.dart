@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/super_admin_functions/company_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_state.dart';
 
-import '../../../Functions/Super_Admin_Functions/company_state.dart';
-import '../../../components/app_widgets/cards/stat_card.dart';
+import '../../../work_phelo_components/widgets/custom_cards/stats_card.dart';
 
 class CompanyData extends ConsumerStatefulWidget {
   const CompanyData({super.key});
