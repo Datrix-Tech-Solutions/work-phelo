@@ -22,6 +22,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForceResetPasswordDto } from './dto/force-reset-password.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
+import { WorkspaceUrl } from '../common/workspace-url.helper';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
@@ -394,24 +395,30 @@ export class AuthService {
 
   // ── Password Reset ──────────────────────────────────────────────────────
   async forgotPassword(dto: ForgotPasswordDto) {
+    // Scope lookup to the tenant — prevents cross-tenant OTP token pollution
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
     });
 
-    if (!tenant)
+    // Always return the same message regardless of whether tenant/user exists
+    // to prevent tenant enumeration via timing attacks
+    if (!tenant || tenant.status !== 'ACTIVE') {
       return {
         message: 'If that email exists, reset instructions have been sent',
       };
+    }
 
-    const user = await this.prisma.user.findFirst({
-      where: { tenantId: tenant.id, email: dto.email },
-      include: { tenant: true },
+    const user = await this.prisma.user.findUnique({
+      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
     });
-    if (!user)
+
+    if (!user) {
       return {
         message: 'If that email exists, reset instructions have been sent',
       };
+    }
 
+    // Invalidate any existing unused reset tokens for this user
     await this.prisma.otpCode.updateMany({
       where: { userId: user.id, type: 'PASSWORD_RESET', usedAt: null },
       data: { usedAt: new Date() },
@@ -423,25 +430,24 @@ export class AuthService {
         userId: user.id,
         type: 'PASSWORD_RESET',
         code,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
       },
     });
 
     if (dto.method === 'sms' && user.phone) {
-      this.rabbitmq.sendPasswordResetOtp({
-        userId: user.id,
-        tenantId: user.tenantId,
-        email: user.email,
-        firstName: user.firstName,
+      await this.rabbitmq.emit('notification.password_reset_otp', {
+        phone: user.phone,
         otp: code,
+        firstName: user.firstName,
       });
     } else {
-      this.rabbitmq.sendPasswordResetLink({
-        userId: user.id,
-        tenantId: user.tenantId,
+      // Workspace-aware reset link — slug gives frontend context; token is the authority
+      const resetLink = WorkspaceUrl.resetPassword(tenant.slug, code);
+      await this.rabbitmq.emit('notification.password_reset_link', {
         email: user.email,
         firstName: user.firstName,
-        resetToken: code,
+        resetLink,
+        tenantName: tenant.name,
       });
     }
 
