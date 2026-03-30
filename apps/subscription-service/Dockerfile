@@ -18,7 +18,6 @@ RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
 RUN npm run build --workspace=packages/config
-RUN cd apps/subscription-service && npx prisma generate
 RUN npm run build --workspace=apps/subscription-service
 
 FROM node:20-alpine AS runner
