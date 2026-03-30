@@ -35,7 +35,7 @@ COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
 # Install production deps with full workspace context
-RUN npm ci --omit=dev
+RUN HUSKY=0 npm ci --omit=dev
 # Copy built service
 COPY --from=builder /app/apps/auth-service/dist ./apps/auth-service/dist
 COPY --from=builder /app/apps/auth-service/prisma ./apps/auth-service/prisma

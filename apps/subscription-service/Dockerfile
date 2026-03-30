@@ -12,7 +12,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/package-lock.json ./
 COPY --from=builder /app/apps/subscription-service/package.json ./apps/subscription-service/
-RUN npm ci --omit=dev
+RUN HUSKY=0 npm ci --omit=dev
 COPY --from=builder /app/apps/subscription-service/dist ./apps/subscription-service/dist
 WORKDIR /app/apps/subscription-service
 EXPOSE 4005

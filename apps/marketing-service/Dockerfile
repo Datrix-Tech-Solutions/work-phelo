@@ -12,7 +12,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/package-lock.json ./
 COPY --from=builder /app/apps/marketing-service/package.json ./apps/marketing-service/
-RUN npm ci --omit=dev
+RUN HUSKY=0 npm ci --omit=dev
 COPY --from=builder /app/apps/marketing-service/dist ./apps/marketing-service/dist
 WORKDIR /app/apps/marketing-service
 EXPOSE 4006

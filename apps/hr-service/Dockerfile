@@ -31,7 +31,7 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-RUN npm ci --omit=dev
+RUN HUSKY=0 npm ci --omit=dev
 COPY --from=builder /app/apps/hr-service/dist ./apps/hr-service/dist
 COPY --from=builder /app/apps/hr-service/prisma ./apps/hr-service/prisma
 WORKDIR /app/apps/hr-service
