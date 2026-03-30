@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: []
+    branches: [dev, prod]
   push:
-    branches: []
+    branches: [dev, prod]
 
 jobs:
   validate:
