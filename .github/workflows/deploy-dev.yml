@@ -224,7 +224,17 @@ jobs:
               up -d --remove-orphans --no-build
             echo " Services recreated"
 
-            # ── 5. Health checks ───────────────────────────────────────────
+            # ── 5. Run DB migrations ──────────────────────────────────
+            echo "Running database migrations..."
+            # Ensure schemas exist before migrating
+            docker exec erp-postgres-dev psql -U erp -d workphelo               -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS hr;"               2>/dev/null || true
+            # Auth service migrations
+            docker exec erp-auth-dev npx prisma migrate deploy               --schema /app/apps/auth-service/prisma/schema.prisma || true
+            # HR service migrations
+            docker exec erp-hr-dev npx prisma migrate deploy               --schema /app/apps/hr-service/prisma/schema.prisma || true
+            echo " Migrations complete"
+
+            # ── 6. Health checks ───────────────────────────────────────────
             echo "Waiting 20s for services to initialise..."
             sleep 20
 
@@ -279,10 +289,10 @@ jobs:
             echo "── Container Status ──────────────────"
             docker compose -f "${{ env.COMPOSE_FILE }}" ps
 
-            # ── 7. Clean up dangling images ────────────────────────────────
+            # ── 8. Clean up dangling images ────────────────────────────────
             docker image prune -f --filter "until=24h"
 
-            # ── 8. Fail if critical services are unhealthy ─────────────────
+            # ── 9. Fail if critical services are unhealthy ─────────────────
             if [[ -n "$FAILED_SERVICES" ]]; then
               echo ""
               echo " Deployment failed — unhealthy services:$FAILED_SERVICES"
