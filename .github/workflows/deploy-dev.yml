@@ -42,8 +42,7 @@ jobs:
     needs: quality-gates
 
     outputs:
-      changed: ${{ steps.filter.outputs.changed }}
-      any_changed: ${{ steps.filter.outputs.any_changed }}
+      changed: ${{ steps.filter.outputs.changes }}
 
     steps:
       - name: Checkout code
@@ -93,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: detect-changes
 
-    if: needs.detect-changes.outputs.any_changed == 'true'
+    if: needs.detect-changes.outputs.changed != '[]' && needs.detect-changes.outputs.changed != ''
 
     permissions:
       contents: read
@@ -109,7 +108,7 @@ jobs:
           - notification-service
           - subscription-service
           - marketing-service
-        exclude: ${{ fromJSON(needs.detect-changes.outputs.changed == '[]' && '[{"service":"__none__"}]' || '[]') }}
+
 
     steps:
       - name: Checkout code
