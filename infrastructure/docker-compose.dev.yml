@@ -1,7 +1,26 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: erp-postgres-dev
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:5432:5432'
+    environment:
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: erppassword
+      POSTGRES_DB: workphelo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U erp -d workphelo']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: erp-rabbitmq
+    restart: unless-stopped
     ports:
       - '127.0.0.1:5672:5672'
       - '127.0.0.1:15672:15672'
@@ -19,6 +38,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: erp-redis
+    restart: unless-stopped
     volumes:
       - redis_data:/data
     healthcheck:
@@ -50,6 +70,8 @@ services:
     env_file:
       - ../apps/auth-service/.env
     depends_on:
+      postgres:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       redis:
@@ -64,6 +86,8 @@ services:
     env_file:
       - ../apps/hr-service/.env
     depends_on:
+      postgres:
+        condition: service_healthy
       rabbitmq:
         condition: service_healthy
       redis:
@@ -110,5 +134,6 @@ services:
         condition: service_healthy
 
 volumes:
+  postgres_data:
   rabbitmq_data:
   redis_data:
