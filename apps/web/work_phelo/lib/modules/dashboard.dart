@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-import 'package:work_phelo/functions/app_users/login_functions/auth_state.dart';
-
-import '../components/app_theme/app_images.dart';
-import '../components/app_theme/colors.dart';
-import '../components/app_theme/misc.dart';
-import '../components/app_widgets/cards/display_card.dart';
-import '../components/app_widgets/cards/title_card.dart';
-import '../components/app_widgets/user_avators.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../pages/log_out/user_details_popup.dart';
+import '../work_phelo_components/theme/app.colors.dart';
+import '../work_phelo_components/theme/app_images.dart';
+import '../work_phelo_components/theme/miscellaneouse.dart';
+import '../work_phelo_components/widgets/custom_cards/display_card.dart';
+import '../work_phelo_components/widgets/custom_cards/title_card.dart';
+import '../work_phelo_components/widgets/misc/user_avator.dart';
 import 'module_options.dart';
 
 class DashboardPage extends ConsumerStatefulWidget {
@@ -21,16 +20,16 @@ class DashboardPage extends ConsumerStatefulWidget {
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
-  late AppUser user;
+  late AppUserModel user;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AppUser) {
+    if (args is AppUserModel) {
       user = args;
     } else {
-      user = AppUser(
+      user = AppUserModel(
         uid: '',
         email: 'unknown',
         fullName: 'Guest',
@@ -54,7 +53,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+    ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
       if (previous?.isAuthenticated == true && !next.isAuthenticated) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }

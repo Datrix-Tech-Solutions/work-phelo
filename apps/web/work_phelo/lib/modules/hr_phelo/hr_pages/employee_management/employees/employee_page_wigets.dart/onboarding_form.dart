@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-import '../../../../../../Functions/company_functions/departments/department_state.dart';
-import '../../../../../../Functions/company_functions/onboarding_function/onboarding_model.dart';
-import '../../../../../../Functions/company_functions/onboarding_function/user_state.dart';
-import '../../../../../../components/app_theme/padding.dart';
-import '../../../../../../components/app_theme/text_styles.dart';
-import '../../../../../../components/form_components/text_fields.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../../../../../pages/login_page/login_utils/validators.dart';
+import '../../../../../../work_phelo_components/theme/app_padding.dart';
+import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 
 class OnboardingForm extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   const OnboardingForm({super.key, required this.currentUser});
 
   @override
@@ -63,7 +63,7 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
     });
   }
 
-  UserModel? submit() {
+  EmployeeModel? submit() {
     if (!(_formKey.currentState?.validate() ?? false)) return null;
     if (_hireDate == null) {
       return null;
@@ -72,7 +72,7 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
       return null;
     }
 
-    final user = UserModel(
+    final user = EmployeeModel(
       firstName: _firstNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
       contact: _phoneController.text.trim(),

@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-
-import '../../../../../Components/App_Theme/text_styles.dart';
-import '../../../../../components/app_widgets/cards/display_card.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../work_phelo_components/widgets/custom_cards/display_card.dart';
 import 'departments_list.dart';
 
 class ManageDepartmentPage extends ConsumerStatefulWidget {
   final VoidCallback onBack;
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   const ManageDepartmentPage({
     super.key,
     required this.onBack,

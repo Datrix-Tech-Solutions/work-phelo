@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-
-import '../../../Components/Form_Components/text_fields.dart';
-import '../../../components/app_theme/app_images.dart';
-import '../../../components/app_theme/padding.dart';
-import '../../../components/app_theme/text_styles.dart';
-import '../../../components/app_widgets/snack_bar.dart';
-import '../../../components/form_components/my_buttons.dart';
+import '../../../work_phelo_components/theme/app_images.dart';
+import '../../../work_phelo_components/theme/app_padding.dart';
+import '../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
+import '../../../work_phelo_components/widgets/misc/snack_bar.dart';
 import '../auth_layout.dart';
 import '../login_utils/password_requirements.dart';
 import '../login_utils/validators.dart';
@@ -128,12 +127,15 @@ class _ResetPasswordState extends State<ResetPassword> {
             ),
 
             // Strength indicators
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: _strength.requirements.map((req) {
-                final (text, met) = req;
-                return PasswordRequirement(text: text, met: met);
-              }).toList(),
+            Padding(
+              padding: myContentPadding,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _strength.requirements.map((req) {
+                  final (text, met) = req;
+                  return PasswordRequirement(text: text, met: met);
+                }).toList(),
+              ),
             ),
 
             MyPasswordField(

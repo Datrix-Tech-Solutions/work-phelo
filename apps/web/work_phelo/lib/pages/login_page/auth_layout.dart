@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../components/app_theme/colors.dart';
+import '../../work_phelo_components/theme/app_images.dart';
+import '../../work_phelo_components/theme/app_text_theme.dart';
 
 class AuthLayout extends StatelessWidget {
   final Widget child;
@@ -42,7 +43,44 @@ class AuthLayout extends StatelessWidget {
             ),
           ),
           // image area
-          Expanded(flex: 3, child: Container(color: myMainColor)),
+          Expanded(
+            flex: 3,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Background image
+                loginPageImage,
+
+                // Color overlay
+                Container(
+                  color: ColorScheme.of(context).primary.withAlpha(100),
+                ),
+
+                // Text on top
+                Align(
+                  alignment: Alignment.bottomLeft,
+                  child: Padding(
+                    padding: EdgeInsets.only(left: 80, bottom: 100),
+                    child: ListTile(
+                      title: Text(
+                        "EMPOWER YOUR ORGANIZATION",
+                        style: myLargeTextStyle(context).copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      subtitle: Text(
+                        "WorkPhelo HR helps organizations manage employees, streamline HR processes, and build productive teams — all from one unified platform.",
+                        style: myTitleTextStyle(
+                          context,
+                        ).copyWith(color: Colors.white70, fontSize: 16),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );

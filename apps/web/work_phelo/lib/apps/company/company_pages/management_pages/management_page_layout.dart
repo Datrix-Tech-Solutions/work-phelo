@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:unicons/unicons.dart';
 
-import '../../../../Components/App_Theme/text_styles.dart';
+import '../../../../work_phelo_components/theme/app_text_theme.dart';
+
 
 class ManagementPage extends StatelessWidget {
   final ValueChanged<int> onNavigate;

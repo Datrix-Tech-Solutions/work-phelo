@@ -2,22 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-import 'package:work_phelo/functions/app_users/login_functions/auth_state.dart';
-import 'package:work_phelo/functions/super_admin_functions/company_model.dart';
-
-import '../../../Components/app_theme/colors.dart';
-import '../../../Functions/super_admin_functions/company_state.dart';
-import '../../../components/app_theme/padding.dart';
-import '../../../components/app_widgets/cards/title_card.dart';
-import '../../../components/app_widgets/lists/app_lists.dart';
-import '../../../components/form_components/my_buttons.dart';
-import '../../../components/form_components/my_side_panel.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../work_phelo_components/theme/app.colors.dart';
+import '../../../work_phelo_components/theme/app_padding.dart';
+import '../../../work_phelo_components/widgets/custom_cards/title_card.dart';
+import '../../../work_phelo_components/widgets/custom_lists/app_table_widget.dart';
+import '../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../work_phelo_components/widgets/form_components/side_form_panel.dart';
 import '../super_admin_widgets/company_onboarded_list.dart';
 import 'company_onboarding_form.dart';
 
 class SuperAdminPortal extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   final ValueChanged<CompanyModel> onCompanySelected;
   const SuperAdminPortal({
     super.key,
@@ -38,7 +37,7 @@ class _SuperAdminPortalState extends ConsumerState<SuperAdminPortal> {
   Widget build(BuildContext context) {
     final state = ref.watch(companyProvider);
     final companies = state.companies;
-    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+    ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
       if (previous?.isAuthenticated == true && !next.isAuthenticated) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
@@ -89,9 +88,11 @@ class _SuperAdminPortalState extends ConsumerState<SuperAdminPortal> {
             padding: menuCardpadding,
             child: AppTableWidget(
               headerTitle: 'Companies',
+              noDataText: 'No companies onboarded yet.',
               headerTrailing: MyOutlinedMenuButton(
                 btnText: 'Onboard Company',
                 btnIcon: UniconsLine.user_plus,
+                
                 btnAccent: myMainColor,
                 isHovered: false,
                 onPressed: () => _panel.show(
@@ -113,6 +114,7 @@ class _SuperAdminPortalState extends ConsumerState<SuperAdminPortal> {
               columns: const [
                 TableColumn(
                   header: 'Company Details',
+                
                   width: FlexColumnWidth(2),
                 ),
                 TableColumn(header: 'Administrator', width: FlexColumnWidth(2)),

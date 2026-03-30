@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-
-import '../../../Components/app_theme/colors.dart';
-import '../../../components/app_theme/app_images.dart';
-import '../../../components/app_theme/text_styles.dart';
-import '../../../components/app_widgets/lists/navigation.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../../apps/company/dashboard/company_dashboard.dart';
+import '../../../work_phelo_components/theme/app.colors.dart';
+import '../../../work_phelo_components/theme/app_images.dart';
+import '../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../work_phelo_components/widgets/custom_lists/navigation.dart';
+import '../../../work_phelo_components/widgets/misc/app_sidebar.dart';
 import '../../dashboard.dart';
 import 'hr_phelo_navigation.dart';
-import '../../../components/app_widgets/app_sidebar.dart';
 
 class HrPheloLayout extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   const HrPheloLayout({super.key, required this.currentUser});
 
   @override

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_leave_functions/employee_leave_request_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_leave_functions/employee_leave_request_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 
-import '../../../../../../Functions/company_functions/leave_function/leave__request_model.dart';
-import '../../../../../../Functions/company_functions/leave_function/leave_state.dart';
-import '../../../../../../components/form_components/text_fields.dart';
+import '../../../../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 
 class LeaveForm extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   const LeaveForm({super.key, required this.currentUser});
 
   @override

@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:unicons/unicons.dart';
 
-import '../../../../../components/app_widgets/cards/stat_card.dart';
+import '../../../../../work_phelo_components/widgets/custom_cards/stats_card.dart';
+
 
 class AssetSummary extends StatefulWidget {
   const AssetSummary({super.key});

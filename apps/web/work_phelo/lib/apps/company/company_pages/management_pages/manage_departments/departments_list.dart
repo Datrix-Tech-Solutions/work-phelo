@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-
-import '../../../../../Components/App_Theme/text_styles.dart';
-import '../../../../../Components/app_theme/padding.dart';
-import '../../../../../Functions/company_functions/departments/department_model.dart';
-import '../../../../../Functions/company_functions/departments/department_state.dart';
-import '../../../../../components/app_theme/misc.dart';
-import '../../../../../components/app_widgets/lists/chip_card.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../../../work_phelo_components/theme/app_padding.dart';
+import '../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../work_phelo_components/theme/miscellaneouse.dart';
+import '../../../../../work_phelo_components/widgets/custom_cards/app_chip_card.dart';
 import 'manage_dept_subpages/create_department_form.dart';
 import 'manage_dept_subpages/dept_helpers.dart';
 import 'manage_dept_subpages/dept_list_details.dart';
 
 class DepartmentsList extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
 
   const DepartmentsList({super.key, required this.currentUser});
 
@@ -23,7 +22,7 @@ class DepartmentsList extends ConsumerStatefulWidget {
 
 class _DepartmentsListState extends ConsumerState<DepartmentsList> {
   bool _showCreateForm = false;
-  DepartmentModel? _selectedDepartment;
+  CompanyDepartmentsModel? _selectedDepartment;
 
   @override
   Widget build(BuildContext context) {

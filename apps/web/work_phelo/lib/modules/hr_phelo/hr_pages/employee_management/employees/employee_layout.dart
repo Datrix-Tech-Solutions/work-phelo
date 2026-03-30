@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-
-import '../../../../../Functions/company_functions/departments/department_state.dart';
-import '../../../../../Functions/company_functions/onboarding_function/user_state.dart';
-import '../../../../../components/app_widgets/lists/app_grid.dart';
-import '../../../../../components/form_components/my_side_panel.dart';
+import 'package:work_phelo/work_phelo_components/widgets/custom_lists/employee_grid_card.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
+import '../../../../../work_phelo_components/widgets/form_components/side_form_panel.dart';
 import 'employee_page_wigets.dart/onboarding_form.dart';
 
 class EmployeeLayout extends ConsumerStatefulWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
   const EmployeeLayout({super.key, required this.currentUser});
 
   @override
@@ -46,7 +45,7 @@ class _EmployeeLayoutState extends ConsumerState<EmployeeLayout> {
       return matchesSearch && matchesDept;
     }).toList();
 
-    return EmployeeCardGrid(
+    return EmployeeGridCard(
       users: filtered,
       departments: departments,
       currentUser: widget.currentUser,

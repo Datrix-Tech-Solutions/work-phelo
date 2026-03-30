@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-
-import '../../../Components/app_theme/colors.dart';
-import '../../../Functions/company_functions/onboarding_function/onboarding_model.dart';
-import '../../../Functions/company_functions/onboarding_function/user_state.dart';
-import '../../../components/app_theme/app_images.dart';
-import '../../../components/app_theme/misc.dart';
-import '../../../components/app_widgets/cards/title_card.dart';
-import '../../../components/app_widgets/lists/horizontal_navigation_tabs.dart';
-import '../../../components/app_widgets/user_avators.dart';
-import '../../../functions/app_users/login_functions/auth_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../../modules/module_options.dart';
 import '../../../pages/log_out/user_details_popup.dart';
+import '../../../work_phelo_components/theme/app.colors.dart';
+import '../../../work_phelo_components/theme/app_images.dart';
+import '../../../work_phelo_components/theme/miscellaneouse.dart';
+import '../../../work_phelo_components/widgets/custom_cards/title_card.dart';
+import '../../../work_phelo_components/widgets/custom_lists/horizontal_nav_bar.dart';
+import '../../../work_phelo_components/widgets/misc/user_avator.dart';
+import '../../../work_phelo_funtions/work_phelo_companies/company_asset_management_functions/company_asset_state.dart';
 import '../company_pages/management_pages/manage_departments/manage_department_page.dart';
 import '../company_pages/management_pages/management_page_layout.dart';
 import '../company_pages/management_pages/permissions_roles_pages/roles_permissions_page.dart';
@@ -27,7 +27,7 @@ class CompanyDashboard extends ConsumerStatefulWidget {
 }
 
 class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
-  late AppUser user;
+  late AppUserModel user;
   int _currentIndex = 0;
   int _managementSubIndex = -1;
   String statDisplay(String value) => value == '0' ? '-' : value;
@@ -38,14 +38,14 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
     final args = ModalRoute.of(context)?.settings.arguments;
 
     if (args is Map) {
-      user = args['user'] as AppUser;
+      user = args['user'] as AppUserModel;
       _currentIndex = args['initialIndex'] as int? ?? 0;
-    } else if (args is AppUser) {
+    } else if (args is AppUserModel) {
       // normal login flow — keep existing behaviour
       user = args;
       _currentIndex = 0;
     } else {
-      user = AppUser(
+      user = AppUserModel(
         uid: '',
         email: 'unknown',
         fullName: 'Guest',
@@ -70,11 +70,12 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
   @override
   Widget build(BuildContext context) {
     final users = ref.watch(usersByTenantProvider(user.tenantSlug));
-    ref.listen<AuthState>(authNotifierProvider, (previous, next) {
+    ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
       if (previous?.isAuthenticated == true && !next.isAuthenticated) {
         Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
       }
     });
+    final assetCount = ref.watch(tenantAssetsCountProvider(user.tenantSlug));
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 150,
@@ -159,23 +160,26 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
                 title: 'On Leave',
                 value: statDisplay(
                   users
+                      .where((u) => u.status == EmploymentStatus.onLeave)
+                      .length
+                      .toString(),
+                ),
+              ),
+              TitleCardStat(
+                title: 'Active Employees',
+                value: statDisplay(
+                  ref
+                      .watch(userProvider)
+                      .users
                       .where((u) => u.status == EmploymentStatus.active)
                       .length
                       .toString(),
                 ),
               ),
               TitleCardStat(
-                title: 'Assets',
-                value: statDisplay(
-                  ref
-                      .watch(userProvider)
-                      .users
-                      .where((u) => u.status == EmploymentStatus.onLeave)
-                      .length
-                      .toString(),
-                ),
+                title: 'Company Assets',
+                value: statDisplay(assetCount.toString()),
               ),
-              TitleCardStat(title: 'Company Assets', value: '-'),
             ],
           ),
 

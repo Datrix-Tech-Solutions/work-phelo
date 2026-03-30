@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_permission_funtions/employee_roles_models.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 
-import '../Components/app_theme/text_styles.dart';
-import '../Functions/Super_Admin_Functions/company_state.dart';
-import '../Functions/company_functions/permissions/company_roles.dart';
-import '../components/app_theme/app_images.dart';
-import '../components/form_components/my_buttons.dart';
+import '../work_phelo_components/theme/app_images.dart';
+import '../work_phelo_components/theme/app_text_theme.dart';
+import '../work_phelo_components/widgets/form_components/app_buttons.dart';
 
 class GetStartedPage extends ConsumerWidget {
-  final AppUser currentUser;
+  final AppUserModel currentUser;
 
   const GetStartedPage({super.key, required this.currentUser});
 
@@ -43,18 +43,16 @@ class GetStartedPage extends ConsumerWidget {
                 MyButton(
                   btnText: 'Get started',
                   btnOnPressed: () {
-                    // Activate the company
                     ref
                         .read(companyProvider.notifier)
                         .setActive(currentUser.tenantSlug);
-                        seedRoles(ref, currentUser.tenantSlug);
+                    seedRoles(ref, currentUser.tenantSlug);
 
-                    // Navigate to the management page
                     Navigator.pushNamedAndRemoveUntil(
                       context,
                       '/dashboard',
                       (route) => false,
-                      arguments: {'user': currentUser, 'initialIndex': 2},
+                      arguments: {'user': currentUser, 'initialIndex': 1},
                     );
                   },
                 ),

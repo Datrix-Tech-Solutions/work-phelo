@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../Components/App_Theme/text_styles.dart';
-import '../../../../components/app_theme/misc.dart';
+import '../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../work_phelo_components/theme/miscellaneouse.dart';
 
 class MgtTab extends StatelessWidget {
   final String label;

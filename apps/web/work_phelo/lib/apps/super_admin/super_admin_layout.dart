@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart' show AppUser;
-import 'package:work_phelo/functions/super_admin_functions/company_model.dart';
-
-import '../../components/app_theme/app_images.dart';
-import '../../components/app_theme/colors.dart';
-import '../../components/app_widgets/lists/horizontal_navigation_tabs.dart';
-import '../../components/app_widgets/user_avators.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../pages/log_out/user_details_popup.dart';
+import '../../work_phelo_components/theme/app.colors.dart';
+import '../../work_phelo_components/theme/app_images.dart';
+import '../../work_phelo_components/widgets/custom_lists/horizontal_nav_bar.dart';
+import '../../work_phelo_components/widgets/misc/user_avator.dart';
 import 'super_admin_pages/company_details_page.dart';
 import 'super_admin_pages/super_admin_portal.dart';
 
@@ -20,7 +19,7 @@ class SuperAdminLayout extends ConsumerStatefulWidget {
 }
 
 class _SuperAdminLayoutState extends ConsumerState<SuperAdminLayout> {
-  late AppUser user;
+  late AppUserModel user;
   int _currentIndex = 0;
   CompanyModel? _selectedCompany;
 
@@ -28,10 +27,10 @@ class _SuperAdminLayoutState extends ConsumerState<SuperAdminLayout> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AppUser) {
+    if (args is AppUserModel) {
       user = args;
     } else {
-      user = AppUser(
+      user = AppUserModel(
         uid: '',
         email: '',
         fullName: '',

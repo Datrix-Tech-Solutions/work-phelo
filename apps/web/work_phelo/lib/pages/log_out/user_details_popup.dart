@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
-
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import 'logout_confirmation_popup.dart';
 
 class UserDetailsPopup {
   static OverlayEntry? _entry;
 
-  static void show(BuildContext context, Offset offset, AppUser currentUser,WidgetRef ref) {
+  static void show(BuildContext context, Offset offset, AppUserModel currentUser,WidgetRef ref) {
     _dismiss();
 
     final initials = currentUser.fullName

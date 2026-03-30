@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/functions/app_users/app_user_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 
-import '../../../../../../Functions/company_functions/departments/department_model.dart';
-import '../../../../../../Functions/company_functions/departments/department_state.dart';
-import '../../../../../../Functions/company_functions/onboarding_function/user_state.dart';
-import '../../../../../../components/app_theme/misc.dart';
-import '../../../../../../components/app_theme/padding.dart';
-import '../../../../../../components/app_theme/text_styles.dart';
-import '../../../../../../components/form_components/my_buttons.dart';
-import '../../../../../../components/form_components/text_fields.dart';
+import '../../../../../../work_phelo_components/theme/app_padding.dart';
+import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../../work_phelo_components/theme/miscellaneouse.dart';
+import '../../../../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 
 class CreateDepartmentForm extends ConsumerStatefulWidget {
   final VoidCallback onSaved;
-  final AppUser currentUser;
+  final AppUserModel currentUser;
 
   const CreateDepartmentForm({
     super.key,
@@ -43,7 +43,7 @@ class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
   void _submit() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final dept = DepartmentModel(
+    final dept = CompanyDepartmentsModel(
       id: generateDepartmentId(_nameController.text),
       name: _nameController.text.trim(),
       tenantSlug: widget.currentUser.tenantSlug,

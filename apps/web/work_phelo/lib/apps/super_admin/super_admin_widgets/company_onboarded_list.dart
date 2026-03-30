@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:unicons/unicons.dart';
-import 'package:work_phelo/functions/super_admin_functions/company_model.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
 
-import '../../../components/app_theme/text_styles.dart';
+import '../../../work_phelo_components/theme/app_text_theme.dart';
 
 List<Widget> buildCompanyOnboardedRowCells(
   BuildContext context,

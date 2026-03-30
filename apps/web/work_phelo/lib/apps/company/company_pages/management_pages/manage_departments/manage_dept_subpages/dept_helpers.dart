@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
 
-import '../../../../../../Components/App_Theme/text_styles.dart';
-import '../../../../../../Functions/company_functions/onboarding_function/onboarding_model.dart';
-import '../../../../../../components/app_theme/misc.dart';
+import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../../work_phelo_components/theme/miscellaneouse.dart';
+
 
 class SectionLabel extends StatelessWidget {
   final String label;
@@ -23,7 +24,7 @@ class SectionLabel extends StatelessWidget {
 }
 
 class MemberTile extends StatelessWidget {
-  final UserModel user;
+  final EmployeeModel user;
   final Widget? trailing;
 
   const MemberTile({super.key, required this.user, this.trailing});
@@ -53,7 +54,7 @@ class MemberTile extends StatelessWidget {
 }
 
 class SetHeadTile extends StatelessWidget {
-  final List<UserModel> members;
+  final List<EmployeeModel> members;
   final void Function(String email) onSet;
 
   const SetHeadTile({super.key, required this.members, required this.onSet});

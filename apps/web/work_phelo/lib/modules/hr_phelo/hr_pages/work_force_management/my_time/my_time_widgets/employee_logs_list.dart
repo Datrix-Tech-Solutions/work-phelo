@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:unicons/unicons.dart';
 
-import '../../../../../../Components/app_theme/text_styles.dart';
-import '../../../../../../components/app_theme/misc.dart';
-import '../../../../../../components/app_widgets/user_avators.dart';
+import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../../work_phelo_components/theme/miscellaneouse.dart';
+import '../../../../../../work_phelo_components/widgets/misc/user_avator.dart';
 
 List<Widget> buildEmployeeLogCells(BuildContext context, int index) {
   final cs = Theme.of(context).colorScheme;
