@@ -34,7 +34,18 @@ export class TenantsController {
   @ApiOperation({ summary: 'Register a new company and admin user' })
   @ApiResponse({
     status: 201,
-    description: 'Tenant created — email OTP sent for verification',
+    description: 'Tenant created — OTP sent to admin email for verification',
+    schema: {
+      example: {
+        message:
+          'Registration submitted. Check your email for verification code.',
+        tenantId: 'uuid',
+        tenantName: 'Acme Ghana Ltd',
+        tenantSlug: 'acme-ghana',
+        workspaceUrl: 'https://app.workphelo.com/t/acme-ghana/login',
+        userId: 'uuid',
+      },
+    },
   })
   @ApiResponse({ status: 409, description: 'Email or slug already exists' })
   @ApiBody({
