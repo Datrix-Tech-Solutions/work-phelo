@@ -32,6 +32,8 @@ COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
 RUN npm ci --omit=dev --ignore-scripts
+COPY --from=builder /app/apps/hr-service/prisma ./apps/hr-service/prisma
+RUN cd apps/hr-service && npx prisma generate
 COPY --from=builder /app/apps/hr-service/dist ./apps/hr-service/dist
 COPY --from=builder /app/apps/hr-service/prisma ./apps/hr-service/prisma
 WORKDIR /app/apps/hr-service

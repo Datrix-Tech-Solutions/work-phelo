@@ -32,6 +32,8 @@ COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
 RUN npm ci --omit=dev --ignore-scripts
+COPY --from=builder /app/apps/notification-service/prisma ./apps/notification-service/prisma
+RUN cd apps/notification-service && npx prisma generate
 COPY --from=builder /app/apps/notification-service/dist ./apps/notification-service/dist
 WORKDIR /app/apps/notification-service
 EXPOSE 4004

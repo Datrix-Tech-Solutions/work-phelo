@@ -235,16 +235,21 @@ jobs:
             # a HEALTHCHECK fall back to 'running' state check only.
             check_service() {
               local service="$1"
-              local status
-              status=$(docker compose -f "${{ env.COMPOSE_FILE }}" \
-                ps --format json "$service" 2>/dev/null \
-                | jq -r '.[0].State // .[0].Health // "unknown"' 2>/dev/null \
-                || echo "unknown")
-
-              if [[ "$status" == "running" || "$status" == "healthy" ]]; then
-                echo "  $service — $status"
+              local container_status
+              # Docker Compose v5 changed --format json output structure.
+              # Use docker inspect directly on the container name for reliability.
+              local container_name
+              container_name=$(docker compose -f "${{ env.COMPOSE_FILE }}" ps -q "$service" 2>/dev/null | head -1)
+              if [[ -z "$container_name" ]]; then
+                echo "  $service — not found (UNHEALTHY)"
+                FAILED_SERVICES="$FAILED_SERVICES $service"
+                return
+              fi
+              container_status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null || echo "unknown")
+              if [[ "$container_status" == "running" ]]; then
+                echo "  $service — running"
               else
-                echo "  $service — $status (UNHEALTHY)"
+                echo "  $service — $container_status (UNHEALTHY)"
                 FAILED_SERVICES="$FAILED_SERVICES $service"
               fi
             }
