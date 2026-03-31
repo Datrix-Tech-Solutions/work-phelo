@@ -16,8 +16,9 @@ RUN npm run build --workspace=packages/utils
 RUN npm run build --workspace=packages/config
 RUN npm run build --workspace=apps/auth-service
 # Compile seed separately for use in deploy pipeline
+# Output goes to prisma/ so relative imports (../prisma/generated/client) resolve correctly
 RUN cd apps/auth-service && npx tsc prisma/seed.ts prisma/seed-resources.ts \
-    --outDir prisma/compiled --module commonjs --target ES2021 \
+    --outDir prisma --module commonjs --target ES2021 \
     --esModuleInterop --skipLibCheck --resolveJsonModule 2>/dev/null || true
 
 FROM node:20-alpine AS runner
@@ -43,7 +44,7 @@ RUN npm ci --omit=dev --ignore-scripts && npm rebuild bcrypt --update-binary
 # Copy built service
 COPY --from=builder /app/apps/auth-service/dist ./apps/auth-service/dist
 COPY --from=builder /app/apps/auth-service/prisma ./apps/auth-service/prisma
-COPY --from=builder /app/apps/auth-service/prisma/compiled ./apps/auth-service/prisma/compiled
+# seed.js and seed-resources.js are already in prisma/ alongside schema
 WORKDIR /app/apps/auth-service
 EXPOSE 4001
 CMD ["node", "dist/main"]
