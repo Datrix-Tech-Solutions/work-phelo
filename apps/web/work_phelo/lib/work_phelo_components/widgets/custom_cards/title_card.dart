@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:unicons/unicons.dart';
+import 'package:work_phelo/modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/employee_forms/onboarding_form.dart';
 
 import '../../../apps/super_admin/super_admin_widgets/company_onboarded_list.dart';
+import '../../../work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
 import '../../../work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
 import '../../theme/app.colors.dart';
 import '../../theme/app_padding.dart';
@@ -268,6 +270,67 @@ class CompanyCard extends StatelessWidget {
                   onPressed: onToggleStatus,
                   btnText: isActive ? 'Deactivate' : 'Activate',
                   btnIcon: isActive ? UniconsLine.pen : UniconsLine.check,
+                  btnAccent: myMainColor,
+                  isHovered: true,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class EmployeeWelcomeCard extends StatelessWidget {
+  final EmployeeModel employee;
+  final VoidCallback onOffboard;
+  final VoidCallback onEdit;
+
+  const EmployeeWelcomeCard({
+    super.key,
+    required this.employee,
+    required this.onOffboard,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    // final isActive = employee.status == EmployeeStatus.active;
+
+    return Padding(
+      padding: myContentPadding,
+      child: Container(
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(appRadius),
+          border: Border.all(color: cs.outline.withAlpha(70)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Row(
+          children: [
+            // Left — company info
+            Expanded(
+              child: ListTile(title: sectionHeader(context, employee.fullName)),
+            ),
+
+            // Right — actions
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                MyOutlinedMenuButton(
+                  onPressed: onOffboard,
+                  btnText: 'Off-Board',
+                  btnIcon: UniconsLine.user_times,
+                  btnAccent: myMainColor,
+                  isHovered: false,
+                ),
+                const SizedBox(width: 10),
+                MyOutlinedMenuButton(
+                  onPressed: onEdit,
+                  btnText: 'Edit',
+                  btnIcon: UniconsLine.pen,
                   btnAccent: myMainColor,
                   isHovered: true,
                 ),

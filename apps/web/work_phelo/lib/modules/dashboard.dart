@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:unicons/unicons.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
-import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../pages/log_out/user_details_popup.dart';
 import '../work_phelo_components/theme/app.colors.dart';
 import '../work_phelo_components/theme/app_images.dart';
@@ -20,50 +20,25 @@ class DashboardPage extends ConsumerStatefulWidget {
 }
 
 class _DashboardPageState extends ConsumerState<DashboardPage> {
-  late AppUserModel user;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AppUserModel) {
-      user = args;
-    } else {
-      user = AppUserModel(
-        uid: '',
-        email: 'unknown',
-        fullName: 'Guest',
-        role: 'guest',
-        companyName: 'company_name',
-        lastLogin: DateTime.now(),
-        tenantSlug: '',
-        companyStatus: '',
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/login',
-            (route) => false,
-          );
-        }
-      });
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+    final user = authState.user;
+
+    if (user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {});
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
-      if (previous?.isAuthenticated == true && !next.isAuthenticated) {
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-      }
+      if (previous?.isAuthenticated == true && !next.isAuthenticated) {}
     });
+
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 150,
         backgroundColor: ColorScheme.of(context).surface,
         leading: appLogo,
-
         actions: [
           IconButton(
             onPressed: () {},
@@ -77,15 +52,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             onPressed: () {},
             icon: Icon(UniconsLine.setting, color: myMainColor),
           ),
-
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: InkWell(
-              onTap: () => Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/login',
-                (route) => false,
-              ),
+              onTap: () => context.go('/${user.tenantSlug}/login'),
               borderRadius: BorderRadius.circular(appRadius),
               child: UserDashIcon(
                 onIconPressed: (details) {
@@ -107,7 +77,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               ),
             ),
           ),
-          Padding(padding: EdgeInsets.all(10)),
+          const Padding(padding: EdgeInsets.all(10)),
         ],
       ),
       body: Column(
@@ -116,9 +86,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             introText: 'Good morning, ${user.fullName}',
             companyName: user.companyName,
           ),
-          Expanded(
-            child: DisplayCard(child: ModuleOptions(currentUser: user)),
-          ),
+          Expanded(child: DisplayCard(child: ModuleOptions())),
         ],
       ),
     );

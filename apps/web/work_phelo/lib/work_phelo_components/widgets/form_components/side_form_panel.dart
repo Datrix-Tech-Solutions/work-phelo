@@ -92,72 +92,85 @@ class _AppSidePanelState extends State<AppSidePanel>
           alignment: Alignment.centerRight,
           child: SlideTransition(
             position: _slide,
-            child: Container(
-              width: widget.width,
-              height: double.infinity,
-              decoration: BoxDecoration(
-                color: cs.surface,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(30),
-                    blurRadius: 24,
-                    offset: const Offset(-4, 0),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: _HoverPanel(
+                width: widget.width,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: cs.surface,
+                    borderRadius: BorderRadius.circular(appRadius),
                   ),
-                ],
-              ),
-              child: Material(
-                child: Navigator(
-                  onGenerateRoute: (_) => MaterialPageRoute(
-                    builder: (_) => Scaffold(
-                      body: Column(
-                        children: [
-                          // Close button row
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                            child: ListTile(
-                              title: Text(
-                                widget.formTitle,
-                                style: myMainTextStyle(context),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.close),
-                                onPressed: _close,
-                                tooltip: 'Close',
-                              ),
-                            ),
-                          ),
-                          myDivider(context),
-                          // Content
-                          Expanded(child: widget.child),
-                          myDivider(context),
-                          Padding(
-                            padding: myContentPadding,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.end,
-                              children: [
-                                Flexible(
-                                  child: MyOutlinedMenuButton(
-                                    onPressed: widget.secBtnOnPressed,
-                                    btnText: 'Reset',
-                                    btnIcon: UniconsLine.times_circle,
-                                    btnAccent: ColorScheme.of(context).error,
-                                    isHovered: false,
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(appRadius),
+                    clipBehavior: Clip.antiAlias,
+                    child: Navigator(
+                      onGenerateRoute: (_) => MaterialPageRoute(
+                        builder: (_) => Scaffold(
+                          backgroundColor: Colors.transparent,
+                          body: Column(
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  16,
+                                  16,
+                                  0,
+                                ),
+                                child: ListTile(
+                                  title: Text(
+                                    widget.formTitle,
+                                    style: myMainTextStyle(context),
+                                  ),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.close),
+                                    onPressed: _close,
                                   ),
                                 ),
-                                Padding(padding: myCardPadding),
-                                Flexible(
-                                  child: MyOutlinedMenuButton(
-                                    onPressed: widget.btnOnPressed,
-                                    btnText: 'Submit',
-                                    btnIcon: UniconsLine.user_plus,
-                                    btnAccent: ColorScheme.of(context).primary,
-                                    isHovered: false,
-                                  ),
+                              ),
+                              myDivider(context),
+                              Expanded(
+                                child: Padding(
+                                  padding: myContentPadding,
+                                  child: widget.child,
                                 ),
-                              ],
-                            ),
+                              ),
+                              myDivider(context),
+                              Padding(
+                                padding: myContentPadding,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Flexible(
+                                      child: MyOutlinedMenuButton(
+                                        onPressed: widget.secBtnOnPressed,
+                                        btnText: 'Reset',
+                                        btnIcon: UniconsLine.times_circle,
+                                        btnAccent: ColorScheme.of(
+                                          context,
+                                        ).error,
+                                        isHovered: false,
+                                      ),
+                                    ),
+                                    Padding(padding: myCardPadding),
+                                    Flexible(
+                                      child: MyOutlinedMenuButton(
+                                        onPressed: widget.btnOnPressed,
+                                        btnText: 'Submit',
+                                        btnIcon: UniconsLine.user_plus,
+                                        btnAccent: ColorScheme.of(
+                                          context,
+                                        ).primary,
+                                        isHovered: false,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
@@ -170,7 +183,6 @@ class _AppSidePanelState extends State<AppSidePanel>
     );
   }
 }
-
 
 class SidePanelController {
   OverlayEntry? _entry;
@@ -199,5 +211,49 @@ class SidePanelController {
   void close() {
     _entry?.remove();
     _entry = null;
+  }
+}
+
+class _HoverPanel extends StatefulWidget {
+  final Widget child;
+  final double width;
+
+  const _HoverPanel({required this.child, required this.width});
+
+  @override
+  State<_HoverPanel> createState() => _HoverPanelState();
+}
+
+class _HoverPanelState extends State<_HoverPanel> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedScale(
+        scale: _isHovered ? 1.01 : 1.0,
+        duration: const Duration(milliseconds: 200),
+        child: AnimatedSlide(
+          offset: _isHovered ? const Offset(-0.01, 0) : Offset.zero,
+          duration: const Duration(milliseconds: 200),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: widget.width,
+            decoration: BoxDecoration(
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(_isHovered ? 60 : 30),
+                  blurRadius: _isHovered ? 40 : 24,
+                  offset: const Offset(-6, 0),
+                ),
+              ],
+            ),
+            child: widget.child,
+          ),
+        ),
+      ),
+    );
   }
 }

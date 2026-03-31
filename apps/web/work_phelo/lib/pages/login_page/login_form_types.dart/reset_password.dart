@@ -8,7 +8,7 @@ import '../../../work_phelo_components/widgets/misc/snack_bar.dart';
 import '../auth_layout.dart';
 import '../login_utils/password_requirements.dart';
 import '../login_utils/validators.dart';
-import 'login_page.dart';
+import '../login_pages/tenant_login_page.dart';
 
 class ResetPassword extends StatefulWidget {
   const ResetPassword({super.key});
@@ -68,7 +68,7 @@ class _ResetPasswordState extends State<ResetPassword> {
 
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
+        MaterialPageRoute(builder: (_) => const TenantLoginPage()),
       );
     } catch (e) {
       if (!mounted) return;

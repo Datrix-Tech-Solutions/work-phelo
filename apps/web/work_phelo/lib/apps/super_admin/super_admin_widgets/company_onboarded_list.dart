@@ -10,7 +10,7 @@ List<Widget> buildCompanyOnboardedRowCells(
   BuildContext context,
   CompanyModel company,
   WidgetRef ref, {
-  required VoidCallback onTap, // add this
+  required VoidCallback onTap,
 }) {
   final cs = Theme.of(context).colorScheme;
 
@@ -104,6 +104,11 @@ Widget buildStatusChip(BuildContext context, CompanyStatus status) {
       cs.tertiaryContainer,
       cs.onTertiaryContainer,
       'Pending',
+    ),
+    CompanyStatus.suspended => (
+      cs.surfaceContainerHighest,
+      cs.onSurfaceVariant,
+      'Suspended',
     ),
   };
   return Card(

@@ -4,7 +4,6 @@ import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onb
 import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
 import '../../../../../../work_phelo_components/theme/miscellaneouse.dart';
 
-
 class SectionLabel extends StatelessWidget {
   final String label;
   const SectionLabel({super.key, required this.label});
@@ -83,8 +82,6 @@ class SetHeadTile extends StatelessWidget {
   }
 }
 
-
-
 class EmptyDetail extends StatelessWidget {
   const EmptyDetail({super.key});
 
@@ -93,7 +90,7 @@ class EmptyDetail extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
+        color: cs.surfaceContainer,
         borderRadius: BorderRadius.circular(appRadius),
       ),
       child: Center(

@@ -7,19 +7,21 @@ import '../../../work_phelo_components/widgets/form_components/app_buttons.dart'
 import '../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 import '../../../work_phelo_components/widgets/misc/snack_bar.dart';
 import '../auth_layout.dart';
-import 'login_page.dart';
+import '../login_pages/tenant_login_page.dart';
 import 'reset_password.dart';
 
 class OTPPage extends StatefulWidget {
   final String email;
   final String role;
-  final String fullName;
+  final String firstName;
+  final String lastName;
   final String companyName;
   const OTPPage({
     super.key,
     required this.email,
     required this.role,
-    required this.fullName,
+    required this.firstName,
+    required this.lastName,
     required this.companyName,
   });
 
@@ -87,12 +89,14 @@ class _OTPPageState extends State<OTPPage> {
       final user = AppUserModel(
         uid: "mock_${widget.email.trim().toLowerCase().hashCode}",
         email: widget.email,
-        fullName: widget.fullName,
+        firstName: widget.firstName,
+        lastName: widget.lastName,
         role: widget.role,
         companyName: widget.companyName,
         lastLogin: DateTime.now(),
         tenantSlug: '',
         companyStatus: '',
+        tenantId: '',
       );
 
       switch (widget.role.toLowerCase()) {
@@ -177,7 +181,7 @@ class _OTPPageState extends State<OTPPage> {
               btnOnPressed: () {
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                  MaterialPageRoute(builder: (_) => const TenantLoginPage()),
                 );
               },
             ),
@@ -195,7 +199,7 @@ class ResetPasswordCodePage extends StatefulWidget {
   final String role;
   final String fullName;
   final String companyName;
-  
+
   const ResetPasswordCodePage({
     super.key,
     required this.email,

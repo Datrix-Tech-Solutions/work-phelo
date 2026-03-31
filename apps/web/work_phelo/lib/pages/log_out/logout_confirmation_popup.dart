@@ -7,7 +7,6 @@ import '../../work_phelo_components/theme/app_text_theme.dart';
 import '../../work_phelo_components/theme/miscellaneouse.dart';
 
 void logoutConfirmationPopup(BuildContext context, WidgetRef ref) {
-  final authNotifier = ref.read(authNotifierProvider.notifier);
   showDialog(
     context: context,
     builder: (context) {
@@ -90,7 +89,7 @@ void logoutConfirmationPopup(BuildContext context, WidgetRef ref) {
                       ),
                       onPressed: () {
                         Navigator.pop(context);
-                        authNotifier.logout();
+                        ref.read(authNotifierProvider.notifier).logout();
                       },
                       child: Text(
                         'Sign out',

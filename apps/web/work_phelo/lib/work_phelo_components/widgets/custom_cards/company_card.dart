@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:unicons/unicons.dart';
+import 'package:work_phelo/work_phelo_components/widgets/form_components/app_buttons.dart';
 
 import '../../../work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
 import '../../theme/app_padding.dart';
@@ -8,8 +10,14 @@ import 'display_card.dart';
 
 class CompanyDetailCard extends StatefulWidget {
   final CompanyModel company;
-
-  const CompanyDetailCard({super.key, required this.company});
+  final VoidCallback onEdit;
+  final VoidCallback onAdminEdit;
+  const CompanyDetailCard({
+    super.key,
+    required this.company,
+    required this.onEdit,
+    required this.onAdminEdit,
+  });
 
   @override
   State<CompanyDetailCard> createState() => _CompanyDetailCardState();
@@ -38,6 +46,7 @@ class _CompanyDetailCardState extends State<CompanyDetailCard> {
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.max,
               children: [
+                Padding(padding: space),
                 CircleAvatar(
                   radius: 52,
                   backgroundColor: cs.primaryContainer,
@@ -79,13 +88,20 @@ class _CompanyDetailCardState extends State<CompanyDetailCard> {
                     context,
                   ).copyWith(color: cs.onSurfaceVariant),
                 ),
+                Spacer(),
+                MyOutlinedMenuButton(
+                  onPressed: widget.onEdit,
+                  btnText: 'Edit',
+                  btnIcon: UniconsLine.edit_alt,
+                  btnAccent: ColorScheme.of(context).primary,
+                  isHovered: true,
+                ),
               ],
             ),
           ),
 
           const SizedBox(width: 24),
 
-          // Right panel — company info + admin info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,7 +109,7 @@ class _CompanyDetailCardState extends State<CompanyDetailCard> {
               // mainAxisSize: MainAxisSize.min,
               children: [
                 _sectionHeader(context, 'Company information'),
-                const SizedBox(height: 14),
+                const SizedBox(height: 7),
                 Row(
                   children: [
                     _infoColumn(
@@ -108,7 +124,7 @@ class _CompanyDetailCardState extends State<CompanyDetailCard> {
                     ),
                   ],
                 ),
-                Padding(padding: space),
+                const SizedBox(height: 4),
                 Row(
                   children: [
                     _infoColumn(
@@ -118,26 +134,30 @@ class _CompanyDetailCardState extends State<CompanyDetailCard> {
                     ),
                     _infoColumn(
                       context,
-                      'Contact',
-                      widget.company.companyContact ?? '-',
+                      'Country',
+                      widget.company.companyCountry ?? '-',
                     ),
                   ],
                 ),
-                Padding(padding: space),
                 // Administrator Information
                 _sectionHeader(context, 'Administrator Information'),
-                const SizedBox(height: 14),
+                const SizedBox(height: 7),
                 Row(
                   children: [
                     _infoColumn(context, 'Name', widget.company.adminName),
                     _infoColumn(context, 'Email', widget.company.adminEmail),
                   ],
                 ),
-                Padding(padding: space),
+                const SizedBox(height: 4),
                 _infoColumn(
                   context,
                   'Contact',
                   widget.company.adminContact ?? '-',
+                ),
+
+                MySecButton(
+                  btnText: 'Assign Administrator',
+                  btnOnPressed: widget.onAdminEdit,
                 ),
               ],
             ),
@@ -158,7 +178,7 @@ class _CompanyDetailCardState extends State<CompanyDetailCard> {
             label,
             style: myNoInfoStyle(context).copyWith(color: cs.onSurfaceVariant),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             value,
             style: myNoInfoStyle(

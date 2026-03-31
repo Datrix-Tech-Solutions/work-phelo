@@ -4,7 +4,7 @@ import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart'
 import '../../../../work_phelo_components/widgets/custom_cards/display_card.dart';
 import '../../../../work_phelo_components/widgets/form_components/app_buttons.dart';
 import '../../../../work_phelo_components/widgets/form_components/side_form_panel.dart';
-import '../employee_management/employees/employee_page_wigets.dart/onboarding_form.dart';
+import '../employee_management/employees/employee_page_wigets.dart/employee_forms/onboarding_form.dart';
 import 'asset_management_widgets/asset_management_form.dart';
 import 'asset_management_widgets/asset_summary.dart';
 import 'asset_management_widgets/assets_lists.dart';

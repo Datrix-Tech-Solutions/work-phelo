@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:unicons/unicons.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
@@ -14,7 +15,6 @@ import '../../../work_phelo_components/widgets/custom_cards/title_card.dart';
 import '../../../work_phelo_components/widgets/custom_lists/horizontal_nav_bar.dart';
 import '../../../work_phelo_components/widgets/misc/user_avator.dart';
 import '../../../work_phelo_funtions/work_phelo_companies/company_asset_management_functions/company_asset_state.dart';
-import '../company_pages/management_pages/manage_departments/manage_department_page.dart';
 import '../company_pages/management_pages/management_page_layout.dart';
 import '../company_pages/management_pages/permissions_roles_pages/roles_permissions_page.dart';
 import '../company_pages/management_pages/tmp_pages.dart';
@@ -27,55 +27,27 @@ class CompanyDashboard extends ConsumerStatefulWidget {
 }
 
 class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
-  late AppUserModel user;
-  int _currentIndex = 0;
+  int _currentIndex = 1;
   int _managementSubIndex = -1;
   String statDisplay(String value) => value == '0' ? '-' : value;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments;
-
-    if (args is Map) {
-      user = args['user'] as AppUserModel;
-      _currentIndex = args['initialIndex'] as int? ?? 0;
-    } else if (args is AppUserModel) {
-      // normal login flow — keep existing behaviour
-      user = args;
-      _currentIndex = 0;
-    } else {
-      user = AppUserModel(
-        uid: '',
-        email: 'unknown',
-        fullName: 'Guest',
-        role: 'guest',
-        companyName: 'company_name',
-        lastLogin: DateTime.now(),
-        tenantSlug: '',
-        companyStatus: '',
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/login',
-            (route) => false,
-          );
-        }
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final users = ref.watch(usersByTenantProvider(user.tenantSlug));
+    final authState = ref.watch(authNotifierProvider);
+    final user = authState.user;
+
+    if (user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {});
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
-      if (previous?.isAuthenticated == true && !next.isAuthenticated) {
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-      }
+      if (previous?.isAuthenticated == true && !next.isAuthenticated) {}
     });
+
+    final users = ref.watch(usersByTenantProvider(user.tenantSlug));
     final assetCount = ref.watch(tenantAssetsCountProvider(user.tenantSlug));
+
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 150,
@@ -96,7 +68,6 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
               isSelected: _currentIndex == 1,
               onTap: () => setState(() => _currentIndex = 1),
             ),
-
             AppNavItem(
               label: 'Management',
               icon: UniconsLine.building,
@@ -117,11 +88,7 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: InkWell(
-              onTap: () => Navigator.pushNamedAndRemoveUntil(
-                context,
-                '/login',
-                (route) => false,
-              ),
+              onTap: () => context.go('/${user.tenantSlug}/login'),
               borderRadius: BorderRadius.circular(appRadius),
               child: UserDashIcon(
                 onIconPressed: (details) {
@@ -143,7 +110,7 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
               ),
             ),
           ),
-          Padding(padding: EdgeInsets.all(10)),
+          const Padding(padding: EdgeInsets.all(10)),
         ],
       ),
       body: Column(
@@ -182,11 +149,14 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
               ),
             ],
           ),
-
           Expanded(
             child: IndexedStack(
               index: _currentIndex,
-              children: [_portalPage(), _modulesPage(), _managementPage()],
+              children: [
+                const Center(child: Text('Home Page')),
+                ModuleOptions(), // ← No currentUser
+                _managementPage(user),
+              ],
             ),
           ),
         ],
@@ -194,34 +164,23 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
     );
   }
 
-  Widget _portalPage() {
-    return Center(child: Text('Home Page'));
-  }
-
-  Widget _modulesPage() {
-    return Center(child: ModuleOptions(currentUser: user));
-  }
-
-  Widget _managementPage() {
+  Widget _managementPage(AppUserModel user) {
     return _managementSubIndex == -1
         ? ManagementPage(
             onNavigate: (i) => setState(() => _managementSubIndex = i),
           )
-        : _managementSubPages()[_managementSubIndex];
+        : _managementSubPages(user)[_managementSubIndex];
   }
 
-  List<Widget> _managementSubPages() => [
-    ManageDepartmentPage(
-      onBack: () => setState(() => _managementSubIndex = -1),
-      currentUser: user,
-    ),
+  List<Widget> _managementSubPages(AppUserModel user) => [
+    AdminAcc(),
     Employees(onBack: () => setState(() => _managementSubIndex = -1)),
     RolesPermissionsPage(
       onBack: () => setState(() => _managementSubIndex = -1),
       currentUser: user,
     ),
-    AdminAcc(),
-    AuditLog(),
-    GeneralSettings(),
+    const AdminAcc(),
+    const AuditLog(),
+    const GeneralSettings(),
   ];
 }

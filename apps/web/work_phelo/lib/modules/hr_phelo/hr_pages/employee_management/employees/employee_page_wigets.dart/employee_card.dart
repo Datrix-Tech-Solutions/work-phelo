@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:unicons/unicons.dart';
+import 'package:work_phelo/work_phelo_components/theme/app_padding.dart';
 
-import '../../../work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
-import '../../theme/app_text_theme.dart';
-import '../../theme/miscellaneouse.dart';
+import '../../../../../../work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
+import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../../work_phelo_components/theme/miscellaneouse.dart';
 
 class EmployeeCard extends StatefulWidget {
   final EmployeeModel user;
@@ -24,7 +25,6 @@ class _EmployeeCardState extends State<EmployeeCard> {
               '${widget.user.lastName.isNotEmpty ? widget.user.lastName[0] : ''}'
           .toUpperCase();
 
-  // Generate a consistent color per employee based on name
   Color get _avatarBg {
     final colors = [
       const Color(0xFFE1F5EE),
@@ -236,16 +236,137 @@ class StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        label,
+        '• $label',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
           color: fg,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+}
+
+//////
+///
+
+class EmployeeSummaryCard extends StatefulWidget {
+  final EmployeeModel user;
+  const EmployeeSummaryCard({super.key, required this.user});
+
+  @override
+  State<EmployeeSummaryCard> createState() => _EmployeeSummaryCardState();
+}
+
+class _EmployeeSummaryCardState extends State<EmployeeSummaryCard> {
+  String get _initials =>
+      '${widget.user.firstName.isNotEmpty ? widget.user.firstName[0] : ''}'
+              '${widget.user.lastName.isNotEmpty ? widget.user.lastName[0] : ''}'
+          .toUpperCase();
+
+  Color get _avatarBg {
+    final colors = [
+      const Color(0xFFE1F5EE),
+      const Color(0xFFEEEDFE),
+      const Color(0xFFFAEEDA),
+      const Color(0xFFFBEAF0),
+      const Color(0xFFE6F1FB),
+    ];
+    return colors[widget.user.fullName.length % colors.length];
+  }
+
+  Color get _avatarFg {
+    final colors = [
+      const Color(0xFF0F6E56),
+      const Color(0xFF534AB7),
+      const Color(0xFF854F0B),
+      const Color(0xFF993556),
+      const Color(0xFF185FA5),
+    ];
+    return colors[widget.user.fullName.length % colors.length];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: myContentPadding,
+      child: Card.outlined(
+        elevation: 1,
+        margin: const EdgeInsets.only(bottom: 24),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(appRadius / 2),
+          side: BorderSide(color: ColorScheme.of(context).outline, width: 0.5),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: double.infinity,
+              height: 160,
+              color: _avatarBg,
+              child: Center(
+                child: Text(
+                  _initials,
+                  style: TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.w500,
+                    color: _avatarFg,
+                  ),
+                ),
+              ),
+            ),
+            Padding(padding: space),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: myContentPadding,
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Email Address: ',
+                          style: myNoInfoStyle(context),
+                        ),
+                        TextSpan(
+                          text: widget.user.email,
+                          style: myMainTextStyle(
+                            context,
+                          ).copyWith(fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: myContentPadding,
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Phone Number: ',
+                          style: myNoInfoStyle(context),
+                        ),
+                        TextSpan(
+                          text: widget.user.contact,
+                          style: myMainTextStyle(
+                            context,
+                          ).copyWith(fontWeight: FontWeight.w500),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ],
         ),
       ),
     );

@@ -64,7 +64,7 @@ InputDecoration appTextFieldDecoration(
   final cs = Theme.of(context).colorScheme;
 
   return InputDecoration(
-    contentPadding: EdgeInsets.only(left: 10, top: 2, bottom: 2, right: 10),
+    contentPadding: EdgeInsets.only(left: 10, right: 10),
     counterText: '',
     prefixText: prefixText,
     hintText: hintText,
