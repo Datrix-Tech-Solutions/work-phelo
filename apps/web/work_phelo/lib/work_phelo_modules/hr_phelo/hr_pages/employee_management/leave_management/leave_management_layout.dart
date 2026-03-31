@@ -38,7 +38,6 @@ class _LeaveManagementLayoutState extends ConsumerState<LeaveManagementLayout> {
 
     return AppTableWidget(
       headerTitle: 'Employees',
-      details: 'Manage your workforce',
       noDataText: 'No leave requests found.',
       headerTrailing: MyOutlinedButton(
         btnText: 'Request Leave',

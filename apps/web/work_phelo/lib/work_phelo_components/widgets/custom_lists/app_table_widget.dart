@@ -117,12 +117,7 @@ class _AppTableWidgetState extends State<AppTableWidget>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.headerTitle,
-                      style: myMainTextStyle(
-                        context,
-                      ).copyWith(fontWeight: FontWeight.w600, fontSize: 15),
-                    ),
+                    titleHeader(context, widget.headerTitle),
                     if (widget.details != null) ...[
                       const SizedBox(height: 2),
                       Text(

@@ -51,14 +51,6 @@ List<NavItem> hrNavigationItems(
       // no requiredModule — always visible
     ),
 
-  // if (accessibleModules.contains(PermissionModule.offboarding))
-  //   NavDestination(
-  //     icon: UniconsLine.user_minus,
-  //     title: 'Offboarding',
-  //     pageIndex: 3,
-  //     page: const OffboardingLayout(),
-  //     requiredModule: PermissionModule.offboarding,
-  //   ),
   if (accessibleModules.contains(PermissionModule.leaveManagement))
     NavDestination(
       icon: UniconsLine.calender,
@@ -70,7 +62,7 @@ List<NavItem> hrNavigationItems(
 
   if (accessibleModules.contains(PermissionModule.appraisal))
     NavDestination(
-      icon: UniconsLine.check_circle,
+      icon: UniconsLine.trophy,
       title: 'Appraisal',
       pageIndex: 4,
       page: AppraisalLayout(currentUser: currentUser),
@@ -85,41 +77,45 @@ List<NavItem> hrNavigationItems(
     pageIndex: 5,
     page: MyTimePlanner(),
   ),
-  if (accessibleModules.contains(PermissionModule.onboarding))
+  if (accessibleModules.contains(PermissionModule.smartSchedule))
     NavDestination(
       icon: UniconsLine.schedule,
-      title: 'My Schedules',
+      title: 'Smart Schedules',
       pageIndex: 6,
       page: SchedulesLayout(),
+      requiredModule: PermissionModule.smartSchedule
     ),
 
-  if (accessibleModules.contains(PermissionModule.onboarding))
+  if (accessibleModules.contains(PermissionModule.projectTask))
     NavDestination(
       icon: UniconsLine.clipboard_notes,
-      title: 'My Projects & Tasks',
+      title: 'Projects & Tasks',
       pageIndex: 7,
       page: ProjectsTasksLayout(),
+      requiredModule: PermissionModule.projectTask
     ),
 
-  if (accessibleModules.contains(PermissionModule.onboarding))
+  if (accessibleModules.contains(PermissionModule.payroll))
     NavSection('Payroll & Compensation'),
 
-  if (accessibleModules.contains(PermissionModule.onboarding))
+  if (accessibleModules.contains(PermissionModule.payroll))
     NavDestination(
       icon: UniconsLine.invoice,
       title: 'Payroll',
       pageIndex: 8,
       page: PayrollManagementPage(),
+      requiredModule: PermissionModule.payroll
     ),
 
-  if (accessibleModules.contains(PermissionModule.onboarding))
+  if (accessibleModules.contains(PermissionModule.assetManagement))
     NavSection('Asset Management'),
 
-  if (accessibleModules.contains(PermissionModule.onboarding))
+  if (accessibleModules.contains(PermissionModule.assetManagement))
     NavDestination(
       icon: UniconsLine.monitor,
       title: 'Asset Management',
       pageIndex: 9,
       page: AssetManagementLayout(currentUser: currentUser),
+      requiredModule: PermissionModule.assetManagement
     ),
 ];

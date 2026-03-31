@@ -7,7 +7,7 @@ import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onb
 import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../../../../../../pages/login_page/login_utils/validators.dart';
 import '../../../../../../../work_phelo_components/theme/app_padding.dart';
-import '../../../../../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../../../../../work_phelo_components/theme/miscellaneouse.dart';
 import '../../../../../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 
 class OnboardingForm extends ConsumerStatefulWidget {
@@ -204,17 +204,3 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
   // ── Helpers ───────────────────────────────────────────────────
 }
 
-Widget sectionHeader(BuildContext context, String title) {
-  return Padding(
-    padding: formWidgetPadding,
-    child: Text(
-      title.toUpperCase(),
-      style: myMainTextStyle(context).copyWith(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.1,
-        color: Theme.of(context).colorScheme.onSurface,
-      ),
-    ),
-  );
-}

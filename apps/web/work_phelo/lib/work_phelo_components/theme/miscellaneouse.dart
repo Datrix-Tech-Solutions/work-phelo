@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:unicons/unicons.dart';
+import 'package:work_phelo/work_phelo_components/theme/app_padding.dart';
 
 import 'app.colors.dart';
 import 'app_text_theme.dart';
@@ -110,6 +111,37 @@ InputDecoration appTextFieldDecoration(
     focusedErrorBorder: OutlineInputBorder(
       borderRadius: BorderRadius.circular(appRadius),
       borderSide: const BorderSide(color: Colors.redAccent, width: 2),
+    ),
+  );
+}
+
+
+Widget sectionHeader(BuildContext context, String title) {
+  return Padding(
+    padding: formWidgetPadding,
+    child: Text(
+      title.toUpperCase(),
+      style: myMainTextStyle(context).copyWith(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.1,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
+    ),
+  );
+}
+
+
+Widget titleHeader(BuildContext context, String title) {
+  return Padding(
+    padding: formWidgetPadding,
+    child: Text(
+      title.toUpperCase(),
+      style: myTitleTextStyle(context).copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.5,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
     ),
   );
 }

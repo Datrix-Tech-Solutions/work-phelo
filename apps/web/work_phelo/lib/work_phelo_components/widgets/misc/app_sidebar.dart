@@ -88,7 +88,7 @@ class AppSidebar extends ConsumerWidget {
                   final item = navigationItems[index];
 
                   if (item is NavSection) {
-                    if (isCompact) return const SizedBox.shrink();
+                    if (isCompact) return myDivider(context);
 
                     return Padding(
                       padding: const EdgeInsets.fromLTRB(20, 6, 16, 6),

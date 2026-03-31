@@ -5,6 +5,10 @@ enum PermissionModule {
   offboarding,
   leaveManagement,
   appraisal,
+  timeClock,
+  smartSchedule,
+  projectTask,
+  payroll,
   assetManagement,
   marketingModule,
   accountingModule,
@@ -15,6 +19,10 @@ enum PermissionModule {
     PermissionModule.offboarding => 'Offboarding',
     PermissionModule.leaveManagement => 'Leave management',
     PermissionModule.appraisal => 'Appraisal',
+    PermissionModule.timeClock => 'Time Clock',
+    PermissionModule.smartSchedule => 'Smart Schedules',
+    PermissionModule.projectTask => 'Projects & Tasks',
+    PermissionModule.payroll => 'Payroll',
     PermissionModule.assetManagement => 'Asset management',
     PermissionModule.marketingModule => 'Marketing module',
     PermissionModule.accountingModule => 'Accounting module',
@@ -26,6 +34,11 @@ enum PermissionModule {
     PermissionModule.offboarding => 'Employee offboarding workflows',
     PermissionModule.leaveManagement => 'Leave requests and approvals',
     PermissionModule.appraisal => 'Performance reviews',
+    PermissionModule.timeClock => 'Can clock in',
+    PermissionModule.smartSchedule =>
+      'Can you smart schedule to create schedules',
+    PermissionModule.projectTask => 'Can set projects and assign to members',
+    PermissionModule.payroll => 'Can use payroll',
     PermissionModule.assetManagement => 'Company assets tracking',
     PermissionModule.marketingModule => 'Marketing tools and campaigns',
     PermissionModule.accountingModule => 'Finance and accounting',
@@ -48,7 +61,7 @@ class EmployeePermission {
     required this.modules,
     required this.color,
     this.isLocked = false,
-    required this.tenantSlug
+    required this.tenantSlug,
   });
 
   EmployeePermission copyWith({

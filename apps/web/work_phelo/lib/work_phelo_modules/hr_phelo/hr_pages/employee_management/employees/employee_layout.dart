@@ -60,7 +60,7 @@ class _EmployeeLayoutState extends ConsumerState<EmployeeLayout> {
 
             newEmployee: () => _panel.show(
               context: context,
-              formTitle: 'COMPANY ONBOARDING FORM',
+              formTitle: 'Company Onboarding Form',
               onPressed: () {
                 final user = _formKey.currentState?.submit();
                 if (user == null) return;
