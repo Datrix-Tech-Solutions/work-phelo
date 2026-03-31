@@ -15,11 +15,11 @@ RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
 RUN npm run build --workspace=packages/config
 RUN npm run build --workspace=apps/auth-service
-# Compile seed separately for use in deploy pipeline
-# Output goes to prisma/ so relative imports (../prisma/generated/client) resolve correctly
+# Compile seed for deploy pipeline
 RUN cd apps/auth-service && npx tsc prisma/seed.ts prisma/seed-resources.ts \
     --outDir prisma --module commonjs --target ES2021 \
-    --esModuleInterop --skipLibCheck --resolveJsonModule 2>/dev/null || true
+    --esModuleInterop --skipLibCheck --resolveJsonModule \
+    && echo "Seed compiled OK" || echo "Seed compile failed"
 
 FROM node:20-alpine AS runner
 RUN apk add --no-cache openssl
