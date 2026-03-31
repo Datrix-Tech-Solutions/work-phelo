@@ -182,29 +182,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset via email link or SMS OTP' })
   @ApiResponse({ status: 200, description: 'Reset instructions sent' })
-  @ApiBody({
-    description: 'Forgot password request payload',
-    schema: {
-      examples: {
-        emailLink: {
-          summary: 'Email reset flow',
-          value: {
-            tenantSlug: 'acme-ghana',
-            email: 'kofi.boateng@acmeghana.com',
-            method: 'email',
-          },
-        },
-        smsOtp: {
-          summary: 'SMS OTP reset flow',
-          value: {
-            tenantSlug: 'acme-ghana',
-            email: 'kofi.boateng@acmeghana.com',
-            method: 'sms',
-          },
-        },
-      },
-    },
-  })
+  @ApiBody({ type: ForgotPasswordDto })
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto);
   }
@@ -213,31 +191,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Reset password using email link token or SMS OTP' })
   @ApiResponse({ status: 200, description: 'Password reset successfully' })
-  @ApiBody({
-    description: 'Reset password payload',
-    schema: {
-      examples: {
-        tokenFlow: {
-          summary: 'Reset by token',
-          value: {
-            tenantSlug: 'acme-ghana',
-            email: 'kofi.boateng@acmeghana.com',
-            token: '123456',
-            newPassword: 'Employee123!New',
-          },
-        },
-        otpFlow: {
-          summary: 'Reset by OTP code',
-          value: {
-            tenantSlug: 'acme-ghana',
-            email: 'kofi.boateng@acmeghana.com',
-            otpCode: '123456',
-            newPassword: 'Employee123!New',
-          },
-        },
-      },
-    },
-  })
+  @ApiBody({ type: ResetPasswordDto })
   @ApiResponse({ status: 400, description: 'Invalid reset request payload' })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);

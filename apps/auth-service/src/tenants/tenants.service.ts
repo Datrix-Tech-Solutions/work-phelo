@@ -68,6 +68,8 @@ export class TenantsService {
       },
     });
 
+    const workspaceUrl = `${process.env.FRONTEND_BASE_URL || process.env.APP_URL || 'http://localhost:3000'}/t/${tenant.slug}/login`;
+
     await this.rabbitmq.emit('notification.email_verification', {
       email: user.email,
       firstName: user.firstName,
@@ -79,6 +81,9 @@ export class TenantsService {
       message:
         'Registration submitted. Check your email for verification code.',
       tenantId: tenant.id,
+      tenantName: tenant.name,
+      tenantSlug: tenant.slug,
+      workspaceUrl,
       userId: user.id,
     };
   }

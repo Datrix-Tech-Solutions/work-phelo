@@ -96,7 +96,7 @@ async function seedTenantPermissionSets(
 }
 
 async function main() {
-  console.log('🌱 Starting seed...\n');
+  console.log('Starting seed...\n');
 
   // ── Seed platform resources first ─────────────────────────────────────────
   console.log('Seeding platform resources...');
@@ -141,7 +141,7 @@ async function main() {
     },
   });
   console.log(
-    `  ✅ ${process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com'} (from env or default)`,
+    `  ${process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com'} (from env or default)`,
   );
 
   // ── 2. ACME GHANA ──────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ async function main() {
 
   // Seed permission sets
   const acmeSets = await seedTenantPermissionSets(acmeTenant.id, resources);
-  console.log(`  ✅ Permission sets: ${Object.keys(acmeSets).join(', ')}`);
+  console.log(`  Permission sets: ${Object.keys(acmeSets).join(', ')}`);
 
   // Users
   const acmeAdmin = await prisma.user.upsert({
@@ -394,17 +394,17 @@ async function main() {
     },
   });
 
-  console.log('  ✅ admin@acmeghana.com / Admin123! (TENANT_ADMIN)');
+  console.log('  admin@acmeghana.com / Admin123! (TENANT_ADMIN)');
   console.log(
-    '  ✅ hr.manager@acmeghana.com / Manager123! → Manager Set assigned',
+    '  hr.manager@acmeghana.com / Manager123! → Manager Set assigned',
   );
   console.log(
-    '  ✅ kofi.boateng@acmeghana.com / Employee123! → Employee Set assigned',
+    '  kofi.boateng@acmeghana.com / Employee123! → Employee Set assigned',
   );
-  console.log('  ✅ ama.owusu@acmeghana.com / Employee123!');
-  console.log('  ✅ accountant@acmeghana.com / Accountant123!');
-  console.log('  ✅ newuser@acmeghana.com / TempPass123! (force reset)');
-  console.log('  ✅ mfa.user@acmeghana.com / MfaUser123!');
+  console.log('  ama.owusu@acmeghana.com / Employee123!');
+  console.log('  accountant@acmeghana.com / Accountant123!');
+  console.log('  newuser@acmeghana.com / TempPass123! (force reset)');
+  console.log('  mfa.user@acmeghana.com / MfaUser123!');
 
   // ── 3. STELLAR TECH ────────────────────────────────────────────────────────
   console.log('\nCreating Stellar Tech Ghana...');
@@ -672,7 +672,7 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
+    console.error('Seed failed:', e);
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());

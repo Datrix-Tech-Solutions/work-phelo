@@ -12,34 +12,31 @@ const SERVICES: Record<string, string> = {
   marketing: process.env.MARKETING_SERVICE_URL || 'http://localhost:4006',
 };
 
-// Services that include their name as a path prefix (e.g. auth-service has /auth/*, /tenants/*, /users/*)
-// Services that DON'T include their name (e.g. hr-service has /departments, /employees, etc.)
-const SERVICES_WITH_OWN_PREFIX = new Set(['auth']);
-
 const PUBLIC_PATTERNS = [
-  /^\/api\/auth\/auth\/login$/,
-  /^\/api\/auth\/auth\/admin\/login$/,
-  /^\/api\/auth\/auth\/refresh$/,
-  /^\/api\/auth\/auth\/verify-email$/,
-  /^\/api\/auth\/auth\/resend-verification$/,
-  /^\/api\/auth\/auth\/forgot-password$/,
-  /^\/api\/auth\/auth\/reset-password$/,
-  /^\/api\/auth\/auth\/force-reset-password$/,
-  /^\/api\/auth\/auth\/google/,
-  /^\/api\/auth\/auth\/microsoft/,
-  /^\/api\/auth\/tenants\/register$/,
-  /^\/api\/auth\/users\/accept-invite$/,
-  /^\/api\/auth\/auth\/mfa\/send-sms$/,
+  /^\/api\/v1\/auth\/auth\/login$/,
+  /^\/api\/v1\/auth\/auth\/admin\/login$/,
+  /^\/api\/v1\/auth\/auth\/refresh$/,
+  /^\/api\/v1\/auth\/auth\/verify-email$/,
+  /^\/api\/v1\/auth\/auth\/resend-verification$/,
+  /^\/api\/v1\/auth\/auth\/forgot-password$/,
+  /^\/api\/v1\/auth\/auth\/reset-password$/,
+  /^\/api\/v1\/auth\/auth\/force-reset-password$/,
+  /^\/api\/v1\/auth\/auth\/google/,
+  /^\/api\/v1\/auth\/auth\/microsoft/,
+  /^\/api\/v1\/auth\/tenants\/register$/,
+  /^\/api\/v1\/auth\/users\/accept-invite$/,
+  /^\/api\/v1\/auth\/auth\/mfa\/send-sms$/,
 ];
 
 @Controller()
 export class ProxyController {
   private readonly logger = new Logger(ProxyController.name);
 
-  @All('api/*')
+  @All('api/v1/*')
   async proxy(@Req() req: Request, @Res() res: Response) {
-    const pathParts = req.path.split('/').filter(Boolean); // ['api', 'auth', 'login']
-    const service = pathParts[1]; // 'auth', 'hr', etc
+    // pathParts: ['api', 'v1', 'auth', 'login', ...]
+    const pathParts = req.path.split('/').filter(Boolean);
+    const service = pathParts[2]; // index 2 — after 'api' and 'v1'
     const serviceUrl = SERVICES[service];
 
     if (!serviceUrl) {
@@ -79,11 +76,11 @@ export class ProxyController {
       }
     }
 
-    // Build downstream path
-    // auth-service: /api/auth/auth/login → /auth/login
-    // auth-service: /api/auth/company-roles → /company-roles
-    // hr-service:   /api/hr/departments → /departments
-    const remainingParts = pathParts.slice(2); // remove 'api' and service name
+    // Strip 'api', 'v1', and service name — forward the rest downstream
+    // /api/v1/auth/auth/login     → /auth/login    (auth-service)
+    // /api/v1/auth/company-roles  → /company-roles (auth-service)
+    // /api/v1/hr/departments      → /departments   (hr-service)
+    const remainingParts = pathParts.slice(3); // remove 'api', 'v1', service
     const downstreamPath = '/' + remainingParts.join('/');
 
     const queryString = req.url.includes('?')

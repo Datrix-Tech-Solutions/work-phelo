@@ -1,3 +1,6 @@
+-- Ensure schema exists before creating enum/table objects in this namespace.
+CREATE SCHEMA IF NOT EXISTS "auth";
+
 -- CreateEnum
 CREATE TYPE "auth"."UserRole" AS ENUM ('SUPER_ADMIN', 'TENANT_ADMIN', 'HR_MANAGER', 'HR_STAFF', 'EMPLOYEE', 'ACCOUNTANT', 'MARKETING_MANAGER', 'MARKETING_STAFF');
 

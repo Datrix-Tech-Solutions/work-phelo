@@ -11,6 +11,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
 import { generateSecureToken } from '../common/otp.helper';
 import * as bcrypt from 'bcrypt';
+import { WorkspaceUrl } from '../common/workspace-url.helper';
 
 @Injectable()
 export class UsersService {
