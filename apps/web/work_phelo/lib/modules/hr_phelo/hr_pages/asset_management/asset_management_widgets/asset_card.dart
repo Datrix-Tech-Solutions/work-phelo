@@ -6,7 +6,7 @@ import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_asse
 import '../../../../../work_phelo_components/theme/app_padding.dart';
 import '../../../../../work_phelo_components/theme/app_text_theme.dart';
 import '../../../../../work_phelo_components/theme/miscellaneouse.dart';
-import '../../../../../work_phelo_components/widgets/custom_cards/employee_card.dart';
+import '../../employee_management/employees/employee_page_wigets.dart/employee_card.dart';
 
 
 class AssetCard extends StatefulWidget {

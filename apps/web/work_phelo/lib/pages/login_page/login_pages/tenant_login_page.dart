@@ -1,9 +1,10 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:unicons/unicons.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
-import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
-import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_state.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../../work_phelo_components/theme/app.colors.dart';
 import '../../../work_phelo_components/theme/app_images.dart';
@@ -15,16 +16,17 @@ import '../../../work_phelo_components/widgets/form_components/app_text_fields.d
 import '../../../work_phelo_components/widgets/misc/snack_bar.dart';
 import '../auth_layout.dart';
 import '../login_utils/validators.dart';
-import 'forgot_password.dart';
+import '../login_form_types.dart/forgot_password.dart';
 
-class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+class TenantLoginPage extends ConsumerStatefulWidget {
+  final String tenantSlug;
+  const TenantLoginPage({super.key, this.tenantSlug = ''});
 
   @override
-  ConsumerState<LoginPage> createState() => _LoginPageState();
+  ConsumerState<TenantLoginPage> createState() => _TenantLoginPageState();
 }
 
-class _LoginPageState extends ConsumerState<LoginPage> {
+class _TenantLoginPageState extends ConsumerState<TenantLoginPage> {
   bool isLoading = false;
   bool showLoginState = false;
   String? _errorMessage;
@@ -41,6 +43,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _handleLogin() async {
+    if (widget.tenantSlug.isEmpty) {
+      setState(() {
+        _errorMessage =
+            'Invalid login link. Please use the link from your onboarding email.';
+        showLoginState = true;
+      });
+      return;
+    }
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 
@@ -54,52 +64,43 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     setState(() => showLoginState = false);
 
-    await ref.read(authNotifierProvider.notifier).login(email, password);
+    await ref
+        .read(authNotifierProvider.notifier)
+        .loginTenant(
+          tenantSlug: widget.tenantSlug,
+          email: email,
+          password: password,
+        );
   }
 
   void _routeToDashboard(AppUserModel user) {
-    // Pending platform owner → get started flow
-    if (user.isPlatformOwner) {
-      final companies = ref.read(companyProvider).companies;
-      final company = companies.cast<CompanyModel?>().firstWhere(
-        (c) => c?.tenantSlug == user.tenantSlug,
-        orElse: () => null,
-      );
-
-      if (company?.status == CompanyStatus.pending) {
-        Navigator.pushNamedAndRemoveUntil(
-          context,
-          '/get-started',
-          (route) => false,
-          arguments: user,
-        );
-        return;
-      }
+    if (user.isPlatformOwner && user.companyStatus == 'pending') {
+      context.go('/get-started', extra: user);
+      return;
     }
 
-    // Normal routing
     final String route = switch (user.role) {
-      'super_admin' => '/platform/dashboard',
-      'platform_owner' => '/dashboard',
-      _ => '/home',
+      'SUPER_ADMIN' => '/platform/dashboard',
+      'TENANT_ADMIN' => '/tenant/dashboard',
+      _ => '/dashboard',
     };
 
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      route,
-      (route) => false,
-      arguments: user,
-    );
+    context.go(route);
   }
 
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
       if (next.error != null) {
-        setState(() => _errorMessage = next.error);
-        showLoginState = true;
+        setState(() {
+          _errorMessage = next.error;
+          showLoginState = true;
+        });
       }
-      if (next.isAuthenticated && next.user != null) {
+      if (previous?.isAuthenticated == false &&
+          next.isAuthenticated &&
+          next.user != null) {
+        log('TENANT PAGE >> routing for role: ${next.user!.role}');
         _routeToDashboard(next.user!);
       }
     });
@@ -118,7 +119,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            appImage,
+            loginImage,
+            Padding(padding: space),
             Text('Sign in', style: myTitleTextStyle(context)),
             Padding(padding: space),
 
@@ -167,6 +169,8 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               isLoading: isLoading,
               btnOnPressed: _handleLogin,
             ),
+
+            Padding(padding: space),
 
             Row(
               mainAxisAlignment: MainAxisAlignment.center,

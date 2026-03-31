@@ -6,7 +6,7 @@ import '../../../work_phelo_components/widgets/form_components/app_buttons.dart'
 import '../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 import '../auth_layout.dart';
 import '../login_utils/validators.dart';
-import 'login_page.dart';
+import '../login_pages/tenant_login_page.dart';
 import 'otp_page.dart';
 
 class EmailConfirmation extends StatefulWidget {
@@ -115,7 +115,7 @@ class _EmailConfirmationState extends State<EmailConfirmation> {
                 onPressed: () {
                   Navigator.pushReplacement(
                     context,
-                    MaterialPageRoute(builder: (context) => LoginPage()),
+                    MaterialPageRoute(builder: (context) => TenantLoginPage()),
                   );
                 },
                 style: TextButton.styleFrom(

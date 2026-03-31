@@ -1,24 +1,27 @@
 import 'package:flutter/material.dart';
 
-enum CompanyStatus { active, inactive, pending }
+enum CompanyStatus { active, inactive, pending, suspended }
 
 extension CompanyStatusX on CompanyStatus {
   String get label => switch (this) {
-    CompanyStatus.active => 'Active',
-    CompanyStatus.inactive => 'Inactive',
-    CompanyStatus.pending => 'Pending',
+    CompanyStatus.active => 'ACTIVE',
+    CompanyStatus.inactive => 'INACTIVE',
+    CompanyStatus.pending => 'PENDING',
+    CompanyStatus.suspended => 'SUSPENDED',
   };
 
   String get mapKey => switch (this) {
-    CompanyStatus.active => 'active',
-    CompanyStatus.inactive => 'inactive',
-    CompanyStatus.pending => 'pending',
+    CompanyStatus.active => 'ACTIVE',
+    CompanyStatus.inactive => 'INACTIVE',
+    CompanyStatus.pending => 'PENDING',
+    CompanyStatus.suspended => 'SUSPENDED',
   };
 
   static CompanyStatus fromString(String? value) => switch (value) {
-    'active' => CompanyStatus.active,
-    'inactive' => CompanyStatus.inactive,
-    'pending' => CompanyStatus.pending,
+    'ACTIVE' => CompanyStatus.active,
+    'INACTIVE' => CompanyStatus.inactive,
+    'PENDING' => CompanyStatus.pending,
+    'SUSPENDED' => CompanyStatus.suspended,
     _ => CompanyStatus.pending,
   };
 
@@ -26,6 +29,7 @@ extension CompanyStatusX on CompanyStatus {
     CompanyStatus.active => Colors.green,
     CompanyStatus.inactive => Colors.red,
     CompanyStatus.pending => Colors.orange,
+    CompanyStatus.suspended => Colors.grey,
   };
 }
 
@@ -33,9 +37,11 @@ extension CompanyStatusX on CompanyStatus {
 
 class CompanyModel {
   final String companyName;
+  final String? tenantId;
   final String? companyContact;
   final String? companySize;
   final String? companyLocation;
+  final String? companyCountry;
   final String? companyIndustry;
   final String adminFirstName;
   final String adminLastName;
@@ -49,19 +55,21 @@ class CompanyModel {
 
   CompanyModel({
     required this.companyName,
+    this.tenantId,
     this.companyContact,
     this.companySize,
     this.companyLocation,
+    this.companyCountry,
     this.companyIndustry,
     required this.adminFirstName,
     required this.adminLastName,
     this.adminContact,
     required this.adminEmail,
     this.onboardedDate,
-    this.status = CompanyStatus.pending,
+    this.status = CompanyStatus.active,
     required this.systemRole,
     required this.adminPassword,
-    this.enabledModules=const [],
+    this.enabledModules = const [],
   });
 
   // ── Computed getters ────────────────────────────────────────
@@ -81,9 +89,11 @@ class CompanyModel {
   // ── copyWith ────────────────────────────────────────────────
   CompanyModel copyWith({
     String? companyName,
+    String? tenantId,
     String? companyContact,
     String? companySize,
     String? companyLocation,
+    String? companyCountry,
     String? companyIndustry,
     String? adminFirstName,
     String? adminLastName,
@@ -97,9 +107,11 @@ class CompanyModel {
   }) {
     return CompanyModel(
       companyName: companyName ?? this.companyName,
+      tenantId: tenantId ?? this.tenantId,
       companyContact: companyContact ?? this.companyContact,
       companySize: companySize ?? this.companySize,
       companyLocation: companyLocation ?? this.companyLocation,
+      companyCountry: companyCountry ?? this.companyCountry,
       companyIndustry: companyIndustry ?? this.companyIndustry,
       adminFirstName: adminFirstName ?? this.adminFirstName,
       adminLastName: adminLastName ?? this.adminLastName,
@@ -109,7 +121,7 @@ class CompanyModel {
       onboardedDate: onboardedDate ?? this.onboardedDate,
       status: status ?? this.status,
       systemRole: systemRole ?? this.systemRole,
-      enabledModules: enabledModules?? this.enabledModules
+      enabledModules: enabledModules ?? this.enabledModules,
     );
   }
 
@@ -117,6 +129,7 @@ class CompanyModel {
   factory CompanyModel.fromMap(Map<String, dynamic> map) {
     return CompanyModel(
       companyName: map['companyName'] as String,
+      tenantId: map['tenantId'] as String?,
       adminFirstName: map['adminFirstName'] as String,
       adminLastName: map['adminLastName'] as String,
       adminEmail: map['adminEmail'] as String,
@@ -124,6 +137,7 @@ class CompanyModel {
       companySize: map['companySize'] as String?,
       companyIndustry: map['companyIndustry'] as String?,
       companyLocation: map['companyLocation'] as String?,
+      companyCountry: map['companyCountry'] as String?,
       adminContact: map['adminContact'] as String?,
       status: CompanyStatusX.fromString(map['status'] as String),
       onboardedDate: map['onboardedDate'] != null
@@ -131,9 +145,11 @@ class CompanyModel {
           : null,
       systemRole: map['systemRole'] as String? ?? '',
       adminPassword: map['adminPassword'] as String,
-      enabledModules: (map['enabledModules'] as List<dynamic>?)
-      ?.map((e) => e as String)
-      .toList() ?? [],
+      enabledModules:
+          (map['enabledModules'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          [],
     );
   }
 
@@ -153,9 +169,11 @@ class CompanyModel {
   Map<String, dynamic> toMap() {
     return {
       'companyName': companyName,
+      'tenantId': tenantId,
       'companyContact': companyContact,
       'companySize': companySize,
       'companyLocation': companyLocation,
+      'companyCountry': companyCountry,
       'companyIndustry': companyIndustry,
       'adminFirstName': adminFirstName,
       'adminLastName': adminLastName,
@@ -167,8 +185,31 @@ class CompanyModel {
       'companyDomain': companyDomain,
       'systemRole': systemRole,
       'adminPassword': adminPassword,
-      'enabledModules':enabledModules,
+      'enabledModules': enabledModules,
     };
+  }
+
+  factory CompanyModel.fromApi(Map<String, dynamic> json) {
+    return CompanyModel(
+      companyName: json['name'] as String? ?? '',
+      adminFirstName: '',
+      adminLastName: '',
+      adminEmail: json['email'] as String? ?? '',
+      adminContact: json['phone'] as String?,
+      companyCountry: json['country'] as String?,
+      companyIndustry: json['industry'] as String?,
+      companySize: json['size'] as String?,
+      tenantId: json['id'] as String?,
+      systemRole: 'TENANT_ADMIN',
+      adminPassword: '',
+      status: CompanyStatusX.fromString(
+        (json['status'] as String? ?? 'pending'),
+      ),
+      onboardedDate: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'] as String)
+          : null,
+      enabledModules: const [],
+    );
   }
 }
 
@@ -187,3 +228,4 @@ class ModuleConfig {
     this.isEnabled = false,
   });
 }
+

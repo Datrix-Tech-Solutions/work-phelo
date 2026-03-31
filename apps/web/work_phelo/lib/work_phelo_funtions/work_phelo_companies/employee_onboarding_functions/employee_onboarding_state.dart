@@ -8,9 +8,17 @@ class EmployeeState {
   final bool isLoading;
   final String? error;
 
-  const EmployeeState({this.users = const [], this.isLoading = false, this.error});
+  const EmployeeState({
+    this.users = const [],
+    this.isLoading = false,
+    this.error,
+  });
 
-  EmployeeState copyWith({List<EmployeeModel>? users, bool? isLoading, String? error}) {
+  EmployeeState copyWith({
+    List<EmployeeModel>? users,
+    bool? isLoading,
+    String? error,
+  }) {
     return EmployeeState(
       users: users ?? this.users,
       isLoading: isLoading ?? this.isLoading,
@@ -43,24 +51,26 @@ class UserNotifier extends StateNotifier<EmployeeState> {
   }
 
   void checkAndResetLeave(int defaultLeaveDays) {
-  final now = DateTime.now();
-  final updated = state.users.map((u) {
-    final anniversary = DateTime(now.year, u.hiredDate.month, u.hiredDate.day);
-    final lastReset = u.lastLeaveReset;
-
-    final shouldReset = !now.isBefore(anniversary) &&
-        (lastReset == null || lastReset.year < now.year);
-
-    if (shouldReset) {
-      return u.copyWith(
-        leaveDays: defaultLeaveDays,
-        lastLeaveReset: now,
+    final now = DateTime.now();
+    final updated = state.users.map((u) {
+      final anniversary = DateTime(
+        now.year,
+        u.hiredDate.month,
+        u.hiredDate.day,
       );
-    }
-    return u;
-  }).toList();
-  state = state.copyWith(users: updated);
-}
+      final lastReset = u.lastLeaveReset;
+
+      final shouldReset =
+          !now.isBefore(anniversary) &&
+          (lastReset == null || lastReset.year < now.year);
+
+      if (shouldReset) {
+        return u.copyWith(leaveDays: defaultLeaveDays, lastLeaveReset: now);
+      }
+      return u;
+    }).toList();
+    state = state.copyWith(users: updated);
+  }
 
   void deductLeave(String email, int days) {
     state = state.copyWith(
@@ -130,7 +140,10 @@ final onLeaveUsersProvider = Provider<List<EmployeeModel>>((ref) {
       .toList();
 });
 
-final userByEmailProvider = Provider.family<EmployeeModel?, String>((ref, email) {
+final userByEmailProvider = Provider.family<EmployeeModel?, String>((
+  ref,
+  email,
+) {
   return ref
       .watch(userProvider)
       .users
@@ -153,25 +166,21 @@ final usersByTenantProvider = Provider.family<List<EmployeeModel>, String>((
       .toList();
 });
 
-final activeUsersByTenantProvider = Provider.family<List<EmployeeModel>, String>((
-  ref,
-  tenantSlug,
-) {
-  return ref
-      .watch(usersByTenantProvider(tenantSlug))
-      .where((u) => u.status == EmploymentStatus.active)
-      .toList();
-});
+final activeUsersByTenantProvider =
+    Provider.family<List<EmployeeModel>, String>((ref, tenantSlug) {
+      return ref
+          .watch(usersByTenantProvider(tenantSlug))
+          .where((u) => u.status == EmploymentStatus.active)
+          .toList();
+    });
 
-final onLeaveUsersByTenantProvider = Provider.family<List<EmployeeModel>, String>((
-  ref,
-  tenantSlug,
-) {
-  return ref
-      .watch(usersByTenantProvider(tenantSlug))
-      .where((u) => u.status == EmploymentStatus.onLeave)
-      .toList();
-});
+final onLeaveUsersByTenantProvider =
+    Provider.family<List<EmployeeModel>, String>((ref, tenantSlug) {
+      return ref
+          .watch(usersByTenantProvider(tenantSlug))
+          .where((u) => u.status == EmploymentStatus.onLeave)
+          .toList();
+    });
 
 /// Total headcount for a specific tenant (all statuses).
 final tenantEmployeeCountProvider = Provider.family<int, String>((

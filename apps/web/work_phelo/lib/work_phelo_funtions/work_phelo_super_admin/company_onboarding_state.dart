@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../work_phelo_login_functions/authentication_service.dart';
 import 'company_onboarding_model.dart';
 
 class CompanyState {
@@ -67,7 +68,32 @@ final inactiveCompanyCountProvider = Provider<int>((ref) {
 });
 
 class CompanyNotifier extends StateNotifier<CompanyState> {
-  CompanyNotifier() : super(const CompanyState());
+  final AuthenticationService _authService;
+  CompanyNotifier(this._authService) : super(const CompanyState());
+
+  Future<Map<String, dynamic>> registerCompany(CompanyModel company) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final result = await _authService.registerTenant(company: company);
+
+      final newCompany = company.copyWith(
+        status: CompanyStatus.pending,
+        onboardedDate: DateTime.now(),
+      );
+      state = state.copyWith(
+        companies: [...state.companies, newCompany],
+        isLoading: false,
+      );
+
+      return result;
+    } catch (e) {
+      state = state.copyWith(
+        error: e.toString().replaceFirst('Exception: ', ''),
+        isLoading: false,
+      );
+      rethrow;
+    }
+  }
 
   void addCompany(CompanyModel company) {
     state = state.copyWith(companies: [...state.companies, company]);
@@ -80,16 +106,18 @@ class CompanyNotifier extends StateNotifier<CompanyState> {
           .toList(),
     );
   }
-  
+
   void updateEnabledModules(String tenantSlug, List<String> modules) {
-  state = state.copyWith(
-    companies: state.companies.map((c) =>
-      c.tenantSlug == tenantSlug
-          ? c.copyWith(enabledModules: modules)
-          : c,
-    ).toList(),
-  );
-}
+    state = state.copyWith(
+      companies: state.companies
+          .map(
+            (c) => c.tenantSlug == tenantSlug
+                ? c.copyWith(enabledModules: modules)
+                : c,
+          )
+          .toList(),
+    );
+  }
 
   void deleteCompany(String tenantSlug) {
     state = state.copyWith(
@@ -109,6 +137,22 @@ class CompanyNotifier extends StateNotifier<CompanyState> {
     );
   }
 
+  Future<void> fetchCompanies() async {
+  state = state.copyWith(isLoading: true, error: null);
+  try {
+    final companies = await _authService.fetchTenants();
+    state = state.copyWith(
+      companies: companies,
+      isLoading: false,
+    );
+  } catch (e) {
+    state = state.copyWith(
+      error: e.toString().replaceFirst('Exception: ', ''),
+      isLoading: false,
+    );
+  }
+}
+
   void setActive(String tenantSlug) =>
       setStatus(tenantSlug, CompanyStatus.active);
   void deactivateCompany(String tenantSlug) =>
@@ -120,89 +164,5 @@ class CompanyNotifier extends StateNotifier<CompanyState> {
 final companyProvider = StateNotifierProvider<CompanyNotifier, CompanyState>((
   ref,
 ) {
-  return CompanyNotifier(); // no repo needed
+  return CompanyNotifier(ref.read(authenticationServiceProvider));
 });
-
-// // ── Notifier ───────────────────────────────────────────────────────────────
-
-// class CompanyNotifier extends StateNotifier<CompanyState> {
-//   final CompanyRepository _repo;
-
-//   CompanyNotifier(this._repo) : super(const CompanyState()) {
-//     fetchCompanies();
-//   }
-
-//   Future<void> fetchCompanies() async {
-//     state = state.copyWith(isLoading: true, error: null);
-//     try {
-//       final companies = await _repo.getCompanies();
-//       state = state.copyWith(companies: companies, isLoading: false);
-//     } catch (e) {
-//       state = state.copyWith(isLoading: false, error: e.toString());
-//     }
-//   }
-
-//   Future<void> addCompany(CompanyModel company) async {
-//     state = state.copyWith(isLoading: true, error: null);
-//     try {
-//       final created = await _repo.addCompany(company);
-//       state = state.copyWith(
-//         companies: [...state.companies, created],
-//         isLoading: false,
-//       );
-//     } catch (e) {
-//       state = state.copyWith(isLoading: false, error: e.toString());
-//     }
-//   }
-
-//   Future<void> updateCompany(CompanyModel company) async {
-//     state = state.copyWith(isLoading: true, error: null);
-//     try {
-//       final updated = await _repo.updateCompany(company);
-//       state = state.copyWith(
-//         companies: state.companies
-//             .map((c) => c.tenantSlug == updated.tenantSlug ? updated : c)
-//             .toList(),
-//         isLoading: false,
-//       );
-//     } catch (e) {
-//       state = state.copyWith(isLoading: false, error: e.toString());
-//     }
-//   }
-
-//   Future<void> deleteCompany(String tenantSlug) async {
-//     state = state.copyWith(isLoading: true, error: null);
-//     try {
-//       await _repo.deleteCompany(tenantSlug);
-//       state = state.copyWith(
-//         companies: state.companies
-//             .where((c) => c.tenantSlug != tenantSlug)
-//             .toList(),
-//         isLoading: false,
-//       );
-//     } catch (e) {
-//       state = state.copyWith(isLoading: false, error: e.toString());
-//     }
-//   }
-
-//   void setStatus(String tenantSlug, CompanyStatus status) {
-//     state = state.copyWith(
-//       companies: state.companies.map((c) {
-//         return c.tenantSlug == tenantSlug ? c.copyWith(status: status) : c;
-//       }).toList(),
-//     );
-//   }
-
-//   void setActive(String tenantSlug) =>
-//       setStatus(tenantSlug, CompanyStatus.active);
-
-//   void deactivateCompany(String tenantSlug) =>
-//       setStatus(tenantSlug, CompanyStatus.inactive);
-// }
-
-// // ── Providers ──────────────────────────────────────────────────────────────
-
-// final companyProvider =
-//     StateNotifierProvider<CompanyNotifier, CompanyState>((ref) {
-//   return CompanyNotifier(ref.watch(companyRepositoryProvider));
-// });

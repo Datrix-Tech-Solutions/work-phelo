@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:unicons/unicons.dart';
+import 'package:work_phelo/work_phelo_components/theme/app_padding.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_model.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
@@ -120,6 +121,30 @@ class DeptDetailState extends ConsumerState<DeptDetail> {
 
             // ── Action buttons ──────────────────────────
             IconButton(
+              tooltip: 'Add Member',
+              onPressed: () {
+                final sidebarWidget = DepartmentMemberSideBar(
+                  key: _formKey,
+                  dept: dept,
+                  currentUser: widget.currentUser,
+                  tenantUsers: tenantUsers,
+                  currentMembers: members,
+                );
+
+                _panel.show(
+                  context: context,
+                  formTitle: 'Add members — ${dept.name}',
+                  onPressed: () {
+                    _formKey.currentState?.submit();
+                    _panel.close();
+                  },
+                  secOnPressed: () => _formKey.currentState?.reset(),
+                  child: sidebarWidget,
+                );
+              },
+              icon: Icon(UniconsLine.user),
+            ),
+            IconButton(
               tooltip: 'Edit',
               icon: Icon(UniconsLine.edit, color: cs.onSurfaceVariant),
               onPressed: () {
@@ -164,39 +189,12 @@ class DeptDetailState extends ConsumerState<DeptDetail> {
                   ),
                 ),
               ] else ...[
-                SectionLabel(label: 'This Department has no head'),
+                SectionLabel(label: ''),
+                Padding(padding: space),
               ],
-          
+
               // ── Members ───────────────────────────────
-              Row(
-                children: [
-                  const Expanded(child: SectionLabel(label: 'Members')),
-                  TextButton.icon(
-                    onPressed: () {
-                      final sidebarWidget = DepartmentMemberSideBar(
-                        key: _formKey,
-                        dept: dept,
-                        currentUser: widget.currentUser,
-                        tenantUsers: tenantUsers,
-                        currentMembers: members,
-                      );
-          
-                      _panel.show(
-                        context: context,
-                        formTitle: 'Add members — ${dept.name}',
-                        onPressed: () {
-                          _formKey.currentState?.submit();
-                          _panel.close();
-                        },
-                        secOnPressed: () => _formKey.currentState?.reset(),
-                        child: sidebarWidget,
-                      );
-                    },
-                    icon: const Icon(UniconsLine.user_plus, size: 16),
-                    label: const Text('Add members'),
-                  ),
-                ],
-              ),
+              SectionLabel(label: 'Members'),
               const SizedBox(height: 8),
               if (members.isEmpty)
                 Padding(

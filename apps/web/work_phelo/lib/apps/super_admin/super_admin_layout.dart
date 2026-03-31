@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:unicons/unicons.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
@@ -8,6 +9,7 @@ import '../../work_phelo_components/theme/app.colors.dart';
 import '../../work_phelo_components/theme/app_images.dart';
 import '../../work_phelo_components/widgets/custom_lists/horizontal_nav_bar.dart';
 import '../../work_phelo_components/widgets/misc/user_avator.dart';
+import '../../work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
 import 'super_admin_pages/company_details_page.dart';
 import 'super_admin_pages/super_admin_portal.dart';
 
@@ -19,41 +21,24 @@ class SuperAdminLayout extends ConsumerStatefulWidget {
 }
 
 class _SuperAdminLayoutState extends ConsumerState<SuperAdminLayout> {
-  late AppUserModel user;
   int _currentIndex = 0;
   CompanyModel? _selectedCompany;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is AppUserModel) {
-      user = args;
-    } else {
-      user = AppUserModel(
-        uid: '',
-        email: '',
-        fullName: '',
-        role: 'guest',
-        companyName: '',
-        tenantSlug: '',
-        companyStatus: '',
-        lastLogin: DateTime.now(),
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/login',
-            (route) => false,
-          );
-        }
-      });
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+
+    if (!authState.isAuthenticated || authState.user == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.go('/platform/login');
+      });
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final user = authState.user!;
+
     return Scaffold(
       appBar: AppBar(
         leadingWidth: 150,
@@ -83,70 +68,43 @@ class _SuperAdminLayoutState extends ConsumerState<SuperAdminLayout> {
           ],
         ),
         actions: [
-          IconButton(
-            onPressed: () {},
-            icon: Icon(Icons.notifications_none, color: myMainColor),
-          ),
-
-          IconButton(
-            onPressed: () {},
-            icon: Icon(UniconsLine.setting, color: myMainColor),
-          ),
-
+          IconButton(onPressed: () {}, icon: Icon(Icons.notifications_none, color: myMainColor)),
+          IconButton(onPressed: () {}, icon: Icon(UniconsLine.setting, color: myMainColor)),
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: UserDashIcon(
               onIconPressed: (details) {
-                UserDetailsPopup.show(
-                  context,
-                  details.globalPosition,
-                  user,
-                  ref,
-                );
+                UserDetailsPopup.show(context, details.globalPosition, user, ref);
               },
               initials: user.fullName.isNotEmpty
-                  ? user.fullName
-                        .trim()
-                        .split(' ')
-                        .map((e) => e[0])
-                        .take(2)
-                        .join()
+                  ? user.fullName.trim().split(' ').map((e) => e[0]).take(2).join()
                   : 'G',
             ),
           ),
-
-          Padding(padding: EdgeInsets.all(10)),
+          const Padding(padding: EdgeInsets.all(10)),
         ],
       ),
-      body: // In Scaffold body:
-      IndexedStack(
+      body: IndexedStack(
         index: _currentIndex,
-        children: [_portalPage(), _reportsPage(), _supportsPage()],
+        children: [
+          _portalPage(user),
+          const Center(child: Text('Reports')),
+          const Center(child: Text('Support')),
+        ],
       ),
     );
   }
 
-  Widget _portalPage() {
+  Widget _portalPage(AppUserModel user) {
     return _selectedCompany == null
         ? Center(
             child: SuperAdminPortal(
-              currentUser: user,
-              onCompanySelected: (company) =>
-                  setState(() => _selectedCompany = company),
+              onCompanySelected: (company) => setState(() => _selectedCompany = company),
             ),
           )
         : CompanyDetailPage(
             company: _selectedCompany!,
-            currentUser: user,
             onBack: () => setState(() => _selectedCompany = null),
           );
-  }
-
-  Widget _reportsPage() {
-    return const Center(child: Text('Reports'));
-  }
-
-  Widget _supportsPage() {
-    return const Center(child: Text('Support'));
   }
 }

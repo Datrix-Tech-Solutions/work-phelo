@@ -18,7 +18,6 @@ class AssetsLists extends ConsumerStatefulWidget {
 class _AssetsListsState extends ConsumerState<AssetsLists> {
   @override
   Widget build(BuildContext context) {
-    // Watch the assets from Riverpod
     final allAssets = ref.watch(tenantFilteredAssetsProvider(widget.currentUser.tenantSlug));
 
     return LayoutBuilder(
@@ -41,7 +40,7 @@ class _AssetsListsState extends ConsumerState<AssetsLists> {
                     crossAxisCount: crossCount,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
-                    mainAxisExtent: 270, // Keep your current card height
+                    mainAxisExtent: 270,
                   ),
                   itemCount: allAssets.length,
                   itemBuilder: (context, index) {

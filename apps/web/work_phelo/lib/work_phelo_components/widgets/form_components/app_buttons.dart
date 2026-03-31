@@ -27,7 +27,9 @@ class MyButton extends StatelessWidget {
       padding: formWidgetPadding,
       child: Card(
         color: widgetColor(context),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(appRadius)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(appRadius),
+        ),
         child: InkWell(
           onTap: isLoading ? null : btnOnPressed,
           borderRadius: BorderRadius.circular(appRadius),
@@ -95,7 +97,9 @@ class MySecButton extends StatelessWidget {
       child: Card(
         elevation: 0,
         color: ColorScheme.of(context).surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(appRadius)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(appRadius),
+        ),
         child: InkWell(
           onTap: isLoading ? null : btnOnPressed,
           borderRadius: BorderRadius.circular(appRadius),
@@ -154,14 +158,16 @@ class WidgetButton extends StatelessWidget {
     return Card(
       elevation: 0,
       color: Colors.grey.withAlpha(20),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(appRadius)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(appRadius),
+      ),
       child: InkWell(
         onTap: btnPressed,
         borderRadius: BorderRadius.circular(appRadius),
         child: SizedBox(
           height: 50,
           child: Padding(
-            padding: menuItemPadding,
+            padding: formPadding,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -190,7 +196,9 @@ class MyTextButton extends StatelessWidget {
     return TextButton(
       onPressed: txtBtnOnPressed,
       style: TextButton.styleFrom(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(appRadius)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(appRadius),
+        ),
         splashFactory: NoSplash.splashFactory,
       ),
       child: Text(txtBtnText, style: myMainTextStyle(context)),
@@ -325,18 +333,7 @@ class _MyOutlinedMenuButtonState extends State<MyOutlinedMenuButton> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(appRadius),
-        boxShadow: widget.isHovered
-            ? [
-                BoxShadow(
-                  color: widget.btnAccent.withAlpha(20),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ]
-            : null,
-      ),
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(appRadius)),
       child: OutlinedButton.icon(
         icon: Icon(widget.btnIcon, size: 20),
         label: Text(

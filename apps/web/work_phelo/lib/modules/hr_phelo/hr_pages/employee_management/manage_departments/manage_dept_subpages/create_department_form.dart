@@ -2,31 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_model.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
-import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 
 import '../../../../../../work_phelo_components/theme/app_padding.dart';
 import '../../../../../../work_phelo_components/theme/app_text_theme.dart';
 import '../../../../../../work_phelo_components/theme/miscellaneouse.dart';
-import '../../../../../../work_phelo_components/widgets/form_components/app_buttons.dart';
 import '../../../../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
+import '../../../../../../work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
 
 class CreateDepartmentForm extends ConsumerStatefulWidget {
-  final VoidCallback onSaved;
-  final AppUserModel currentUser;
-
-  const CreateDepartmentForm({
-    super.key,
-    required this.onSaved,
-    required this.currentUser,
-  });
+  const CreateDepartmentForm({super.key});
 
   @override
   ConsumerState<CreateDepartmentForm> createState() =>
-      _CreateDepartmentFormState();
+      CreateDepartmentFormState();
 }
 
-class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
+class CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
 
@@ -40,30 +32,59 @@ class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
     super.dispose();
   }
 
-  void _submit() {
+  void submit() {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    // Get current user from Riverpod instead of widget
+    final authState = ref.read(authNotifierProvider);
+    final currentUser = authState.user;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('User not found')));
+      return;
+    }
+    
 
     final dept = CompanyDepartmentsModel(
       id: generateDepartmentId(_nameController.text),
       name: _nameController.text.trim(),
-      tenantSlug: widget.currentUser.tenantSlug,
+      tenantSlug: currentUser.tenantSlug,
       color: _selectedColor,
       icon: _selectedIcon,
       headEmail: _selectedHeadEmail,
-      // if a head is set, add them as first member automatically
       memberEmails: _selectedHeadEmail != null ? [_selectedHeadEmail!] : [],
     );
 
     ref.read(departmentProvider.notifier).addDepartment(dept);
-    widget.onSaved();
+
+    // Close the panel after successful creation
+    Navigator.of(context).pop(); // This closes the side panel
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Department created successfully')),
+    );
   }
+
+  void reset() {
+  _formKey.currentState?.reset();
+  _nameController.clear();
+  setState(() {
+    _selectedColor = departmentColors.first;
+    _selectedIcon = departmentIcons.first;
+    _selectedHeadEmail = null;
+  });
+}
 
   @override
   Widget build(BuildContext context) {
-    // Only employees from this company can be set as head
-    final tenantUsers = ref.watch(
-      usersByTenantProvider(widget.currentUser.tenantSlug),
-    );
+    // Watch tenant users using current user's tenantSlug
+    // final authState = ref.watch(authNotifierProvider);
+    // final currentUser = authState.user;
+    // final tenantUsers = currentUser != null
+    //     ? ref.watch(usersByTenantProvider(currentUser.tenantSlug))
+    //     : <AppUserModel>[];
+    final tenantUsers = <AppUserModel>[];
 
     return Form(
       key: _formKey,
@@ -71,7 +92,7 @@ class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Name ───────────────────────────────────
+            // Department Name
             _field(
               context,
               1,
@@ -83,7 +104,7 @@ class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
               ),
             ),
 
-            // ── Color picker ────────────────────────────
+            // Color & Icon Picker
             Container(
               padding: formPadding,
               child: Column(
@@ -118,9 +139,8 @@ class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
                     }).toList(),
                   ),
 
-                  // ── Icon picker ─────────────────────────────
-                  const SizedBox(height: 16),
-                  _sectionHeader(context, 'Color'),
+                  const SizedBox(height: 24),
+                  _sectionHeader(context, 'Icon'),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -153,7 +173,7 @@ class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
               ),
             ),
 
-            // ── Head (optional) ─────────────────────────
+            // Department Head (Optional)
             const SizedBox(height: 16),
             _field(
               context,
@@ -167,6 +187,11 @@ class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
                     .map((u) => u.fullName)
                     .firstOrNull,
                 onChanged: (name) {
+                  if (name == null) {
+                    setState(() => _selectedHeadEmail = null);
+                    return;
+                  }
+                  // Match by email via name lookup — safe because list is scoped to tenant
                   final match = tenantUsers
                       .where((u) => u.fullName == name)
                       .firstOrNull;
@@ -175,12 +200,7 @@ class _CreateDepartmentFormState extends ConsumerState<CreateDepartmentForm> {
               ),
             ),
 
-            const SizedBox(height: 32),
-            _field(
-              context,
-              0.35,
-              MyButton(btnText: 'Create department', btnOnPressed: _submit),
-            ),
+            
           ],
         ),
       ),

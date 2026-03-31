@@ -3,11 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_model.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
-import '../../../../../work_phelo_components/theme/app_padding.dart';
 import '../../../../../work_phelo_components/theme/app_text_theme.dart';
-import '../../../../../work_phelo_components/theme/miscellaneouse.dart';
 import '../../../../../work_phelo_components/widgets/custom_cards/app_chip_card.dart';
-import 'manage_dept_subpages/create_department_form.dart';
 import 'manage_dept_subpages/dept_helpers.dart';
 import 'manage_dept_subpages/dept_list_details.dart';
 
@@ -29,7 +26,6 @@ class _DepartmentsListState extends ConsumerState<DepartmentsList> {
     final departments = ref.watch(
       departmentsByTenantProvider(widget.currentUser.tenantSlug),
     );
-    final cs = Theme.of(context).colorScheme;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -55,14 +51,6 @@ class _DepartmentsListState extends ConsumerState<DepartmentsList> {
               Expanded(
                 child: ListView(
                   children: [
-                    AddExtraCardChip(
-                      chipLabel: 'Create a department',
-                      isSelected: _showCreateForm,
-                      onTap: () => setState(() {
-                        _showCreateForm = true;
-                        _selectedDepartment = null;
-                      }),
-                    ),
                     const SizedBox(height: 6),
                     ...departments.map((dept) {
                       final isSelected =
@@ -88,28 +76,12 @@ class _DepartmentsListState extends ConsumerState<DepartmentsList> {
 
         // ── Right: detail / form panel ────────────────────
         Expanded(
-          child: _showCreateForm
-              ? Navigator(
-                  onGenerateRoute: (_) => MaterialPageRoute(
-                    builder: (_) => CreateDepartmentForm(
-                      currentUser: widget.currentUser,
-                      onSaved: () => setState(() => _showCreateForm = false),
-                    ),
-                  ),
-                )
-              : _selectedDepartment != null
-              ? Container(
-                  padding: myContentPadding,
-                  decoration: BoxDecoration(
-                    color: cs.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(appRadius),
-                  ),
-                  child: DeptDetail(
-                    key: ValueKey(_selectedDepartment!.id),
-                    departmentId: _selectedDepartment!.id,
-                    currentUser: widget.currentUser,
-                    onDeleted: () => setState(() => _selectedDepartment = null),
-                  ),
+          child: _selectedDepartment != null
+              ? DeptDetail(
+                  key: ValueKey(_selectedDepartment!.id),
+                  departmentId: _selectedDepartment!.id,
+                  currentUser: widget.currentUser,
+                  onDeleted: () => setState(() => _selectedDepartment = null),
                 )
               : const EmptyDetail(),
         ),

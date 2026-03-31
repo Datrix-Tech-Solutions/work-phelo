@@ -38,9 +38,7 @@ class AppSidebar extends ConsumerWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
-      if (previous?.isAuthenticated == true && !next.isAuthenticated) {
-        Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-      }
+      if (previous?.isAuthenticated == true && !next.isAuthenticated) {}
     });
 
     return Material(

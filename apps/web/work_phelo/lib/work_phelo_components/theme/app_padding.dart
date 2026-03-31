@@ -15,3 +15,5 @@ const space = EdgeInsets.only(top: 20);
 const myCardPadding = EdgeInsets.only(left: 2, right: 2);
 
 const menuCardpadding = EdgeInsets.only(left: 15, right: 15);
+
+const myPadding = EdgeInsets.only(bottom: 10);

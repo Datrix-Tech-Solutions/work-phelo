@@ -1,5 +1,9 @@
+import 'dart:developer';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../routings/go_routes.dart';
 import '../work_phelo_users/user_model.dart';
 import 'authentication_service.dart';
 
@@ -12,27 +16,76 @@ class AuthenticationState {
 
   bool get isAuthenticated => user != null;
 
-  AuthenticationState copyWith({AppUserModel? user, bool? isLoading, String? error}) {
+  AuthenticationState copyWith({
+    AppUserModel? user,
+    bool? isLoading,
+    String? error,
+    bool clearError = false,
+  }) {
     return AuthenticationState(
       user: user ?? this.user,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: clearError ? null : error ?? this.error,
     );
   }
 }
 
 class AuthNotifier extends StateNotifier<AuthenticationState> {
   final AuthenticationService _service;
+  final Ref ref;
 
-  AuthNotifier(this._service) : super(const AuthenticationState());
+  AuthNotifier(this._service, this.ref) : super(const AuthenticationState());
 
-  Future<void> login(String email, String password) async {
-    state = state.copyWith(isLoading: true, error: null);
+  // Super Admin Login
+  Future<void> loginSuperAdmin({
+    required String email,
+    required String password,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+
     try {
-      final user = await _service.login(email: email, password: password);
+      final user = await _service.loginSuperAdmin(
+        email: email,
+        password: password,
+      );
       state = state.copyWith(user: user, isLoading: false);
-      
     } catch (e) {
+      state = state.copyWith(
+        error: e
+            .toString()
+            .replaceFirst('Exception: ', '')
+            .replaceFirst('Exception', ''),
+        isLoading: false,
+      );
+    }
+  }
+
+  // Tenant Login
+  Future<void> loginTenant({
+    required String tenantSlug,
+    required String email,
+    required String password,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    log('TENANT AUTH >> login started, slug: $tenantSlug');
+
+    try {
+      final user = await _service
+          .loginTenant(tenantSlug: tenantSlug, email: email, password: password)
+          .timeout(
+            const Duration(seconds: 15),
+            onTimeout: () {
+              log('TENANT AUTH >> TIMED OUT after 15 seconds');
+              throw Exception('Request timed out. Check your connection.');
+            },
+          );
+      log('TENANT AUTH >> user received: ${user.email} role: ${user.role}');
+      state = state.copyWith(user: user, isLoading: false);
+      log(
+        'TENANT AUTH >> state updated: isAuthenticated=${state.isAuthenticated}, isLoading=${state.isLoading}',
+      );
+    } catch (e) {
+      log('TENANT AUTH >> error: $e');
       state = state.copyWith(
         error: e.toString().replaceFirst('Exception: ', ''),
         isLoading: false,
@@ -41,14 +94,25 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
   }
 
   Future<void> logout() async {
-    
+    final tenantSlug = state.user?.tenantSlug;
+    final isSuperAdmin = state.user?.isSuperAdmin ?? false;
+    log('LOGOUT >> tenantSlug: ${state.user?.tenantSlug}');
+    log('LOGOUT >> user: ${state.user?.email}');
+    log('LOGOUT >> isSuperAdmin: ${state.user?.isSuperAdmin}');
+
     await _service.logout();
     state = const AuthenticationState();
+
+    // ── Route back to the correct login page ──
+    if (isSuperAdmin) {
+      ref.read(goRouterProvider).go('/platform/login');
+    } else if (tenantSlug != null && tenantSlug.isNotEmpty) {
+      ref.read(goRouterProvider).go('/$tenantSlug/login');
+    }
   }
 }
 
-final authNotifierProvider = StateNotifierProvider<AuthNotifier, AuthenticationState>((
-  ref,
-) {
-  return AuthNotifier(ref.read(authenticationServiceProvider));
-});
+final authNotifierProvider =
+    StateNotifierProvider<AuthNotifier, AuthenticationState>((ref) {
+      return AuthNotifier(ref.read(authenticationServiceProvider), ref);
+    });

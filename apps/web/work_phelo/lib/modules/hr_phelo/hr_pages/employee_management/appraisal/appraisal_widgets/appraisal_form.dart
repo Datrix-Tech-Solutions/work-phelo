@@ -22,7 +22,7 @@ class _EmployeeAppraisalFormState extends ConsumerState<EmployeeAppraisalForm> {
   final Map<String, String> _comments = {};
 
   void _submit() {
-    if (_ratings.length != widget.record.templateId /* wait, better get questions from template */) {
+    if (_ratings.length != widget.record.templateId) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please rate all questions')),
       );
