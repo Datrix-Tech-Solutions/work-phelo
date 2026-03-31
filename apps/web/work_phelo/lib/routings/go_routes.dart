@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:work_phelo/modules/dashboard.dart';
-import 'package:work_phelo/modules/hr_phelo/hr_phelo_navigation/hr_phelo_layout.dart';
+import 'package:work_phelo/work_phelo_modules/dashboard.dart';
+import 'package:work_phelo/work_phelo_modules/hr_phelo/hr_phelo_navigation/hr_phelo_layout.dart';
 
 import '../apps/company/dashboard/company_dashboard.dart';
 import '../apps/super_admin/super_admin_layout.dart';

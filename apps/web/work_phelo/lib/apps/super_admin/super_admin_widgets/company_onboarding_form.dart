@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:work_phelo/work_phelo_components/theme/app_padding.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_model.dart';
-import '../../../Modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/onboarding_form.dart';
+import 'package:work_phelo/work_phelo_modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/employee_forms/onboarding_form.dart';
 import '../../../pages/login_page/login_utils/validators.dart';
 import '../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 
