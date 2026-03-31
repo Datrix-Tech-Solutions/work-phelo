@@ -37,9 +37,13 @@ export class EmailService {
           </div>
         `,
       });
+      this.logger.log(`Verification OTP sent to ${to}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to send verification OTP to ${to}`, error);
+      this.logger.error(
+        `Failed to send verification OTP to ${to}: ${JSON.stringify(error)}`,
+        error,
+      );
       return false;
     }
   }
@@ -72,9 +76,13 @@ export class EmailService {
           </div>
         `,
       });
+      this.logger.log(`Invite email sent to ${to}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to send invite email to ${to}`, error);
+      this.logger.error(
+        `Failed to send invite email to ${to}: ${JSON.stringify(error)}`,
+        error,
+      );
       return false;
     }
   }
@@ -107,9 +115,13 @@ export class EmailService {
           </div>
         `,
       });
+      this.logger.log(`Password reset email sent to ${to}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to send password reset email to ${to}`, error);
+      this.logger.error(
+        `Failed to send password reset email to ${to}: ${JSON.stringify(error)}`,
+        error,
+      );
       return false;
     }
   }
@@ -137,9 +149,13 @@ export class EmailService {
           </div>
         `,
       });
+      this.logger.log(`Password reset OTP sent to ${to}`);
       return true;
     } catch (error) {
-      this.logger.error(`Failed to send password reset OTP to ${to}`, error);
+      this.logger.error(
+        `Failed to send password reset OTP to ${to}: ${JSON.stringify(error)}`,
+        error,
+      );
       return false;
     }
   }
