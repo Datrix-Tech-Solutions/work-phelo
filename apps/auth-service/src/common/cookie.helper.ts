@@ -26,11 +26,11 @@ export function setAuthCookies(
     secure: COOKIE_SECURE,
     sameSite: SAME_SITE,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: '/api/v1/auth/auth/refresh', // scoped — not sent on every request
+    path: '/api/v1/auth/refresh', // scoped — not sent on every request
   });
 }
 
 export function clearAuthCookies(res: Response) {
   res.clearCookie('access_token', { path: '/' });
-  res.clearCookie('refresh_token', { path: '/api/v1/auth/auth/refresh' });
+  res.clearCookie('refresh_token', { path: '/api/v1/auth/refresh' });
 }

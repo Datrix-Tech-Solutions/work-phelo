@@ -34,7 +34,7 @@ import { MicrosoftAuthGuard } from './guards/microsoft-auth.guard';
 import { setAuthCookies, clearAuthCookies } from '../common/cookie.helper';
 
 @ApiTags('Auth')
-@Controller('auth')
+@Controller()
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 

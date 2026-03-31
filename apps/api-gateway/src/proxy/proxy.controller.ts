@@ -77,7 +77,7 @@ export class ProxyController {
     }
 
     // Strip 'api', 'v1', and service name — forward the rest downstream
-    // /api/v1/auth/auth/login     → /auth/login    (auth-service)
+    // /api/v1/auth/login     → /auth/login    (auth-service)
     // /api/v1/auth/company-roles  → /company-roles (auth-service)
     // /api/v1/hr/departments      → /departments   (hr-service)
     const remainingParts = pathParts.slice(3); // remove 'api', 'v1', service
