@@ -205,6 +205,9 @@ export class AuthService {
         lastName: user.lastName,
         role: user.role,
         tenantId: user.tenantId,
+        tenantSlug: tenant.slug,
+        tenantName: tenant.name,
+        companyRoleId: user.companyRoleId ?? null,
       },
     };
   }
