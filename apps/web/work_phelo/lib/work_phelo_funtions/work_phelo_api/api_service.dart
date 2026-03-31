@@ -37,12 +37,12 @@ class ApiService {
     await dio.post('/auth/logout');
   }
 
-  Future<String?> refreshToken() async {
+  Future<bool?> refreshToken() async {
     try {
-      final response = await dio.post('/auth/refresh');
-      return response.data['access_token'] as String?;
+      await dio.post('/auth/refresh');
+      return true;
     } catch (_) {
-      return null;
+      return false;
     }
   }
 
@@ -51,7 +51,7 @@ class ApiService {
     required CompanyModel company,
   }) async {
     final response = await dio.post(
-      '/tenants/register',
+      '/auth/tenants/register',
       data: {
         'name': company.companyName,
         'slug': company.tenantSlug,
@@ -70,7 +70,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> fetchTenants() async {
-    final response = await dio.get('/tenants');
+    final response = await dio.get('/auth/tenants');
     return response.data as Map<String, dynamic>;
   }
 }
