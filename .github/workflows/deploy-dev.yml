@@ -165,10 +165,54 @@ jobs:
             BUILD_REF=${{ github.ref_name }}
 
 
+
+  flutter-build-deploy:
+    name: Build & Deploy Flutter Web
+    runs-on: ubuntu-latest
+    needs: quality-gates
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        working-directory: apps/web/work_phelo
+        run: flutter pub get
+
+      - name: Build Flutter Web
+        working-directory: apps/web/work_phelo
+        run: flutter build web --release
+
+      - name: Deploy static files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: "apps/web/work_phelo/build/web/*"
+          target: "/var/www/apps/dev.work-phelo.com/frontend/"
+          strip_components: 4
+
+      - name: Reload Nginx
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: nginx -t && systemctl reload nginx && echo "Flutter Web deployed"
+
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
-    needs: [detect-changes, build-and-push]
+    needs: [detect-changes, build-and-push, flutter-build-deploy]
 
     if: always() && needs.quality-gates.result == 'success'
 

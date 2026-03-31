@@ -13,19 +13,19 @@ const SERVICES: Record<string, string> = {
 };
 
 const PUBLIC_PATTERNS = [
-  /^\/api\/v1\/auth\/auth\/login$/,
-  /^\/api\/v1\/auth\/auth\/admin\/login$/,
-  /^\/api\/v1\/auth\/auth\/refresh$/,
-  /^\/api\/v1\/auth\/auth\/verify-email$/,
-  /^\/api\/v1\/auth\/auth\/resend-verification$/,
-  /^\/api\/v1\/auth\/auth\/forgot-password$/,
-  /^\/api\/v1\/auth\/auth\/reset-password$/,
-  /^\/api\/v1\/auth\/auth\/force-reset-password$/,
-  /^\/api\/v1\/auth\/auth\/google/,
-  /^\/api\/v1\/auth\/auth\/microsoft/,
+  /^\/api\/v1\/auth\/login$/,
+  /^\/api\/v1\/auth\/admin\/login$/,
+  /^\/api\/v1\/auth\/refresh$/,
+  /^\/api\/v1\/auth\/verify-email$/,
+  /^\/api\/v1\/auth\/resend-verification$/,
+  /^\/api\/v1\/auth\/forgot-password$/,
+  /^\/api\/v1\/auth\/reset-password$/,
+  /^\/api\/v1\/auth\/force-reset-password$/,
+  /^\/api\/v1\/auth\/google/,
+  /^\/api\/v1\/auth\/microsoft/,
   /^\/api\/v1\/auth\/tenants\/register$/,
   /^\/api\/v1\/auth\/users\/accept-invite$/,
-  /^\/api\/v1\/auth\/auth\/mfa\/send-sms$/,
+  /^\/api\/v1\/auth\/mfa\/send-sms$/,
 ];
 
 @Controller()
@@ -77,7 +77,7 @@ export class ProxyController {
     }
 
     // Strip 'api', 'v1', and service name — forward the rest downstream
-    // /api/v1/auth/auth/login     → /auth/login    (auth-service)
+    // /api/v1/auth/login     → /auth/login    (auth-service)
     // /api/v1/auth/company-roles  → /company-roles (auth-service)
     // /api/v1/hr/departments      → /departments   (hr-service)
     const remainingParts = pathParts.slice(3); // remove 'api', 'v1', service

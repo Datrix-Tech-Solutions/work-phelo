@@ -44,6 +44,14 @@ export class LeaveController {
     return this.leaveService.getLeaveBalances(req.user.tenantId, req.user.id);
   }
 
+  @Post('balances/:employeeId/initialize')
+  initializeBalances(@Param('employeeId') employeeId: string, @Req() req: any) {
+    return this.leaveService.initializeLeaveBalances(
+      req.user.tenantId,
+      employeeId,
+    );
+  }
+
   @Post('requests')
   @HttpCode(HttpStatus.CREATED)
   createRequest(@Body() dto: CreateLeaveRequestDto, @Req() req: any) {

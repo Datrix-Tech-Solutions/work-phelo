@@ -89,7 +89,7 @@ class AuthenticationService {
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
-      baseUrl: 'http://localhost:4001',
+      baseUrl: 'http://157.245.220.205/api/v1',
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
       extra: {'withCredentials': true},
