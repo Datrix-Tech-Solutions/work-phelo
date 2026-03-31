@@ -16,11 +16,11 @@ All frontend requests go through this gateway at port **4000**.
 ### Service Routes
 | Prefix | Service | Port |
 |---|---|---|
-| \`/api/auth/auth/*\` | Auth endpoints | 4001 |
-| \`/api/auth/tenants/*\` | Tenant management | 4001 |
-| \`/api/auth/users/*\` | User management | 4001 |
-| \`/api/auth/company-roles/*\` | Company roles | 4001 |
-| \`/api/auth/permissions/*\` | Permissions | 4001 |
+| \`/api/v1/auth/*\` | Auth endpoints | 4001 |
+| \`/api/v1/auth/tenants/*\` | Tenant management | 4001 |
+| \`/api/v1/auth/users/*\` | User management | 4001 |
+| \`/api/v1/auth/company-roles/*\` | Company roles | 4001 |
+| \`/api/v1/auth/permissions/*\` | Permissions | 4001 |
 | \`/api/hr/employees/*\` | Employees | 4002 |
 | \`/api/hr/departments/*\` | Departments | 4002 |
 | \`/api/hr/leave/*\` | Leave management | 4002 |
@@ -29,15 +29,15 @@ All frontend requests go through this gateway at port **4000**.
 | \`/api/hr/appraisals/*\` | Appraisals | 4002 |
 
 ### Public Endpoints (no auth required)
-- \`POST /api/auth/auth/login\`
-- \`POST /api/auth/auth/admin/login\`
-- \`POST /api/auth/auth/refresh\`
-- \`POST /api/auth/auth/verify-email\`
-- \`POST /api/auth/auth/forgot-password\`
-- \`POST /api/auth/auth/reset-password\`
-- \`POST /api/auth/auth/force-reset-password\`
-- \`POST /api/auth/tenants/register\`
-- \`POST /api/auth/users/accept-invite\`
+- \`POST /api/v1/auth/login\`
+- \`POST /api/v1/auth/admin/login\`
+- \`POST /api/v1/auth/refresh\`
+- \`POST /api/v1/auth/verify-email\`
+- \`POST /api/v1/auth/forgot-password\`
+- \`POST /api/v1/auth/reset-password\`
+- \`POST /api/v1/auth/force-reset-password\`
+- \`POST /api/v1/auth/tenants/register\`
+- \`POST /api/v1/auth/users/accept-invite\`
 
 ### Rate Limits
 - 10 requests/second per IP
