@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { LeaveService } from '../leave/leave.service';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { OffboardEmployeeDto } from './dto/offboard-employee.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
@@ -13,7 +14,10 @@ import { paginationParams, paginate } from '../common/response.helper';
 
 @Injectable()
 export class EmployeesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly leaveService: LeaveService,
+  ) {}
 
   async create(tenantId: string, dto: CreateEmployeeDto) {
     const existing = await this.prisma.employee.findUnique({
