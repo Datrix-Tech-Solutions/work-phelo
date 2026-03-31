@@ -14,21 +14,21 @@ export class NotificationService {
   ) {}
 
   async sendEmailVerification(data: {
-    userId: string;
-    tenantId: string;
+    userId?: string;
+    tenantId?: string;
     email: string;
     firstName: string;
     otp: string;
+    tenantName?: string;
   }) {
     const success = await this.email.sendEmailVerificationOtp(
       data.email,
       data.firstName,
       data.otp,
     );
-
     await this.log({
-      userId: data.userId,
-      tenantId: data.tenantId,
+      userId: data.userId ?? 'system',
+      tenantId: data.tenantId ?? 'system',
       type: 'EMAIL_VERIFICATION',
       channel: 'EMAIL',
       recipient: data.email,
@@ -38,23 +38,24 @@ export class NotificationService {
   }
 
   async sendInvite(data: {
-    userId: string;
-    tenantId: string;
+    userId?: string;
+    tenantId?: string;
     email: string;
     firstName: string;
     inviteToken: string;
+    acceptInviteUrl: string;
     tenantName: string;
   }) {
+    // Use workspace-aware URL built by auth service
     const success = await this.email.sendInviteEmail(
       data.email,
       data.firstName,
-      data.inviteToken,
+      data.acceptInviteUrl,
       data.tenantName,
     );
-
     await this.log({
-      userId: data.userId,
-      tenantId: data.tenantId,
+      userId: data.userId ?? 'system',
+      tenantId: data.tenantId ?? 'system',
       type: 'INVITE_USER',
       channel: 'EMAIL',
       recipient: data.email,
@@ -64,21 +65,22 @@ export class NotificationService {
   }
 
   async sendPasswordResetLink(data: {
-    userId: string;
-    tenantId: string;
+    userId?: string;
+    tenantId?: string;
     email: string;
     firstName: string;
-    resetToken: string;
+    resetLink: string;
+    tenantName?: string;
   }) {
+    // Use workspace-aware URL built by auth service
     const success = await this.email.sendPasswordResetLink(
       data.email,
       data.firstName,
-      data.resetToken,
+      data.resetLink,
     );
-
     await this.log({
-      userId: data.userId,
-      tenantId: data.tenantId,
+      userId: data.userId ?? 'system',
+      tenantId: data.tenantId ?? 'system',
       type: 'PASSWORD_RESET_LINK',
       channel: 'EMAIL',
       recipient: data.email,
@@ -88,41 +90,43 @@ export class NotificationService {
   }
 
   async sendPasswordResetOtp(data: {
-    userId: string;
-    tenantId: string;
-    email: string;
+    userId?: string;
+    tenantId?: string;
+    phone?: string;
+    email?: string;
     firstName: string;
     otp: string;
   }) {
-    const success = await this.email.sendPasswordResetOtp(
-      data.email,
-      data.firstName,
-      data.otp,
-    );
-
+    const recipient = data.email ?? data.phone ?? 'unknown';
+    const success = data.email
+      ? await this.email.sendPasswordResetOtp(
+          data.email,
+          data.firstName,
+          data.otp,
+        )
+      : false;
     await this.log({
-      userId: data.userId,
-      tenantId: data.tenantId,
+      userId: data.userId ?? 'system',
+      tenantId: data.tenantId ?? 'system',
       type: 'PASSWORD_RESET_OTP',
       channel: 'EMAIL',
-      recipient: data.email,
+      recipient,
       subject: 'Password reset code',
       status: success ? 'SENT' : 'FAILED',
     });
   }
 
   async sendSmsOtp(data: {
-    userId: string;
-    tenantId: string;
+    userId?: string;
+    tenantId?: string;
     phone: string;
     otp: string;
     context: string;
   }) {
     const success = await this.sms.sendOtp(data.phone, data.otp, data.context);
-
     await this.log({
-      userId: data.userId,
-      tenantId: data.tenantId,
+      userId: data.userId ?? 'system',
+      tenantId: data.tenantId ?? 'system',
       type: 'SMS_OTP',
       channel: 'SMS',
       recipient: data.phone,

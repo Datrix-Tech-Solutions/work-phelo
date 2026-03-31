@@ -12,11 +12,12 @@ export class NotificationHandler {
   async handleEmailVerification(
     @Payload()
     data: {
-      userId: string;
-      tenantId: string;
+      userId?: string;
+      tenantId?: string;
       email: string;
       firstName: string;
       otp: string;
+      tenantName: string;
     },
   ) {
     this.logger.log(`Handling email verification for ${data.email}`);
@@ -27,11 +28,12 @@ export class NotificationHandler {
   async handleInviteUser(
     @Payload()
     data: {
-      userId: string;
-      tenantId: string;
+      userId?: string;
+      tenantId?: string;
       email: string;
       firstName: string;
       inviteToken: string;
+      acceptInviteUrl: string;
       tenantName: string;
     },
   ) {
@@ -43,11 +45,12 @@ export class NotificationHandler {
   async handlePasswordResetLink(
     @Payload()
     data: {
-      userId: string;
-      tenantId: string;
+      userId?: string;
+      tenantId?: string;
       email: string;
       firstName: string;
-      resetToken: string;
+      resetLink: string;
+      tenantName: string;
     },
   ) {
     this.logger.log(`Handling password reset link for ${data.email}`);
@@ -58,14 +61,14 @@ export class NotificationHandler {
   async handlePasswordResetOtp(
     @Payload()
     data: {
-      userId: string;
-      tenantId: string;
-      email: string;
-      firstName: string;
+      userId?: string;
+      tenantId?: string;
+      phone: string;
       otp: string;
+      firstName: string;
     },
   ) {
-    this.logger.log(`Handling password reset OTP for ${data.email}`);
+    this.logger.log(`Handling password reset OTP for ${data.phone}`);
     await this.notificationService.sendPasswordResetOtp(data);
   }
 
@@ -73,8 +76,8 @@ export class NotificationHandler {
   async handleSmsOtp(
     @Payload()
     data: {
-      userId: string;
-      tenantId: string;
+      userId?: string;
+      tenantId?: string;
       phone: string;
       otp: string;
       context: string;

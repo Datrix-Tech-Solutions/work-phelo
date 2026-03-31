@@ -47,10 +47,10 @@ export class EmailService {
   async sendInviteEmail(
     to: string,
     firstName: string,
-    inviteToken: string,
+    acceptInviteUrl: string,
     tenantName: string,
   ): Promise<boolean> {
-    const inviteUrl = `${this.appUrl}/accept-invite?token=${inviteToken}`;
+    const inviteUrl = acceptInviteUrl;
     try {
       await this.resend.emails.send({
         from: this.fromEmail,
@@ -82,9 +82,9 @@ export class EmailService {
   async sendPasswordResetLink(
     to: string,
     firstName: string,
-    resetToken: string,
+    resetLink: string,
   ): Promise<boolean> {
-    const resetUrl = `${this.appUrl}/reset-password?token=${resetToken}`;
+    const resetUrl = resetLink;
     try {
       await this.resend.emails.send({
         from: this.fromEmail,
