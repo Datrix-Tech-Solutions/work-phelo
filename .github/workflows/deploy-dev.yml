@@ -187,7 +187,7 @@ jobs:
 
       - name: Build Flutter Web
         working-directory: apps/web/work_phelo
-        run: flutter build web --release --web-renderer canvaskit
+        run: flutter build web --release
 
       - name: Deploy static files to server
         uses: appleboy/scp-action@v0.1.7
