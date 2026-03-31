@@ -198,7 +198,7 @@ jobs:
           port: 22
           source: "apps/web/work_phelo/build/web/*"
           target: "/var/www/apps/dev.work-phelo.com/frontend/"
-          strip_components: 5
+          strip_components: 4
 
       - name: Reload Nginx
         uses: appleboy/ssh-action@v1.2.0
