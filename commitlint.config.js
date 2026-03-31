@@ -9,7 +9,7 @@ module.exports = {
       'auth', 'hr', 'gateway', 'notification',
       'subscription', 'marketing',
       'types', 'schemas', 'utils', 'config',
-      'infra', 'deps', 'release',
+      'infra', 'web', 'deps', 'release',
     ]],
     'subject-max-length': [2, 'always', 100],
   },

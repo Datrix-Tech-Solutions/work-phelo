@@ -125,7 +125,7 @@ final dioProvider = Provider<Dio>((ref) {
   final storage = ref.read(secureStorageProvider);
   final dio = Dio(
     BaseOptions(
-      baseUrl: 'http://YOUR_DEV_IP:3000',
+      baseUrl: 'http://157.245.220.205/api/v1',
       connectTimeout: const Duration(seconds: 10),
       receiveTimeout: const Duration(seconds: 10),
     ),
