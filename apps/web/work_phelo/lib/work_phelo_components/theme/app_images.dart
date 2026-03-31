@@ -8,7 +8,7 @@ final Widget appImage = Image.asset(
 );
 
 final Widget appLogo = Image.asset(
-  'logo/HRPhelo_1.png',
+  'logo/HRphelo_1.png',
   fit: BoxFit.cover,
   filterQuality: FilterQuality.high,
 );
