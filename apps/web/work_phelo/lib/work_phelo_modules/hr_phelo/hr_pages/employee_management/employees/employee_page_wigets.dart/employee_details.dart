@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:work_phelo/modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/employee_card.dart';
-import 'package:work_phelo/modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/employee_details_card.dart';
+import 'package:work_phelo/work_phelo_modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/employee_card.dart';
+import 'package:work_phelo/work_phelo_modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/employee_details_card.dart';
 import 'package:work_phelo/work_phelo_components/widgets/custom_cards/display_card.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
 

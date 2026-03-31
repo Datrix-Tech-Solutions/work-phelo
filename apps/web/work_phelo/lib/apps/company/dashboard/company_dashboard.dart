@@ -6,7 +6,7 @@ import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onb
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
-import '../../../modules/module_options.dart';
+import '../../../work_phelo_modules/module_options.dart';
 import '../../../pages/log_out/user_details_popup.dart';
 import '../../../work_phelo_components/theme/app.colors.dart';
 import '../../../work_phelo_components/theme/app_images.dart';

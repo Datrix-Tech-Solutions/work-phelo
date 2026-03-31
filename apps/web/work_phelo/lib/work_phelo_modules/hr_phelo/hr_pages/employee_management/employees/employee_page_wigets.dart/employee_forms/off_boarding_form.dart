@@ -1,7 +1,7 @@
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:work_phelo/modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/employee_forms/onboarding_form.dart';
+import 'package:work_phelo/work_phelo_modules/hr_phelo/hr_pages/employee_management/employees/employee_page_wigets.dart/employee_forms/onboarding_form.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
 
 import '../../../../../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
