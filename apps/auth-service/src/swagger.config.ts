@@ -10,6 +10,11 @@ export function setupSwagger(app: INestApplication) {
 
 Handles all authentication, user management, tenant management, and RBAC.
 
+### Base URL
+All requests go through the API Gateway at /api/v1/auth/...
+
+**Example:** POST http://157.245.220.205/api/v1/auth/login
+
 ### Authentication
 All protected endpoints require a valid JWT token either via:
 - **Cookie**: \`access_token\` (set automatically on login)
@@ -39,6 +44,8 @@ Tenant Admins can create custom roles with specific permissions.
     `,
     )
     .setVersion('1.0')
+    .addServer('http://157.245.220.205/api/v1', 'Dev Server (via API Gateway)')
+    .addServer('http://localhost:8080/api/v1', 'Local Dev (via API Gateway)')
     .addTag('Auth', 'Login, logout, token refresh, MFA, social auth')
     .addTag('Tenants', 'Tenant registration and management')
     .addTag('Users', 'User management and invitations')
