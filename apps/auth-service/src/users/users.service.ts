@@ -7,7 +7,6 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { JwtService } from '@nestjs/jwt';
-import { JwtService } from '@nestjs/jwt';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
