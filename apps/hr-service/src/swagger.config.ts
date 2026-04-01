@@ -35,8 +35,11 @@ All endpoints require a valid JWT token via:
     `,
     )
     .setVersion('1.0')
-    .addServer('http://157.245.220.205/api/v1', 'Dev Server (via API Gateway)')
-    .addServer('http://localhost:8080/api/v1', 'Local Dev (via API Gateway)')
+    .addServer(
+      'http://157.245.220.205/api/v1/hr',
+      'Dev Server (via API Gateway)',
+    )
+    .addServer('http://localhost:8080/api/v1/hr', 'Local Dev (via API Gateway)')
     .addTag('Departments', 'Department management')
     .addTag('Employees', 'Employee profiles and documents')
     .addTag('Leave', 'Leave types, balances, requests and approvals')

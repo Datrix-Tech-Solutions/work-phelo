@@ -44,8 +44,14 @@ Tenant Admins can create custom roles with specific permissions.
     `,
     )
     .setVersion('1.0')
-    .addServer('http://157.245.220.205/api/v1', 'Dev Server (via API Gateway)')
-    .addServer('http://localhost:8080/api/v1', 'Local Dev (via API Gateway)')
+    .addServer(
+      'http://157.245.220.205/api/v1/auth',
+      'Dev Server (via API Gateway)',
+    )
+    .addServer(
+      'http://localhost:8080/api/v1/auth',
+      'Local Dev (via API Gateway)',
+    )
     .addTag('Auth', 'Login, logout, token refresh, MFA, social auth')
     .addTag('Tenants', 'Tenant registration and management')
     .addTag('Users', 'User management and invitations')

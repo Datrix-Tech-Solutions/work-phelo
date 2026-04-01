@@ -53,7 +53,7 @@ export class TenantsService {
         country: dto.country || 'GH',
         industry: dto.industry,
         size: dto.size,
-        status: 'ACTIVE',
+        status: 'PENDING',
       },
     });
 
@@ -80,7 +80,7 @@ export class TenantsService {
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
     // Send invite email with workspace details
-    await this.rabbitmq.emit('notification.user_invite', {
+    await this.rabbitmq.emit('notification.invite_user', {
       email: user.email,
       firstName: user.firstName,
       tenantName: tenant.name,
