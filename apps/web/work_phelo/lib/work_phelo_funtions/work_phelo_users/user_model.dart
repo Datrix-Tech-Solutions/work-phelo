@@ -41,8 +41,8 @@ class AppUserModel {
       lastName: userData['lastName'] as String? ?? '',
       role: (userData['role'] as String? ?? 'EMPLOYEE').toUpperCase(),
       tenantId: userData['tenantId'] as String? ?? '',
-      tenantSlug: tenantSlug,
-      companyName: companyName,
+      tenantSlug: userData['tenantSlug'] as String? ?? tenantSlug,
+      companyName: userData['tenantName'] as String? ?? companyName,
       companyStatus: 'active',
       lastLogin: DateTime.now(),
     );
