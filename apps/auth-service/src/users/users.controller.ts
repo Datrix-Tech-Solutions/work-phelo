@@ -15,6 +15,7 @@ import {
   Param,
   UseGuards,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -26,6 +27,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { Response } from 'express';
+import { setAuthCookies } from '../common/cookie.helper';
 
 @ApiTags('Users')
 @Controller('users')
@@ -74,8 +77,24 @@ export class UsersController {
   })
   @ApiResponse({ status: 200, description: 'Invite accepted successfully' })
   @ApiResponse({ status: 400, description: 'Invalid or expired invite token' })
-  acceptInvite(@Body() dto: AcceptInviteDto) {
-    return this.usersService.acceptInvite(dto);
+  async acceptInvite(
+    @Body() dto: AcceptInviteDto,
+    @Res({ passthrough: false }) res: Response,
+  ) {
+    const result = await this.usersService.acceptInvite(dto);
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    const { accessToken, refreshToken, ...safeResult } = result;
+    return res.json(safeResult);
+  }
+
+  @Post(':id/resend-invite')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend invite email — SuperAdmin only' })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'Invitation resent successfully' })
+  async resendInvite(@Req() req: any, @Param('id') userId: string) {
+    return this.usersService.resendInvite(req.user.tenantId, userId);
   }
 
   @Get()

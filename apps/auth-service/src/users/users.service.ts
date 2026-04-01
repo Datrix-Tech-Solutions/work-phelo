@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
+import { JwtService } from '@nestjs/jwt';
+import { JwtService } from '@nestjs/jwt';
 import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
@@ -18,6 +20,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
+    private readonly jwtService: JwtService,
   ) {}
 
   async invite(tenantId: string, dto: InviteUserDto) {
@@ -78,10 +81,15 @@ export class UsersService {
       include: { tenant: true },
     });
 
-    if (!user) throw new NotFoundException('Invalid invite link');
+    if (!user) {
+      throw new ForbiddenException(
+        'This link has already been used. Please log in or request a password reset.',
+      );
+    }
+
     if (!user.inviteExpiresAt || user.inviteExpiresAt < new Date()) {
       throw new ForbiddenException(
-        'Invite link has expired. Please contact your administrator.',
+        'This invitation has expired. Please contact your platform administrator to resend the invitation.',
       );
     }
 
@@ -95,15 +103,83 @@ export class UsersService {
         forcePasswordReset: false,
         inviteToken: null,
         inviteExpiresAt: null,
+        lastLoginAt: new Date(),
       },
       include: { tenant: true },
     });
 
-    return {
-      message: 'Account setup complete. You can now log in.',
-      userId: updated.id,
+    // Auto-login — issue tokens so frontend redirects straight to dashboard
+    const payload = {
+      sub: updated.id,
+      email: updated.email,
+      role: updated.role,
+      tenantId: updated.tenantId,
       tenantSlug: updated.tenant.slug,
+      tenantName: updated.tenant.name,
+      firstName: updated.firstName,
     };
+
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refreshToken = this.jwtService.sign(
+      { sub: updated.id, type: 'refresh' },
+      { expiresIn: '7d' },
+    );
+
+    await this.prisma.refreshToken.create({
+      data: {
+        userId: updated.id,
+        token: refreshToken,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return {
+      accessToken,
+      refreshToken,
+      user: {
+        id: updated.id,
+        email: updated.email,
+        firstName: updated.firstName,
+        lastName: updated.lastName,
+        role: updated.role,
+        tenantId: updated.tenantId,
+        tenantSlug: updated.tenant.slug,
+        tenantName: updated.tenant.name,
+      },
+    };
+  }
+
+  async resendInvite(tenantId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      include: { tenant: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.status === 'ACTIVE' && !user.inviteToken) {
+      throw new ForbiddenException('User has already accepted the invitation.');
+    }
+
+    const inviteToken = generateSecureToken();
+    const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { inviteToken, inviteExpiresAt },
+    });
+
+    const acceptInviteUrl = WorkspaceUrl.acceptInvite(
+      user.tenant.slug,
+      inviteToken,
+    );
+
+    await this.rabbitmq.emit('notification.invite_user', {
+      email: user.email,
+      firstName: user.firstName,
+      tenantName: user.tenant.name,
+      acceptInviteUrl,
+    });
+
+    return { message: 'Invitation resent successfully' };
   }
 
   async findAll(tenantId: string) {
