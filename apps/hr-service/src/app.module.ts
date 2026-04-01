@@ -9,6 +9,7 @@ import { LeaveModule } from './leave/leave.module';
 import { TimeModule } from './time/time.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { AppraisalsModule } from './appraisals/appraisals.module';
     TimeModule,
     PayrollModule,
     AppraisalsModule,
+    DashboardModule,
   ],
   providers: [
     {
