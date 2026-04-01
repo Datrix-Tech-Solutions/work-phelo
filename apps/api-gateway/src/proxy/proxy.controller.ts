@@ -66,6 +66,8 @@ export class ProxyController {
         req.headers['x-user-role'] = payload.role;
         req.headers['x-tenant-id'] = payload.tenantId;
         req.headers['x-tenant-slug'] = payload.tenantSlug;
+        req.headers['x-tenant-name'] = payload.tenantName ?? '';
+        req.headers['x-user-first-name'] = payload.firstName ?? '';
         if (payload.companyRoleId) {
           req.headers['x-company-role-id'] = payload.companyRoleId;
         }

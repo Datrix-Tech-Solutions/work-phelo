@@ -45,6 +45,8 @@ export class AuthService {
       companyRoleId: user.companyRoleId,
       tenantId: tenant.id,
       tenantSlug: tenant.slug,
+      tenantName: tenant.name,
+      firstName: user.firstName,
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
