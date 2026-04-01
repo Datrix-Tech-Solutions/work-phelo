@@ -30,7 +30,7 @@ export const WorkspaceUrl = {
     `${baseUrl()}/${slug}/reset-password?token=${encodeURIComponent(token)}`,
 
   /** Email verification deep link — sent in registration emails */
-  verifyEmail: (slug: string) => `${baseUrl()}/${slug}/verify-email`,
+  verifyEmail: (slug: string) => `${baseUrl()}/${slug}/verify-account`,
 
   /** Dashboard root — used in OAuth social login redirects */
   dashboard: (slug: string) => `${baseUrl()}/${slug}/dashboard`,
