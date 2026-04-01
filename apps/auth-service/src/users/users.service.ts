@@ -230,7 +230,12 @@ export class UsersService {
   }
 
   async update(tenantId: string, id: string, dto: UpdateUserDto) {
-    await this.findById(tenantId, id);
+    const existing = await this.findById(tenantId, id);
+    if (existing.role === 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'The super admin account cannot be modified.',
+      );
+    }
     return this.prisma.user.update({
       where: { id },
       data: dto,
@@ -250,7 +255,12 @@ export class UsersService {
   }
 
   async deactivate(tenantId: string, id: string) {
-    await this.findById(tenantId, id);
+    const existing = await this.findById(tenantId, id);
+    if (existing.role === 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'The super admin account cannot be deactivated.',
+      );
+    }
     await this.prisma.refreshToken.updateMany({
       where: { userId: id, isRevoked: false },
       data: { isRevoked: true },
@@ -262,7 +272,12 @@ export class UsersService {
   }
 
   async forcePasswordReset(tenantId: string, id: string) {
-    await this.findById(tenantId, id);
+    const existing = await this.findById(tenantId, id);
+    if (existing.role === 'SUPER_ADMIN') {
+      throw new ForbiddenException(
+        'The super admin account cannot be modified.',
+      );
+    }
     return this.prisma.user.update({
       where: { id },
       data: { forcePasswordReset: true },
