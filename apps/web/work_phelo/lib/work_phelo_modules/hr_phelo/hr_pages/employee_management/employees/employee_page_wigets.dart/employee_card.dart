@@ -152,7 +152,7 @@ class _EmployeeCardState extends State<EmployeeCard> {
                     const SizedBox(height: 5),
                     ContactRow(
                       icon: UniconsLine.phone,
-                      value: widget.user.contact,
+                      value: widget.user.contact??'-',
                     ),
                   ],
                 ),

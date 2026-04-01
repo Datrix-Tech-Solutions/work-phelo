@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
+import '../../work_phelo_login_functions/authentication_service.dart';
 import 'employee_onboarding_model.dart';
 
 class EmployeeState {
@@ -30,7 +31,39 @@ class EmployeeState {
 // ── Notifier ───────────────────────────────────────────────────────────────
 
 class UserNotifier extends StateNotifier<EmployeeState> {
-  UserNotifier() : super(const EmployeeState());
+  final AuthenticationService _authService;
+  UserNotifier(this._authService) : super(const EmployeeState());
+
+  Future<Map<String, dynamic>> inviteEmployee({
+    required String tenantSlug,
+    required EmployeeModel employee,
+  }) async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final result = await _authService.inviteEmployee(
+        tenantSlug: tenantSlug,
+        employee: employee,
+      );
+
+      // Add to local state with pending status
+      final newEmployee = employee.copyWith(
+        tenantSlug: tenantSlug,
+        status: EmploymentStatus.pending,
+      );
+      state = state.copyWith(
+        users: [...state.users, newEmployee],
+        isLoading: false,
+      );
+
+      return result; // { user, message }
+    } catch (e) {
+      state = state.copyWith(
+        error: e.toString().replaceFirst('Exception: ', ''),
+        isLoading: false,
+      );
+      rethrow;
+    }
+  }
 
   void addUser(EmployeeModel user) {
     state = state.copyWith(users: [...state.users, user]);
@@ -117,7 +150,7 @@ class UserNotifier extends StateNotifier<EmployeeState> {
 // ── Providers ──────────────────────────────────────────────────────────────
 
 final userProvider = StateNotifierProvider<UserNotifier, EmployeeState>((ref) {
-  return UserNotifier();
+  return UserNotifier(ref.read(authenticationServiceProvider));
 });
 
 final allUsersProvider = Provider<List<EmployeeModel>>((ref) {

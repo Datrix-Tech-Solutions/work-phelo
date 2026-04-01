@@ -4,10 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_permission_funtions/employee_roles_models.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_super_admin/company_onboarding_state.dart';
 
-import '../work_phelo_components/theme/app_images.dart';
-import '../work_phelo_components/theme/app_text_theme.dart';
-import '../work_phelo_components/widgets/form_components/app_buttons.dart';
-import '../work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
+import '../../../work_phelo_components/theme/app_images.dart';
+import '../../../work_phelo_components/theme/app_text_theme.dart';
+import '../../../work_phelo_components/widgets/form_components/app_buttons.dart';
+import '../../../work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
 
 class GetStartedPage extends ConsumerWidget {
   const GetStartedPage({super.key});

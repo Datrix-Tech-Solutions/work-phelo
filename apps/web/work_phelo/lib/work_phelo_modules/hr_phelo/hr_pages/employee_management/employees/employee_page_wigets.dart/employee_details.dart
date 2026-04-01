@@ -24,7 +24,8 @@ class EmployeeDetailsPage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<EmployeeDetailsPage> createState() => _EmployeeDetailsPageState();
+  ConsumerState<EmployeeDetailsPage> createState() =>
+      _EmployeeDetailsPageState();
 }
 
 class _EmployeeDetailsPageState extends ConsumerState<EmployeeDetailsPage> {
@@ -71,6 +72,7 @@ class _EmployeeDetailsPageState extends ConsumerState<EmployeeDetailsPage> {
           ),
           EmployeeWelcomeCard(
             employee: widget.employee,
+            inviteEmployee: () {},
             onOffboard: () => _panel.show(
               context: context,
               formTitle: 'Company Offboarding Form',

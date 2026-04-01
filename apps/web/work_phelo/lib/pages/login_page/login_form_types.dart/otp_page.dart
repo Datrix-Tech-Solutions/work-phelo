@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:work_phelo/pages/login_page/get_started/set_password_page.dart';
+import 'package:work_phelo/work_phelo_components/theme/miscellaneouse.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../../work_phelo_components/theme/app_images.dart';
 import '../../../work_phelo_components/theme/app_padding.dart';
@@ -7,7 +9,6 @@ import '../../../work_phelo_components/widgets/form_components/app_buttons.dart'
 import '../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
 import '../../../work_phelo_components/widgets/misc/snack_bar.dart';
 import '../auth_layout.dart';
-import '../login_pages/tenant_login_page.dart';
 import 'reset_password.dart';
 
 class OTPPage extends StatefulWidget {
@@ -146,8 +147,9 @@ class _OTPPageState extends State<OTPPage> {
       child: Form(
         child: Column(
           children: [
-            appImage,
-            Text('Verify', style: myLargeTextStyle(context)),
+            loginImage,
+            Padding(padding: space),
+            sectionHeader(context, 'Veryfy email'),
             Padding(padding: space),
             Text(
               'We have a sent a verification code\nto your email',
@@ -163,12 +165,19 @@ class _OTPPageState extends State<OTPPage> {
               controller: _otpController,
               onCompleted: _verifyOtp,
             ),
-
+            Padding(padding: space),
             MyButton(
               btnText: 'Verify',
               loadingText: 'Verifying...',
               isLoading: isVerifying,
-              btnOnPressed: () => _verifyOtp(_otpController.text),
+              btnOnPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SetPasswordPage(tenantSlug: ''),
+                  ),
+                );
+              },
             ),
             if (!isVerifying)
               MyTextButton(
@@ -176,15 +185,6 @@ class _OTPPageState extends State<OTPPage> {
                 txtBtnOnPressed: _resendOtp,
               ),
             Padding(padding: space),
-            MySecButton(
-              btnText: 'go back to login',
-              btnOnPressed: () {
-                Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (_) => const TenantLoginPage()),
-                );
-              },
-            ),
           ],
         ),
       ),
@@ -192,6 +192,19 @@ class _OTPPageState extends State<OTPPage> {
   }
 }
 
+//
+//
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
+///
 //RESET PASSWORD CODE PAGE
 
 class ResetPasswordCodePage extends StatefulWidget {

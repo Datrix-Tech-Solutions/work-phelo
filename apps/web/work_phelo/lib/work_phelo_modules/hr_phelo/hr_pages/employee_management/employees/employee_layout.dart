@@ -4,14 +4,13 @@ import 'package:work_phelo/work_phelo_modules/hr_phelo/hr_pages/employee_managem
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
-import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../../../../work_phelo_components/widgets/form_components/side_form_panel.dart';
+import '../../../../../work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
 import 'employee_page_wigets.dart/employee_details.dart';
 import 'employee_page_wigets.dart/employee_forms/onboarding_form.dart';
 
 class EmployeeLayout extends ConsumerStatefulWidget {
-  final AppUserModel currentUser;
-  const EmployeeLayout({super.key, required this.currentUser});
+  const EmployeeLayout({super.key});
 
   @override
   ConsumerState<EmployeeLayout> createState() => _EmployeeLayoutState();
@@ -26,11 +25,11 @@ class _EmployeeLayoutState extends ConsumerState<EmployeeLayout> {
 
   @override
   Widget build(BuildContext context) {
-    final users = ref.watch(
-      usersByTenantProvider(widget.currentUser.tenantSlug),
-    );
+    final authState = ref.watch(authNotifierProvider);
+    final currentUser = authState.user;
+    final users = ref.watch(usersByTenantProvider(currentUser!.tenantSlug));
     final departments = ref.watch(
-      departmentsByTenantProvider(widget.currentUser.tenantSlug),
+      departmentsByTenantProvider(currentUser.tenantSlug),
     );
 
     final filtered = users.where((u) {
@@ -52,7 +51,7 @@ class _EmployeeLayoutState extends ConsumerState<EmployeeLayout> {
         ? EmployeeGridCard(
             users: filtered,
             departments: departments,
-            currentUser: widget.currentUser,
+            currentUser: currentUser,
             search: _search,
             departmentFilter: _departmentFilter,
             onSearchChanged: (v) => setState(() => _search = v),
@@ -61,17 +60,13 @@ class _EmployeeLayoutState extends ConsumerState<EmployeeLayout> {
             newEmployee: () => _panel.show(
               context: context,
               formTitle: 'Company Onboarding Form',
-              onPressed: () {
-                final user = _formKey.currentState?.submit();
+              onPressed: () async {
+                final user = await _formKey.currentState?.submit();
                 if (user == null) return;
-                ref.read(userProvider.notifier).addUser(user);
                 _panel.close();
               },
               secOnPressed: () => _formKey.currentState?.reset(),
-              child: OnboardingForm(
-                key: _formKey,
-                currentUser: widget.currentUser,
-              ),
+              child: OnboardingForm(key: _formKey),
             ),
             onCardTap: (user) {
               setState(() => _selectedEmployee = user);

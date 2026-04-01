@@ -73,4 +73,34 @@ class ApiService {
     final response = await dio.get('/auth/tenants');
     return response.data as Map<String, dynamic>;
   }
+
+  Future<void> approveTenant(String tenantId) async {
+    await dio.patch('/auth/tenants/$tenantId/approve');
+  }
+
+  Future<void> suspendTenant(String tenantId) async {
+    await dio.patch('/auth/tenants/$tenantId/suspend');
+  }
+
+  //////////////////////////////////////////////////////
+  Future<Map<String, dynamic>> inviteEmployee({
+    required String tenantSlug,
+    required String email,
+    required String firstName,
+    required String lastName,
+    required String phone,
+    required String role,
+  }) async {
+    final response = await dio.post(
+      '/users/invite',
+      data: {
+        'email': email,
+        'firstName': firstName,
+        'lastName': lastName,
+        'phone': phone,
+        'role': role,
+      },
+    );
+    return response.data as Map<String, dynamic>;
+  }
 }

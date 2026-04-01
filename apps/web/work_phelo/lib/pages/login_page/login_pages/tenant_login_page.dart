@@ -80,7 +80,6 @@ class _TenantLoginPageState extends ConsumerState<TenantLoginPage> {
     }
 
     final String route = switch (user.role) {
-      'SUPER_ADMIN' => '/platform/dashboard',
       'TENANT_ADMIN' => '/tenant/dashboard',
       _ => '/dashboard',
     };
@@ -148,7 +147,7 @@ class _TenantLoginPageState extends ConsumerState<TenantLoginPage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const EmailConfirmation(),
+                      builder: (_) => const EmailConfirmationForReset(),
                     ),
                   );
                 },
