@@ -29,6 +29,13 @@ export class DashboardService {
       activeEmployees,
       pendingLeaveRequests,
       assignedAssetsCount: 0, // Assets module not yet implemented
+      hasEmployees: totalEmployees > 0,
+      modules: {
+        hr: { enabled: true, locked: false },
+        payroll: { enabled: true, locked: false },
+        assets: { enabled: false, locked: true },
+        recruitment: { enabled: false, locked: true },
+      },
     };
   }
 }
