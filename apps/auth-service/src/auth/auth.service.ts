@@ -409,7 +409,7 @@ export class AuthService {
     // to prevent tenant enumeration via timing attacks
     if (!tenant || tenant.status !== 'ACTIVE') {
       return {
-        message: 'If that email exists, reset instructions have been sent',
+        message: "If this email is registered, you'll receive a code shortly",
       };
     }
 
@@ -419,7 +419,23 @@ export class AuthService {
 
     if (!user) {
       return {
-        message: 'If that email exists, reset instructions have been sent',
+        message: "If this email is registered, you'll receive a code shortly",
+      };
+    }
+
+    // Resend rate limit: max 3 OTPs per hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentCount = await this.prisma.otpCode.count({
+      where: {
+        userId: user.id,
+        type: 'PASSWORD_RESET',
+        createdAt: { gt: oneHourAgo },
+      },
+    });
+
+    if (recentCount >= 3) {
+      return {
+        message: 'Too many attempts. Please try again in one hour.',
       };
     }
 
@@ -446,7 +462,6 @@ export class AuthService {
         firstName: user.firstName,
       });
     } else {
-      // Workspace-aware reset link — slug gives frontend context; token is the authority
       const resetLink = WorkspaceUrl.resetPassword(tenant.slug, code);
       await this.rabbitmq.emit('notification.password_reset_link', {
         email: user.email,
@@ -457,7 +472,7 @@ export class AuthService {
     }
 
     return {
-      message: 'If that email exists, reset instructions have been sent',
+      message: "If this email is registered, you'll receive a code shortly",
     };
   }
 
@@ -480,18 +495,58 @@ export class AuthService {
     if (!code)
       throw new BadRequestException('Reset token or OTP code is required');
 
+    // Find the most recent unused PASSWORD_RESET OTP for this user
     const record = await this.prisma.otpCode.findFirst({
       where: {
         userId: user.id,
         type: 'PASSWORD_RESET',
-        code,
         usedAt: null,
-        expiresAt: { gt: new Date() },
       },
+      orderBy: { createdAt: 'desc' },
     });
 
-    if (!record)
+    if (!record) {
       throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    // Check if locked due to too many attempts
+    if (record.lockedUntil && record.lockedUntil > new Date()) {
+      throw new BadRequestException(
+        'Too many incorrect attempts. Please try again in 30 minutes.',
+      );
+    }
+
+    // Check expiry
+    if (record.expiresAt < new Date()) {
+      throw new BadRequestException(
+        'This code has expired. Please request a new one.',
+      );
+    }
+
+    // Check code correctness
+    if (record.code !== code) {
+      const newAttempts = record.attempts + 1;
+      const updateData: any = { attempts: newAttempts };
+
+      if (newAttempts >= 5) {
+        updateData.lockedUntil = new Date(Date.now() + 30 * 60 * 1000);
+      }
+
+      await this.prisma.otpCode.update({
+        where: { id: record.id },
+        data: updateData,
+      });
+
+      if (newAttempts >= 5) {
+        throw new BadRequestException(
+          'Too many incorrect attempts. Your reset code has been locked for 30 minutes.',
+        );
+      }
+
+      throw new BadRequestException(
+        `Incorrect code. Please try again. ${5 - newAttempts} attempt(s) remaining.`,
+      );
+    }
 
     const hashed = await bcrypt.hash(dto.newPassword, 12);
     await this.prisma.otpCode.update({

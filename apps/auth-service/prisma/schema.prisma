@@ -282,13 +282,15 @@ model RefreshToken {
 // ── OtpCode ────────────────────────────────────────────────────────────────
 
 model OtpCode {
-  id        String    @id @default(uuid())
-  userId    String
-  type      OtpType
-  code      String
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  id          String    @id @default(uuid())
+  userId      String
+  type        OtpType
+  code        String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  attempts    Int       @default(0)
+  lockedUntil DateTime?
+  createdAt   DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
