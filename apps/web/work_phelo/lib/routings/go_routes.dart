@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:work_phelo/pages/login_page/get_started/set_password_page.dart';
-import '../pages/get_started.dart';
+import '../pages/login_page/get_started/get_started.dart';
 import 'package:work_phelo/pages/login_page/get_started/verify_account_page.dart';
 import 'package:work_phelo/work_phelo_modules/dashboard.dart';
 import 'package:work_phelo/work_phelo_modules/hr_phelo/hr_phelo_navigation/hr_phelo_layout.dart';
