@@ -1,6 +1,7 @@
 import {
   Injectable,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
@@ -18,6 +19,14 @@ export class TenantsService {
   ) {}
 
   async register(dto: CreateTenantDto) {
+    // Block superadmin email from being used as company admin
+    const superAdminEmail =
+      process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com';
+    if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
+      throw new ForbiddenException(
+        'This email address cannot be used to register a company',
+      );
+    }
     const existingTenant = await this.prisma.tenant.findFirst({
       where: {
         OR: [{ email: dto.email }, { slug: dto.slug }],

@@ -26,6 +26,15 @@ export class UsersService {
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
+    // Block superadmin email from being invited as company user
+    const superAdminEmail =
+      process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com';
+    if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
+      throw new ForbiddenException(
+        'This email address cannot be assigned as a company user',
+      );
+    }
+
     const existing = await this.prisma.user.findUnique({
       where: { tenantId_email: { tenantId, email: dto.email } },
     });
