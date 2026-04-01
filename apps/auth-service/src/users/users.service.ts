@@ -13,6 +13,7 @@ import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
 import { generateSecureToken } from '../common/otp.helper';
 import * as bcrypt from 'bcrypt';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class UsersService {
@@ -20,6 +21,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly jwtService: JwtService,
+    private readonly audit: AuditService,
   ) {}
 
   async invite(tenantId: string, dto: InviteUserDto) {
@@ -28,12 +30,12 @@ export class UsersService {
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    // Block superadmin email from being invited as company user
+    // Block superadmin email
     const superAdminEmail =
       process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com';
     if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
       throw new ForbiddenException(
-        'This email address cannot be assigned as a company user',
+        'This email is reserved for the platform owner.',
       );
     }
 
@@ -41,7 +43,19 @@ export class UsersService {
       where: { tenantId_email: { tenantId, email: dto.email } },
     });
     if (existing)
-      throw new ConflictException('User with this email already exists');
+      throw new ConflictException('A user with this email already exists.');
+
+    // One Company Admin per tenant
+    if (dto.role === 'TENANT_ADMIN' || !dto.role) {
+      const existingAdmin = await this.prisma.user.findFirst({
+        where: { tenantId, role: 'TENANT_ADMIN' },
+      });
+      if (existingAdmin) {
+        throw new ConflictException(
+          'This company already has a Company Admin assigned.',
+        );
+      }
+    }
 
     const inviteToken = generateSecureToken();
     const inviteExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -68,6 +82,23 @@ export class UsersService {
       firstName: user.firstName,
       inviteToken,
       tenantName: tenant.name,
+    });
+
+    await this.audit.log({
+      tenantId,
+      action: 'CREATE',
+      resource: 'users',
+      resourceId: user.id,
+      changes: {
+        after: {
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          status: 'PENDING_VERIFICATION',
+        },
+      },
+      status: 'SUCCESS',
     });
 
     const { password, mfaSecret, inviteToken: token, ...safeUser } = user;
