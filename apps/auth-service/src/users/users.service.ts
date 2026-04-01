@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { JwtService } from '@nestjs/jwt';
-import { InviteUserDto } from './dto/invite-user.dto';
+import { InviteUserDto, UserSystemRole } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
 import { generateSecureToken } from '../common/otp.helper';
@@ -46,7 +46,7 @@ export class UsersService {
       throw new ConflictException('A user with this email already exists.');
 
     // One Company Admin per tenant
-    if (dto.role === 'TENANT_ADMIN' || !dto.role) {
+    if (dto.role === UserSystemRole.TENANT_ADMIN || !dto.role) {
       const existingAdmin = await this.prisma.user.findFirst({
         where: { tenantId, role: 'TENANT_ADMIN' },
       });
