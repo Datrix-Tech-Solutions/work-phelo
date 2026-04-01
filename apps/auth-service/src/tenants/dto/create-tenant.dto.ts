@@ -65,16 +65,18 @@ export class CreateTenantDto {
   @MaxLength(50)
   lastName!: string;
 
-  @ApiProperty({
-    description: 'Admin password (min 8 characters)',
+  @ApiPropertyOptional({
+    description:
+      'Admin password — if omitted, an invite email is sent and admin sets password on first login',
     example: 'Admin123!',
     minLength: 8,
     maxLength: 100,
   })
+  @IsOptional()
   @IsString()
   @MinLength(8)
   @MaxLength(100)
-  password!: string;
+  password?: string;
 
   @ApiPropertyOptional({
     description: 'Company phone number',

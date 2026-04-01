@@ -23,6 +23,8 @@ import {
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('Tenants')
 @Controller('tenants')
@@ -30,8 +32,11 @@ export class TenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Post('register')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Register a new company and admin user' })
+  @ApiOperation({ summary: 'Register a new company — SuperAdmin only' })
   @ApiResponse({
     status: 201,
     description: 'Tenant created — OTP sent to admin email for verification',
@@ -42,7 +47,7 @@ export class TenantsController {
         tenantId: 'uuid',
         tenantName: 'Acme Ghana Ltd',
         tenantSlug: 'acme-ghana',
-        workspaceUrl: 'https://app.workphelo.com/t/acme-ghana/login',
+        workspaceUrl: 'http://157.245.220.205/acme-ghana/login',
         userId: 'uuid',
       },
     },

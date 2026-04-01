@@ -9,6 +9,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { generateSecureToken } from '../common/otp.helper';
+import { WorkspaceUrl } from '../common/workspace-url.helper';
 
 @Injectable()
 export class TenantsService {
@@ -27,6 +29,7 @@ export class TenantsService {
         'This email address cannot be used to register a company',
       );
     }
+
     const existingTenant = await this.prisma.tenant.findFirst({
       where: {
         OR: [{ email: dto.email }, { slug: dto.slug }],
@@ -40,6 +43,7 @@ export class TenantsService {
       );
     }
 
+    // SuperAdmin creates tenant — immediately ACTIVE, no approval needed
     const tenant = await this.prisma.tenant.create({
       data: {
         name: dto.name,
@@ -49,50 +53,57 @@ export class TenantsService {
         country: dto.country || 'GH',
         industry: dto.industry,
         size: dto.size,
-        status: 'PENDING',
+        status: 'ACTIVE',
       },
     });
 
-    const hashedPassword = await bcrypt.hash(dto.password, 12);
+    // Generate invite token — tenant admin sets their own password on first login
+    const inviteToken = generateSecureToken();
+    const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
     const user = await this.prisma.user.create({
       data: {
         tenantId: tenant.id,
         email: dto.email,
-        password: hashedPassword,
+        password: '',
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
         role: 'TENANT_ADMIN',
         status: 'PENDING_VERIFICATION',
+        forcePasswordReset: true,
+        inviteToken,
+        inviteExpiresAt,
       },
     });
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    await this.prisma.otpCode.create({
-      data: {
-        userId: user.id,
-        type: 'EMAIL_VERIFICATION',
-        code,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-      },
-    });
+    const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
-    const workspaceUrl = `${process.env.FRONTEND_BASE_URL || process.env.APP_URL || 'http://localhost:3000'}/t/${tenant.slug}/login`;
-
-    await this.rabbitmq.emit('notification.email_verification', {
+    // Send invite email with workspace details
+    await this.rabbitmq.emit('notification.user_invite', {
       email: user.email,
       firstName: user.firstName,
-      otp: code,
       tenantName: tenant.name,
+      acceptInviteUrl,
+    });
+
+    await this.audit.log({
+      tenantId: tenant.id,
+      action: 'CREATE',
+      resource: 'tenants',
+      resourceId: tenant.id,
+      changes: {
+        after: { name: tenant.name, slug: tenant.slug, status: 'ACTIVE' },
+      },
+      status: 'SUCCESS',
     });
 
     return {
-      message:
-        'Registration submitted. Check your email for verification code.',
+      message: 'Company registered. Invite email sent to tenant admin.',
       tenantId: tenant.id,
       tenantName: tenant.name,
       tenantSlug: tenant.slug,
-      workspaceUrl,
+      workspaceUrl: WorkspaceUrl.login(tenant.slug),
       userId: user.id,
     };
   }
