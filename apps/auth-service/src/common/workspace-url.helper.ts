@@ -5,7 +5,7 @@
  * Uses FRONTEND_BASE_URL env var so migration to subdomains later
  * only requires changing this one file.
  *
- * Current pattern:  {FRONTEND_BASE_URL}/t/{slug}/...
+ * Current pattern:  {FRONTEND_BASE_URL}/{slug}/...
  * Future subdomain: https://{slug}.workphelo.com/...
  */
 
@@ -19,19 +19,19 @@ function baseUrl(): string {
 
 export const WorkspaceUrl = {
   /** Workspace login page — sent in registration confirmation email */
-  login: (slug: string) => `${baseUrl()}/t/${slug}/login`,
+  login: (slug: string) => `${baseUrl()}/${slug}/login`,
 
   /** Accept invite link — sent in invite emails */
   acceptInvite: (slug: string, token: string) =>
-    `${baseUrl()}/t/${slug}/accept-invite?token=${encodeURIComponent(token)}`,
+    `${baseUrl()}/${slug}/accept-invite?token=${encodeURIComponent(token)}`,
 
   /** Password reset link — sent in forgot-password emails */
   resetPassword: (slug: string, token: string) =>
-    `${baseUrl()}/t/${slug}/reset-password?token=${encodeURIComponent(token)}`,
+    `${baseUrl()}/${slug}/reset-password?token=${encodeURIComponent(token)}`,
 
   /** Email verification deep link — sent in registration emails */
-  verifyEmail: (slug: string) => `${baseUrl()}/t/${slug}/verify-email`,
+  verifyEmail: (slug: string) => `${baseUrl()}/${slug}/verify-email`,
 
   /** Dashboard root — used in OAuth social login redirects */
-  dashboard: (slug: string) => `${baseUrl()}/t/${slug}/dashboard`,
+  dashboard: (slug: string) => `${baseUrl()}/${slug}/dashboard`,
 };
