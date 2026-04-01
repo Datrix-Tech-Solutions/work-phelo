@@ -94,8 +94,6 @@ class TitleCard extends StatelessWidget {
   }
 }
 
-
-
 /////////////////////////////////////////////
 ////////////////////////////////////////////
 class _StatTile extends StatelessWidget {
@@ -122,8 +120,6 @@ class _StatTile extends StatelessWidget {
     );
   }
 }
-
-
 
 ////////////////////////////////////////////
 ///////////////////////////////////////////
@@ -178,8 +174,6 @@ class _WelcomeCardState extends State<WelcomeCard> {
   }
 }
 
-
-
 ///////////////////////////////////////////////
 //////////////////////////////////////////////
 class WelcomeCardAlt extends StatefulWidget {
@@ -213,8 +207,6 @@ class _WelcomeCardAltState extends State<WelcomeCardAlt> {
   }
 }
 
-
-
 /////////////////////////////////////////////
 ////////////////////////////////////////////
 class CompanyCard extends StatelessWidget {
@@ -232,7 +224,10 @@ class CompanyCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isActive = company.status == CompanyStatus.active;
+    final canActivate =
+        company.status == CompanyStatus.pending ||
+        company.status == CompanyStatus.suspended;
+    // final canSuspend = company.status == CompanyStatus.active;
 
     return Padding(
       padding: myContentPadding,
@@ -283,9 +278,9 @@ class CompanyCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 MyOutlinedMenuButton(
                   onPressed: onToggleStatus,
-                  btnText: isActive ? 'Deactivate' : 'Activate',
-                  btnIcon: isActive ? UniconsLine.pen : UniconsLine.check,
-                  btnAccent: myMainColor,
+                  btnText: canActivate ? 'Activate' : 'Suspend',
+                  btnIcon: canActivate ? UniconsLine.check : UniconsLine.ban,
+                  btnAccent: canActivate ? Colors.green : Colors.orange,
                   isHovered: true,
                 ),
               ],
@@ -297,26 +292,28 @@ class CompanyCard extends StatelessWidget {
   }
 }
 
-
-
 /////////////////////////////////////////////////
 ////////////////////////////////////////////////
 class EmployeeWelcomeCard extends StatelessWidget {
   final EmployeeModel employee;
   final VoidCallback onOffboard;
   final VoidCallback onEdit;
+  final VoidCallback inviteEmployee;
 
   const EmployeeWelcomeCard({
     super.key,
     required this.employee,
     required this.onOffboard,
     required this.onEdit,
+    required this.inviteEmployee,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // final isActive = employee.status == EmployeeStatus.active;
+    final status = EmploymentStatusX.fromString((employee.status).toString());
+
+    final (statusBg, statusFg, statusLabel) = status.resolve(cs);
 
     return Padding(
       padding: myContentPadding,
@@ -331,20 +328,48 @@ class EmployeeWelcomeCard extends StatelessWidget {
           children: [
             // Left — company info
             Expanded(
-              child: ListTile(title: sectionHeader(context, employee.fullName)),
+              child: ListTile(
+                title: sectionHeader(context, employee.fullName),
+                
+                trailing: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '• $statusLabel',
+                    style: myNoInfoStyle(
+                      context,
+                    ).copyWith(color: statusFg, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
             ),
 
             // Right — actions
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                MyOutlinedMenuButton(
-                  onPressed: onOffboard,
-                  btnText: 'Off-Board',
-                  btnIcon: UniconsLine.user_times,
-                  btnAccent: myMainColor,
-                  isHovered: false,
-                ),
+                if (status == EmploymentStatus.pending)
+                  MyOutlinedMenuButton(
+                    onPressed: inviteEmployee,
+                    btnText: 'Resend Invite',
+                    btnIcon: UniconsLine.envelope_redo,
+                    btnAccent: myMainColor,
+                    isHovered: false,
+                  )
+                else
+                  MyOutlinedMenuButton(
+                    onPressed: onOffboard,
+                    btnText: 'Off-Board',
+                    btnIcon: UniconsLine.user_times,
+                    btnAccent: Colors.red,
+                    isHovered: false,
+                  ),
                 const SizedBox(width: 10),
                 MyOutlinedMenuButton(
                   onPressed: onEdit,

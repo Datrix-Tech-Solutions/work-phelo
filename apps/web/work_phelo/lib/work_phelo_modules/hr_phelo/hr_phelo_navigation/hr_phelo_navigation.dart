@@ -46,7 +46,7 @@ List<NavItem> hrNavigationItems(
       icon: UniconsLine.users_alt,
       title: 'Employees',
       pageIndex: 2,
-      page: EmployeeLayout(currentUser: currentUser),
+      page: EmployeeLayout(),
       requiredModule: PermissionModule.onboarding,
       // no requiredModule — always visible
     ),
@@ -83,7 +83,7 @@ List<NavItem> hrNavigationItems(
       title: 'Smart Schedules',
       pageIndex: 6,
       page: SchedulesLayout(),
-      requiredModule: PermissionModule.smartSchedule
+      requiredModule: PermissionModule.smartSchedule,
     ),
 
   if (accessibleModules.contains(PermissionModule.projectTask))
@@ -92,7 +92,7 @@ List<NavItem> hrNavigationItems(
       title: 'Projects & Tasks',
       pageIndex: 7,
       page: ProjectsTasksLayout(),
-      requiredModule: PermissionModule.projectTask
+      requiredModule: PermissionModule.projectTask,
     ),
 
   if (accessibleModules.contains(PermissionModule.payroll))
@@ -104,7 +104,7 @@ List<NavItem> hrNavigationItems(
       title: 'Payroll',
       pageIndex: 8,
       page: PayrollManagementPage(),
-      requiredModule: PermissionModule.payroll
+      requiredModule: PermissionModule.payroll,
     ),
 
   if (accessibleModules.contains(PermissionModule.assetManagement))
@@ -116,6 +116,6 @@ List<NavItem> hrNavigationItems(
       title: 'Asset Management',
       pageIndex: 9,
       page: AssetManagementLayout(currentUser: currentUser),
-      requiredModule: PermissionModule.assetManagement
+      requiredModule: PermissionModule.assetManagement,
     ),
 ];

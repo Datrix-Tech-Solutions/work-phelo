@@ -3,15 +3,16 @@ import 'package:flutter/material.dart';
 class EmployeeModel {
   final String firstName;
   final String lastName;
-  final String contact;
+  final String? contact;
   final String email;
+  final DateTime? dob;
   final String? department;
   final String jobTitle;
   final List<String> systemRole;
   final String? reportingManager;
   final DateTime hiredDate;
   final String employmentType;
-  final double annualSalary;
+  final double? annualSalary;
   final String? asset;
   final int? leaveDays;
   final EmploymentStatus status;
@@ -22,7 +23,8 @@ class EmployeeModel {
   EmployeeModel({
     required this.firstName,
     required this.lastName,
-    required this.contact,
+    this.dob,
+    this.contact,
     required this.email,
     this.department,
     required this.jobTitle,
@@ -30,10 +32,10 @@ class EmployeeModel {
     this.reportingManager,
     required this.hiredDate,
     required this.employmentType,
-    required this.annualSalary,
+    this.annualSalary,
     this.asset,
     this.leaveDays,
-    this.status = EmploymentStatus.active,
+    this.status = EmploymentStatus.pending,
     required this.password,
     required this.tenantSlug,
     this.lastLeaveReset,
@@ -45,6 +47,7 @@ class EmployeeModel {
     String? firstName,
     String? lastName,
     String? contact,
+    DateTime? dob,
     String? email,
     String? department,
     String? jobTitle,
@@ -63,6 +66,7 @@ class EmployeeModel {
     return EmployeeModel(
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
+      dob: dob ?? this.dob,
       contact: contact ?? this.contact,
       email: email ?? this.email,
       department: department ?? this.department,
@@ -85,6 +89,7 @@ class EmployeeModel {
     return EmployeeModel(
       firstName: map['firstName'] as String? ?? '',
       lastName: map['lastName'] as String? ?? '',
+      dob: DateTime.parse(map['dob'] as String),
       contact: map['contact'] as String? ?? '',
       email: map['email'] as String? ?? '',
       department: map['department'] as String?,
@@ -110,6 +115,7 @@ class EmployeeModel {
     return EmployeeModel(
       firstName: '',
       lastName: '',
+      dob: DateTime.now(),
       contact: '',
       email: '',
       department: '',
@@ -131,6 +137,7 @@ class EmployeeModel {
     return {
       'firstName': firstName,
       'lastName': lastName,
+      'dob': dob,
       'contact': contact,
       'email': email,
       'department': department,
@@ -148,53 +155,88 @@ class EmployeeModel {
       'tenantSlug': tenantSlug,
     };
   }
+  factory EmployeeModel.fromApi(Map<String, dynamic> json) {
+  return EmployeeModel(
+    firstName: json['firstName'] as String? ?? '',
+    lastName: json['lastName'] as String? ?? '',
+    email: json['email'] as String? ?? '',
+    contact: json['phone'] as String?,
+    jobTitle: '',
+    systemRole: [json['role'] as String? ?? 'EMPLOYEE'],
+    hiredDate: json['createdAt'] != null
+        ? DateTime.parse(json['createdAt'] as String)
+        : DateTime.now(),
+    employmentType: '',
+    password: '',
+    tenantSlug: '',
+    status: _parseStatus(json['status'] as String? ?? 'PENDING_VERIFICATION'),
+  );
 }
 
-enum EmploymentStatus { active, onLeave, inactive }
+static EmploymentStatus _parseStatus(String status) {
+  return switch (status.toUpperCase()) {
+    'ACTIVE' => EmploymentStatus.active,
+    'INACTIVE' => EmploymentStatus.inactive,
+    'ON_LEAVE' => EmploymentStatus.onLeave,
+    _ => EmploymentStatus.pending,
+  };
+}
+}
+
+enum EmploymentStatus { active, onLeave, inactive, pending }
 
 extension EmploymentStatusX on EmploymentStatus {
   String get label => switch (this) {
     EmploymentStatus.active => 'Active',
     EmploymentStatus.onLeave => 'On Leave',
     EmploymentStatus.inactive => 'Inactive',
+    EmploymentStatus.pending => 'Pending',
   };
 
   String get mapKey => switch (this) {
     EmploymentStatus.active => 'active',
     EmploymentStatus.onLeave => 'on_leave',
     EmploymentStatus.inactive => 'inactive',
+    EmploymentStatus.pending => 'pending',
   };
 
   static EmploymentStatus fromString(String? value) => switch (value) {
     'active' => EmploymentStatus.active,
     'on_leave' => EmploymentStatus.onLeave,
     'inactive' => EmploymentStatus.inactive,
-    _ => EmploymentStatus.active, // safe default
+    'pending' => EmploymentStatus.pending,
+    _ => EmploymentStatus.pending, //default statys
   };
 
   Color get color => switch (this) {
     EmploymentStatus.active => Colors.green,
     EmploymentStatus.onLeave => Colors.orange,
     EmploymentStatus.inactive => Colors.red,
+    EmploymentStatus.pending => Colors.blue,
   };
 }
 
 extension EmploymentStatusUI on EmploymentStatus {
   (Color bg, Color fg, String label) resolve(ColorScheme cs) => switch (this) {
-        EmploymentStatus.active => (
-            Colors.green.withAlpha(30),
-            Colors.green,
-            'Active',
-          ),
-        EmploymentStatus.onLeave => (
-            cs.tertiaryContainer,
-            cs.onTertiaryContainer,
-            'On Leave',
-          ),
-        EmploymentStatus.inactive => (
-            Colors.red.withAlpha(30),
-            Colors.red,
-            'Inactive',
-          ),
-      };
+    EmploymentStatus.active => (
+      Colors.green.withAlpha(30),
+      Colors.green,
+      'Active',
+    ),
+    EmploymentStatus.onLeave => (
+      cs.tertiaryContainer,
+      cs.onTertiaryContainer,
+      'On Leave',
+    ),
+    EmploymentStatus.inactive => (
+      Colors.red.withAlpha(30),
+      Colors.red,
+      'Inactive',
+    ),
+    EmploymentStatus.pending => (
+      Colors.blue.withAlpha(30),
+      Colors.blue,
+      'Pending Invite',
+    ),
+  };
 }

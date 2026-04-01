@@ -141,17 +141,38 @@ class CompanyNotifier extends StateNotifier<CompanyState> {
   state = state.copyWith(isLoading: true, error: null);
   try {
     final companies = await _authService.fetchTenants();
-    state = state.copyWith(
-      companies: companies,
-      isLoading: false,
-    );
+    state = state.copyWith(companies: companies, isLoading: false);
   } catch (e) {
+    // ── Don't rethrow — just show empty state ──
     state = state.copyWith(
-      error: e.toString().replaceFirst('Exception: ', ''),
+      companies: [],
       isLoading: false,
+      error: e.toString().replaceFirst('Exception: ', ''),
     );
   }
 }
+
+  Future<void> toggleCompanyStatus(CompanyModel company) async {
+    final tenantId = company.tenantId;
+    if (tenantId == null) return;
+
+    final isActive = company.status == CompanyStatus.active;
+
+    try {
+      if (isActive) {
+        await _authService.suspendTenant(tenantId);
+        setStatus(company.tenantSlug, CompanyStatus.suspended);
+      } else {
+        await _authService.approveTenant(tenantId);
+        setStatus(company.tenantSlug, CompanyStatus.active);
+      }
+    } catch (e) {
+      state = state.copyWith(
+        error: e.toString().replaceFirst('Exception: ', ''),
+      );
+      rethrow;
+    }
+  }
 
   void setActive(String tenantSlug) =>
       setStatus(tenantSlug, CompanyStatus.active);

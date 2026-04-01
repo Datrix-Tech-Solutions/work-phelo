@@ -9,14 +9,14 @@ import '../login_utils/validators.dart';
 import '../login_pages/tenant_login_page.dart';
 import 'otp_page.dart';
 
-class EmailConfirmation extends StatefulWidget {
-  const EmailConfirmation({super.key});
+class EmailConfirmationForReset extends StatefulWidget {
+  const EmailConfirmationForReset({super.key});
 
   @override
-  State<EmailConfirmation> createState() => _EmailConfirmationState();
+  State<EmailConfirmationForReset> createState() => _EmailConfirmationForResetState();
 }
 
-class _EmailConfirmationState extends State<EmailConfirmation> {
+class _EmailConfirmationForResetState extends State<EmailConfirmationForReset> {
   bool isLoading = false;
 
   final _formKey = GlobalKey<FormState>();

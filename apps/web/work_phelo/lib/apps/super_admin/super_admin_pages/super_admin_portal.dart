@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -41,9 +43,19 @@ class _SuperAdminPortalState extends ConsumerState<SuperAdminPortal> {
     final state = ref.watch(companyProvider);
     final companies = state.companies;
     ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
-      if (previous?.user != null && next.user == null && !next.isLoading) {
-    context.go('/platform/login');
-  }
+      log(
+        'PORTAL LISTEN >> prev.user=${previous?.user?.email}, next.user=${next.user?.email}, next.isLoading=${next.isLoading}',
+      );
+
+      // Only redirect if previously authenticated AND not currently loading
+      // This prevents redirect during initial state propagation
+      if (previous?.isAuthenticated == true &&
+          !next.isAuthenticated &&
+          !next.isLoading &&
+          previous?.user?.email != null) {
+        log('PORTAL LISTEN >> redirecting');
+        context.go('/platform/login');
+      }
     });
 
     final totalCompanies = companies.length;

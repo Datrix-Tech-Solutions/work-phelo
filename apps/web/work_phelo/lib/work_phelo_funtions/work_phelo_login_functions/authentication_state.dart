@@ -110,6 +110,13 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
       ref.read(goRouterProvider).go('/$tenantSlug/login');
     }
   }
+
+  void clearUser() {
+    log('CLEAR USER CALLED');
+    // Print the stack trace to see exactly what called it
+    log(StackTrace.current.toString());
+    state = const AuthenticationState();
+  }
 }
 
 final authNotifierProvider =

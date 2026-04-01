@@ -9,6 +9,7 @@ import '../../../work_phelo_components/widgets/custom_cards/title_card.dart';
 import '../../../work_phelo_components/widgets/custom_lists/app_list.dart';
 import '../../../work_phelo_components/widgets/form_components/side_form_panel.dart';
 import '../../../work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
+import '../../../work_phelo_funtions/work_phelo_super_admin/company_onboarding_state.dart';
 import '../super_admin_widgets/admin_update_form.dart';
 import '../super_admin_widgets/company_editing_form.dart';
 import '../super_admin_widgets/module_features.dart';
@@ -83,7 +84,22 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
         CompanyCard(
           company: widget.company,
           onDelete: () {},
-          onToggleStatus: () {},
+          onToggleStatus: () async {
+    try {
+      await ref
+          .read(companyProvider.notifier)
+          .toggleCompanyStatus(widget.company);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  },
         ),
 
         Expanded(

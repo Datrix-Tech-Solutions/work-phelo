@@ -1,18 +1,16 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/company_departments_funtions/company_departments_state.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_companies/employee_onboarding_functions/employee_onboarding_state.dart';
-import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
 import '../../../../../../../pages/login_page/login_utils/validators.dart';
-import '../../../../../../../work_phelo_components/theme/app_padding.dart';
 import '../../../../../../../work_phelo_components/theme/miscellaneouse.dart';
 import '../../../../../../../work_phelo_components/widgets/form_components/app_text_fields.dart';
+import '../../../../../../../work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
 
 class OnboardingForm extends ConsumerStatefulWidget {
-  final AppUserModel currentUser;
-  const OnboardingForm({super.key, required this.currentUser});
+  const OnboardingForm({super.key});
 
   @override
   ConsumerState<OnboardingForm> createState() => OnboardingFormState();
@@ -21,88 +19,102 @@ class OnboardingForm extends ConsumerStatefulWidget {
 class OnboardingFormState extends ConsumerState<OnboardingForm> {
   final _formKey = GlobalKey<FormState>();
 
-  // ── Controllers ──────────────────────────────────────────────
+  // Controllers
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
-  final _phoneController = TextEditingController();
   final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _jobTitleController = TextEditingController();
-  final _salaryController = TextEditingController();
 
-  // ── Dropdown state ───────────────────────────────────────────
+  // State
   String? _selectedDepartmentId;
   String? _selectedEmploymentType;
-  String? _selectedAsset;
   DateTime? _hireDate;
 
   @override
   void dispose() {
     _firstNameController.dispose();
     _lastNameController.dispose();
-    _phoneController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
     _jobTitleController.dispose();
-    _salaryController.dispose();
-    _hireDate = null;
     super.dispose();
+  }
+
+  // This is the method called by the panel's onPressed
+  Future<EmployeeModel?> submit() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return null;
+
+    final authState = ref.read(authNotifierProvider);
+    final currentUser = authState.user;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Session expired')));
+      return null;
+    }
+
+    final employee = EmployeeModel(
+      firstName: _firstNameController.text.trim(),
+      lastName: _lastNameController.text.trim(),
+      email: _emailController.text.trim(),
+      contact: _phoneController.text.trim(),
+      jobTitle: _jobTitleController.text.trim(),
+      systemRole: ['EMPLOYEE'],
+      hiredDate: _hireDate ?? DateTime.now(),
+      employmentType: _selectedEmploymentType ?? 'Full-Time',
+      password: '',
+      tenantSlug: currentUser.tenantSlug,
+      status: EmploymentStatus.pending,
+    );
+
+    try {
+      // Call the real backend invite
+      await ref
+          .read(userProvider.notifier)
+          .inviteEmployee(
+            tenantSlug: currentUser.tenantSlug,
+            employee: employee,
+          );
+
+      return employee; // Return success to panel
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceAll('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return null;
+    }
   }
 
   void reset() {
     _formKey.currentState?.reset();
     _firstNameController.clear();
     _lastNameController.clear();
-    _phoneController.clear();
     _emailController.clear();
+    _phoneController.clear();
     _jobTitleController.clear();
-    _salaryController.clear();
     setState(() {
       _selectedDepartmentId = null;
       _selectedEmploymentType = null;
-      _selectedAsset = null;
       _hireDate = null;
     });
   }
 
-  EmployeeModel? submit() {
-    if (!(_formKey.currentState?.validate() ?? false)) return null;
-    if (_hireDate == null) {
-      return null;
-    }
-    if (_selectedEmploymentType == null) {
-      return null;
-    }
-
-    final user = EmployeeModel(
-      firstName: _firstNameController.text.trim(),
-      lastName: _lastNameController.text.trim(),
-      contact: _phoneController.text.trim(),
-      email: _emailController.text.trim(),
-      password: 'Password55',
-      department: null,
-      jobTitle: _jobTitleController.text.trim(),
-      systemRole: ['employee'],
-      hiredDate: _hireDate!,
-      employmentType: _selectedEmploymentType!,
-      annualSalary:
-          double.tryParse(_salaryController.text.replaceAll(',', '')) ?? 0.0,
-      asset: _selectedAsset,
-      tenantSlug: widget.currentUser.tenantSlug,
-    );
-
-    ref.read(userProvider.notifier).addUser(user);
-
-    if (_selectedDepartmentId != null) {
-      ref
-          .read(departmentProvider.notifier)
-          .addMember(_selectedDepartmentId!, user.email);
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authNotifierProvider);
+    final currentUser = authState.user;
+
+    if (currentUser == null) {
+      return const Center(child: Text("Please login again"));
+    }
+
     final departments = ref.watch(
-      departmentsByTenantProvider(widget.currentUser.tenantSlug),
+      departmentsByTenantProvider(currentUser.tenantSlug),
     );
 
     return Form(
@@ -112,12 +124,14 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             sectionHeader(context, 'Personal Information'),
+
             MyCustomTextField(
               label: 'First Name',
               placeholder: 'John',
               controller: _firstNameController,
               validator: (v) => v?.trim().isEmpty ?? true ? 'Required' : null,
             ),
+
             MyCustomTextField(
               label: 'Last Name',
               placeholder: 'Doe',
@@ -126,27 +140,24 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
             ),
 
             MyCustomTextField(
-              label: 'Phone Number',
-              placeholder: '+233 20 123 4567',
-              controller: _phoneController,
-              keyType: TextInputType.phone,
-              inputType: [
-                FilteringTextInputFormatter.allow(RegExp(r'[\d\s+]')),
-              ],
-              textLenght: 10,
-            ),
-            MyCustomTextField(
               label: 'Email Address',
-              placeholder: 'john.doe@company.com',
+              placeholder: 'john.doe@acmeghana.com',
               controller: _emailController,
               keyType: TextInputType.emailAddress,
               validator: emailValidator,
             ),
 
-            const SizedBox(height: 20),
+            MyCustomTextField(
+              label: 'Phone Number',
+              placeholder: '+233 20 123 4567',
+              controller: _phoneController,
+              keyType: TextInputType.phone,
+            ),
+
+            const SizedBox(height: 24),
             sectionHeader(context, 'Role & Department'),
 
-            if (departments.isNotEmpty) ...[
+            if (departments.isNotEmpty)
               MyDropdownField(
                 label: 'Department',
                 placeholder: 'Assign to department',
@@ -156,34 +167,26 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
                     .map((d) => d.name)
                     .firstOrNull,
                 onChanged: (name) {
-                  final match = departments
-                      .where((d) => d.name == name)
-                      .firstOrNull;
-                  setState(() {
-                    _selectedDepartmentId = match?.id;
-                  });
+                  final match = departments.firstWhereOrNull(
+                    (d) => d.name == name,
+                  );
+                  setState(() => _selectedDepartmentId = match?.id);
                 },
               ),
-            ] else ...[
-              Padding(
-                padding: space,
-                child: sectionHeader(context, 'You have no departments'),
-              ),
 
-              Padding(padding: space),
-            ],
             MyCustomTextField(
               label: 'Job Title',
-              placeholder: 'Enter job title',
+              placeholder: 'Procurement Officer',
               controller: _jobTitleController,
               validator: (v) => v?.trim().isEmpty ?? true ? 'Required' : null,
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
             sectionHeader(context, 'Employment Details'),
+
             MyDatePicker(
               label: 'Date of Hire',
-              placeholder: 'mm/dd/yyyy',
+              placeholder: 'dd/mm/yyyy',
               lastDate: DateTime.now(),
               onDateSelected: (date) => setState(() => _hireDate = date),
             ),
@@ -191,7 +194,7 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
             MyDropdownField(
               label: 'Employment Type',
               placeholder: 'Select type',
-              items: ['Full-Time', 'Part-Time', 'Contract', 'Intern'],
+              items: const ['Full-Time', 'Part-Time', 'Contract', 'Intern'],
               initialValue: _selectedEmploymentType,
               onChanged: (v) => setState(() => _selectedEmploymentType = v),
             ),
@@ -200,7 +203,4 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
       ),
     );
   }
-
-  // ── Helpers ───────────────────────────────────────────────────
 }
-

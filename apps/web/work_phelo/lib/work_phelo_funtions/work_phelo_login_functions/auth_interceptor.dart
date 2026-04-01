@@ -2,7 +2,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'authentication_service.dart';
-import 'authentication_state.dart';
 
 class AuthInterceptor extends Interceptor {
   final Ref ref;
@@ -18,25 +17,30 @@ class AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (_isRefreshing || err.requestOptions.path.contains('/auth/refresh')) {
-      _isRefreshing = false;
+    final path = err.requestOptions.path;
+
+    if (err.response?.statusCode != 401 ||
+        path.contains('/auth/refresh') ||
+        path.contains('/auth/login') ||
+        path.contains('/auth/admin/login')) {
       handler.next(err);
       return;
     }
 
-    if (err.response?.statusCode == 401) {
-      _isRefreshing = true;
-      try {
-        await ref.read(apiServiceProvider).refreshToken();
-        _isRefreshing = false;
-        final retryRes = await ref.read(dioProvider).fetch(err.requestOptions);
-        return handler.resolve(retryRes);
-      } catch (_) {
-        _isRefreshing = false;
-        await ref.read(authNotifierProvider.notifier).logout();
-      }
+    if (_isRefreshing) {
+      handler.next(err);
+      return;
     }
 
-    handler.next(err);
+    _isRefreshing = true;
+    try {
+      await ref.read(apiServiceProvider).refreshToken();
+      final retryRes = await ref.read(dioProvider).fetch(err.requestOptions);
+      handler.resolve(retryRes);
+    } catch (_) {
+      handler.next(err);
+    } finally {
+      _isRefreshing = false;
+    }
   }
 }

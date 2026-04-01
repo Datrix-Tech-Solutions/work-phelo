@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
+import '../work_phelo_companies/employee_onboarding_functions/employee_onboarding_model.dart';
 import '../work_phelo_super_admin/company_onboarding_model.dart';
 import '../work_phelo_users/user_model.dart';
 import '../work_phelo_api/api_service.dart';
@@ -78,6 +79,44 @@ class AuthenticationService {
       return tenants
           .map((t) => CompanyModel.fromApi(t as Map<String, dynamic>))
           .toList();
+    } on DioException catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  Future<void> approveTenant(String tenantId) async {
+    try {
+      await _apiService.approveTenant(tenantId);
+    } on DioException catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  Future<void> suspendTenant(String tenantId) async {
+    try {
+      await _apiService.suspendTenant(tenantId);
+    } on DioException catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  /////////////////////////////////////////////////////////
+  Future<Map<String, dynamic>> inviteEmployee({
+    required String tenantSlug,
+    required EmployeeModel employee,
+  }) async {
+    try {
+      final data = await _apiService.inviteEmployee(
+        tenantSlug: tenantSlug,
+        email: employee.email,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        phone: employee.contact ?? '',
+        role: employee.systemRole.isNotEmpty
+            ? employee.systemRole.first
+            : 'EMPLOYEE',
+      );
+      return data;
     } on DioException catch (e) {
       throw Exception(_extractError(e));
     }

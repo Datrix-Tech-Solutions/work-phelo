@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -28,13 +30,20 @@ class _SuperAdminLayoutState extends ConsumerState<SuperAdminLayout> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
 
+    log(
+      'LAYOUT >> isLoading=${authState.isLoading}, isAuthenticated=${authState.isAuthenticated}, user=${authState.user?.email}',
+    );
+
+    if (authState.isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     if (!authState.isAuthenticated || authState.user == null) {
+      log('LAYOUT >> redirecting to login — user is null');
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) context.go('/platform/login');
       });
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     final user = authState.user!;
@@ -68,16 +77,32 @@ class _SuperAdminLayoutState extends ConsumerState<SuperAdminLayout> {
           ],
         ),
         actions: [
-          IconButton(onPressed: () {}, icon: Icon(Icons.notifications_none, color: myMainColor)),
-          IconButton(onPressed: () {}, icon: Icon(UniconsLine.setting, color: myMainColor)),
+          IconButton(
+            onPressed: () {},
+            icon: Icon(Icons.notifications_none, color: myMainColor),
+          ),
+          IconButton(
+            onPressed: () {},
+            icon: Icon(UniconsLine.setting, color: myMainColor),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
             child: UserDashIcon(
               onIconPressed: (details) {
-                UserDetailsPopup.show(context, details.globalPosition, user, ref);
+                UserDetailsPopup.show(
+                  context,
+                  details.globalPosition,
+                  user,
+                  ref,
+                );
               },
               initials: user.fullName.isNotEmpty
-                  ? user.fullName.trim().split(' ').map((e) => e[0]).take(2).join()
+                  ? user.fullName
+                        .trim()
+                        .split(' ')
+                        .map((e) => e[0])
+                        .take(2)
+                        .join()
                   : 'G',
             ),
           ),
@@ -99,7 +124,8 @@ class _SuperAdminLayoutState extends ConsumerState<SuperAdminLayout> {
     return _selectedCompany == null
         ? Center(
             child: SuperAdminPortal(
-              onCompanySelected: (company) => setState(() => _selectedCompany = company),
+              onCompanySelected: (company) =>
+                  setState(() => _selectedCompany = company),
             ),
           )
         : CompanyDetailPage(
