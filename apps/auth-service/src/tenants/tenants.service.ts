@@ -114,6 +114,10 @@ export class TenantsService {
     tenantId?: string;
   }) {
     const where: any = {};
+
+    // Always exclude the internal Datrix platform tenant
+    where.slug = { not: 'datrix-internal' };
+
     if (filters.tenantId) {
       where.id = filters.tenantId;
     }
