@@ -178,6 +178,26 @@ export class AuthController {
     return { message: 'Logged out from all devices' };
   }
 
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get current authenticated user' })
+  @ApiResponse({ status: 200, description: 'Current user returned' })
+  me(@Req() req: any) {
+    return {
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        role: req.user.role,
+        tenantId: req.user.tenantId,
+        tenantSlug: req.user.tenantSlug,
+        tenantName: req.user.tenantName,
+        firstName: req.user.firstName,
+        companyRoleId: req.user.companyRoleId,
+      },
+    };
+  }
+
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset via email link or SMS OTP' })

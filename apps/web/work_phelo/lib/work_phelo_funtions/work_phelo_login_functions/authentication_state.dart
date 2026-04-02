@@ -32,6 +32,16 @@ class AuthenticationState {
 }
 
 class AuthNotifier extends StateNotifier<AuthenticationState> {
+  AuthNotifier(this._service) : super(const AuthenticationState()) {
+    _restore();
+  }
+
+  Future<void> _restore() async {
+    final user = await _service.restoreSession();
+    if (user != null) {
+      state = state.copyWith(user: user, isLoading: false);
+    }
+  }
   final AuthenticationService _service;
   final Ref ref;
 

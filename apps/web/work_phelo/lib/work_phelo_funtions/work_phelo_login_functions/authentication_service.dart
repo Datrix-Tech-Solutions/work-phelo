@@ -78,6 +78,16 @@ class AuthenticationService {
     return e.message ?? 'An error occurred';
   }
 
+  Future<AppUserModel?> restoreSession() async {
+    try {
+      final data = await _apiService.dio.get('/auth/me');
+      final userData = (data.data as Map<String, dynamic>)['user'] as Map<String, dynamic>;
+      return AppUserModel.fromLoginResponse(userData, companyName: userData['tenantName'] as String? ?? '');
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<List<CompanyModel>> fetchTenants() async {
     try {
       final data = await _apiService.fetchTenants();
