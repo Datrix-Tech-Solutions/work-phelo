@@ -41,34 +41,50 @@ export class EmployeesService {
     const count = await this.prisma.employee.count({ where: { tenantId } });
     const employeeNumber = `EMP-${String(count + 1).padStart(4, '0')}`;
 
-    const { departmentId, userId, ...rest } = dto;
     const employee = await this.prisma.employee.create({
       data: {
-        ...rest,
         tenantId,
         employeeNumber,
-        basicSalary: dto.basicSalary,
-        hireDate: new Date(dto.hireDate),
+        userId: dto.userId ?? '',
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email,
+        phone: dto.phone,
+        gender: dto.gender,
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+        maritalStatus: dto.maritalStatus,
+        nationality: dto.nationality,
+        address: dto.address,
+        city: dto.city,
+        region: dto.region,
+        emergencyName: dto.emergencyName,
+        emergencyPhone: dto.emergencyPhone,
+        emergencyRelation: dto.emergencyRelation,
+        jobTitle: dto.jobTitle,
+        employmentType: dto.employmentType,
+        hireDate: new Date(dto.hireDate),
         probationEndsAt: dto.probationEndsAt
           ? new Date(dto.probationEndsAt)
           : undefined,
-        ...(departmentId && { department: { connect: { id: departmentId } } }),
-        ...(userId && { user: { connect: { id: userId } } }),
+        basicSalary: dto.basicSalary,
+        bankName: dto.bankName,
+        bankAccountNumber: dto.bankAccountNumber,
+        bankBranch: dto.bankBranch,
+        ssnit: dto.ssnit,
+        tinNumber: dto.tinNumber,
+        ...(dto.departmentId && { departmentId: dto.departmentId }),
       },
       include: { department: true },
     });
 
-    // If no userId provided, emit event to auth service to create user and send invite
-    if (!dto.userId) {
-      await this.rabbitmq.emitToAuth('auth.invite_employee', {
-        tenantId,
-        employeeId: employee.id,
-        email: employee.email,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-      });
-    }
+    // Emit event to auth service to create user account and send invite
+    await this.rabbitmq.emitToAuth('auth.invite_employee', {
+      tenantId,
+      employeeId: employee.id,
+      email: employee.email,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+    });
 
     return employee;
   }
