@@ -28,6 +28,19 @@ async function bootstrap() {
 
   setupSwagger(app);
 
+  // Connect as hybrid microservice to listen to RabbitMQ events
+  app.connectMicroservice({
+    transport: 'RMQ',
+    options: {
+      urls: [
+        process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
+      ],
+      queue: 'auth_queue',
+      queueOptions: { durable: true, arguments: { 'x-message-ttl': 3600000 } },
+    },
+  });
+
+  await app.startAllMicroservices();
   const port = process.env.PORT || 4001;
   await app.listen(port);
   console.log(`Auth service running on port ${port}`);

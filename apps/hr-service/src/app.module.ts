@@ -10,6 +10,7 @@ import { TimeModule } from './time/time.module';
 import { PayrollModule } from './payroll/payroll.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { RabbitMQModule } from './messaging/rabbitmq.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     PayrollModule,
     AppraisalsModule,
     DashboardModule,
+    RabbitMQModule,
   ],
   providers: [
     {

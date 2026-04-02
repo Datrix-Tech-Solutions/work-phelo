@@ -58,7 +58,7 @@ export class UsersService {
     }
 
     const inviteToken = generateSecureToken();
-    const inviteExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
 
     const user = await this.prisma.user.create({
       data: {
@@ -113,7 +113,7 @@ export class UsersService {
 
     if (!user) {
       throw new ForbiddenException(
-        'This link has already been used. Please log in or request a password reset.',
+        'This link has already been used. Please log in or reset your password.',
       );
     }
 

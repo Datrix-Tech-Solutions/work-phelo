@@ -15,8 +15,9 @@ import {
 } from '../../../prisma/generated/client';
 
 export class CreateEmployeeDto {
+  @IsOptional()
   @IsString()
-  userId!: string;
+  userId?: string;
 
   @IsString()
   firstName!: string;

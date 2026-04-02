@@ -5,6 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { LeaveService } from '../leave/leave.service';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -39,7 +40,7 @@ export class EmployeesService {
     const count = await this.prisma.employee.count({ where: { tenantId } });
     const employeeNumber = `EMP-${String(count + 1).padStart(4, '0')}`;
 
-    return this.prisma.employee.create({
+    const employee = await this.prisma.employee.create({
       data: {
         tenantId,
         employeeNumber,
@@ -51,8 +52,21 @@ export class EmployeesService {
           ? new Date(dto.probationEndsAt)
           : undefined,
       },
-      include: { department: true },
+      include: { department: true, user: { select: { id: true } } },
     });
+
+    // If no userId provided, emit event to auth service to create user and send invite
+    if (!dto.userId) {
+      await this.rabbitmq.emitToAuth('auth.invite_employee', {
+        tenantId,
+        employeeId: employee.id,
+        email: employee.email,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+      });
+    }
+
+    return employee;
   }
 
   async findAll(tenantId: string, query: QueryEmployeesDto) {
