@@ -138,6 +138,14 @@ export class UsersService {
       include: { tenant: true },
     });
 
+    // Activate tenant when Company Admin accepts invite
+    if (updated.role === 'TENANT_ADMIN') {
+      await this.prisma.tenant.update({
+        where: { id: updated.tenantId },
+        data: { status: 'ACTIVE' },
+      });
+    }
+
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {
       sub: updated.id,
