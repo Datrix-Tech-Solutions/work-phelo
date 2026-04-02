@@ -13,7 +13,24 @@ import { RabbitMQPublisher } from './rabbitmq.publisher';
             process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
           ],
           queue: 'notification_queue',
-          queueOptions: { durable: true },
+          queueOptions: {
+            durable: true,
+            arguments: { 'x-message-ttl': 3600000 },
+          },
+        },
+      },
+      {
+        name: 'AUTH_SERVICE',
+        transport: Transport.RMQ,
+        options: {
+          urls: [
+            process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
+          ],
+          queue: 'auth_queue',
+          queueOptions: {
+            durable: true,
+            arguments: { 'x-message-ttl': 3600000 },
+          },
         },
       },
     ]),
