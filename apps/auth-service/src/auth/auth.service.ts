@@ -477,33 +477,44 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    if (!dto.email || !dto.tenantSlug) {
-      throw new BadRequestException('Email and tenant slug are required');
-    }
-
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug: dto.tenantSlug },
-    });
-    if (!tenant) throw new NotFoundException('Tenant not found');
-
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
-    });
-    if (!user) throw new BadRequestException('Invalid or expired reset token');
-
     const code = dto.token || dto.otpCode;
     if (!code)
       throw new BadRequestException('Reset token or OTP code is required');
 
-    // Find the most recent unused PASSWORD_RESET OTP for this user
-    const record = await this.prisma.otpCode.findFirst({
+    // Find OTP record directly by code — no email required when token is known
+    let record = await this.prisma.otpCode.findFirst({
       where: {
-        userId: user.id,
         type: 'PASSWORD_RESET',
+        code,
         usedAt: null,
       },
       orderBy: { createdAt: 'desc' },
+      include: { user: { include: { tenant: true } } },
     });
+
+    // If email provided, scope to tenant for extra validation
+    if (dto.email && dto.tenantSlug) {
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { slug: dto.tenantSlug },
+      });
+      if (!tenant) throw new NotFoundException('Tenant not found');
+
+      const user = await this.prisma.user.findUnique({
+        where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+      });
+      if (!user)
+        throw new BadRequestException('Invalid or expired reset token');
+
+      record = await this.prisma.otpCode.findFirst({
+        where: {
+          userId: user.id,
+          type: 'PASSWORD_RESET',
+          usedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { user: { include: { tenant: true } } },
+      });
+    }
 
     if (!record) {
       throw new BadRequestException('Invalid or expired reset token');

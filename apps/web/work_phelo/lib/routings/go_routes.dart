@@ -56,7 +56,12 @@ final GoRouter router = GoRouter(
       path: '/:tenantSlug/reset-password',
       builder: (context, state) {
         final tenantSlug = state.pathParameters['tenantSlug'] ?? '';
-        return SetPasswordPage(tenantSlug: tenantSlug);
+        final token = state.uri.queryParameters['token'] ?? '';
+        return SetPasswordPage(
+          tenantSlug: tenantSlug,
+          token: token,
+          isResetFlow: true,
+        );
       },
     ),
 
