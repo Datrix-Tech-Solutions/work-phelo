@@ -34,26 +34,13 @@ class DashboardSummary {
   }
 }
 
-class DashboardSummaryNotifier extends StateNotifier<AsyncValue<DashboardSummary>> {
-  final Dio _dio;
-
-  DashboardSummaryNotifier(this._dio) : super(const AsyncValue.loading()) {
-    fetch();
-  }
-
-  Future<void> fetch() async {
-    state = const AsyncValue.loading();
-    try {
-      final response = await _dio.get('/hr/dashboard/summary');
-      final data = response.data as Map<String, dynamic>;
-      state = AsyncValue.data(DashboardSummary.fromJson(data));
-    } on DioException catch (e) {
-      state = AsyncValue.error(e, StackTrace.current);
-    }
-  }
-}
-
-final dashboardSummaryProvider = StateNotifierProvider<DashboardSummaryNotifier, AsyncValue<DashboardSummary>>((ref) {
+final dashboardSummaryProvider = FutureProvider<DashboardSummary>((ref) async {
   final dio = ref.read(dioProvider);
-  return DashboardSummaryNotifier(dio);
+  try {
+    final response = await dio.get('/hr/dashboard/summary');
+    final data = response.data as Map<String, dynamic>;
+    return DashboardSummary.fromJson(data);
+  } on DioException {
+    return const DashboardSummary();
+  }
 });

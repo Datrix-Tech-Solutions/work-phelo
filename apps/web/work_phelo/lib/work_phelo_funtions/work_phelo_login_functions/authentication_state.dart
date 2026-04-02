@@ -42,10 +42,6 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
       state = state.copyWith(user: user, isLoading: false);
     }
   }
-  final AuthenticationService _service;
-  final Ref ref;
-
-  AuthNotifier(this._service, this.ref) : super(const AuthenticationState());
 
   // Super Admin Login
   Future<void> loginSuperAdmin({

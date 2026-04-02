@@ -49,7 +49,11 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
     final users = ref.watch(usersByTenantProvider(user.tenantSlug));
     final assetCount = ref.watch(tenantAssetsCountProvider(user.tenantSlug));
     final summaryAsync = ref.watch(dashboardSummaryProvider);
-    final summary = summaryAsync.valueOrNull;
+    final summary = summaryAsync.when(
+      data: (s) => s,
+      loading: () => null,
+      error: (_, __) => null,
+    );
 
     return Scaffold(
       appBar: AppBar(
