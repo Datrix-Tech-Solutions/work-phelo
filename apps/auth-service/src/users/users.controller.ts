@@ -24,6 +24,8 @@ import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
@@ -61,6 +63,27 @@ export class UsersController {
   @ApiResponse({ status: 409, description: 'User already exists in tenant' })
   invite(@Body() dto: InviteUserDto, @Req() req: any) {
     return this.usersService.invite(req.user.tenantId, dto);
+  }
+
+  @Post('assign-admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'SuperAdmin assigns a Company Admin to a tenant' })
+  @ApiResponse({
+    status: 201,
+    description: 'Company Admin invited successfully',
+  })
+  assignAdmin(
+    @Body() dto: InviteUserDto & { tenantId: string },
+    @Req() req: any,
+  ) {
+    const tenantId = dto.tenantId;
+    const { tenantId: _, ...inviteDto } = dto;
+    return this.usersService.invite(tenantId, {
+      ...inviteDto,
+      role: 'TENANT_ADMIN',
+    } as any);
   }
 
   @Post('accept-invite')

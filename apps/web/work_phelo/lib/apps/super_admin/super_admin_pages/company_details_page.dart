@@ -134,7 +134,7 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
                         final tenantId = widget.company.tenantId;
                         if (tenantId == null) return;
                         final dio = ref.read(dioProvider);
-                        await dio.post('/auth/users/invite', data: {
+                        await dio.post('/auth/users/assign-admin', data: {
                           'email': data['email'],
                           'firstName': data['firstName'],
                           'lastName': data['lastName'],
