@@ -15,6 +15,27 @@ All requests go through the API Gateway at /api/v1/auth/...
 
 **Example:** POST http://157.245.220.205/api/v1/auth/login
 
+### Sprint 1 — Key Flows
+
+**1. SuperAdmin Registration of Tenant**
+- POST /auth/admin/login → get token
+- POST /auth/tenants/register → creates tenant + sends invite email
+
+**2. Tenant Admin Onboarding**
+- GET email invite link → POST /auth/users/accept-invite → auto-login
+
+**3. Tenant Login**
+- POST /auth/login with tenantSlug
+
+**4. Forgot Password**
+- POST /auth/forgot-password → OTP sent to email
+- POST /auth/reset-password with OTP token
+
+**5. Session Management**
+- POST /auth/refresh → rotate tokens
+- POST /auth/logout → revoke session
+- GET /auth/me → get current user
+
 ### Authentication
 All protected endpoints require a valid JWT token either via:
 - **Cookie**: \`access_token\` (set automatically on login)

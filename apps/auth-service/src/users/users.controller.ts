@@ -70,9 +70,25 @@ export class UsersController {
   @Roles('SUPER_ADMIN')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'SuperAdmin assigns a Company Admin to a tenant' })
+  @ApiBody({
+    schema: {
+      example: {
+        tenantId: 'uuid-of-target-tenant',
+        email: 'admin@companyname.com',
+        firstName: 'Abena',
+        lastName: 'Mensah',
+        role: 'TENANT_ADMIN',
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
     description: 'Company Admin invited successfully',
+  })
+  @ApiResponse({ status: 409, description: 'Company already has an admin' })
+  @ApiResponse({
+    status: 403,
+    description: 'SuperAdmin email cannot be assigned',
   })
   assignAdmin(
     @Body() dto: InviteUserDto & { tenantId: string },
