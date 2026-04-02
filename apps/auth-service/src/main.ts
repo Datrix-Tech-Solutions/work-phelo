@@ -29,8 +29,8 @@ async function bootstrap() {
   setupSwagger(app);
 
   // Connect as hybrid microservice to listen to RabbitMQ events
-  app.connectMicroservice({
-    transport: 'RMQ',
+  app.connectMicroservice<any>({
+    transport: Transport.RMQ,
     options: {
       urls: [
         process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
