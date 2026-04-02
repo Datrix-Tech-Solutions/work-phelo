@@ -36,14 +36,11 @@ export class PayrollController {
       'Run payroll for a given period — Ghana GRA tax calculations applied',
   })
   @ApiBody({
-    examples: {
-      april2026: {
-        summary: 'April 2026 Payroll',
-        value: {
-          month: 4,
-          year: 2026,
-          description: 'April 2026 monthly payroll',
-        },
+    schema: {
+      example: {
+        month: 4,
+        year: 2026,
+        description: 'April 2026 monthly payroll',
       },
     },
   })

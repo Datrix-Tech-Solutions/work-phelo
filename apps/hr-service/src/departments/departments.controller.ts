@@ -32,27 +32,10 @@ export class DepartmentsController {
   @Post()
   @ApiOperation({ summary: 'Create a new department' })
   @ApiBody({
-    examples: {
-      hr: {
-        summary: 'HR Department',
-        value: {
-          name: 'Human Resources',
-          description: 'HR and people management',
-        },
-      },
-      finance: {
-        summary: 'Finance Department',
-        value: {
-          name: 'Finance',
-          description: 'Accounting and financial operations',
-        },
-      },
-      engineering: {
-        summary: 'Engineering Department',
-        value: {
-          name: 'Engineering',
-          description: 'Software development team',
-        },
+    schema: {
+      example: {
+        name: 'Human Resources',
+        description: 'HR and people management',
       },
     },
   })

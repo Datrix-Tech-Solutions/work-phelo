@@ -80,15 +80,12 @@ export class LeaveController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Submit a leave request' })
   @ApiBody({
-    examples: {
+    schema: {
       example: {
-        summary: 'Annual leave request',
-        value: {
-          leaveTypeId: 'replace-with-leave-type-id',
-          startDate: '2026-04-10',
-          endDate: '2026-04-14',
-          reason: 'Family vacation',
-        },
+        name: 'Annual Leave',
+        defaultDays: 21,
+        isPaid: True,
+        description: 'Yearly annual leave',
       },
     },
   })
