@@ -78,7 +78,7 @@ export class EmployeesService {
     });
 
     // Emit event to auth service to create user account and send invite
-    await this.rabbitmq.emitToAuth('auth.invite_employee', {
+    this.rabbitmq.emitToAuth('auth.invite_employee', {
       tenantId,
       employeeId: employee.id,
       email: employee.email,
