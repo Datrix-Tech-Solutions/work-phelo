@@ -37,7 +37,48 @@ export class EmployeesController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new employee profile' })
-  @ApiBody({ type: CreateEmployeeDto })
+  @ApiBody({
+    examples: {
+      kofi: {
+        summary: 'Create Kofi Boateng',
+        value: {
+          userId: 'b23af225-01e8-45c1-9509-2caf8872b82c',
+          firstName: 'Kofi',
+          lastName: 'Boateng',
+          email: 'kofi.boateng@acmeghana.com',
+          phone: '+233244000003',
+          gender: 'MALE',
+          dateOfBirth: '1990-05-15',
+          jobTitle: 'Software Engineer',
+          employmentType: 'FULL_TIME',
+          hireDate: '2024-01-15',
+          basicSalary: 5000,
+          departmentId: 'e9f919c4-6463-48a3-a6fa-a7afa36b88c7',
+          bankName: 'GCB Bank',
+          bankAccountNumber: '1234567890',
+          ssnit: 'P00123456',
+          tinNumber: 'P0012345678',
+        },
+      },
+      ama: {
+        summary: 'Create Ama Owusu',
+        value: {
+          userId: 'c312a870-9c17-45ae-bc3f-48848b6aa020',
+          firstName: 'Ama',
+          lastName: 'Owusu',
+          email: 'ama.owusu@acmeghana.com',
+          phone: '+233244000004',
+          gender: 'FEMALE',
+          dateOfBirth: '1993-08-22',
+          jobTitle: 'HR Officer',
+          employmentType: 'FULL_TIME',
+          hireDate: '2024-03-01',
+          basicSalary: 4000,
+          departmentId: 'e9f919c4-6463-48a3-a6fa-a7afa36b88c7',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Employee created successfully' })
   @ApiResponse({
     status: 409,
