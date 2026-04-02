@@ -146,7 +146,7 @@ model Department {
 model Employee {
   id                String           @id @default(uuid())
   tenantId          String
-  userId            String           @unique
+  userId            String?          @unique
   employeeNumber    String
   firstName         String
   lastName          String
