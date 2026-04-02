@@ -41,6 +41,8 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
     if (user != null) {
       state = state.copyWith(user: user, isLoading: false);
     }
+
+  final AuthenticationService _service;
   }
 
   // Super Admin Login
