@@ -124,6 +124,7 @@ class CompanyModel {
       status: status ?? this.status,
       systemRole: systemRole ?? this.systemRole,
       enabledModules: enabledModules ?? this.enabledModules,
+      slug: slug ?? this.slug,
     );
   }
 
