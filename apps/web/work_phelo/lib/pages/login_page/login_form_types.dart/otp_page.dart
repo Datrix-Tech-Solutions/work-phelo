@@ -264,42 +264,24 @@ class _ResetPasswordCodePageState extends ConsumerState<ResetPasswordCodePage> {
     if (otp.length != 6 || isVerifying) return;
     setState(() { isVerifying = true; _showBanner = false; });
 
-    try {
-      final dio = ref.read(dioProvider);
-      await dio.post('/auth/reset-password', data: {
-        'email': widget.email,
-        'tenantSlug': widget.tenantSlug,
-        'token': otp,
-        'newPassword': '__otp_check_only__',
-      });
-    } on DioException catch (e) {
-      final data = e.response?.data;
-      final msg = data is Map ? data['message']?.toString() ?? 'Invalid code' : 'Invalid code';
+    // Don't call the API here — just pass the OTP to SetPasswordPage
+    // The actual verification happens when the user submits their new password
+    await Future.delayed(const Duration(milliseconds: 300));
 
-      if (e.response?.statusCode == 400 &&
-          !msg.contains('expired') &&
-          !msg.contains('Incorrect') &&
-          !msg.contains('locked') &&
-          !msg.contains('Invalid or expired')) {
-        if (mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => SetPasswordPage(
-                tenantSlug: widget.tenantSlug,
-                token: otp,
-                isResetFlow: true,
-              ),
-            ),
-          );
-        }
-        setState(() => isVerifying = false);
-        return;
-      }
-      _showMessage(msg, isSuccess: false);
-    } finally {
-      if (mounted) setState(() => isVerifying = false);
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => SetPasswordPage(
+            tenantSlug: widget.tenantSlug,
+            token: otp,
+            isResetFlow: true,
+          ),
+        ),
+      );
     }
+
+    setState(() => isVerifying = false);
   }
 
   Future<void> _resendOtp() async {
