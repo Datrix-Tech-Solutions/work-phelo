@@ -40,7 +40,6 @@ export class EmployeesController {
   @ApiBody({
     schema: {
       example: {
-        userId: 'b23af225-01e8-45c1-9509-2caf8872b82c',
         firstName: 'Kofi',
         lastName: 'Boateng',
         email: 'kofi.boateng@acmeghana.com',
