@@ -35,7 +35,18 @@ export class PayrollController {
     summary:
       'Run payroll for a given period — Ghana GRA tax calculations applied',
   })
-  @ApiBody({ type: RunPayrollDto })
+  @ApiBody({
+    examples: {
+      april2026: {
+        summary: 'April 2026 Payroll',
+        value: {
+          month: 4,
+          year: 2026,
+          description: 'April 2026 monthly payroll',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Payroll run created successfully' })
   @ApiResponse({ status: 400, description: 'No active employees found' })
   runPayroll(@Body() dto: RunPayrollDto, @Req() req: any) {

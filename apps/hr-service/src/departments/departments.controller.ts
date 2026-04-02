@@ -31,7 +31,31 @@ export class DepartmentsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a new department' })
-  @ApiBody({ type: CreateDepartmentDto })
+  @ApiBody({
+    examples: {
+      hr: {
+        summary: 'HR Department',
+        value: {
+          name: 'Human Resources',
+          description: 'HR and people management',
+        },
+      },
+      finance: {
+        summary: 'Finance Department',
+        value: {
+          name: 'Finance',
+          description: 'Accounting and financial operations',
+        },
+      },
+      engineering: {
+        summary: 'Engineering Department',
+        value: {
+          name: 'Engineering',
+          description: 'Software development team',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Department created successfully' })
   @ApiResponse({ status: 409, description: 'Department name already exists' })
   create(@Body() dto: CreateDepartmentDto, @Req() req: any) {

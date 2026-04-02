@@ -79,7 +79,19 @@ export class LeaveController {
   @Post('requests')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Submit a leave request' })
-  @ApiBody({ type: CreateLeaveRequestDto })
+  @ApiBody({
+    examples: {
+      example: {
+        summary: 'Annual leave request',
+        value: {
+          leaveTypeId: 'replace-with-leave-type-id',
+          startDate: '2026-04-10',
+          endDate: '2026-04-14',
+          reason: 'Family vacation',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 201, description: 'Leave request submitted' })
   @ApiResponse({ status: 400, description: 'Insufficient leave balance' })
   createRequest(@Body() dto: CreateLeaveRequestDto, @Req() req: any) {
