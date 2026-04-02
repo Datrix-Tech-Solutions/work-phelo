@@ -33,8 +33,9 @@ class AuthenticationState {
 
 class AuthNotifier extends StateNotifier<AuthenticationState> {
   final AuthenticationService _service;
+  final Ref _ref;
 
-  AuthNotifier(this._service) : super(const AuthenticationState()) {
+  AuthNotifier(this._service, this._ref) : super(const AuthenticationState()) {
     _restore();
   }
 
@@ -115,9 +116,9 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
 
     // ── Route back to the correct login page ──
     if (isSuperAdmin) {
-      ref.read(goRouterProvider).go('/platform/login');
+      _ref.read(goRouterProvider).go('/platform/login');
     } else if (tenantSlug != null && tenantSlug.isNotEmpty) {
-      ref.read(goRouterProvider).go('/$tenantSlug/login');
+      _ref.read(goRouterProvider).go('/$tenantSlug/login');
     }
   }
 
@@ -131,5 +132,5 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
 
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AuthenticationState>((ref) {
-      return AuthNotifier(ref.read(authenticationServiceProvider));
+      return AuthNotifier(ref.read(authenticationServiceProvider), ref);
     });
