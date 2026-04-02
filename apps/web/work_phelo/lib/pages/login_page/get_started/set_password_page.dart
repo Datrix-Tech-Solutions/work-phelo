@@ -81,13 +81,19 @@ class _SetPasswordPageState extends ConsumerState<SetPasswordPage> {
 
     try {
       final dio = ref.read(dioProvider);
-      await dio.post(
-        '/auth/reset-password',
-        data: {
+      if (widget.isResetFlow) {
+        await dio.post('/auth/reset-password', data: {
           'tenantSlug': widget.tenantSlug,
           'token': widget.token,
           'newPassword': _passwordController.text,
-        },
+        });
+      } else {
+        await dio.post('/auth/users/accept-invite', data: {
+          'inviteToken': widget.token,
+          'password': _passwordController.text,
+        });
+      }
+      // ignore:
       );
 
       if (mounted) {

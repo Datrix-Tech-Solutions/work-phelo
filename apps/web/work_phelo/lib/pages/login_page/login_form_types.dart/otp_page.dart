@@ -1,4 +1,7 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../work_phelo_funtions/work_phelo_login_functions/authentication_service.dart';
 import 'package:work_phelo/pages/login_page/get_started/set_password_page.dart';
 import 'package:work_phelo/work_phelo_components/theme/miscellaneouse.dart';
 import 'package:work_phelo/work_phelo_funtions/work_phelo_users/user_model.dart';
@@ -207,8 +210,9 @@ class _OTPPageState extends State<OTPPage> {
 ///
 //RESET PASSWORD CODE PAGE
 
-class ResetPasswordCodePage extends StatefulWidget {
+class ResetPasswordCodePage extends ConsumerStatefulWidget {
   final String email;
+  final String tenantSlug;
   final String role;
   final String fullName;
   final String companyName;
@@ -216,23 +220,22 @@ class ResetPasswordCodePage extends StatefulWidget {
   const ResetPasswordCodePage({
     super.key,
     required this.email,
+    this.tenantSlug = '',
     required this.role,
     required this.fullName,
     required this.companyName,
   });
 
   @override
-  State<ResetPasswordCodePage> createState() => _ResetPasswordCodePageState();
+  ConsumerState<ResetPasswordCodePage> createState() => _ResetPasswordCodePageState();
 }
 
-class _ResetPasswordCodePageState extends State<ResetPasswordCodePage> {
+class _ResetPasswordCodePageState extends ConsumerState<ResetPasswordCodePage> {
   late final TextEditingController _otpController;
   bool isVerifying = false;
   bool _showBanner = false;
   bool _isSuccess = false;
   String? _bannerMessage;
-
-  final String _mockCorrectOtp = '123456';
 
   @override
   void initState() {
@@ -252,58 +255,68 @@ class _ResetPasswordCodePageState extends State<ResetPasswordCodePage> {
       _isSuccess = isSuccess;
       _bannerMessage = message;
     });
-
     Future.delayed(const Duration(seconds: 5), () {
-      if (mounted) {
-        setState(() => _showBanner = false);
-      }
+      if (mounted) setState(() => _showBanner = false);
     });
-  }
-
-  void _clearMessage() {
-    if (mounted) {
-      setState(() => _showBanner = false);
-    }
   }
 
   Future<void> _verifyOtp(String otp) async {
     if (otp.length != 6 || isVerifying) return;
+    setState(() { isVerifying = true; _showBanner = false; });
 
-    final navigator = Navigator.of(context);
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.post('/auth/reset-password', data: {
+        'email': widget.email,
+        'tenantSlug': widget.tenantSlug,
+        'token': otp,
+        'newPassword': '__otp_check_only__',
+      });
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final msg = data is Map ? data['message']?.toString() ?? 'Invalid code' : 'Invalid code';
 
-    setState(() {
-      isVerifying = true;
-      _clearMessage();
-    });
-
-    await Future.delayed(const Duration(seconds: 3));
-
-    if (!mounted) return;
-
-    if (otp == _mockCorrectOtp) {
-      navigator.pushReplacement(
-        MaterialPageRoute(builder: (context) => ResetPassword()),
-      );
-    } else {
-      _otpController.clear();
-      _showMessage("Invalid reset code", isSuccess: false);
+      if (e.response?.statusCode == 400 &&
+          !msg.contains('expired') &&
+          !msg.contains('Incorrect') &&
+          !msg.contains('locked') &&
+          !msg.contains('Invalid or expired')) {
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => SetPasswordPage(
+                tenantSlug: widget.tenantSlug,
+                token: otp,
+                isResetFlow: true,
+              ),
+            ),
+          );
+        }
+        setState(() => isVerifying = false);
+        return;
+      }
+      _showMessage(msg, isSuccess: false);
+    } finally {
+      if (mounted) setState(() => isVerifying = false);
     }
-
-    setState(() => isVerifying = false);
   }
 
   Future<void> _resendOtp() async {
     if (isVerifying) return;
-
-    await Future.delayed(const Duration(seconds: 3));
-
-    if (!mounted) return;
-
-    _otpController.clear();
-    _showMessage(
-      "A new code has been sent to ${widget.email}",
-      isSuccess: true,
-    );
+    try {
+      final dio = ref.read(dioProvider);
+      await dio.post('/auth/forgot-password', data: {
+        'email': widget.email,
+        'tenantSlug': widget.tenantSlug,
+      });
+      _otpController.clear();
+      _showMessage('A new code has been sent to \${widget.email}', isSuccess: true);
+    } on DioException catch (e) {
+      final data = e.response?.data;
+      final msg = data is Map ? data['message']?.toString() ?? 'Failed to resend' : 'Failed to resend';
+      _showMessage(msg, isSuccess: false);
+    }
   }
 
   @override
@@ -311,7 +324,7 @@ class _ResetPasswordCodePageState extends State<ResetPasswordCodePage> {
     return AuthLayout(
       stateBanner: _showBanner
           ? MySnackBar(
-              snackMessage: _bannerMessage ?? "Operation completed",
+              snackMessage: _bannerMessage ?? 'Operation completed',
               type: _isSuccess ? SnackBarType.success : SnackBarType.error,
             )
           : null,
@@ -322,20 +335,19 @@ class _ResetPasswordCodePageState extends State<ResetPasswordCodePage> {
             Text('Verify', style: myLargeTextStyle(context)),
             Padding(padding: space),
             Text(
-              'We have a sent a password reset code\nto your email',
+              'We have sent a password reset code to your email',
               textAlign: TextAlign.center,
               style: myMainTextStyle(context).copyWith(
                 fontWeight: FontWeight.normal,
                 color: ColorScheme.of(context).outline,
               ),
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             OtpTextBoxes(
               length: 6,
               controller: _otpController,
               onCompleted: _verifyOtp,
             ),
-
             MyButton(
               btnText: 'Verify',
               loadingText: 'Verifying...',

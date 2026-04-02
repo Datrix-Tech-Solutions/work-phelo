@@ -154,7 +154,7 @@ class _TenantLoginPageState extends ConsumerState<TenantLoginPage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const EmailConfirmationForReset(),
+                      builder: (_) => EmailConfirmationForReset(tenantSlug: widget.tenantSlug),
                     ),
                   );
                 },
