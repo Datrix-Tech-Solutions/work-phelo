@@ -96,7 +96,7 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
     try {
       await ref
           .read(companyProvider.notifier)
-          .toggleCompanyStatus(widget.company);
+          .toggleCompanyStatus(liveCompany);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
