@@ -52,6 +52,7 @@ class CompanyModel {
   final String systemRole;
   final String adminPassword;
   final List<String> enabledModules;
+  final String? slug;
 
   CompanyModel({
     required this.companyName,
@@ -70,6 +71,7 @@ class CompanyModel {
     required this.systemRole,
     required this.adminPassword,
     this.enabledModules = const [],
+    this.slug,
   });
 
   // ── Computed getters ────────────────────────────────────────
@@ -80,7 +82,7 @@ class CompanyModel {
     return parts.length == 2 ? parts[1] : '';
   }
 
-  String get tenantSlug => companyName
+  String get tenantSlug => slug ?? companyName
       .trim()
       .toLowerCase()
       .replaceAll(RegExp(r'\s+'), '-')
@@ -209,6 +211,7 @@ class CompanyModel {
           ? DateTime.parse(json['createdAt'] as String)
           : null,
       enabledModules: const [],
+      slug: json['slug'] as String?,
     );
   }
 }

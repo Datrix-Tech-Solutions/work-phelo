@@ -131,7 +131,9 @@ class CompanyNotifier extends StateNotifier<CompanyState> {
     state = state.copyWith(
       companies: state.companies
           .map(
-            (c) => c.tenantSlug == tenantSlug ? c.copyWith(status: status) : c,
+            (c) => c.tenantSlug == tenantSlug || c.tenantId == tenantSlug
+                ? c.copyWith(status: status)
+                : c,
           )
           .toList(),
     );
@@ -161,10 +163,10 @@ class CompanyNotifier extends StateNotifier<CompanyState> {
     try {
       if (isActive) {
         await _authService.suspendTenant(tenantId);
-        setStatus(company.tenantSlug, CompanyStatus.suspended);
+        setStatus(tenantId, CompanyStatus.suspended);
       } else {
         await _authService.approveTenant(tenantId);
-        setStatus(company.tenantSlug, CompanyStatus.active);
+        setStatus(tenantId, CompanyStatus.active);
       }
     } catch (e) {
       state = state.copyWith(
