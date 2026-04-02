@@ -17,12 +17,21 @@ import '../login_utils/validators.dart';
 class SetPasswordPage extends ConsumerStatefulWidget {
   final String tenantSlug;
   final String token;
+  final bool isResetFlow;
+  final String email;
 
-  const SetPasswordPage({super.key, required this.tenantSlug, this.token = ''});
+  const SetPasswordPage({
+    super.key,
+    required this.tenantSlug,
+    this.token = '',
+    this.isResetFlow = false,
+    this.email = '',
+  });
 
   @override
   ConsumerState<SetPasswordPage> createState() => _SetPasswordPageState();
 }
+
 
 class _SetPasswordPageState extends ConsumerState<SetPasswordPage> {
   bool isLoading = false;
@@ -94,8 +103,6 @@ class _SetPasswordPageState extends ConsumerState<SetPasswordPage> {
           'password': _passwordController.text,
         });
       }
-      // ignore:
-      );
 
       if (mounted) {
         setState(() => _successMessage = 'Password set! Redirecting...');
