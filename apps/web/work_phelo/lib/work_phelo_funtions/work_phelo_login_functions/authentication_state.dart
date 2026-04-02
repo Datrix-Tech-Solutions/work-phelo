@@ -32,6 +32,8 @@ class AuthenticationState {
 }
 
 class AuthNotifier extends StateNotifier<AuthenticationState> {
+  final AuthenticationService _service;
+
   AuthNotifier(this._service) : super(const AuthenticationState()) {
     _restore();
   }
@@ -41,8 +43,6 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
     if (user != null) {
       state = state.copyWith(user: user, isLoading: false);
     }
-
-  final AuthenticationService _service;
   }
 
   // Super Admin Login
@@ -131,5 +131,5 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
 
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AuthenticationState>((ref) {
-      return AuthNotifier(ref.read(authenticationServiceProvider), ref);
+      return AuthNotifier(ref.read(authenticationServiceProvider));
     });
