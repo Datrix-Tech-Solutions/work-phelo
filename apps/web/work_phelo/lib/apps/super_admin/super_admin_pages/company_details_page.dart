@@ -42,6 +42,12 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
     final authState = ref.watch(authNotifierProvider);
     final currentUser = authState.user;
 
+    // Watch live company state so UI updates on status change
+    final liveCompany = ref.watch(companyProvider).companies.firstWhere(
+      (c) => c.tenantId == widget.company.tenantId,
+      orElse: () => widget.company,
+    );
+
     if (currentUser == null) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -84,7 +90,7 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
 
         // Top bar — status + actions
         CompanyCard(
-          company: widget.company,
+          company: liveCompany,
           onDelete: () {},
           onToggleStatus: () async {
     try {
@@ -110,7 +116,7 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
             children: [
               Expanded(
                 child: CompanyDetailCard(
-                  company: widget.company,
+                  company: liveCompany,
                   onEdit: () => _panel.show(
                     context: context,
                     formTitle: 'Company Editing Form',
@@ -160,7 +166,7 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
               ),
               Expanded(
                 child: ModuleConfigCard(
-                  company: widget.company,
+                  company: liveCompany,
                   onOpenModule: (String moduleKey) {
                     _panel.show(
                       context: context,
