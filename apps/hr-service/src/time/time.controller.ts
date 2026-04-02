@@ -1,4 +1,12 @@
-import { ApiTags } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
+  ApiQuery,
+} from '@nestjs/swagger';
 import {
   Controller,
   Get,
@@ -19,14 +27,19 @@ import { ReviewCorrectionDto } from './dto/review-correction.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('utime')
+@ApiTags('Time')
 @Controller('time')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('access-token')
 export class TimeController {
   constructor(private readonly timeService: TimeService) {}
 
   @Post('clock-in')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clock in for the day' })
+  @ApiBody({ type: ClockInDto })
+  @ApiResponse({ status: 200, description: 'Clocked in successfully' })
+  @ApiResponse({ status: 409, description: 'Already clocked in today' })
   clockIn(@Body() dto: ClockInDto, @Req() req: any) {
     return this.timeService.clockIn(
       req.user.tenantId,
@@ -38,16 +51,40 @@ export class TimeController {
 
   @Post('clock-out')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Clock out for the day' })
+  @ApiResponse({ status: 200, description: 'Clocked out successfully' })
+  @ApiResponse({ status: 400, description: 'Not clocked in today' })
   clockOut(@Req() req: any) {
     return this.timeService.clockOut(req.user.tenantId, req.user.id);
   }
 
   @Get('today')
+  @ApiOperation({
+    summary: "Get today's clock status for the logged-in employee",
+  })
+  @ApiResponse({ status: 200, description: "Today's clock status retrieved" })
   getTodayStatus(@Req() req: any) {
     return this.timeService.getTodayStatus(req.user.tenantId, req.user.id);
   }
 
   @Get('attendance')
+  @ApiOperation({ summary: 'Get attendance records with date range filter' })
+  @ApiQuery({
+    name: 'employeeId',
+    required: false,
+    description: 'Filter by employee',
+  })
+  @ApiQuery({
+    name: 'from',
+    required: false,
+    description: 'Start date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'to',
+    required: false,
+    description: 'End date (YYYY-MM-DD)',
+  })
+  @ApiResponse({ status: 200, description: 'Attendance records retrieved' })
   getAttendance(
     @Query('employeeId') employeeId: string,
     @Query('from') from: string,
@@ -63,6 +100,9 @@ export class TimeController {
 
   @Post('corrections')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Submit a time correction request' })
+  @ApiBody({ type: TimeCorrectionDto })
+  @ApiResponse({ status: 201, description: 'Time correction submitted' })
   submitCorrection(@Body() dto: TimeCorrectionDto, @Req() req: any) {
     return this.timeService.submitTimeCorrection(
       req.user.tenantId,
@@ -72,11 +112,22 @@ export class TimeController {
   }
 
   @Get('corrections')
+  @ApiOperation({ summary: 'List time correction requests' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['PENDING', 'APPROVED', 'REJECTED'],
+  })
+  @ApiResponse({ status: 200, description: 'Corrections retrieved' })
   getCorrections(@Query('status') status: string, @Req() req: any) {
     return this.timeService.getTimeCorrections(req.user.tenantId, { status });
   }
 
   @Patch('corrections/:id/review')
+  @ApiOperation({ summary: 'Approve or reject a time correction' })
+  @ApiParam({ name: 'id', description: 'Time correction UUID' })
+  @ApiBody({ type: ReviewCorrectionDto })
+  @ApiResponse({ status: 200, description: 'Correction reviewed' })
   reviewCorrection(
     @Param('id') id: string,
     @Body() dto: ReviewCorrectionDto,
@@ -92,11 +143,17 @@ export class TimeController {
 
   @Post('schedules')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a shift schedule for an employee' })
+  @ApiBody({ type: CreateScheduleDto })
+  @ApiResponse({ status: 201, description: 'Schedule created' })
   createSchedule(@Body() dto: CreateScheduleDto, @Req() req: any) {
     return this.timeService.createSchedule(req.user.tenantId, req.user.id, dto);
   }
 
   @Get('schedules')
+  @ApiOperation({ summary: 'Get shift schedules' })
+  @ApiQuery({ name: 'employeeId', required: false })
+  @ApiResponse({ status: 200, description: 'Schedules retrieved' })
   getSchedules(@Query('employeeId') employeeId: string, @Req() req: any) {
     return this.timeService.getSchedules(req.user.tenantId, employeeId);
   }

@@ -15,6 +15,49 @@ All requests go through the API Gateway at /api/v1/hr/...
 
 **Example:** GET http://157.245.220.205/api/v1/hr/dashboard/summary
 
+### Available Modules
+
+**Dashboard**
+- GET /hr/dashboard/summary — Company Admin dashboard stats
+
+**Employees**
+- POST /hr/employees — Create employee profile
+- GET /hr/employees — List all employees
+- GET /hr/employees/me — My profile
+- GET /hr/employees/:id — Get employee
+- PATCH /hr/employees/:id — Update employee
+- PATCH /hr/employees/:id/offboard — Offboard employee
+
+**Departments**
+- POST /hr/departments — Create department
+- GET /hr/departments — List departments
+- PATCH /hr/departments/:id — Update department
+- DELETE /hr/departments/:id — Delete department
+
+**Leave**
+- POST /hr/leave/types — Create leave type
+- GET /hr/leave/types — List leave types
+- POST /hr/leave/requests — Submit leave request
+- GET /hr/leave/requests/my — My leave requests
+- PATCH /hr/leave/requests/:id/review — Approve/reject
+
+**Time & Attendance**
+- POST /hr/time/clock-in — Clock in
+- POST /hr/time/clock-out — Clock out
+- GET /hr/time/today — Today status
+- GET /hr/time/attendance — Attendance records
+
+**Payroll** (Ghana GRA compliant)
+- POST /hr/payroll/run — Run payroll
+- GET /hr/payroll — List payroll runs
+- PATCH /hr/payroll/:id/approve — Approve payroll
+- GET /hr/payroll/my-payslips — My payslips
+
+**Appraisals**
+- POST /hr/appraisals/cycles — Create cycle
+- POST /hr/appraisals/cycles/:id/start — Start cycle
+- PATCH /hr/appraisals/:id/self-assessment — Submit self review
+
 ### Authentication
 All endpoints require a valid JWT token via:
 - **Cookie**: \`access_token\`

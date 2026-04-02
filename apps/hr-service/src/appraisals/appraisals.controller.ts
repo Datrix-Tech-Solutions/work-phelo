@@ -1,4 +1,11 @@
-import { ApiTags } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
+} from '@nestjs/swagger';
 import {
   Controller,
   Get,
@@ -16,14 +23,18 @@ import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@ApiTags('uappraisals')
+@ApiTags('Appraisals')
 @Controller('appraisals')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth('access-token')
 export class AppraisalsController {
   constructor(private readonly appraisalsService: AppraisalsService) {}
 
   @Post('cycles')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a new appraisal cycle' })
+  @ApiBody({ type: CreateAppraisalCycleDto })
+  @ApiResponse({ status: 201, description: 'Appraisal cycle created' })
   createCycle(@Body() dto: CreateAppraisalCycleDto, @Req() req: any) {
     return this.appraisalsService.createCycle(
       req.user.tenantId,
@@ -33,21 +44,35 @@ export class AppraisalsController {
   }
 
   @Get('cycles')
+  @ApiOperation({ summary: 'List all appraisal cycles for the tenant' })
+  @ApiResponse({ status: 200, description: 'Appraisal cycles retrieved' })
   getCycles(@Req() req: any) {
     return this.appraisalsService.getCycles(req.user.tenantId);
   }
 
   @Post('cycles/:id/start')
+  @ApiOperation({
+    summary:
+      'Start an appraisal cycle — generates appraisal records for all employees',
+  })
+  @ApiParam({ name: 'id', description: 'Appraisal cycle UUID' })
+  @ApiResponse({ status: 200, description: 'Appraisal cycle started' })
+  @ApiResponse({ status: 404, description: 'Cycle not found' })
   startCycle(@Param('id') id: string, @Req() req: any) {
     return this.appraisalsService.startCycle(req.user.tenantId, id);
   }
 
   @Get('cycles/:cycleId/appraisals')
+  @ApiOperation({ summary: 'Get all appraisal records for a cycle' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiResponse({ status: 200, description: 'Appraisals retrieved' })
   getAppraisals(@Param('cycleId') cycleId: string, @Req() req: any) {
     return this.appraisalsService.getAppraisals(req.user.tenantId, cycleId);
   }
 
   @Get('my')
+  @ApiOperation({ summary: "Get the logged-in employee's own appraisals" })
+  @ApiResponse({ status: 200, description: 'My appraisals retrieved' })
   getMyAppraisals(@Req() req: any) {
     return this.appraisalsService.getMyAppraisals(
       req.user.tenantId,
@@ -56,6 +81,10 @@ export class AppraisalsController {
   }
 
   @Patch(':id/self-assessment')
+  @ApiOperation({ summary: 'Submit self-assessment for an appraisal' })
+  @ApiParam({ name: 'id', description: 'Appraisal UUID' })
+  @ApiBody({ type: SubmitReviewDto })
+  @ApiResponse({ status: 200, description: 'Self-assessment submitted' })
   submitSelf(
     @Param('id') id: string,
     @Body() dto: SubmitReviewDto,
@@ -70,6 +99,10 @@ export class AppraisalsController {
   }
 
   @Patch(':id/manager-review')
+  @ApiOperation({ summary: 'Submit manager review for an appraisal' })
+  @ApiParam({ name: 'id', description: 'Appraisal UUID' })
+  @ApiBody({ type: SubmitReviewDto })
+  @ApiResponse({ status: 200, description: 'Manager review submitted' })
   submitManagerReview(
     @Param('id') id: string,
     @Body() dto: SubmitReviewDto,
