@@ -84,7 +84,7 @@ export class LeaveController {
       example: {
         name: 'Annual Leave',
         defaultDays: 21,
-        isPaid: True,
+        isPaid: true,
         description: 'Yearly annual leave',
       },
     },
