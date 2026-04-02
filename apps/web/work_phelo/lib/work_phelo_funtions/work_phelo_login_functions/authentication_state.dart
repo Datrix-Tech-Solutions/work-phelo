@@ -1,5 +1,6 @@
 import 'dart:developer';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
@@ -50,13 +51,14 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
       );
       state = state.copyWith(user: user, isLoading: false);
     } catch (e) {
-      state = state.copyWith(
-        error: e
-            .toString()
-            .replaceFirst('Exception: ', '')
-            .replaceFirst('Exception', ''),
-        isLoading: false,
-      );
+      String msg = 'An error occurred. Please try again.';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map && data['message'] != null) {
+          msg = data['message'].toString();
+        }
+      }
+      state = state.copyWith(error: msg, isLoading: false);
     }
   }
 
