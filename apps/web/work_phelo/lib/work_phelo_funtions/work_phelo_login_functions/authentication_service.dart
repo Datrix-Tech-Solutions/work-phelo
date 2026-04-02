@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 
@@ -18,15 +16,19 @@ class AuthenticationService {
     required String email,
     required String password,
   }) async {
-    final data = await _apiService.loginSuperAdmin(
-      email: email,
-      password: password,
-    );
-    final userData = data['user'] as Map<String, dynamic>;
-    return AppUserModel.fromLoginResponse(
-      userData,
-      companyName: 'Platform Administration',
-    );
+    try {
+      final data = await _apiService.loginSuperAdmin(
+        email: email,
+        password: password,
+      );
+      final userData = data['user'] as Map<String, dynamic>;
+      return AppUserModel.fromLoginResponse(
+        userData,
+        companyName: 'Platform Administration',
+      );
+    } on DioException catch (e) {
+      throw Exception(_extractError(e));
+    }
   }
 
   Future<AppUserModel> loginTenant({
@@ -34,16 +36,17 @@ class AuthenticationService {
     required String email,
     required String password,
   }) async {
-    final data = await _apiService.loginTenant(
-      tenantSlug: tenantSlug,
-      email: email,
-      password: password,
-    );
-    final userData = data['user'] as Map<String, dynamic>;
-
-    log('SERVICE >> tenantSlug being passed: $tenantSlug');
-
-    return AppUserModel.fromLoginResponse(userData, tenantSlug: tenantSlug);
+    try {
+      final data = await _apiService.loginTenant(
+        tenantSlug: tenantSlug,
+        email: email,
+        password: password,
+      );
+      final userData = data['user'] as Map<String, dynamic>;
+      return AppUserModel.fromLoginResponse(userData, tenantSlug: tenantSlug);
+    } on DioException catch (e) {
+      throw Exception(_extractError(e));
+    }
   }
 
   Future<void> logout() async {
@@ -65,9 +68,12 @@ class AuthenticationService {
   String _extractError(DioException e) {
     final data = e.response?.data;
     if (data is Map) {
-      return data['message'] as String? ??
-          data['error'] as String? ??
-          'An error occurred';
+      final raw = data['message'];
+      if (raw is List && raw.isNotEmpty) {
+        return raw.first.toString(); // ← handle list
+      }
+      if (raw is String) return raw;
+      return data['error'] as String? ?? 'An error occurred';
     }
     return e.message ?? 'An error occurred';
   }
@@ -117,6 +123,17 @@ class AuthenticationService {
             : 'EMPLOYEE',
       );
       return data;
+    } on DioException catch (e) {
+      throw Exception(_extractError(e));
+    }
+  }
+
+  Future<List<EmployeeModel>> fetchEmployees() async {
+    try {
+      final data = await _apiService.fetchUsers();
+      return data
+          .map((u) => EmployeeModel.fromApi(u as Map<String, dynamic>))
+          .toList();
     } on DioException catch (e) {
       throw Exception(_extractError(e));
     }

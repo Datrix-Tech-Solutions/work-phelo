@@ -18,11 +18,7 @@ class SetPasswordPage extends ConsumerStatefulWidget {
   final String tenantSlug;
   final String token;
 
-  const SetPasswordPage({
-    super.key,
-    required this.tenantSlug,
-    this.token = '',
-  });
+  const SetPasswordPage({super.key, required this.tenantSlug, this.token = ''});
 
   @override
   ConsumerState<SetPasswordPage> createState() => _SetPasswordPageState();
@@ -85,10 +81,14 @@ class _SetPasswordPageState extends ConsumerState<SetPasswordPage> {
 
     try {
       final dio = ref.read(dioProvider);
-      await dio.post('/auth/users/accept-invite', data: {
-        'inviteToken': widget.token,
-        'password': _passwordController.text,
-      });
+      await dio.post(
+        '/auth/reset-password',
+        data: {
+          'tenantSlug': widget.tenantSlug,
+          'token': widget.token,
+          'newPassword': _passwordController.text,
+        },
+      );
 
       if (mounted) {
         setState(() => _successMessage = 'Password set! Redirecting...');
@@ -97,10 +97,17 @@ class _SetPasswordPageState extends ConsumerState<SetPasswordPage> {
         });
       }
     } on DioException catch (e) {
-      final msg = (e.response?.data as Map?)?['message'] as String?;
-      setState(() => _errorMessage = msg ?? 'Something went wrong. Please try again.');
-    } finally {
-      if (mounted) setState(() => isLoading = false);
+      final data = e.response?.data;
+      String msg;
+      if (data is Map) {
+        final raw = data['message'];
+        msg = raw is List
+            ? (raw.first as String)
+            : (raw as String? ?? 'Something went wrong.');
+      } else {
+        msg = 'Something went wrong. Please try again.';
+      }
+      setState(() => _errorMessage = msg);
     }
   }
 
@@ -114,12 +121,12 @@ class _SetPasswordPageState extends ConsumerState<SetPasswordPage> {
               snackColor: Colors.red,
             )
           : _successMessage != null
-              ? MySnackBar(
-                  snackMessage: _successMessage!,
-                  snackIcon: UniconsLine.check_circle,
-                  snackColor: Colors.green,
-                )
-              : null,
+          ? MySnackBar(
+              snackMessage: _successMessage!,
+              snackIcon: UniconsLine.check_circle,
+              snackColor: Colors.green,
+            )
+          : null,
       child: Form(
         key: _formKey,
         child: Column(

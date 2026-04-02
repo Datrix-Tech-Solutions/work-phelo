@@ -70,7 +70,6 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
     );
 
     try {
-      // Call the real backend invite
       await ref
           .read(userProvider.notifier)
           .inviteEmployee(
@@ -78,14 +77,16 @@ class OnboardingFormState extends ConsumerState<OnboardingForm> {
             employee: employee,
           );
 
-      return employee; // Return success to panel
+      return employee;
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceAll('Exception: ', '')),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceAll('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return null;
     }
   }

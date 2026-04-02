@@ -6,6 +6,8 @@ class ApiService {
   final Dio dio;
 
   ApiService(this.dio);
+
+  
   //login api calls
   Future<Map<String, dynamic>> loginSuperAdmin({
     required String email,
@@ -92,7 +94,7 @@ class ApiService {
     required String role,
   }) async {
     final response = await dio.post(
-      '/users/invite',
+      '/auth/users/invite',
       data: {
         'email': email,
         'firstName': firstName,
@@ -102,5 +104,10 @@ class ApiService {
       },
     );
     return response.data as Map<String, dynamic>;
+  }
+
+  Future<List<dynamic>> fetchUsers() async {
+    final response = await dio.get('/auth/users');
+    return response.data as List<dynamic>;
   }
 }

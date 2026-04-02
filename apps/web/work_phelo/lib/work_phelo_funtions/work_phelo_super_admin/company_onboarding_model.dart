@@ -27,9 +27,9 @@ extension CompanyStatusX on CompanyStatus {
 
   Color get color => switch (this) {
     CompanyStatus.active => Colors.green,
-    CompanyStatus.inactive => Colors.red,
-    CompanyStatus.pending => Colors.orange,
-    CompanyStatus.suspended => Colors.grey,
+    CompanyStatus.inactive => Colors.amber,
+    CompanyStatus.pending => Colors.blue,
+    CompanyStatus.suspended => Colors.red,
   };
 }
 
@@ -228,4 +228,3 @@ class ModuleConfig {
     this.isEnabled = false,
   });
 }
-

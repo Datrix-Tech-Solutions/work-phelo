@@ -1,4 +1,3 @@
-import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -90,19 +89,27 @@ class _TenantLoginPageState extends ConsumerState<TenantLoginPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
-      if (next.error != null) {
-        setState(() {
-          _errorMessage = next.error;
-          showLoginState = true;
-        });
-      }
-      if (previous?.isAuthenticated == false &&
-          next.isAuthenticated &&
-          next.user != null) {
-        log('TENANT PAGE >> routing for role: ${next.user!.role}');
-        _routeToDashboard(next.user!);
-      }
+  // ── Clear error when loading starts ──
+  if (next.isLoading) {
+    setState(() => showLoginState = false);
+    return;
+  }
+
+  if (next.error != null) {
+    setState(() {
+      _errorMessage = next.error;
+      showLoginState = true;
     });
+    return;
+  }
+
+  if (previous?.isAuthenticated == false &&
+      next.isAuthenticated &&
+      next.user != null) {
+    setState(() => showLoginState = false);
+    _routeToDashboard(next.user!);
+  }
+});
 
     final isLoading = ref.watch(authNotifierProvider).isLoading;
     return AuthLayout(

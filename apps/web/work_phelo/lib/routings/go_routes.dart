@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:work_phelo/pages/login_page/get_started/set_password_page.dart';
-import '../pages/login_page/get_started/get_started.dart';
 import 'package:work_phelo/pages/login_page/get_started/verify_account_page.dart';
 import 'package:work_phelo/work_phelo_modules/dashboard.dart';
 import 'package:work_phelo/work_phelo_modules/hr_phelo/hr_phelo_navigation/hr_phelo_layout.dart';
@@ -41,11 +40,10 @@ final GoRouter router = GoRouter(
     // App page routes
     GoRoute(
       path: '/:tenantSlug/accept-invite',
-      builder: (context, state) {
-        final tenantSlug = state.pathParameters['tenantSlug'] ?? '';
-        final token = state.uri.queryParameters['token'] ?? '';
-        return SetPasswordPage(tenantSlug: tenantSlug, token: token);
-      },
+      builder: (context, state) => SetPasswordPage(
+        tenantSlug: state.pathParameters['tenantSlug'] ?? '',
+        token: state.uri.queryParameters['token'] ?? '',
+      ),
     ),
     GoRoute(
       path: '/:tenantSlug/verify-account',
@@ -61,10 +59,7 @@ final GoRouter router = GoRouter(
         return SetPasswordPage(tenantSlug: tenantSlug);
       },
     ),
-    GoRoute(
-      path: '/get-started',
-      builder: (context, state) => const GetStartedPage(),
-    ),
+
     GoRoute(
       path: '/:tenantSlug/login',
       builder: (context, state) {
