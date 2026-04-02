@@ -565,7 +565,7 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
     await this.prisma.user.update({
-      where: { id: user.id },
+      where: { id: record.user.id },
       data: {
         password: hashed,
         passwordChangedAt: new Date(),
@@ -575,7 +575,7 @@ export class AuthService {
       },
     });
     await this.prisma.refreshToken.updateMany({
-      where: { userId: user.id },
+      where: { userId: record.user.id },
       data: { isRevoked: true },
     });
 
