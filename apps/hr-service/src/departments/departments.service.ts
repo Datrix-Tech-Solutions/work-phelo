@@ -15,7 +15,8 @@ export class DepartmentsService {
     const existing = await this.prisma.department.findUnique({
       where: { tenantId_name: { tenantId, name: dto.name } },
     });
-    if (existing) throw new ConflictException('Department name already exists');
+    if (existing)
+      throw new ConflictException('A department with this name already exists');
 
     return this.prisma.department.create({
       data: { tenantId, ...dto },
@@ -62,7 +63,7 @@ export class DepartmentsService {
     const dept = await this.findById(tenantId, id);
     if (dept.employees.length > 0) {
       throw new ConflictException(
-        'Cannot delete department with active employees',
+        'This department has employees assigned to it and cannot be deleted. Reassign employees before deleting.',
       );
     }
     return this.prisma.department.update({

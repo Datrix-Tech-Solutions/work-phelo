@@ -20,6 +20,16 @@ export class EmployeesService {
   ) {}
 
   async create(tenantId: string, dto: CreateEmployeeDto) {
+    // Enforce minimum one department before adding employees
+    const deptCount = await this.prisma.department.count({
+      where: { tenantId, isActive: true },
+    });
+    if (deptCount === 0) {
+      throw new BadRequestException(
+        'Please set up at least one department before adding employees.',
+      );
+    }
+
     const existing = await this.prisma.employee.findUnique({
       where: { tenantId_email: { tenantId, email: dto.email } },
     });
