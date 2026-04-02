@@ -17,6 +17,7 @@ import { paginationParams, paginate } from '../common/response.helper';
 export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly rabbitmq: RabbitMQPublisher,
     private readonly leaveService: LeaveService,
   ) {}
 
@@ -40,19 +41,22 @@ export class EmployeesService {
     const count = await this.prisma.employee.count({ where: { tenantId } });
     const employeeNumber = `EMP-${String(count + 1).padStart(4, '0')}`;
 
+    const { departmentId, userId, ...rest } = dto;
     const employee = await this.prisma.employee.create({
       data: {
+        ...rest,
         tenantId,
         employeeNumber,
-        ...dto,
         basicSalary: dto.basicSalary,
         hireDate: new Date(dto.hireDate),
         dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
         probationEndsAt: dto.probationEndsAt
           ? new Date(dto.probationEndsAt)
           : undefined,
+        ...(departmentId && { department: { connect: { id: departmentId } } }),
+        ...(userId && { user: { connect: { id: userId } } }),
       },
-      include: { department: true, user: { select: { id: true } } },
+      include: { department: true },
     });
 
     // If no userId provided, emit event to auth service to create user and send invite
