@@ -83,6 +83,7 @@ class _SetPasswordPageState extends ConsumerState<SetPasswordPage> {
       final dio = ref.read(dioProvider);
       if (widget.isResetFlow) {
         await dio.post('/auth/reset-password', data: {
+          'email': widget.email,
           'tenantSlug': widget.tenantSlug,
           'token': widget.token,
           'newPassword': _passwordController.text,

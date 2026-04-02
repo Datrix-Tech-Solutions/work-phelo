@@ -276,6 +276,7 @@ class _ResetPasswordCodePageState extends ConsumerState<ResetPasswordCodePage> {
             tenantSlug: widget.tenantSlug,
             token: otp,
             isResetFlow: true,
+            email: widget.email,
           ),
         ),
       );
