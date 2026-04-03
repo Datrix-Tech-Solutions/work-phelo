@@ -183,7 +183,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: apps/web/work-phelo-web
-        run: npm ci
+        run: npm install
 
       - name: Type check
         working-directory: apps/web/work-phelo-web
