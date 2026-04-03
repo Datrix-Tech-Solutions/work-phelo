@@ -185,9 +185,11 @@ jobs:
         working-directory: apps/web/work-phelo-web
         run: npm install
 
-      - name: Rebuild native modules for Linux
+      - name: Install Linux native binaries
         working-directory: apps/web/work-phelo-web
-        run: npm rebuild lightningcss || true
+        run: |
+          npm install lightningcss-linux-x64-gnu --no-save || true
+          npm install lightningcss-linux-x64-musl --no-save || true
 
       - name: Type check
         working-directory: apps/web/work-phelo-web
