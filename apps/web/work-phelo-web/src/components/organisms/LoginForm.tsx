@@ -2,10 +2,13 @@
 
 import { useForm } from 'react-hook-form';
 import { useMutation } from '@tanstack/react-query';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
+import { AppLogo } from '@/components/atoms/AppLogo';
 import { api } from '@/lib/api';
-import { LoginPayload } from '@/types/auth';
+import { LoginPayload, User } from '@/types/auth';
+import { useAuthStore } from '@/store/auth.store';
+import { useToast } from '@/hooks/useToast';
 import { Button } from '@/components/atoms/Button';
 import { GoogleButton } from '@/components/atoms/GoogleButton';
 import { MicrosoftButton } from '@/components/atoms/MicrosoftButton';
@@ -15,13 +18,19 @@ interface LoginFormProps {
   showSocialLogin?: boolean;
   tenantSlug?: string;
   forgotPasswordHref?: string;
+  redirectTo?: string;
 }
 
 export function LoginForm({
   showSocialLogin = false,
   tenantSlug,
   forgotPasswordHref = '/forgot-password',
+  redirectTo = '/dashboard',
 }: LoginFormProps) {
+  const router = useRouter();
+  const setUser = useAuthStore((s) => s.setUser);
+  const toast = useToast();
+
   const {
     register,
     handleSubmit,
@@ -29,7 +38,17 @@ export function LoginForm({
   } = useForm<LoginPayload>();
 
   const { mutate, isPending } = useMutation({
-    mutationFn: (data: LoginPayload) => api.post('/auth/login', data),
+    mutationFn: (data: LoginPayload) => api.post<{ user: User }>('/auth/admin/login', data),
+    onSuccess: (res) => {
+      setUser(res.data.user);
+      router.push(redirectTo);
+    },
+    onError: (err) => {
+      const message =
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
+        'Invalid email or password';
+      toast.error(message);
+    },
   });
 
   const onSubmit = (data: LoginPayload) => {
@@ -39,13 +58,7 @@ export function LoginForm({
   return (
     <div className="w-full max-w-sm px-8 py-10">
       <div className="flex justify-center mb-6">
-        <Image
-          src="/images/HRphelo.png"
-          alt="WorkPhelo"
-          width={160}
-          height={40}
-          className="h-10 w-auto"
-        />
+        <AppLogo />
       </div>
 
       <h1 className="text-2xl font-semibold text-gray-900 text-center mb-6">Sign in</h1>

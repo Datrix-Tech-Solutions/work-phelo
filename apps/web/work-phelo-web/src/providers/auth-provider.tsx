@@ -6,15 +6,24 @@ import { useAuthStore } from '@/store/auth.store';
 import { User } from '@/types/auth';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { setUser, setLoading } = useAuthStore();
+  const { user, setUser, setLoading } = useAuthStore();
 
   useEffect(() => {
+    // If a user is already in the store (e.g. just logged in), don't re-fetch —
+    // the cookie may not yet be present in dev (CORS/SameSite) and overwriting
+    // with null would immediately log the user out.
+    if (user) {
+      setLoading(false);
+      return;
+    }
+
     api
       .get<{ user: User }>('/auth/me')
       .then((res) => setUser(res.data.user))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
-  }, [setUser, setLoading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return <>{children}</>;
 }

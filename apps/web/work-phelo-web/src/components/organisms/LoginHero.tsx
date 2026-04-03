@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { cn } from '@/lib/utils';
 
 const slides = [
   {
@@ -22,7 +21,7 @@ const slides = [
 ];
 
 export function LoginHero() {
-  const [active, setActive] = useState(1);
+  const [active] = useState(1);
 
   return (
     <div className="relative w-full h-full overflow-hidden">
@@ -31,34 +30,18 @@ export function LoginHero() {
         src="/images/login_page_image.jpg"
         alt="WorkPhelo hero"
         fill
+        sizes="58vw"
         className="object-cover object-center"
         priority
       />
 
-      {/* Gradient overlay */}
       <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/20 to-transparent" />
 
-      {/* Text content pinned to bottom */}
       <div className="absolute bottom-0 left-0 right-0 z-10 p-10 pb-8">
         <h2 className="text-3xl font-extrabold text-white uppercase leading-tight mb-3">
           {slides[active].heading}
         </h2>
         <p className="text-sm text-white/80 leading-relaxed max-w-sm">{slides[active].subtext}</p>
-
-        {/* Carousel dots */}
-        <div className="flex items-center gap-2 mt-6">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setActive(i)}
-              className={cn(
-                'rounded-full transition-all duration-300',
-                i === active ? 'w-5 h-2 bg-white' : 'w-2 h-2 bg-white/40 hover:bg-white/60',
-              )}
-              aria-label={`Slide ${i + 1}`}
-            />
-          ))}
-        </div>
       </div>
     </div>
   );

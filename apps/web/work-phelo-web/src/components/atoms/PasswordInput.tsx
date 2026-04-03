@@ -1,7 +1,7 @@
 'use client';
 
 import { InputHTMLAttributes, forwardRef, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, inputClass } from '@/lib/utils';
 
 interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   label?: string;
@@ -19,13 +19,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
           <input
             ref={ref}
             type={visible ? 'text' : 'password'}
-            className={cn(
-              'w-full px-4 py-3 pr-11 border rounded-xl text-sm bg-white text-gray-800',
-              'placeholder:text-gray-400 transition-colors',
-              'focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400',
-              error ? 'border-red-500' : 'border-gray-300',
-              className,
-            )}
+            className={inputClass(error, cn('pr-11', className))}
             {...props}
           />
           <button

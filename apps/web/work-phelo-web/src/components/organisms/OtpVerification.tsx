@@ -3,7 +3,7 @@
 import { useRef, useState, ClipboardEvent, KeyboardEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import { AppLogo } from '@/components/atoms/AppLogo';
 import { api } from '@/lib/api';
 import { Button } from '@/components/atoms/Button';
 import { cn } from '@/lib/utils';
@@ -66,13 +66,7 @@ export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
   return (
     <div className="w-full max-w-sm px-8 py-10">
       <div className="flex justify-center mb-6">
-        <Image
-          src="/images/HRphelo.png"
-          alt="WorkPhelo"
-          width={160}
-          height={40}
-          className="h-10 w-auto"
-        />
+        <AppLogo />
       </div>
 
       <h1 className="text-2xl font-semibold text-gray-900 text-center mb-2">Verify Your Email</h1>
