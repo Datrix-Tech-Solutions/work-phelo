@@ -185,6 +185,10 @@ jobs:
         working-directory: apps/web/work-phelo-web
         run: npm install
 
+      - name: Rebuild native modules for Linux
+        working-directory: apps/web/work-phelo-web
+        run: npm rebuild lightningcss || true
+
       - name: Type check
         working-directory: apps/web/work-phelo-web
         run: npx tsc --noEmit
@@ -194,6 +198,7 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://157.245.220.205/api/v1
+          NEXT_TELEMETRY_DISABLED: 1
 
       - name: Deploy to server
         uses: appleboy/scp-action@v0.1.7
