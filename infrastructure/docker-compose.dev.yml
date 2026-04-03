@@ -133,6 +133,16 @@ services:
       redis:
         condition: service_healthy
 
+  nextjs:
+    image: ghcr.io/datrix-tech-solutions/work-phelo/nextjs-web:dev
+    container_name: erp-nextjs-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://157.245.220.205/api/v1
+    ports:
+      - "127.0.0.1:3000:3000"
+
 volumes:
   postgres_data:
   rabbitmq_data:

@@ -85,6 +85,8 @@ jobs:
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+            nextjs-web:
+              - 'apps/web/work-phelo-web/**'
           list-files: none
 
   build-and-push:
@@ -225,7 +227,7 @@ jobs:
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
-    needs: [detect-changes, build-and-push, nextjs-build-deploy]
+    needs: [detect-changes, build-and-push, nextjs-build-push]
 
     if: always() && needs.quality-gates.result == 'success'
 
@@ -331,6 +333,7 @@ jobs:
             check_service auth-service
             check_service hr-service
             check_service notification-service
+            check_service nextjs
 
             # Non-critical: warn but don't fail
             warn_service() {
