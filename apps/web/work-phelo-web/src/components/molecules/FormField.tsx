@@ -1,4 +1,5 @@
 import { Input } from '@/components/atoms/Input';
+import { PasswordInput } from '@/components/atoms/PasswordInput';
 import { FieldError, UseFormRegisterReturn } from 'react-hook-form';
 
 interface FormFieldProps {
@@ -18,6 +19,18 @@ export function FormField({
   placeholder,
   readOnly,
 }: FormFieldProps) {
+  if (type === 'password') {
+    return (
+      <PasswordInput
+        label={label}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        error={error?.message}
+        {...registration}
+      />
+    );
+  }
+
   return (
     <Input
       label={label}

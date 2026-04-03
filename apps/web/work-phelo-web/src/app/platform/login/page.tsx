@@ -4,7 +4,7 @@ import { LoginForm } from '@/components/organisms/LoginForm';
 export default function PlatformLoginPage() {
   return (
     <AuthPageShell>
-      <LoginForm forgotPasswordHref="/forgot-password" />
+      <LoginForm forgotPasswordHref="/platform/forgot-password" redirectTo="/dashboard" />
     </AuthPageShell>
   );
 }

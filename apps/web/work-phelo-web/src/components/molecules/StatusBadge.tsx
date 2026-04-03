@@ -12,7 +12,7 @@ const statusMap: Record<
   PENDING: { label: 'Pending', variant: 'warning' },
   PENDING_VERIFICATION: { label: 'Pending', variant: 'warning' },
   SUSPENDED: { label: 'Suspended', variant: 'danger' },
-  INACTIVE: { label: 'Inactive', variant: 'neutral' },
+  INACTIVE: { label: 'Inactive', variant: 'danger' },
   APPROVED: { label: 'Approved', variant: 'success' },
   REJECTED: { label: 'Rejected', variant: 'danger' },
   ON_LEAVE: { label: 'On Leave', variant: 'info' },
