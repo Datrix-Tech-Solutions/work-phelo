@@ -218,7 +218,7 @@ jobs:
           port: 22
           script: |
             cd /var/www/apps/dev.work-phelo.com/nextjs
-            npm ci --omit=dev
+            npm install --omit=dev
             pm2 restart work-phelo-web || pm2 start npm --name work-phelo-web -- start
             echo "Next.js deployed"
 
