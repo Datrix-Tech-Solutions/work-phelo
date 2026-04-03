@@ -45,7 +45,7 @@ export class EmployeesService {
       data: {
         tenantId,
         employeeNumber,
-        userId: dto.userId ?? '',
+        ...(dto.userId ? { userId: dto.userId } : {}),
         firstName: dto.firstName,
         lastName: dto.lastName,
         email: dto.email,
