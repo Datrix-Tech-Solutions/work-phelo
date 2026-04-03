@@ -41,7 +41,12 @@
   },
   "packageManager": "npm@11.10.0",
   "workspaces": [
-    "apps/*",
+    "apps/api-gateway",
+    "apps/auth-service",
+    "apps/hr-service",
+    "apps/notification-service",
+    "apps/subscription-service",
+    "apps/marketing-service",
     "packages/*"
   ]
 }
