@@ -1,8 +1,10 @@
+//SUPER ADMIN PORTAL
+
 'use client';
 
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { TopNav } from '@/components/organisms/TopNav';
+import { useRouter } from 'next/navigation';
 import { WelcomeBanner } from '@/components/organisms/WelcomeBanner';
 import { StatCard } from '@/components/molecules/StatCard';
 import { DataTable, Column } from '@/components/organisms/DataTable';
@@ -104,16 +106,9 @@ const COLUMNS: Column<Company>[] = [
   },
 ];
 
-const NAV_TABS = [
-  { label: 'Portal', value: 'portal' },
-  { label: 'Reports', value: 'reports' },
-  { label: 'Audit Trails', value: 'audit-trails' },
-  { label: 'Support', value: 'support' },
-];
-
 export default function AdminDashboardPage() {
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const [activeTab, setActiveTab] = useState('portal');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -139,7 +134,7 @@ export default function AdminDashboardPage() {
               year: 'numeric',
             })
           : '—',
-      contact: c.contact ?? c.contactNumber ?? '—',
+      contact: c.phone ?? c.contact ?? c.contactNumber ?? '—',
       industry: c.industry ?? '—',
       status: (c.status as 'ACTIVE' | 'INACTIVE') ?? 'INACTIVE',
     }));
@@ -182,20 +177,10 @@ export default function AdminDashboardPage() {
   );
 
   const firstName = user?.firstName ?? 'Admin';
-  const initials = firstName.slice(0, 2).toUpperCase();
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <TopNav
-        showMenuButton
-        userInitials={initials}
-        notificationCount={1}
-        tabs={NAV_TABS}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-      />
-
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-6 flex flex-col gap-6">
+    <>
+      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-6 flex flex-col gap-6 min-h-0">
         {/* Welcome banner */}
         <WelcomeBanner userName={firstName} />
 
@@ -220,7 +205,7 @@ export default function AdminDashboardPage() {
         </div>
 
         {/* Companies table */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 flex-1 min-h-0">
           <h2 className="text-xl font-bold text-gray-900">Companies</h2>
           <DataTable
             columns={COLUMNS}
@@ -234,6 +219,8 @@ export default function AdminDashboardPage() {
             filterOptions={[
               { value: 'ACTIVE', label: 'Active' },
               { value: 'INACTIVE', label: 'Inactive' },
+              { value: 'SUSPENDED', label: 'Suspended' },
+              { value: 'PENDING', label: 'Pending' },
             ]}
             onFilter={(v) => {
               setFilter(v);
@@ -242,8 +229,7 @@ export default function AdminDashboardPage() {
             onExport={() => console.log('export')}
             actionButton={{ label: 'New Company', onClick: () => setPanelOpen(true) }}
             rowActions={(row) => [
-              { label: 'View', onClick: () => console.log('view', row.id) },
-              { label: 'Edit', onClick: () => console.log('edit', row.id) },
+              { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
               { label: 'Deactivate', onClick: () => console.log('deact', row.id), danger: true },
             ]}
             emptyMessage="No companies onboarded"
@@ -256,6 +242,6 @@ export default function AdminDashboardPage() {
 
       {/* Add Company side panel */}
       <AddCompanyForm isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
-    </div>
+    </>
   );
 }

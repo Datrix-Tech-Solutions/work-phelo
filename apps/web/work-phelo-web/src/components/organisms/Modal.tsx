@@ -47,7 +47,7 @@ export function Modal({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
       {/* Dialog */}
-      <div className={cn('relative z-10 w-full bg-white rounded-2xl shadow-2xl p-6', width)}>
+      <div className={cn('relative z-10 w-full bg-white rounded-card shadow-2xl p-6', width)}>
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-3">
           <h2 className="text-xl font-bold text-gray-800">{title}</h2>

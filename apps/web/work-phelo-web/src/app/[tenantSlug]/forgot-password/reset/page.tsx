@@ -1,3 +1,5 @@
+// RESET PASSWORD PAGE //
+
 import { AuthPageShell } from '@/components/organisms/AuthPageShell';
 import { ResetPassword } from '@/components/organisms/ResetPassword';
 

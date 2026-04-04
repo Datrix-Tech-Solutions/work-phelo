@@ -8,6 +8,7 @@ const statusMap: Record<
   string,
   { label: string; variant: 'success' | 'warning' | 'danger' | 'info' | 'neutral' }
 > = {
+  // Employee / tenant statuses
   ACTIVE: { label: 'Active', variant: 'success' },
   PENDING: { label: 'Pending', variant: 'warning' },
   PENDING_VERIFICATION: { label: 'Pending', variant: 'warning' },
@@ -18,6 +19,17 @@ const statusMap: Record<
   ON_LEAVE: { label: 'On Leave', variant: 'info' },
   PROBATION: { label: 'Probation', variant: 'warning' },
   TERMINATED: { label: 'Terminated', variant: 'danger' },
+  // Appraisal cycle statuses
+  Upcoming: { label: 'Upcoming', variant: 'info' },
+  InProgress: { label: 'In Progress', variant: 'warning' },
+  Completed: { label: 'Completed', variant: 'success' },
+  Cancelled: { label: 'Cancelled', variant: 'danger' },
+  // Employee appraisal statuses
+  NotStarted: { label: 'Not Started', variant: 'neutral' },
+  SelfSubmitted: { label: 'Self Submitted', variant: 'info' },
+  ManagerSubmitted: { label: 'Manager Submitted', variant: 'warning' },
+  HRPending: { label: 'HR Pending', variant: 'warning' },
+  Finalized: { label: 'Finalized', variant: 'success' },
 };
 
 export function StatusBadge({ status }: StatusBadgeProps) {

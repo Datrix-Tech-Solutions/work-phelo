@@ -90,7 +90,7 @@ export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
             onKeyDown={(e) => handleKeyDown(i, e)}
             onPaste={handlePaste}
             className={cn(
-              'w-11 h-13 text-center text-lg font-semibold border rounded-xl',
+              'w-11 h-13 text-center text-lg font-semibold border rounded-input',
               'focus:outline-none focus:ring-2 focus:ring-[#0D2244] focus:border-[#0D2244]',
               'transition-colors text-gray-900',
               isError ? 'border-red-500' : digit ? 'border-[#0D2244]' : 'border-gray-300',

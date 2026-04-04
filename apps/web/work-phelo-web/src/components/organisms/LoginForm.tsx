@@ -37,11 +37,15 @@ export function LoginForm({
     formState: { errors },
   } = useForm<LoginPayload>();
 
+  const isTenantLogin = !!tenantSlug;
+  const endpoint = isTenantLogin ? '/auth/login' : '/auth/admin/login';
+
   const { mutate, isPending } = useMutation({
-    mutationFn: (data: LoginPayload) => api.post<{ user: User }>('/auth/admin/login', data),
+    mutationFn: (data: LoginPayload) => api.post<{ user: User }>(endpoint, data),
     onSuccess: (res) => {
       setUser(res.data.user);
-      router.push(redirectTo);
+      const destination = isTenantLogin ? `/${tenantSlug}/dashboard` : (redirectTo ?? '/dashboard');
+      router.push(destination);
     },
     onError: (err) => {
       const message =

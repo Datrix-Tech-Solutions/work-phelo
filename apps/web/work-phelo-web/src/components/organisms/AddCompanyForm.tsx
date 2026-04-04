@@ -1,6 +1,5 @@
 'use client';
 
-import { useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -12,15 +11,14 @@ import { Select } from '@/components/atoms/Select';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 
 interface AddCompanyPayload {
-  companyName: string;
-  companySize: string;
-  industry: string;
-  location: string;
-  contactNumber: string;
-  adminName: string;
-  adminContact: string;
-  adminEmail: string;
-  status?: 'ACTIVE' | 'DRAFT';
+  name: string;
+  email: string;
+  slug: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  industry?: string;
+  size?: string;
 }
 
 interface AddCompanyFormProps {
@@ -48,9 +46,16 @@ const INDUSTRY_OPTIONS = [
   { value: 'Other', label: 'Other' },
 ];
 
+function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '-');
+}
+
 export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
   const queryClient = useQueryClient();
-  const isDraftRef = useRef(false);
 
   const {
     register,
@@ -70,7 +75,7 @@ export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
   });
 
   const onSubmit = (data: AddCompanyPayload) => {
-    mutate({ ...data, status: isDraftRef.current ? 'DRAFT' : 'ACTIVE' });
+    mutate({ ...data, slug: generateSlug(data.name) });
   };
 
   const handleClose = () => {
@@ -90,25 +95,10 @@ export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
             Cancel
           </Button>
           <Button
-            variant="secondary"
             type="button"
-            isLoading={isPending && isDraftRef.current}
+            isLoading={isPending}
             loadingText="Saving..."
-            onClick={() => {
-              isDraftRef.current = true;
-              handleSubmit(onSubmit)();
-            }}
-          >
-            Save to Draft
-          </Button>
-          <Button
-            type="button"
-            isLoading={isPending && !isDraftRef.current}
-            loadingText="Saving..."
-            onClick={() => {
-              isDraftRef.current = false;
-              handleSubmit(onSubmit)();
-            }}
+            onClick={handleSubmit(onSubmit)}
           >
             Save
           </Button>
@@ -119,60 +109,54 @@ export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
       <FormSection title="Company Information">
         <FormField
           label="Company Name"
-          registration={register('companyName', { required: 'Company name is required' })}
-          error={errors.companyName}
+          registration={register('name', { required: 'Company name is required' })}
+          error={errors.name}
           placeholder="eg; Acme Corp Ltd"
         />
         <Select
           label="Company Size"
           placeholder="Select range"
           options={COMPANY_SIZE_OPTIONS}
-          {...register('companySize', { required: 'Company size is required' })}
-          error={errors.companySize?.message}
+          {...register('size')}
+          error={errors.size?.message}
         />
         <Select
           label="Industry"
           placeholder="Select industry"
           options={INDUSTRY_OPTIONS}
-          {...register('industry', { required: 'Industry is required' })}
+          {...register('industry')}
           error={errors.industry?.message}
-        />
-        <FormField
-          label="Location"
-          registration={register('location', { required: 'Location is required' })}
-          error={errors.location}
-          placeholder="eg; Accra, Ghana"
-        />
-        <PhoneInput
-          label="Contact"
-          placeholder="00 000 0000"
-          onChange={(v) => setValue('contactNumber', v)}
         />
       </FormSection>
 
       {/* Administrator Information */}
       <FormSection title="Administrator Information">
         <FormField
-          label="Name"
-          registration={register('adminName', { required: 'Admin name is required' })}
-          error={errors.adminName}
-          placeholder="eg; Daniel Asante"
+          label="First Name"
+          registration={register('firstName', { required: 'First name is required' })}
+          error={errors.firstName}
+          placeholder="eg; Daniel"
         />
         <FormField
-          label="Contact Number"
-          registration={register('adminContact', { required: 'Contact number is required' })}
-          error={errors.adminContact}
-          placeholder="eg; 0242347474"
+          label="Last Name"
+          registration={register('lastName', { required: 'Last name is required' })}
+          error={errors.lastName}
+          placeholder="eg; Asante"
+        />
+        <PhoneInput
+          label="Contact"
+          placeholder="00 000 0000"
+          onChange={(v) => setValue('phone', v)}
         />
         <FormField
           label="Email Address"
-          registration={register('adminEmail', {
+          registration={register('email', {
             required: 'Email is required',
             pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
           })}
-          error={errors.adminEmail}
+          error={errors.email}
           type="email"
-          placeholder="eg; paul@datrix.com"
+          placeholder="eg; daniel@datrix.com"
         />
       </FormSection>
     </SidePanel>

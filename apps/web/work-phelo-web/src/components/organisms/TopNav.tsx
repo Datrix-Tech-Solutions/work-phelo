@@ -7,7 +7,7 @@ import { Modal } from '@/components/organisms/Modal';
 import { Button } from '@/components/atoms/Button';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 
 export interface NavTab {
   label: string;
@@ -119,7 +119,7 @@ function ProfileDropdown({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-11 z-20 min-w-40 bg-white border border-gray-100 rounded-xl shadow-lg py-1.5 overflow-hidden">
+          <div className="absolute right-0 top-11 z-20 min-w-40 bg-white border border-gray-100 rounded-input shadow-lg py-1.5 overflow-hidden">
             {items.map((item) => (
               <button
                 key={item.label}
@@ -154,6 +154,7 @@ export function TopNav({
   const [logoutOpen, setLogoutOpen] = useState(false);
   const { logout, user } = useAuthStore();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     await api.post('/auth/logout').catch(() => {});
@@ -165,12 +166,12 @@ export function TopNav({
 
   return (
     <>
-      <header className="w-full bg-[#111827] border-b border-white/10 px-5 h-14 flex items-center gap-4 shrink-0">
+      <header className="w-full bg-[#d5dbe7] border-b border-white/10 px-5 h-14 flex items-center gap-4 shrink-0">
         {/* Menu button */}
         {showMenuButton && (
           <button
             onClick={onMenuClick}
-            className="text-white/70 hover:text-white transition-colors"
+            className="text-white/70 hover:text-black transition-colors"
             aria-label="Toggle menu"
           >
             <svg
@@ -195,7 +196,7 @@ export function TopNav({
 
         {/* Tabs — center */}
         {tabs && tabs.length > 0 && (
-          <nav className="flex-1 flex items-center justify-center gap-6">
+          <nav className="flex-1 flex items-end justify-end gap-6">
             {tabs.map((tab) => (
               <button
                 key={tab.value}
@@ -203,8 +204,8 @@ export function TopNav({
                 className={cn(
                   'relative text-sm pb-0.5 transition-colors',
                   activeTab === tab.value
-                    ? 'text-white font-semibold after:absolute after:-bottom-4.25 after:left-0 after:right-0 after:h-0.5 after:bg-white after:rounded-full'
-                    : 'text-white/60 hover:text-white/90',
+                    ? 'text-black font-semibold after:absolute after:-bottom-4.25 after:left-0 after:right-0 after:h-0.5 after:bg-black after:rounded-full'
+                    : 'text-black/60 hover:text-/90',
                 )}
               >
                 {tab.label}
@@ -219,7 +220,7 @@ export function TopNav({
         <div className="flex items-center gap-3">
           {/* Bell */}
           <button
-            className="relative text-white/70 hover:text-white transition-colors"
+            className="relative text-black/70 hover:text-black transition-colors"
             aria-label="Notifications"
           >
             <svg
@@ -243,7 +244,7 @@ export function TopNav({
           </button>
 
           {/* Help */}
-          <button className="text-white/70 hover:text-white transition-colors" aria-label="Help">
+          <button className="text-black/70 hover:text-black transition-colors" aria-label="Help">
             <svg
               width="20"
               height="20"
@@ -260,8 +261,19 @@ export function TopNav({
             </svg>
           </button>
 
-          {/* Apps grid */}
-          <button className="text-white/70 hover:text-white transition-colors" aria-label="Apps">
+          {/* Apps grid — back to module dashboard */}
+          <button
+            className="text-black/70 hover:text-black transition-colors"
+            aria-label="Apps"
+            onClick={() => {
+              if (user?.role === 'SUPER_ADMIN') {
+                router.push('/dashboard');
+              } else {
+                const slug = user?.tenantSlug || pathname.split('/')[1];
+                router.push(`/${slug}/dashboard`);
+              }
+            }}
+          >
             <svg
               width="20"
               height="20"

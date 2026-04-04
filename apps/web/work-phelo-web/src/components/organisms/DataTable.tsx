@@ -59,7 +59,7 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-8 z-20 min-w-35 bg-white border border-gray-100 rounded-xl shadow-lg py-1 overflow-hidden">
+          <div className="absolute right-0 top-8 z-20 min-w-35 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden">
             {actions.map((action) => (
               <button
                 key={action.label}
@@ -100,9 +100,9 @@ export function DataTable<T extends { id: string | number }>({
   onPageChange,
 }: DataTableProps<T>) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-4 flex-1 min-h-0">
       {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-3 flex-wrap shrink-0">
         {/* Search */}
         {onSearch && (
           <div className="relative flex-1 min-w-55 max-w-sm">
@@ -124,7 +124,7 @@ export function DataTable<T extends { id: string | number }>({
               type="text"
               placeholder={searchPlaceholder}
               onChange={(e) => onSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
             />
           </div>
         )}
@@ -134,7 +134,7 @@ export function DataTable<T extends { id: string | number }>({
           <div className="relative">
             <select
               onChange={(e) => onFilter(e.target.value)}
-              className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white"
+              className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white"
             >
               <option value="">Status</option>
               {filterOptions.map((o) => (
@@ -180,7 +180,7 @@ export function DataTable<T extends { id: string | number }>({
         {onExport && (
           <button
             onClick={onExport}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Export
             <svg
@@ -204,7 +204,7 @@ export function DataTable<T extends { id: string | number }>({
         {actionButton && (
           <button
             onClick={actionButton.onClick}
-            className="flex items-center gap-2 px-4 py-2 bg-[#0D2244] text-white rounded-xl text-sm font-medium hover:bg-[#162d56] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-[#0D2244] text-white rounded-input text-sm font-medium hover:bg-[#162d56] transition-colors"
           >
             {actionButton.label}
             <svg
@@ -225,10 +225,10 @@ export function DataTable<T extends { id: string | number }>({
       </div>
 
       {/* Table */}
-      <div className="border border-gray-100 rounded-xl overflow-hidden">
+      <div className="border border-gray-100 rounded-input overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Header */}
         <div
-          className="grid text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50 px-4 py-3"
+          className="grid text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50 px-4 py-3 shrink-0"
           style={{
             gridTemplateColumns: [
               ...columns.map((c) => c.width ?? '1fr'),
@@ -245,68 +245,76 @@ export function DataTable<T extends { id: string | number }>({
         </div>
 
         {/* Rows */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-gray-400">
-            Loading...
-          </div>
-        ) : data.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-3">
-            {emptyImage ?? (
-              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
-                <svg
-                  width="32"
-                  height="32"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="3" y1="9" x2="21" y2="9" />
-                  <line x1="9" y1="21" x2="9" y2="9" />
-                </svg>
-              </div>
-            )}
-            <p className="text-sm text-gray-400">{emptyMessage}</p>
-          </div>
-        ) : (
-          data.map((row, rowIndex) => (
-            <div
-              key={row.id}
-              className={cn(
-                'grid px-4 py-3.5 items-center text-sm text-gray-700',
-                rowIndex !== data.length - 1 && 'border-b border-gray-100',
-                'hover:bg-gray-50 transition-colors',
-              )}
-              style={{
-                gridTemplateColumns: [
-                  ...columns.map((c) => c.width ?? '1fr'),
-                  ...(rowActions ? ['48px'] : []),
-                ].join(' '),
-              }}
-            >
-              {columns.map((col) => (
-                <div key={col.key} className={col.className}>
-                  {col.render
-                    ? col.render(row)
-                    : String((row as Record<string, unknown>)[col.key] ?? '')}
-                </div>
-              ))}
-              {rowActions && (
-                <div className="flex justify-end">
-                  <ThreeDotMenu actions={rowActions(row)} />
-                </div>
-              )}
+        <div className="overflow-y-auto flex-1">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16 text-sm text-gray-400">
+              Loading...
             </div>
-          ))
-        )}
+          ) : data.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              {emptyImage ?? (
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
+                  <svg
+                    width="32"
+                    height="32"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <line x1="3" y1="9" x2="21" y2="9" />
+                    <line x1="9" y1="21" x2="9" y2="9" />
+                  </svg>
+                </div>
+              )}
+              <p className="text-sm text-gray-400">{emptyMessage}</p>
+            </div>
+          ) : (
+            data.map((row, rowIndex) => (
+              <div
+                key={row.id}
+                className={cn(
+                  'grid px-4 py-3.5 items-center text-sm text-gray-700',
+                  rowIndex !== data.length - 1 && 'border-b border-gray-100',
+                  'hover:bg-gray-50 transition-colors',
+                )}
+                style={{
+                  gridTemplateColumns: [
+                    ...columns.map((c) => c.width ?? '1fr'),
+                    ...(rowActions ? ['48px'] : []),
+                  ].join(' '),
+                }}
+              >
+                {columns.map((col) => (
+                  <div key={col.key} className={col.className}>
+                    {col.render
+                      ? col.render(row)
+                      : String((row as Record<string, unknown>)[col.key] ?? '')}
+                  </div>
+                ))}
+                {rowActions && (
+                  <div className="flex justify-end">
+                    <ThreeDotMenu actions={rowActions(row)} />
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={onPageChange} />
+        <div className="shrink-0">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={onPageChange}
+          />
+        </div>
       )}
     </div>
   );
