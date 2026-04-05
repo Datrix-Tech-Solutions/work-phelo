@@ -66,7 +66,7 @@ export class EmployeesService {
         probationEndsAt: dto.probationEndsAt
           ? new Date(dto.probationEndsAt)
           : undefined,
-        basicSalary: dto.basicSalary,
+        basicSalary: dto.basicSalary ?? 0,
         bankName: dto.bankName,
         bankAccountNumber: dto.bankAccountNumber,
         bankBranch: dto.bankBranch,
@@ -156,13 +156,32 @@ export class EmployeesService {
     return employee;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateEmployeeDto) {
-    await this.findById(tenantId, id);
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdateEmployeeDto,
+    actor?: { id: string; email: string },
+  ) {
+    const existing = await this.findById(tenantId, id);
+
+    const { employmentStatus, dateOfBirth, ...rest } = dto;
+
+    // Track status change
+    const statusChanged =
+      employmentStatus && employmentStatus !== existing.employmentStatus;
+
     return this.prisma.employee.update({
       where: { id },
       data: {
-        ...dto,
-        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+        ...rest,
+        ...(employmentStatus && { employmentStatus }),
+        ...(statusChanged &&
+          actor && {
+            statusChangedAt: new Date(),
+            statusChangedById: actor.id,
+            statusChangedByEmail: actor.email,
+          }),
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
       },
       include: { department: true },
     });
@@ -201,5 +220,25 @@ export class EmployeesService {
     return this.prisma.employeeDocument.create({
       data: { tenantId, employeeId, ...dto },
     });
+  }
+
+  async resendInvite(tenantId: string, employeeId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+
+    if (!employee.email) {
+      throw new BadRequestException('Employee has no email address on record');
+    }
+
+    this.rabbitmq.emitToAuth('auth.resend_employee_invite', {
+      tenantId,
+      employeeId,
+      email: employee.email,
+      firstName: employee.firstName,
+    });
+
+    return { message: 'Invitation resent successfully' };
   }
 }

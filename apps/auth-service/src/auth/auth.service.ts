@@ -47,6 +47,11 @@ export class AuthService {
       tenantSlug: tenant.slug,
       tenantName: tenant.name,
       firstName: user.firstName,
+      moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {
+        hr: false,
+        accounting: false,
+        marketing: false,
+      },
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
@@ -210,6 +215,11 @@ export class AuthService {
         tenantSlug: tenant.slug,
         tenantName: tenant.name,
         companyRoleId: user.companyRoleId ?? null,
+        moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {
+          hr: false,
+          accounting: false,
+          marketing: false,
+        },
       },
     };
   }

@@ -22,10 +22,13 @@ import { AppraisalsService } from './appraisals.service';
 import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../auth/guards/module.guard';
+import { RequireModule } from '../auth/decorators/module.decorator';
 
 @ApiTags('Appraisals')
 @Controller('appraisals')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
+@RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class AppraisalsController {
   constructor(private readonly appraisalsService: AppraisalsService) {}

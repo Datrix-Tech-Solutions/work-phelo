@@ -21,10 +21,13 @@ import {
 import { PayrollService } from './payroll.service';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../auth/guards/module.guard';
+import { RequireModule } from '../auth/decorators/module.decorator';
 
 @ApiTags('Payroll')
 @Controller('payroll')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
+@RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}

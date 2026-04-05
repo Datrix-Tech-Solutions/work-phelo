@@ -84,6 +84,8 @@ model Tenant {
   address        String?
   country        String       @default("GH")
   status         TenantStatus @default(PENDING)
+  moduleConfig   Json         @default("{\"hr\": false, \"accounting\": false, \"marketing\": false}")
+  featureConfig  Json         @default("{\"hr\": {\"leave\": false, \"time\": false, \"payroll\": false, \"appraisals\": false, \"projects\": false, \"assets\": false}, \"marketing\": {\"leads\": false, \"pipeline\": false, \"contacts\": false}}")
   logoUrl        String?
   website        String?
   industry       String?
@@ -209,6 +211,7 @@ model CompanyRole {
   description String?
   isSystem    Boolean  @default(false)
   isActive    Boolean  @default(true)
+  permissions Json     @default("{\"hr\": \"none\", \"accounting\": \"none\", \"marketing\": \"none\"}")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

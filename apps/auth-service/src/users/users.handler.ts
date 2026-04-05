@@ -34,4 +34,35 @@ export class UsersHandler {
       );
     }
   }
+
+  @EventPattern('auth.resend_employee_invite')
+  async handleResendEmployeeInvite(
+    @Payload()
+    data: {
+      tenantId: string;
+      employeeId: string;
+      email: string;
+      firstName: string;
+    },
+  ) {
+    this.logger.log(`Resending employee invite for ${data.email}`);
+    try {
+      const user = await this.usersService.findByEmail(
+        data.tenantId,
+        data.email,
+      );
+      if (!user) {
+        this.logger.warn(
+          `No user found for ${data.email} — cannot resend invite`,
+        );
+        return;
+      }
+      await this.usersService.resendInvite(data.tenantId, user.id);
+      this.logger.log(`Invite resent to ${data.email}`);
+    } catch (e: any) {
+      this.logger.warn(
+        `Failed to resend invite for ${data.email}: ${e.message}`,
+      );
+    }
+  }
 }

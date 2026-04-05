@@ -29,6 +29,11 @@ export class JwtAuthGuard implements CanActivate {
         tenantName: payload.tenantName ?? '',
         firstName: payload.firstName ?? '',
         companyRoleId: payload.companyRoleId ?? null,
+        moduleConfig: (payload.moduleConfig as Record<string, boolean>) ?? {
+          hr: false,
+          accounting: false,
+          marketing: false,
+        },
       };
       return true;
     } catch {

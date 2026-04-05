@@ -50,10 +50,12 @@ export class UsersService {
       const existingAdmin = await this.prisma.user.findFirst({
         where: { tenantId, role: 'TENANT_ADMIN' },
       });
+      // Demote existing admin to EMPLOYEE before assigning new one
       if (existingAdmin) {
-        throw new ConflictException(
-          'This company already has a Company Admin assigned.',
-        );
+        await this.prisma.user.update({
+          where: { id: existingAdmin.id },
+          data: { role: 'EMPLOYEE' },
+        });
       }
     }
 
@@ -218,6 +220,12 @@ export class UsersService {
     });
 
     return { message: 'Invitation resent successfully' };
+  }
+
+  async findByEmail(tenantId: string, email: string) {
+    return this.prisma.user.findUnique({
+      where: { tenantId_email: { tenantId, email } },
+    });
   }
 
   async findAll(tenantId: string) {

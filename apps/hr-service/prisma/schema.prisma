@@ -165,7 +165,10 @@ model Employee {
   departmentId      String?
   jobTitle          String
   employmentType    EmploymentType   @default(FULL_TIME)
-  employmentStatus  EmploymentStatus @default(PROBATION)
+  employmentStatus      EmploymentStatus @default(PROBATION)
+  statusChangedAt       DateTime?
+  statusChangedById     String?
+  statusChangedByEmail  String?
   hireDate          DateTime
   probationEndsAt   DateTime?
   offboardedAt      DateTime?
@@ -484,5 +487,44 @@ model Appraisal {
   manager     Employee?       @relation("AppraisalManager", fields: [managerId], references: [id])
 
   @@unique([cycleId, employeeId])
+  @@schema("hr")
+}
+
+model Announcement {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  body        String
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@schema("hr")
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  tenantId   String
+  userId     String
+  type       String
+  message    String
+  link       String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, isRead])
+  @@index([tenantId, userId])
+  @@schema("hr")
+}
+
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, date])
   @@schema("hr")
 }

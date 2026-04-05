@@ -102,6 +102,21 @@ export class UsersController {
     } as any);
   }
 
+  @Post('set-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Alias for accept-invite — set password via invite token',
+  })
+  @ApiBody({
+    schema: {
+      example: { inviteToken: 'invite-token-here', password: 'NewPass123!' },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Password set, auto-logged in' })
+  setPassword(@Body() dto: AcceptInviteDto) {
+    return this.usersService.acceptInvite(dto);
+  }
+
   @Post('accept-invite')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Accept invitation and set initial password' })
