@@ -224,7 +224,3 @@ npm run build       # must succeed
 Never push if either of these fail — the CI pipeline will reject it.
 
 ---
-
-git add apps/web/work-phelo-web/FRONTEND.md
-git commit -m "docs(web): add comprehensive frontend developer guide"
-git push origin feature/frontend-integration
