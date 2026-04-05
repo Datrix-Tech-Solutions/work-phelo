@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -279,6 +280,108 @@ export class TenantsService {
     };
   }
 
+  async updateFeatures(
+    tenantId: string,
+    module: string,
+    features: Record<string, boolean>,
+    actorId: string,
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const moduleConfig = (tenant.moduleConfig as Record<string, boolean>) ?? {};
+    if (!moduleConfig[module]) {
+      throw new BadRequestException(
+        `The ${module} module is not enabled for this company.`,
+      );
+    }
+
+    const currentFeatures =
+      (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {};
+    const currentModuleFeatures = currentFeatures[module] ?? {};
+
+    // Validate at least one feature enabled
+    const merged = { ...currentModuleFeatures, ...features };
+    const enabledCount = Object.values(merged).filter(Boolean).length;
+    if (enabledCount === 0) {
+      throw new BadRequestException(
+        `At least one feature must be enabled within the ${module} module.`,
+      );
+    }
+
+    const updatedFeatureConfig = {
+      ...currentFeatures,
+      [module]: merged,
+    };
+
+    // Build audit log changes
+    const changes: string[] = [];
+    for (const [feature, enabled] of Object.entries(features)) {
+      if (currentModuleFeatures[feature] !== enabled) {
+        changes.push(
+          `${module}.${feature}: ${currentModuleFeatures[feature] ? 'enabled' : 'disabled'} → ${enabled ? 'enabled' : 'disabled'}`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { featureConfig: updatedFeatureConfig },
+    });
+
+    if (changes.length > 0) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actorId,
+          tenantId,
+          action: 'UPDATE',
+          resource: 'Tenant',
+          resourceId: tenantId,
+          changes: {
+            type: 'FEATURE_CONFIG_UPDATED',
+            module,
+            changes,
+            updatedConfig: updatedFeatureConfig,
+          },
+        },
+      });
+    }
+
+    return {
+      message: 'Feature configuration updated successfully',
+      featureConfig: updated.featureConfig,
+    };
+  }
+
+  async getFeatureHistory(tenantId: string) {
+    const logs = await this.prisma.auditLog.findMany({
+      where: {
+        tenantId,
+        action: 'UPDATE',
+        resource: 'Tenant',
+        resourceId: tenantId,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    return {
+      history: logs
+        .filter((l) => {
+          const changes = l.changes as any;
+          return changes?.type === 'FEATURE_CONFIG_UPDATED';
+        })
+        .map((l) => ({
+          id: l.id,
+          actorId: l.userId,
+          changes: (l.changes as any)?.changes ?? [],
+          module: (l.changes as any)?.module,
+          timestamp: l.createdAt,
+        })),
+    };
+  }
   async resendAdminInvite(tenantId: string) {
     const admin = await this.prisma.user.findFirst({
       where: { tenantId, role: 'TENANT_ADMIN', status: 'PENDING_VERIFICATION' },

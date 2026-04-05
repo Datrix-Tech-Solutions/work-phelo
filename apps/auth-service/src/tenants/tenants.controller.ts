@@ -153,6 +153,52 @@ export class TenantsController {
     return this.tenantsService.updateModules(id, dto, req.user.id);
   }
 
+  @Patch(':id/features')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Update feature config for a module within a company',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant ID' })
+  @ApiBody({
+    schema: {
+      example: {
+        module: 'hr',
+        features: { leave: true, payroll: true, time: false },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Feature config updated' })
+  @ApiResponse({
+    status: 400,
+    description: 'At least one feature must remain enabled',
+  })
+  updateFeatures(
+    @Param('id') id: string,
+    @Body() dto: { module: string; features: Record<string, boolean> },
+    @Req() req: any,
+  ) {
+    return this.tenantsService.updateFeatures(
+      id,
+      dto.module,
+      dto.features,
+      req.user.id,
+    );
+  }
+
+  @Get(':id/feature-history')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @ApiOperation({
+    summary: 'Get feature configuration change history for a company',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant ID' })
+  @ApiResponse({ status: 200, description: 'Feature history returned' })
+  getFeatureHistory(@Param('id') id: string) {
+    return this.tenantsService.getFeatureHistory(id);
+  }
+
   @Post(':id/admin/resend-invite')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN')
