@@ -15,6 +15,16 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
+  @Get('me')
+  @ApiOperation({ summary: 'Get personal employee dashboard' })
+  @ApiResponse({ status: 200, description: 'Employee dashboard data returned' })
+  getMyDashboard(@Req() req: any) {
+    return this.dashboardService.getEmployeeDashboard(
+      req.user.tenantId,
+      req.user.id,
+    );
+  }
+
   @Get('summary')
   @ApiOperation({ summary: 'Get Company Admin dashboard summary' })
   @ApiResponse({

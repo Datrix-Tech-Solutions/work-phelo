@@ -11,6 +11,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 
 @Module({
@@ -25,6 +26,7 @@ import { ModuleGuard } from './auth/guards/module.guard';
     AppraisalsModule,
     DashboardModule,
     RabbitMQModule,
+    AnnouncementsModule,
   ],
   providers: [
     ModuleGuard,
