@@ -113,8 +113,8 @@ export class UsersController {
     },
   })
   @ApiResponse({ status: 200, description: 'Password set, auto-logged in' })
-  setPassword(@Body() dto: AcceptInviteDto, @Req() req: any) {
-    return this.usersService.acceptInvite(dto, req.res);
+  setPassword(@Body() dto: AcceptInviteDto) {
+    return this.usersService.acceptInvite(dto);
   }
 
   @Post('accept-invite')
