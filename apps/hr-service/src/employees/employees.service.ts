@@ -66,7 +66,7 @@ export class EmployeesService {
         probationEndsAt: dto.probationEndsAt
           ? new Date(dto.probationEndsAt)
           : undefined,
-        basicSalary: dto.basicSalary,
+        basicSalary: dto.basicSalary ?? 0,
         bankName: dto.bankName,
         bankAccountNumber: dto.bankAccountNumber,
         bankBranch: dto.bankBranch,

@@ -72,16 +72,14 @@ export class CreateEmployeeDto {
   @IsString()
   emergencyRelation?: string;
 
-  @IsOptional()
   @IsString()
-  departmentId?: string;
+  departmentId!: string;
 
   @IsString()
   jobTitle!: string;
 
-  @IsOptional()
   @IsEnum(EmploymentType)
-  employmentType?: EmploymentType;
+  employmentType!: EmploymentType;
 
   @IsDateString()
   hireDate!: string;
@@ -110,8 +108,9 @@ export class CreateEmployeeDto {
   @IsString()
   tinNumber?: string;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  basicSalary!: number;
+  basicSalary?: number;
 }
