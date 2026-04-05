@@ -154,4 +154,150 @@ export class DashboardService {
       })),
     };
   }
+
+  async getDepartmentDistribution(tenantId: string) {
+    const departments = await this.prisma.department.findMany({
+      where: { tenantId, isActive: true },
+      include: { _count: { select: { employees: true } } },
+      orderBy: { name: 'asc' },
+    });
+
+    return {
+      distribution: departments.map((d) => ({
+        department: d.name,
+        count: d._count.employees,
+      })),
+      hasData: departments.some((d) => d._count.employees > 0),
+    };
+  }
+
+  async getRecentActivity(tenantId: string) {
+    const recent = await this.prisma.employee.findMany({
+      where: { tenantId },
+      orderBy: { updatedAt: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        employmentStatus: true,
+        createdAt: true,
+        updatedAt: true,
+        statusChangedAt: true,
+        statusChangedByEmail: true,
+        offboardedAt: true,
+      },
+    });
+
+    return {
+      activity: recent.map((e) => {
+        let action = 'New hire added';
+        if (e.offboardedAt) action = 'Offboarding initiated';
+        else if (e.statusChangedAt && e.statusChangedAt > e.createdAt)
+          action = 'Status changed';
+
+        return {
+          employeeId: e.id,
+          employeeName: `${e.firstName} ${e.lastName}`,
+          action,
+          status: e.employmentStatus,
+          timestamp: e.statusChangedAt ?? e.createdAt,
+          changedBy: e.statusChangedByEmail ?? null,
+        };
+      }),
+    };
+  }
+
+  async getUpcomingBirthdays(tenantId: string) {
+    const today = new Date();
+    const in30Days = new Date();
+    in30Days.setDate(today.getDate() + 30);
+
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        tenantId,
+        dateOfBirth: { not: null },
+        employmentStatus: { in: ['ACTIVE', 'PROBATION'] },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        dateOfBirth: true,
+        department: { select: { name: true } },
+        avatarUrl: true,
+      },
+    });
+
+    const todayMonth = today.getMonth();
+    const todayDay = today.getDate();
+
+    const upcoming = employees
+      .filter((e) => {
+        if (!e.dateOfBirth) return false;
+        const bday = new Date(e.dateOfBirth);
+        const bdayThisYear = new Date(
+          today.getFullYear(),
+          bday.getMonth(),
+          bday.getDate(),
+        );
+        if (bdayThisYear < today) {
+          bdayThisYear.setFullYear(today.getFullYear() + 1);
+        }
+        return bdayThisYear <= in30Days;
+      })
+      .map((e) => {
+        const bday = new Date(e.dateOfBirth!);
+        const bdayThisYear = new Date(
+          today.getFullYear(),
+          bday.getMonth(),
+          bday.getDate(),
+        );
+        if (bdayThisYear < today) {
+          bdayThisYear.setFullYear(today.getFullYear() + 1);
+        }
+        return {
+          id: e.id,
+          name: `${e.firstName} ${e.lastName}`,
+          department: e.department?.name ?? 'No department',
+          dateOfBirth: e.dateOfBirth,
+          upcomingBirthday: bdayThisYear,
+          avatarUrl: e.avatarUrl,
+        };
+      })
+      .sort(
+        (a, b) => a.upcomingBirthday.getTime() - b.upcomingBirthday.getTime(),
+      )
+      .slice(0, 5);
+
+    return { birthdays: upcoming };
+  }
+
+  async getRecentlyAdded(tenantId: string) {
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        jobTitle: true,
+        createdAt: true,
+        avatarUrl: true,
+        department: { select: { name: true } },
+      },
+    });
+
+    return {
+      employees: employees.map((e) => ({
+        id: e.id,
+        name: `${e.firstName} ${e.lastName}`,
+        jobTitle: e.jobTitle,
+        department: e.department?.name ?? 'No department',
+        dateAdded: e.createdAt,
+        avatarUrl: e.avatarUrl,
+      })),
+    };
+  }
 }

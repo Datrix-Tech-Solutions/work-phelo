@@ -56,4 +56,35 @@ export class DashboardController {
       req.user.tenantName,
     );
   }
+
+  @Get('department-distribution')
+  @ApiOperation({ summary: 'Get employee count per department' })
+  @ApiResponse({ status: 200, description: 'Department distribution returned' })
+  getDepartmentDistribution(@Req() req: any) {
+    return this.dashboardService.getDepartmentDistribution(req.user.tenantId);
+  }
+
+  @Get('recent-activity')
+  @ApiOperation({ summary: 'Get last 5 employee record changes' })
+  @ApiResponse({ status: 200, description: 'Recent activity returned' })
+  getRecentActivity(@Req() req: any) {
+    return this.dashboardService.getRecentActivity(req.user.tenantId);
+  }
+
+  @Get('upcoming-birthdays')
+  @ApiOperation({ summary: 'Get employees with birthdays in next 30 days' })
+  @ApiResponse({ status: 200, description: 'Upcoming birthdays returned' })
+  getUpcomingBirthdays(@Req() req: any) {
+    return this.dashboardService.getUpcomingBirthdays(req.user.tenantId);
+  }
+
+  @Get('recently-added')
+  @ApiOperation({ summary: 'Get last 5 employees added to the company' })
+  @ApiResponse({
+    status: 200,
+    description: 'Recently added employees returned',
+  })
+  getRecentlyAdded(@Req() req: any) {
+    return this.dashboardService.getRecentlyAdded(req.user.tenantId);
+  }
 }
