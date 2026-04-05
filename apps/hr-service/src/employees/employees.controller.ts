@@ -116,7 +116,10 @@ export class EmployeesController {
     @Body() dto: UpdateEmployeeDto,
     @Req() req: any,
   ) {
-    return this.employeesService.update(req.user.tenantId, id, dto);
+    return this.employeesService.update(req.user.tenantId, id, dto, {
+      id: req.user.id,
+      email: req.user.email,
+    });
   }
 
   @Patch(':id/offboard')

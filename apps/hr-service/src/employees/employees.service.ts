@@ -156,13 +156,32 @@ export class EmployeesService {
     return employee;
   }
 
-  async update(tenantId: string, id: string, dto: UpdateEmployeeDto) {
-    await this.findById(tenantId, id);
+  async update(
+    tenantId: string,
+    id: string,
+    dto: UpdateEmployeeDto,
+    actor?: { id: string; email: string },
+  ) {
+    const existing = await this.findById(tenantId, id);
+
+    const { employmentStatus, dateOfBirth, ...rest } = dto;
+
+    // Track status change
+    const statusChanged =
+      employmentStatus && employmentStatus !== existing.employmentStatus;
+
     return this.prisma.employee.update({
       where: { id },
       data: {
-        ...dto,
-        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+        ...rest,
+        ...(employmentStatus && { employmentStatus }),
+        ...(statusChanged &&
+          actor && {
+            statusChangedAt: new Date(),
+            statusChangedById: actor.id,
+            statusChangedByEmail: actor.email,
+          }),
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
       },
       include: { department: true },
     });

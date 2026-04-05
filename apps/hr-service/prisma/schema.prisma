@@ -165,7 +165,10 @@ model Employee {
   departmentId      String?
   jobTitle          String
   employmentType    EmploymentType   @default(FULL_TIME)
-  employmentStatus  EmploymentStatus @default(PROBATION)
+  employmentStatus      EmploymentStatus @default(PROBATION)
+  statusChangedAt       DateTime?
+  statusChangedById     String?
+  statusChangedByEmail  String?
   hireDate          DateTime
   probationEndsAt   DateTime?
   offboardedAt      DateTime?
