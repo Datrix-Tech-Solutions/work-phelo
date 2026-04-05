@@ -1,6 +1,7 @@
 import {
   Injectable,
   NotFoundException,
+  ConflictException,
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -64,7 +65,126 @@ export class LeaveService {
 
   // ── Leave Types ───────────────────────────────────────────────────────────
   async createLeaveType(tenantId: string, dto: CreateLeaveTypeDto) {
+    const existing = await this.prisma.leaveType.findFirst({
+      where: { tenantId, name: dto.name },
+    });
+    if (existing) {
+      throw new ConflictException('A leave type with this name already exists');
+    }
     return this.prisma.leaveType.create({ data: { tenantId, ...dto } });
+  }
+
+  async updateLeaveType(
+    tenantId: string,
+    id: string,
+    dto: Partial<CreateLeaveTypeDto>,
+  ) {
+    const leaveType = await this.prisma.leaveType.findFirst({
+      where: { id, tenantId },
+    });
+    if (!leaveType) throw new NotFoundException('Leave type not found');
+
+    // Check for existing requests
+    const hasRequests = await this.prisma.leaveRequest.count({
+      where: { leaveTypeId: id, tenantId },
+    });
+
+    const updated = await this.prisma.leaveType.update({
+      where: { id },
+      data: dto,
+    });
+
+    return {
+      ...updated,
+      warning:
+        hasRequests > 0
+          ? 'Editing this leave type will not affect requests already submitted or approved.'
+          : null,
+    };
+  }
+
+  async deleteLeaveType(tenantId: string, id: string) {
+    const leaveType = await this.prisma.leaveType.findFirst({
+      where: { id, tenantId },
+    });
+    if (!leaveType) throw new NotFoundException('Leave type not found');
+    if (leaveType.isDefault) {
+      throw new ForbiddenException('Default leave types cannot be deleted');
+    }
+
+    await this.prisma.leaveType.update({
+      where: { id },
+      data: { isActive: false },
+    });
+    return { message: 'Leave type deleted successfully' };
+  }
+
+  // ── Public Holidays ───────────────────────────────────────────────────────
+  async createPublicHoliday(
+    tenantId: string,
+    dto: { name: string; date: string },
+  ) {
+    return this.prisma.publicHoliday.create({
+      data: { tenantId, name: dto.name, date: new Date(dto.date) },
+    });
+  }
+
+  async getPublicHolidays(tenantId: string) {
+    return this.prisma.publicHoliday.findMany({
+      where: { tenantId },
+      orderBy: { date: 'asc' },
+    });
+  }
+
+  async updatePublicHoliday(
+    tenantId: string,
+    id: string,
+    dto: { name?: string; date?: string },
+  ) {
+    const holiday = await this.prisma.publicHoliday.findFirst({
+      where: { id, tenantId },
+    });
+    if (!holiday) throw new NotFoundException('Public holiday not found');
+    return this.prisma.publicHoliday.update({
+      where: { id },
+      data: { name: dto.name, date: dto.date ? new Date(dto.date) : undefined },
+    });
+  }
+
+  async deletePublicHoliday(tenantId: string, id: string) {
+    const holiday = await this.prisma.publicHoliday.findFirst({
+      where: { id, tenantId },
+    });
+    if (!holiday) throw new NotFoundException('Public holiday not found');
+    await this.prisma.publicHoliday.delete({ where: { id } });
+    return { message: 'Public holiday deleted successfully' };
+  }
+
+  private async countWorkingDays(
+    tenantId: string,
+    startDate: Date,
+    endDate: Date,
+  ): Promise<number> {
+    const holidays = await this.prisma.publicHoliday.findMany({
+      where: {
+        tenantId,
+        date: { gte: startDate, lte: endDate },
+      },
+    });
+    const holidayDates = new Set(
+      holidays.map((h) => h.date.toISOString().split('T')[0]),
+    );
+    let count = 0;
+    const current = new Date(startDate);
+    while (current <= endDate) {
+      const dayOfWeek = current.getDay();
+      const dateStr = current.toISOString().split('T')[0];
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDates.has(dateStr)) {
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return count;
   }
 
   async getLeaveTypes(tenantId: string) {

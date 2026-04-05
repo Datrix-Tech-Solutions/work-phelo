@@ -12,6 +12,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -35,6 +36,77 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 @ApiBearerAuth('access-token')
 export class LeaveController {
   constructor(private readonly leaveService: LeaveService) {}
+
+  @Patch('types/:id')
+  @ApiOperation({ summary: 'Update a leave type' })
+  @ApiParam({ name: 'id', description: 'Leave type UUID' })
+  @ApiResponse({ status: 200, description: 'Leave type updated' })
+  @ApiResponse({
+    status: 200,
+    description: 'Warning returned if existing requests found',
+  })
+  updateLeaveType(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateLeaveTypeDto>,
+    @Req() req: any,
+  ) {
+    return this.leaveService.updateLeaveType(req.user.tenantId, id, dto);
+  }
+
+  @Delete('types/:id')
+  @ApiOperation({
+    summary: 'Delete a custom leave type — default types cannot be deleted',
+  })
+  @ApiParam({ name: 'id', description: 'Leave type UUID' })
+  @ApiResponse({ status: 200, description: 'Leave type deleted' })
+  @ApiResponse({
+    status: 403,
+    description: 'Default leave types cannot be deleted',
+  })
+  deleteLeaveType(@Param('id') id: string, @Req() req: any) {
+    return this.leaveService.deleteLeaveType(req.user.tenantId, id);
+  }
+
+  @Post('public-holidays')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a public holiday' })
+  @ApiBody({
+    schema: { example: { name: 'Independence Day', date: '2026-03-06' } },
+  })
+  @ApiResponse({ status: 201, description: 'Public holiday added' })
+  createPublicHoliday(
+    @Body() dto: { name: string; date: string },
+    @Req() req: any,
+  ) {
+    return this.leaveService.createPublicHoliday(req.user.tenantId, dto);
+  }
+
+  @Get('public-holidays')
+  @ApiOperation({ summary: 'List all public holidays for the company' })
+  @ApiResponse({ status: 200, description: 'Public holidays retrieved' })
+  getPublicHolidays(@Req() req: any) {
+    return this.leaveService.getPublicHolidays(req.user.tenantId);
+  }
+
+  @Patch('public-holidays/:id')
+  @ApiOperation({ summary: 'Update a public holiday' })
+  @ApiParam({ name: 'id', description: 'Public holiday UUID' })
+  @ApiResponse({ status: 200, description: 'Public holiday updated' })
+  updatePublicHoliday(
+    @Param('id') id: string,
+    @Body() dto: { name?: string; date?: string },
+    @Req() req: any,
+  ) {
+    return this.leaveService.updatePublicHoliday(req.user.tenantId, id, dto);
+  }
+
+  @Delete('public-holidays/:id')
+  @ApiOperation({ summary: 'Delete a public holiday' })
+  @ApiParam({ name: 'id', description: 'Public holiday UUID' })
+  @ApiResponse({ status: 200, description: 'Public holiday deleted' })
+  deletePublicHoliday(@Param('id') id: string, @Req() req: any) {
+    return this.leaveService.deletePublicHoliday(req.user.tenantId, id);
+  }
 
   @Post('types')
   @ApiOperation({

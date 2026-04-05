@@ -517,3 +517,14 @@ model Notification {
   @@index([tenantId, userId])
   @@schema("hr")
 }
+
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, date])
+  @@schema("hr")
+}
