@@ -59,18 +59,34 @@ export class EmailService {
         to,
         subject: `You've been invited to ${tenantName} on ${this.appName}`,
         html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-            <h2 style="color: #4F46E5;">You've been invited!</h2>
-            <p>Hi ${firstName},</p>
-            <p><strong>${tenantName}</strong> has invited you to join their workspace on ${this.appName}.</p>
-            <p>Click the button below to set up your account. This link expires in <strong>24 hours</strong>.</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="${acceptInviteUrl}"
-                style="background: #4F46E5; color: white; padding: 14px 28px; border-radius: 6px; text-decoration: none; font-weight: bold; font-size: 16px;">
-                Accept Invitation
-              </a>
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
+            <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
+              <h1 style="color: #f97316; margin: 0 0 8px 0; font-size: 24px;">WorkPhelo ERP</h1>
+              <h2 style="color: #111827; margin: 0 0 24px 0; font-size: 18px;">You've been invited to ${tenantName}</h2>
+              <p style="color: #374151; margin: 0 0 16px 0;">Hi ${firstName},</p>
+              <p style="color: #374151; margin: 0 0 16px 0;">
+                <strong>${tenantName}</strong> has added you as a team member on ${this.appName}.
+                Click the button below to set your password and access your account.
+              </p>
+              <div style="background: #fff7ed; border-left: 4px solid #f97316; padding: 12px 16px; margin: 24px 0; border-radius: 0 4px 4px 0;">
+                <p style="color: #92400e; margin: 0; font-size: 14px;">
+                  This link expires in <strong>48 hours</strong>. If it expires, contact your platform administrator to resend the invitation.
+                </p>
+              </div>
+              <div style="text-align: center; margin: 32px 0;">
+                <a href="${acceptInviteUrl}"
+                  style="background: #f97316; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; display: inline-block;">
+                  Set Your Password
+                </a>
+              </div>
+              <p style="color: #9ca3af; font-size: 12px; margin: 24px 0 0 0;">
+                Or copy this link into your browser:<br/>
+                <span style="color: #6b7280; word-break: break-all;">${acceptInviteUrl}</span>
+              </p>
             </div>
-            <p style="color: #666; font-size: 12px;">Or copy this link: ${acceptInviteUrl}</p>
+            <p style="color: #9ca3af; font-size: 11px; text-align: center; margin: 16px 0 0 0;">
+              This email was sent by ${this.appName}. If you did not expect this invitation, you can safely ignore it.
+            </p>
           </div>
         `,
       });

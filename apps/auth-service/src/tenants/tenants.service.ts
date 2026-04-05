@@ -227,4 +227,31 @@ export class TenantsService {
       tenant: updated,
     };
   }
+
+  async resendAdminInvite(tenantId: string) {
+    const admin = await this.prisma.user.findFirst({
+      where: { tenantId, role: 'TENANT_ADMIN', status: 'PENDING_VERIFICATION' },
+      include: { tenant: true },
+    });
+    if (!admin) {
+      throw new NotFoundException(
+        'No pending Company Admin found for this company.',
+      );
+    }
+    const inviteToken = generateSecureToken();
+    const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    await this.prisma.user.update({
+      where: { id: admin.id },
+      data: { inviteToken, inviteExpiresAt },
+    });
+    await this.rabbitmq.sendInviteEmail({
+      userId: admin.id,
+      tenantId,
+      email: admin.email,
+      firstName: admin.firstName,
+      inviteToken,
+      tenantName: admin.tenant.name,
+    });
+    return { message: 'Invitation resent successfully' };
+  }
 }

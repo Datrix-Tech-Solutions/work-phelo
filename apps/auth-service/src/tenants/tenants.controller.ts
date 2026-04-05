@@ -132,4 +132,19 @@ export class TenantsController {
   suspend(@Param('id') id: string) {
     return this.tenantsService.suspendTenant(id);
   }
+
+  @Post(':id/admin/resend-invite')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend invite to Company Admin — SuperAdmin only' })
+  @ApiParam({ name: 'id', description: 'Tenant ID' })
+  @ApiResponse({ status: 200, description: 'Invite resent successfully' })
+  @ApiResponse({
+    status: 404,
+    description: 'No pending admin found for this company',
+  })
+  async resendAdminInvite(@Param('id') tenantId: string) {
+    return this.tenantsService.resendAdminInvite(tenantId);
+  }
 }
