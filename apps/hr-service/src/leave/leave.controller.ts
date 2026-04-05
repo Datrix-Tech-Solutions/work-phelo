@@ -25,10 +25,13 @@ import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../auth/guards/module.guard';
+import { RequireModule } from '../auth/decorators/module.decorator';
 
 @ApiTags('Leave')
 @Controller('leave')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
+@RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class LeaveController {
   constructor(private readonly leaveService: LeaveService) {}

@@ -84,6 +84,7 @@ model Tenant {
   address        String?
   country        String       @default("GH")
   status         TenantStatus @default(PENDING)
+  moduleConfig   Json         @default("{\"hr\": false, \"accounting\": false, \"marketing\": false}")
   logoUrl        String?
   website        String?
   industry       String?

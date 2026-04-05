@@ -133,6 +133,26 @@ export class TenantsController {
     return this.tenantsService.suspendTenant(id);
   }
 
+  @Patch(':id/modules')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Update module configuration for a company' })
+  @ApiParam({ name: 'id', description: 'Tenant ID' })
+  @ApiBody({
+    schema: {
+      example: { hr: true, accounting: false, marketing: true },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Module config updated' })
+  updateModules(
+    @Param('id') id: string,
+    @Body() dto: Record<string, boolean>,
+    @Req() req: any,
+  ) {
+    return this.tenantsService.updateModules(id, dto, req.user.id);
+  }
+
   @Post(':id/admin/resend-invite')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN')

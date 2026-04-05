@@ -26,10 +26,13 @@ import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { OffboardEmployeeDto } from './dto/offboard-employee.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../auth/guards/module.guard';
+import { RequireModule } from '../auth/decorators/module.decorator';
 
 @ApiTags('Employees')
 @Controller('employees')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
+@RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}

@@ -228,6 +228,57 @@ export class TenantsService {
     };
   }
 
+  async updateModules(
+    tenantId: string,
+    modules: Record<string, boolean>,
+    actorId: string,
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+    });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    const currentConfig =
+      (tenant.moduleConfig as Record<string, boolean>) ?? {};
+
+    // Build audit log entries for changed modules
+    const changes: string[] = [];
+    for (const [module, enabled] of Object.entries(modules)) {
+      if (currentConfig[module] !== enabled) {
+        changes.push(
+          `${module}: ${currentConfig[module] ? 'enabled' : 'disabled'} → ${enabled ? 'enabled' : 'disabled'}`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.tenant.update({
+      where: { id: tenantId },
+      data: { moduleConfig: { ...currentConfig, ...modules } },
+    });
+
+    // Audit log
+    if (changes.length > 0) {
+      await this.prisma.auditLog.create({
+        data: {
+          userId: actorId,
+          tenantId,
+          action: 'UPDATE',
+          resource: 'Tenant',
+          resourceId: tenantId,
+          changes: {
+            modules: changes,
+            updatedConfig: updated.moduleConfig,
+          },
+        },
+      });
+    }
+
+    return {
+      message: 'Module configuration updated successfully',
+      moduleConfig: updated.moduleConfig,
+    };
+  }
+
   async resendAdminInvite(tenantId: string) {
     const admin = await this.prisma.user.findFirst({
       where: { tenantId, role: 'TENANT_ADMIN', status: 'PENDING_VERIFICATION' },

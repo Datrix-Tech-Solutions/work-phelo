@@ -11,6 +11,7 @@ import { PayrollModule } from './payroll/payroll.module';
 import { AppraisalsModule } from './appraisals/appraisals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
+import { ModuleGuard } from './auth/guards/module.guard';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { RabbitMQModule } from './messaging/rabbitmq.module';
     RabbitMQModule,
   ],
   providers: [
+    ModuleGuard,
     {
       provide: APP_PIPE,
       useValue: new ValidationPipe({

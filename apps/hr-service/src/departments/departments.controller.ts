@@ -21,10 +21,13 @@ import { DepartmentsService } from './departments.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../auth/guards/module.guard';
+import { RequireModule } from '../auth/decorators/module.decorator';
 
 @ApiTags('Departments')
 @Controller('departments')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
+@RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class DepartmentsController {
   constructor(private readonly departmentsService: DepartmentsService) {}

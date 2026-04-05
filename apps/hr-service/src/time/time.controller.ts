@@ -26,10 +26,13 @@ import { TimeCorrectionDto } from './dto/time-correction.dto';
 import { ReviewCorrectionDto } from './dto/review-correction.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../auth/guards/module.guard';
+import { RequireModule } from '../auth/decorators/module.decorator';
 
 @ApiTags('Time')
 @Controller('time')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard)
+@RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class TimeController {
   constructor(private readonly timeService: TimeService) {}
