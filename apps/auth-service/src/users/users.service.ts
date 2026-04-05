@@ -222,6 +222,12 @@ export class UsersService {
     return { message: 'Invitation resent successfully' };
   }
 
+  async findByEmail(tenantId: string, email: string) {
+    return this.prisma.user.findUnique({
+      where: { tenantId_email: { tenantId, email } },
+    });
+  }
+
   async findAll(tenantId: string) {
     return this.prisma.user.findMany({
       where: { tenantId },

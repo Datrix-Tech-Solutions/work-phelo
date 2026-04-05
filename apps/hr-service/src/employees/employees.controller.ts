@@ -132,6 +132,18 @@ export class EmployeesController {
     return this.employeesService.offboard(req.user.tenantId, id, dto);
   }
 
+  @Post(':id/resend-invite')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resend invite email to employee — invalidates previous link',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Invite resent successfully' })
+  @ApiResponse({ status: 404, description: 'Employee not found' })
+  resendInvite(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.resendInvite(req.user.tenantId, id);
+  }
+
   @Post(':id/allowances')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add an allowance to an employee' })

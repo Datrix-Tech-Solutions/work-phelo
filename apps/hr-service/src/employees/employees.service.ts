@@ -202,4 +202,24 @@ export class EmployeesService {
       data: { tenantId, employeeId, ...dto },
     });
   }
+
+  async resendInvite(tenantId: string, employeeId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+
+    if (!employee.email) {
+      throw new BadRequestException('Employee has no email address on record');
+    }
+
+    this.rabbitmq.emitToAuth('auth.resend_employee_invite', {
+      tenantId,
+      employeeId,
+      email: employee.email,
+      firstName: employee.firstName,
+    });
+
+    return { message: 'Invitation resent successfully' };
+  }
 }
