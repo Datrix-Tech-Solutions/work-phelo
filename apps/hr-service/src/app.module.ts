@@ -12,6 +12,7 @@ import { AppraisalsModule } from './appraisals/appraisals.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 
 @Module({
@@ -27,6 +28,7 @@ import { ModuleGuard } from './auth/guards/module.guard';
     DashboardModule,
     RabbitMQModule,
     AnnouncementsModule,
+    NotificationsModule,
   ],
   providers: [
     ModuleGuard,
