@@ -16,16 +16,12 @@ All requests go through the API Gateway at /api/v1/hr/...
 **Example:** GET http://157.245.220.205/api/v1/hr/dashboard/summary
 
 ### How to Authenticate in Swagger
-1. Login via POST /auth/login with demo credentials below
-2. Open browser DevTools → Application → Cookies → copy access_token value
+1. Login via POST /auth/login using your tenant credentials
+2. Open browser DevTools → Application → Cookies → copy the access_token value
 3. Click the Authorize button above → paste token → click Authorize
 
 ### Demo Credentials
-| Role | Slug | Email | Password |
-|---|---|---|---|
-| Company Admin | acme-ghana | admin@acmeghana.com | Admin123! |
-| Manager | acme-ghana | hr.manager@acmeghana.com | Manager123! |
-| Employee | acme-ghana | kofi.boateng@acmeghana.com | Employee123! |
+Use seeded local test accounts or your own tenant credentials. Avoid publishing real credentials inside Swagger documentation.
 
 ### Available Modules
 
@@ -90,10 +86,6 @@ All endpoints require a valid JWT token via:
     `,
     )
     .setVersion('1.0')
-    .addServer(
-      'http://157.245.220.205/api/v1/hr',
-      'Dev Server (via API Gateway)',
-    )
     .addServer('http://localhost:8080/api/v1/hr', 'Local Dev (via API Gateway)')
     .addTag('Departments', 'Department management')
     .addTag('Employees', 'Employee profiles and documents')
@@ -111,6 +103,7 @@ All endpoints require a valid JWT token via:
       },
       'access-token',
     )
+    .addCookieAuth('access_token')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

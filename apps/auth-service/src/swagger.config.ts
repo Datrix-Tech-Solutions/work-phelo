@@ -56,21 +56,12 @@ Each tenant has 3 default company roles seeded automatically: **Company Admin**,
 Tenant Admins can create custom roles with specific permissions.
 
 ### Demo Credentials
-| Role | Slug | Email | Password |
-|---|---|---|---|
-| SuperAdmin | — | superadmin@datrix.com | SuperAdmin123! |
-| Tenant Admin | acme-ghana | admin@acmeghana.com | Admin123! |
-| Manager | acme-ghana | hr.manager@acmeghana.com | Manager123! |
-| Employee | acme-ghana | kofi.boateng@acmeghana.com | Employee123! |
+Use seeded local test accounts or your own tenant credentials. Avoid publishing real credentials inside Swagger documentation.
     `,
     )
     .setVersion('1.0')
     .addServer(
       'http://157.245.220.205/api/v1/auth',
-      'Dev Server (via API Gateway)',
-    )
-    .addServer(
-      'http://localhost:8080/api/v1/auth',
       'Local Dev (via API Gateway)',
     )
     .addTag('Auth', 'Login, logout, token refresh, MFA, social auth')
@@ -88,6 +79,7 @@ Tenant Admins can create custom roles with specific permissions.
       },
       'access-token',
     )
+    .addCookieAuth('access_token')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

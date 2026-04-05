@@ -8,18 +8,48 @@ import {
   Min,
   Max,
 } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ShiftType } from '../../../prisma/generated/client';
 
 export class CreateScheduleDto {
-  @IsString() employeeId!: string;
-  @IsEnum(ShiftType) shiftType!: ShiftType;
-  @IsString() startTime!: string;
-  @IsString() endTime!: string;
+  @ApiProperty({ description: 'Employee ID for the shift', example: 'emp-123' })
+  @IsString()
+  employeeId!: string;
+
+  @ApiProperty({ description: 'Type of shift', example: 'DAY' })
+  @IsEnum(ShiftType)
+  shiftType!: ShiftType;
+
+  @ApiProperty({ description: 'Shift start time', example: '08:00' })
+  @IsString()
+  startTime!: string;
+
+  @ApiProperty({ description: 'Shift end time', example: '17:00' })
+  @IsString()
+  endTime!: string;
+
+  @ApiProperty({
+    description: 'Days of week to apply schedule (0=Sunday..6=Saturday)',
+    example: [1, 2, 3, 4, 5],
+  })
   @IsArray()
   @IsInt({ each: true })
   @Min(0, { each: true })
   @Max(6, { each: true })
   dayOfWeek!: number[];
-  @IsDateString() effectiveFrom!: string;
-  @IsOptional() @IsDateString() effectiveTo?: string;
+
+  @ApiProperty({
+    description: 'Schedule effective start date',
+    example: '2026-07-01',
+  })
+  @IsDateString()
+  effectiveFrom!: string;
+
+  @ApiPropertyOptional({
+    description: 'Optional effective end date',
+    example: '2026-12-31',
+  })
+  @IsOptional()
+  @IsDateString()
+  effectiveTo?: string;
 }
