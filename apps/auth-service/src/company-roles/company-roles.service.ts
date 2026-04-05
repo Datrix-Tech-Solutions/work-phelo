@@ -53,17 +53,27 @@ export class CompanyRolesService {
         name: dto.name,
         description: dto.description,
         isSystem: false,
+        permissions: dto.permissions ?? {
+          hr: 'none',
+          accounting: 'none',
+          marketing: 'none',
+        },
       },
     });
   }
 
   async update(tenantId: string, id: string, dto: UpdateCompanyRoleDto) {
     await this.findById(tenantId, id);
+    const role = await this.findById(tenantId, id);
+    if (role.isSystem) {
+      throw new ForbiddenException('Default roles cannot be edited');
+    }
     return this.prisma.companyRole.update({
       where: { id },
       data: {
         ...(dto.name && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.permissions && { permissions: dto.permissions }),
       },
     });
   }
@@ -71,10 +81,10 @@ export class CompanyRolesService {
   async remove(tenantId: string, id: string) {
     const role = await this.findById(tenantId, id);
     if (role.isSystem)
-      throw new ForbiddenException('System roles cannot be deleted');
+      throw new ForbiddenException('Default roles cannot be deleted');
     if (role._count.users > 0) {
       throw new ConflictException(
-        'Cannot delete a role that has users assigned to it',
+        'This role has employees assigned to it and cannot be deleted. Reassign employees before deleting.',
       );
     }
     return this.prisma.companyRole.update({

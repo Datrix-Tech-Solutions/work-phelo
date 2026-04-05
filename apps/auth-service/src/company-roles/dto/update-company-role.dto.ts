@@ -1,4 +1,4 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsObject } from 'class-validator';
 
 export class UpdateCompanyRoleDto {
   @IsOptional()
@@ -8,4 +8,8 @@ export class UpdateCompanyRoleDto {
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsObject()
+  permissions?: Record<string, 'none' | 'view' | 'edit'>;
 }
