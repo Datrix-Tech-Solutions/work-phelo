@@ -116,6 +116,18 @@ async function main() {
       status: 'ACTIVE',
       industry: 'Technology',
       size: '10-50',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
 
@@ -158,6 +170,18 @@ async function main() {
       status: 'ACTIVE',
       industry: 'Manufacturing',
       size: '100-500',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
 
@@ -420,6 +444,18 @@ async function main() {
       status: 'ACTIVE',
       industry: 'Technology',
       size: '10-50',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
 
@@ -570,6 +606,18 @@ async function main() {
       status: 'PENDING',
       industry: 'Food & Beverage',
       size: '50-100',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
   await prisma.user.upsert({
@@ -605,6 +653,18 @@ async function main() {
       status: 'SUSPENDED',
       industry: 'Import/Export',
       size: '10-50',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
   await prisma.user.upsert({
