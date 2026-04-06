@@ -52,6 +52,8 @@ export class AuthService {
         accounting: false,
         marketing: false,
       },
+      featureConfig:
+        (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
@@ -220,6 +222,9 @@ export class AuthService {
           accounting: false,
           marketing: false,
         },
+        featureConfig:
+          (tenant.featureConfig as Record<string, Record<string, boolean>>) ??
+          {},
       },
     };
   }
