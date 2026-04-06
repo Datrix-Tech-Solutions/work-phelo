@@ -33,7 +33,7 @@ COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
 RUN npm ci --omit=dev --ignore-scripts --legacy-peer-deps
 COPY --from=builder /app/apps/notification-service/prisma ./apps/notification-service/prisma
-RUN cd apps/notification-service && npx prisma generate
+RUN cd apps/notification-service && npx prisma@5.22.0 generate
 COPY --from=builder /app/apps/notification-service/dist ./apps/notification-service/dist
 WORKDIR /app/apps/notification-service
 EXPOSE 4004
