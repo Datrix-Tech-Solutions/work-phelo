@@ -9,7 +9,7 @@ COPY packages/utils ./packages/utils
 COPY packages/config ./packages/config
 COPY apps/hr-service ./apps/hr-service
 RUN npm ci
-RUN cd apps/hr-service && npx prisma generate
+RUN cd apps/hr-service && npx prisma@5.22.0 generate
 RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
@@ -35,7 +35,6 @@ RUN npm ci --omit=dev --ignore-scripts
 COPY --from=builder /app/apps/hr-service/prisma ./apps/hr-service/prisma
 RUN cd apps/hr-service && npx prisma@5.22.0 generate
 COPY --from=builder /app/apps/hr-service/dist ./apps/hr-service/dist
-COPY --from=builder /app/apps/hr-service/prisma ./apps/hr-service/prisma
 WORKDIR /app/apps/hr-service
 EXPOSE 4002
 CMD ["node", "dist/main"]

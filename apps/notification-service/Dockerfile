@@ -13,7 +13,7 @@ RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
 RUN npm run build --workspace=packages/config
-RUN cd apps/notification-service && npx prisma generate
+RUN cd apps/notification-service && npx prisma@5.22.0 generate
 RUN npm run build --workspace=apps/notification-service
 
 FROM node:20-alpine AS runner
@@ -31,7 +31,7 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-RUN npm ci --omit=dev --ignore-scripts --legacy-peer-deps
+RUN npm ci --omit=dev --ignore-scripts
 COPY --from=builder /app/apps/notification-service/prisma ./apps/notification-service/prisma
 RUN cd apps/notification-service && npx prisma@5.22.0 generate
 COPY --from=builder /app/apps/notification-service/dist ./apps/notification-service/dist

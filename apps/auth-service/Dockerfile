@@ -9,7 +9,7 @@ COPY packages/utils ./packages/utils
 COPY packages/config ./packages/config
 COPY apps/auth-service ./apps/auth-service
 RUN npm ci
-RUN cd apps/auth-service && npx prisma generate
+RUN cd apps/auth-service && npx prisma@5.22.0 generate
 RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
