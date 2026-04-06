@@ -32,9 +32,10 @@ export class EmailService {
       const resData = res.data as { id?: string };
       this.logger.log(`Email sent to ${to} — ID: ${resData?.id}`);
       return true;
-    } catch (error: any) {
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: unknown }; message?: string };
       this.logger.error(
-        `Failed to send email to ${to}: ${JSON.stringify(error?.response?.data || error?.message)}`,
+        `Failed to send email to ${to}: ${JSON.stringify(e?.response?.data || e?.message)}`,
       );
       return false;
     }
