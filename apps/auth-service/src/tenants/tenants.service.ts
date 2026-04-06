@@ -202,6 +202,8 @@ export class TenantsService {
       },
       status: 'SUCCESS',
     });
+    // Emit to HR service to seed default leave types and company roles
+    this.rabbitmq.emit('hr.tenant_approved', { tenantId: id });
     return { message: 'Tenant approved successfully', tenant: updated };
   }
 
