@@ -27,4 +27,4 @@ async function bootstrap() {
   console.log(`Notification service running on port ${port}`);
   console.log(`Listening on RabbitMQ queue: notification_queue`);
 }
-bootstrap();
+void bootstrap();

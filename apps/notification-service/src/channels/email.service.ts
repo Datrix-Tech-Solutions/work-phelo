@@ -29,7 +29,8 @@ export class EmailService {
           },
         },
       );
-      this.logger.log(`Email sent to ${to} — ID: ${res.data?.id}`);
+      const resData = res.data as { id?: string };
+      this.logger.log(`Email sent to ${to} — ID: ${resData?.id}`);
       return true;
     } catch (error: any) {
       this.logger.error(
