@@ -99,7 +99,7 @@ export class NotificationService {
   }) {
     const recipient = data.email ?? data.phone ?? 'unknown';
     const success = data.email
-      ? await this.email.sendPasswordResetOtp(
+      ? await this.email.sendPasswordResetLink(
           data.email,
           data.firstName,
           data.otp,
