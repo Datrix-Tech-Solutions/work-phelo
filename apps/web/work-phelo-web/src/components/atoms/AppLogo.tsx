@@ -5,7 +5,7 @@ export function AppLogo() {
     <div className="flex justify-center">
       <div className="relative w-50 aspect-280/90">
         <Image
-          src="/images/HRphelo.png"
+          src="/HRphelo.png"
           alt="WorkPhelo Logo"
           fill
           className="object-contain"

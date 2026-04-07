@@ -244,7 +244,7 @@ export class TenantsService {
 
     const updated = await this.prisma.tenant.update({
       where: { id },
-      data: { status: 'INACTIVE' },
+      data: { status: 'SUSPENDED' },
     });
 
     // Revoke all active sessions
@@ -537,33 +537,6 @@ export class TenantsService {
     };
   }
 
-  async getTenantUsers(tenantId: string) {
-    const users = await this.prisma.user.findMany({
-      where: { tenantId },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        role: true,
-        status: true,
-        companyRoleId: true,
-        lastLoginAt: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-    return { users };
-  }
-
-  async getTenantAuditLog(tenantId: string, limit = 20) {
-    const logs = await this.prisma.auditLog.findMany({
-      where: { tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
-    return { logs };
-  }
   async resendAdminInvite(tenantId: string) {
     const admin = await this.prisma.user.findFirst({
       where: { tenantId, role: 'TENANT_ADMIN', status: 'PENDING_VERIFICATION' },

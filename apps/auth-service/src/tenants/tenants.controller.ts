@@ -269,30 +269,6 @@ export class TenantsController {
     return this.tenantsService.getFeatureHistory(id);
   }
 
-  @Get(':id/users')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: 'Get all users for a tenant' })
-  @ApiParam({ name: 'id', description: 'Tenant ID' })
-  @ApiResponse({ status: 200, description: 'Users returned' })
-  getTenantUsers(@Param('id') id: string) {
-    return this.tenantsService.getTenantUsers(id);
-  }
-
-  @Get(':id/audit')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN')
-  @ApiOperation({ summary: 'Get audit log for a tenant' })
-  @ApiParam({ name: 'id', description: 'Tenant ID' })
-  @ApiQuery({ name: 'limit', required: false })
-  @ApiResponse({ status: 200, description: 'Audit log returned' })
-  getTenantAudit(@Param('id') id: string, @Query('limit') limit?: string) {
-    return this.tenantsService.getTenantAuditLog(
-      id,
-      limit ? parseInt(limit) : 20,
-    );
-  }
-
   @Post(':id/admin/resend-invite')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN')
