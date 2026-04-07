@@ -3,10 +3,8 @@
 'use client';
 
 import { useState, use } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, useWatch } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
 import { EmployeeCard } from '@/components/molecules/EmployeeCard';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -16,28 +14,10 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { useEmployees, useDepartments, useCreateEmployee } from '@/hooks';
+import { CreateEmployeePayload } from '@/types/hr';
 
 /* ── Types ── */
-interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  jobTitle: string;
-  email: string;
-  phone?: string;
-  avatarUrl?: string;
-  employmentStatus: string;
-  employmentType: string;
-  hireDate: string;
-  departmentId?: string;
-  department?: { id: string; name: string };
-}
-
-interface Department {
-  id: string;
-  name: string;
-}
-
 interface InviteForm {
   firstName: string;
   lastName: string;
@@ -83,7 +63,6 @@ function FilterSelect({
 export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
-  const queryClient = useQueryClient();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
@@ -94,29 +73,16 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const [panelOpen, setPanelOpen] = useState(false);
 
   /* ── Fetch employees ── */
-  const { data: empData, isLoading } = useQuery({
-    queryKey: ['employees', search, statusFilter, deptFilter, typeFilter],
-    queryFn: () =>
-      api
-        .get('/hr/employees', {
-          params: {
-            ...(search && { search }),
-            ...(statusFilter && { status: statusFilter }),
-            ...(deptFilter && { departmentId: deptFilter }),
-            ...(typeFilter && { type: typeFilter }),
-            limit: 100,
-          },
-        })
-        .then((r) => r.data),
+  const { data: empResult, isLoading } = useEmployees({
+    search: search || undefined,
+    status: statusFilter || undefined,
+    departmentId: deptFilter || undefined,
+    limit: 100,
   });
-
-  const employees: Employee[] = empData?.employees ?? empData ?? [];
+  const employees = empResult?.data ?? [];
 
   /* ── Fetch departments ── */
-  const { data: departments = [] } = useQuery<Department[]>({
-    queryKey: ['departments'],
-    queryFn: () => api.get('/hr/departments').then((r) => r.data),
-  });
+  const { data: departments = [] } = useDepartments();
 
   /* ── Invite form ── */
   const {
@@ -137,22 +103,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
 
-  const { mutate: inviteEmployee, isPending } = useMutation({
-    mutationFn: (data: InviteForm) => {
-      const { managerId: _m, ...rest } = data;
-      const payload = Object.fromEntries(
-        Object.entries(rest).filter(([, v]) => v !== '' && v !== undefined && v !== null),
-      );
-      return api.post('/hr/employees', payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] });
-      toast.success('Employee invited successfully');
-      reset();
-      setPanelOpen(false);
-    },
-    onError: (err: unknown) => toast.error(extractError(err, 'Failed to invite employee')),
-  });
+  const { mutate: createEmployee, isPending } = useCreateEmployee();
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
@@ -316,7 +267,21 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
             <Button
               isLoading={isPending}
               loadingText="Sending invite…"
-              onClick={handleSubmit((d) => inviteEmployee(d))}
+              onClick={handleSubmit((d) => {
+                const { managerId: _m, ...rest } = d;
+                const payload = Object.fromEntries(
+                  Object.entries(rest).filter(([, v]) => v !== '' && v !== undefined && v !== null),
+                ) as CreateEmployeePayload;
+                createEmployee(payload, {
+                  onSuccess: () => {
+                    toast.success('Employee invited successfully');
+                    reset();
+                    setPanelOpen(false);
+                  },
+                  onError: (err: unknown) =>
+                    toast.error(extractError(err, 'Failed to invite employee')),
+                });
+              })}
             >
               Send Invite
             </Button>

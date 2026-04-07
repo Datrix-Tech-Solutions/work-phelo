@@ -9,6 +9,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
+import { Activity, BookUser, DollarSign } from 'lucide-react';
 
 /* ── Nav ── */
 
@@ -27,54 +28,11 @@ function getGreeting() {
 }
 
 /* ── Module definitions ── */
-const HRIcon = () => (
-  <svg
-    width="26"
-    height="26"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
+const HRIcon = () => <BookUser />;
 
-const MarketingIcon = () => (
-  <svg
-    width="26"
-    height="26"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-  </svg>
-);
+const MarketingIcon = () => <Activity />;
 
-const AccountingIcon = () => (
-  <svg
-    width="26"
-    height="26"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="12" y1="1" x2="12" y2="23" />
-    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-  </svg>
-);
+const AccountingIcon = () => <DollarSign />;
 
 const OperationIcon = () => (
   <svg

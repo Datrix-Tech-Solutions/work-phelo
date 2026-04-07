@@ -1,35 +1,22 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, Controller, useWatch } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { inputClass } from '@/lib/utils';
-import { CreateLeaveTypeDto, LeaveApplicability, LeaveType } from '@/types/leave';
+import { CreateLeaveTypeDto, LeaveType, LeaveApplicability } from '@/types/leave';
+import { api } from '@/lib/api';
 
 interface CreateLeaveTypePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  tenantSlug: string;
+  tenantSlug?: string;
   editLeaveType?: LeaveType;
 }
-
-type FormValues = {
-  name: string;
-  description: string;
-  isPaid: 'yes' | 'no' | '';
-  daysPerYear: number | '';
-  carryOver: 'yes' | 'no' | '';
-  maxCarryOverDays: number | '';
-  requiresDocumentation: 'yes' | 'no' | '';
-  documentationDescription: string;
-  applicableTo: LeaveApplicability[];
-};
 
 const APPLICABILITY_OPTIONS: { value: LeaveApplicability; label: string }[] = [
   { value: 'All', label: 'All Employees' },
@@ -48,269 +35,200 @@ export function CreateLeaveTypePanel({
   const queryClient = useQueryClient();
   const isEditing = !!editLeaveType;
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    reset,
-    setValue,
-    formState: { errors },
-  } = useForm<FormValues>({
+  const form = useForm<CreateLeaveTypeDto>({
     defaultValues: {
       name: '',
       description: '',
-      isPaid: '',
-      daysPerYear: '',
-      carryOver: '',
-      maxCarryOverDays: '',
-      requiresDocumentation: '',
+      isPaid: true,
+      daysPerYear: 10,
+      carryOver: false,
+      maxCarryOverDays: undefined,
+      requiresDocumentation: false,
       documentationDescription: '',
-      applicableTo: [],
+      applicableTo: ['All'],
     },
   });
 
+  // Reset form when editing
   useEffect(() => {
     if (editLeaveType) {
-      reset({
+      form.reset({
         name: editLeaveType.name,
-        description: editLeaveType.description ?? '',
-        isPaid: editLeaveType.isPaid ? 'yes' : 'no',
+        description: editLeaveType.description || '',
+        isPaid: editLeaveType.isPaid,
         daysPerYear: editLeaveType.daysPerYear,
-        carryOver: editLeaveType.carryOver ? 'yes' : 'no',
-        maxCarryOverDays: editLeaveType.maxCarryOverDays ?? '',
-        requiresDocumentation: editLeaveType.requiresDocumentation ? 'yes' : 'no',
-        documentationDescription: editLeaveType.documentationDescription ?? '',
+        carryOver: editLeaveType.carryOver,
+        maxCarryOverDays: editLeaveType.maxCarryOverDays,
+        requiresDocumentation: editLeaveType.requiresDocumentation,
+        documentationDescription: editLeaveType.documentationDescription || '',
         applicableTo: editLeaveType.applicableTo,
       });
     } else {
-      reset({
-        name: '',
-        description: '',
-        isPaid: '',
-        daysPerYear: '',
-        carryOver: '',
-        maxCarryOverDays: '',
-        requiresDocumentation: '',
-        documentationDescription: '',
-        applicableTo: [],
-      });
+      form.reset();
     }
-  }, [editLeaveType, reset]);
-
-  const carryOver = useWatch({ control, name: 'carryOver' });
-  const requiresDocumentation = useWatch({ control, name: 'requiresDocumentation' });
-  const applicableTo = useWatch({ control, name: 'applicableTo' });
-
-  const toggleApplicability = (value: LeaveApplicability) => {
-    const current = applicableTo ?? [];
-    if (current.includes(value)) {
-      setValue(
-        'applicableTo',
-        current.filter((v) => v !== value),
-        { shouldValidate: true },
-      );
-    } else {
-      setValue('applicableTo', [...current, value], { shouldValidate: true });
-    }
-  };
+  }, [editLeaveType, form]);
 
   const { mutate, isPending } = useMutation({
-    mutationFn: (data: CreateLeaveTypeDto) =>
-      isEditing
-        ? api.put(`/${tenantSlug}/leave-types/${editLeaveType!.id}`, data)
-        : api.post(`/${tenantSlug}/leave-types`, data),
+    mutationFn: (data: CreateLeaveTypeDto) => {
+      const payload = {
+        name: data.name,
+        isPaid: data.isPaid,
+        daysAllowed: data.daysPerYear,
+      };
+
+      return isEditing
+        ? api.patch(`/hr/leave/types/${editLeaveType!.id}`, payload)
+        : api.post('/hr/leave/types', payload);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave-types', tenantSlug] });
-      toast.success(isEditing ? 'Leave type updated' : 'Leave type created');
+      queryClient.invalidateQueries({ queryKey: ['leave-types'] });
+      toast.success(
+        isEditing ? 'Leave type updated successfully' : 'Leave type created successfully',
+      );
       onClose();
     },
-    onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
+    onError: (err: any) => {
+      const message = err?.response?.data?.message || 'Something went wrong';
       toast.error(message);
     },
   });
 
-  const onSubmit = (values: FormValues) => {
-    if (!values.isPaid || !values.carryOver || !values.requiresDocumentation) return;
-    if ((values.applicableTo ?? []).length === 0) {
-      toast.error('Select at least one applicability option');
+  const onSubmit = (data: CreateLeaveTypeDto) => {
+    if (data.applicableTo.length === 0) {
+      toast.error('Please select at least one applicability option');
       return;
     }
-    mutate({
-      name: values.name,
-      description: values.description || undefined,
-      isPaid: values.isPaid === 'yes',
-      daysPerYear: Number(values.daysPerYear),
-      carryOver: values.carryOver === 'yes',
-      maxCarryOverDays:
-        values.carryOver === 'yes' && values.maxCarryOverDays !== ''
-          ? Number(values.maxCarryOverDays)
-          : undefined,
-      requiresDocumentation: values.requiresDocumentation === 'yes',
-      documentationDescription:
-        values.requiresDocumentation === 'yes' && values.documentationDescription
-          ? values.documentationDescription
-          : undefined,
-      applicableTo: values.applicableTo,
-    });
+    mutate(data);
   };
 
   return (
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditing ? 'Edit Leave Type' : 'Add New Leave Type'}
-      description="Define the leave type and its entitlement rules."
+      title={isEditing ? 'Edit Leave Type' : 'Create New Leave Type'}
+      description="Define leave policy, entitlements, and rules."
       width="w-[520px]"
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onSubmit)}>
-            {isEditing ? 'Save Changes' : 'Add Leave Type'}
+          <Button
+            isLoading={isPending}
+            loadingText="Saving..."
+            onClick={form.handleSubmit(onSubmit)}
+          >
+            {isEditing ? 'Save Changes' : 'Create Leave Type'}
           </Button>
         </div>
       }
     >
-      {/* Leave Type Name */}
       <FormField
         label="Leave Type Name"
-        registration={register('name', { required: 'Leave type name is required' })}
-        error={errors.name}
-        placeholder="e.g. Sick Leave"
+        registration={form.register('name', { required: 'Name is required' })}
+        error={form.formState.errors.name}
+        placeholder="e.g. Annual Leave"
       />
 
-      {/* Description */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-bold text-gray-900">Description</label>
-        <textarea
-          {...register('description')}
-          placeholder="Optional"
-          rows={3}
-          className={inputClass(undefined, 'resize-none')}
-        />
-      </div>
-
-      {/* Paid Leave */}
-      <Controller
-        name="isPaid"
-        control={control}
-        rules={{ required: 'Please select an option' }}
-        render={({ field }) => (
-          <SearchSelect
-            label="Paid Leave"
-            placeholder="Select option"
-            options={[
-              { value: 'yes', label: 'Yes' },
-              { value: 'no', label: 'No' },
-            ]}
-            value={field.value}
-            onChange={field.onChange}
-            error={errors.isPaid?.message}
-          />
-        )}
+      <FormField
+        label="Description"
+        registration={form.register('description')}
+        placeholder="Optional description"
+        type="textarea"
+        // rows={3}
       />
 
-      {/* Days Entitled Per Year */}
+      <SearchSelect
+        label="Is this paid leave?"
+        value={form.watch('isPaid') ? 'yes' : 'no'}
+        onChange={(val) => form.setValue('isPaid', val === 'yes')}
+        options={[
+          { value: 'yes', label: 'Yes' },
+          { value: 'no', label: 'No' },
+        ]}
+      />
+
       <FormField
         label="Days Entitled Per Year"
-        registration={register('daysPerYear', {
-          required: 'Days per year is required',
-          min: { value: 1, message: 'Must be at least 1' },
+        registration={form.register('daysPerYear', {
+          required: 'Required',
+          min: { value: 1, message: 'Must be at least 1 day' },
         })}
-        error={errors.daysPerYear}
         type="number"
-        placeholder="e.g. 10"
+        error={form.formState.errors.daysPerYear}
       />
 
-      {/* Carry Over Allowed */}
-      <Controller
-        name="carryOver"
-        control={control}
-        rules={{ required: 'Please select an option' }}
-        render={({ field }) => (
-          <SearchSelect
-            label="Carry Over Allowed"
-            placeholder="Select option"
-            options={[
-              { value: 'yes', label: 'Yes' },
-              { value: 'no', label: 'No' },
-            ]}
-            value={field.value}
-            onChange={field.onChange}
-            error={errors.carryOver?.message}
-          />
-        )}
-      />
-
-      {/* Max Carry Over Days — conditional */}
-      {carryOver === 'yes' && (
-        <FormField
-          label="Maximum Carry Over Days"
-          registration={register('maxCarryOverDays', {
-            min: { value: 1, message: 'Must be at least 1' },
-          })}
-          error={errors.maxCarryOverDays}
-          type="number"
-          placeholder="e.g. 5"
+      {/* Carry Over Section */}
+      <div className="space-y-3">
+        <SearchSelect
+          label="Allow Carry Over?"
+          value={form.watch('carryOver') ? 'yes' : 'no'}
+          onChange={(val) => form.setValue('carryOver', val === 'yes')}
+          options={[
+            { value: 'yes', label: 'Yes' },
+            { value: 'no', label: 'No' },
+          ]}
         />
-      )}
 
-      {/* Requires Documentation */}
-      <Controller
-        name="requiresDocumentation"
-        control={control}
-        rules={{ required: 'Please select an option' }}
-        render={({ field }) => (
-          <SearchSelect
-            label="Requires Documentation"
-            placeholder="Select option"
-            options={[
-              { value: 'yes', label: 'Yes' },
-              { value: 'no', label: 'No' },
-            ]}
-            value={field.value}
-            onChange={field.onChange}
-            error={errors.requiresDocumentation?.message}
+        {form.watch('carryOver') && (
+          <FormField
+            label="Maximum Carry Over Days"
+            registration={form.register('maxCarryOverDays', { min: 0 })}
+            type="number"
+            placeholder="e.g. 5"
           />
         )}
-      />
+      </div>
 
-      {/* Documentation Description — conditional */}
-      {requiresDocumentation === 'yes' && (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-bold text-gray-900">Documentation Description</label>
-          <textarea
-            {...register('documentationDescription')}
-            placeholder="Describe what documentation is required"
-            rows={3}
-            className={inputClass(undefined, 'resize-none')}
+      {/* Documentation Section */}
+      <div className="space-y-3">
+        <SearchSelect
+          label="Requires Documentation?"
+          value={form.watch('requiresDocumentation') ? 'yes' : 'no'}
+          onChange={(val) => form.setValue('requiresDocumentation', val === 'yes')}
+          options={[
+            { value: 'yes', label: 'Yes' },
+            { value: 'no', label: 'No' },
+          ]}
+        />
+
+        {form.watch('requiresDocumentation') && (
+          <FormField
+            label="Documentation Requirements"
+            registration={form.register('documentationDescription')}
+            placeholder="Describe what documents are needed..."
+            type="textarea"
+            // rows={3}
           />
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Applicable To */}
       <div className="flex flex-col gap-2">
         <label className="text-sm font-bold text-gray-900">Applicable To</label>
-        <div className="flex flex-col gap-2.5">
-          {APPLICABILITY_OPTIONS.map((opt) => (
-            <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer">
+        <div className="flex flex-col gap-2">
+          {APPLICABILITY_OPTIONS.map((option) => (
+            <label key={option.value} className="flex items-center gap-2 cursor-pointer ">
               <input
                 type="checkbox"
-                checked={(applicableTo ?? []).includes(opt.value)}
-                onChange={() => toggleApplicability(opt.value)}
+                checked={form.watch('applicableTo').includes(option.value)}
+                onChange={(e) => {
+                  const current = form.watch('applicableTo');
+                  if (e.target.checked) {
+                    form.setValue('applicableTo', [...current, option.value]);
+                  } else {
+                    form.setValue(
+                      'applicableTo',
+                      current.filter((v) => v !== option.value),
+                    );
+                  }
+                }}
                 className="w-4 h-4 accent-[#0D2244]"
               />
-              <span className="text-sm text-gray-700">{opt.label}</span>
+              <span>{option.label}</span>
             </label>
           ))}
         </div>
-        {(applicableTo ?? []).length === 0 && errors.applicableTo && (
-          <p className="text-xs text-red-500">Select at least one option</p>
-        )}
       </div>
     </SidePanel>
   );

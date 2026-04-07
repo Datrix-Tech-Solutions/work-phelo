@@ -15,7 +15,7 @@ import { CreateLeaveRequestDto, LeaveBalance, LeaveType, PublicHoliday } from '@
 interface ApplyLeavePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  tenantSlug: string;
+  tenantSlug?: string;
   balances: LeaveBalance[];
 }
 
@@ -56,17 +56,23 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const { data: leaveTypes = [] } = useQuery<LeaveType[]>({
-    queryKey: ['leave-types', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/leave-types`).then((r) => r.data),
+  const { data: leaveTypesRaw } = useQuery({
+    queryKey: ['leave-types'],
+    queryFn: () => api.get('/hr/leave/types').then((r) => r.data),
     enabled: isOpen,
   });
+  const leaveTypes: LeaveType[] = Array.isArray(leaveTypesRaw)
+    ? leaveTypesRaw
+    : (leaveTypesRaw?.data ?? []);
 
-  const { data: holidays = [] } = useQuery<PublicHoliday[]>({
-    queryKey: ['public-holidays', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/public-holidays`).then((r) => r.data),
+  const { data: holidaysRaw } = useQuery({
+    queryKey: ['public-holidays'],
+    queryFn: () => api.get('/hr/leave/public-holidays').then((r) => r.data),
     enabled: isOpen,
   });
+  const holidays: PublicHoliday[] = Array.isArray(holidaysRaw)
+    ? holidaysRaw
+    : (holidaysRaw?.data ?? []);
 
   const {
     register,
@@ -111,10 +117,10 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
     selectedBalance != null && workingDays > 0 && workingDays > selectedBalance.remaining;
 
   const { mutate, isPending } = useMutation({
-    mutationFn: (data: CreateLeaveRequestDto) => api.post(`/${tenantSlug}/leave/request`, data),
+    mutationFn: (data: CreateLeaveRequestDto) => api.post('/hr/leave/requests', data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-leave-requests', tenantSlug] });
-      queryClient.invalidateQueries({ queryKey: ['leave-balance', tenantSlug] });
+      queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['leave-balances'] });
       toast.success('Leave request submitted');
       onClose();
     },

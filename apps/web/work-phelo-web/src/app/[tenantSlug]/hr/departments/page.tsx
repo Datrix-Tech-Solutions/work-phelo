@@ -3,9 +3,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/DataTable';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -13,26 +12,16 @@ import { FormField } from '@/components/molecules/FormField';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { extractError } from '@/lib/extractError';
+import {
+  useDepartments,
+  useCreateDepartment,
+  useUpdateDepartment,
+  useEmployees,
+  useUpdateEmployee,
+} from '@/hooks';
+import { Department, Employee } from '@/types/hr';
 
 /* ── Types ── */
-interface Department {
-  id: string;
-  name: string;
-  description?: string;
-  managerId?: string;
-  isActive: boolean;
-  _count: { employees: number };
-}
-
-interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  jobTitle: string;
-  departmentId?: string;
-  avatarUrl?: string;
-}
-
 interface DeptForm {
   name: string;
   description?: string;
@@ -66,7 +55,6 @@ const PAGE_SIZE = 8;
 
 /* ── Page ── */
 export default function DepartmentsPage() {
-  const queryClient = useQueryClient();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
@@ -82,15 +70,10 @@ export default function DepartmentsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   /* ── Data fetching ── */
-  const { data: departments = [], isLoading } = useQuery<Department[]>({
-    queryKey: ['departments'],
-    queryFn: () => api.get('/hr/departments').then((r) => r.data),
-  });
+  const { data: departments = [], isLoading } = useDepartments();
 
-  const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ['employees-all'],
-    queryFn: () => api.get('/hr/employees').then((r) => r.data?.employees ?? r.data),
-  });
+  const { data: empResult } = useEmployees({ limit: 500 });
+  const employees = empResult?.data ?? [];
 
   /* ── Resolve manager names ── */
   const employeeMap = useMemo(() => {
@@ -136,57 +119,63 @@ export default function DepartmentsPage() {
       label: 'Members',
       width: '1fr',
       render: (row) => (
-        <span className="text-sm font-medium text-gray-700">{row._count.employees}</span>
+        <span className="text-sm font-medium text-gray-700">{row._count?.employees ?? 0}</span>
       ),
     },
     {
       key: 'status',
       label: 'Status',
       width: '1fr',
-      render: (row) => <DeptStatus count={row._count.employees} isActive={row.isActive} />,
+      render: (row) => <DeptStatus count={row._count?.employees ?? 0} isActive={row.isActive} />,
     },
   ];
 
   /* ── Create mutation ── */
   const createForm = useForm<DeptForm>();
-  const { mutate: createDept, isPending: isCreating } = useMutation({
-    mutationFn: (data: DeptForm) => api.post('/hr/departments', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
-      toast.success('Department created');
-      createForm.reset();
-      setCreateOpen(false);
-    },
-    onError: (err: unknown) => toast.error(extractError(err, 'Failed to create department')),
-  });
+  const { mutate: createDeptMutate, isPending: isCreating } = useCreateDepartment();
+
+  const createDept = (data: DeptForm) =>
+    createDeptMutate(data, {
+      onSuccess: () => {
+        toast.success('Department created');
+        createForm.reset();
+        setCreateOpen(false);
+      },
+      onError: (err: unknown) => toast.error(extractError(err, 'Failed to create department')),
+    });
 
   /* ── Edit mutation ── */
   const editForm = useForm<DeptForm>();
-  const { mutate: editDept, isPending: isEditing } = useMutation({
-    mutationFn: (data: DeptForm) => api.patch(`/hr/departments/${editTarget?.id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
-      toast.success('Department updated');
-      setEditTarget(null);
-    },
-    onError: (err: unknown) => toast.error(extractError(err, 'Failed to update department')),
-  });
+  const { mutate: updateDeptMutate, isPending: isEditing } = useUpdateDepartment();
 
-  const openEdit = (dept: Department) => {
+  const editDept = (data: DeptForm) => {
+    if (!editTarget) return;
+    updateDeptMutate(
+      { id: editTarget.id, ...data },
+      {
+        onSuccess: () => {
+          toast.success('Department updated');
+          setEditTarget(null);
+        },
+        onError: (err: unknown) => toast.error(extractError(err, 'Failed to update department')),
+      },
+    );
+  };
+
+  const openEdit = (dept: (typeof departments)[number]) => {
     editForm.reset({ name: dept.name, description: dept.description, managerId: dept.managerId });
     setEditTarget(dept);
   };
 
   /* ── Add members mutation ── */
+  const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
   const { mutate: addMembers, isPending: isAddingMembers } = useMutation({
     mutationFn: async (departmentId: string) => {
       await Promise.all(
-        [...selectedIds].map((empId) => api.patch(`/hr/employees/${empId}`, { departmentId })),
+        [...selectedIds].map((empId) => updateEmployeeAsync({ id: empId, departmentId })),
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
-      queryClient.invalidateQueries({ queryKey: ['employees-all'] });
       toast.success('Members added successfully');
       setMembersTarget(null);
       setSelectedIds(new Set());

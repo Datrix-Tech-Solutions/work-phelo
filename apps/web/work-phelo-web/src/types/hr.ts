@@ -2,6 +2,7 @@ export interface Department {
   id: string;
   name: string;
   description?: string;
+  managerId?: string;
   isActive: boolean;
   _count?: { employees: number };
 }
@@ -42,6 +43,32 @@ export interface Employee {
   statusChangedByEmail?: string;
   offboardedAt?: string;
   createdAt?: string;
+}
+
+export interface UpdateEmployeePayload {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  maritalStatus?: string;
+  nationality?: string;
+  address?: string;
+  city?: string;
+  region?: string;
+  jobTitle?: string;
+  departmentId?: string;
+  employmentType?: string;
+  employmentStatus?: string;
+  basicSalary?: number;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankBranch?: string;
+  ssnit?: string;
+  tinNumber?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  emergencyRelation?: string;
 }
 
 export interface CreateEmployeePayload {
@@ -102,6 +129,14 @@ export interface PayrollRun {
   totalNet: number;
   totalTax: number;
   createdAt: string;
+}
+
+export interface UpcomingBirthday {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  avatarUrl?: string;
 }
 
 export interface DashboardSummary {

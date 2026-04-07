@@ -9,12 +9,7 @@ import { StatusBadge } from '@/components/molecules/StatusBadge';
 import { Button } from '@/components/atoms/Button';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { useEmployee } from '@/hooks/hr/useEmployee';
-import { useDepartments } from '@/hooks/hr/useDepartments';
-import { useEmployees } from '@/hooks/hr/useEmployees';
-import { useUpdateEmployee } from '@/hooks/hr/useUpdateEmployee';
-import { useOffboardEmployee } from '@/hooks/hr/useOffboardEmployee';
-import { useResendInvite } from '@/hooks/hr/useResendInvite';
+
 import { AssetType } from '@/lib/assetIcons';
 import { ChevronRight, UserRoundMinus, UserRoundPen } from 'lucide-react';
 import { AssetCard } from '@/components/molecules/empAssetCard';
@@ -23,6 +18,14 @@ import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardE
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
 import { DetailField } from '@/components/molecules/DetailField';
+import {
+  useDepartments,
+  useEmployee,
+  useEmployees,
+  useOffboardEmployee,
+  useResendEmployeeInvite,
+  useUpdateEmployee,
+} from '@/hooks';
 
 /* ── Types ── */
 interface Asset {
@@ -76,30 +79,16 @@ export default function EmployeeDetailPage({
   /* ── Queries ── */
   const { data: employee, isLoading } = useEmployee(id);
   const { data: departments = [] } = useDepartments();
-  const { data: allHrEmployees = [] } = useEmployees();
+  const { data: allHrResult } = useEmployees();
+  const allHrEmployees = allHrResult?.data ?? [];
 
   /* ── Mutations ── */
-  const { mutate: processOffboard, isPending: isOffboarding } = useOffboardEmployee({
-    onSuccess: () => {
-      toast.success('Employee offboarded successfully');
-      setOffboardOpen(false);
-    },
-    onError: (err) => toast.error(extractError(err, 'Failed to offboard employee')),
-  });
+  const { mutate: processOffboard, isPending: isOffboarding } = useOffboardEmployee();
 
-  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee(employee?.id ?? '', {
-    onSuccess: () => {
-      toast.success('Employee updated successfully');
-      setEditOpen(false);
-    },
-    onError: (err) => toast.error(extractError(err, 'Failed to update employee')),
-  });
+  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
 
   /* ── Resend invite ── */
-  const { mutate: resendInvite, isPending: isResending } = useResendInvite(employee?.userId, {
-    onSuccess: () => toast.success('Invite resent successfully'),
-    onError: (err) => toast.error(extractError(err, 'Failed to resend invite')),
-  });
+  const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
 
   /* ── Loading / not found ── */
   if (isLoading) {
@@ -227,7 +216,13 @@ export default function EmployeeDetailPage({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => resendInvite()}
+              onClick={() =>
+                employee.userId &&
+                resendInvite(employee.userId, {
+                  onSuccess: () => toast.success('Invite resent successfully'),
+                  onError: (err) => toast.error(extractError(err, 'Failed to resend invite')),
+                })
+              }
               isLoading={isResending}
               loadingText="Sending…"
             >
@@ -384,7 +379,18 @@ export default function EmployeeDetailPage({
         onClose={() => setOffboardOpen(false)}
         employee={employee}
         allHrEmployees={allHrEmployees}
-        onOffboard={processOffboard}
+        onOffboard={(formData) =>
+          processOffboard(
+            { id: employee.id, reason: formData.reason },
+            {
+              onSuccess: () => {
+                toast.success('Employee offboarded successfully');
+                setOffboardOpen(false);
+              },
+              onError: (err) => toast.error(extractError(err, 'Failed to offboard employee')),
+            },
+          )
+        }
         isOffboarding={isOffboarding}
       />
 
@@ -395,7 +401,18 @@ export default function EmployeeDetailPage({
         employee={employee}
         departments={departments}
         name={name}
-        onSave={updateEmployee}
+        onSave={(formData) =>
+          updateEmployee(
+            { id: employee.id, ...formData },
+            {
+              onSuccess: () => {
+                toast.success('Employee updated successfully');
+                setEditOpen(false);
+              },
+              onError: (err) => toast.error(extractError(err, 'Failed to update employee')),
+            },
+          )
+        }
         isUpdating={isUpdating}
       />
 

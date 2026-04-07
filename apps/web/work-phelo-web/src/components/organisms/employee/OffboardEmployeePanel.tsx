@@ -7,7 +7,6 @@ import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Employee } from '@/types/hr';
-import { OffboardPayload } from '@/hooks/hr/useOffboardEmployee';
 
 interface OffboardForm {
   employeeId: string;
@@ -25,7 +24,7 @@ interface OffboardEmployeePanelProps {
   onClose: () => void;
   employee: Employee;
   allHrEmployees: Employee[];
-  onOffboard: (data: OffboardPayload) => void;
+  onOffboard: (data: OffboardForm) => void;
   isOffboarding: boolean;
 }
 

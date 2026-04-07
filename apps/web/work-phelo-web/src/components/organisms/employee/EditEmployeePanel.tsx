@@ -7,8 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { Employee, Department } from '@/types/hr';
-import { UpdateEmployeePayload } from '@/hooks/hr/useUpdateEmployee';
+import { Employee, Department, UpdateEmployeePayload } from '@/types/hr';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;

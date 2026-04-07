@@ -3,7 +3,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/DataTable';
 import { Modal } from '@/components/organisms/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -11,6 +11,7 @@ import { CreatePublicHolidayPanel } from '@/components/organisms/leave/CreatePub
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { PublicHoliday } from '@/types/leave';
+import { useDeletePublicHoliday } from '@/hooks';
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-GB', {
@@ -20,11 +21,6 @@ function formatDate(dateStr: string) {
   });
 }
 
-function daysBetween(start: string, end: string) {
-  const diff = new Date(end).getTime() - new Date(start).getTime();
-  return Math.round(diff / (1000 * 60 * 60 * 24)) + 1;
-}
-
 export default function PublicHolidaysPage({
   params,
 }: {
@@ -32,7 +28,6 @@ export default function PublicHolidaysPage({
 }) {
   const { tenantSlug } = use(params);
   const toast = useToast();
-  const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -41,10 +36,10 @@ export default function PublicHolidaysPage({
   const [deleteTarget, setDeleteTarget] = useState<PublicHoliday | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['public-holidays', tenantSlug, page, search],
+    queryKey: ['public-holidays', { page, search }],
     queryFn: () =>
       api
-        .get(`/${tenantSlug}/public-holidays`, {
+        .get('/hr/leave/public-holidays', {
           params: { page, search: search || undefined },
         })
         .then((r) => r.data),
@@ -55,20 +50,7 @@ export default function PublicHolidaysPage({
     : (data?.data ?? data?.holidays ?? []);
   const totalPages: number = data?.totalPages ?? 1;
 
-  const { mutate: deleteHoliday, isPending: isDeleting } = useMutation({
-    mutationFn: (id: string) => api.delete(`/${tenantSlug}/public-holidays/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['public-holidays', tenantSlug] });
-      toast.success('Holiday deleted');
-      setDeleteTarget(null);
-    },
-    onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
-      toast.error(message);
-    },
-  });
+  const { mutate: deleteHoliday, isPending: isDeleting } = useDeletePublicHoliday();
 
   const columns: Column<PublicHoliday>[] = [
     {
@@ -78,23 +60,10 @@ export default function PublicHolidaysPage({
     },
     {
       key: 'startDate',
-      label: 'Start Date',
-      render: (row) => <span className="text-gray-700">{formatDate(row.startDate)}</span>,
-    },
-    {
-      key: 'endDate',
-      label: 'End Date',
-      render: (row) => <span className="text-gray-700">{formatDate(row.endDate)}</span>,
-    },
-    {
-      key: 'duration',
-      label: 'Duration',
-      render: (row) => {
-        const days = daysBetween(row.startDate, row.endDate);
-        return (
-          <span className="text-gray-500 text-sm">{days === 1 ? '1 day' : `${days} days`}</span>
-        );
-      },
+      label: 'Date',
+      render: (row) => (
+        <span className="text-gray-700">{formatDate((row as any).date ?? row.startDate)}</span>
+      ),
     },
   ];
 
@@ -155,7 +124,17 @@ export default function PublicHolidaysPage({
               variant="danger"
               isLoading={isDeleting}
               loadingText="Deleting..."
-              onClick={() => deleteTarget && deleteHoliday(deleteTarget.id)}
+              onClick={() =>
+                deleteTarget &&
+                deleteHoliday(deleteTarget.id, {
+                  onSuccess: () => {
+                    toast.success('Holiday deleted');
+                    setDeleteTarget(null);
+                  },
+                  onError: (err: any) =>
+                    toast.error(err?.response?.data?.message ?? 'Something went wrong'),
+                })
+              }
             >
               Delete
             </Button>
