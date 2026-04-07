@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -38,7 +38,6 @@ export function CreatePublicHolidayPanel({
     register,
     handleSubmit,
     control,
-    watch,
     reset,
     formState: { errors },
   } = useForm<FormValues>({
@@ -57,7 +56,7 @@ export function CreatePublicHolidayPanel({
     }
   }, [editHoliday, reset]);
 
-  const startDate = watch('startDate');
+  const startDate = useWatch({ control, name: 'startDate' });
 
   const { mutate, isPending } = useMutation({
     mutationFn: (data: CreatePublicHolidayDto) =>

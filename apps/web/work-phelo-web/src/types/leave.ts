@@ -51,3 +51,51 @@ export interface CreatePublicHolidayDto {
 }
 
 export type UpdatePublicHolidayDto = Partial<CreatePublicHolidayDto>;
+
+// ── Leave Request ─────────────────────────────────────────
+export type LeaveRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
+
+export interface LeaveRequest {
+  id: string;
+  tenantSlug: string;
+  employeeId: string;
+  employeeName: string;
+  leaveTypeId: string;
+  leaveTypeName: string;
+  isPaid: boolean; // denormalised from leave type
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  totalDays: number;
+  reason?: string;
+  documentationUrl?: string;
+  status: LeaveRequestStatus;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateLeaveRequestDto {
+  leaveTypeId: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  reason?: string;
+  documentationUrl?: string;
+}
+
+export interface ReviewLeaveRequestDto {
+  status: 'Approved' | 'Rejected';
+  reviewNote?: string;
+}
+
+// ── Leave Balance ─────────────────────────────────────────
+export interface LeaveBalance {
+  leaveTypeId: string;
+  leaveTypeName: string;
+  entitled: number; // days per year
+  used: number; // approved days taken this cycle
+  pending: number; // days in pending requests
+  remaining: number; // entitled - used - pending
+  carriedOver: number; // days carried over from previous cycle
+}

@@ -4,7 +4,7 @@
 
 import { useState, use } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { EmployeeCard } from '@/components/molecules/EmployeeCard';
@@ -15,6 +15,7 @@ import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 /* ── Types ── */
 interface Employee {
@@ -25,11 +26,11 @@ interface Employee {
   email: string;
   phone?: string;
   avatarUrl?: string;
-  employmentStatus: 'ACTIVE' | 'PROBATION' | 'SUSPENDED' | 'OFFBOARDED';
+  employmentStatus: string;
   employmentType: string;
   hireDate: string;
   departmentId?: string;
-  department?: { name: string };
+  department?: { id: string; name: string };
 }
 
 interface Department {
@@ -85,7 +86,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const queryClient = useQueryClient();
   const toast = useToast();
 
-  /* filters */
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
@@ -93,7 +93,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
 
   const [panelOpen, setPanelOpen] = useState(false);
 
-  /* ── Fetch employees (server-side filtering) ── */
+  /* ── Fetch employees ── */
   const { data: empData, isLoading } = useQuery({
     queryKey: ['employees', search, statusFilter, deptFilter, typeFilter],
     queryFn: () =>
@@ -112,7 +112,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
 
   const employees: Employee[] = empData?.employees ?? empData ?? [];
 
-  /* ── Fetch departments for filter + form ── */
+  /* ── Fetch departments ── */
   const { data: departments = [] } = useQuery<Department[]>({
     queryKey: ['departments'],
     queryFn: () => api.get('/hr/departments').then((r) => r.data),
@@ -123,29 +123,35 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
     register,
     handleSubmit,
     reset,
-    watch,
+    control,
     setValue,
     formState: { errors },
   } = useForm<InviteForm>({
     defaultValues: { employmentType: 'FULL_TIME' },
   });
 
-  const phoneValue = watch('phone');
-  const hireDateValue = watch('hireDate');
-  const dobValue = watch('dateOfBirth');
-  const deptFormValue = watch('departmentId');
-  const managerValue = watch('managerId' as any);
-  const employmentTypeValue = watch('employmentType');
+  const phoneValue = useWatch({ control, name: 'phone' });
+  const hireDateValue = useWatch({ control, name: 'hireDate' });
+  const dobValue = useWatch({ control, name: 'dateOfBirth' });
+  const deptFormValue = useWatch({ control, name: 'departmentId' });
+  const managerValue = useWatch({ control, name: 'managerId' });
+  const employmentTypeValue = useWatch({ control, name: 'employmentType' });
 
   const { mutate: inviteEmployee, isPending } = useMutation({
-    mutationFn: (data: InviteForm) => api.post('/hr/employees', data),
+    mutationFn: (data: InviteForm) => {
+      const { managerId: _m, ...rest } = data;
+      const payload = Object.fromEntries(
+        Object.entries(rest).filter(([, v]) => v !== '' && v !== undefined && v !== null),
+      );
+      return api.post('/hr/employees', payload);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       toast.success('Employee invited successfully');
       reset();
       setPanelOpen(false);
     },
-    onError: (err: any) => toast.error(err?.response?.data?.message ?? 'Failed to invite employee'),
+    onError: (err: unknown) => toast.error(extractError(err, 'Failed to invite employee')),
   });
 
   return (
@@ -163,7 +169,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        {/* Search */}
         <div className="relative flex-1 min-w-52">
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
@@ -318,7 +323,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           </div>
         }
       >
-        {/* Personal Information */}
         <div className="flex flex-col gap-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Personal Information
@@ -359,7 +363,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           />
         </div>
 
-        {/* Job Information */}
         <div className="flex flex-col gap-4">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Job Information
@@ -384,7 +387,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
             label="Reporting Manager"
             placeholder="Select manager"
             value={managerValue}
-            onChange={(v) => setValue('managerId' as any, v)}
+            onChange={(v) => setValue('managerId', v)}
             options={employees.map((e) => ({
               value: e.id,
               label: `${e.firstName} ${e.lastName}`,

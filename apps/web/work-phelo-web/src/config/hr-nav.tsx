@@ -1,198 +1,32 @@
 import { NavGroup } from '@/components/organisms/Sidebar';
-import { BuildingIcon } from 'lucide-react';
+import {
+  LayoutDashboard,
+  CircleDollarSign,
+  Building,
+  Network,
+  Users,
+  CalendarRange,
+  Trophy,
+  Timer,
+  CalendarCheck,
+  ClipboardList,
+  MonitorSmartphone,
+  FileSliders,
+} from 'lucide-react';
 
 /* ── Icons ── */
-const DashboardIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="3" width="7" height="7" rx="1" />
-    <rect x="14" y="3" width="7" height="7" rx="1" />
-    <rect x="3" y="14" width="7" height="7" rx="1" />
-    <rect x="14" y="14" width="7" height="7" rx="1" />
-  </svg>
-);
-const DepartmentsIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M3 21h18" />
-    <path d="M5 21V7l7-4 7 4v14" />
-    <path d="M9 21v-4h6v4" />
-    <rect x="9" y="9" width="2" height="2" />
-    <rect x="13" y="9" width="2" height="2" />
-    <rect x="9" y="13" width="2" height="2" />
-    <rect x="13" y="13" width="2" height="2" />
-  </svg>
-);
-const BranchesIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M3 9h18M3 15h18M12 3v18" />
-    <rect x="3" y="3" width="6" height="6" rx="1" />
-    <rect x="15" y="3" width="6" height="6" rx="1" />
-    <rect x="15" y="15" width="6" height="6" rx="1" />
-    <rect x="3" y="15" width="6" height="6" rx="1" />
-  </svg>
-);
-const EmployeesIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
-const LeaveIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="4" width="18" height="18" rx="2" />
-    <line x1="16" y1="2" x2="16" y2="6" />
-    <line x1="8" y1="2" x2="8" y2="6" />
-    <line x1="3" y1="10" x2="21" y2="10" />
-    <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
-  </svg>
-);
-const AppraisalIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M8 21h8" />
-    <path d="M12 21v-4" />
-    <path d="M17 4H7a1 1 0 0 0-1 1v6a6 6 0 0 0 12 0V5a1 1 0 0 0-1-1z" />
-    <path d="M6 9H3a1 1 0 0 0-1 1v1a4 4 0 0 0 4 4" />
-    <path d="M18 9h3a1 1 0 0 1 1 1v1a4 4 0 0 1-4 4" />
-  </svg>
-);
-const TimeClockIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="9" />
-    <polyline points="12 7 12 12 15 15" />
-  </svg>
-);
-const SchedulingIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="4" width="18" height="18" rx="2" />
-    <line x1="16" y1="2" x2="16" y2="6" />
-    <line x1="8" y1="2" x2="8" y2="6" />
-    <line x1="3" y1="10" x2="21" y2="10" />
-    <polyline points="9 16 11 18 15 14" />
-  </svg>
-);
-const ProjectsIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-    <rect x="8" y="2" width="8" height="4" rx="1" />
-    <line x1="9" y1="12" x2="15" y2="12" />
-    <line x1="9" y1="16" x2="13" y2="16" />
-    <circle cx="7.5" cy="12" r="0.5" fill="currentColor" />
-    <circle cx="7.5" cy="16" r="0.5" fill="currentColor" />
-  </svg>
-);
-const PayrollIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="9" />
-    <line x1="12" y1="7" x2="12" y2="17" />
-    <path d="M15 10a3 3 0 0 0-6 0c0 4 6 4 6 0a3 3 0 0 0-6 0" />
-  </svg>
-);
-const AssetIcon = () => (
-  <svg
-    width="18"
-    height="18"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="2" y="3" width="20" height="14" rx="2" />
-    <path d="M8 21h8M12 17v4" />
-  </svg>
-);
+const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
+const DepartmentsIcon = () => <Building className="w-5 h-5" />;
+const BranchesIcon = () => <Network className="w-5 h-5" />;
+const EmployeesIcon = () => <Users className="w-5 h-5" />;
+const LeaveIcon = () => <CalendarRange className="w-5 h-5" />;
+const AppraisalIcon = () => <Trophy className="w-5 h-5" />;
+const TimeClockIcon = () => <Timer className="w-5 h-5" />;
+const SchedulingIcon = () => <CalendarCheck className="w-5 h-5" />;
+const ProjectsIcon = () => <ClipboardList className="w-5 h-5" />;
+const PayrollIcon = () => <CircleDollarSign className="w-5 h-5" />;
+const AssetIcon = () => <MonitorSmartphone className="w-5 h-5" />;
+const ManagementIcon = () => <FileSliders className="w-5 h-5" />;
 
 /* ── Nav groups — all items default enabled & active ── */
 
@@ -207,6 +41,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         href: '',
         enabled: true,
         active: true,
+        exact: true,
       },
     ],
   },
@@ -243,7 +78,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         icon: <LeaveIcon />,
         href: 'leave',
         enabled: true,
-        active: false,
+        active: true,
       },
       {
         key: 'appraisal',
@@ -293,7 +128,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         icon: <PayrollIcon />,
         href: 'payroll',
         enabled: true,
-        active: false,
+        active: true,
       },
     ],
   },
@@ -306,7 +141,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         icon: <AssetIcon />,
         href: 'assets',
         enabled: true,
-        active: false,
+        active: true,
       },
     ],
   },
@@ -316,7 +151,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
       {
         key: 'management',
         label: 'HR Management',
-        icon: <BuildingIcon />,
+        icon: <ManagementIcon />,
         href: 'hrmanagement',
         enabled: true,
         active: true,

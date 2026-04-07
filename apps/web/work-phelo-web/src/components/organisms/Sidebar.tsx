@@ -11,16 +11,12 @@ export interface NavItem {
   label: string;
   icon: React.ReactNode;
   href: string;
-  /**
-   * false  → item is hidden entirely (role-based access)
-   * true   → item is visible (default)
-   */
+  // enabled false cannot be seen at all used by company admin
   enabled?: boolean;
-  /**
-   * false  → item is visible but grayed-out / non-clickable (deactivated by super-admin module config)
-   * true   → item is fully interactive (default)
-   */
+  // active false make it inactive used by superadmin for feature control //
   active?: boolean;
+  // exact true means only highlight on exact path match (use for index/dashboard routes)
+  exact?: boolean;
 }
 
 export interface NavGroup {
@@ -37,7 +33,7 @@ interface SidebarProps {
 
 function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
   const pathname = usePathname();
-  const isCurrent = pathname === item.href || pathname.startsWith(item.href + '/');
+  const isCurrent = pathname === item.href || (!item.exact && pathname.startsWith(item.href + '/'));
   const isDeactivated = item.active === false;
 
   const iconEl = (

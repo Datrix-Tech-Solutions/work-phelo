@@ -7,8 +7,9 @@ import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { FormSection } from '@/components/molecules/FormSection';
-import { Select } from '@/components/atoms/Select';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { SearchSelect } from '../atoms/SearchSelect';
+import { useState } from 'react';
 
 interface AddCompanyPayload {
   name: string;
@@ -56,6 +57,10 @@ function generateSlug(name: string): string {
 
 export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
   const queryClient = useQueryClient();
+
+  const [industry, setIndustry] = useState('');
+
+  const [size, setSize] = useState('');
 
   const {
     register,
@@ -113,19 +118,27 @@ export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
           error={errors.name}
           placeholder="eg; Acme Corp Ltd"
         />
-        <Select
+
+        <SearchSelect
           label="Company Size"
-          placeholder="Select range"
+          placeholder="Select size range"
           options={COMPANY_SIZE_OPTIONS}
-          {...register('size')}
+          value={size}
+          onChange={(v) => {
+            setSize(v);
+            setValue('size', v);
+          }}
           error={errors.size?.message}
         />
-        <Select
-          label="Industry"
-          placeholder="Select industry"
+        <SearchSelect
+          label="Select Industry"
+          placeholder="Industry"
           options={INDUSTRY_OPTIONS}
-          {...register('industry')}
-          error={errors.industry?.message}
+          value={industry}
+          onChange={(v) => {
+            setIndustry(v);
+            setValue('industry', v);
+          }}
         />
       </FormSection>
 

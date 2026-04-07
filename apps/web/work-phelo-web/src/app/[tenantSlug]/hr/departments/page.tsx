@@ -11,6 +11,8 @@ import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { useToast } from '@/hooks/useToast';
+import { cn } from '@/lib/utils';
+import { extractError } from '@/lib/extractError';
 
 /* ── Types ── */
 interface Department {
@@ -155,8 +157,7 @@ export default function DepartmentsPage() {
       createForm.reset();
       setCreateOpen(false);
     },
-    onError: (err: any) =>
-      toast.error(err?.response?.data?.message ?? 'Failed to create department'),
+    onError: (err: unknown) => toast.error(extractError(err, 'Failed to create department')),
   });
 
   /* ── Edit mutation ── */
@@ -168,8 +169,7 @@ export default function DepartmentsPage() {
       toast.success('Department updated');
       setEditTarget(null);
     },
-    onError: (err: any) =>
-      toast.error(err?.response?.data?.message ?? 'Failed to update department'),
+    onError: (err: unknown) => toast.error(extractError(err, 'Failed to update department')),
   });
 
   const openEdit = (dept: Department) => {
@@ -223,7 +223,7 @@ export default function DepartmentsPage() {
       <div>
         <h1 className="text-xl font-bold text-gray-900">Departments</h1>
         <p className="text-sm text-gray-400 mt-0.5">
-          Manage your company's departments and team members
+          Manage your company&apos;s departments and team members
         </p>
       </div>
 
@@ -432,7 +432,10 @@ export default function DepartmentsPage() {
               return (
                 <label
                   key={emp.id}
-                  className={`flex items-center gap-3 py-3 cursor-pointer hover:bg-gray-50 -mx-6 px-6 transition-colors ${alreadyInDept ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={cn(
+                    'flex items-center gap-3 py-3 cursor-pointer hover:bg-gray-50 -mx-6 px-6 transition-colors',
+                    alreadyInDept && 'opacity-50 cursor-not-allowed',
+                  )}
                 >
                   <input
                     type="checkbox"

@@ -15,19 +15,33 @@ export interface Employee {
   phone?: string;
   gender?: 'MALE' | 'FEMALE' | 'OTHER';
   dateOfBirth?: string;
+  maritalStatus?: string;
+  nationality?: string;
+  address?: string;
+  city?: string;
+  region?: string;
   jobTitle: string;
   employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
-  employmentStatus: 'ACTIVE' | 'PROBATION' | 'ON_LEAVE' | 'SUSPENDED' | 'TERMINATED';
+  employmentStatus: 'ACTIVE' | 'PROBATION' | 'ON_LEAVE' | 'SUSPENDED' | 'TERMINATED' | 'OFFBOARDED';
   hireDate: string;
-  basicSalary: number;
+  basicSalary?: number;
   departmentId?: string;
   department?: Department;
+  managerId?: string;
   userId?: string;
   avatarUrl?: string;
   bankName?: string;
   bankAccountNumber?: string;
+  bankBranch?: string;
   ssnit?: string;
   tinNumber?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  emergencyRelation?: string;
+  statusChangedAt?: string;
+  statusChangedByEmail?: string;
+  offboardedAt?: string;
+  createdAt?: string;
 }
 
 export interface CreateEmployeePayload {
@@ -40,19 +54,28 @@ export interface CreateEmployeePayload {
   jobTitle: string;
   employmentType: string;
   hireDate: string;
-  basicSalary: number;
-  departmentId?: string;
+  basicSalary?: number;
+  departmentId: string;
   bankName?: string;
   bankAccountNumber?: string;
+  bankBranch?: string;
   ssnit?: string;
   tinNumber?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  emergencyRelation?: string;
 }
 
 export interface LeaveType {
   id: string;
   name: string;
-  defaultDays: number;
+  daysAllowed: number;
+  defaultDays?: number;
   isPaid: boolean;
+  isDefault?: boolean;
+  isActive?: boolean;
+  requiresApproval?: boolean;
+  isCarryOver?: boolean;
   description?: string;
 }
 

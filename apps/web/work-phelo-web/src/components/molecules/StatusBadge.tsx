@@ -19,6 +19,11 @@ const statusMap: Record<
   ON_LEAVE: { label: 'On Leave', variant: 'info' },
   PROBATION: { label: 'Probation', variant: 'warning' },
   TERMINATED: { label: 'Terminated', variant: 'danger' },
+  // Payroll statuses
+  PAID: { label: 'Paid', variant: 'success' },
+  UNPAID: { label: 'Unpaid', variant: 'warning' },
+  // Employee offboard status
+  OFFBOARDED: { label: 'Offboarded', variant: 'neutral' },
   // Appraisal cycle statuses
   Upcoming: { label: 'Upcoming', variant: 'info' },
   InProgress: { label: 'In Progress', variant: 'warning' },

@@ -82,7 +82,6 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   const user = useAuthStore((s) => s.user);
 
   const isHR = user?.role === 'TENANT_ADMIN';
-  const isEmployee = isHR || user?.role === 'EMPLOYEE' || user?.role === 'MANAGER';
   const isManager = isHR || user?.isManager === true;
 
   const TABS = [

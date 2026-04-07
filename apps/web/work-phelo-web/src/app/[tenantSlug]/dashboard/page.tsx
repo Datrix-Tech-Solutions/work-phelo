@@ -12,6 +12,12 @@ import { ModuleButton } from '@/components/molecules/ModuleButton';
 
 /* ── Nav ── */
 
+/* ── Types ── */
+interface TenantUser {
+  id: string;
+  status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'INACTIVE' | 'PENDING';
+}
+
 /* ── Greeting ── */
 function getGreeting() {
   const h = new Date().getHours();
@@ -157,7 +163,7 @@ export default function TenantDashboardPage({
   const initials = firstName.slice(0, 2).toUpperCase();
 
   /* ── Fetch users for employee count ── */
-  const { data: users = [] } = useQuery<any[]>({
+  const { data: users = [] } = useQuery<TenantUser[]>({
     queryKey: ['tenant-users', tenantId],
     queryFn: () => api.get(`/auth/tenants/${tenantId}/users`).then((r) => r.data),
     enabled: !!tenantId,
@@ -166,10 +172,13 @@ export default function TenantDashboardPage({
   /* ── Derive stats ── */
   const stats = useMemo(() => {
     const total = users.length;
+
     const active = users.filter((u) => u.status === 'ACTIVE').length;
+
     const pending = users.filter(
       (u) => u.status === 'PENDING_VERIFICATION' || u.status === 'PENDING',
     ).length;
+
     return { total, active, pending };
   }, [users]);
 
