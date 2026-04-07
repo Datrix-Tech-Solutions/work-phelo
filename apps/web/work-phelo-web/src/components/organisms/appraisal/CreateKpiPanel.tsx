@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -46,7 +46,6 @@ export function CreateKpiPanel({
     register,
     handleSubmit,
     control,
-    watch,
     reset,
     formState: { errors },
   } = useForm<FormValues>({
@@ -67,9 +66,9 @@ export function CreateKpiPanel({
     }
   }, [editKpi, reset]);
 
-  const selfWeight = watch('selfWeight');
+  const selfWeight = useWatch({ control, name: 'selfWeight' });
   const managerWeight = selfWeight !== '' ? Math.max(0, 100 - Number(selfWeight)) : 60;
-  const weight = watch('weight');
+  const weight = useWatch({ control, name: 'weight' });
 
   // Remaining weight budget (exclude current KPI's own weight when editing)
   const ownWeight = isEditing ? (editKpi?.weight ?? 0) : 0;
@@ -223,7 +222,7 @@ export function CreateKpiPanel({
         <div>
           <p className="text-sm font-bold text-gray-900">Assessment Weighting</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            How much each party's score contributes to the final KPI score
+            How much each party&apos;s score contributes to the final KPI score
           </p>
         </div>
 

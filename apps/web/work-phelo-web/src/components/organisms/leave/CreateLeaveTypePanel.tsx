@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -52,7 +52,6 @@ export function CreateLeaveTypePanel({
     register,
     handleSubmit,
     control,
-    watch,
     reset,
     setValue,
     formState: { errors },
@@ -98,9 +97,9 @@ export function CreateLeaveTypePanel({
     }
   }, [editLeaveType, reset]);
 
-  const carryOver = watch('carryOver');
-  const requiresDocumentation = watch('requiresDocumentation');
-  const applicableTo = watch('applicableTo');
+  const carryOver = useWatch({ control, name: 'carryOver' });
+  const requiresDocumentation = useWatch({ control, name: 'requiresDocumentation' });
+  const applicableTo = useWatch({ control, name: 'applicableTo' });
 
   const toggleApplicability = (value: LeaveApplicability) => {
     const current = applicableTo ?? [];

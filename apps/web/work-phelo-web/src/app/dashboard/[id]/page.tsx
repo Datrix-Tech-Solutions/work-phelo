@@ -11,6 +11,28 @@ import { CompanyInfoCard } from '@/components/organisms/CompanyInfoCard';
 import { ModuleConfiguration, Module } from '@/components/organisms/ModuleConfiguration';
 import { RecentActivities } from '@/components/organisms/RecentActivities';
 
+/* ── Types ── */
+interface TenantUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE' | 'MANAGER';
+  status: string;
+}
+
+interface AuditLog {
+  id: string;
+  resource: string;
+  action: string;
+  createdAt: string;
+  changes?: { after?: Record<string, unknown> };
+}
+
+interface AuditData {
+  logs: AuditLog[];
+}
+
 const DEFAULT_MODULES: Module[] = [
   {
     id: 'hr',
@@ -99,28 +121,28 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   });
 
   /* ── Fetch tenant users (find the TENANT_ADMIN) ── */
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<TenantUser[]>({
     queryKey: ['tenant-users', id],
     queryFn: () => api.get(`/auth/tenants/${id}/users`).then((r) => r.data),
     enabled: !!id,
   });
 
   /* ── Fetch audit logs ── */
-  const { data: auditData } = useQuery({
+  const { data: auditData } = useQuery<AuditData>({
     queryKey: ['tenant-audit', id],
     queryFn: () =>
       api.get(`/auth/tenants/${id}/audit`, { params: { limit: 20 } }).then((r) => r.data),
     enabled: !!id,
   });
 
-  const admin = (users as any[]).find((u: any) => u.role === 'TENANT_ADMIN');
+  const admin = users.find((u) => u.role === 'TENANT_ADMIN');
 
-  const activities = ((auditData?.logs ?? []) as any[]).map((log: any) => ({
+  const activities = (auditData?.logs ?? []).map((log) => ({
     id: log.id,
     title: `${log.resource} ${log.action.toLowerCase()}`,
     description: log.changes?.after
       ? Object.entries(log.changes.after)
-          .map(([k, v]) => `${k}: ${v}`)
+          .map(([k, v]) => `${k}: ${String(v)}`)
           .join(', ')
       : undefined,
     date: new Date(log.createdAt)

@@ -13,6 +13,7 @@ interface DatePickerProps {
   error?: string;
   placeholder?: string;
   disableFuture?: boolean;
+  disablePast?: boolean; // disables dates before today
 }
 
 function CalendarIcon() {
@@ -93,6 +94,7 @@ export function DatePicker({
   error,
   placeholder = 'DD/MM/YYYY',
   disableFuture,
+  disablePast,
 }: DatePickerProps) {
   const today = new Date();
   const parsed = value ? new Date(value) : null;
@@ -120,28 +122,37 @@ export function DatePicker({
     ? `${String(parsed.getDate()).padStart(2, '0')}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`
     : '';
 
-  /* calendar grid */
-  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array(firstDay).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
+  /* helpers */
+  const todayNorm = new Date(today);
+  todayNorm.setHours(0, 0, 0, 0);
 
   const isFutureDay = (day: number) => {
     if (!disableFuture) return false;
     const d = new Date(viewYear, viewMonth, day);
-    d.setHours(0, 0, 0, 0);
-    const t = new Date(today);
-    t.setHours(0, 0, 0, 0);
-    return d > t;
+    return d > todayNorm;
   };
+
+  const isPastDay = (day: number) => {
+    if (!disablePast) return false;
+    const d = new Date(viewYear, viewMonth, day);
+    return d < todayNorm;
+  };
+
+  const isDisabledDay = (day: number) => isFutureDay(day) || isPastDay(day);
 
   const isFutureMonth = (year: number, month: number) => {
     if (!disableFuture) return false;
     return year > today.getFullYear() || (year === today.getFullYear() && month > today.getMonth());
   };
+
+  const isPastMonth = (year: number, month: number) => {
+    if (!disablePast) return false;
+    return year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth());
+  };
+
+  const canGoPrevMonth =
+    !disablePast ||
+    !isPastMonth(viewMonth === 0 ? viewYear - 1 : viewYear, viewMonth === 0 ? 11 : viewMonth - 1);
 
   const canGoNextMonth =
     !disableFuture ||
@@ -151,9 +162,19 @@ export function DatePicker({
     );
 
   const canGoNextYear = !disableFuture || viewYear < today.getFullYear();
+  const canGoPrevYear = !disablePast || viewYear > today.getFullYear();
+
+  /* calendar grid */
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
 
   const selectDay = (day: number) => {
-    if (isFutureDay(day)) return;
+    if (isDisabledDay(day)) return;
     const d = new Date(viewYear, viewMonth, day);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     onChange?.(iso);
@@ -162,12 +183,13 @@ export function DatePicker({
   };
 
   const selectMonth = (monthIdx: number) => {
-    if (isFutureMonth(viewYear, monthIdx)) return;
+    if (isFutureMonth(viewYear, monthIdx) || isPastMonth(viewYear, monthIdx)) return;
     setViewMonth(monthIdx);
     setView('days');
   };
 
   const prevMonth = () => {
+    if (!canGoPrevMonth) return;
     if (viewMonth === 0) {
       setViewMonth(11);
       setViewYear((y) => y - 1);
@@ -224,7 +246,13 @@ export function DatePicker({
                   <button
                     type="button"
                     onClick={prevMonth}
-                    className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+                    disabled={!canGoPrevMonth}
+                    className={cn(
+                      'p-1.5 rounded-lg transition-colors',
+                      canGoPrevMonth
+                        ? 'hover:bg-gray-100 text-gray-600'
+                        : 'text-gray-200 cursor-not-allowed',
+                    )}
                   >
                     <ChevronLeft />
                   </button>
@@ -266,16 +294,16 @@ export function DatePicker({
                     today.getDate() === day &&
                     today.getMonth() === viewMonth &&
                     today.getFullYear() === viewYear;
-                  const future = isFutureDay(day);
+                  const disabled = isDisabledDay(day);
                   return (
                     <button
                       key={i}
                       type="button"
                       onClick={() => selectDay(day)}
-                      disabled={future}
+                      disabled={disabled}
                       className={cn(
                         'h-8 w-full text-sm rounded-lg transition-colors',
-                        future
+                        disabled
                           ? 'text-gray-200 cursor-not-allowed'
                           : isSelected
                             ? 'bg-[#0D2244] text-white font-semibold'
@@ -291,14 +319,21 @@ export function DatePicker({
               </div>
             </>
           ) : (
-            /* Month/year picker — simple nav, no fixed range */
             <div className="p-4">
               {/* Year navigation */}
               <div className="flex items-center justify-between mb-3">
                 <button
                   type="button"
-                  onClick={() => setViewYear((y) => y - 1)}
-                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600"
+                  onClick={() => {
+                    if (canGoPrevYear) setViewYear((y) => y - 1);
+                  }}
+                  disabled={!canGoPrevYear}
+                  className={cn(
+                    'p-1.5 rounded-lg transition-colors',
+                    canGoPrevYear
+                      ? 'hover:bg-gray-100 text-gray-600'
+                      : 'text-gray-200 cursor-not-allowed',
+                  )}
                 >
                   <ChevronLeft />
                 </button>
@@ -323,16 +358,16 @@ export function DatePicker({
               {/* Month grid */}
               <div className="grid grid-cols-4 gap-1">
                 {MONTHS.map((m, idx) => {
-                  const futureM = isFutureMonth(viewYear, idx);
+                  const disabledM = isFutureMonth(viewYear, idx) || isPastMonth(viewYear, idx);
                   return (
                     <button
                       key={m}
                       type="button"
                       onClick={() => selectMonth(idx)}
-                      disabled={futureM}
+                      disabled={disabledM}
                       className={cn(
                         'py-2 text-xs rounded-lg transition-colors',
-                        futureM
+                        disabledM
                           ? 'text-gray-200 cursor-not-allowed'
                           : idx === viewMonth && viewYear === (parsed?.getFullYear() ?? -1)
                             ? 'bg-[#0D2244] text-white font-semibold'

@@ -9,8 +9,8 @@ import { StatusBadge } from '@/components/molecules/StatusBadge';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { FormField } from '@/components/molecules/FormField';
-import { Select } from '@/components/atoms/Select';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { SearchSelect } from '../atoms/SearchSelect';
 
 /* ── Types ── */
 
@@ -128,8 +128,8 @@ export function CompanyInfoCard({
   id,
   name,
   slug,
-  size,
-  industry,
+  size: initialSize,
+  industry: initialIndustry,
   location,
   contact,
   logoUrl,
@@ -140,6 +140,10 @@ export function CompanyInfoCard({
   const [adminOpen, setAdminOpen] = useState(false);
 
   const workspaceUrl = `${slug}`;
+
+  const [industry, setIndustry] = useState(initialIndustry ?? '');
+
+  const [size, setSize] = useState(initialSize ?? '');
 
   /* ── Edit company form ── */
   const {
@@ -274,18 +278,27 @@ export function CompanyInfoCard({
           error={editErrors.name}
           placeholder="eg; Acme Corp Ltd"
         />
-        <Select
+        <SearchSelect
           label="Company Size"
           placeholder="Select range"
           options={COMPANY_SIZE_OPTIONS}
-          {...regEdit('size')}
+          value={size}
+          onChange={(v) => {
+            setSize(v);
+            setEditValue('size', v);
+          }}
           error={editErrors.size?.message}
         />
-        <Select
+
+        <SearchSelect
           label="Industry"
           placeholder="Select industry"
           options={INDUSTRY_OPTIONS}
-          {...regEdit('industry')}
+          value={industry}
+          onChange={(v) => {
+            setIndustry(v);
+            setEditValue('industry', v);
+          }}
           error={editErrors.industry?.message}
         />
         <FormField
