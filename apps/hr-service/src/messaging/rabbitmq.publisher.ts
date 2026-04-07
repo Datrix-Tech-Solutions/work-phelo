@@ -12,18 +12,15 @@ export class RabbitMQPublisher {
   ) {}
 
   emit(pattern: string, data: any) {
-    try {
-      this.notificationClient.emit(pattern, data);
-    } catch (error) {
-      this.logger.error(`Failed to emit event ${pattern}`, error);
-    }
+    this.notificationClient.emit(pattern, data).subscribe({
+      error: (err) => this.logger.error(`Failed to emit event ${pattern}`, err),
+    });
   }
 
   emitToAuth(pattern: string, data: any) {
-    try {
-      this.authClient.emit(pattern, data);
-    } catch (error) {
-      this.logger.error(`Failed to emit auth event ${pattern}`, error);
-    }
+    this.authClient.emit(pattern, data).subscribe({
+      error: (err) =>
+        this.logger.error(`Failed to emit auth event ${pattern}`, err),
+    });
   }
 }
