@@ -1,11 +1,13 @@
 export interface User {
   id: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE';
+  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE' | 'MANAGER';
+  isManager?: boolean; // true when the user manages direct reports (any role can be a manager)
   tenantId: string;
   tenantSlug: string;
   tenantName: string;
   firstName: string;
+  lastName?: string;
   companyRoleId?: string;
 }
 

@@ -36,13 +36,14 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
     ref,
   ) => {
     const [countryCode, setCountryCode] = useState(defaultCountryCode);
+    const [localValue, setLocalValue] = useState(value ?? '');
 
     return (
       <div className="flex flex-col gap-1.5">
         {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
         <div
           className={cn(
-            'flex border rounded-xl overflow-hidden bg-white transition-colors',
+            'flex border rounded-input overflow-hidden bg-white transition-colors',
             'focus-within:ring-1 focus-within:ring-gray-400 focus-within:border-gray-400',
             error ? 'border-red-500' : 'border-gray-300',
             className,
@@ -81,8 +82,12 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
           <input
             ref={ref}
             type="tel"
-            value={value}
-            onChange={(e) => onChange?.(e.target.value)}
+            value={localValue}
+            onChange={(e) => {
+              const numeric = e.target.value.replace(/\D/g, '').slice(0, 10);
+              setLocalValue(numeric);
+              onChange?.(numeric);
+            }}
             placeholder={placeholder}
             className="flex-1 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 bg-transparent focus:outline-none"
           />

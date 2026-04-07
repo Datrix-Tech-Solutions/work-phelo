@@ -9,7 +9,7 @@ export function Toast({ id, message, type }: ToastItem) {
   return (
     <div
       className={cn(
-        'flex items-center gap-3 px-4 py-3 rounded-2xl shadow-sm min-w-70 max-w-sm',
+        'flex items-center gap-3 px-4 py-3 rounded-card shadow-sm min-w-70 max-w-sm',
         type === 'error' && 'bg-red-100',
         type === 'success' && 'bg-green-100',
       )}

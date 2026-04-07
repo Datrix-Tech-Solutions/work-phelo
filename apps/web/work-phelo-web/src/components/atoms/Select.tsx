@@ -19,7 +19,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           <select
             ref={ref}
             className={cn(
-              'w-full px-4 py-3 border rounded-xl text-sm bg-white appearance-none',
+              'w-full px-4 py-3 border rounded-input text-sm bg-white appearance-none',
               'focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400',
               'transition-colors',
               error ? 'border-red-500 text-gray-800' : 'border-gray-300',

@@ -8,16 +8,10 @@ interface Stat {
   value: string | number;
 }
 
-interface AvatarPin {
-  initial: string;
-  bgColor?: string;
-}
-
 interface WelcomeBannerProps {
   userName: string;
   companyName?: string;
   stats?: Stat[];
-  avatars?: AvatarPin[];
   className?: string;
 }
 
@@ -37,37 +31,7 @@ function formatDate(): string {
   });
 }
 
-function AvatarPinBubble({ initial, bgColor = 'bg-gray-700' }: AvatarPin) {
-  return (
-    <div className="flex flex-col items-center">
-      <div
-        className={cn(
-          'w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold',
-          bgColor,
-        )}
-      >
-        {initial}
-      </div>
-      {/* Pin triangle */}
-      <div
-        className={cn('w-0 h-0')}
-        style={{
-          borderLeft: '5px solid transparent',
-          borderRight: '5px solid transparent',
-          borderTop: `6px solid ${bgColor.startsWith('bg-') ? 'currentColor' : bgColor}`,
-        }}
-      />
-    </div>
-  );
-}
-
-export function WelcomeBanner({
-  userName,
-  companyName,
-  stats,
-  avatars,
-  className,
-}: WelcomeBannerProps) {
+export function WelcomeBanner({ userName, companyName, stats, className }: WelcomeBannerProps) {
   const greeting = useMemo(
     () => (companyName ? `${getTimeGreeting()}, ${userName}` : `Welcome back, ${userName}!`),
     [companyName, userName],
@@ -78,7 +42,7 @@ export function WelcomeBanner({
   return (
     <div
       className={cn(
-        'w-full rounded-xl px-6 py-4 flex items-center justify-between gap-6 overflow-hidden',
+        'w-full rounded-input px-6 py-4 flex items-center justify-between gap-6 overflow-hidden',
         className,
       )}
       style={{
@@ -100,17 +64,10 @@ export function WelcomeBanner({
           {stats.map((stat, i) => (
             <div key={i} className="flex flex-col items-start gap-0.5">
               <span className="text-xs text-white/60">{stat.label}</span>
-              <span className="text-base font-bold text-white">{stat.value}</span>
+              <span className="text-base font-bold text-white">
+                {stat.value === 0 || stat.value === '0' ? '—' : stat.value}
+              </span>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Right — avatar pins */}
-      {avatars && avatars.length > 0 && (
-        <div className="flex items-start gap-3 self-start shrink-0">
-          {avatars.map((avatar, i) => (
-            <AvatarPinBubble key={i} {...avatar} />
           ))}
         </div>
       )}
