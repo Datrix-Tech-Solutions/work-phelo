@@ -1,10 +1,9 @@
 'use client';
 
 import { useForm, useWatch } from 'react-hook-form';
-import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/atoms/AppLogo';
-import { api } from '@/lib/api';
+import { useResetPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { cn } from '@/lib/utils';
@@ -36,14 +35,15 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
 
   const password = useWatch({ control, name: 'password', defaultValue: '' });
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data: ResetPasswordForm) =>
-      api.post('/auth/reset-password', { password: data.password, tenantSlug }),
-    onSuccess: () => {
-      const base = tenantSlug ? `/${tenantSlug}` : '';
-      router.push(`${base}/login`);
-    },
-  });
+  const { mutate, isPending } = useResetPassword();
+  const handleReset = (data: ResetPasswordForm) => {
+    mutate({ password: data.password, tenantSlug } as any, {
+      onSuccess: () => {
+        const base = tenantSlug ? `/${tenantSlug}` : '';
+        router.push(`${base}/login`);
+      },
+    });
+  };
 
   return (
     <div className="w-full max-w-sm px-8 py-10">
@@ -58,7 +58,7 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
         For security reasons, you must create a new password before accessing your workspace.
       </p>
 
-      <form onSubmit={handleSubmit((d) => mutate(d))} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit(handleReset)} className="flex flex-col gap-4">
         <div>
           <FormField
             label="Password"

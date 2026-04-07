@@ -103,3 +103,27 @@ export function useDeleteCompanyRole() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['company-roles'] }),
   });
 }
+
+export function useTenant(id: string) {
+  return useQuery({
+    queryKey: ['tenant', id],
+    queryFn: () => api.get(`/auth/tenants/${id}`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useTenantUsers(id: string) {
+  return useQuery({
+    queryKey: ['tenant-users', id],
+    queryFn: () => api.get(`/auth/tenants/${id}/users`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useTenantAudit(id: string) {
+  return useQuery({
+    queryKey: ['tenant-audit', id],
+    queryFn: () => api.get(`/auth/tenants/${id}/audit`).then((r) => r.data),
+    enabled: !!id,
+  });
+}

@@ -103,3 +103,17 @@ export function useAcceptInvite() {
     },
   });
 }
+
+export function useVerifyOtp() {
+  return useMutation({
+    mutationFn: (dto: { otp: string; tenantSlug?: string }) =>
+      api.post('/auth/verify-otp', dto).then((r) => r.data),
+  });
+}
+
+export function useResendOtp() {
+  return useMutation({
+    mutationFn: (dto: { tenantSlug?: string }) =>
+      api.post('/auth/resend-otp', dto).then((r) => r.data),
+  });
+}
