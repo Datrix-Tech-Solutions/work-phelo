@@ -165,7 +165,7 @@ export function EmployeeCard({
       </div>
 
       {/* Details */}
-      <div className="flex flex-col gap-3 pt-1 border-t border-gray-100">
+      <div className="flex flex-col gap-3 pt-1 border-t border-gray-10">
         {/* Department + hire date */}
         <div className="grid grid-cols-2 gap-3 pt-1">
           <div>

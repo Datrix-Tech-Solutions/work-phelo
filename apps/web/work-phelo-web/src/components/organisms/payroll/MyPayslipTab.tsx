@@ -17,7 +17,7 @@ export function MyPayslipTab({ employee }: MyPayslipTabProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  // Dummy current payroll data - replace with real data from backend later
+  // Dummy current payroll data
   const basicSalary = employee?.basicSalary ?? 715;
   const allowances = 1000;
 
