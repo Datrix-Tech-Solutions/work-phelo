@@ -110,8 +110,9 @@ export class CreateEmployeeDto {
   @IsString()
   tinNumber?: string;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Type(() => Number)
-  basicSalary!: number;
+  basicSalary?: number;
 }

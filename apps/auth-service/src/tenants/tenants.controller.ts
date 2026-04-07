@@ -10,6 +10,8 @@ import {
   UseGuards,
   Query,
   Req,
+  ParseIntPipe,
+  DefaultValuePipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -22,6 +24,8 @@ import {
 } from '@nestjs/swagger';
 import { TenantsService } from './tenants.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
+import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -97,6 +101,35 @@ export class TenantsController {
     return this.tenantsService.findAll({ status, search, tenantId });
   }
 
+  @Get(':id/users')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get all users for a tenant — SuperAdmin only' })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
+  getTenantUsers(@Param('id') id: string) {
+    return this.tenantsService.getTenantUsers(id);
+  }
+
+  @Get(':id/audit')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get audit logs for a tenant — SuperAdmin only' })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  @ApiResponse({
+    status: 200,
+    description: 'Audit logs retrieved successfully',
+  })
+  getTenantAudit(
+    @Param('id') id: string,
+    @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+    @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
+  ) {
+    return this.tenantsService.getTenantAuditLogs(id, { page, limit });
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
@@ -109,6 +142,31 @@ export class TenantsController {
     return this.tenantsService.findById(id);
   }
 
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update tenant details — SuperAdmin only' })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Tenant updated successfully' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  update(@Param('id') id: string, @Body() dto: UpdateTenantDto) {
+    return this.tenantsService.updateTenant(id, dto);
+  }
+
+  @Patch(':id/admin')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Assign or update tenant admin — SuperAdmin only' })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Admin assigned/updated successfully',
+  })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  updateAdmin(@Param('id') id: string, @Body() dto: UpdateTenantAdminDto) {
+    return this.tenantsService.updateTenantAdmin(id, dto);
+  }
+
   @Patch(':id/approve')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
@@ -119,6 +177,18 @@ export class TenantsController {
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   approve(@Param('id') id: string) {
     return this.tenantsService.approveTenant(id);
+  }
+
+  @Patch(':id/deactivate')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Deactivate active tenant — SuperAdmin only' })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Tenant deactivated successfully' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  deactivate(@Param('id') id: string) {
+    return this.tenantsService.deactivateTenant(id);
   }
 
   @Patch(':id/suspend')
