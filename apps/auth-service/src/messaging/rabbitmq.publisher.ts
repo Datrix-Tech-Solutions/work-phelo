@@ -10,11 +10,9 @@ export class RabbitMQPublisher {
   ) {}
 
   emit(pattern: string, data: any) {
-    try {
-      this.client.emit(pattern, data);
-    } catch (error) {
-      this.logger.error(`Failed to emit event ${pattern}`, error);
-    }
+    this.client.emit(pattern, data).subscribe({
+      error: (err) => this.logger.error(`Failed to emit event ${pattern}`, err),
+    });
   }
 
   sendEmailVerification(data: {
