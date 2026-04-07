@@ -50,8 +50,8 @@ export class NotificationService {
     const success = await this.email.sendInviteEmail(
       data.email,
       data.firstName,
-      data.acceptInviteUrl,
       data.tenantName,
+      data.acceptInviteUrl,
     );
     await this.log({
       userId: data.userId ?? 'system',
