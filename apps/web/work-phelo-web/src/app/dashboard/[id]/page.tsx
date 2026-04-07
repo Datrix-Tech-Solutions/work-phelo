@@ -3,9 +3,9 @@
 'use client';
 
 import { use } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useTenant, useTenantUsers, useTenantAudit } from '@/hooks/useTenants';
+import { useUpdateModules, useUpdateFeatures } from '@/hooks/useModuleConfig';
 import Link from 'next/link';
-import { api } from '@/lib/api';
 import { CompanyHeader } from '@/components/organisms/CompanyHeader';
 import { CompanyInfoCard } from '@/components/organisms/CompanyInfoCard';
 import { ModuleConfiguration, Module } from '@/components/organisms/ModuleConfiguration';
@@ -109,35 +109,17 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
 
   /* ── Fetch tenant ── */
-  const {
-    data: tenant,
-    isLoading: tenantLoading,
-    error: tenantError,
-  } = useQuery({
-    queryKey: ['tenant', id],
-    queryFn: () => api.get(`/auth/tenants/${id}`).then((r) => r.data),
-    enabled: !!id,
-    retry: 1,
-  });
+  const { data: tenant, isLoading: tenantLoading, error: tenantError } = useTenant(id);
 
   /* ── Fetch tenant users (find the TENANT_ADMIN) ── */
-  const { data: users = [] } = useQuery<TenantUser[]>({
-    queryKey: ['tenant-users', id],
-    queryFn: () => api.get(`/auth/tenants/${id}/users`).then((r) => r.data),
-    enabled: !!id,
-  });
+  const { data: users = [] } = useTenantUsers(id);
 
   /* ── Fetch audit logs ── */
-  const { data: auditData } = useQuery<AuditData>({
-    queryKey: ['tenant-audit', id],
-    queryFn: () =>
-      api.get(`/auth/tenants/${id}/audit`, { params: { limit: 20 } }).then((r) => r.data),
-    enabled: !!id,
-  });
+  const { data: auditData } = useTenantAudit(id);
 
-  const admin = users.find((u) => u.role === 'TENANT_ADMIN');
+  const admin = (users as any[]).find((u: any) => u.role === 'TENANT_ADMIN');
 
-  const activities = (auditData?.logs ?? []).map((log) => ({
+  const activities = (auditData?.logs ?? []).map((log: any) => ({
     id: log.id,
     title: `${log.resource} ${log.action.toLowerCase()}`,
     description: log.changes?.after
