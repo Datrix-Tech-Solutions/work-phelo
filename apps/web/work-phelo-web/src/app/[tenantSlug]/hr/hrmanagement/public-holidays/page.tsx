@@ -44,7 +44,7 @@ export default function PublicHolidaysPage({
     queryKey: ['public-holidays', tenantSlug, page, search],
     queryFn: () =>
       api
-        .get(`/${tenantSlug}/public-holidays`, {
+        .get(`/hr/leave/public-holidays`, {
           params: { page, search: search || undefined },
         })
         .then((r) => r.data),
@@ -56,7 +56,7 @@ export default function PublicHolidaysPage({
   const totalPages: number = data?.totalPages ?? 1;
 
   const { mutate: deleteHoliday, isPending: isDeleting } = useMutation({
-    mutationFn: (id: string) => api.delete(`/${tenantSlug}/public-holidays/${id}`),
+    mutationFn: (id: string) => api.delete(`/hr/leave/public-holidays/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['public-holidays', tenantSlug] });
       toast.success('Holiday deleted');

@@ -36,7 +36,7 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
     queryKey: ['leave-types', tenantSlug, page, search],
     queryFn: () =>
       api
-        .get(`/${tenantSlug}/leave-types`, {
+        .get(`/hr/leave/types`, {
           params: { page, search: search || undefined },
         })
         .then((r) => r.data),
@@ -48,7 +48,7 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
   const totalPages: number = data?.totalPages ?? 1;
 
   const { mutate: deleteLeaveType, isPending: isDeleting } = useMutation({
-    mutationFn: (id: string) => api.delete(`/${tenantSlug}/leave-types/${id}`),
+    mutationFn: (id: string) => api.delete(`/hr/leave/types/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['leave-types', tenantSlug] });
       toast.success('Leave type deleted');
