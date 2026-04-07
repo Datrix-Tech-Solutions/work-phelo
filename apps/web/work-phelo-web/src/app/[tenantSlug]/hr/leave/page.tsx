@@ -80,8 +80,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   /* ── Pending count — always fetched so badge shows on load ── */
   const { data: pendingCount = 0 } = useQuery<number>({
     queryKey: ['leave-pending-count', tenantSlug],
-    queryFn: () =>
-      api.get(`/${tenantSlug}/leave/requests/pending-count`).then((r) => r.data?.count ?? 0),
+    queryFn: () => api.get(`/hr/leave/requests/pending-count`).then((r) => r.data?.count ?? 0),
     enabled: isManager || isHR,
   });
 
@@ -101,7 +100,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
 
   const { mutate: cancelRequest, isPending: isCancelling } = useMutation({
-    mutationFn: (id: string) => api.delete(`/${tenantSlug}/leave/requests/${id}`),
+    mutationFn: (id: string) => api.delete(`/hr/leave/requests/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-leave-requests', tenantSlug] });
       queryClient.invalidateQueries({ queryKey: ['leave-balance', tenantSlug] });
@@ -130,27 +129,27 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   /* ── Leave balances (current user) ── */
   const { data: balancesData = [] } = useQuery<LeaveBalance[]>({
     queryKey: ['leave-balance', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/leave/balance`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/leave/balances`).then((r) => r.data),
   });
 
   /* ── Leave types for filter dropdown ── */
   const { data: leaveTypes = [] } = useQuery<LeaveType[]>({
     queryKey: ['leave-types', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/leave-types`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/leave/types`).then((r) => r.data),
     enabled: activeTab === 'requests',
   });
 
   /* ── Departments for filter dropdown ── */
   const { data: departments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ['departments', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/departments`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/departments`).then((r) => r.data),
     enabled: activeTab === 'requests',
   });
 
   /* ── My leave requests ── */
   const { data: myData, isLoading: myLoading } = useQuery({
     queryKey: ['my-leave-requests', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/leave/my-requests`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/leave/requests/my`).then((r) => r.data),
     enabled: activeTab === 'my',
   });
 
