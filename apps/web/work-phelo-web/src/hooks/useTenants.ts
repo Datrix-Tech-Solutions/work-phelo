@@ -79,3 +79,27 @@ export function useResendInvite() {
     },
   });
 }
+
+export function useCompanyRoles() {
+  return useQuery({
+    queryKey: ['company-roles'],
+    queryFn: () => api.get('/auth/company-roles').then((r) => r.data),
+  });
+}
+
+export function useCreateCompanyRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; description?: string }) =>
+      api.post('/auth/company-roles', dto).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-roles'] }),
+  });
+}
+
+export function useDeleteCompanyRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/auth/company-roles/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-roles'] }),
+  });
+}
