@@ -6,10 +6,18 @@ export function useEmployees(query?: EmployeeQuery) {
   return useQuery({
     queryKey: ['employees', query],
     queryFn: async () => {
-      const res = await api.get<{ data: Employee[]; total: number }>('/hr/employees', {
-        params: query,
-      });
-      return res.data;
+      const res = await api.get('/hr/employees', { params: query });
+      const raw = res.data;
+      // Backend returns { employees, meta } — normalise to { data, total }
+      if (Array.isArray(raw)) return { data: raw as Employee[], total: raw.length };
+      if (Array.isArray(raw?.employees))
+        return {
+          data: raw.employees as Employee[],
+          total: raw.meta?.total ?? raw.employees.length,
+        };
+      if (Array.isArray(raw?.data))
+        return { data: raw.data as Employee[], total: raw.total ?? raw.data.length };
+      return { data: [] as Employee[], total: 0 };
     },
   });
 }

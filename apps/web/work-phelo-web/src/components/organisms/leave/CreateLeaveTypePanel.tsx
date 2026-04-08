@@ -2,14 +2,13 @@
 
 import { useEffect } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { CreateLeaveTypeDto, LeaveType } from '@/types/leave';
+import { useCreateLeaveType, useUpdateLeaveType } from '@/hooks/useLeave';
+import { LeaveType } from '@/types/leave';
 
 interface CreateLeaveTypePanelProps {
   isOpen: boolean;
@@ -27,6 +26,15 @@ type FormValues = {
   requiresApproval: 'yes' | 'no' | '';
 };
 
+const emptyDefaults: FormValues = {
+  name: '',
+  isPaid: '',
+  daysAllowed: '',
+  isCarryOver: '',
+  maxCarryOverDays: '',
+  requiresApproval: '',
+};
+
 export function CreateLeaveTypePanel({
   isOpen,
   onClose,
@@ -34,8 +42,11 @@ export function CreateLeaveTypePanel({
   editLeaveType,
 }: CreateLeaveTypePanelProps) {
   const toast = useToast();
-  const queryClient = useQueryClient();
   const isEditing = !!editLeaveType;
+
+  const { mutate: createLeaveType, isPending: isCreating } = useCreateLeaveType(tenantSlug);
+  const { mutate: updateLeaveType, isPending: isUpdating } = useUpdateLeaveType(tenantSlug);
+  const isPending = isCreating || isUpdating;
 
   const {
     register,
@@ -43,16 +54,7 @@ export function CreateLeaveTypePanel({
     control,
     reset,
     formState: { errors },
-  } = useForm<FormValues>({
-    defaultValues: {
-      name: '',
-      isPaid: '',
-      daysAllowed: '',
-      isCarryOver: '',
-      maxCarryOverDays: '',
-      requiresApproval: '',
-    },
-  });
+  } = useForm<FormValues>({ defaultValues: emptyDefaults });
 
   useEffect(() => {
     if (editLeaveType) {
@@ -65,40 +67,16 @@ export function CreateLeaveTypePanel({
         requiresApproval: editLeaveType.requiresApproval ? 'yes' : 'no',
       });
     } else {
-      reset({
-        name: '',
-        isPaid: '',
-        daysAllowed: '',
-        isCarryOver: '',
-        maxCarryOverDays: '',
-        requiresApproval: '',
-      });
+      reset(emptyDefaults);
     }
   }, [editLeaveType, reset]);
 
   const isCarryOver = useWatch({ control, name: 'isCarryOver' });
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data: CreateLeaveTypeDto) =>
-      isEditing
-        ? api.patch(`/hr/leave/types/${editLeaveType!.id}`, data)
-        : api.post(`/hr/leave/types`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave-types', tenantSlug] });
-      toast.success(isEditing ? 'Leave type updated' : 'Leave type created');
-      onClose();
-    },
-    onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
-      toast.error(message);
-    },
-  });
-
   const onSubmit = (values: FormValues) => {
     if (!values.isPaid || !values.isCarryOver || !values.requiresApproval) return;
-    mutate({
+
+    const payload = {
       name: values.name,
       isPaid: values.isPaid === 'yes',
       daysAllowed: Number(values.daysAllowed),
@@ -108,7 +86,28 @@ export function CreateLeaveTypePanel({
           ? Number(values.maxCarryOverDays)
           : undefined,
       requiresApproval: values.requiresApproval === 'yes',
-    });
+    };
+
+    const handleSuccess = () => {
+      toast.success(isEditing ? 'Leave type updated' : 'Leave type created');
+      onClose();
+    };
+
+    const handleError = (err: unknown) => {
+      const message =
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
+        'Something went wrong';
+      toast.error(message);
+    };
+
+    if (isEditing) {
+      updateLeaveType(
+        { id: editLeaveType!.id, ...payload },
+        { onSuccess: handleSuccess, onError: handleError },
+      );
+    } else {
+      createLeaveType(payload, { onSuccess: handleSuccess, onError: handleError });
+    }
   };
 
   return (

@@ -11,7 +11,7 @@ export default async function TenantOtpVerificationPage({
   const { tenantSlug } = await params;
   return (
     <AuthPageShell>
-      <OtpVerification tenantSlug={tenantSlug} />
+      <OtpVerification tenantSlug={tenantSlug} mode="password-reset" />
     </AuthPageShell>
   );
 }

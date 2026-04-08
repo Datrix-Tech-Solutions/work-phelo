@@ -88,3 +88,11 @@ export interface LeaveBalance {
   remaining: number;
   carriedOver: number;
 }
+
+// ── Pagination ────────────────────────────────────────────
+export interface PaginatedResponse<T> {
+  data: T[];
+  totalPages: number;
+  totalCount: number;
+  currentPage: number;
+}

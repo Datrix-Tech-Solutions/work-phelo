@@ -114,6 +114,7 @@ export interface CreateEmployeePayload {
 }
 
 export interface LeaveType {
+  maxCarryOverDays: any;
   id: string;
   name: string;
   daysAllowed: number;

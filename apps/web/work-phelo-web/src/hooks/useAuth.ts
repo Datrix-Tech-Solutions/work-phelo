@@ -79,7 +79,12 @@ export function useForgotPassword() {
 
 export function useResetPassword() {
   return useMutation({
-    mutationFn: async (payload: { token: string; newPassword: string }) => {
+    mutationFn: async (payload: {
+      otpCode: string;
+      newPassword: string;
+      email?: string;
+      tenantSlug?: string;
+    }) => {
       const res = await api.post('/auth/reset-password', payload);
       return res.data;
     },

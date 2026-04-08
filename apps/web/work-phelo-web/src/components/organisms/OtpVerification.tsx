@@ -3,7 +3,7 @@
 import { useRef, useState, ClipboardEvent, KeyboardEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/atoms/AppLogo';
-import { useVerifyOtp, useResendOtp } from '@/hooks';
+import { useVerifyOtp, useResendOtp, useForgotPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { cn } from '@/lib/utils';
 
@@ -11,24 +11,34 @@ const OTP_LENGTH = 6;
 
 interface OtpVerificationProps {
   tenantSlug?: string;
+  /** When 'password-reset', skip the verify-otp API call and go straight to reset page */
+  mode?: 'email-verification' | 'password-reset';
 }
 
-export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
+export function OtpVerification({ tenantSlug, mode = 'email-verification' }: OtpVerificationProps) {
   const router = useRouter();
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   const { mutate, isPending, isError } = useVerifyOtp();
+
   const handleVerify = () => {
     const otp = digits.join('');
-    if (otp.length === OTP_LENGTH) {
-      mutate({ otp, tenantSlug } as any, {
-        onSuccess: () => {
-          const base = tenantSlug ? `/${tenantSlug}` : '';
-          router.push(`${base}/forgot-password/reset`);
-        },
-      });
+    if (otp.length < OTP_LENGTH) return;
+
+    if (mode === 'password-reset') {
+      sessionStorage.setItem('fpOtp', otp);
+      const base = tenantSlug ? `/${tenantSlug}` : '';
+      router.push(`${base}/forgot-password/reset`);
+      return;
     }
+
+    mutate({ otp, tenantSlug } as any, {
+      onSuccess: () => {
+        const base = tenantSlug ? `/${tenantSlug}` : '';
+        router.push(`${base}/forgot-password/reset`);
+      },
+    });
   };
 
   const handleChange = (index: number, value: string) => {
@@ -59,6 +69,16 @@ export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
   };
 
   const { mutate: resend, isPending: isResending } = useResendOtp();
+  const { mutate: resendForgot, isPending: isResendingForgot } = useForgotPassword();
+
+  const handleResend = () => {
+    if (mode === 'password-reset') {
+      const email = sessionStorage.getItem('fpEmail') ?? '';
+      resendForgot({ email, tenantSlug: tenantSlug ?? '' });
+    } else {
+      resend({ tenantSlug } as any);
+    }
+  };
 
   return (
     <div className="w-full max-w-sm px-8 py-10">
@@ -113,11 +133,11 @@ export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
       <p className="text-center text-xs text-gray-400 mt-6">
         Didn&apos;t receive a code?{' '}
         <button
-          onClick={() => resend({ tenantSlug } as any)}
-          disabled={isResending}
+          onClick={handleResend}
+          disabled={isResending || isResendingForgot}
           className="text-[#0D2244] font-medium hover:underline disabled:opacity-50"
         >
-          {isResending ? 'Resending...' : 'Resend'}
+          {isResending || isResendingForgot ? 'Resending...' : 'Resend'}
         </button>
       </p>
     </div>

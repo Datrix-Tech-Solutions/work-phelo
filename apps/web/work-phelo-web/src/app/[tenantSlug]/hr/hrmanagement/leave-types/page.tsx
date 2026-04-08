@@ -3,7 +3,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/DataTable';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
@@ -11,12 +11,13 @@ import { Modal } from '@/components/organisms/Modal';
 import { CreateLeaveTypePanel } from '@/components/organisms/leave/CreateLeaveTypePanel';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { LeaveType } from '@/types/leave';
+import { useDeleteLeaveType } from '@/hooks/useLeave';
+import { LeaveType, PaginatedResponse } from '@/types/leave';
+import { leaveKeys } from '@/hooks/useLeave';
 
 export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const toast = useToast();
-  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -25,33 +26,36 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
   const [deleteTarget, setDeleteTarget] = useState<LeaveType | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['leave-types', tenantSlug, page, search],
-    queryFn: () =>
-      api
-        .get(`/hr/leave/types`, {
-          params: { page, search: search || undefined },
-        })
-        .then((r) => r.data),
-  });
-
-  const leaveTypes: LeaveType[] = Array.isArray(data)
-    ? data
-    : (data?.data ?? data?.leaveTypes ?? []);
-
-  const totalPages = data?.totalPages ?? 1;
-
-  const { mutate: deleteLeaveType, isPending: isDeleting } = useMutation({
-    mutationFn: (id: string) => api.delete(`/hr/leave/types/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave-types'] });
-      toast.success('Leave type deleted successfully');
-      setDeleteTarget(null);
-    },
-    onError: (err: any) => {
-      const message = err?.response?.data?.message || 'Failed to delete leave type';
-      toast.error(message);
+    queryKey: [...leaveKeys.types(tenantSlug), page, search],
+    queryFn: async () => {
+      const res = await api.get<PaginatedResponse<LeaveType> | LeaveType[]>('/hr/leave/types', {
+        params: { page, search: search || undefined },
+      });
+      return res.data;
     },
   });
+
+  // Safely normalise both paginated and flat array responses
+  const leaveTypes: LeaveType[] = Array.isArray(data) ? data : (data?.data ?? []);
+  const totalPages: number = Array.isArray(data) ? 1 : (data?.totalPages ?? 1);
+
+  const { mutate: deleteLeaveType, isPending: isDeleting } = useDeleteLeaveType(tenantSlug);
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    deleteLeaveType(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success('Leave type deleted successfully');
+        setDeleteTarget(null);
+      },
+      onError: (err: unknown) => {
+        const message =
+          (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
+          'Failed to delete leave type';
+        toast.error(message);
+      },
+    });
+  };
 
   const columns: Column<LeaveType>[] = [
     {
@@ -106,6 +110,11 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
     setPanelOpen(true);
   };
 
+  const closePanel = () => {
+    setPanelOpen(false);
+    setEditLeaveType(undefined);
+  };
+
   return (
     <>
       <div className="mb-6 flex items-center justify-between">
@@ -150,10 +159,7 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
 
       <CreateLeaveTypePanel
         isOpen={panelOpen}
-        onClose={() => {
-          setPanelOpen(false);
-          setEditLeaveType(undefined);
-        }}
+        onClose={closePanel}
         tenantSlug={tenantSlug}
         editLeaveType={editLeaveType}
       />
@@ -173,7 +179,7 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
               variant="danger"
               isLoading={isDeleting}
               loadingText="Deleting..."
-              onClick={() => deleteTarget && deleteLeaveType(deleteTarget.id)}
+              onClick={handleDelete}
             >
               Delete Leave Type
             </Button>
