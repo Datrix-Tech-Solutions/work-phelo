@@ -79,3 +79,51 @@ export function useResendInvite() {
     },
   });
 }
+
+export function useCompanyRoles() {
+  return useQuery({
+    queryKey: ['company-roles'],
+    queryFn: () => api.get('/auth/company-roles').then((r) => r.data),
+  });
+}
+
+export function useCreateCompanyRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: { name: string; description?: string }) =>
+      api.post('/auth/company-roles', dto).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-roles'] }),
+  });
+}
+
+export function useDeleteCompanyRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/auth/company-roles/${id}`).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-roles'] }),
+  });
+}
+
+export function useTenant(id: string) {
+  return useQuery({
+    queryKey: ['tenant', id],
+    queryFn: () => api.get(`/auth/tenants/${id}`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useTenantUsers(id: string) {
+  return useQuery({
+    queryKey: ['tenant-users', id],
+    queryFn: () => api.get(`/auth/tenants/${id}/users`).then((r) => r.data),
+    enabled: !!id,
+  });
+}
+
+export function useTenantAudit(id: string) {
+  return useQuery({
+    queryKey: ['tenant-audit', id],
+    queryFn: () => api.get(`/auth/tenants/${id}/audit`).then((r) => r.data),
+    enabled: !!id,
+  });
+}

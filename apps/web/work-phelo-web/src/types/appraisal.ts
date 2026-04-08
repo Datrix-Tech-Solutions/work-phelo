@@ -5,8 +5,8 @@ export type ResponseRole = 'Self' | 'Manager';
 export type FinalizedStatus = 'Pending' | 'Approved' | 'Cancelled';
 export type EmployeeAppraisalStatus =
   | 'NotStarted'
-  | 'SelfSubmitted' // employee done, waiting on manager
-  | 'ManagerSubmitted' // manager done, waiting on HR
+  | 'SelfSubmitted' // employee done and waiting on manager
+  | 'ManagerSubmitted' // manager done and waiting on HR
   | 'HRPending' // HR has opened it and is actively reviewing
   | 'Finalized'; // HR approved or cancelled
 
@@ -168,11 +168,7 @@ export interface SectionResponse {
 }
 
 // ── Score Breakdown (computed at finalization) ───────────
-// Per User Story 1 & 2:
-//   selfWeighted         = (selfScore / maxScore) * weight
-//   managerWeighted      = (managerScore / maxScore) * weight
-//   weightedContribution = (selfWeighted * selfWeight/100) + (managerWeighted * managerWeight/100)
-//   overallScore         = Σ weightedContribution  → 0 – 100
+
 export interface KpiScoreBreakdown {
   kpiId: string;
   kpiTitle: string;
@@ -212,8 +208,8 @@ export interface FinalizedAppraisal {
   cycleId: string;
   tenantSlug: string;
   employeeId: string;
-  kpiBreakdown: KpiScoreBreakdown[]; // full per-KPI audit trail with both sides' comments
-  overallScore: number; // 0 – 100  (Σ weightedContribution)
+  kpiBreakdown: KpiScoreBreakdown[]; // full per-KPI audit trail with both sides comments
+  overallScore: number; // 0 – 100
   finalRating: FinalRating;
   status: FinalizedStatus; // Pending → Approved | Cancelled
   hrComments?: string;

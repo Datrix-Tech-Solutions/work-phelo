@@ -39,7 +39,7 @@ export default function PublicHolidaysPage({
     queryKey: ['public-holidays', { page, search }],
     queryFn: () =>
       api
-        .get('/hr/leave/public-holidays', {
+        .get(`/hr/leave/public-holidays`, {
           params: { page, search: search || undefined },
         })
         .then((r) => r.data),

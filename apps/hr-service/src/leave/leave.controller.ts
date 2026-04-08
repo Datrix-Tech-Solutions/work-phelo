@@ -193,6 +193,13 @@ export class LeaveController {
     return this.leaveService.getRequests(req.user.tenantId, { status });
   }
 
+  @Get('requests/pending-count')
+  @ApiOperation({ summary: 'Get pending leave request count' })
+  @ApiResponse({ status: 200, description: 'Count returned' })
+  getPendingCount(@Req() req: any) {
+    return this.leaveService.getPendingCount(req.user.tenantId);
+  }
+
   @Get('requests/my')
   @ApiOperation({ summary: "Get the logged-in employee's own leave requests" })
   @ApiResponse({ status: 200, description: 'My leave requests retrieved' })

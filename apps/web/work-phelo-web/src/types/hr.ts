@@ -1,3 +1,19 @@
+export interface Branch {
+  id: string;
+  name: string;
+  code?: string;
+  address?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  managerId?: string;
+  isActive: boolean;
+  isHeadOffice: boolean;
+  _count?: { employees: number };
+}
+
 export interface Department {
   id: string;
   name: string;
@@ -28,6 +44,8 @@ export interface Employee {
   basicSalary?: number;
   departmentId?: string;
   department?: Department;
+  branchId?: string;
+  branch?: Branch;
   managerId?: string;
   userId?: string;
   avatarUrl?: string;
@@ -58,6 +76,7 @@ export interface UpdateEmployeePayload {
   region?: string;
   jobTitle?: string;
   departmentId?: string;
+  branchId?: string;
   employmentType?: string;
   employmentStatus?: string;
   basicSalary?: number;

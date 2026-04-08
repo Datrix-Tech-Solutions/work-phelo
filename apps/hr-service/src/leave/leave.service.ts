@@ -187,6 +187,12 @@ export class LeaveService {
     return count;
   }
 
+  async getPendingCount(tenantId: string, employeeId?: string) {
+    const where: any = { tenantId, status: 'PENDING' };
+    if (employeeId) where.employeeId = employeeId;
+    const count = await this.prisma.leaveRequest.count({ where });
+    return { count };
+  }
   async getLeaveTypes(tenantId: string) {
     return this.prisma.leaveType.findMany({
       where: { tenantId, isActive: true },

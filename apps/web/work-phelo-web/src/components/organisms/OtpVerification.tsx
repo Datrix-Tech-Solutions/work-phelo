@@ -1,10 +1,9 @@
 'use client';
 
 import { useRef, useState, ClipboardEvent, KeyboardEvent } from 'react';
-import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/atoms/AppLogo';
-import { api } from '@/lib/api';
+import { useVerifyOtp, useResendOtp } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { cn } from '@/lib/utils';
 
@@ -19,13 +18,18 @@ export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const { mutate, isPending, isError } = useMutation({
-    mutationFn: (otp: string) => api.post('/auth/verify-otp', { otp, tenantSlug }),
-    onSuccess: () => {
-      const base = tenantSlug ? `/${tenantSlug}` : '';
-      router.push(`${base}/forgot-password/reset`);
-    },
-  });
+  const { mutate, isPending, isError } = useVerifyOtp();
+  const handleVerify = () => {
+    const otp = digits.join('');
+    if (otp.length === OTP_LENGTH) {
+      mutate({ otp, tenantSlug } as any, {
+        onSuccess: () => {
+          const base = tenantSlug ? `/${tenantSlug}` : '';
+          router.push(`${base}/forgot-password/reset`);
+        },
+      });
+    }
+  };
 
   const handleChange = (index: number, value: string) => {
     const char = value.replace(/\D/g, '').slice(-1);
@@ -54,14 +58,7 @@ export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
     inputRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
   };
 
-  const handleSubmit = () => {
-    const otp = digits.join('');
-    if (otp.length === OTP_LENGTH) mutate(otp);
-  };
-
-  const { mutate: resend, isPending: isResending } = useMutation({
-    mutationFn: () => api.post('/auth/resend-otp', { tenantSlug }),
-  });
+  const { mutate: resend, isPending: isResending } = useResendOtp();
 
   return (
     <div className="w-full max-w-sm px-8 py-10">
@@ -104,7 +101,7 @@ export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
       )}
 
       <Button
-        onClick={handleSubmit}
+        onClick={handleVerify}
         isLoading={isPending}
         loadingText="Verifying..."
         disabled={digits.join('').length < OTP_LENGTH}
@@ -116,7 +113,7 @@ export function OtpVerification({ tenantSlug }: OtpVerificationProps) {
       <p className="text-center text-xs text-gray-400 mt-6">
         Didn&apos;t receive a code?{' '}
         <button
-          onClick={() => resend()}
+          onClick={() => resend({ tenantSlug } as any)}
           disabled={isResending}
           className="text-[#0D2244] font-medium hover:underline disabled:opacity-50"
         >

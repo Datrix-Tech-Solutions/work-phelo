@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useTenants } from '@/hooks/useTenants';
 import { useRouter } from 'next/navigation';
 import { WelcomeBanner } from '@/components/organisms/WelcomeBanner';
 import { StatCard } from '@/components/molecules/StatCard';
@@ -11,7 +11,6 @@ import { DataTable, Column } from '@/components/organisms/DataTable';
 import { StatusBadge } from '@/components/molecules/StatusBadge';
 import { AddCompanyForm } from '@/components/organisms/AddCompanyForm';
 import { useAuthStore } from '@/store/auth.store';
-import { api } from '@/lib/api';
 
 /* ── Icons ── */
 const TotalCompaniesIcon = () => (
@@ -115,15 +114,12 @@ export default function AdminDashboardPage() {
   const [panelOpen, setPanelOpen] = useState(false);
 
   /* ── Fetch companies ── */
-  const { data: apiData, isLoading } = useQuery({
-    queryKey: ['tenants'],
-    queryFn: () => api.get('/auth/tenants').then((r) => r.data),
-  });
+  const { data: apiData, isLoading } = useTenants();
 
   const allCompanies: Company[] = useMemo(() => {
     if (!apiData) return [];
-    const list = Array.isArray(apiData) ? apiData : (apiData.data ?? apiData.tenants ?? []);
-    return list.map((c: Record<string, unknown>) => ({
+    const list = apiData ?? [];
+    return list.map((c: any) => ({
       id: c.id ?? c._id,
       name: c.name ?? c.companyName,
       dateCreated:

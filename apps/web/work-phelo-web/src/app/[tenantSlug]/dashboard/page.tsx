@@ -3,9 +3,8 @@
 'use client';
 
 import { use, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useTenantUsers } from '@/hooks/useTenants';
 import { useRouter } from 'next/navigation';
-import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
@@ -121,20 +120,16 @@ export default function TenantDashboardPage({
   const initials = firstName.slice(0, 2).toUpperCase();
 
   /* ── Fetch users for employee count ── */
-  const { data: users = [] } = useQuery<TenantUser[]>({
-    queryKey: ['tenant-users', tenantId],
-    queryFn: () => api.get(`/auth/tenants/${tenantId}/users`).then((r) => r.data),
-    enabled: !!tenantId,
-  });
+  const { data: users = [] } = useTenantUsers(tenantId ?? '');
 
   /* ── Derive stats ── */
   const stats = useMemo(() => {
     const total = users.length;
 
-    const active = users.filter((u) => u.status === 'ACTIVE').length;
+    const active = users.filter((u: any) => u.status === 'ACTIVE').length;
 
     const pending = users.filter(
-      (u) => u.status === 'PENDING_VERIFICATION' || u.status === 'PENDING',
+      (u: any) => u.status === 'PENDING_VERIFICATION' || u.status === 'PENDING',
     ).length;
 
     return { total, active, pending };

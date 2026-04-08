@@ -40,7 +40,7 @@ interface DataTableProps<T extends { id: string | number }> {
   onPageChange: (page: number) => void;
 }
 
-function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
+function ThreeDotMenu({ actions, isNearBottom }: { actions: RowAction[]; isNearBottom: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -59,7 +59,12 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-8 z-20 min-w-35 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden">
+          <div
+            className={cn(
+              'absolute right-0 z-20 min-w-35 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden',
+              isNearBottom ? 'bottom-8' : 'top-8',
+            )}
+          >
             {actions.map((action) => (
               <button
                 key={action.label}
@@ -247,11 +252,11 @@ export function DataTable<T extends { id: string | number }>({
         {/* Rows */}
         <div className="overflow-y-auto flex-1">
           {isLoading ? (
-            <div className="flex items-center justify-center py-16 text-sm text-gray-400">
+            <div className="flex flex-1 items-center justify-center text-sm text-gray-400">
               Loading...
             </div>
           ) : data.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3">
+            <div className="flex flex-1 flex-col items-center justify-center gap-3">
               {emptyImage ?? (
                 <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
                   <svg
@@ -297,7 +302,10 @@ export function DataTable<T extends { id: string | number }>({
                 ))}
                 {rowActions && (
                   <div className="flex justify-end">
-                    <ThreeDotMenu actions={rowActions(row)} />
+                    <ThreeDotMenu
+                      actions={rowActions(row)}
+                      isNearBottom={rowIndex >= data.length - 2}
+                    />
                   </div>
                 )}
               </div>

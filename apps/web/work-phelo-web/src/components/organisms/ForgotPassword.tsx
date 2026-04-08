@@ -1,10 +1,9 @@
 'use client';
 
 import { useForm } from 'react-hook-form';
-import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/atoms/AppLogo';
-import { api } from '@/lib/api';
+import { useForgotPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 
@@ -24,14 +23,15 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
     formState: { errors },
   } = useForm<ForgotPasswordForm>();
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data: ForgotPasswordForm) =>
-      api.post('/auth/forgot-password', { ...data, tenantSlug }),
-    onSuccess: () => {
-      const base = tenantSlug ? `/${tenantSlug}` : '';
-      router.push(`${base}/forgot-password/verify`);
-    },
-  });
+  const { mutate, isPending } = useForgotPassword();
+  const handleSubmit2 = (data: ForgotPasswordForm) => {
+    mutate({ ...data, tenantSlug } as any, {
+      onSuccess: () => {
+        const base = tenantSlug ? `/${tenantSlug}` : '';
+        router.push(`${base}/forgot-password/verify`);
+      },
+    });
+  };
 
   const backHref = tenantSlug ? `/${tenantSlug}/login` : '/login';
 
@@ -46,7 +46,7 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
         Enter your email and we&apos;ll send you a code to reset your password.
       </p>
 
-      <form onSubmit={handleSubmit((d) => mutate(d))} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit(handleSubmit2)} className="flex flex-col gap-4">
         <FormField
           label="Email"
           registration={register('email', { required: 'Email is required' })}

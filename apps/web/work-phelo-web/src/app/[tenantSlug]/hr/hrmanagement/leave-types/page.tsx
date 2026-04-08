@@ -34,13 +34,13 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
 
   // Fetch Leave Types
   const { data, isLoading } = useQuery({
-    queryKey: ['leave-types', { page, search }],
-    queryFn: async () => {
-      const res = await api.get('/hr/leave/types', {
-        params: { page, search: search || undefined },
-      });
-      return res.data;
-    },
+    queryKey: ['leave-types', tenantSlug, page, search],
+    queryFn: () =>
+      api
+        .get(`/hr/leave/types`, {
+          params: { page, search: search || undefined },
+        })
+        .then((r) => r.data),
   });
 
   const leaveTypes: LeaveType[] = Array.isArray(data)
