@@ -2,7 +2,7 @@
 
 'use client';
 
-import { use } from 'react';
+import { use, useMemo } from 'react';
 import { useTenant, useTenantUsers, useTenantAudit } from '@/hooks/useTenants';
 import { useUpdateModules, useUpdateFeatures } from '@/hooks/useModuleConfig';
 import Link from 'next/link';
@@ -33,57 +33,49 @@ interface AuditData {
   logs: AuditLog[];
 }
 
+// Module keys and feature keys must match the backend featureConfig schema exactly
 const DEFAULT_MODULES: Module[] = [
   {
     id: 'hr',
     key: 'hr',
     name: 'HR Module',
-    description: 'Manage employees, attendance, payroll…',
+    description: 'Manage employees, leave, payroll, appraisals and more',
     enabled: false,
     options: [
       {
-        key: 'employees',
-        label: 'Employee Management',
-        description: 'Add and manage employee records',
+        key: 'leave',
+        label: 'Leave Management',
+        description: 'Employee leave requests and balances',
       },
-      {
-        key: 'attendance',
-        label: 'Attendance Tracking',
-        description: 'Track daily attendance and leave',
-      },
+      { key: 'time', label: 'Time Management', description: 'Clock in/out and scheduling' },
       { key: 'payroll', label: 'Payroll', description: 'Process and manage payroll' },
+      { key: 'appraisals', label: 'Appraisals', description: 'Performance reviews and cycles' },
+      { key: 'projects', label: 'Project Management', description: 'Projects and task tracking' },
+      { key: 'assets', label: 'Asset Management', description: 'Company asset tracking' },
     ],
   },
   {
     id: 'accounting',
     key: 'accounting',
     name: 'Accounting Module',
-    description: 'Manage invoices, expenses, and reports…',
+    description: 'Manage invoices, expenses, and financial reports',
     enabled: false,
-    options: [
-      { key: 'invoices', label: 'Invoices', description: 'Create and manage invoices' },
-      { key: 'expenses', label: 'Expenses', description: 'Track business expenses' },
-    ],
+    options: [],
   },
   {
     id: 'marketing',
     key: 'marketing',
     name: 'Marketing Module',
-    description: 'Manage campaigns, leads, and analytics…',
+    description: 'Manage leads, sales pipeline, and contacts',
     enabled: false,
     options: [
-      { key: 'campaigns', label: 'Campaigns', description: 'Run and track marketing campaigns' },
-      { key: 'leads', label: 'Leads', description: 'Manage leads and conversions' },
-    ],
-  },
-  {
-    id: 'operations',
-    key: 'operations',
-    name: 'Operations Module',
-    description: 'Manage campaigns, leads, and analytics…',
-    enabled: false,
-    options: [
-      { key: 'operations', label: 'Operations', description: 'Run and track operations campaigns' },
+      { key: 'leads', label: 'Lead Management', description: 'Manage leads and conversions' },
+      {
+        key: 'pipeline',
+        label: 'Sales Pipeline',
+        description: 'Track deals through pipeline stages',
+      },
+      { key: 'contacts', label: 'Contact Management', description: 'Manage customer contacts' },
     ],
   },
 ];
@@ -117,7 +109,28 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   /* ── Fetch audit logs ── */
   const { data: auditData } = useTenantAudit(id);
 
+  const updateModules = useUpdateModules(id);
+  const updateFeatures = useUpdateFeatures(id);
+
   const admin = (users as any[]).find((u: any) => u.role === 'TENANT_ADMIN');
+
+  // Build modules from real tenant config — memoized so ModuleConfiguration
+  // only re-syncs its local state when the server data actually changes
+  const moduleConfig = (tenant?.moduleConfig as Record<string, boolean>) ?? {};
+  const featureConfig = (tenant?.featureConfig as Record<string, Record<string, boolean>>) ?? {};
+  const modules: Module[] = useMemo(
+    () =>
+      DEFAULT_MODULES.map((m) => ({
+        ...m,
+        enabled: moduleConfig[m.key] ?? false,
+        options: m.options?.map((o) => ({
+          ...o,
+          enabled: featureConfig[m.key]?.[o.key] ?? false,
+        })),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(moduleConfig), JSON.stringify(featureConfig)],
+  );
 
   const activities = (auditData?.logs ?? []).map((log: any) => ({
     id: log.id,
@@ -190,12 +203,19 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
           }
         />
         <ModuleConfiguration
-          modules={DEFAULT_MODULES}
+          modules={modules}
           onToggle={(moduleId, enabled) => {
-            console.log('toggle', moduleId, enabled);
+            updateModules.mutate({ [moduleId]: enabled });
           }}
-          onSave={(modules) => {
-            console.log('save', modules);
+          onSave={(updatedModules) => {
+            updatedModules.forEach((m) => {
+              if (m.options && m.enabled) {
+                const features = Object.fromEntries(
+                  m.options.map((o) => [o.key, (o as any).enabled ?? false]),
+                );
+                updateFeatures.mutate({ module: m.key, features });
+              }
+            });
           }}
         />
       </div>

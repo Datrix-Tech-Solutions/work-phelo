@@ -3,7 +3,7 @@
 'use client';
 
 import { use, useMemo } from 'react';
-import { useTenantUsers } from '@/hooks/useTenants';
+import { useCurrentTenantUsers } from '@/hooks/useTenants';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/TopNav';
@@ -116,11 +116,10 @@ export default function TenantDashboardPage({
 
   const firstName = user?.firstName ?? 'User';
   const tenantName = user?.tenantName ?? '';
-  const tenantId = user?.tenantId ?? '';
   const initials = firstName.slice(0, 2).toUpperCase();
 
   /* ── Fetch users for employee count ── */
-  const { data: users = [] } = useTenantUsers(tenantId ?? '');
+  const { data: users = [] } = useCurrentTenantUsers();
 
   /* ── Derive stats ── */
   const stats = useMemo(() => {
@@ -135,8 +134,13 @@ export default function TenantDashboardPage({
     return { total, active, pending };
   }, [users]);
 
-  /* ── Enabled modules ── */
-  const enabledKeys = new Set(['hr', 'marketing']);
+  /* ── Enabled modules from tenant config ── */
+  const moduleConfig = user?.moduleConfig ?? {};
+  const enabledKeys = new Set(
+    Object.entries(moduleConfig)
+      .filter(([, enabled]) => enabled)
+      .map(([key]) => key),
+  );
   const activeModuleCount = MODULE_DEFS.filter((m) => enabledKeys.has(m.key)).length;
 
   return (

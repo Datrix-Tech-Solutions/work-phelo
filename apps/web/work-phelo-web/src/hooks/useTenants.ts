@@ -120,6 +120,14 @@ export function useTenantUsers(id: string) {
   });
 }
 
+// Tenant-scoped: calls GET /auth/users — uses the JWT's own tenantId (no SUPER_ADMIN required)
+export function useCurrentTenantUsers() {
+  return useQuery({
+    queryKey: ['current-tenant-users'],
+    queryFn: () => api.get('/auth/users').then((r) => r.data),
+  });
+}
+
 export function useTenantAudit(id: string) {
   return useQuery({
     queryKey: ['tenant-audit', id],

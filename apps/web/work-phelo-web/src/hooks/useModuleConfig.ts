@@ -6,7 +6,10 @@ export function useUpdateModules(tenantId: string) {
   return useMutation({
     mutationFn: (modules: Record<string, boolean>) =>
       api.patch(`/auth/tenants/${tenantId}/modules`, modules).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tenants'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tenants'] });
+      qc.invalidateQueries({ queryKey: ['tenant', tenantId] });
+    },
   });
 }
 
@@ -15,7 +18,10 @@ export function useUpdateFeatures(tenantId: string) {
   return useMutation({
     mutationFn: (payload: { module: string; features: Record<string, boolean> }) =>
       api.patch(`/auth/tenants/${tenantId}/features`, payload).then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['tenants'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tenants'] });
+      qc.invalidateQueries({ queryKey: ['tenant', tenantId] });
+    },
   });
 }
 
