@@ -1,3 +1,19 @@
+export interface Branch {
+  id: string;
+  name: string;
+  code?: string;
+  address?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  managerId?: string;
+  isActive: boolean;
+  isHeadOffice: boolean;
+  _count?: { employees: number };
+}
+
 export interface Department {
   id: string;
   name: string;
@@ -28,6 +44,8 @@ export interface Employee {
   basicSalary?: number;
   departmentId?: string;
   department?: Department;
+  branchId?: string;
+  branch?: Branch;
   managerId?: string;
   userId?: string;
   avatarUrl?: string;
@@ -45,6 +63,33 @@ export interface Employee {
   createdAt?: string;
 }
 
+export interface UpdateEmployeePayload {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  maritalStatus?: string;
+  nationality?: string;
+  address?: string;
+  city?: string;
+  region?: string;
+  jobTitle?: string;
+  departmentId?: string;
+  branchId?: string;
+  employmentType?: string;
+  employmentStatus?: string;
+  basicSalary?: number;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankBranch?: string;
+  ssnit?: string;
+  tinNumber?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  emergencyRelation?: string;
+}
+
 export interface CreateEmployeePayload {
   firstName: string;
   lastName: string;
@@ -57,6 +102,7 @@ export interface CreateEmployeePayload {
   hireDate: string;
   basicSalary?: number;
   departmentId: string;
+  branchId?: string;
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;
@@ -105,6 +151,14 @@ export interface PayrollRun {
   createdAt: string;
 }
 
+export interface UpcomingBirthday {
+  id: string;
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  avatarUrl?: string;
+}
+
 export interface DashboardSummary {
   adminFirstName: string;
   companyName: string;
@@ -122,33 +176,6 @@ export interface EmployeeQuery {
   search?: string;
   departmentId?: string;
   status?: string;
-}
-
-// ── Employee Mutation Payloads ───────────────────────────
-export interface UpdateEmployeePayload {
-  firstName: string;
-  lastName: string;
-  phone?: string;
-  jobTitle: string;
-  departmentId?: string;
-  employmentType: string;
-  employmentStatus: string;
-  dateOfBirth?: string;
-  gender?: string;
-  maritalStatus?: string;
-  nationality?: string;
-  address?: string;
-  city?: string;
-  region?: string;
-  emergencyName?: string;
-  emergencyPhone?: string;
-  emergencyRelation?: string;
-  basicSalary?: number;
-  bankName?: string;
-  bankAccountNumber?: string;
-  bankBranch?: string;
-  ssnit?: string;
-  tinNumber?: string;
 }
 
 export interface OffboardPayload {

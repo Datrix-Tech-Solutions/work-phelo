@@ -23,12 +23,23 @@ export default function HRLayout({
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('portal');
 
-  // Prefix all hrefs with the tenant + module path
+  // Feature toggles from the user's tenant config
+  const hrFeatures = user?.featureConfig?.hr ?? {};
+
+  // Only dashboard and management are always active (no toggle exists for them)
+  const coreKeys = new Set(['dashboard', 'management']);
+
+  // Prefix all hrefs with the tenant + module path, and apply feature-driven active state
   const groups = HR_NAV_GROUPS.map((group) => ({
     ...group,
     items: group.items.map((item) => ({
       ...item,
       href: `/${tenantSlug}/hr${item.href ? `/${item.href}` : ''}`,
+      active: coreKeys.has(item.key)
+        ? true
+        : item.key in hrFeatures
+          ? hrFeatures[item.key]
+          : item.active,
     })),
   }));
 

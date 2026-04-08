@@ -33,7 +33,7 @@ export default function AppraisalTemplatesPage({
     queryKey: ['appraisal-templates', tenantSlug, page, search],
     queryFn: () =>
       api
-        .get(`/${tenantSlug}/appraisal/templates`, {
+        .get('/hr/appraisals/templates', {
           params: { page, search: search || undefined },
         })
         .then((r) => r.data),
@@ -45,7 +45,7 @@ export default function AppraisalTemplatesPage({
   const totalPages: number = data?.totalPages ?? 1;
 
   const { mutate: deleteTemplate, isPending: isDeleting } = useMutation({
-    mutationFn: (id: string) => api.delete(`/${tenantSlug}/appraisal/templates/${id}`),
+    mutationFn: (id: string) => api.delete(`/hr/appraisals/templates/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appraisal-templates', tenantSlug] });
       toast.success('Template deleted');

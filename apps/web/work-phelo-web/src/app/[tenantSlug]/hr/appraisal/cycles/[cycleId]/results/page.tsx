@@ -91,14 +91,13 @@ export default function CycleResultsPage({
   /* ── Fetch cycle ── */
   const { data: cycle, isLoading: cycleLoading } = useQuery<AppraisalCycle>({
     queryKey: ['appraisal-cycle', cycleId],
-    queryFn: () => api.get(`/${tenantSlug}/appraisal/cycles/${cycleId}`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/appraisals/cycles/${cycleId}`).then((r) => r.data),
   });
 
   /* ── Fetch results ── */
   const { data: summary, isLoading: resultsLoading } = useQuery<CycleResultsSummary>({
     queryKey: ['cycle-results', tenantSlug, cycleId],
-    queryFn: () =>
-      api.get(`/${tenantSlug}/appraisal/cycles/${cycleId}/results`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/appraisals/cycles/${cycleId}/results`).then((r) => r.data),
     enabled: !!cycleId,
   });
 

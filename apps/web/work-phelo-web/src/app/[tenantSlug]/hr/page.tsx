@@ -3,19 +3,17 @@
 'use client';
 
 import { use, useState, useRef } from 'react';
-import {
-  Calendar,
-  Clock,
-  ChevronLeft,
-  ChevronRight,
-  CircleDollarSign,
-  MonitorSmartphone,
-  CalendarRange,
-} from 'lucide-react';
+import { Calendar, CircleDollarSign, MonitorSmartphone, CalendarRange } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
+import { useUpcomingBirthdays } from '@/hooks';
+import { UpcomingBirthday } from '@/types/hr';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
+import { MetricCard } from '@/components/molecules/MetricCard';
+import { AttendanceMetricCard } from '@/components/molecules/AttendanceMetricCard';
+import { AnnouncementCard } from '@/components/molecules/announcmentCard';
+import { BirthdaysCard } from '@/components/molecules/birthdayCard';
 import { cn } from '@/lib/utils';
 import { getGreeting } from '@/lib/formatters';
 
@@ -25,12 +23,8 @@ const DUMMY_ANNOUNCEMENTS = [
     id: '1',
     title: 'General Meeting',
     date: '22 Apr 2025',
-    body: '',
+    body: 'this is the body of the announcemm',
   },
-];
-
-const DUMMY_BIRTHDAYS = [
-  { id: '1', name: 'John Doe', date: '6th April', initials: 'JD', color: '#0D2244' },
 ];
 
 const DUMMY_HOLIDAYS = [{ id: '2', name: 'Easter Monday', date: '6 Apr 2026' }];
@@ -71,6 +65,29 @@ const DUMMY_LEAVE_BALANCES = [
     carriedOver: 0,
   },
 ];
+
+/* ── Avatar colour picker (deterministic from name) ── */
+const AVATAR_COLORS = [
+  '#0D2244',
+  '#1E3A8A',
+  '#6D28D9',
+  '#B45309',
+  '#047857',
+  '#0369A1',
+  '#9D174D',
+  '#374151',
+];
+function avatarColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+/* ── Format birthday date for display ── */
+function formatBirthdayDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+}
 
 /* ── Quick action button ── */
 function QuickActionBtn({
@@ -123,12 +140,29 @@ export default function EmployeeDashboardPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+
   const user = useAuthStore((s) => s.user);
 
   const firstName = user?.firstName ?? 'Employee';
   const lastName = user?.lastName ?? '';
   const fullName = lastName ? `${firstName} ${lastName}` : firstName;
   const tenantName = user?.tenantName ?? 'Your Company';
+
+  /* ── Birthdays ── */
+  const { data: birthdaysRaw } = useUpcomingBirthdays();
+  const rawBirthdays = Array.isArray(birthdaysRaw)
+    ? birthdaysRaw
+    : ((birthdaysRaw as unknown as { data?: UpcomingBirthday[] })?.data ?? []);
+  const birthdays = (Array.isArray(rawBirthdays) ? rawBirthdays : []).map((b) => {
+    const name = `${b.firstName} ${b.lastName}`;
+    return {
+      id: b.id,
+      name,
+      date: formatBirthdayDate(b.dateOfBirth),
+      initials: `${b.firstName[0]}${b.lastName[0]}`.toUpperCase(),
+      color: avatarColor(name),
+    };
+  });
 
   /* ── Panel states ── */
   const [applyLeaveOpen, setApplyLeaveOpen] = useState(false);
@@ -138,7 +172,7 @@ export default function EmployeeDashboardPage({
 
   /* ── Clock in state ── */
   const [clockedIn, setClockedIn] = useState(false);
-  const [clockInTime, setClockInTime] = useState<string | null>(null);
+  const [, setClockInTime] = useState<string | null>(null);
 
   const handleClockIn = () => {
     const now = new Date();
@@ -158,31 +192,18 @@ export default function EmployeeDashboardPage({
 
   /* ── Announcement pagination ── */
   const [announcementIdx, setAnnouncementIdx] = useState(0);
-  const announcement = DUMMY_ANNOUNCEMENTS[announcementIdx];
-  const [expanded, setExpanded] = useState(false);
 
-  const prevAnnouncement = () => {
-    setAnnouncementIdx((i) => Math.max(0, i - 1));
-    setExpanded(false);
-  };
-  const nextAnnouncement = () => {
+  const prevAnnouncement = () => setAnnouncementIdx((i) => Math.max(0, i - 1));
+  const nextAnnouncement = () =>
     setAnnouncementIdx((i) => Math.min(DUMMY_ANNOUNCEMENTS.length - 1, i + 1));
-    setExpanded(false);
-  };
 
   /* ── Birthday scroll ── */
   const birthdayRef = useRef<HTMLDivElement>(null);
+
   const scrollBirthdays = (dir: 'left' | 'right') => {
     if (!birthdayRef.current) return;
     birthdayRef.current.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
   };
-
-  /* ── Truncated announcement body ── */
-  const BODY_LIMIT = 400;
-  const bodyTruncated = announcement.body.length > BODY_LIMIT && !expanded;
-  const displayBody = bodyTruncated
-    ? announcement.body.slice(0, BODY_LIMIT) + '…'
-    : announcement.body;
 
   return (
     <div className="p-6 flex flex-col gap-4 h-full overflow-hidden">
@@ -202,64 +223,25 @@ export default function EmployeeDashboardPage({
       {/* ── Stat cards row ── */}
       <div className="grid grid-cols-3 gap-4 shrink-0">
         {/* Annual Leave */}
-        <div className="bg-white border border-gray-200 rounded-card px-5 py-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Annual Leave</span>
-            <Calendar className="w-5 h-5 text-gray-400" />
-          </div>
-          <div className="flex items-end justify-between">
-            <p className="text-3xl font-bold text-gray-900">
-              14<span className="text-base font-normal text-gray-400">/ 22 Days</span>
-            </p>
-            <button
-              onClick={() => setApplyLeaveOpen(true)}
-              className="text-sm font-semibold text-orange-500 hover:text-orange-600 transition-colors"
-            >
-              Request Leave
-            </button>
-          </div>
-        </div>
 
         {/* Upcoming Leave */}
-        <div className="bg-white border border-gray-200 rounded-card px-5 py-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">Upcoming Leave</span>
-            <Calendar className="w-5 h-5 text-gray-400" />
-          </div>
-          <p className="text-base font-semibold text-gray-900 mt-1">27 Apr 2026 – 03 May 2026</p>
-        </div>
+        <MetricCard
+          title="Annual Leave"
+          value="14"
+          unit="/ 22 Days"
+          icon={Calendar}
+          actionLabel="Request Leave"
+          onAction={() => setApplyLeaveOpen(true)}
+        />
+        <MetricCard title="Upcoming Leave" unit="27 Apr 2026 – 03 May 2026" icon={CalendarRange} />
 
         {/* Clock In / Out */}
-        <div className="bg-white border border-gray-200 rounded-card px-5 py-4 flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500">{clockedIn ? 'Clock In' : 'Clock In'}</span>
-            <Clock className="w-5 h-5 text-gray-400" />
-          </div>
-          <div className="flex items-end justify-between">
-            {clockedIn ? (
-              <p className="text-sm text-gray-700">
-                Clocked in at <span className="font-bold">{clockInTime}</span>
-              </p>
-            ) : (
-              <p className="text-sm text-gray-400">Not clocked in</p>
-            )}
-            {clockedIn ? (
-              <button
-                onClick={handleClockOut}
-                className="text-sm font-semibold text-orange-500 hover:text-orange-600 transition-colors"
-              >
-                Clock Out
-              </button>
-            ) : (
-              <button
-                onClick={handleClockIn}
-                className="text-sm font-semibold text-orange-500 hover:text-orange-600 transition-colors"
-              >
-                Clock In
-              </button>
-            )}
-          </div>
-        </div>
+        <AttendanceMetricCard
+          clockedIn={clockedIn}
+          clockInTime="08:45 AM"
+          onClockIn={handleClockIn}
+          onClockOut={handleClockOut}
+        />
       </div>
 
       {/* ── Main grid ── */}
@@ -267,89 +249,20 @@ export default function EmployeeDashboardPage({
         {/* ── Left column ── */}
         <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
           {/* General Announcements */}
-          <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col gap-3 flex-1 min-h-0 overflow-hidden">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-900">General Announcements</h2>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={prevAnnouncement}
-                  disabled={announcementIdx === 0}
-                  className="p-1.5 rounded-full hover:bg-gray-100 disabled:opacity-30 transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4 text-gray-600" />
-                </button>
-                <button
-                  onClick={nextAnnouncement}
-                  disabled={announcementIdx === DUMMY_ANNOUNCEMENTS.length - 1}
-                  className="p-1.5 rounded-full hover:bg-gray-100 disabled:opacity-30 transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4 text-gray-600" />
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-sm font-bold text-gray-900">{announcement.title}</p>
-                <span className="text-xs text-gray-400 shrink-0 ml-4">{announcement.date}</span>
-              </div>
-              <p className="text-sm text-gray-600 leading-relaxed">
-                {displayBody}
-                {bodyTruncated && (
-                  <button
-                    onClick={() => setExpanded(true)}
-                    className="ml-1 text-sm font-semibold text-gray-900 hover:underline"
-                  >
-                    Read More
-                  </button>
-                )}
-              </p>
-            </div>
-          </div>
+          <AnnouncementCard
+            announcements={DUMMY_ANNOUNCEMENTS}
+            currentIndex={announcementIdx}
+            onPrev={prevAnnouncement}
+            onNext={nextAnnouncement}
+          />
 
           {/* Upcoming Birthdays */}
-          <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col gap-4 shrink-0 overflow-hidden">
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-900">Upcoming Birthdays</h2>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => scrollBirthdays('left')}
-                  className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
-                >
-                  <ChevronLeft className="w-4 h-4 text-gray-600" />
-                </button>
-                <button
-                  onClick={() => scrollBirthdays('right')}
-                  className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
-                >
-                  <ChevronRight className="w-4 h-4 text-gray-600" />
-                </button>
-              </div>
-            </div>
-
-            <div
-              ref={birthdayRef}
-              className="flex gap-4 overflow-x-auto scrollbar-hide pb-1"
-              style={{ scrollbarWidth: 'none' }}
-            >
-              {DUMMY_BIRTHDAYS.map((person) => (
-                <div key={person.id} className="flex flex-col items-center gap-2 shrink-0 w-28">
-                  <div
-                    className="w-20 h-20 rounded-full flex items-center justify-center text-white text-xl font-bold shrink-0"
-                    style={{ backgroundColor: person.color }}
-                  >
-                    {person.initials}
-                  </div>
-                  <div className="text-center">
-                    <p className="text-sm font-semibold text-gray-900 leading-tight">
-                      {person.name}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-0.5">{person.date}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <BirthdaysCard
+            birthdays={birthdays}
+            scrollRef={birthdayRef}
+            onScrollLeft={() => scrollBirthdays('left')}
+            onScrollRight={() => scrollBirthdays('right')}
+          />
         </div>
 
         {/* ── Right column ── */}

@@ -122,7 +122,7 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
             loadingText="Deactivating..."
             className="gap-2"
           >
-            Deactivate
+            Suspend
             <EditIcon />
           </Button>
         )}

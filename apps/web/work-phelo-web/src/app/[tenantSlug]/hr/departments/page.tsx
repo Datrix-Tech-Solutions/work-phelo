@@ -3,18 +3,19 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/DataTable';
 import { SidePanel } from '@/components/organisms/SidePanel';
-import { Modal } from '@/components/organisms/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { extractError } from '@/lib/extractError';
 import { Department, Employee } from '@/types/hr';
+import { useDepartments, useCreateDepartment, useUpdateDepartment } from '@/hooks/useDepartments';
+import { useEmployees, useUpdateEmployee } from '@/hooks/useEmployees';
+import { SuccessModal } from '@/components/organisms/SuccessModal';
 
 /* ── Types ── */
 
@@ -25,7 +26,14 @@ interface DeptForm {
 }
 
 /* ── Status badge ── */
-function DeptStatus({ count }: { count: number }) {
+function DeptStatus({ count, isActive }: { count: number; isActive: boolean }) {
+  if (!isActive) {
+    return (
+      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-600">
+        Inactive
+      </span>
+    );
+  }
   if (count === 0) {
     return (
       <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
@@ -44,7 +52,6 @@ const PAGE_SIZE = 8;
 
 /* ── Page ── */
 export default function DepartmentsPage() {
-  const queryClient = useQueryClient();
   const toast = useToast();
 
   const [search, setSearch] = useState('');
@@ -54,22 +61,17 @@ export default function DepartmentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Department | null>(null);
   const [membersTarget, setMembersTarget] = useState<Department | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
+  const [successName, setSuccessName] = useState<string | null>(null);
 
   /* member panel state */
   const [memberSearch, setMemberSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   /* ── Data fetching ── */
-  const { data: departments = [], isLoading } = useQuery<Department[]>({
-    queryKey: ['departments'],
-    queryFn: () => api.get('/hr/departments').then((r) => r.data),
-  });
+  const { data: departments = [], isLoading } = useDepartments();
 
-  const { data: employees = [] } = useQuery<Employee[]>({
-    queryKey: ['employees-all'],
-    queryFn: () => api.get('/hr/employees').then((r) => r.data?.employees ?? r.data),
-  });
+  const { data: empResult } = useEmployees({ limit: 500 });
+  const employees = empResult?.data ?? [];
 
   /* ── Resolve manager names ── */
   const employeeMap = useMemo(() => {
@@ -122,67 +124,62 @@ export default function DepartmentsPage() {
       key: 'status',
       label: 'Status',
       width: '1fr',
-      render: (row) => <DeptStatus count={row._count?.employees ?? 0} />,
+      render: (row) => <DeptStatus count={row._count?.employees ?? 0} isActive={row.isActive} />,
     },
   ];
 
   /* ── Create mutation ── */
   const createForm = useForm<DeptForm>();
-  const { mutate: createDept, isPending: isCreating } = useMutation({
-    mutationFn: (data: DeptForm) => api.post('/hr/departments', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
-      toast.success('Department created');
-      createForm.reset();
-      setCreateOpen(false);
-    },
-    onError: (err: unknown) => toast.error(extractError(err, 'Failed to create department')),
-  });
+  const { mutate: createDeptMutate, isPending: isCreating } = useCreateDepartment();
+
+  const createDept = (data: DeptForm) =>
+    createDeptMutate(data, {
+      onSuccess: () => {
+        createForm.reset();
+        setCreateOpen(false);
+        setSuccessName(data.name);
+      },
+      onError: (err: unknown) => toast.error(extractError(err, 'Failed to create department')),
+    });
 
   /* ── Edit mutation ── */
   const editForm = useForm<DeptForm>();
-  const { mutate: editDept, isPending: isEditing } = useMutation({
-    mutationFn: (data: DeptForm) => api.patch(`/hr/departments/${editTarget?.id}`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
-      toast.success('Department updated');
-      setEditTarget(null);
-    },
-    onError: (err: unknown) => toast.error(extractError(err, 'Failed to update department')),
-  });
+  const { mutate: updateDeptMutate, isPending: isEditing } = useUpdateDepartment();
 
-  const openEdit = (dept: Department) => {
+  const editDept = (data: DeptForm) => {
+    if (!editTarget) return;
+    updateDeptMutate(
+      { id: editTarget.id, ...data },
+      {
+        onSuccess: () => {
+          toast.success('Department updated');
+          setEditTarget(null);
+        },
+        onError: (err: unknown) => toast.error(extractError(err, 'Failed to update department')),
+      },
+    );
+  };
+
+  const openEdit = (dept: (typeof departments)[number]) => {
     editForm.reset({ name: dept.name, description: dept.description, managerId: dept.managerId });
     setEditTarget(dept);
   };
 
   /* ── Add members mutation ── */
+  const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
   const { mutate: addMembers, isPending: isAddingMembers } = useMutation({
     mutationFn: async (departmentId: string) => {
       await Promise.all(
-        [...selectedIds].map((empId) => api.patch(`/hr/employees/${empId}`, { departmentId })),
+        [...selectedIds].map((empId) => updateEmployeeAsync({ id: empId, departmentId })),
       );
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
-      queryClient.invalidateQueries({ queryKey: ['employees-all'] });
       toast.success('Members added successfully');
       setMembersTarget(null);
       setSelectedIds(new Set());
       setMemberSearch('');
     },
     onError: () => toast.error('Failed to add some members'),
-  });
-
-  /* ── Delete mutation ── */
-  const { mutate: deleteDept, isPending: isDeleting } = useMutation({
-    mutationFn: (id: string) => api.delete(`/hr/departments/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['departments'] });
-      toast.success('Department deleted');
-      setDeleteTarget(null);
-    },
-    onError: (err: unknown) => toast.error(extractError(err, 'Failed to delete department')),
   });
 
   const openMembers = (dept: Department) => {
@@ -231,7 +228,6 @@ export default function DepartmentsPage() {
           rowActions={(row) => [
             { label: 'Edit Department', onClick: () => openEdit(row) },
             { label: 'Add Members', onClick: () => openMembers(row) },
-            { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
           ]}
           emptyMessage="No departments found"
           currentPage={page}
@@ -347,27 +343,11 @@ export default function DepartmentsPage() {
         </div>
       </SidePanel>
 
-      {/* ── Delete Department modal ── */}
-      <Modal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete Department"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone. The department must have no employees assigned.`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              isLoading={isDeleting}
-              loadingText="Deleting..."
-              onClick={() => deleteTarget && deleteDept(deleteTarget.id)}
-            >
-              Delete
-            </Button>
-          </div>
-        }
+      <SuccessModal
+        isOpen={!!successName}
+        onClose={() => setSuccessName(null)}
+        title="Department Created!"
+        message={`"${successName}" has been added to your organisation.`}
       />
 
       {/* ── Add Members panel ── */}

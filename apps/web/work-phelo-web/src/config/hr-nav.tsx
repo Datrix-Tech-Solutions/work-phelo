@@ -62,7 +62,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         icon: <BranchesIcon />,
         href: 'branches',
         enabled: true,
-        active: false,
+        active: true,
       },
       {
         key: 'employees',
@@ -99,7 +99,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         icon: <TimeClockIcon />,
         href: 'time-clock',
         enabled: true,
-        active: false,
+        active: true,
       },
       {
         key: 'scheduling',
@@ -115,7 +115,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         icon: <ProjectsIcon />,
         href: 'projects',
         enabled: true,
-        active: false,
+        active: true,
       },
     ],
   },

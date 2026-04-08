@@ -38,12 +38,16 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const isHR = user?.role === 'TENANT_ADMIN';
   const isManager = isHR || user?.isManager === true;
 
-  /* ── Pending count — always fetched so badge shows on load ── */
-  const { data: pendingCount = 0 } = useQuery<number>({
-    queryKey: ['leave-pending-count', tenantSlug],
-    queryFn: () => api.get(`/hr/leave/requests/pending-count`).then((r) => r.data?.count ?? 0),
-    enabled: isManager || isHR,
+  /* ── Pending count — derived from a lightweight pending-only fetch ── */
+  const { data: pendingList = [] } = useQuery({
+    queryKey: ['leave-requests-pending'],
+    queryFn: () =>
+      api
+        .get('/hr/leave/requests', { params: { status: 'Pending', limit: 100 } })
+        .then((r) => (Array.isArray(r.data) ? r.data : (r.data?.data ?? []))),
+    enabled: !!(isManager || isHR),
   });
+  const pendingCount = pendingList.length;
 
   const TABS = [
     { key: 'my', label: 'My Leave' },
@@ -63,8 +67,8 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const { mutate: cancelRequest, isPending: isCancelling } = useMutation({
     mutationFn: (id: string) => api.patch(`/hr/leave/requests/${id}/cancel`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-leave-requests', tenantSlug] });
-      queryClient.invalidateQueries({ queryKey: ['leave-balance', tenantSlug] });
+      queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['leave-balances'] });
       toast.success('Leave request cancelled');
       setCancelTarget(null);
     },
@@ -88,29 +92,38 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const [reqPage, setReqPage] = useState(1);
 
   /* ── Leave balances (current user) ── */
-  const { data: balancesData = [] } = useQuery<LeaveBalance[]>({
-    queryKey: ['leave-balance', tenantSlug],
-    queryFn: () => api.get(`/hr/leave/balances/me`).then((r) => r.data),
+  const { data: balancesRaw } = useQuery({
+    queryKey: ['leave-balances'],
+    queryFn: () => api.get('/hr/leave/balances/me').then((r) => r.data),
   });
+  const balancesData: LeaveBalance[] = Array.isArray(balancesRaw)
+    ? balancesRaw
+    : (balancesRaw?.data ?? []);
 
   /* ── Leave types for filter dropdown ── */
-  const { data: leaveTypes = [] } = useQuery<LeaveType[]>({
-    queryKey: ['leave-types', tenantSlug],
-    queryFn: () => api.get(`/hr/leave/types`).then((r) => r.data),
+  const { data: leaveTypesRaw } = useQuery({
+    queryKey: ['leave-types'],
+    queryFn: () => api.get('/hr/leave/types').then((r) => r.data),
     enabled: activeTab === 'requests',
   });
+  const leaveTypes: LeaveType[] = Array.isArray(leaveTypesRaw)
+    ? leaveTypesRaw
+    : (leaveTypesRaw?.data ?? []);
 
   /* ── Departments for filter dropdown ── */
-  const { data: departments = [] } = useQuery<{ id: string; name: string }[]>({
-    queryKey: ['departments', tenantSlug],
-    queryFn: () => api.get(`/hr/departments`).then((r) => r.data),
+  const { data: departmentsRaw } = useQuery({
+    queryKey: ['departments'],
+    queryFn: () => api.get('/hr/departments').then((r) => r.data),
     enabled: activeTab === 'requests',
   });
+  const departments: { id: string; name: string }[] = Array.isArray(departmentsRaw)
+    ? departmentsRaw
+    : (departmentsRaw?.data ?? []);
 
   /* ── My leave requests ── */
   const { data: myData, isLoading: myLoading } = useQuery({
-    queryKey: ['my-leave-requests', tenantSlug],
-    queryFn: () => api.get(`/hr/leave/requests/my`).then((r) => r.data),
+    queryKey: ['leave-requests', 'my'],
+    queryFn: () => api.get('/hr/leave/requests/my').then((r) => r.data),
     enabled: activeTab === 'my',
   });
 
@@ -141,7 +154,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
     ],
     queryFn: () =>
       api
-        .get(`/hr/leave/requests`, {
+        .get(`/${tenantSlug}/leave/requests`, {
           params: {
             page: reqPage,
             leaveTypeId: filterLeaveType || undefined,

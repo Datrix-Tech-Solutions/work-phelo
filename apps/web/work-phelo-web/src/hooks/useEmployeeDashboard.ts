@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { UpcomingBirthday } from '@/types/hr';
 
 export function useEmployeeDashboard() {
   return useQuery({
@@ -25,7 +26,10 @@ export function useRecentActivity() {
 export function useUpcomingBirthdays() {
   return useQuery({
     queryKey: ['dashboard-birthdays'],
-    queryFn: () => api.get('/hr/dashboard/upcoming-birthdays').then((r) => r.data),
+    queryFn: () =>
+      api
+        .get<UpcomingBirthday[] | { data: UpcomingBirthday[] }>('/hr/dashboard/upcoming-birthdays')
+        .then((r) => r.data),
   });
 }
 

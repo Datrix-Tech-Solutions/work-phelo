@@ -56,7 +56,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   /* ── My Appraisal ── */
   const { data: myData, isLoading: myLoading } = useQuery({
     queryKey: ['my-appraisals', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/appraisal/my-appraisals`).then((r) => r.data),
+    queryFn: () => api.get('/hr/appraisals/my').then((r) => r.data),
     enabled: activeTab === 'my',
   });
 
@@ -83,7 +83,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   /* ── Team Review ── */
   const { data: teamData, isLoading: teamLoading } = useQuery({
     queryKey: ['team-appraisals', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/appraisal/team-appraisals`).then((r) => r.data),
+    queryFn: () => api.get('/hr/appraisals/team').then((r) => r.data),
     enabled: activeTab === 'team',
   });
 
@@ -114,7 +114,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
     queryKey: ['appraisal-cycles-summary', tenantSlug, hrPage, hrSearch],
     queryFn: () =>
       api
-        .get(`/${tenantSlug}/appraisal/cycles`, {
+        .get('/hr/appraisals/cycles', {
           params: { page: hrPage, search: hrSearch || undefined, includeSummary: true },
         })
         .then((r) => r.data),

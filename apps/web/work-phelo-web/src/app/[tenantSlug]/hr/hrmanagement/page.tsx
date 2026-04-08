@@ -2,6 +2,12 @@
 
 import { redirect } from 'next/navigation';
 
-export default function HRManagementPage({ params }: { params: { tenantSlug: string } }) {
-  redirect(`/${params.tenantSlug}/hr/hrmanagement/leave-types`);
+export default async function HRManagementPage({
+  params,
+}: {
+  params: Promise<{ tenantSlug: string }>;
+}) {
+  const { tenantSlug } = await params;
+
+  redirect(`/${tenantSlug}/hr/hrmanagement/leave-types`);
 }

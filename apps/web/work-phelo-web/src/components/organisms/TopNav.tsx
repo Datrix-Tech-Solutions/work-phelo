@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
 import { Modal } from '@/components/organisms/Modal';
+import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';
@@ -152,6 +154,7 @@ export function TopNav({
   userColor,
 }: TopNavProps) {
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const { logout, user } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
@@ -220,22 +223,11 @@ export function TopNav({
         <div className="flex items-center gap-3">
           {/* Bell */}
           <button
+            onClick={() => setNotificationsOpen(true)}
             className="relative text-black/70 hover:text-black transition-colors"
             aria-label="Notifications"
           >
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
+            <Bell width={20} height={20} />
             {notificationCount != null && notificationCount > 0 && (
               <span className="absolute -top-1.5 -right-1.5 min-w-4 h-4 px-0.5 bg-orange-400 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
                 {notificationCount > 99 ? '99+' : notificationCount}
@@ -299,6 +291,23 @@ export function TopNav({
           />
         </div>
       </header>
+
+      {/* Notifications panel */}
+      <SidePanel
+        isOpen={notificationsOpen}
+        onClose={() => setNotificationsOpen(false)}
+        title="Notifications"
+        description="Stay up to date with what's happening."
+        width="w-[400px]"
+      >
+        <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+          <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
+            <Bell className="w-6 h-6" />
+          </div>
+          <p className="text-sm font-medium text-gray-500">No notifications yet</p>
+          <p className="text-xs text-gray-400">You&apos;re all caught up! Check back later.</p>
+        </div>
+      </SidePanel>
 
       {/* Logout confirmation modal */}
       <Modal

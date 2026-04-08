@@ -4,6 +4,8 @@ import { useState, useMemo } from 'react';
 import { SectionCard } from '@/components/molecules/sectionCard';
 import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '../DataTable';
+import { MetricCard } from '@/components/molecules/MetricCard';
+import { TrendingDown, TrendingUp } from 'lucide-react';
 
 interface PayrollRow {
   id: string;
@@ -137,31 +139,37 @@ export function ManagePayrollTab({
     <div className="flex flex-col gap-6">
       {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <SectionCard title="Total Gross">
-          <p className="text-3xl font-semibold text-gray-900 mt-2">
-            GHS {totals.gross.toLocaleString()}
-          </p>
-        </SectionCard>
-        <SectionCard title="Total Net Pay">
-          <p className="text-3xl font-semibold text-emerald-600 mt-2">
-            GHS {totals.net.toLocaleString()}
-          </p>
-        </SectionCard>
-        <SectionCard title="Total PAYE">
-          <p className="text-3xl font-semibold text-amber-600 mt-2">
-            GHS {totals.paye.toLocaleString()}
-          </p>
-        </SectionCard>
-        <SectionCard title="Total SSNIT">
-          <p className="text-3xl font-semibold text-blue-600 mt-2">
-            GHS {totals.ssnit.toLocaleString()}
-          </p>
-        </SectionCard>
-        <SectionCard title="Employer Cost">
-          <p className="text-3xl font-semibold text-purple-600 mt-2">
-            GHS {totals.employerCost.toLocaleString()}
-          </p>
-        </SectionCard>
+        <MetricCard
+          title="Total Gross"
+          value={`GHS ${totals.gross.toLocaleString()}`}
+          icon={TrendingUp}
+          variant="highlight"
+        />
+        <MetricCard
+          title="Total Net Pay"
+          value={`GHS ${totals.net.toLocaleString()}`}
+          icon={TrendingUp}
+          variant="success"
+        />
+
+        <MetricCard
+          title="Total PAYE"
+          value={`GHS ${totals.paye.toLocaleString()}`}
+          icon={TrendingDown}
+          variant="warning"
+        />
+        <MetricCard
+          title="Total SSNIT"
+          value={`GHS ${totals.ssnit.toLocaleString()}`}
+          icon={TrendingUp}
+          variant="highlight"
+        />
+        <MetricCard
+          title="Employer Cost"
+          value={`GHS ${totals.employerCost.toLocaleString()}`}
+          icon={TrendingUp}
+          variant="highlight"
+        />
       </div>
 
       {/* Payroll Table */}

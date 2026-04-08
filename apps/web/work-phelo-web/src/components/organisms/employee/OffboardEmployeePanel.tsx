@@ -24,7 +24,7 @@ interface OffboardEmployeePanelProps {
   onClose: () => void;
   employee: Employee;
   allHrEmployees: Employee[];
-  onOffboard: (data: OffboardPayload) => void;
+  onOffboard: (data: OffboardForm) => void;
   isOffboarding: boolean;
 }
 
