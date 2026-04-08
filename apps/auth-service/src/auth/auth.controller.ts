@@ -194,6 +194,8 @@ export class AuthController {
         tenantName: req.user.tenantName,
         firstName: req.user.firstName,
         companyRoleId: req.user.companyRoleId,
+        moduleConfig: req.user.moduleConfig ?? {},
+        featureConfig: req.user.featureConfig ?? {},
       },
     };
   }

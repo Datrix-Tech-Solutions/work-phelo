@@ -51,12 +51,19 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    queryClient.invalidateQueries({ queryKey: ['tenant', id] });
+  };
+
   const { mutate: deactivate, isPending: isDeactivating } = useMutation({
     mutationFn: () => api.patch(`/auth/tenants/${id}/deactivate`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      queryClient.invalidateQueries({ queryKey: ['tenant', id] });
-    },
+    onSuccess: invalidate,
+  });
+
+  const { mutate: activate, isPending: isActivating } = useMutation({
+    mutationFn: () => api.patch(`/auth/tenants/${id}/approve`),
+    onSuccess: invalidate,
   });
 
   const { mutate: deleteTenant, isPending: isDeleting } = useMutation({
@@ -67,6 +74,7 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
     },
   });
 
+  const isSuspended = status === 'SUSPENDED';
   const workspaceUrl = `workphelo.com/${slug}/`;
 
   return (
@@ -93,17 +101,31 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
           Delete Company
           <TrashIcon />
         </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => deactivate()}
-          isLoading={isDeactivating}
-          loadingText="Deactivating..."
-          className="gap-2"
-        >
-          Deactivate
-          <EditIcon />
-        </Button>
+        {isSuspended ? (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => activate()}
+            isLoading={isActivating}
+            loadingText="Activating..."
+            className="gap-2"
+          >
+            Activate
+            <EditIcon />
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => deactivate()}
+            isLoading={isDeactivating}
+            loadingText="Deactivating..."
+            className="gap-2"
+          >
+            Deactivate
+            <EditIcon />
+          </Button>
+        )}
       </div>
     </div>
   );

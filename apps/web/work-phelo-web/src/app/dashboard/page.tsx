@@ -132,7 +132,7 @@ export default function AdminDashboardPage() {
           : '—',
       contact: c.phone ?? c.contact ?? c.contactNumber ?? '—',
       industry: c.industry ?? '—',
-      status: (c.status as 'ACTIVE' | 'INACTIVE') ?? 'INACTIVE',
+      status: (c.status as 'ACTIVE' | 'SUSPENDED') ?? 'SUSPENDED',
     }));
   }, [apiData]);
 
@@ -160,7 +160,7 @@ export default function AdminDashboardPage() {
     () => ({
       total: allCompanies.length,
       active: allCompanies.filter((c) => c.status === 'ACTIVE').length,
-      inactive: allCompanies.filter((c) => c.status === 'INACTIVE').length,
+      inactive: allCompanies.filter((c) => c.status === 'SUSPENDED').length,
       newMonth: allCompanies.filter((c) => {
         const now = new Date();
         return (
@@ -189,7 +189,7 @@ export default function AdminDashboardPage() {
           />
           <StatCard title="Active" value={isLoading ? null : stats.active} icon={<ActiveIcon />} />
           <StatCard
-            title="Inactive"
+            title="Suspended"
             value={isLoading ? null : stats.inactive}
             icon={<InactiveIcon />}
           />

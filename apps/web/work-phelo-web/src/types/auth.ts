@@ -9,6 +9,8 @@ export interface User {
   firstName: string;
   lastName?: string;
   companyRoleId?: string;
+  moduleConfig?: Record<string, boolean>;
+  featureConfig?: Record<string, Record<string, boolean>>;
 }
 
 export interface AuthState {
