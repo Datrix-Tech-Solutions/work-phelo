@@ -8,14 +8,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
-
-/* ── Nav ── */
-
-/* ── Types ── */
-interface TenantUser {
-  id: string;
-  status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'INACTIVE' | 'PENDING';
-}
+import { TenantUser } from '@/types/tenant';
 
 /* ── Greeting ── */
 function getGreeting() {

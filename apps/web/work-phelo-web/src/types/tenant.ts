@@ -1,3 +1,5 @@
+export type TenantStatus = 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
+
 export interface Tenant {
   id: string;
   name: string;
@@ -7,7 +9,7 @@ export interface Tenant {
   country?: string;
   industry?: string;
   size?: string;
-  status: 'PENDING' | 'ACTIVE' | 'SUSPENDED' | 'PENDING_VERIFICATION';
+  status: TenantStatus;
   createdAt: string;
 }
 
@@ -21,4 +23,37 @@ export interface RegisterTenantPayload {
   country?: string;
   industry?: string;
   size?: string;
+}
+
+// ── Tenant User ──────────────────────────────────────────
+export interface TenantUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE' | 'MANAGER';
+  status: string;
+}
+
+// ── Audit Log ────────────────────────────────────────────
+export interface AuditLog {
+  id: string;
+  resource: string;
+  action: string;
+  createdAt: string;
+  changes?: { after?: Record<string, unknown> };
+}
+
+export interface AuditData {
+  logs: AuditLog[];
+}
+
+// ── Company (SuperAdmin table display model) ─────────────
+export interface Company {
+  id: string;
+  name: string;
+  dateCreated: string;
+  contact: string;
+  industry: string;
+  status: TenantStatus;
 }

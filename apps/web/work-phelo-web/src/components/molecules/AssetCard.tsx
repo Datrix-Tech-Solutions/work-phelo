@@ -1,4 +1,4 @@
-import { Asset, AssetStatus, AssetCondition } from '@/app/[tenantSlug]/hr/assets/page';
+import { Asset, AssetStatus, AssetCondition } from '@/types/asset';
 import { AssetTypeIcon } from '@/lib/assetIcons';
 import { cn } from '@/lib/utils';
 

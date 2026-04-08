@@ -302,3 +302,28 @@ export interface CycleResultsSummary {
   }[];
   results: CycleResultItem[];
 }
+
+// ── Page-level View Models ────────────────────────────────
+// Employee's own appraisal row (self view)
+export interface MyAppraisalRow {
+  id: string;
+  cycleId: string;
+  cycleName: string;
+  cycleStatus: AppraisalStatus;
+  overallStatus: EmployeeAppraisalStatus;
+  overallScore?: number;
+  finalRating?: FinalRating;
+  selfAssessmentDeadline: string;
+}
+
+// Manager's team review row
+export interface TeamReviewRow {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  cycleId: string;
+  cycleName: string;
+  selfSubmittedAt?: string;
+  managerReviewDeadline: string;
+  overallStatus: EmployeeAppraisalStatus;
+}

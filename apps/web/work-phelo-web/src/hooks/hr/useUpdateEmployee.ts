@@ -1,31 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-
-export interface UpdateEmployeePayload {
-  firstName: string;
-  lastName: string;
-  phone?: string;
-  jobTitle: string;
-  departmentId?: string;
-  employmentType: string;
-  employmentStatus: string;
-  dateOfBirth?: string;
-  gender?: string;
-  maritalStatus?: string;
-  nationality?: string;
-  address?: string;
-  city?: string;
-  region?: string;
-  emergencyName?: string;
-  emergencyPhone?: string;
-  emergencyRelation?: string;
-  basicSalary?: number;
-  bankName?: string;
-  bankAccountNumber?: string;
-  bankBranch?: string;
-  ssnit?: string;
-  tinNumber?: string;
-}
+import { UpdateEmployeePayload } from '@/types/hr';
 
 interface Options {
   onSuccess?: () => void;

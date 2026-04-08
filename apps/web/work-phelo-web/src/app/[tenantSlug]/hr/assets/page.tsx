@@ -13,28 +13,9 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/lib/assetIcons';
+import { Asset, AssetStatus, AssetCondition } from '@/types/asset';
 
 /* ── Types ── */
-
-export type AssetStatus = 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' | 'RETIRED';
-export type AssetCondition = 'NEW' | 'GOOD' | 'FAIR' | 'POOR';
-
-export interface Asset {
-  id: string;
-  assetNumber: string;
-  name: string;
-  type: AssetType;
-  serialNumber?: string;
-  purchaseDate?: string;
-  purchaseCost?: number;
-  currency?: string;
-  condition?: AssetCondition;
-  notes?: string;
-  status: AssetStatus;
-  assignedTo?: string;
-  assignedEmployeeName?: string;
-  assignedAt?: string;
-}
 
 interface AssetForm {
   name: string;

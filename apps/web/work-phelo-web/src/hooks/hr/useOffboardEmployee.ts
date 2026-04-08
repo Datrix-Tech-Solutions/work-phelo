@@ -1,11 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-
-export interface OffboardPayload {
-  employeeId: string;
-  offboardedAt: string;
-  reason: string;
-}
+import { OffboardPayload } from '@/types/hr';
 
 interface Options {
   onSuccess?: () => void;

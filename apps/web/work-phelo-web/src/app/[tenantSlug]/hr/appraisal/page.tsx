@@ -16,30 +16,9 @@ import {
   EmployeeAppraisalStatus,
   FinalRating,
   AppraisalCycleSummary,
+  MyAppraisalRow,
+  TeamReviewRow,
 } from '@/types/appraisal';
-
-/* ── Local row types ── */
-interface MyAppraisalRow {
-  id: string;
-  cycleId: string;
-  cycleName: string;
-  cycleStatus: AppraisalStatus;
-  overallStatus: EmployeeAppraisalStatus;
-  overallScore?: number;
-  finalRating?: FinalRating;
-  selfAssessmentDeadline: string;
-}
-
-interface TeamReviewRow {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  cycleId: string;
-  cycleName: string;
-  selfSubmittedAt?: string;
-  managerReviewDeadline: string;
-  overallStatus: EmployeeAppraisalStatus;
-}
 
 /* ── Helpers ── */
 function formatDate(d: string) {

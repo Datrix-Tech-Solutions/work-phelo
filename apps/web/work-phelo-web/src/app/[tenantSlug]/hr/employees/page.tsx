@@ -16,27 +16,9 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { Employee, Department } from '@/types/hr';
 
 /* ── Types ── */
-interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  jobTitle: string;
-  email: string;
-  phone?: string;
-  avatarUrl?: string;
-  employmentStatus: string;
-  employmentType: string;
-  hireDate: string;
-  departmentId?: string;
-  department?: { id: string; name: string };
-}
-
-interface Department {
-  id: string;
-  name: string;
-}
 
 interface InviteForm {
   firstName: string;

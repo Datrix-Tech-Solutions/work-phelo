@@ -13,25 +13,9 @@ import { FormField } from '@/components/molecules/FormField';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { extractError } from '@/lib/extractError';
+import { Department, Employee } from '@/types/hr';
 
 /* ── Types ── */
-interface Department {
-  id: string;
-  name: string;
-  description?: string;
-  managerId?: string;
-  isActive: boolean;
-  _count: { employees: number };
-}
-
-interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  jobTitle: string;
-  departmentId?: string;
-  avatarUrl?: string;
-}
 
 interface DeptForm {
   name: string;
@@ -136,14 +120,14 @@ export default function DepartmentsPage() {
       label: 'Members',
       width: '1fr',
       render: (row) => (
-        <span className="text-sm font-medium text-gray-700">{row._count.employees}</span>
+        <span className="text-sm font-medium text-gray-700">{row._count?.employees ?? 0}</span>
       ),
     },
     {
       key: 'status',
       label: 'Status',
       width: '1fr',
-      render: (row) => <DeptStatus count={row._count.employees} isActive={row.isActive} />,
+      render: (row) => <DeptStatus count={row._count?.employees ?? 0} isActive={row.isActive} />,
     },
   ];
 

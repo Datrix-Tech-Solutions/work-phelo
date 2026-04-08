@@ -2,6 +2,7 @@ export interface Department {
   id: string;
   name: string;
   description?: string;
+  managerId?: string;
   isActive: boolean;
   _count?: { employees: number };
 }
@@ -112,4 +113,46 @@ export interface DashboardSummary {
   pendingLeaveRequests: number;
   assignedAssetsCount: number;
   hasEmployees: boolean;
+}
+
+// ── Employee Query Params ────────────────────────────────
+export interface EmployeeQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  departmentId?: string;
+  status?: string;
+}
+
+// ── Employee Mutation Payloads ───────────────────────────
+export interface UpdateEmployeePayload {
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  jobTitle: string;
+  departmentId?: string;
+  employmentType: string;
+  employmentStatus: string;
+  dateOfBirth?: string;
+  gender?: string;
+  maritalStatus?: string;
+  nationality?: string;
+  address?: string;
+  city?: string;
+  region?: string;
+  emergencyName?: string;
+  emergencyPhone?: string;
+  emergencyRelation?: string;
+  basicSalary?: number;
+  bankName?: string;
+  bankAccountNumber?: string;
+  bankBranch?: string;
+  ssnit?: string;
+  tinNumber?: string;
+}
+
+export interface OffboardPayload {
+  employeeId: string;
+  offboardedAt: string;
+  reason: string;
 }

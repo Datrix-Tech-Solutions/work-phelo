@@ -10,28 +10,7 @@ import { CompanyHeader } from '@/components/organisms/CompanyHeader';
 import { CompanyInfoCard } from '@/components/organisms/CompanyInfoCard';
 import { ModuleConfiguration, Module } from '@/components/organisms/ModuleConfiguration';
 import { RecentActivities } from '@/components/organisms/RecentActivities';
-
-/* ── Types ── */
-interface TenantUser {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE' | 'MANAGER';
-  status: string;
-}
-
-interface AuditLog {
-  id: string;
-  resource: string;
-  action: string;
-  createdAt: string;
-  changes?: { after?: Record<string, unknown> };
-}
-
-interface AuditData {
-  logs: AuditLog[];
-}
+import { TenantUser, AuditLog, AuditData } from '@/types/tenant';
 
 // Module keys and feature keys must match the backend featureConfig schema exactly
 const DEFAULT_MODULES: Module[] = [
