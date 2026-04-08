@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -10,12 +10,13 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
+import { leaveKeys, useCreateLeaveRequest } from '@/hooks/useLeave';
 import { CreateLeaveRequestDto, LeaveBalance, LeaveType, PublicHoliday } from '@/types/leave';
 
 interface ApplyLeavePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  tenantSlug?: string;
+  tenantSlug: string;
   balances: LeaveBalance[];
 }
 
@@ -46,25 +47,24 @@ function calcWorkingDays(start: string, end: string, holidays: PublicHoliday[]):
 
 export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: ApplyLeavePanelProps) {
   const toast = useToast();
-  const queryClient = useQueryClient();
 
-  const { data: leaveTypesRaw } = useQuery({
-    queryKey: ['leave-types'],
-    queryFn: () => api.get('/hr/leave/types').then((r) => r.data),
+  const { data: leaveTypes = [] } = useQuery({
+    queryKey: leaveKeys.types(tenantSlug),
+    queryFn: async () => {
+      const res = await api.get<LeaveType[]>('/hr/leave/types');
+      return res.data;
+    },
     enabled: isOpen,
   });
-  const leaveTypes: LeaveType[] = Array.isArray(leaveTypesRaw)
-    ? leaveTypesRaw
-    : (leaveTypesRaw?.data ?? []);
 
-  const { data: holidaysRaw } = useQuery({
-    queryKey: ['public-holidays'],
-    queryFn: () => api.get('/hr/leave/public-holidays').then((r) => r.data),
+  const { data: holidays = [] } = useQuery({
+    queryKey: ['public-holidays', tenantSlug],
+    queryFn: async () => {
+      const res = await api.get<PublicHoliday[]>('/hr/leave/public-holidays');
+      return res.data;
+    },
     enabled: isOpen,
   });
-  const holidays: PublicHoliday[] = Array.isArray(holidaysRaw)
-    ? holidaysRaw
-    : (holidaysRaw?.data ?? []);
 
   const {
     register,
@@ -90,11 +90,6 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const startDate = useWatch({ control, name: 'startDate' });
   const endDate = useWatch({ control, name: 'endDate' });
 
-  const selectedType = useMemo(
-    () => leaveTypes.find((t) => t.id === leaveTypeId),
-    [leaveTypes, leaveTypeId],
-  );
-
   const selectedBalance = useMemo(
     () => balances.find((b) => b.leaveTypeId === leaveTypeId),
     [balances, leaveTypeId],
@@ -108,30 +103,30 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const isOverBalance =
     selectedBalance != null && workingDays > 0 && workingDays > selectedBalance.remaining;
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data: CreateLeaveRequestDto) => api.post('/hr/leave/requests', data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['leave-balances'] });
-      toast.success('Leave request submitted');
-      onClose();
-    },
-    onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
-      toast.error(message);
-    },
-  });
+  const { mutate, isPending } = useCreateLeaveRequest();
 
   const onSubmit = (values: FormValues) => {
     if (!values.leaveTypeId) return;
-    mutate({
+
+    const payload: CreateLeaveRequestDto = {
       leaveTypeId: values.leaveTypeId,
       startDate: values.startDate,
       endDate: values.endDate,
       reason: values.reason || undefined,
       documentationUrl: values.documentationUrl || undefined,
+    };
+
+    mutate(payload, {
+      onSuccess: () => {
+        toast.success('Leave request submitted');
+        onClose();
+      },
+      onError: (err: unknown) => {
+        const message =
+          (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
+          'Something went wrong';
+        toast.error(message);
+      },
     });
   };
 
@@ -212,7 +207,11 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
       {/* Working days summary */}
       {workingDays > 0 && (
         <div
-          className={`rounded-xl px-4 py-3 text-sm ${isOverBalance ? 'bg-orange-50 border border-orange-200' : 'bg-blue-50 border border-blue-200'}`}
+          className={`rounded-xl px-4 py-3 text-sm ${
+            isOverBalance
+              ? 'bg-orange-50 border border-orange-200'
+              : 'bg-blue-50 border border-blue-200'
+          }`}
         >
           <p
             className={isOverBalance ? 'text-orange-700 font-medium' : 'text-blue-700 font-medium'}

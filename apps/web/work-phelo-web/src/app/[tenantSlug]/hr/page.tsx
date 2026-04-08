@@ -4,8 +4,13 @@
 
 import { use, useState, useRef } from 'react';
 import { Calendar, CircleDollarSign, MonitorSmartphone, CalendarRange } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
-import { useUpcomingBirthdays } from '@/hooks';
+import { useUpcomingBirthdays, useEmployeeDashboard } from '@/hooks';
+import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/useLeave';
+import { useMyPayslips } from '@/hooks/usePayroll';
+import { usePublicHolidays } from '@/hooks/usePublicHolidays';
+import { useClockIn, useClockOut } from '@/hooks/useTimeClock';
 import { UpcomingBirthday } from '@/types/hr';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -16,55 +21,6 @@ import { AnnouncementCard } from '@/components/molecules/announcmentCard';
 import { BirthdaysCard } from '@/components/molecules/birthdayCard';
 import { cn } from '@/lib/utils';
 import { getGreeting } from '@/lib/formatters';
-
-/* ── Dummy data ── */
-const DUMMY_ANNOUNCEMENTS = [
-  {
-    id: '1',
-    title: 'General Meeting',
-    date: '22 Apr 2025',
-    body: 'this is the body of the announcemm',
-  },
-];
-
-const DUMMY_HOLIDAYS = [{ id: '2', name: 'Easter Monday', date: '6 Apr 2026' }];
-
-const DUMMY_PAYSLIPS = [
-  { id: '1', month: 'March 2026', gross: 'GHS 5,500.00', net: 'GHS 4,820.00', status: 'Paid' },
-];
-
-const DUMMY_MY_ASSETS = [
-  {
-    id: '1',
-    name: 'MacBook Pro 14"',
-    type: 'Laptop',
-    assetNumber: 'LAP-0001',
-    assignedAt: '1 Feb 2024',
-  },
-];
-
-const DUMMY_LEAVE_REQUESTS = [
-  {
-    id: '1',
-    type: 'Annual Leave',
-    start: '27 Apr 2026',
-    end: '3 May 2026',
-    days: 5,
-    status: 'Approved',
-  },
-];
-
-const DUMMY_LEAVE_BALANCES = [
-  {
-    leaveTypeId: 'annual',
-    leaveTypeName: 'Annual Leave',
-    entitled: 22,
-    used: 8,
-    pending: 5,
-    remaining: 14,
-    carriedOver: 0,
-  },
-];
 
 /* ── Avatar colour picker (deterministic from name) ── */
 const AVATAR_COLORS = [
@@ -87,6 +43,32 @@ function avatarColor(name: string) {
 function formatBirthdayDate(iso: string) {
   const d = new Date(iso);
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' });
+}
+
+/* ── Format time from ISO string ── */
+function formatTime(iso: string | null | undefined) {
+  if (!iso) return undefined;
+  return new Date(iso).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/* ── Format date range ── */
+function formatDateRange(start: string, end: string) {
+  const fmt = (d: string) =>
+    new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  return `${fmt(start)} – ${fmt(end)}`;
+}
+
+/* ── Format holiday date ── */
+function formatHolidayDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 /* ── Quick action button ── */
@@ -117,9 +99,16 @@ function QuickActionBtn({
 /* ── Leave request status badge ── */
 function LeaveStatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    Approved: 'bg-green-50 text-green-700',
-    Pending: 'bg-yellow-50 text-yellow-700',
-    Rejected: 'bg-red-50 text-red-700',
+    APPROVED: 'bg-green-50 text-green-700',
+    PENDING: 'bg-yellow-50 text-yellow-700',
+    REJECTED: 'bg-red-50 text-red-700',
+    CANCELLED: 'bg-gray-50 text-gray-500',
+  };
+  const labels: Record<string, string> = {
+    APPROVED: 'Approved',
+    PENDING: 'Pending',
+    REJECTED: 'Rejected',
+    CANCELLED: 'Cancelled',
   };
   return (
     <span
@@ -128,8 +117,17 @@ function LeaveStatusBadge({ status }: { status: string }) {
         styles[status] ?? 'bg-gray-50 text-gray-600',
       )}
     >
-      {status}
+      {labels[status] ?? status}
     </span>
+  );
+}
+
+/* ── Empty state helper ── */
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+      <p className="text-sm text-gray-400">{message}</p>
+    </div>
   );
 }
 
@@ -140,16 +138,58 @@ export default function EmployeeDashboardPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  const queryClient = useQueryClient();
 
   const user = useAuthStore((s) => s.user);
-
   const firstName = user?.firstName ?? 'Employee';
   const lastName = user?.lastName ?? '';
   const fullName = lastName ? `${firstName} ${lastName}` : firstName;
   const tenantName = user?.tenantName ?? 'Your Company';
 
-  /* ── Birthdays ── */
+  /* ── Data ── */
+  const { data: dashboard } = useEmployeeDashboard();
+  const { data: balancesRaw } = useLeaveBalances();
+  const { data: myLeaveRaw } = useMyLeaveRequests();
+  const { data: myPayslipsRaw } = useMyPayslips();
+  const { data: holidaysRaw } = usePublicHolidays();
   const { data: birthdaysRaw } = useUpcomingBirthdays();
+
+  /* ── Derived: leave balances ── */
+  const leaveBalances = Array.isArray(balancesRaw) ? balancesRaw : [];
+  const annualBalance = leaveBalances.find((b: any) =>
+    b.leaveTypeName?.toLowerCase().includes('annual'),
+  );
+
+  /* ── Derived: upcoming leave from dashboard ── */
+  const upcomingLeave = dashboard?.leave?.upcomingLeave ?? null;
+
+  /* ── Derived: announcements ── */
+  const announcements: { id: string; title: string; date: string; body: string }[] = (
+    dashboard?.announcements ?? []
+  ).map((a: any) => ({
+    id: a.id,
+    title: a.title,
+    date: new Date(a.publishedAt).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    }),
+    body: a.body ?? a.preview ?? '',
+  }));
+
+  /* ── Derived: upcoming holidays (future only, first 5) ── */
+  const holidays = (Array.isArray(holidaysRaw) ? holidaysRaw : [])
+    .filter((h: any) => new Date(h.date) >= new Date())
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 5);
+
+  /* ── Derived: my leave requests ── */
+  const myLeave = Array.isArray(myLeaveRaw) ? myLeaveRaw : [];
+
+  /* ── Derived: my payslips ── */
+  const myPayslips = Array.isArray(myPayslipsRaw) ? myPayslipsRaw : [];
+
+  /* ── Derived: birthdays ── */
   const rawBirthdays = Array.isArray(birthdaysRaw)
     ? birthdaysRaw
     : ((birthdaysRaw as unknown as { data?: UpcomingBirthday[] })?.data ?? []);
@@ -164,42 +204,40 @@ export default function EmployeeDashboardPage({
     };
   });
 
+  /* ── Attendance ── */
+  const attendance = dashboard?.attendance;
+  const clockedIn = attendance?.status === 'CLOCKED_IN';
+  const clockInTime = formatTime(attendance?.clockedInAt);
+
+  const { mutate: clockIn, isPending: isClockinIn } = useClockIn();
+  const { mutate: clockOut, isPending: isClockingOut } = useClockOut();
+
+  const handleClockIn = () => {
+    clockIn(undefined, {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employee-dashboard'] }),
+    });
+  };
+
+  const handleClockOut = () => {
+    clockOut(undefined, {
+      onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employee-dashboard'] }),
+    });
+  };
+
   /* ── Panel states ── */
   const [applyLeaveOpen, setApplyLeaveOpen] = useState(false);
   const [payslipsOpen, setPayslipsOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [myLeaveOpen, setMyLeaveOpen] = useState(false);
 
-  /* ── Clock in state ── */
-  const [clockedIn, setClockedIn] = useState(false);
-  const [, setClockInTime] = useState<string | null>(null);
-
-  const handleClockIn = () => {
-    const now = new Date();
-    const time = now.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    });
-    setClockedIn(true);
-    setClockInTime(time);
-  };
-
-  const handleClockOut = () => {
-    setClockedIn(false);
-    setClockInTime(null);
-  };
-
   /* ── Announcement pagination ── */
   const [announcementIdx, setAnnouncementIdx] = useState(0);
-
   const prevAnnouncement = () => setAnnouncementIdx((i) => Math.max(0, i - 1));
   const nextAnnouncement = () =>
-    setAnnouncementIdx((i) => Math.min(DUMMY_ANNOUNCEMENTS.length - 1, i + 1));
+    setAnnouncementIdx((i) => Math.min(Math.max(announcements.length - 1, 0), i + 1));
 
   /* ── Birthday scroll ── */
   const birthdayRef = useRef<HTMLDivElement>(null);
-
   const scrollBirthdays = (dir: 'left' | 'right') => {
     if (!birthdayRef.current) return;
     birthdayRef.current.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
@@ -223,24 +261,34 @@ export default function EmployeeDashboardPage({
       {/* ── Stat cards row ── */}
       <div className="grid grid-cols-3 gap-4 shrink-0">
         {/* Annual Leave */}
-
-        {/* Upcoming Leave */}
         <MetricCard
           title="Annual Leave"
-          value="14"
-          unit="/ 22 Days"
+          value={annualBalance ? annualBalance.remaining : '—'}
+          unit={annualBalance ? `/ ${annualBalance.entitled} Days` : undefined}
           icon={Calendar}
           actionLabel="Request Leave"
           onAction={() => setApplyLeaveOpen(true)}
         />
-        <MetricCard title="Upcoming Leave" unit="27 Apr 2026 – 03 May 2026" icon={CalendarRange} />
+
+        {/* Upcoming Leave */}
+        <MetricCard
+          title="Upcoming Leave"
+          value={upcomingLeave ? upcomingLeave.leaveType : '—'}
+          unit={
+            upcomingLeave
+              ? formatDateRange(upcomingLeave.startDate, upcomingLeave.endDate)
+              : 'No upcoming leave'
+          }
+          icon={CalendarRange}
+        />
 
         {/* Clock In / Out */}
         <AttendanceMetricCard
           clockedIn={clockedIn}
-          clockInTime="08:45 AM"
+          clockInTime={clockInTime}
           onClockIn={handleClockIn}
           onClockOut={handleClockOut}
+          isLoading={isClockinIn || isClockingOut}
         />
       </div>
 
@@ -250,7 +298,7 @@ export default function EmployeeDashboardPage({
         <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
           {/* General Announcements */}
           <AnnouncementCard
-            announcements={DUMMY_ANNOUNCEMENTS}
+            announcements={announcements}
             currentIndex={announcementIdx}
             onPrev={prevAnnouncement}
             onNext={nextAnnouncement}
@@ -295,19 +343,23 @@ export default function EmployeeDashboardPage({
           {/* Upcoming Holidays */}
           <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
             <h2 className="text-base font-bold text-gray-900">Upcoming Holidays</h2>
-            <div className="flex flex-col gap-3">
-              {DUMMY_HOLIDAYS.map((h) => (
-                <div key={h.id} className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
-                    <Calendar className="w-4 h-4 text-gray-500" />
+            {holidays.length === 0 ? (
+              <EmptyState message="No upcoming public holidays" />
+            ) : (
+              <div className="flex flex-col gap-3">
+                {holidays.map((h: any) => (
+                  <div key={h.id} className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                      <Calendar className="w-4 h-4 text-gray-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400">{formatHolidayDate(h.date)}</p>
+                      <p className="text-sm font-semibold text-gray-900">{h.name}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-gray-400">{h.date}</p>
-                    <p className="text-sm font-semibold text-gray-900">{h.name}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -317,7 +369,7 @@ export default function EmployeeDashboardPage({
         isOpen={applyLeaveOpen}
         onClose={() => setApplyLeaveOpen(false)}
         tenantSlug={tenantSlug}
-        balances={DUMMY_LEAVE_BALANCES}
+        balances={leaveBalances}
       />
 
       {/* ── My Payslips Panel ── */}
@@ -328,28 +380,41 @@ export default function EmployeeDashboardPage({
         description="Your recent payslip history."
         width="w-[480px]"
       >
-        <div className="flex flex-col gap-3">
-          {DUMMY_PAYSLIPS.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
-            >
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{p.month}</p>
-                <p className="text-xs text-gray-400 mt-0.5">Gross: {p.gross}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="text-sm font-bold text-gray-900">{p.net}</p>
-                  <p className="text-xs text-green-600 font-medium">{p.status}</p>
+        {myPayslips.length === 0 ? (
+          <EmptyState message="No payslips available yet" />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {myPayslips.map((p: any) => {
+              const run = p.payrollRun;
+              const month = run
+                ? new Date(run.year, run.month - 1).toLocaleDateString('en-US', {
+                    month: 'long',
+                    year: 'numeric',
+                  })
+                : '—';
+              const gross = p.grossPay != null ? `GHS ${Number(p.grossPay).toFixed(2)}` : '—';
+              const net = p.netPay != null ? `GHS ${Number(p.netPay).toFixed(2)}` : '—';
+              const status = run?.status === 'PAID' ? 'Paid' : (run?.status ?? '—');
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{month}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Gross: {gross}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-gray-900">{net}</p>
+                      <p className="text-xs text-green-600 font-medium">{status}</p>
+                    </div>
+                  </div>
                 </div>
-                <button className="text-xs font-semibold text-[#0D2244] hover:underline">
-                  Download
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </SidePanel>
 
       {/* ── My Assets Panel ── */}
@@ -360,25 +425,7 @@ export default function EmployeeDashboardPage({
         description="Assets currently assigned to you."
         width="w-[480px]"
       >
-        <div className="flex flex-col gap-3">
-          {DUMMY_MY_ASSETS.map((a) => (
-            <div
-              key={a.id}
-              className="flex items-center gap-4 px-4 py-4 border border-gray-200 rounded-card bg-white"
-            >
-              <div className="w-10 h-10 rounded-lg bg-[#EEF1F8] flex items-center justify-center shrink-0">
-                <MonitorSmartphone className="w-5 h-5 text-[#0D2244]" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 truncate">{a.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {a.assetNumber} · {a.type}
-                </p>
-              </div>
-              <p className="text-xs text-gray-400 shrink-0">Since {a.assignedAt}</p>
-            </div>
-          ))}
-        </div>
+        <EmptyState message="Asset management is not available yet" />
       </SidePanel>
 
       {/* ── My Leave Panel ── */}
@@ -401,22 +448,28 @@ export default function EmployeeDashboardPage({
           </div>
         }
       >
-        <div className="flex flex-col gap-3">
-          {DUMMY_LEAVE_REQUESTS.map((r) => (
-            <div
-              key={r.id}
-              className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
-            >
-              <div>
-                <p className="text-sm font-semibold text-gray-900">{r.type}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {r.start} – {r.end} · {r.days} {r.days === 1 ? 'day' : 'days'}
-                </p>
+        {myLeave.length === 0 ? (
+          <EmptyState message="No leave requests yet" />
+        ) : (
+          <div className="flex flex-col gap-3">
+            {myLeave.map((r: any) => (
+              <div
+                key={r.id}
+                className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
+              >
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {r.leaveType?.name ?? 'Leave'}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {formatDateRange(r.startDate, r.endDate)}
+                  </p>
+                </div>
+                <LeaveStatusBadge status={r.status} />
               </div>
-              <LeaveStatusBadge status={r.status} />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </SidePanel>
     </div>
   );

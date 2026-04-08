@@ -37,12 +37,19 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
 
   const { mutate, isPending } = useResetPassword();
   const handleReset = (data: ResetPasswordForm) => {
-    mutate({ password: data.password, tenantSlug } as any, {
-      onSuccess: () => {
-        const base = tenantSlug ? `/${tenantSlug}` : '';
-        router.push(`${base}/login`);
+    const otpCode = sessionStorage.getItem('fpOtp') ?? '';
+    const email = sessionStorage.getItem('fpEmail') ?? undefined;
+    mutate(
+      { otpCode, newPassword: data.password, email, tenantSlug },
+      {
+        onSuccess: () => {
+          sessionStorage.removeItem('fpOtp');
+          sessionStorage.removeItem('fpEmail');
+          const base = tenantSlug ? `/${tenantSlug}` : '';
+          router.push(`${base}/login`);
+        },
       },
-    });
+    );
   };
 
   return (

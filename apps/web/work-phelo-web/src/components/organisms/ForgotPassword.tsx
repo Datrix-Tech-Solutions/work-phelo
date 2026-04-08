@@ -27,6 +27,7 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
   const handleSubmit2 = (data: ForgotPasswordForm) => {
     mutate({ ...data, tenantSlug } as any, {
       onSuccess: () => {
+        sessionStorage.setItem('fpEmail', data.email);
         const base = tenantSlug ? `/${tenantSlug}` : '';
         router.push(`${base}/forgot-password/verify`);
       },

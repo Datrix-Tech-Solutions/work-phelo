@@ -19,11 +19,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Allow accept-invite and reset-password routes
+  // Allow accept-invite, reset-password, and forgot-password routes
   if (
     pathname.includes('/accept-invite') ||
     pathname.includes('/reset-password') ||
-    pathname.includes('/verify-account')
+    pathname.includes('/verify-account') ||
+    pathname.includes('/forgot-password')
   ) {
     return NextResponse.next();
   }
