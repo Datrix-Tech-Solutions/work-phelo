@@ -87,17 +87,16 @@ export default function CycleDetailPage({
 
   const { data: cycle, isLoading: cycleLoading } = useQuery<AppraisalCycle>({
     queryKey: ['appraisal-cycle', id],
-    queryFn: () => api.get(`/${tenantSlug}/appraisal/cycles/${id}`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/appraisals/cycles/${id}`).then((r) => r.data),
   });
 
   const { data: kpis = [], isLoading: kpisLoading } = useQuery<AppraisalKpi[]>({
     queryKey: ['cycle-kpis', id],
-    queryFn: () => api.get(`/${tenantSlug}/appraisal/cycles/${id}/kpis`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/appraisals/cycles/${id}/kpis`).then((r) => r.data),
   });
 
   const { mutate: deleteKpiMutation, isPending: isDeleting } = useMutation({
-    mutationFn: (kpiId: string) =>
-      api.delete(`/${tenantSlug}/appraisal/cycles/${id}/kpis/${kpiId}`),
+    mutationFn: (kpiId: string) => api.delete(`/hr/appraisals/cycles/${id}/kpis/${kpiId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cycle-kpis', id] });
       toast.success('KPI removed');

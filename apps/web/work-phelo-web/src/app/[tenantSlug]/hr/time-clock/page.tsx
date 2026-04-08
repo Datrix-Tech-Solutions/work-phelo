@@ -155,7 +155,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const handleReview = () => {
     if (!reviewTarget) return;
     reviewCorrection(
-      { id: reviewTarget.req.id, status: reviewTarget.action },
+      { id: reviewTarget.req.id, action: reviewTarget.action },
       {
         onSuccess: () => {
           toast.success(

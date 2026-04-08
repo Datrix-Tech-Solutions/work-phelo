@@ -51,7 +51,7 @@ export default function AppraisalCyclesPage({
     queryKey: ['appraisal-cycles', tenantSlug, page, search, statusFilter],
     queryFn: () =>
       api
-        .get(`/${tenantSlug}/appraisal/cycles`, {
+        .get('/hr/appraisals/cycles', {
           params: { page, search: search || undefined, status: statusFilter || undefined },
         })
         .then((r) => r.data),
@@ -62,7 +62,7 @@ export default function AppraisalCyclesPage({
 
   const { mutate: cancelCycle, isPending: isCancelling } = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api.patch(`/${tenantSlug}/appraisal/cycles/${id}/cancel`, { reason }),
+      api.patch(`/hr/appraisals/cycles/${id}/cancel`, { reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appraisal-cycles', tenantSlug] });
       toast.success('Cycle cancelled');

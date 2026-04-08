@@ -88,13 +88,13 @@ export function CreateCyclePanel({
 
   const { data: templates = [] } = useQuery<AppraisalTemplate[]>({
     queryKey: ['appraisal-templates', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/appraisal/templates`).then((r) => r.data),
+    queryFn: () => api.get('/hr/appraisals/templates').then((r) => r.data),
     enabled: isOpen,
   });
 
   const { data: departments = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ['departments', tenantSlug],
-    queryFn: () => api.get(`/${tenantSlug}/departments`).then((r) => r.data),
+    queryFn: () => api.get('/hr/departments').then((r) => r.data),
     enabled: isOpen,
   });
 
@@ -160,8 +160,8 @@ export function CreateCyclePanel({
   const { mutate, isPending } = useMutation({
     mutationFn: (data: CreateAppraisalCycleDto) =>
       isEditing
-        ? api.put(`/${tenantSlug}/appraisal/cycles/${editCycle!.id}`, data)
-        : api.post(`/${tenantSlug}/appraisal/cycles`, data),
+        ? api.put(`/hr/appraisals/cycles/${editCycle!.id}`, data)
+        : api.post('/hr/appraisals/cycles', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appraisal-cycles', tenantSlug] });
       toast.success(isEditing ? 'Cycle updated' : 'Cycle created');

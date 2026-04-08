@@ -79,8 +79,8 @@ export function CreateKpiPanel({
   const { mutate, isPending } = useMutation({
     mutationFn: (data: CreateAppraisalKpiDto) =>
       isEditing
-        ? api.put(`/${tenantSlug}/appraisal/cycles/${cycleId}/kpis/${editKpi!.id}`, data)
-        : api.post(`/${tenantSlug}/appraisal/cycles/${cycleId}/kpis`, data),
+        ? api.put(`/hr/appraisals/cycles/${cycleId}/kpis/${editKpi!.id}`, data)
+        : api.post(`/hr/appraisals/cycles/${cycleId}/kpis`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cycle-kpis', cycleId] });
       toast.success(isEditing ? 'KPI updated' : 'KPI added');

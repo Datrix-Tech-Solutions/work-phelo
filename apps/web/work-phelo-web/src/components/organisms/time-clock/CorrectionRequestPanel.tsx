@@ -35,8 +35,8 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
     mutate(
       {
         date,
-        requestedClockIn: clockIn || undefined,
-        requestedClockOut: clockOut || undefined,
+        requestedIn: clockIn || undefined,
+        requestedOut: clockOut || undefined,
         reason: reason.trim(),
       },
       {
