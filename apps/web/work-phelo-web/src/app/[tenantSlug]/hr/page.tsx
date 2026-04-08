@@ -17,14 +17,7 @@ import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
 import { cn } from '@/lib/utils';
-
-/* ── Greeting ── */
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+import { getGreeting } from '@/lib/formatters';
 
 /* ── Dummy data ── */
 const DUMMY_ANNOUNCEMENTS = [

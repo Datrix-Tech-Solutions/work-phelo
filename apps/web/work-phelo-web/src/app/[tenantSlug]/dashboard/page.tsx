@@ -8,15 +8,9 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
+import { StatPill } from '@/components/molecules/StatPill';
 import { TenantUser } from '@/types/tenant';
-
-/* ── Greeting ── */
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+import { getGreeting } from '@/lib/formatters';
 
 /* ── Module definitions ── */
 const HRIcon = () => (
@@ -128,16 +122,6 @@ const MODULE_DEFS: ModuleDef[] = [
     route: 'operation',
   },
 ];
-
-/* ── Stat pill ── */
-function StatPill({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex flex-col items-start gap-0.5 px-6  ">
-      <span className="text-xs text-white/60">{label}</span>
-      <span className="text-2xl font-bold text-white">{value === 0 ? '—' : value}</span>
-    </div>
-  );
-}
 
 /* ── Page ── */
 export default function TenantDashboardPage({

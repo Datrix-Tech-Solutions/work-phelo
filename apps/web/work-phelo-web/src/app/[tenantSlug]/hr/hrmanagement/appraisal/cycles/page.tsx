@@ -14,14 +14,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
 import { AppraisalCycle, AppraisalStatus } from '@/types/appraisal';
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+import { formatDate } from '@/lib/formatters';
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'Upcoming', label: 'Upcoming' },

@@ -14,6 +14,7 @@ import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/lib/assetIcons';
 import { Asset, AssetStatus, AssetCondition } from '@/types/asset';
+import { FilterSelect } from '@/components/molecules/FilterSelect';
 
 /* ── Types ── */
 
@@ -56,34 +57,6 @@ const TYPE_LABELS: Record<AssetType, string> = {
   SOFTWARE_LICENSE: 'Software License',
   OTHER: 'Other',
 };
-
-/* ── Filter select ── */
-function FilterSelect({
-  value,
-  onChange,
-  options,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  placeholder: string;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0D2244]/20 focus:border-[#0D2244]"
-    >
-      <option value="">{placeholder}</option>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
-}
 
 /* ── Page ── */
 export default function AssetsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {

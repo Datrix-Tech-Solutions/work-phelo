@@ -11,14 +11,7 @@ import { CreatePublicHolidayPanel } from '@/components/organisms/leave/CreatePub
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { PublicHoliday } from '@/types/leave';
-
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+import { formatDate } from '@/lib/formatters';
 
 function daysBetween(start: string, end: string) {
   const diff = new Date(end).getTime() - new Date(start).getTime();
