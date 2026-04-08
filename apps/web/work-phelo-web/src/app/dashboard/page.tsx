@@ -87,7 +87,7 @@ interface Company {
   dateCreated: string;
   contact: string;
   industry: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING';
 }
 
 const PAGE_SIZE = 7;
@@ -132,7 +132,7 @@ export default function AdminDashboardPage() {
           : '—',
       contact: c.phone ?? c.contact ?? c.contactNumber ?? '—',
       industry: c.industry ?? '—',
-      status: (c.status as 'ACTIVE' | 'SUSPENDED') ?? 'SUSPENDED',
+      status: (c.status as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING') ?? 'SUSPENDED',
     }));
   }, [apiData]);
 
