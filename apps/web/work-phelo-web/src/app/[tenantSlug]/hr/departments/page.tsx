@@ -8,6 +8,7 @@ import { useForm } from 'react-hook-form';
 import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/DataTable';
 import { SidePanel } from '@/components/organisms/SidePanel';
+import { Modal } from '@/components/organisms/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { useToast } from '@/hooks/useToast';
@@ -24,14 +25,7 @@ interface DeptForm {
 }
 
 /* ── Status badge ── */
-function DeptStatus({ count, isActive }: { count: number; isActive: boolean }) {
-  if (!isActive) {
-    return (
-      <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-600">
-        Inactive
-      </span>
-    );
-  }
+function DeptStatus({ count }: { count: number }) {
   if (count === 0) {
     return (
       <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
@@ -60,6 +54,7 @@ export default function DepartmentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Department | null>(null);
   const [membersTarget, setMembersTarget] = useState<Department | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
 
   /* member panel state */
   const [memberSearch, setMemberSearch] = useState('');
@@ -127,7 +122,7 @@ export default function DepartmentsPage() {
       key: 'status',
       label: 'Status',
       width: '1fr',
-      render: (row) => <DeptStatus count={row._count?.employees ?? 0} isActive={row.isActive} />,
+      render: (row) => <DeptStatus count={row._count?.employees ?? 0} />,
     },
   ];
 
@@ -179,6 +174,17 @@ export default function DepartmentsPage() {
     onError: () => toast.error('Failed to add some members'),
   });
 
+  /* ── Delete mutation ── */
+  const { mutate: deleteDept, isPending: isDeleting } = useMutation({
+    mutationFn: (id: string) => api.delete(`/hr/departments/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      toast.success('Department deleted');
+      setDeleteTarget(null);
+    },
+    onError: (err: unknown) => toast.error(extractError(err, 'Failed to delete department')),
+  });
+
   const openMembers = (dept: Department) => {
     setMembersTarget(dept);
     setSelectedIds(new Set());
@@ -225,6 +231,7 @@ export default function DepartmentsPage() {
           rowActions={(row) => [
             { label: 'Edit Department', onClick: () => openEdit(row) },
             { label: 'Add Members', onClick: () => openMembers(row) },
+            { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
           ]}
           emptyMessage="No departments found"
           currentPage={page}
@@ -339,6 +346,29 @@ export default function DepartmentsPage() {
           </select>
         </div>
       </SidePanel>
+
+      {/* ── Delete Department modal ── */}
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Department"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone. The department must have no employees assigned.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isDeleting}
+              loadingText="Deleting..."
+              onClick={() => deleteTarget && deleteDept(deleteTarget.id)}
+            >
+              Delete
+            </Button>
+          </div>
+        }
+      />
 
       {/* ── Add Members panel ── */}
       <SidePanel
