@@ -32,7 +32,7 @@ export default function AcceptInvitePage() {
     try {
       await acceptInvite.mutateAsync({ inviteToken: token, password });
       setSuccess(true);
-      setTimeout(() => router.push(`/${tenantSlug}/login`), 2000);
+      setTimeout(() => router.push(`/${tenantSlug}/dashboard`), 2000);
     } catch (err) {
       setError(extractError(err));
     }

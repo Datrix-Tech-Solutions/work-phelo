@@ -89,7 +89,7 @@ export default function EmployeeDetailPage({
   });
 
   /* ── Resend invite ── */
-  const { mutate: resendInvite, isPending: isResending } = useResendInvite(employee?.userId, {
+  const { mutate: resendInvite, isPending: isResending } = useResendInvite(employee?.id, {
     onSuccess: () => toast.success('Invite resent successfully'),
     onError: (err) => toast.error(extractError(err, 'Failed to resend invite')),
   });

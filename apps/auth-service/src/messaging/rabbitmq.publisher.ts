@@ -31,6 +31,7 @@ export class RabbitMQPublisher {
     email: string;
     firstName: string;
     inviteToken: string;
+    acceptInviteUrl: string;
     tenantName: string;
   }) {
     this.emit('notification.invite_user', data);

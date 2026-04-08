@@ -6,9 +6,9 @@ interface Options {
   onError?: (err: unknown) => void;
 }
 
-export function useResendInvite(userId: string | null | undefined, options?: Options) {
+export function useResendInvite(employeeId: string | null | undefined, options?: Options) {
   return useMutation({
-    mutationFn: () => api.post(`/auth/users/${userId}/resend-invite`),
+    mutationFn: () => api.post(`/hr/employees/${employeeId}/resend-invite`),
     onSuccess: options?.onSuccess,
     onError: options?.onError,
   });

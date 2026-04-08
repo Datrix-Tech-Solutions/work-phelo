@@ -61,7 +61,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
 
   const { mutate: cancelRequest, isPending: isCancelling } = useMutation({
-    mutationFn: (id: string) => api.delete(`/hr/leave/requests/${id}`),
+    mutationFn: (id: string) => api.patch(`/hr/leave/requests/${id}/cancel`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-leave-requests', tenantSlug] });
       queryClient.invalidateQueries({ queryKey: ['leave-balance', tenantSlug] });
@@ -90,7 +90,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   /* ── Leave balances (current user) ── */
   const { data: balancesData = [] } = useQuery<LeaveBalance[]>({
     queryKey: ['leave-balance', tenantSlug],
-    queryFn: () => api.get(`/hr/leave/balances`).then((r) => r.data),
+    queryFn: () => api.get(`/hr/leave/balances/me`).then((r) => r.data),
   });
 
   /* ── Leave types for filter dropdown ── */
@@ -141,7 +141,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
     ],
     queryFn: () =>
       api
-        .get(`/${tenantSlug}/leave/requests`, {
+        .get(`/hr/leave/requests`, {
           params: {
             page: reqPage,
             leaveTypeId: filterLeaveType || undefined,
