@@ -568,6 +568,10 @@ export class TenantsService {
       email: admin.email,
       firstName: admin.firstName,
       inviteToken,
+      acceptInviteUrl: WorkspaceUrl.acceptInvite(
+        admin.tenant.slug,
+        inviteToken,
+      ),
       tenantName: admin.tenant.name,
     });
     return { message: 'Invitation resent successfully' };
