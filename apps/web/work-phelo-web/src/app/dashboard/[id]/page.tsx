@@ -43,15 +43,55 @@ const DEFAULT_MODULES: Module[] = [
     enabled: false,
     options: [
       {
+        key: 'departments',
+        label: 'Departments',
+        description: 'Manage company departments and structure',
+      },
+      {
+        key: 'branches',
+        label: 'Branches',
+        description: 'Manage company branch locations',
+      },
+      {
+        key: 'employees',
+        label: 'Employees',
+        description: 'Manage employee records and profiles',
+      },
+      {
         key: 'leave',
         label: 'Leave Management',
         description: 'Employee leave requests and balances',
       },
-      { key: 'time', label: 'Time Management', description: 'Clock in/out and scheduling' },
-      { key: 'payroll', label: 'Payroll', description: 'Process and manage payroll' },
-      { key: 'appraisals', label: 'Appraisals', description: 'Performance reviews and cycles' },
-      { key: 'projects', label: 'Project Management', description: 'Projects and task tracking' },
-      { key: 'assets', label: 'Asset Management', description: 'Company asset tracking' },
+      {
+        key: 'appraisal',
+        label: 'Appraisal',
+        description: 'Performance reviews and cycles',
+      },
+      {
+        key: 'timeclock',
+        label: 'Time Clock',
+        description: 'Clock in/out and attendance tracking',
+      },
+      {
+        key: 'scheduling',
+        label: 'Smart Scheduling',
+        description: 'Shift and workforce scheduling',
+      },
+      {
+        key: 'projects',
+        label: 'Project & Tasks',
+        description: 'Projects and task tracking',
+      },
+      {
+        key: 'payroll',
+        label: 'Payroll',
+        description: 'Process and manage payroll',
+      },
+      {
+        key: 'assets',
+        label: 'Asset Management',
+        description: 'Company asset tracking',
+      },
     ],
   },
   {

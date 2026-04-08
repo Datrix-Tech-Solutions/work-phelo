@@ -115,7 +115,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         icon: <ProjectsIcon />,
         href: 'projects',
         enabled: true,
-        active: false,
+        active: true,
       },
     ],
   },
