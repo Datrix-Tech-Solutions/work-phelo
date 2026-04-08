@@ -2,7 +2,7 @@
 
 'use client';
 
-import { use } from 'react';
+import { use, useMemo } from 'react';
 import { useTenant, useTenantUsers, useTenantAudit } from '@/hooks/useTenants';
 import { useUpdateModules, useUpdateFeatures } from '@/hooks/useModuleConfig';
 import Link from 'next/link';
@@ -114,17 +114,23 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
 
   const admin = (users as any[]).find((u: any) => u.role === 'TENANT_ADMIN');
 
-  // Build modules from real tenant config
+  // Build modules from real tenant config — memoized so ModuleConfiguration
+  // only re-syncs its local state when the server data actually changes
   const moduleConfig = (tenant?.moduleConfig as Record<string, boolean>) ?? {};
   const featureConfig = (tenant?.featureConfig as Record<string, Record<string, boolean>>) ?? {};
-  const modules: Module[] = DEFAULT_MODULES.map((m) => ({
-    ...m,
-    enabled: moduleConfig[m.key] ?? false,
-    options: m.options?.map((o) => ({
-      ...o,
-      enabled: featureConfig[m.key]?.[o.key] ?? false,
-    })),
-  }));
+  const modules: Module[] = useMemo(
+    () =>
+      DEFAULT_MODULES.map((m) => ({
+        ...m,
+        enabled: moduleConfig[m.key] ?? false,
+        options: m.options?.map((o) => ({
+          ...o,
+          enabled: featureConfig[m.key]?.[o.key] ?? false,
+        })),
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(moduleConfig), JSON.stringify(featureConfig)],
+  );
 
   const activities = (auditData?.logs ?? []).map((log: any) => ({
     id: log.id,

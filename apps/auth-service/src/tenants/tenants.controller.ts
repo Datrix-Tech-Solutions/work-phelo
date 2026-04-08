@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   HttpCode,
@@ -201,6 +202,19 @@ export class TenantsController {
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   suspend(@Param('id') id: string) {
     return this.tenantsService.suspendTenant(id);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Permanently delete a company — SuperAdmin only' })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({ status: 200, description: 'Company deleted successfully' })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  deleteTenant(@Param('id') id: string) {
+    return this.tenantsService.deleteTenant(id);
   }
 
   @Patch(':id/modules')

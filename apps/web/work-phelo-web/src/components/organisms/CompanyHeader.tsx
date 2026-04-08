@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { StatusBadge } from '@/components/molecules/StatusBadge';
@@ -48,15 +49,22 @@ const EditIcon = () => (
 
 export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const { mutate: deactivate, isPending: isDeactivating } = useMutation({
     mutationFn: () => api.patch(`/auth/tenants/${id}/deactivate`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tenants'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant', id] });
+    },
   });
 
   const { mutate: deleteTenant, isPending: isDeleting } = useMutation({
-    mutationFn: () => api.patch(`/auth/tenants/${id}/suspend`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tenants'] }),
+    mutationFn: () => api.delete(`/auth/tenants/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+      router.push('/dashboard');
+    },
   });
 
   const workspaceUrl = `workphelo.com/${slug}/`;

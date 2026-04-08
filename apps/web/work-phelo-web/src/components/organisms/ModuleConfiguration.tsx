@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/SidePanel';
 
@@ -74,9 +74,24 @@ export function ModuleConfiguration({
   const [modules, setModules] = useState<Module[]>(initialModules);
   const [activeModule, setActiveModule] = useState<Module | null>(null);
 
+  // Sync local state when server data changes (after cache invalidation)
+  useEffect(() => {
+    setModules(initialModules);
+  }, [initialModules]);
+
   const handleToggle = (id: string, enabled: boolean) => {
     setModules((prev) => prev.map((m) => (m.id === id ? { ...m, enabled } : m)));
     onToggle(id, enabled);
+  };
+
+  const handleOptionToggle = (optKey: string, enabled: boolean) => {
+    if (!activeModule) return;
+    const updatedOptions = activeModule.options!.map((o) =>
+      o.key === optKey ? { ...o, enabled } : o,
+    );
+    const updatedModule = { ...activeModule, options: updatedOptions };
+    setActiveModule(updatedModule);
+    setModules((prev) => prev.map((m) => (m.id === activeModule.id ? updatedModule : m)));
   };
 
   const handleRowClick = (mod: Module) => {
@@ -147,7 +162,10 @@ export function ModuleConfiguration({
                   <p className="text-sm font-medium text-gray-900">{opt.label}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{opt.description}</p>
                 </div>
-                <Toggle enabled={false} onChange={() => {}} />
+                <Toggle
+                  enabled={opt.enabled ?? false}
+                  onChange={(v) => handleOptionToggle(opt.key, v)}
+                />
               </div>
             ))}
           </div>

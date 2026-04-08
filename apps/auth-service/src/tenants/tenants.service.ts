@@ -537,6 +537,15 @@ export class TenantsService {
     };
   }
 
+  async deleteTenant(id: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id } });
+    if (!tenant) throw new NotFoundException('Tenant not found');
+
+    await this.prisma.tenant.delete({ where: { id } });
+
+    return { message: 'Company deleted successfully' };
+  }
+
   async resendAdminInvite(tenantId: string) {
     const admin = await this.prisma.user.findFirst({
       where: { tenantId, role: 'TENANT_ADMIN', status: 'PENDING_VERIFICATION' },
