@@ -1,34 +1,26 @@
-export type LeaveApplicability = 'All' | 'FullTime' | 'PartTime' | 'Contract';
-
 // ── Leave Type ───────────────────────────────────────────
 export interface LeaveType {
   id: string;
-  tenantSlug: string;
+  tenantId: string;
   name: string;
-  description?: string;
   isPaid: boolean;
-  daysPerYear: number;
-  carryOver: boolean;
+  daysAllowed: number;
+  isCarryOver: boolean;
   maxCarryOverDays?: number;
-  requiresDocumentation: boolean;
-  documentationDescription?: string;
-  applicableTo: LeaveApplicability[];
+  requiresApproval: boolean;
   isDefault: boolean;
-  hasExistingRequests?: boolean;
+  isActive: boolean;
   createdAt: string;
   updatedAt?: string;
 }
 
 export interface CreateLeaveTypeDto {
   name: string;
-  description?: string;
   isPaid: boolean;
-  daysPerYear: number;
-  carryOver: boolean;
+  daysAllowed: number;
+  isCarryOver: boolean;
   maxCarryOverDays?: number;
-  requiresDocumentation: boolean;
-  documentationDescription?: string;
-  applicableTo: LeaveApplicability[];
+  requiresApproval: boolean;
 }
 
 export type UpdateLeaveTypeDto = Partial<CreateLeaveTypeDto>;
@@ -36,18 +28,15 @@ export type UpdateLeaveTypeDto = Partial<CreateLeaveTypeDto>;
 // ── Public Holiday ───────────────────────────────────────
 export interface PublicHoliday {
   id: string;
-  tenantSlug: string;
+  tenantId: string;
   name: string;
-  startDate: string; // ISO: YYYY-MM-DD
-  endDate: string; // ISO: YYYY-MM-DD
+  date: string; // ISO date string
   createdAt: string;
-  updatedAt?: string;
 }
 
 export interface CreatePublicHolidayDto {
   name: string;
-  startDate: string; // ISO: YYYY-MM-DD
-  endDate: string; // ISO: YYYY-MM-DD
+  date: string;
 }
 
 export type UpdatePublicHolidayDto = Partial<CreatePublicHolidayDto>;
@@ -62,7 +51,7 @@ export interface LeaveRequest {
   employeeName: string;
   leaveTypeId: string;
   leaveTypeName: string;
-  isPaid: boolean; // denormalised from leave type
+  isPaid: boolean;
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
   totalDays: number;
@@ -93,9 +82,9 @@ export interface ReviewLeaveRequestDto {
 export interface LeaveBalance {
   leaveTypeId: string;
   leaveTypeName: string;
-  entitled: number; // days per year
-  used: number; // approved days taken this cycle
-  pending: number; // days in pending requests
-  remaining: number; // entitled - used - pending
-  carriedOver: number; // days carried over from previous cycle
+  entitled: number;
+  used: number;
+  pending: number;
+  remaining: number;
+  carriedOver: number;
 }

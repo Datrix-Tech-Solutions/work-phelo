@@ -240,16 +240,10 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
 
   const hrColumns: Column<AppraisalCycleSummary>[] = [
     {
-      key: 'name',
+      key: 'title',
       label: 'Cycle Name',
       width: '2fr',
-      render: (r) => <span className="font-medium text-gray-900">{r.name}</span>,
-    },
-    {
-      key: 'frequency',
-      label: 'Frequency',
-      width: '100px',
-      render: (r) => <span className="text-sm text-gray-600">{r.frequency}</span>,
+      render: (r) => <span className="font-medium text-gray-900">{r.title}</span>,
     },
     {
       key: 'period',
@@ -290,22 +284,22 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
       key: 'status',
       label: 'Status',
       width: '110px',
-      render: (r) => <StatusBadge status={r.status} />,
+      render: (r) => <StatusBadge status={r.isActive ? 'ACTIVE' : 'INACTIVE'} />,
     },
     {
       key: 'viewResults',
       label: '',
       width: '140px',
       render: (r) =>
-        r.status === 'Completed' ? (
+        r.isActive ? (
+          <span className="text-xs text-gray-400 italic">Results pending</span>
+        ) : r.completionRate === 100 ? (
           <Button
             size="sm"
             onClick={() => router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.id}/results`)}
           >
             View Results
           </Button>
-        ) : r.status === 'InProgress' ? (
-          <span className="text-xs text-gray-400 italic">Results pending</span>
         ) : null,
     },
   ];

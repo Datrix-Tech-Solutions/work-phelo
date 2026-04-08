@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, Controller, useWatch } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -20,8 +20,7 @@ interface CreatePublicHolidayPanelProps {
 
 type FormValues = {
   name: string;
-  startDate: string;
-  endDate: string;
+  date: string;
 };
 
 export function CreatePublicHolidayPanel({
@@ -41,28 +40,25 @@ export function CreatePublicHolidayPanel({
     reset,
     formState: { errors },
   } = useForm<FormValues>({
-    defaultValues: { name: '', startDate: '', endDate: '' },
+    defaultValues: { name: '', date: '' },
   });
 
   useEffect(() => {
     if (editHoliday) {
       reset({
         name: editHoliday.name,
-        startDate: editHoliday.startDate,
-        endDate: editHoliday.endDate,
+        date: editHoliday.date,
       });
     } else {
-      reset({ name: '', startDate: '', endDate: '' });
+      reset({ name: '', date: '' });
     }
   }, [editHoliday, reset]);
-
-  const startDate = useWatch({ control, name: 'startDate' });
 
   const { mutate, isPending } = useMutation({
     mutationFn: (data: CreatePublicHolidayDto) =>
       isEditing
-        ? api.put(`/${tenantSlug}/public-holidays/${editHoliday!.id}`, data)
-        : api.post(`/${tenantSlug}/public-holidays`, data),
+        ? api.patch(`/hr/leave/public-holidays/${editHoliday!.id}`, data)
+        : api.post(`/hr/leave/public-holidays`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['public-holidays', tenantSlug] });
       toast.success(isEditing ? 'Holiday updated' : 'Holiday added');
@@ -79,8 +75,7 @@ export function CreatePublicHolidayPanel({
   const onSubmit = (values: FormValues) => {
     mutate({
       name: values.name,
-      startDate: values.startDate,
-      endDate: values.endDate,
+      date: values.date,
     });
   };
 
@@ -102,45 +97,27 @@ export function CreatePublicHolidayPanel({
         </div>
       }
     >
-      {/* Date range */}
-      <div className="grid grid-cols-2 gap-4">
-        <Controller
-          name="startDate"
-          control={control}
-          rules={{ required: 'Start date is required' }}
-          render={({ field }) => (
-            <DatePicker
-              label="Start Date"
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.startDate?.message}
-            />
-          )}
-        />
-        <Controller
-          name="endDate"
-          control={control}
-          rules={{
-            required: 'End date is required',
-            validate: (v) => !startDate || v >= startDate || 'Cannot be before start date',
-          }}
-          render={({ field }) => (
-            <DatePicker
-              label="End Date"
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.endDate?.message}
-            />
-          )}
-        />
-      </div>
-
-      {/* Holiday name */}
+      {/* Holiday Name */}
       <FormField
         label="Holiday Name"
         registration={register('name', { required: 'Holiday name is required' })}
         error={errors.name}
         placeholder="e.g. Christmas Day"
+      />
+
+      {/* Date */}
+      <Controller
+        name="date"
+        control={control}
+        rules={{ required: 'Date is required' }}
+        render={({ field }) => (
+          <DatePicker
+            label="Date"
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.date?.message}
+          />
+        )}
       />
     </SidePanel>
   );

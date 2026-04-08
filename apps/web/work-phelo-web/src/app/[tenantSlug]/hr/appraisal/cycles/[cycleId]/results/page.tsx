@@ -8,7 +8,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
 import {
   AppraisalCycle,
   FinalRating,
@@ -174,18 +173,17 @@ export default function CycleResultsPage({
           Appraisals
         </Link>
         <span>/</span>
-        <span className="text-gray-700 font-medium">{cycle.name}</span>
+        <span className="text-gray-700 font-medium">{cycle.title}</span>
       </nav>
 
       {/* Cycle header */}
       <div className="flex items-start justify-between shrink-0">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold text-gray-900">{cycle.name}</h1>
-            <StatusBadge status={cycle.status} />
+            <h1 className="text-xl font-bold text-gray-900">{cycle.title}</h1>
           </div>
           <p className="text-sm text-gray-500">
-            {cycle.frequency} · {formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}
+            {formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}
           </p>
         </div>
       </div>

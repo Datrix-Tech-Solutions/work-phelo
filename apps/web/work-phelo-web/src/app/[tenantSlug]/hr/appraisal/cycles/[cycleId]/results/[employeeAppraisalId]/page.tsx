@@ -12,7 +12,6 @@ import {
   EmployeeAppraisal,
   AppraisalCycle,
   AppraisalKpi,
-  AppraisalTemplate,
   AppraisalSection,
   FinalRating,
   KpiScore,
@@ -130,15 +129,7 @@ export default function EmployeeAppraisalDetailPage({
     queryFn: () => api.get(`/${tenantSlug}/appraisal/cycles/${cycleId}/kpis`).then((r) => r.data),
   });
 
-  /* ── Fetch template sections ── */
-  const { data: template } = useQuery<AppraisalTemplate>({
-    queryKey: ['appraisal-template', cycle?.templateId],
-    queryFn: () =>
-      api.get(`/${tenantSlug}/appraisal/templates/${cycle!.templateId}`).then((r) => r.data),
-    enabled: !!cycle?.templateId,
-  });
-
-  const sections: AppraisalSection[] = template?.sections ?? [];
+  const sections: AppraisalSection[] = [];
 
   /* ── Score lookup helpers ── */
   function getKpiScore(scores: KpiScore[] | undefined, kpiId: string): KpiScore | undefined {
@@ -189,7 +180,7 @@ export default function EmployeeAppraisalDetailPage({
           href={`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/results`}
           className="flex items-center gap-1 hover:text-gray-600 transition-colors"
         >
-          {cycle?.name ?? 'Cycle Results'}
+          {cycle?.title ?? 'Cycle Results'}
         </Link>
         <span>/</span>
         <span className="text-gray-700 font-medium">Employee Detail</span>

@@ -13,11 +13,6 @@ import { useToast } from '@/hooks/useToast';
 import { PublicHoliday } from '@/types/leave';
 import { formatDate } from '@/lib/formatters';
 
-function daysBetween(start: string, end: string) {
-  const diff = new Date(end).getTime() - new Date(start).getTime();
-  return Math.round(diff / (1000 * 60 * 60 * 24)) + 1;
-}
-
 export default function PublicHolidaysPage({
   params,
 }: {
@@ -70,24 +65,9 @@ export default function PublicHolidaysPage({
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
-      key: 'startDate',
-      label: 'Start Date',
-      render: (row) => <span className="text-gray-700">{formatDate(row.startDate)}</span>,
-    },
-    {
-      key: 'endDate',
-      label: 'End Date',
-      render: (row) => <span className="text-gray-700">{formatDate(row.endDate)}</span>,
-    },
-    {
-      key: 'duration',
-      label: 'Duration',
-      render: (row) => {
-        const days = daysBetween(row.startDate, row.endDate);
-        return (
-          <span className="text-gray-500 text-sm">{days === 1 ? '1 day' : `${days} days`}</span>
-        );
-      },
+      key: 'date',
+      label: 'Date',
+      render: (row) => <span className="text-gray-700">{formatDate(row.date)}</span>,
     },
   ];
 

@@ -3,25 +3,18 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { DataTable, Column } from '@/components/organisms/DataTable';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
-import { Modal } from '@/components/organisms/Modal';
 import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/Modal';
 import { CreateCyclePanel } from '@/components/organisms/appraisal/CreateCyclePanel';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { inputClass } from '@/lib/utils';
-import { AppraisalCycle, AppraisalStatus } from '@/types/appraisal';
+import { useMutation } from '@tanstack/react-query';
+import { AppraisalCycle } from '@/types/appraisal';
 import { formatDate } from '@/lib/formatters';
-
-const STATUS_OPTIONS: { value: string; label: string }[] = [
-  { value: 'Upcoming', label: 'Upcoming' },
-  { value: 'InProgress', label: 'In Progress' },
-  { value: 'Completed', label: 'Completed' },
-  { value: 'Cancelled', label: 'Cancelled' },
-];
+import { Badge } from '@/components/atoms/Badge';
 
 export default function AppraisalCyclesPage({
   params,
@@ -34,18 +27,16 @@ export default function AppraisalCyclesPage({
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
   const [editCycle, setEditCycle] = useState<AppraisalCycle | undefined>();
-  const [cancelTarget, setCancelTarget] = useState<AppraisalCycle | null>(null);
-  const [cancelReason, setCancelReason] = useState('');
+  const [startTarget, setStartTarget] = useState<AppraisalCycle | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['appraisal-cycles', tenantSlug, page, search, statusFilter],
+    queryKey: ['appraisal-cycles', tenantSlug, page, search],
     queryFn: () =>
       api
-        .get(`/${tenantSlug}/appraisal/cycles`, {
-          params: { page, search: search || undefined, status: statusFilter || undefined },
+        .get(`/hr/appraisals/cycles`, {
+          params: { page, search: search || undefined },
         })
         .then((r) => r.data),
   });
@@ -53,26 +44,24 @@ export default function AppraisalCyclesPage({
   const cycles: AppraisalCycle[] = Array.isArray(data) ? data : (data?.data ?? data?.cycles ?? []);
   const totalPages: number = data?.totalPages ?? 1;
 
-  const { mutate: cancelCycle, isPending: isCancelling } = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api.patch(`/${tenantSlug}/appraisal/cycles/${id}/cancel`, { reason }),
+  const { mutate: startCycle, isPending: isStarting } = useMutation({
+    mutationFn: (id: string) => api.post(`/hr/appraisals/cycles/${id}/start`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appraisal-cycles', tenantSlug] });
-      toast.success('Cycle cancelled');
-      setCancelTarget(null);
-      setCancelReason('');
+      toast.success('Cycle started');
+      setStartTarget(null);
     },
     onError: (err) => {
       const message =
         (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Failed to cancel cycle';
+        'Failed to start cycle';
       toast.error(message);
     },
   });
 
   const columns: Column<AppraisalCycle>[] = [
     {
-      key: 'name',
+      key: 'title',
       label: 'Cycle Name',
       width: '2fr',
       render: (row) => (
@@ -80,15 +69,9 @@ export default function AppraisalCyclesPage({
           href={`/${tenantSlug}/hr/hrmanagement/appraisal/cycles/${row.id}`}
           className="font-medium text-gray-900 hover:text-[#0D2244] hover:underline transition-colors"
         >
-          {row.name}
+          {row.title}
         </Link>
       ),
-    },
-    {
-      key: 'frequency',
-      label: 'Frequency',
-      width: '120px',
-      render: (row) => <span className="text-gray-600">{row.frequency}</span>,
     },
     {
       key: 'period',
@@ -101,33 +84,22 @@ export default function AppraisalCyclesPage({
       ),
     },
     {
-      key: 'selfAssessmentDeadline',
-      label: 'Self Deadline',
-      width: '130px',
-      render: (row) => (
-        <span className="text-gray-600 text-xs">{formatDate(row.selfAssessmentDeadline)}</span>
-      ),
-    },
-    {
-      key: 'managerReviewDeadline',
-      label: 'Manager Deadline',
-      width: '130px',
-      render: (row) => (
-        <span className="text-gray-600 text-xs">{formatDate(row.managerReviewDeadline)}</span>
-      ),
-    },
-    {
-      key: 'status',
+      key: 'isActive',
       label: 'Status',
       width: '120px',
-      render: (row) => <StatusBadge status={row.status} />,
+      render: (row) => (
+        <Badge
+          variant={row.isActive ? 'success' : 'neutral'}
+          label={row.isActive ? 'Active' : 'Inactive'}
+        />
+      ),
     },
   ];
 
   const rowActions = (row: AppraisalCycle) => {
     const actions = [];
 
-    if (row.status === 'Upcoming') {
+    if (!row.isActive) {
       actions.push({
         label: 'Edit',
         onClick: () => {
@@ -136,24 +108,8 @@ export default function AppraisalCyclesPage({
         },
       });
       actions.push({
-        label: 'Cancel Cycle',
-        danger: true,
-        onClick: () => setCancelTarget(row),
-      });
-    }
-
-    if (row.status === 'InProgress') {
-      actions.push({
-        label: 'Extend Deadlines',
-        onClick: () => {
-          setEditCycle(row);
-          setPanelOpen(true);
-        },
-      });
-      actions.push({
-        label: 'Cancel Cycle',
-        danger: true,
-        onClick: () => setCancelTarget(row),
+        label: 'Start Cycle',
+        onClick: () => setStartTarget(row),
       });
     }
 
@@ -176,8 +132,6 @@ export default function AppraisalCyclesPage({
         emptyMessage="No appraisal cycles yet — create your first one"
         searchPlaceholder="Search cycles..."
         onSearch={setSearch}
-        filterOptions={STATUS_OPTIONS}
-        onFilter={(v) => setStatusFilter(v as AppraisalStatus | '')}
         actionButton={{
           label: 'New Cycle',
           onClick: () => {
@@ -202,56 +156,27 @@ export default function AppraisalCyclesPage({
         editCycle={editCycle}
       />
 
-      {/* Cancel confirmation modal */}
+      {/* Start cycle confirmation modal */}
       <Modal
-        isOpen={!!cancelTarget}
-        onClose={() => {
-          setCancelTarget(null);
-          setCancelReason('');
-        }}
-        title="Cancel Cycle"
-        description={`You are about to cancel "${cancelTarget?.name}". All participants will be notified.`}
+        isOpen={!!startTarget}
+        onClose={() => setStartTarget(null)}
+        title="Start Appraisal Cycle"
+        description={`Start "${startTarget?.title}"? This will generate appraisal records for all employees.`}
         footer={
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setCancelTarget(null);
-                setCancelReason('');
-              }}
-            >
-              Go Back
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setStartTarget(null)}>
+              Cancel
             </Button>
             <Button
-              variant="danger"
-              isLoading={isCancelling}
-              loadingText="Cancelling..."
-              onClick={() => {
-                if (!cancelReason.trim()) {
-                  toast.error('A cancellation reason is required');
-                  return;
-                }
-                cancelCycle({ id: cancelTarget!.id, reason: cancelReason });
-              }}
+              isLoading={isStarting}
+              loadingText="Starting..."
+              onClick={() => startTarget && startCycle(startTarget.id)}
             >
-              Cancel Cycle
+              Start Cycle
             </Button>
-          </>
+          </div>
         }
-      >
-        <div className="mt-4 flex flex-col gap-1.5">
-          <label className="text-sm font-bold text-gray-900">
-            Reason <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            value={cancelReason}
-            onChange={(e) => setCancelReason(e.target.value)}
-            placeholder="Explain why this cycle is being cancelled..."
-            rows={3}
-            className={inputClass(undefined, 'resize-none')}
-          />
-        </div>
-      </Modal>
+      />
     </>
   );
 }
