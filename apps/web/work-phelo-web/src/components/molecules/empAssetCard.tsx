@@ -1,11 +1,5 @@
-import { AssetTypeIcon, AssetType } from '@/lib/assetIcons';
-
-interface EmployeeAsset {
-  id: string;
-  name: string;
-  type: AssetType;
-  assignedAt: string;
-}
+import { AssetTypeIcon } from '@/lib/assetIcons';
+import { EmployeeAsset } from '@/types/asset';
 
 export function AssetCard({ asset }: { asset: EmployeeAsset }) {
   const formattedDate = new Date(asset.assignedAt).toLocaleDateString('en-GB', {

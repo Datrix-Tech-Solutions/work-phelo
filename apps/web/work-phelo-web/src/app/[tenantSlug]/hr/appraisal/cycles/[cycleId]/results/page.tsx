@@ -16,31 +16,8 @@ import {
   CycleResultsSummary,
   DEFAULT_PERFORMANCE_BANDS,
 } from '@/types/appraisal';
-
-/* ── Helpers ── */
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
-
-const RATING_STYLES: Record<FinalRating, string> = {
-  Outstanding: 'bg-green-100 text-green-700',
-  'Very Good': 'bg-blue-100 text-blue-700',
-  Good: 'bg-cyan-100 text-cyan-700',
-  Satisfactory: 'bg-yellow-100 text-yellow-700',
-  'Needs Improvement': 'bg-red-100 text-red-700',
-};
-
-function RatingBadge({ rating }: { rating: FinalRating }) {
-  return (
-    <span className={cn('px-2.5 py-1 rounded-full text-xs font-semibold', RATING_STYLES[rating])}>
-      {rating}
-    </span>
-  );
-}
+import { RatingBadge, RATING_STYLES } from '@/components/molecules/appraisal/RatingBadge';
+import { formatDate } from '@/lib/formatters';
 
 /* ── Metric card ── */
 function MetricCard({

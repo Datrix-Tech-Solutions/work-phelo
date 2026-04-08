@@ -10,15 +10,13 @@ import { Button } from '@/components/atoms/Button';
 import { CreatePublicHolidayPanel } from '@/components/organisms/leave/CreatePublicHolidayPanel';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { useDeletePublicHoliday } from '@/hooks/usePublicHolidays';
 import { PublicHoliday } from '@/types/leave';
-import { useDeletePublicHoliday } from '@/hooks';
+import { formatDate } from '@/lib/formatters';
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+function daysBetween(start: string, end: string) {
+  const diff = new Date(end).getTime() - new Date(start).getTime();
+  return Math.round(diff / (1000 * 60 * 60 * 24)) + 1;
 }
 
 export default function PublicHolidaysPage({

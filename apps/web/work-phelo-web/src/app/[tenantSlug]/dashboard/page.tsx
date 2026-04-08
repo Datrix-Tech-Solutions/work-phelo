@@ -8,30 +8,59 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
-import { Activity, BookUser, DollarSign } from 'lucide-react';
-
-/* ── Nav ── */
-
-/* ── Types ── */
-interface TenantUser {
-  id: string;
-  status: 'ACTIVE' | 'PENDING_VERIFICATION' | 'INACTIVE' | 'PENDING';
-}
-
-/* ── Greeting ── */
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+import { StatPill } from '@/components/molecules/StatPill';
+import { TenantUser } from '@/types/tenant';
+import { getGreeting } from '@/lib/formatters';
 
 /* ── Module definitions ── */
-const HRIcon = () => <BookUser />;
+const HRIcon = () => (
+  <svg
+    width="26"
+    height="26"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="white"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
 
-const MarketingIcon = () => <Activity />;
+const MarketingIcon = () => (
+  <svg
+    width="26"
+    height="26"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="white"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+  </svg>
+);
 
-const AccountingIcon = () => <DollarSign />;
+const AccountingIcon = () => (
+  <svg
+    width="26"
+    height="26"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="white"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="12" y1="1" x2="12" y2="23" />
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+  </svg>
+);
 
 const OperationIcon = () => (
   <svg
@@ -93,16 +122,6 @@ const MODULE_DEFS: ModuleDef[] = [
     route: 'operation',
   },
 ];
-
-/* ── Stat pill ── */
-function StatPill({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="flex flex-col items-start gap-0.5 px-6  ">
-      <span className="text-xs text-white/60">{label}</span>
-      <span className="text-2xl font-bold text-white">{value === 0 ? '—' : value}</span>
-    </div>
-  );
-}
 
 /* ── Page ── */
 export default function TenantDashboardPage({

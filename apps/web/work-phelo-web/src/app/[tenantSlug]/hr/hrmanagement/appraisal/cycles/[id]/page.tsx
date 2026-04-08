@@ -13,14 +13,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { AppraisalCycle, AppraisalKpi } from '@/types/appraisal';
-
-function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+import { formatDate } from '@/lib/formatters';
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (

@@ -1,14 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Employee, CreateEmployeePayload } from '@/types/hr';
-
-interface EmployeeQuery {
-  page?: number;
-  limit?: number;
-  search?: string;
-  departmentId?: string;
-  status?: string;
-}
+import { Employee, CreateEmployeePayload, EmployeeQuery } from '@/types/hr';
 
 export function useEmployees(query?: EmployeeQuery) {
   return useQuery({

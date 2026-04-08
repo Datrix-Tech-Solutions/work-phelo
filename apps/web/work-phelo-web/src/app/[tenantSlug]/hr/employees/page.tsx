@@ -14,10 +14,13 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { useEmployees, useDepartments, useCreateEmployee } from '@/hooks';
-import { CreateEmployeePayload } from '@/types/hr';
+import { Employee, Department, CreateEmployeePayload } from '@/types/hr';
+import { FilterSelect } from '@/components/molecules/FilterSelect';
+import { useEmployees, useCreateEmployee } from '@/hooks/useEmployees';
+import { useDepartments } from '@/hooks/useDepartments';
 
 /* ── Types ── */
+
 interface InviteForm {
   firstName: string;
   lastName: string;
@@ -29,34 +32,6 @@ interface InviteForm {
   employmentType: string;
   hireDate: string;
   dateOfBirth?: string;
-}
-
-/* ── Filter select ── */
-function FilterSelect({
-  value,
-  onChange,
-  options,
-  placeholder,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  placeholder: string;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0D2244]/20 focus:border-[#0D2244]"
-    >
-      <option value="">{placeholder}</option>
-      {options.map((o) => (
-        <option key={o.value} value={o.value}>
-          {o.label}
-        </option>
-      ))}
-    </select>
-  );
 }
 
 /* ── Page ── */

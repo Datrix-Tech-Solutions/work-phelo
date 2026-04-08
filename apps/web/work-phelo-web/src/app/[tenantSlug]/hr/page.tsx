@@ -10,19 +10,12 @@ import { UpcomingBirthday } from '@/types/hr';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
-import { cn } from '@/lib/utils';
 import { MetricCard } from '@/components/molecules/MetricCard';
 import { AttendanceMetricCard } from '@/components/molecules/AttendanceMetricCard';
 import { AnnouncementCard } from '@/components/molecules/announcmentCard';
 import { BirthdaysCard } from '@/components/molecules/birthdayCard';
-
-/* ── Greeting ── */
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
+import { cn } from '@/lib/utils';
+import { getGreeting } from '@/lib/formatters';
 
 /* ── Dummy data ── */
 const DUMMY_ANNOUNCEMENTS = [

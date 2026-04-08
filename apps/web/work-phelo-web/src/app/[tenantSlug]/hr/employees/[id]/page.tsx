@@ -9,7 +9,14 @@ import { StatusBadge } from '@/components/molecules/StatusBadge';
 import { Button } from '@/components/atoms/Button';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-
+import {
+  useEmployee,
+  useUpdateEmployee,
+  useOffboardEmployee,
+  useResendEmployeeInvite,
+} from '@/hooks/useEmployees';
+import { useDepartments } from '@/hooks/useDepartments';
+import { useEmployees } from '@/hooks/useEmployees';
 import { AssetType } from '@/lib/assetIcons';
 import { ChevronRight, UserRoundMinus, UserRoundPen } from 'lucide-react';
 import { AssetCard } from '@/components/molecules/empAssetCard';
@@ -18,22 +25,7 @@ import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardE
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
 import { DetailField } from '@/components/molecules/DetailField';
-import {
-  useDepartments,
-  useEmployee,
-  useEmployees,
-  useOffboardEmployee,
-  useResendEmployeeInvite,
-  useUpdateEmployee,
-} from '@/hooks';
-
-/* ── Types ── */
-interface Asset {
-  id: string;
-  name: string;
-  type: AssetType;
-  assignedAt: string;
-}
+import { EmployeeAsset } from '@/types/asset';
 
 /* ── Icons ── */
 function ChevronIcon() {
@@ -188,7 +180,7 @@ export default function EmployeeDetailPage({
   ];
 
   /* Assets */
-  const assets: Asset[] = [
+  const assets: EmployeeAsset[] = [
     { id: '1', name: 'MacBook Pro 14"', type: 'LAPTOP', assignedAt: '2024-02-01' },
     { id: '2', name: 'iPhone 15 Pro', type: 'PHONE', assignedAt: '2024-02-01' },
     { id: '3', name: 'Dell 27" Monitor', type: 'MONITOR', assignedAt: '2024-03-10' },

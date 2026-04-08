@@ -11,6 +11,7 @@ import { DataTable, Column } from '@/components/organisms/DataTable';
 import { StatusBadge } from '@/components/molecules/StatusBadge';
 import { AddCompanyForm } from '@/components/organisms/AddCompanyForm';
 import { useAuthStore } from '@/store/auth.store';
+import { Company } from '@/types/tenant';
 
 /* ── Icons ── */
 const TotalCompaniesIcon = () => (
@@ -80,16 +81,6 @@ const CalendarIcon = () => (
   </svg>
 );
 
-/* ── Types ── */
-interface Company {
-  id: string | number;
-  name: string;
-  dateCreated: string;
-  contact: string;
-  industry: string;
-  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING';
-}
-
 const PAGE_SIZE = 7;
 
 const COLUMNS: Column<Company>[] = [
@@ -132,7 +123,7 @@ export default function AdminDashboardPage() {
           : '—',
       contact: c.phone ?? c.contact ?? c.contactNumber ?? '—',
       industry: c.industry ?? '—',
-      status: (c.status as 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'PENDING') ?? 'SUSPENDED',
+      status: (c.status as Company['status']) ?? 'SUSPENDED',
     }));
   }, [apiData]);
 

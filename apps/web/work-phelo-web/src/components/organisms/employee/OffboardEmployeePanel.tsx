@@ -6,7 +6,7 @@ import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { Employee } from '@/types/hr';
+import { Employee, OffboardPayload } from '@/types/hr';
 
 interface OffboardForm {
   employeeId: string;

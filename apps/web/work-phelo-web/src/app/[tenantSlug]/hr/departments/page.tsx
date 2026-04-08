@@ -12,16 +12,12 @@ import { FormField } from '@/components/molecules/FormField';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { extractError } from '@/lib/extractError';
-import {
-  useDepartments,
-  useCreateDepartment,
-  useUpdateDepartment,
-  useEmployees,
-  useUpdateEmployee,
-} from '@/hooks';
 import { Department, Employee } from '@/types/hr';
+import { useDepartments, useCreateDepartment, useUpdateDepartment } from '@/hooks/useDepartments';
+import { useEmployees, useUpdateEmployee } from '@/hooks/useEmployees';
 
 /* ── Types ── */
+
 interface DeptForm {
   name: string;
   description?: string;

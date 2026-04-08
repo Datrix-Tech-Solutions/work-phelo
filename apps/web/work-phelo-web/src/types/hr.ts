@@ -168,3 +168,18 @@ export interface DashboardSummary {
   assignedAssetsCount: number;
   hasEmployees: boolean;
 }
+
+// ── Employee Query Params ────────────────────────────────
+export interface EmployeeQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  departmentId?: string;
+  status?: string;
+}
+
+export interface OffboardPayload {
+  employeeId: string;
+  offboardedAt: string;
+  reason: string;
+}
