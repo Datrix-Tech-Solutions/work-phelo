@@ -8,6 +8,7 @@ export interface ModuleOption {
   key: string;
   label: string;
   description: string;
+  enabled?: boolean;
   icon?: React.ReactNode;
 }
 
