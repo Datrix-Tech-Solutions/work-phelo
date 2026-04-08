@@ -13,13 +13,6 @@ import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { LeaveType } from '@/types/leave';
 
-const APPLICABILITY_LABELS: Record<string, string> = {
-  All: 'All Employees',
-  FullTime: 'Full-time',
-  PartTime: 'Part-time',
-  Contract: 'Contract',
-};
-
 export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const toast = useToast();
@@ -30,9 +23,7 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
   const [panelOpen, setPanelOpen] = useState(false);
   const [editLeaveType, setEditLeaveType] = useState<LeaveType | undefined>(undefined);
   const [deleteTarget, setDeleteTarget] = useState<LeaveType | null>(null);
-  const [warnTarget, setWarnTarget] = useState<LeaveType | null>(null);
 
-  // Fetch Leave Types
   const { data, isLoading } = useQuery({
     queryKey: ['leave-types', tenantSlug, page, search],
     queryFn: () =>
@@ -49,7 +40,6 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
 
   const totalPages = data?.totalPages ?? 1;
 
-  // Delete Mutation
   const { mutate: deleteLeaveType, isPending: isDeleting } = useMutation({
     mutationFn: (id: string) => api.delete(`/hr/leave/types/${id}`),
     onSuccess: () => {
@@ -63,7 +53,6 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
     },
   });
 
-  // Table Columns
   const columns: Column<LeaveType>[] = [
     {
       key: 'name',
@@ -78,16 +67,16 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
       ),
     },
     {
-      key: 'daysPerYear',
+      key: 'daysAllowed',
       label: 'Days / Year',
-      render: (row) => <span className="font-medium">{row.daysPerYear}</span>,
+      render: (row) => <span className="font-medium">{row.daysAllowed}</span>,
     },
     {
-      key: 'carryOver',
+      key: 'isCarryOver',
       label: 'Carry Over',
       render: (row) => (
         <span className="text-gray-700">
-          {row.carryOver
+          {row.isCarryOver
             ? row.maxCarryOverDays
               ? `Yes (max ${row.maxCarryOverDays})`
               : 'Yes'
@@ -96,23 +85,12 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
       ),
     },
     {
-      key: 'applicableTo',
-      label: 'Applicable To',
-      render: (row) => (
-        <div className="flex flex-wrap gap-1">
-          {(row.applicableTo ?? []).map((a) => (
-            <Badge key={a} variant="neutral" label={APPLICABILITY_LABELS[a] ?? a} />
-          ))}
-        </div>
-      ),
-    },
-    {
-      key: 'requiresDocumentation',
-      label: 'Docs Required',
+      key: 'requiresApproval',
+      label: 'Requires Approval',
       render: (row) => (
         <Badge
-          variant={row.requiresDocumentation ? 'warning' : 'neutral'}
-          label={row.requiresDocumentation ? 'Yes' : 'No'}
+          variant={row.requiresApproval ? 'warning' : 'neutral'}
+          label={row.requiresApproval ? 'Yes' : 'No'}
         />
       ),
     },
@@ -124,20 +102,8 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
   };
 
   const openEdit = (leaveType: LeaveType) => {
-    if (leaveType.hasExistingRequests) {
-      setWarnTarget(leaveType);
-    } else {
-      setEditLeaveType(leaveType);
-      setPanelOpen(true);
-    }
-  };
-
-  const confirmEdit = () => {
-    if (warnTarget) {
-      setEditLeaveType(warnTarget);
-      setWarnTarget(null);
-      setPanelOpen(true);
-    }
+    setEditLeaveType(leaveType);
+    setPanelOpen(true);
   };
 
   return (
@@ -182,7 +148,6 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
         ]}
       />
 
-      {/* Create / Edit Panel */}
       <CreateLeaveTypePanel
         isOpen={panelOpen}
         onClose={() => {
@@ -191,22 +156,6 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
         }}
         tenantSlug={tenantSlug}
         editLeaveType={editLeaveType}
-      />
-
-      {/* Warning Modal - Editing leave type with existing requests */}
-      <Modal
-        isOpen={!!warnTarget}
-        onClose={() => setWarnTarget(null)}
-        title="Warning"
-        description={`"${warnTarget?.name}" already has existing leave requests. Editing this may affect current balances. Do you want to continue?`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={() => setWarnTarget(null)}>
-              Cancel
-            </Button>
-            <Button onClick={confirmEdit}>Yes, Continue Editing</Button>
-          </div>
-        }
       />
 
       {/* Delete Confirmation Modal */}

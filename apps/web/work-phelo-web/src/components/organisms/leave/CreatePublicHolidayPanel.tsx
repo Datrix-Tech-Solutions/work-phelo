@@ -47,7 +47,7 @@ export function CreatePublicHolidayPanel({
 
   useEffect(() => {
     if (editHoliday) {
-      reset({ name: editHoliday.name, date: editHoliday.startDate });
+      reset({ name: editHoliday.name, date: editHoliday.date });
     } else {
       reset({ name: '', date: '' });
     }

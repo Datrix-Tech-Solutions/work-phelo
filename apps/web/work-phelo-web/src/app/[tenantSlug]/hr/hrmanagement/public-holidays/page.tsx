@@ -57,11 +57,9 @@ export default function PublicHolidaysPage({
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
-      key: 'startDate',
+      key: 'date',
       label: 'Date',
-      render: (row) => (
-        <span className="text-gray-700">{formatDate((row as any).date ?? row.startDate)}</span>
-      ),
+      render: (row) => <span className="text-gray-700">{formatDate(row.date)}</span>,
     },
   ];
 

@@ -1,29 +1,31 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useToast } from '@/hooks/useToast';
-import { CreateLeaveTypeDto, LeaveType, LeaveApplicability } from '@/types/leave';
 import { api } from '@/lib/api';
+import { useToast } from '@/hooks/useToast';
+import { CreateLeaveTypeDto, LeaveType } from '@/types/leave';
 
 interface CreateLeaveTypePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  tenantSlug?: string;
+  tenantSlug: string;
   editLeaveType?: LeaveType;
 }
 
-const APPLICABILITY_OPTIONS: { value: LeaveApplicability; label: string }[] = [
-  { value: 'All', label: 'All Employees' },
-  { value: 'FullTime', label: 'Full-time' },
-  { value: 'PartTime', label: 'Part-time' },
-  { value: 'Contract', label: 'Contract' },
-];
+type FormValues = {
+  name: string;
+  isPaid: 'yes' | 'no' | '';
+  daysAllowed: number | '';
+  isCarryOver: 'yes' | 'no' | '';
+  maxCarryOverDays: number | '';
+  requiresApproval: 'yes' | 'no' | '';
+};
 
 export function CreateLeaveTypePanel({
   isOpen,
@@ -35,201 +37,190 @@ export function CreateLeaveTypePanel({
   const queryClient = useQueryClient();
   const isEditing = !!editLeaveType;
 
-  const form = useForm<CreateLeaveTypeDto>({
+  const {
+    register,
+    handleSubmit,
+    control,
+    reset,
+    formState: { errors },
+  } = useForm<FormValues>({
     defaultValues: {
       name: '',
-      description: '',
-      isPaid: true,
-      daysPerYear: 10,
-      carryOver: false,
-      maxCarryOverDays: undefined,
-      requiresDocumentation: false,
-      documentationDescription: '',
-      applicableTo: ['All'],
+      isPaid: '',
+      daysAllowed: '',
+      isCarryOver: '',
+      maxCarryOverDays: '',
+      requiresApproval: '',
     },
   });
 
-  // Reset form when editing
   useEffect(() => {
     if (editLeaveType) {
-      form.reset({
+      reset({
         name: editLeaveType.name,
-        description: editLeaveType.description || '',
-        isPaid: editLeaveType.isPaid,
-        daysPerYear: editLeaveType.daysPerYear,
-        carryOver: editLeaveType.carryOver,
-        maxCarryOverDays: editLeaveType.maxCarryOverDays,
-        requiresDocumentation: editLeaveType.requiresDocumentation,
-        documentationDescription: editLeaveType.documentationDescription || '',
-        applicableTo: editLeaveType.applicableTo,
+        isPaid: editLeaveType.isPaid ? 'yes' : 'no',
+        daysAllowed: editLeaveType.daysAllowed,
+        isCarryOver: editLeaveType.isCarryOver ? 'yes' : 'no',
+        maxCarryOverDays: editLeaveType.maxCarryOverDays ?? '',
+        requiresApproval: editLeaveType.requiresApproval ? 'yes' : 'no',
       });
     } else {
-      form.reset();
+      reset({
+        name: '',
+        isPaid: '',
+        daysAllowed: '',
+        isCarryOver: '',
+        maxCarryOverDays: '',
+        requiresApproval: '',
+      });
     }
-  }, [editLeaveType, form]);
+  }, [editLeaveType, reset]);
+
+  const isCarryOver = useWatch({ control, name: 'isCarryOver' });
 
   const { mutate, isPending } = useMutation({
-    mutationFn: (data: CreateLeaveTypeDto) => {
-      const payload = {
-        name: data.name,
-        isPaid: data.isPaid,
-        daysAllowed: data.daysPerYear,
-      };
-
-      return isEditing
-        ? api.patch(`/hr/leave/types/${editLeaveType!.id}`, payload)
-        : api.post('/hr/leave/types', payload);
-    },
+    mutationFn: (data: CreateLeaveTypeDto) =>
+      isEditing
+        ? api.patch(`/hr/leave/types/${editLeaveType!.id}`, data)
+        : api.post(`/hr/leave/types`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave-types'] });
-      toast.success(
-        isEditing ? 'Leave type updated successfully' : 'Leave type created successfully',
-      );
+      queryClient.invalidateQueries({ queryKey: ['leave-types', tenantSlug] });
+      toast.success(isEditing ? 'Leave type updated' : 'Leave type created');
       onClose();
     },
-    onError: (err: any) => {
-      const message = err?.response?.data?.message || 'Something went wrong';
+    onError: (err) => {
+      const message =
+        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
+        'Something went wrong';
       toast.error(message);
     },
   });
 
-  const onSubmit = (data: CreateLeaveTypeDto) => {
-    if (data.applicableTo.length === 0) {
-      toast.error('Please select at least one applicability option');
-      return;
-    }
-    mutate(data);
+  const onSubmit = (values: FormValues) => {
+    if (!values.isPaid || !values.isCarryOver || !values.requiresApproval) return;
+    mutate({
+      name: values.name,
+      isPaid: values.isPaid === 'yes',
+      daysAllowed: Number(values.daysAllowed),
+      isCarryOver: values.isCarryOver === 'yes',
+      maxCarryOverDays:
+        values.isCarryOver === 'yes' && values.maxCarryOverDays !== ''
+          ? Number(values.maxCarryOverDays)
+          : undefined,
+      requiresApproval: values.requiresApproval === 'yes',
+    });
   };
 
   return (
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditing ? 'Edit Leave Type' : 'Create New Leave Type'}
-      description="Define leave policy, entitlements, and rules."
-      width="w-[520px]"
+      title={isEditing ? 'Edit Leave Type' : 'Add New Leave Type'}
+      description="Define the leave type and its entitlement rules."
+      width="w-[480px]"
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
-          <Button
-            isLoading={isPending}
-            loadingText="Saving..."
-            onClick={form.handleSubmit(onSubmit)}
-          >
-            {isEditing ? 'Save Changes' : 'Create Leave Type'}
+          <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onSubmit)}>
+            {isEditing ? 'Save Changes' : 'Add Leave Type'}
           </Button>
         </div>
       }
     >
+      {/* Leave Type Name */}
       <FormField
         label="Leave Type Name"
-        registration={form.register('name', { required: 'Name is required' })}
-        error={form.formState.errors.name}
-        placeholder="e.g. Annual Leave"
+        registration={register('name', { required: 'Leave type name is required' })}
+        error={errors.name}
+        placeholder="e.g. Sick Leave"
       />
 
+      {/* Paid Leave */}
+      <Controller
+        name="isPaid"
+        control={control}
+        rules={{ required: 'Please select an option' }}
+        render={({ field }) => (
+          <SearchSelect
+            label="Paid Leave"
+            placeholder="Select option"
+            options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]}
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.isPaid?.message}
+          />
+        )}
+      />
+
+      {/* Days Entitled Per Year */}
       <FormField
-        label="Description"
-        registration={form.register('description')}
-        placeholder="Optional description"
-        type="textarea"
-        // rows={3}
-      />
-
-      <SearchSelect
-        label="Is this paid leave?"
-        value={form.watch('isPaid') ? 'yes' : 'no'}
-        onChange={(val) => form.setValue('isPaid', val === 'yes')}
-        options={[
-          { value: 'yes', label: 'Yes' },
-          { value: 'no', label: 'No' },
-        ]}
-      />
-
-      <FormField
-        label="Days Entitled Per Year"
-        registration={form.register('daysPerYear', {
-          required: 'Required',
-          min: { value: 1, message: 'Must be at least 1 day' },
+        label="Days Allowed Per Year"
+        registration={register('daysAllowed', {
+          required: 'Days allowed is required',
+          min: { value: 1, message: 'Must be at least 1' },
         })}
+        error={errors.daysAllowed}
         type="number"
-        error={form.formState.errors.daysPerYear}
+        placeholder="e.g. 10"
       />
 
-      {/* Carry Over Section */}
-      <div className="space-y-3">
-        <SearchSelect
-          label="Allow Carry Over?"
-          value={form.watch('carryOver') ? 'yes' : 'no'}
-          onChange={(val) => form.setValue('carryOver', val === 'yes')}
-          options={[
-            { value: 'yes', label: 'Yes' },
-            { value: 'no', label: 'No' },
-          ]}
-        />
-
-        {form.watch('carryOver') && (
-          <FormField
-            label="Maximum Carry Over Days"
-            registration={form.register('maxCarryOverDays', { min: 0 })}
-            type="number"
-            placeholder="e.g. 5"
+      {/* Carry Over Allowed */}
+      <Controller
+        name="isCarryOver"
+        control={control}
+        rules={{ required: 'Please select an option' }}
+        render={({ field }) => (
+          <SearchSelect
+            label="Carry Over Allowed"
+            placeholder="Select option"
+            options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]}
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.isCarryOver?.message}
           />
         )}
-      </div>
+      />
 
-      {/* Documentation Section */}
-      <div className="space-y-3">
-        <SearchSelect
-          label="Requires Documentation?"
-          value={form.watch('requiresDocumentation') ? 'yes' : 'no'}
-          onChange={(val) => form.setValue('requiresDocumentation', val === 'yes')}
-          options={[
-            { value: 'yes', label: 'Yes' },
-            { value: 'no', label: 'No' },
-          ]}
+      {/* Max Carry Over Days — conditional */}
+      {isCarryOver === 'yes' && (
+        <FormField
+          label="Maximum Carry Over Days"
+          registration={register('maxCarryOverDays', {
+            min: { value: 1, message: 'Must be at least 1' },
+          })}
+          error={errors.maxCarryOverDays}
+          type="number"
+          placeholder="e.g. 5"
         />
+      )}
 
-        {form.watch('requiresDocumentation') && (
-          <FormField
-            label="Documentation Requirements"
-            registration={form.register('documentationDescription')}
-            placeholder="Describe what documents are needed..."
-            type="textarea"
-            // rows={3}
+      {/* Requires Approval */}
+      <Controller
+        name="requiresApproval"
+        control={control}
+        rules={{ required: 'Please select an option' }}
+        render={({ field }) => (
+          <SearchSelect
+            label="Requires Approval"
+            placeholder="Select option"
+            options={[
+              { value: 'yes', label: 'Yes' },
+              { value: 'no', label: 'No' },
+            ]}
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.requiresApproval?.message}
           />
         )}
-      </div>
-
-      {/* Applicable To */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-bold text-gray-900">Applicable To</label>
-        <div className="flex flex-col gap-2">
-          {APPLICABILITY_OPTIONS.map((option) => (
-            <label key={option.value} className="flex items-center gap-2 cursor-pointer ">
-              <input
-                type="checkbox"
-                checked={form.watch('applicableTo').includes(option.value)}
-                onChange={(e) => {
-                  const current = form.watch('applicableTo');
-                  if (e.target.checked) {
-                    form.setValue('applicableTo', [...current, option.value]);
-                  } else {
-                    form.setValue(
-                      'applicableTo',
-                      current.filter((v) => v !== option.value),
-                    );
-                  }
-                }}
-                className="w-4 h-4 accent-[#0D2244]"
-              />
-              <span>{option.label}</span>
-            </label>
-          ))}
-        </div>
-      </div>
+      />
     </SidePanel>
   );
 }

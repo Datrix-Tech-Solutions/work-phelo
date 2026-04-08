@@ -81,8 +81,8 @@ export function useOffboardEmployee() {
 
 export function useResendEmployeeInvite() {
   return useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await api.post(`/auth/users/${userId}/resend-invite`);
+    mutationFn: async (employeeId: string) => {
+      const res = await api.post(`/hr/employees/${employeeId}/resend-invite`);
       return res.data;
     },
   });

@@ -77,12 +77,15 @@ export class UsersService {
       },
     });
 
+    const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
+
     this.rabbitmq.sendInviteEmail({
       userId: user.id,
       tenantId,
       email: user.email,
       firstName: user.firstName,
       inviteToken,
+      acceptInviteUrl,
       tenantName: tenant.name,
     });
 

@@ -31,15 +31,7 @@ type FormValues = {
 function calcWorkingDays(start: string, end: string, holidays: PublicHoliday[]): number {
   if (!start || !end || end < start) return 0;
 
-  const holidaySet = new Set<string>();
-  holidays.forEach((h) => {
-    const cur = new Date(h.startDate);
-    const last = new Date(h.endDate);
-    while (cur <= last) {
-      holidaySet.add(cur.toISOString().slice(0, 10));
-      cur.setDate(cur.getDate() + 1);
-    }
-  });
+  const holidaySet = new Set<string>(holidays.map((h) => h.date.slice(0, 10)));
 
   let count = 0;
   const cur = new Date(start);
@@ -250,31 +242,18 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
         />
       </div>
 
-      {/* Documentation — conditional on selected leave type */}
-      {selectedType?.requiresDocumentation && (
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-bold text-gray-900">
-            Supporting Document
-            <span className="ml-1.5 text-xs font-normal text-orange-500">Required</span>
-          </label>
-          {selectedType.documentationDescription && (
-            <p className="text-xs text-gray-500">{selectedType.documentationDescription}</p>
-          )}
-          <input
-            type="text"
-            {...register('documentationUrl', {
-              required: selectedType.requiresDocumentation
-                ? 'Documentation is required for this leave type'
-                : false,
-            })}
-            placeholder="Paste document URL"
-            className={inputClass(errors.documentationUrl?.message)}
-          />
-          {errors.documentationUrl && (
-            <p className="text-xs text-red-500">{errors.documentationUrl.message}</p>
-          )}
-        </div>
-      )}
+      {/* Supporting document (optional) */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-bold text-gray-900">
+          Supporting Document <span className="text-gray-400 font-normal">(optional)</span>
+        </label>
+        <input
+          type="text"
+          {...register('documentationUrl')}
+          placeholder="Paste document URL"
+          className={inputClass(errors.documentationUrl?.message)}
+        />
+      </div>
     </SidePanel>
   );
 }

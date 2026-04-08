@@ -97,22 +97,16 @@ export interface AppraisalSection {
 // ── Cycle ────────────────────────────────────────────────
 export interface AppraisalCycle {
   id: string;
-  tenantSlug: string;
-  name: string;
-  frequency: Frequency;
-  description: string;
+  tenantId: string;
+  title: string;
+  description?: string;
   startDate: string;
   endDate: string;
-  selfAssessmentDeadline: string;
-  managerReviewDeadline: string;
-  templateId: string;
-  targetDepartmentIds: string[];
-  isAllDepartments: boolean;
-  status: AppraisalStatus;
-  cancellationReason?: string; // required when status = 'Cancelled'
+  isActive: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt?: string;
+  _count?: { appraisals: number };
 }
 
 // ── KPI Definition (HR sets per cycle) ───────────────────
@@ -228,17 +222,10 @@ export interface CreateAppraisalTemplateDto {
 }
 
 export interface CreateAppraisalCycleDto {
-  tenantSlug: string;
-  name: string;
-  frequency: Frequency;
-  description: string;
+  title: string;
+  description?: string;
   startDate: string;
   endDate: string;
-  selfAssessmentDeadline: string;
-  managerReviewDeadline: string;
-  templateId: string;
-  targetDepartmentIds?: string[];
-  isAllDepartments?: boolean;
 }
 
 export interface CreateAppraisalKpiDto {
