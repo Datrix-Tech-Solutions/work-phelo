@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/SidePanel';
+import { SuccessModal } from '@/components/organisms/SuccessModal';
 
 export interface ModuleOption {
   key: string;
@@ -73,6 +74,8 @@ export function ModuleConfiguration({
 }: ModuleConfigurationProps) {
   const [modules, setModules] = useState<Module[]>(initialModules);
   const [activeModule, setActiveModule] = useState<Module | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
   // Sync local state when server data changes (after cache invalidation)
   useEffect(() => {
@@ -100,6 +103,26 @@ export function ModuleConfiguration({
     }
   };
 
+  const validate = () => {
+    const errors: Record<string, string> = {};
+    modules.forEach((m) => {
+      if (m.enabled && m.options && m.options.length > 0) {
+        const hasEnabled = m.options.some((o) => o.enabled);
+        if (!hasEnabled) {
+          errors[m.id] = `${m.name} is enabled but has no features selected.`;
+        }
+      }
+    });
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSave = () => {
+    if (!validate()) return;
+    onSave(modules);
+    setShowSaveSuccess(true);
+  };
+
   return (
     <>
       <div className="border border-gray-200 rounded-card flex flex-col h-full overflow-hidden">
@@ -114,22 +137,26 @@ export function ModuleConfiguration({
         {/* Scrollable module list */}
         <div className="flex-1 overflow-y-auto px-6 flex flex-col divide-y divide-gray-100 min-h-0">
           {modules.map((mod) => (
-            <div
-              key={mod.id}
-              onClick={() => handleRowClick(mod)}
-              className={cn(
-                'flex items-center gap-4 py-4',
-                mod.options &&
-                  mod.options.length > 0 &&
-                  'cursor-pointer hover:bg-gray-50 -mx-6 px-6 transition-colors',
-              )}
-            >
-              {mod.icon ?? <DefaultModuleIcon />}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900">{mod.name}</p>
-                <p className="text-xs text-gray-400 mt-0.5 truncate">{mod.description}</p>
+            <div key={mod.id}>
+              <div
+                onClick={() => handleRowClick(mod)}
+                className={cn(
+                  'flex items-center gap-4 py-4',
+                  mod.options &&
+                    mod.options.length > 0 &&
+                    'cursor-pointer hover:bg-gray-50 -mx-6 px-6 transition-colors',
+                )}
+              >
+                {mod.icon ?? <DefaultModuleIcon />}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{mod.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 truncate">{mod.description}</p>
+                </div>
+                <Toggle enabled={mod.enabled} onChange={(v) => handleToggle(mod.id, v)} />
               </div>
-              <Toggle enabled={mod.enabled} onChange={(v) => handleToggle(mod.id, v)} />
+              {validationErrors[mod.id] && (
+                <p className="text-xs text-red-500 pb-3 -mt-1">{validationErrors[mod.id]}</p>
+              )}
             </div>
           ))}
         </div>
@@ -137,7 +164,7 @@ export function ModuleConfiguration({
         {/* save button */}
         <div className="px-6 py-4 border-t border-gray-100 shrink-0 flex justify-end">
           <button
-            onClick={() => onSave(modules)}
+            onClick={handleSave}
             disabled={isSaving}
             className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-input hover:bg-gray-200 transition-colors disabled:opacity-60"
           >
@@ -153,6 +180,16 @@ export function ModuleConfiguration({
           onClose={() => setActiveModule(null)}
           title={activeModule.name}
           description={activeModule.description}
+          footer={
+            <div className="flex justify-end">
+              <button
+                onClick={() => setActiveModule(null)}
+                className="px-4 py-2 bg-[#0D2244] text-white text-sm font-medium rounded-input hover:bg-[#162d55] transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          }
         >
           <div className="flex flex-col divide-y divide-gray-100">
             {activeModule.options?.map((opt) => (
@@ -171,6 +208,15 @@ export function ModuleConfiguration({
           </div>
         </SidePanel>
       )}
+
+      {/* Save success popup */}
+      <SuccessModal
+        isOpen={showSaveSuccess}
+        onClose={() => setShowSaveSuccess(false)}
+        title="Configuration Saved!"
+        message="Module configuration has been updated successfully."
+        actionLabel="Done"
+      />
     </>
   );
 }

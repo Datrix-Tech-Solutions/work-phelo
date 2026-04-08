@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
@@ -13,78 +14,7 @@ interface DatePickerProps {
   error?: string;
   placeholder?: string;
   disableFuture?: boolean;
-  disablePast?: boolean; // disables dates before today
-}
-
-function CalendarIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
-    </svg>
-  );
-}
-
-function ChevronLeft() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="15 18 9 12 15 6" />
-    </svg>
-  );
-}
-
-function ChevronRight() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="9 18 15 12 9 6" />
-    </svg>
-  );
-}
-
-function ChevronDown() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
+  disablePast?: boolean;
 }
 
 export function DatePicker({
@@ -93,20 +23,19 @@ export function DatePicker({
   onChange,
   error,
   placeholder = 'DD/MM/YYYY',
-  disableFuture,
-  disablePast,
+  disableFuture = false,
+  disablePast = false,
 }: DatePickerProps) {
   const today = new Date();
   const parsed = value ? new Date(value) : null;
 
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<'days' | 'months'>('days');
+  const [view, setView] = useState<'days' | 'months' | 'years'>('days');
   const [viewYear, setViewYear] = useState(parsed?.getFullYear() ?? today.getFullYear());
   const [viewMonth, setViewMonth] = useState(parsed?.getMonth() ?? today.getMonth());
 
   const containerRef = useRef<HTMLDivElement>(null);
 
-  /* close on outside click */
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -122,49 +51,50 @@ export function DatePicker({
     ? `${String(parsed.getDate()).padStart(2, '0')}/${String(parsed.getMonth() + 1).padStart(2, '0')}/${parsed.getFullYear()}`
     : '';
 
-  /* helpers */
-  const todayNorm = new Date(today);
-  todayNorm.setHours(0, 0, 0, 0);
+  const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  const isFutureDay = (day: number) => {
-    if (!disableFuture) return false;
-    const d = new Date(viewYear, viewMonth, day);
-    return d > todayNorm;
-  };
-
-  const isPastDay = (day: number) => {
-    if (!disablePast) return false;
-    const d = new Date(viewYear, viewMonth, day);
-    return d < todayNorm;
-  };
-
+  const isFutureDay = (day: number) =>
+    disableFuture && new Date(viewYear, viewMonth, day) > todayNorm;
+  const isPastDay = (day: number) => disablePast && new Date(viewYear, viewMonth, day) < todayNorm;
   const isDisabledDay = (day: number) => isFutureDay(day) || isPastDay(day);
 
-  const isFutureMonth = (year: number, month: number) => {
-    if (!disableFuture) return false;
-    return year > today.getFullYear() || (year === today.getFullYear() && month > today.getMonth());
+  const selectDay = (day: number) => {
+    if (isDisabledDay(day)) return;
+    const d = new Date(viewYear, viewMonth, day);
+    const iso = d.toISOString().split('T')[0];
+    onChange?.(iso);
+    setOpen(false);
+    setView('days');
   };
 
-  const isPastMonth = (year: number, month: number) => {
-    if (!disablePast) return false;
-    return year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth());
+  const selectMonth = (monthIdx: number) => {
+    setViewMonth(monthIdx);
+    setView('days');
   };
 
-  const canGoPrevMonth =
-    !disablePast ||
-    !isPastMonth(viewMonth === 0 ? viewYear - 1 : viewYear, viewMonth === 0 ? 11 : viewMonth - 1);
+  const selectYear = (year: number) => {
+    setViewYear(year);
+    setView('months');
+  };
 
-  const canGoNextMonth =
-    !disableFuture ||
-    !isFutureMonth(
-      viewMonth === 11 ? viewYear + 1 : viewYear,
-      viewMonth === 11 ? 0 : viewMonth + 1,
-    );
+  const prevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear((y) => y - 1);
+    } else {
+      setViewMonth((m) => m - 1);
+    }
+  };
 
-  const canGoNextYear = !disableFuture || viewYear < today.getFullYear();
-  const canGoPrevYear = !disablePast || viewYear > today.getFullYear();
+  const nextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear((y) => y + 1);
+    } else {
+      setViewMonth((m) => m + 1);
+    }
+  };
 
-  /* calendar grid */
   const firstDay = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
   const cells: (number | null)[] = [
@@ -173,143 +103,92 @@ export function DatePicker({
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const selectDay = (day: number) => {
-    if (isDisabledDay(day)) return;
-    const d = new Date(viewYear, viewMonth, day);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    onChange?.(iso);
-    setOpen(false);
-    setView('days');
-  };
-
-  const selectMonth = (monthIdx: number) => {
-    if (isFutureMonth(viewYear, monthIdx) || isPastMonth(viewYear, monthIdx)) return;
-    setViewMonth(monthIdx);
-    setView('days');
-  };
-
-  const prevMonth = () => {
-    if (!canGoPrevMonth) return;
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear((y) => y - 1);
-    } else setViewMonth((m) => m - 1);
-  };
-
-  const nextMonth = () => {
-    if (!canGoNextMonth) return;
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear((y) => y + 1);
-    } else setViewMonth((m) => m + 1);
-  };
-
   return (
     <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
       {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
 
-      {/* Input trigger */}
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setOpen(!open)}
         className={cn(
-          'w-full flex items-center justify-between px-4 py-3 border rounded-input bg-white text-sm transition-colors focus:outline-none',
-          'focus:ring-1 focus:ring-gray-400 focus:border-gray-400',
+          'w-full flex items-center justify-between px-4 py-3 border rounded-input bg-white text-sm transition-colors',
           error ? 'border-red-500' : 'border-gray-300',
           displayValue ? 'text-gray-900' : 'text-gray-400',
         )}
       >
         <span>{displayValue || placeholder}</span>
-        <span className="text-gray-400">
-          <CalendarIcon />
-        </span>
+        <Calendar className="w-5 h-5 text-gray-400" />
       </button>
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 
-      {/* Calendar popup */}
       {open && (
         <div className="absolute top-full left-0 mt-2 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
-          {view === 'days' ? (
+          {/* Days View */}
+          {view === 'days' && (
             <>
-              {/* Month/year header */}
               <div className="flex items-center justify-between px-4 pt-4 pb-2">
                 <button
-                  type="button"
                   onClick={() => setView('months')}
                   className="flex items-center gap-1.5 text-sm font-bold text-[#0D2244] hover:opacity-70 transition-opacity"
                 >
                   {MONTHS[viewMonth]} {viewYear}
-                  <ChevronDown />
+                  <ChevronDown className="w-4 h-4" />
                 </button>
-                <div className="flex items-center gap-1">
+
+                <div className="flex gap-1">
                   <button
-                    type="button"
                     onClick={prevMonth}
-                    disabled={!canGoPrevMonth}
-                    className={cn(
-                      'p-1.5 rounded-lg transition-colors',
-                      canGoPrevMonth
-                        ? 'hover:bg-gray-100 text-gray-600'
-                        : 'text-gray-200 cursor-not-allowed',
-                    )}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
-                    <ChevronLeft />
+                    <ChevronLeft className="w-5 h-5" />
                   </button>
                   <button
-                    type="button"
                     onClick={nextMonth}
-                    disabled={!canGoNextMonth}
-                    className={cn(
-                      'p-1.5 rounded-lg transition-colors',
-                      canGoNextMonth
-                        ? 'hover:bg-gray-100 text-gray-600'
-                        : 'text-gray-200 cursor-not-allowed',
-                    )}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                   >
-                    <ChevronRight />
+                    <ChevronRight className="w-5 h-5" />
                   </button>
                 </div>
               </div>
 
-              {/* Day headers */}
-              <div className="grid grid-cols-7 px-3 pb-1">
+              <div className="grid grid-cols-7 text-xs text-gray-500 py-2 px-3 border-b">
                 {DAYS.map((d) => (
-                  <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">
+                  <div key={d} className="text-center font-medium">
                     {d}
                   </div>
                 ))}
               </div>
 
-              {/* Day cells */}
-              <div className="grid grid-cols-7 px-3 pb-3 gap-y-0.5">
+              <div className="grid grid-cols-7 gap-1 p-3">
                 {cells.map((day, i) => {
-                  if (!day) return <div key={i} />;
+                  if (!day) return <div key={i} className="h-9" />;
+
+                  const disabled = isDisabledDay(day);
                   const isSelected =
                     parsed &&
                     parsed.getDate() === day &&
                     parsed.getMonth() === viewMonth &&
                     parsed.getFullYear() === viewYear;
-                  const isToday =
+                  const isCurrentDay =
                     today.getDate() === day &&
                     today.getMonth() === viewMonth &&
                     today.getFullYear() === viewYear;
-                  const disabled = isDisabledDay(day);
+
                   return (
                     <button
                       key={i}
-                      type="button"
                       onClick={() => selectDay(day)}
                       disabled={disabled}
                       className={cn(
-                        'h-8 w-full text-sm rounded-lg transition-colors',
+                        'h-9 w-9 text-sm rounded-lg transition-all',
                         disabled
-                          ? 'text-gray-200 cursor-not-allowed'
+                          ? 'text-gray-300 cursor-not-allowed'
                           : isSelected
-                            ? 'bg-[#0D2244] text-white font-semibold'
-                            : isToday
-                              ? 'border border-[#0D2244] text-[#0D2244] font-semibold'
-                              : 'text-gray-700 hover:bg-gray-100',
+                            ? 'bg-[#0D2244] text-white font-semibold shadow-sm'
+                            : isCurrentDay
+                              ? 'border-2 border-[#0D2244] text-[#0D2244] font-medium'
+                              : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900',
                       )}
                     >
                       {day}
@@ -318,66 +197,71 @@ export function DatePicker({
                 })}
               </div>
             </>
-          ) : (
+          )}
+
+          {/* Months View */}
+          {view === 'months' && (
             <div className="p-4">
-              {/* Year navigation */}
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-4">
                 <button
-                  type="button"
-                  onClick={() => {
-                    if (canGoPrevYear) setViewYear((y) => y - 1);
-                  }}
-                  disabled={!canGoPrevYear}
-                  className={cn(
-                    'p-1.5 rounded-lg transition-colors',
-                    canGoPrevYear
-                      ? 'hover:bg-gray-100 text-gray-600'
-                      : 'text-gray-200 cursor-not-allowed',
-                  )}
+                  onClick={() => setView('years')}
+                  className="text-sm font-bold text-[#0D2244] flex items-center gap-1 hover:underline"
                 >
-                  <ChevronLeft />
+                  {viewYear} <ChevronDown className="w-4 h-4" />
                 </button>
-                <span className="text-sm font-bold text-[#0D2244]">{viewYear}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (canGoNextYear) setViewYear((y) => y + 1);
-                  }}
-                  disabled={!canGoNextYear}
-                  className={cn(
-                    'p-1.5 rounded-lg transition-colors',
-                    canGoNextYear
-                      ? 'hover:bg-gray-100 text-gray-600'
-                      : 'text-gray-200 cursor-not-allowed',
-                  )}
-                >
-                  <ChevronRight />
-                </button>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setViewYear((y) => y - 1)}
+                    className="p-2 hover:bg-gray-100 rounded-lg"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setViewYear((y) => y + 1)}
+                    className="p-2 hover:bg-gray-100 rounded-lg"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
-              {/* Month grid */}
-              <div className="grid grid-cols-4 gap-1">
-                {MONTHS.map((m, idx) => {
-                  const disabledM = isFutureMonth(viewYear, idx) || isPastMonth(viewYear, idx);
-                  return (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => selectMonth(idx)}
-                      disabled={disabledM}
-                      className={cn(
-                        'py-2 text-xs rounded-lg transition-colors',
-                        disabledM
-                          ? 'text-gray-200 cursor-not-allowed'
-                          : idx === viewMonth && viewYear === (parsed?.getFullYear() ?? -1)
-                            ? 'bg-[#0D2244] text-white font-semibold'
-                            : 'text-gray-700 hover:bg-gray-100',
-                      )}
-                    >
-                      {m}
-                    </button>
-                  );
-                })}
+              <div className="grid grid-cols-4 gap-2">
+                {MONTHS.map((month, idx) => (
+                  <button
+                    key={month}
+                    onClick={() => selectMonth(idx)}
+                    className={cn(
+                      'py-3 text-sm rounded-lg transition-colors',
+                      idx === viewMonth
+                        ? 'bg-[#0D2244] text-white font-medium'
+                        : 'hover:bg-gray-100 text-gray-700',
+                    )}
+                  >
+                    {month}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Years View */}
+          {view === 'years' && (
+            <div className="p-4 max-h-80 overflow-y-auto">
+              <div className="grid grid-cols-4 gap-2">
+                {Array.from({ length: 20 }, (_, i) => viewYear - 10 + i).map((year) => (
+                  <button
+                    key={year}
+                    onClick={() => selectYear(year)}
+                    className={cn(
+                      'py-3 text-sm rounded-lg font-medium transition-colors',
+                      year === viewYear
+                        ? 'bg-[#0D2244] text-white shadow-sm'
+                        : 'hover:bg-gray-100 text-gray-800 hover:text-gray-900',
+                    )}
+                  >
+                    {year}
+                  </button>
+                ))}
               </div>
             </div>
           )}

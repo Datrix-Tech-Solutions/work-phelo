@@ -3,42 +3,18 @@
 'use client';
 
 import { useState, use } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
 import { EmployeeCard } from '@/components/molecules/EmployeeCard';
-import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { FormField } from '@/components/molecules/FormField';
-import { PhoneInput } from '@/components/atoms/PhoneInput';
-import { DatePicker } from '@/components/atoms/DatePicker';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useToast } from '@/hooks/useToast';
-import { extractError } from '@/lib/extractError';
-import { Employee, Department, CreateEmployeePayload } from '@/types/hr';
 import { FilterSelect } from '@/components/molecules/FilterSelect';
-import { useEmployees, useCreateEmployee } from '@/hooks/useEmployees';
+import { useEmployees } from '@/hooks/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
+import { SuccessModal } from '@/components/organisms/SuccessModal';
+import { InviteEmployeePanel } from '@/components/organisms/employee/inviteEmployeePanel';
 
-/* ── Types ── */
-
-interface InviteForm {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  jobTitle: string;
-  departmentId?: string;
-  managerId?: string;
-  employmentType: string;
-  hireDate: string;
-  dateOfBirth?: string;
-}
-
-/* ── Page ── */
 export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
-  const toast = useToast();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -46,8 +22,8 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const [typeFilter, setTypeFilter] = useState('');
 
   const [panelOpen, setPanelOpen] = useState(false);
+  const [successEmployee, setSuccessEmployee] = useState<string | null>(null);
 
-  /* ── Fetch employees ── */
   const { data: empResult, isLoading } = useEmployees({
     search: search || undefined,
     status: statusFilter || undefined,
@@ -56,29 +32,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   });
   const employees = empResult?.data ?? [];
 
-  /* ── Fetch departments ── */
   const { data: departments = [] } = useDepartments();
-
-  /* ── Invite form ── */
-  const {
-    register,
-    handleSubmit,
-    reset,
-    control,
-    setValue,
-    formState: { errors },
-  } = useForm<InviteForm>({
-    defaultValues: { employmentType: 'FULL_TIME' },
-  });
-
-  const phoneValue = useWatch({ control, name: 'phone' });
-  const hireDateValue = useWatch({ control, name: 'hireDate' });
-  const dobValue = useWatch({ control, name: 'dateOfBirth' });
-  const deptFormValue = useWatch({ control, name: 'departmentId' });
-  const managerValue = useWatch({ control, name: 'managerId' });
-  const employmentTypeValue = useWatch({ control, name: 'employmentType' });
-
-  const { mutate: createEmployee, isPending } = useCreateEmployee();
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
@@ -130,14 +84,12 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
             { value: 'OFFBOARDED', label: 'Offboarded' },
           ]}
         />
-
         <FilterSelect
           value={deptFilter}
           onChange={setDeptFilter}
           placeholder="All Departments"
           options={departments.map((d) => ({ value: d.id, label: d.name }))}
         />
-
         <FilterSelect
           value={typeFilter}
           onChange={setTypeFilter}
@@ -218,144 +170,20 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
         </div>
       )}
 
-      {/* ── Invite Employee side panel ── */}
-      <SidePanel
+      <SuccessModal
+        isOpen={!!successEmployee}
+        onClose={() => setSuccessEmployee(null)}
+        title="Employee Invited!"
+        message={`An invite has been sent to ${successEmployee}. They will receive an email to set up their account.`}
+      />
+
+      <InviteEmployeePanel
         isOpen={panelOpen}
-        onClose={() => {
-          setPanelOpen(false);
-          reset();
-        }}
-        title="Add New Employee"
-        description="Add a new employee to onboard them onto WorkPhelo."
-        width="w-[500px]"
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setPanelOpen(false);
-                reset();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              isLoading={isPending}
-              loadingText="Sending invite…"
-              onClick={handleSubmit((d) => {
-                const { managerId: _m, ...rest } = d;
-                const payload = Object.fromEntries(
-                  Object.entries(rest).filter(([, v]) => v !== '' && v !== undefined && v !== null),
-                ) as unknown as CreateEmployeePayload;
-                createEmployee(payload, {
-                  onSuccess: () => {
-                    toast.success('Employee invited successfully');
-                    reset();
-                    setPanelOpen(false);
-                  },
-                  onError: (err: unknown) =>
-                    toast.error(extractError(err, 'Failed to invite employee')),
-                });
-              })}
-            >
-              Send Invite
-            </Button>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-            Personal Information
-          </p>
-          <FormField
-            label="First Name"
-            registration={register('firstName', { required: 'Required' })}
-            error={errors.firstName}
-            placeholder="eg; Kofi"
-          />
-          <FormField
-            label="Last Name"
-            registration={register('lastName', { required: 'Required' })}
-            error={errors.lastName}
-            placeholder="eg; Boateng"
-          />
-          <FormField
-            label="Work Email"
-            registration={register('email', {
-              required: 'Required',
-              pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
-            })}
-            error={errors.email}
-            type="email"
-            placeholder="eg; kofi@acmecorp.com"
-          />
-          <PhoneInput
-            label="Phone Number"
-            placeholder="00 000 0000"
-            value={phoneValue}
-            onChange={(v) => setValue('phone', v)}
-          />
-          <DatePicker
-            label="Date of Birth"
-            value={dobValue}
-            onChange={(v) => setValue('dateOfBirth', v)}
-            disableFuture
-          />
-        </div>
-
-        <div className="flex flex-col gap-4">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-            Job Information
-          </p>
-
-          <SearchSelect
-            label="Department"
-            placeholder="Select department"
-            value={deptFormValue}
-            onChange={(v) => setValue('departmentId', v)}
-            options={departments.map((d) => ({ value: d.id, label: d.name }))}
-          />
-
-          <FormField
-            label="Job Title"
-            registration={register('jobTitle', { required: 'Required' })}
-            error={errors.jobTitle}
-            placeholder="eg; UI/UX Engineer"
-          />
-
-          <SearchSelect
-            label="Reporting Manager"
-            placeholder="Select manager"
-            value={managerValue}
-            onChange={(v) => setValue('managerId', v)}
-            options={employees.map((e) => ({
-              value: e.id,
-              label: `${e.firstName} ${e.lastName}`,
-              sublabel: e.jobTitle,
-            }))}
-          />
-
-          <DatePicker
-            label="Date Hired"
-            value={hireDateValue}
-            onChange={(v) => setValue('hireDate', v)}
-            error={errors.hireDate?.message}
-          />
-
-          <SearchSelect
-            label="Employment Type"
-            placeholder="Select employment type"
-            value={employmentTypeValue}
-            onChange={(v) => setValue('employmentType', v)}
-            options={[
-              { value: 'FULL_TIME', label: 'Full Time' },
-              { value: 'PART_TIME', label: 'Part Time' },
-              { value: 'CONTRACT', label: 'Contract' },
-              { value: 'INTERN', label: 'Intern' },
-            ]}
-          />
-        </div>
-      </SidePanel>
+        onClose={() => setPanelOpen(false)}
+        onSuccess={(name) => setSuccessEmployee(name)}
+        departments={departments}
+        employees={employees}
+      />
     </div>
   );
 }

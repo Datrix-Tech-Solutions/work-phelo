@@ -15,6 +15,7 @@ import { extractError } from '@/lib/extractError';
 import { Department, Employee } from '@/types/hr';
 import { useDepartments, useCreateDepartment, useUpdateDepartment } from '@/hooks/useDepartments';
 import { useEmployees, useUpdateEmployee } from '@/hooks/useEmployees';
+import { SuccessModal } from '@/components/organisms/SuccessModal';
 
 /* ── Types ── */
 
@@ -60,6 +61,7 @@ export default function DepartmentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Department | null>(null);
   const [membersTarget, setMembersTarget] = useState<Department | null>(null);
+  const [successName, setSuccessName] = useState<string | null>(null);
 
   /* member panel state */
   const [memberSearch, setMemberSearch] = useState('');
@@ -133,9 +135,9 @@ export default function DepartmentsPage() {
   const createDept = (data: DeptForm) =>
     createDeptMutate(data, {
       onSuccess: () => {
-        toast.success('Department created');
         createForm.reset();
         setCreateOpen(false);
+        setSuccessName(data.name);
       },
       onError: (err: unknown) => toast.error(extractError(err, 'Failed to create department')),
     });
@@ -340,6 +342,13 @@ export default function DepartmentsPage() {
           </select>
         </div>
       </SidePanel>
+
+      <SuccessModal
+        isOpen={!!successName}
+        onClose={() => setSuccessName(null)}
+        title="Department Created!"
+        message={`"${successName}" has been added to your organisation.`}
+      />
 
       {/* ── Add Members panel ── */}
       <SidePanel
