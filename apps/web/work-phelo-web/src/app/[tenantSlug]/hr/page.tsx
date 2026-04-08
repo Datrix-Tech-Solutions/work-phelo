@@ -6,6 +6,7 @@ import { use, useState, useRef } from 'react';
 import { Calendar, CircleDollarSign, MonitorSmartphone, CalendarRange } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { useUpcomingBirthdays } from '@/hooks';
+import { UpcomingBirthday } from '@/types/hr';
 import { SidePanel } from '@/components/organisms/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
@@ -158,7 +159,7 @@ export default function EmployeeDashboardPage({
   const { data: birthdaysRaw } = useUpcomingBirthdays();
   const rawBirthdays = Array.isArray(birthdaysRaw)
     ? birthdaysRaw
-    : ((birthdaysRaw as { data?: typeof birthdaysRaw })?.data ?? []);
+    : ((birthdaysRaw as unknown as { data?: UpcomingBirthday[] })?.data ?? []);
   const birthdays = (Array.isArray(rawBirthdays) ? rawBirthdays : []).map((b) => {
     const name = `${b.firstName} ${b.lastName}`;
     return {

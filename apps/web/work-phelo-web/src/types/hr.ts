@@ -102,6 +102,7 @@ export interface CreateEmployeePayload {
   hireDate: string;
   basicSalary?: number;
   departmentId: string;
+  branchId?: string;
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;

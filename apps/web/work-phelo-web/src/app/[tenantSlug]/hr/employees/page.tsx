@@ -271,7 +271,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
                 const { managerId: _m, ...rest } = d;
                 const payload = Object.fromEntries(
                   Object.entries(rest).filter(([, v]) => v !== '' && v !== undefined && v !== null),
-                ) as CreateEmployeePayload;
+                ) as unknown as CreateEmployeePayload;
                 createEmployee(payload, {
                   onSuccess: () => {
                     toast.success('Employee invited successfully');

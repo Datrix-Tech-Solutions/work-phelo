@@ -13,7 +13,7 @@ interface Birthday {
 
 interface BirthdaysCardProps {
   birthdays: Birthday[];
-  scrollRef?: React.RefObject<HTMLDivElement> | null;
+  scrollRef?: React.RefObject<HTMLDivElement | null> | null;
   onScrollLeft: () => void;
   onScrollRight: () => void;
 }
