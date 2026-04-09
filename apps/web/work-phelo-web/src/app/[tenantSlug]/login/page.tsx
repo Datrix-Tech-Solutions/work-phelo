@@ -1,7 +1,7 @@
 // LOGIN PAGE //
 
-import { AuthPageShell } from '@/components/organisms/AuthPageShell';
-import { LoginForm } from '@/components/organisms/LoginForm';
+import { AuthPageShell } from '@/components/organisms/login/AuthPageShell';
+import { LoginForm } from '@/components/organisms/login/LoginForm';
 
 export default async function TenantLoginPage({
   params,

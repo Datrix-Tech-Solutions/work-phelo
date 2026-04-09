@@ -4,8 +4,8 @@
 
 import { use, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
-import { TopNav } from '@/components/organisms/TopNav';
-import { Sidebar } from '@/components/organisms/Sidebar';
+import { TopNav } from '@/components/organisms/shared/TopNav';
+import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
 
 export default function HRLayout({

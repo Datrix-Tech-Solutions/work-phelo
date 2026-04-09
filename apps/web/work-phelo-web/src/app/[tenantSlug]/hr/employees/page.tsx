@@ -4,12 +4,12 @@
 
 import { useState, use } from 'react';
 import { useRouter } from 'next/navigation';
-import { EmployeeCard } from '@/components/molecules/EmployeeCard';
+import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
-import { FilterSelect } from '@/components/molecules/FilterSelect';
+import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
-import { SuccessModal } from '@/components/organisms/SuccessModal';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { InviteEmployeePanel } from '@/components/organisms/employee/inviteEmployeePanel';
 import { useAuthStore } from '@/store/auth.store';
 import { SearchIcon } from 'lucide-react';

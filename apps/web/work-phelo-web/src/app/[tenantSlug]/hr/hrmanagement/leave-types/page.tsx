@@ -4,10 +4,10 @@
 
 import { use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { DataTable, Column } from '@/components/organisms/DataTable';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { Modal } from '@/components/organisms/Modal';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateLeaveTypePanel } from '@/components/organisms/leave/CreateLeaveTypePanel';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';

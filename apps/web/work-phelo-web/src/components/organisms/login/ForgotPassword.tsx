@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/atoms/AppLogo';
 import { useForgotPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 
 interface ForgotPasswordForm {
   email: string;

@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { SectionCard } from '@/components/molecules/sectionCard';
+import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { Button } from '@/components/atoms/Button';
-import { Column, DataTable } from '../DataTable';
-import { MetricCard } from '@/components/molecules/MetricCard';
+import { Column, DataTable } from '../shared/DataTable';
+import { MetricCard } from '@/components/molecules/payroll/MetricCard';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 
 interface PayrollRow {

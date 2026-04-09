@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { Pencil } from 'lucide-react';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
+import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { Button } from '@/components/atoms/Button';
 
 /* ── Types ── */

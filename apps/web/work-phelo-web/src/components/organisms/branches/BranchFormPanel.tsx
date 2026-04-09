@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { useCreateBranch, useUpdateBranch } from '@/hooks';
-import { SuccessModal } from '@/components/organisms/SuccessModal';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import type { Branch, Employee } from '@/types/hr';
 
 interface BranchForm {

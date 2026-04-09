@@ -1,4 +1,4 @@
-import { LoginHero } from '@/components/organisms/LoginHero';
+import { LoginHero } from '@/components/organisms/login/LoginHero';
 
 export function AuthPageShell({ children }: { children: React.ReactNode }) {
   return (

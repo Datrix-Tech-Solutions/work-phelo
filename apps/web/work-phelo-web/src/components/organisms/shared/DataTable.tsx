@@ -2,9 +2,10 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { Pagination } from '@/components/molecules/Pagination';
+import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
-import { NoSearchLogo } from '../atoms/NoSearchLogo';
+import { NoSearchLogo } from '../../atoms/NoSearchLogo';
+import { Icons } from '@/lib/icons';
 
 export interface Column<T> {
   key: string;
@@ -137,34 +138,8 @@ export function DataTable<T extends { id: string | number }>({
                 </option>
               ))}
             </select>
-            <svg
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="4" y1="6" x2="20" y2="6" />
-              <line x1="8" y1="12" x2="16" y2="12" />
-              <line x1="11" y1="18" x2="13" y2="18" />
-            </svg>
-            <svg
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
+
+            <Icons.ListFilter className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none h-4 w-4" />
           </div>
         )}
 
@@ -177,20 +152,7 @@ export function DataTable<T extends { id: string | number }>({
             className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Export
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
+            <Icons.Upload className="w-5 h-5" />
           </button>
         )}
 
@@ -201,19 +163,7 @@ export function DataTable<T extends { id: string | number }>({
             className="flex items-center gap-2 px-4 py-2 bg-[#0D2244] text-white rounded-input text-sm font-medium hover:bg-[#162d56] transition-colors"
           >
             {actionButton.label}
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
+            <Icons.Plus />
           </button>
         )}
       </div>
@@ -245,7 +195,7 @@ export function DataTable<T extends { id: string | number }>({
               Loading...
             </div>
           ) : data.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3">
+            <div className="flex flex-1 flex-col items-center justify-center gap-10">
               {emptyImage ?? (
                 <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
                   <NoSearchLogo />

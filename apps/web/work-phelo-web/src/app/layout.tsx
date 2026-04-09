@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { QueryProvider } from '@/providers/query-provider';
 import { AuthProvider } from '@/providers/auth-provider';
-import { ToastContainer } from '@/components/molecules/ToastContainer';
+import { ToastContainer } from '@/components/molecules/shared/ToastContainer';
 import { appFont } from '@/lib/fonts';
 
 export const metadata: Metadata = {

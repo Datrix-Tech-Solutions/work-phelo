@@ -1,4 +1,4 @@
-import { NavGroup } from '@/components/organisms/Sidebar';
+import { NavGroup } from '@/components/organisms/shared/Sidebar';
 
 import {
   LayoutDashboard,

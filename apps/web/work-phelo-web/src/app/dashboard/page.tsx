@@ -5,10 +5,10 @@
 import { useState, useMemo } from 'react';
 import { useTenants } from '@/hooks/useTenants';
 import { useRouter } from 'next/navigation';
-import { WelcomeBanner } from '@/components/organisms/WelcomeBanner';
-import { StatCard } from '@/components/molecules/StatCard';
-import { DataTable, Column } from '@/components/organisms/DataTable';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
+import { WelcomeBanner } from '@/components/organisms/shared/WelcomeBanner';
+import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { AddCompanyForm } from '@/components/organisms/superadmin/AddCompanyForm';
 import { useAuthStore } from '@/store/auth.store';
 import { Company } from '@/types/tenant';

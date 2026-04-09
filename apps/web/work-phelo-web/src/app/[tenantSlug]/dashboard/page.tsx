@@ -6,9 +6,9 @@ import { use, useMemo } from 'react';
 import { useCurrentTenantUsers } from '@/hooks/useTenants';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { TopNav } from '@/components/organisms/TopNav';
+import { TopNav } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
-import { StatPill } from '@/components/molecules/StatPill';
+import { StatPill } from '@/components/molecules/departments/StatPill';
 import { TenantUser } from '@/types/tenant';
 import { getGreeting } from '@/lib/formatters';
 

@@ -1,5 +1,5 @@
 import { UseFormReturn } from 'react-hook-form';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 import { Employee } from '@/types/hr';
 
 export interface DeptForm {

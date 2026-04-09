@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/useToast';
 import { Button } from '@/components/atoms/Button';
 import { GoogleButton } from '@/components/atoms/GoogleButton';
 import { MicrosoftButton } from '@/components/atoms/MicrosoftButton';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 
 interface LoginFormProps {
   showSocialLogin?: boolean;

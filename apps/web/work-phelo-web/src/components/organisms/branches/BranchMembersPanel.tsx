@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { useToast } from '@/hooks/useToast';
 import { useUpdateEmployee } from '@/hooks';

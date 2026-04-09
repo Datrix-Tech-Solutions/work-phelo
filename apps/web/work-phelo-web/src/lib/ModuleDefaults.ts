@@ -1,4 +1,4 @@
-import { Module } from '@/components/organisms/ModuleConfiguration';
+import { Module } from '@/components/organisms/shared/ModuleConfiguration';
 
 export const DEFAULT_MODULES: Module[] = [
   {

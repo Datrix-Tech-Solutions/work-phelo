@@ -12,13 +12,13 @@ import { useMyPayslips } from '@/hooks/usePayroll';
 import { usePublicHolidays } from '@/hooks/usePublicHolidays';
 import { useClockIn, useClockOut } from '@/hooks/useTimeClock';
 import { UpcomingBirthday } from '@/types/hr';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
-import { MetricCard } from '@/components/molecules/MetricCard';
+import { MetricCard } from '@/components/molecules/payroll/MetricCard';
 import { AttendanceMetricCard } from '@/components/molecules/AttendanceMetricCard';
-import { AnnouncementCard } from '@/components/molecules/announcmentCard';
-import { BirthdaysCard } from '@/components/molecules/birthdayCard';
+import { AnnouncementCard } from '@/components/molecules/dashboard/announcmentCard';
+import { BirthdaysCard } from '@/components/molecules/dashboard/birthdayCard';
 import { cn } from '@/lib/utils';
 import { getGreeting } from '@/lib/formatters';
 

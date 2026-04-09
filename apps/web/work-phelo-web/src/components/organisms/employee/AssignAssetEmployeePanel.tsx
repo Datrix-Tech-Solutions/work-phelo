@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 
 interface AvailableAsset {
