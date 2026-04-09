@@ -9,7 +9,7 @@ import { WelcomeBanner } from '@/components/organisms/WelcomeBanner';
 import { StatCard } from '@/components/molecules/StatCard';
 import { DataTable, Column } from '@/components/organisms/DataTable';
 import { StatusBadge } from '@/components/molecules/StatusBadge';
-import { AddCompanyForm } from '@/components/organisms/AddCompanyForm';
+import { AddCompanyForm } from '@/components/organisms/superadmin/AddCompanyForm';
 import { useAuthStore } from '@/store/auth.store';
 import { Company } from '@/types/tenant';
 

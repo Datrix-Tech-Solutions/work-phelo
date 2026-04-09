@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { useBranches, useDeleteBranch, useEmployees } from '@/hooks';
 import type { Branch, Employee } from '@/types/hr';
+import { useAuthStore } from '@/store/auth.store';
 
 const PAGE_SIZE = 8;
 
@@ -55,16 +56,17 @@ function BranchStatus({
 export default function BranchesPage() {
   const toast = useToast();
 
+  const user = useAuthStore((s) => s.user);
+  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
+
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  // Panel / modal state
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Branch | null>(null);
   const [membersTarget, setMembersTarget] = useState<Branch | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Branch | null>(null);
 
-  // Data
   const { data: branches = [], isLoading } = useBranches();
   const { data: empResult } = useEmployees({ limit: 500 });
   const employees: Employee[] = empResult?.data ?? [];
@@ -75,7 +77,6 @@ export default function BranchesPage() {
     return map;
   }, [employees]);
 
-  // Table
   const filtered = useMemo(() => {
     if (!search) return branches;
     const q = search.toLowerCase();
@@ -155,7 +156,6 @@ export default function BranchesPage() {
     },
   ];
 
-  // Delete
   const { mutate: deleteBranch, isPending: isDeleting } = useDeleteBranch();
 
   const confirmDelete = () => {
@@ -188,12 +188,18 @@ export default function BranchesPage() {
             setSearch(q);
             setPage(1);
           }}
-          actionButton={{ label: 'New Branch', onClick: () => setCreateOpen(true) }}
-          rowActions={(row) => [
-            { label: 'Edit Branch', onClick: () => setEditTarget(row) },
-            { label: 'Add Members', onClick: () => setMembersTarget(row) },
-            { label: 'Delete Branch', danger: true, onClick: () => setDeleteTarget(row) },
-          ]}
+          {...(!isEmployee && {
+            actionButton: { label: 'New Branch', onClick: () => setCreateOpen(true) },
+          })}
+          rowActions={
+            isEmployee
+              ? undefined
+              : (row) => [
+                  { label: 'Edit Branch', onClick: () => setEditTarget(row) },
+                  { label: 'Add Members', onClick: () => setMembersTarget(row) },
+                  { label: 'Delete Branch', danger: true, onClick: () => setDeleteTarget(row) },
+                ]
+          }
           emptyMessage="No branches found"
           currentPage={page}
           totalPages={totalPages}
@@ -201,51 +207,51 @@ export default function BranchesPage() {
         />
       </div>
 
-      {/* Create panel */}
-      <BranchFormPanel
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
-        employees={employees}
-      />
+      {!isEmployee && (
+        <>
+          <BranchFormPanel
+            isOpen={createOpen}
+            onClose={() => setCreateOpen(false)}
+            employees={employees}
+          />
 
-      {/* Edit panel */}
-      <BranchFormPanel
-        isOpen={!!editTarget}
-        onClose={() => setEditTarget(null)}
-        branch={editTarget}
-        employees={employees}
-      />
+          <BranchFormPanel
+            isOpen={!!editTarget}
+            onClose={() => setEditTarget(null)}
+            branch={editTarget}
+            employees={employees}
+          />
 
-      {/* Add members panel */}
-      <BranchMembersPanel
-        isOpen={!!membersTarget}
-        onClose={() => setMembersTarget(null)}
-        branch={membersTarget}
-        employees={employees}
-      />
+          <BranchMembersPanel
+            isOpen={!!membersTarget}
+            onClose={() => setMembersTarget(null)}
+            branch={membersTarget}
+            employees={employees}
+          />
 
-      {/* Delete modal */}
-      <Modal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete Branch"
-        description={`Delete "${deleteTarget?.name}"? This cannot be undone. Employees assigned to this branch will be unassigned.`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              isLoading={isDeleting}
-              loadingText="Deleting…"
-              onClick={confirmDelete}
-            >
-              Delete Branch
-            </Button>
-          </div>
-        }
-      />
+          <Modal
+            isOpen={!!deleteTarget}
+            onClose={() => setDeleteTarget(null)}
+            title="Delete Branch"
+            description={`Delete "${deleteTarget?.name}"? This cannot be undone. Employees assigned to this branch will be unassigned.`}
+            footer={
+              <div className="flex justify-end gap-3">
+                <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="danger"
+                  isLoading={isDeleting}
+                  loadingText="Deleting…"
+                  onClick={confirmDelete}
+                >
+                  Delete Branch
+                </Button>
+              </div>
+            }
+          />
+        </>
+      )}
     </div>
   );
 }

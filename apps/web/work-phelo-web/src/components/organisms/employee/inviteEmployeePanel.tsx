@@ -189,6 +189,7 @@ export function InviteEmployeePanel({
           value={hireDateValue}
           onChange={(v) => setValue('hireDate', v)}
           error={errors.hireDate?.message}
+          disableFuture
         />
         {/* <DatePicker
           label="Probation End Date"
@@ -215,6 +216,7 @@ export function InviteEmployeePanel({
             onChange={(v) => setValue('contractEndDate', v)}
             // Optional: make it required when contract is selected
             error={errors.contractEndDate?.message}
+            disablePast
           />
         )} */}
       </div>

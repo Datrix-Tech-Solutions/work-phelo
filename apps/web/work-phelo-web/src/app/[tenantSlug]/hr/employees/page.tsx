@@ -11,10 +11,15 @@ import { useEmployees } from '@/hooks/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { SuccessModal } from '@/components/organisms/SuccessModal';
 import { InviteEmployeePanel } from '@/components/organisms/employee/inviteEmployeePanel';
+import { useAuthStore } from '@/store/auth.store';
+import { SearchIcon } from 'lucide-react';
+import { NoSearchLogo } from '@/components/atoms/NoSearchLogo';
 
 export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -44,26 +49,13 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
             {isLoading ? '—' : `${employees.length} employee${employees.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        <Button onClick={() => setPanelOpen(true)}>+ Invite Employee</Button>
+        {!isEmployee && <Button onClick={() => setPanelOpen(true)}>+ Invite Employee</Button>}
       </div>
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
         <div className="relative flex-1 min-w-52">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            width="15"
-            height="15"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
             value={search}
@@ -127,21 +119,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
       ) : employees.length === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">
           <div className="w-14 h-14 rounded-card bg-gray-100 flex items-center justify-center">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#9ca3af"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-              <circle cx="9" cy="7" r="4" />
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
+            <NoSearchLogo />
           </div>
           <p className="text-sm font-medium text-gray-900">No employees found</p>
           <p className="text-xs text-gray-400">
@@ -177,13 +155,15 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
         message={`An invite has been sent to ${successEmployee}. They will receive an email to set up their account.`}
       />
 
-      <InviteEmployeePanel
-        isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        onSuccess={(name) => setSuccessEmployee(name)}
-        departments={departments}
-        employees={employees}
-      />
+      {!isEmployee && (
+        <InviteEmployeePanel
+          isOpen={panelOpen}
+          onClose={() => setPanelOpen(false)}
+          onSuccess={(name) => setSuccessEmployee(name)}
+          departments={departments}
+          employees={employees}
+        />
+      )}
     </div>
   );
 }

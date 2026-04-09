@@ -29,19 +29,35 @@ export default function HRLayout({
   // Only dashboard and management are always active (no toggle exists for them)
   const coreKeys = new Set(['dashboard', 'management']);
 
-  // Prefix all hrefs with the tenant + module path, and apply feature-driven active state
-  const groups = HR_NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.map((item) => ({
-      ...item,
-      href: `/${tenantSlug}/hr${item.href ? `/${item.href}` : ''}`,
-      active: coreKeys.has(item.key)
-        ? true
-        : item.key in hrFeatures
-          ? hrFeatures[item.key]
-          : item.active,
-    })),
-  }));
+  //TODO: this is a temp fix just for the presentation remove after
+  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
+
+  const groups = HR_NAV_GROUPS.filter((group) => !(isEmployee && group.label === 'Management')).map(
+    (group) => ({
+      ...group,
+      items: group.items.map((item) => ({
+        ...item,
+        href: `/${tenantSlug}/hr${item.href ? `/${item.href}` : ''}`,
+        active: coreKeys.has(item.key)
+          ? true
+          : item.key in hrFeatures
+            ? hrFeatures[item.key]
+            : item.active,
+      })),
+    }),
+  );
+  // const groups = HR_NAV_GROUPS.map((group) => ({
+  //   ...group,
+  //   items: group.items.map((item) => ({
+  //     ...item,
+  //     href: `/${tenantSlug}/hr${item.href ? `/${item.href}` : ''}`,
+  //     active: coreKeys.has(item.key)
+  //       ? true
+  //       : item.key in hrFeatures
+  //         ? hrFeatures[item.key]
+  //         : item.active,
+  //   })),
+  // }));
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">

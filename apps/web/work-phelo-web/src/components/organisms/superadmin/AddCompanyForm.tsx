@@ -9,7 +9,7 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/FormField';
 import { FormSection } from '@/components/molecules/FormSection';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
-import { SearchSelect } from '../atoms/SearchSelect';
+import { SearchSelect } from '../../atoms/SearchSelect';
 import { useState } from 'react';
 
 interface AddCompanyPayload {
