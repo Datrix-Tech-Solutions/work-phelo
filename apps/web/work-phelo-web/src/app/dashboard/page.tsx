@@ -65,8 +65,8 @@ export default function AdminDashboardPage() {
         size?: string;
         country?: string;
       }) => ({
-        id: c.id ?? c._id,
-        name: c.name ?? c.companyName,
+        id: c.id ?? c._id ?? '',
+        name: c.name ?? c.companyName ?? '',
         dateCreated:
           (c.dateCreated ?? c.createdAt)
             ? new Date(String(c.dateCreated ?? c.createdAt)).toLocaleDateString('en-US', {

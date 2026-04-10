@@ -61,7 +61,7 @@ export interface Employee {
   statusChangedByEmail?: string;
   offboardedAt?: string;
   createdAt?: string;
-  assets?: object[];
+  assets?: import('@/types/asset').EmployeeAsset[];
 }
 
 export interface UpdateEmployeePayload {

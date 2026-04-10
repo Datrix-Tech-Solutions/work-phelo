@@ -15,7 +15,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   tenantSlug: string;
-  editTarget: { id: string; name: string; description?: string } | null;
+  editTarget: { id: string; name: string; description?: string; managerId?: string } | null;
 }
 
 export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
@@ -34,6 +34,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
   }, [editTarget, form]);
 
   const handleSubmit = (data: DeptForm) => {
+    if (!editTarget) return;
     updateDepartment(
       { id: editTarget.id, name: data.name, description: data.description || undefined },
       {
