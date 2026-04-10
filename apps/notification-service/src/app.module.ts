@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { NotificationModule } from './notification/notification.module';
+import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 
 @Module({
   imports: [
@@ -9,5 +10,6 @@ import { NotificationModule } from './notification/notification.module';
     PrismaModule,
     NotificationModule,
   ],
+  providers: [RabbitMQSetupService],
 })
 export class AppModule {}

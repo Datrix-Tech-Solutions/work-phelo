@@ -1,5 +1,6 @@
 // RESET PASSWORD PAGE //
 
+import { Suspense } from 'react';
 import { AuthPageShell } from '@/components/organisms/login/AuthPageShell';
 import { ResetPassword } from '@/components/organisms/login/ResetPassword';
 
@@ -11,7 +12,9 @@ export default async function TenantResetPasswordPage({
   const { tenantSlug } = await params;
   return (
     <AuthPageShell>
-      <ResetPassword tenantSlug={tenantSlug} />
+      <Suspense>
+        <ResetPassword tenantSlug={tenantSlug} />
+      </Suspense>
     </AuthPageShell>
   );
 }

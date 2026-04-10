@@ -37,7 +37,14 @@ async function bootstrap() {
         process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
       ],
       queue: 'auth_queue',
-      queueOptions: { durable: true, arguments: { 'x-message-ttl': 3600000 } },
+      queueOptions: {
+        durable: true,
+        arguments: {
+          'x-message-ttl': 3600000,
+          'x-dead-letter-exchange': 'workphelo.dlx',
+          'x-dead-letter-routing-key': 'auth_queue',
+        },
+      },
     },
   });
 

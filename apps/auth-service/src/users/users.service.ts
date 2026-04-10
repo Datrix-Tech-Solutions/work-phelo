@@ -79,7 +79,7 @@ export class UsersService {
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
-    this.rabbitmq.sendInviteEmail({
+    await this.rabbitmq.sendInviteEmail({
       userId: user.id,
       tenantId,
       email: user.email,
@@ -150,6 +150,13 @@ export class UsersService {
         data: { status: 'ACTIVE' },
       });
     }
+
+    // Link the auth userId back to the HR employee record
+    await this.rabbitmq.emitToHr('hr.employee_activated', {
+      tenantId: updated.tenantId,
+      email: updated.email,
+      userId: updated.id,
+    });
 
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {

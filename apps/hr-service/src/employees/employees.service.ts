@@ -11,7 +11,7 @@ import { LeaveService } from '../leave/leave.service';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { OffboardEmployeeDto } from './dto/offboard-employee.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
-import { paginationParams, paginate } from '../common/response.helper';
+import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 
 @Injectable()
 export class EmployeesService {
@@ -77,8 +77,8 @@ export class EmployeesService {
       include: { department: true },
     });
 
-    // Emit event to auth service to create user account and send invite
-    this.rabbitmq.emitToAuth('auth.invite_employee', {
+    // Fire-and-forget — HR returns immediately, auth handles invite async
+    void this.rabbitmq.emitToAuth('auth.invite_employee', {
       tenantId,
       employeeId: employee.id,
       email: employee.email,
@@ -90,7 +90,7 @@ export class EmployeesService {
   }
 
   async findAll(tenantId: string, query: QueryEmployeesDto) {
-    const { take, skip } = paginationParams(query.page, query.limit);
+    const { take, skip, page } = getPaginationParams(query);
 
     const where: any = { tenantId };
     if (query.status) where.employmentStatus = query.status;
@@ -130,7 +130,7 @@ export class EmployeesService {
       this.prisma.employee.count({ where }),
     ]);
 
-    return { employees, meta: paginate(total, query.page || 1, take) };
+    return { employees, meta: buildMeta(page, take, total) };
   }
 
   async findById(tenantId: string, id: string) {
@@ -232,7 +232,7 @@ export class EmployeesService {
       throw new BadRequestException('Employee has no email address on record');
     }
 
-    this.rabbitmq.emitToAuth('auth.resend_employee_invite', {
+    void this.rabbitmq.emitToAuth('auth.resend_employee_invite', {
       tenantId,
       employeeId,
       email: employee.email,

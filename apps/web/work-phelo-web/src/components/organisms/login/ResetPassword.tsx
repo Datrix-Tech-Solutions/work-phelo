@@ -1,7 +1,7 @@
 'use client';
 
 import { useForm, useWatch } from 'react-hook-form';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AppLogo } from '@/components/atoms/AppLogo';
 import { useResetPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
@@ -26,6 +26,7 @@ const rules = [
 
 export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     register,
     handleSubmit,
@@ -36,11 +37,16 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
   const password = useWatch({ control, name: 'password', defaultValue: '' });
 
   const { mutate, isPending } = useResetPassword();
+
   const handleReset = (data: ResetPasswordForm) => {
-    const otpCode = sessionStorage.getItem('fpOtp') ?? '';
-    const email = sessionStorage.getItem('fpEmail') ?? undefined;
+    // Link flow: ?token=<code> is in the URL
+    // OTP flow: code was stored in sessionStorage by the verify page
+    const linkToken = searchParams.get('token') ?? undefined;
+    const otpCode = linkToken ? undefined : (sessionStorage.getItem('fpOtp') ?? undefined);
+    const email = linkToken ? undefined : (sessionStorage.getItem('fpEmail') ?? undefined);
+
     mutate(
-      { otpCode, newPassword: data.password, email, tenantSlug },
+      { token: linkToken, otpCode, newPassword: data.password, email, tenantSlug },
       {
         onSuccess: () => {
           sessionStorage.removeItem('fpOtp');

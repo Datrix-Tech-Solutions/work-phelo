@@ -50,6 +50,7 @@ export class NotificationHandler {
       email: string;
       firstName: string;
       resetLink: string;
+      otpCode?: string;
       tenantName: string;
     },
   ) {

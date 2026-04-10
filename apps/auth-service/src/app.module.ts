@@ -9,6 +9,7 @@ import { UsersModule } from './users/users.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { AuditModule } from './audit/audit.module';
 import { CompanyRolesModule } from './company-roles/company-roles.module';
+import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 
 @Module({
   imports: [
@@ -19,10 +20,10 @@ import { CompanyRolesModule } from './company-roles/company-roles.module';
     UsersModule,
     PermissionsModule,
     AuditModule,
-    AuditModule,
     CompanyRolesModule,
   ],
   providers: [
+    RabbitMQSetupService,
     {
       provide: APP_PIPE,
       useValue: new ValidationPipe({

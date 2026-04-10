@@ -13,4 +13,4 @@ async function bootstrap() {
   console.log(`Marketing service running on port ${port}`);
 }
 
-bootstrap();
+void bootstrap();

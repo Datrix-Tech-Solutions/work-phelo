@@ -27,7 +27,7 @@ export const WorkspaceUrl = {
 
   /** Password reset link — sent in forgot-password emails */
   resetPassword: (slug: string, token: string) =>
-    `${baseUrl()}/${slug}/reset-password?token=${encodeURIComponent(token)}`,
+    `${baseUrl()}/${slug}/forgot-password/reset?token=${encodeURIComponent(token)}`,
 
   /** Email verification deep link — sent in registration emails */
   verifyEmail: (slug: string) => `${baseUrl()}/${slug}/verify-account`,
