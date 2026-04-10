@@ -1,4 +1,12 @@
 // components/TeamReviewTable.tsx
+function daysUntil(dateStr: string): number {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(dateStr);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -41,7 +49,8 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
     if (!search) return teamRows;
     const q = search.toLowerCase();
     return teamRows.filter(
-      (r) => r.employeeName.toLowerCase().includes(q) || r.cycleName.toLowerCase().includes(q),
+      (r: (typeof teamRows)[0]) =>
+        r.employeeName.toLowerCase().includes(q) || r.cycleName.toLowerCase().includes(q),
     );
   }, [teamRows, search]);
 

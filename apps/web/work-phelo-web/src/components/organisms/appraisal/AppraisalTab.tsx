@@ -23,7 +23,7 @@ export function AppraisalTabs({ activeTab, isManager, isHR, onTabChange }: Props
       {tabs.map((tab) => (
         <button
           key={tab.key}
-          onClick={() => onTabChange(tab.key)}
+          onClick={() => onTabChange(tab.key as 'my' | 'team' | 'hr')}
           className={cn(
             'relative px-6 py-3 text-sm transition-colors whitespace-nowrap',
             activeTab === tab.key ? TAB_ACTIVE : TAB_IDLE,

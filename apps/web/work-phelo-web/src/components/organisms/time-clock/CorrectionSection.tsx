@@ -49,7 +49,7 @@ export function CorrectionsSection({
       label: 'Status',
       render: (r) => {
         const map = { PENDING: 'warning', APPROVED: 'success', REJECTED: 'danger' } as const;
-        return <Badge variant={map[r.status]} label={r.status} />;
+        return <Badge variant={map[r.status as keyof typeof map]} label={r.status} />;
       },
     },
   ];

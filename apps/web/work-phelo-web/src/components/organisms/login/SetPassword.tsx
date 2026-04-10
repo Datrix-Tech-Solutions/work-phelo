@@ -1,20 +1,17 @@
 'use client';
 
 import { useForm, useWatch } from 'react-hook-form';
-import { useRouter } from 'next/navigation';
+import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { AppLogo } from '@/components/atoms/AppLogo';
-import { useResetPassword } from '@/hooks';
+import { useAcceptInvite } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { cn } from '@/lib/utils';
+import { extractError } from '@/lib/errors';
 
-interface ResetPasswordForm {
+interface SetPasswordForm {
   password: string;
   confirmPassword: string;
-}
-
-interface ResetPasswordProps {
-  tenantSlug?: string;
 }
 
 const rules = [
@@ -24,33 +21,53 @@ const rules = [
   { label: 'Special character', test: (v: string) => /[^A-Za-z0-9]/.test(v) },
 ];
 
-export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
+export default function SetPassword() {
+  const params = useParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
+
+  const tenantSlug = params.tenantSlug as string;
+  const token = searchParams.get('token') ?? '';
+
   const {
     register,
     handleSubmit,
     control,
+    setError,
     formState: { errors },
-  } = useForm<ResetPasswordForm>();
+  } = useForm<SetPasswordForm>();
 
   const password = useWatch({ control, name: 'password', defaultValue: '' });
 
-  const { mutate, isPending } = useResetPassword();
-  const handleReset = (data: ResetPasswordForm) => {
-    const otpCode = sessionStorage.getItem('fpOtp') ?? '';
-    const email = sessionStorage.getItem('fpEmail') ?? undefined;
+  const { mutate, isPending } = useAcceptInvite();
+
+  const handleSetPassword = (data: SetPasswordForm) => {
     mutate(
-      { otpCode, newPassword: data.password, email, tenantSlug },
+      { inviteToken: token, password: data.password },
       {
         onSuccess: () => {
-          sessionStorage.removeItem('fpOtp');
-          sessionStorage.removeItem('fpEmail');
-          const base = tenantSlug ? `/${tenantSlug}` : '';
-          router.push(`${base}/login`);
+          router.push(`/${tenantSlug}/login`);
+        },
+        onError: (err) => {
+          setError('root', { message: extractError(err) });
         },
       },
     );
   };
+
+  if (!token) {
+    return (
+      <div className="w-full max-w-sm px-8 py-10 text-center">
+        <div className="flex justify-center mb-6">
+          <AppLogo />
+        </div>
+        <h1 className="text-xl font-semibold text-red-600">Invalid Link</h1>
+        <p className="text-gray-500 mt-2 text-sm">
+          This invitation link is invalid or has expired.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-sm px-8 py-10">
@@ -58,21 +75,19 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
         <AppLogo />
       </div>
 
-      <h1 className="text-2xl font-semibold text-gray-900 text-center mb-2">
-        Set Your New Password
-      </h1>
+      <h1 className="text-2xl font-semibold text-gray-900 text-center mb-2">Set Your Password</h1>
       <p className="text-sm text-gray-500 text-center mb-6">
-        For security reasons, you must create a new password before accessing your workspace.
+        Create a password to access your WorkPhelo account.
       </p>
 
-      <form onSubmit={handleSubmit(handleReset)} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit(handleSetPassword)} className="flex flex-col gap-4">
         <div>
           <FormField
             label="Password"
             registration={register('password', { required: 'Password is required' })}
             error={errors.password}
             type="password"
-            placeholder="Create new password"
+            placeholder="Create a password"
           />
           {/* Validation checklist */}
           <ul className="mt-2 flex flex-col gap-1">
@@ -92,23 +107,25 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
         </div>
 
         <FormField
-          label="Confirm New Password"
+          label="Confirm Password"
           registration={register('confirmPassword', {
             required: 'Please confirm your password',
             validate: (v) => v === password || 'Passwords do not match',
           })}
           error={errors.confirmPassword}
           type="password"
-          placeholder="Re-enter new password"
+          placeholder="Re-enter your password"
         />
+
+        {errors.root && <p className="text-sm text-red-500">{errors.root.message}</p>}
 
         <Button
           type="submit"
           isLoading={isPending}
-          loadingText="Updating..."
+          loadingText="Setting password..."
           className="w-full mt-1"
         >
-          Update Password
+          Set Password
         </Button>
       </form>
     </div>

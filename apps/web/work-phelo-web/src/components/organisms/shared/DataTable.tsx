@@ -52,11 +52,7 @@ function ThreeDotMenu({ actions, isNearBottom }: { actions: RowAction[]; isNearB
         onClick={() => setOpen((v) => !v)}
         className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-          <circle cx="12" cy="5" r="1.5" />
-          <circle cx="12" cy="12" r="1.5" />
-          <circle cx="12" cy="19" r="1.5" />
-        </svg>
+        <Icons.EllipsisVertical />
       </button>
 
       {open && (
@@ -191,17 +187,34 @@ export function DataTable<T extends { id: string | number }>({
         {/* Rows */}
         <div className="overflow-y-auto flex-1">
           {isLoading ? (
-            <div className="flex flex-1 items-center justify-center text-sm text-gray-400">
-              Loading...
+            <div
+              className="flex-1 min-h-200
+             flex items-center justify-center  border-gray-200 rounded-card"
+            >
+              <div className="flex flex-col items-center gap-4">
+                {/* Spinner */}
+                <div className="w-8 h-8 border-4 border-gray-100 border-t-[#0D2244] rounded-full animate-spin" />
+
+                {/* Text */}
+                <p className="text-sm text-gray-500 font-medium tracking-wide">Loading...</p>
+              </div>
             </div>
           ) : data.length === 0 ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-10">
-              {emptyImage ?? (
-                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
-                  <NoSearchLogo />
+            <div className="flex-1 min-h-200 flex items-center justify-center  border-gray-200 rounded-card">
+              <div className="flex flex-col items-center gap-5 text-center px-6">
+                {emptyImage ?? (
+                  <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-gray-300">
+                    <NoSearchLogo />
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-base font-medium text-gray-600 mb-1">{emptyMessage}</p>
+                  {emptyMessage.includes('found') && (
+                    <p className="text-sm text-gray-400">Try adjusting your search or filters</p>
+                  )}
                 </div>
-              )}
-              <p className="text-sm text-gray-400">{emptyMessage}</p>
+              </div>
             </div>
           ) : (
             data.map((row, rowIndex) => (
