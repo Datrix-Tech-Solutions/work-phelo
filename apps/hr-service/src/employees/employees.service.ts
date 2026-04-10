@@ -251,6 +251,7 @@ export class EmployeesService {
       employeeId,
       email: employee.email,
       firstName: employee.firstName,
+      lastName: employee.lastName,
     });
 
     return { message: 'Invitation resent successfully' };

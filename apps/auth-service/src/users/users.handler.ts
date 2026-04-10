@@ -43,6 +43,7 @@ export class UsersHandler {
       employeeId: string;
       email: string;
       firstName: string;
+      lastName?: string;
     },
   ) {
     this.logger.log(`Resending employee invite for ${data.email}`);
@@ -52,9 +53,17 @@ export class UsersHandler {
         data.email,
       );
       if (!user) {
+        // User was never created (original invite was lost) — create fresh
         this.logger.warn(
-          `No user found for ${data.email} — cannot resend invite`,
+          `No user found for ${data.email} — sending fresh invite`,
         );
+        await this.usersService.invite(data.tenantId, {
+          email: data.email,
+          firstName: data.firstName,
+          lastName: data.lastName ?? '',
+          role: 'EMPLOYEE' as any,
+        });
+        this.logger.log(`Fresh invite sent to ${data.email}`);
         return;
       }
       await this.usersService.resendInvite(data.tenantId, user.id);
