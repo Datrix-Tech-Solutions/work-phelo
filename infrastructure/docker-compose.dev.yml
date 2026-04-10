@@ -17,24 +17,6 @@ services:
       timeout: 5s
       retries: 5
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: erp-rabbitmq
-    restart: unless-stopped
-    ports:
-      - '127.0.0.1:5672:5672'
-      - '127.0.0.1:15672:15672'
-    environment:
-      RABBITMQ_DEFAULT_USER: erp
-      RABBITMQ_DEFAULT_PASS: erppassword
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ['CMD', 'rabbitmq-diagnostics', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   redis:
     image: redis:7-alpine
     container_name: erp-redis
@@ -56,8 +38,6 @@ services:
     env_file:
       - ../apps/api-gateway/.env
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -71,8 +51,6 @@ services:
       - ../apps/auth-service/.env
     depends_on:
       postgres:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -88,8 +66,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -102,8 +78,6 @@ services:
     env_file:
       - ../apps/notification-service/.env
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -115,10 +89,6 @@ services:
       - '127.0.0.1:4005:4005'
     env_file:
       - ../apps/subscription-service/.env
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-
   marketing-service:
     image: ghcr.io/datrix-tech-solutions/work-phelo/marketing-service:dev
     container_name: erp-marketing-dev
@@ -128,8 +98,6 @@ services:
     env_file:
       - ../apps/marketing-service/.env
     depends_on:
-      rabbitmq:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -145,5 +113,4 @@ services:
 
 volumes:
   postgres_data:
-  rabbitmq_data:
   redis_data:

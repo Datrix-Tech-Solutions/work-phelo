@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { NotificationType } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../channels/email.service';
 import { SmsService } from '../channels/sms.service';
@@ -13,6 +14,17 @@ export class NotificationService {
     private readonly sms: SmsService,
   ) {}
 
+  private async isDuplicate(
+    recipient: string,
+    type: NotificationType,
+  ): Promise<boolean> {
+    const since = new Date(Date.now() - 2 * 60 * 1000);
+    const existing = await this.prisma.notificationLog.findFirst({
+      where: { recipient, type, status: 'SENT', sentAt: { gt: since } },
+    });
+    return !!existing;
+  }
+
   async sendEmailVerification(data: {
     userId?: string;
     tenantId?: string;
@@ -21,6 +33,14 @@ export class NotificationService {
     otp: string;
     tenantName?: string;
   }) {
+    if (
+      await this.isDuplicate(data.email, NotificationType.EMAIL_VERIFICATION)
+    ) {
+      this.logger.warn(
+        `Duplicate EMAIL_VERIFICATION suppressed for ${data.email}`,
+      );
+      return;
+    }
     const success = await this.email.sendEmailVerificationOtp(
       data.email,
       data.firstName,
@@ -46,6 +66,10 @@ export class NotificationService {
     acceptInviteUrl: string;
     tenantName: string;
   }) {
+    if (await this.isDuplicate(data.email, NotificationType.INVITE_USER)) {
+      this.logger.warn(`Duplicate INVITE_USER suppressed for ${data.email}`);
+      return;
+    }
     // Use workspace-aware URL built by auth service
     const success = await this.email.sendInviteEmail(
       data.email,
@@ -70,13 +94,22 @@ export class NotificationService {
     email: string;
     firstName: string;
     resetLink: string;
+    otpCode?: string;
     tenantName?: string;
   }) {
-    // Use workspace-aware URL built by auth service
+    if (
+      await this.isDuplicate(data.email, NotificationType.PASSWORD_RESET_LINK)
+    ) {
+      this.logger.warn(
+        `Duplicate PASSWORD_RESET_LINK suppressed for ${data.email}`,
+      );
+      return;
+    }
     const success = await this.email.sendPasswordResetLink(
       data.email,
       data.firstName,
       data.resetLink,
+      data.otpCode,
     );
     await this.log({
       userId: data.userId ?? 'system',
@@ -98,6 +131,14 @@ export class NotificationService {
     otp: string;
   }) {
     const recipient = data.email ?? data.phone ?? 'unknown';
+    if (
+      await this.isDuplicate(recipient, NotificationType.PASSWORD_RESET_OTP)
+    ) {
+      this.logger.warn(
+        `Duplicate PASSWORD_RESET_OTP suppressed for ${recipient}`,
+      );
+      return;
+    }
     const success = data.email
       ? await this.email.sendPasswordResetLink(
           data.email,
@@ -123,6 +164,10 @@ export class NotificationService {
     otp: string;
     context: string;
   }) {
+    if (await this.isDuplicate(data.phone, NotificationType.SMS_OTP)) {
+      this.logger.warn(`Duplicate SMS_OTP suppressed for ${data.phone}`);
+      return;
+    }
     const success = await this.sms.sendOtp(data.phone, data.otp, data.context);
     await this.log({
       userId: data.userId ?? 'system',

@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
 
@@ -28,6 +29,25 @@ async function bootstrap() {
 
   setupSwagger(app);
 
+  app.connectMicroservice<MicroserviceOptions>({
+    transport: Transport.RMQ,
+    options: {
+      urls: [
+        process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
+      ],
+      queue: 'hr_queue',
+      queueOptions: {
+        durable: true,
+        arguments: {
+          'x-message-ttl': 3600000,
+          'x-dead-letter-exchange': 'workphelo.dlx',
+          'x-dead-letter-routing-key': 'hr_queue',
+        },
+      },
+    },
+  });
+
+  await app.startAllMicroservices();
   const port = process.env.PORT || 4002;
   await app.listen(port);
   console.log(`HR service running on port ${port}`);

@@ -11,16 +11,27 @@ export class RabbitMQPublisher {
     @Inject('AUTH_SERVICE') private readonly authClient: ClientProxy,
   ) {}
 
-  emit(pattern: string, data: any) {
-    this.notificationClient.emit(pattern, data).subscribe({
-      error: (err) => this.logger.error(`Failed to emit event ${pattern}`, err),
+  emit(pattern: string, data: any): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.notificationClient.emit(pattern, data).subscribe({
+        complete: () => resolve(),
+        error: (err) => {
+          this.logger.error(`Failed to emit event ${pattern}`, err);
+          reject(err);
+        },
+      });
     });
   }
 
-  emitToAuth(pattern: string, data: any) {
-    this.authClient.emit(pattern, data).subscribe({
-      error: (err) =>
-        this.logger.error(`Failed to emit auth event ${pattern}`, err),
+  emitToAuth(pattern: string, data: any): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.authClient.emit(pattern, data).subscribe({
+        complete: () => resolve(),
+        error: (err) => {
+          this.logger.error(`Failed to emit auth event ${pattern}`, err);
+          reject(err);
+        },
+      });
     });
   }
 }

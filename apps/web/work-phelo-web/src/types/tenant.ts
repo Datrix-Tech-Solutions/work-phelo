@@ -11,6 +11,8 @@ export interface Tenant {
   size?: string;
   status: TenantStatus;
   createdAt: string;
+  moduleConfig?: Record<string, boolean>;
+  featureConfig?: Record<string, Record<string, boolean>>;
 }
 
 export interface RegisterTenantPayload {

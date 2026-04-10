@@ -23,7 +23,9 @@ import {
   ApiQuery,
   ApiBody,
 } from '@nestjs/swagger';
-import { TenantsService } from './tenants.service';
+import { TenantLifecycleService } from './tenant-lifecycle.service';
+import { TenantConfigService } from './tenant-config.service';
+import { TenantAdminService } from './tenant-admin.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
@@ -34,7 +36,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @ApiTags('Tenants')
 @Controller('tenants')
 export class TenantsController {
-  constructor(private readonly tenantsService: TenantsService) {}
+  constructor(
+    private readonly lifecycle: TenantLifecycleService,
+    private readonly config: TenantConfigService,
+    private readonly admin: TenantAdminService,
+  ) {}
 
   @Post('register')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -76,7 +82,7 @@ export class TenantsController {
     },
   })
   register(@Body() dto: CreateTenantDto) {
-    return this.tenantsService.register(dto);
+    return this.lifecycle.register(dto);
   }
 
   @Get()
@@ -99,7 +105,7 @@ export class TenantsController {
   ) {
     const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
     const tenantId = isSuperAdmin ? undefined : req.user?.tenantId;
-    return this.tenantsService.findAll({ status, search, tenantId });
+    return this.lifecycle.findAll({ status, search, tenantId });
   }
 
   @Get(':id/users')
@@ -109,7 +115,7 @@ export class TenantsController {
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
   getTenantUsers(@Param('id') id: string) {
-    return this.tenantsService.getTenantUsers(id);
+    return this.lifecycle.getTenantUsers(id);
   }
 
   @Get(':id/audit')
@@ -128,7 +134,7 @@ export class TenantsController {
     @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
-    return this.tenantsService.getTenantAuditLogs(id, { page, limit });
+    return this.lifecycle.getTenantAuditLogs(id, { page, limit });
   }
 
   @Get(':id')
@@ -140,7 +146,7 @@ export class TenantsController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   findOne(@Param('id') id: string) {
-    return this.tenantsService.findById(id);
+    return this.lifecycle.findById(id);
   }
 
   @Patch(':id')
@@ -151,7 +157,7 @@ export class TenantsController {
   @ApiResponse({ status: 200, description: 'Tenant updated successfully' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   update(@Param('id') id: string, @Body() dto: UpdateTenantDto) {
-    return this.tenantsService.updateTenant(id, dto);
+    return this.lifecycle.updateTenant(id, dto);
   }
 
   @Patch(':id/admin')
@@ -165,7 +171,7 @@ export class TenantsController {
   })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   updateAdmin(@Param('id') id: string, @Body() dto: UpdateTenantAdminDto) {
-    return this.tenantsService.updateTenantAdmin(id, dto);
+    return this.admin.updateTenantAdmin(id, dto);
   }
 
   @Patch(':id/approve')
@@ -177,7 +183,7 @@ export class TenantsController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   approve(@Param('id') id: string) {
-    return this.tenantsService.approveTenant(id);
+    return this.lifecycle.approveTenant(id);
   }
 
   @Patch(':id/deactivate')
@@ -189,7 +195,7 @@ export class TenantsController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   deactivate(@Param('id') id: string) {
-    return this.tenantsService.deactivateTenant(id);
+    return this.lifecycle.deactivateTenant(id);
   }
 
   @Patch(':id/suspend')
@@ -201,7 +207,7 @@ export class TenantsController {
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   suspend(@Param('id') id: string) {
-    return this.tenantsService.suspendTenant(id);
+    return this.lifecycle.suspendTenant(id);
   }
 
   @Delete(':id')
@@ -214,7 +220,7 @@ export class TenantsController {
   @ApiResponse({ status: 200, description: 'Company deleted successfully' })
   @ApiResponse({ status: 404, description: 'Tenant not found' })
   deleteTenant(@Param('id') id: string) {
-    return this.tenantsService.deleteTenant(id);
+    return this.lifecycle.deleteTenant(id);
   }
 
   @Patch(':id/modules')
@@ -234,7 +240,7 @@ export class TenantsController {
     @Body() dto: Record<string, boolean>,
     @Req() req: any,
   ) {
-    return this.tenantsService.updateModules(id, dto, req.user.id);
+    return this.config.updateModules(id, dto, req.user.id);
   }
 
   @Patch(':id/features')
@@ -263,7 +269,7 @@ export class TenantsController {
     @Body() dto: { module: string; features: Record<string, boolean> },
     @Req() req: any,
   ) {
-    return this.tenantsService.updateFeatures(
+    return this.config.updateFeatures(
       id,
       dto.module,
       dto.features,
@@ -280,7 +286,7 @@ export class TenantsController {
   @ApiParam({ name: 'id', description: 'Tenant ID' })
   @ApiResponse({ status: 200, description: 'Feature history returned' })
   getFeatureHistory(@Param('id') id: string) {
-    return this.tenantsService.getFeatureHistory(id);
+    return this.config.getFeatureHistory(id);
   }
 
   @Post(':id/admin/resend-invite')
@@ -295,6 +301,6 @@ export class TenantsController {
     description: 'No pending admin found for this company',
   })
   async resendAdminInvite(@Param('id') tenantId: string) {
-    return this.tenantsService.resendAdminInvite(tenantId);
+    return this.admin.resendAdminInvite(tenantId);
   }
 }

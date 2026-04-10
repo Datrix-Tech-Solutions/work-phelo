@@ -356,7 +356,7 @@ export class AuthService {
       },
     });
 
-    this.rabbitmq.sendEmailVerification({
+    void this.rabbitmq.sendEmailVerification({
       userId: user.id,
       tenantId: user.tenantId,
       email: user.email,
@@ -482,6 +482,7 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         resetLink,
+        otpCode: code,
         tenantName: tenant.name,
       });
     }
@@ -723,7 +724,7 @@ export class AuthService {
       },
     });
 
-    this.rabbitmq.sendSmsOtp({
+    void this.rabbitmq.sendSmsOtp({
       userId: user.id,
       tenantId: user.tenantId,
       phone: user.phone,

@@ -7,25 +7,44 @@ export class RabbitMQPublisher {
 
   constructor(
     @Inject('NOTIFICATION_SERVICE') private readonly client: ClientProxy,
+    @Inject('HR_SERVICE') private readonly hrClient: ClientProxy,
   ) {}
 
-  emit(pattern: string, data: any) {
-    this.client.emit(pattern, data).subscribe({
-      error: (err) => this.logger.error(`Failed to emit event ${pattern}`, err),
+  emit(pattern: string, data: any): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.client.emit(pattern, data).subscribe({
+        complete: () => resolve(),
+        error: (err) => {
+          this.logger.error(`Failed to emit event ${pattern}`, err);
+          reject(err);
+        },
+      });
     });
   }
 
-  sendEmailVerification(data: {
+  emitToHr(pattern: string, data: any): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.hrClient.emit(pattern, data).subscribe({
+        complete: () => resolve(),
+        error: (err) => {
+          this.logger.error(`Failed to emit HR event ${pattern}`, err);
+          reject(err);
+        },
+      });
+    });
+  }
+
+  async sendEmailVerification(data: {
     userId: string;
     tenantId: string;
     email: string;
     firstName: string;
     otp: string;
   }) {
-    this.emit('notification.email_verification', data);
+    return this.emit('notification.email_verification', data);
   }
 
-  sendInviteEmail(data: {
+  async sendInviteEmail(data: {
     userId: string;
     tenantId: string;
     email: string;
@@ -34,36 +53,36 @@ export class RabbitMQPublisher {
     acceptInviteUrl: string;
     tenantName: string;
   }) {
-    this.emit('notification.invite_user', data);
+    return this.emit('notification.invite_user', data);
   }
 
-  sendPasswordResetLink(data: {
+  async sendPasswordResetLink(data: {
     userId: string;
     tenantId: string;
     email: string;
     firstName: string;
     resetToken: string;
   }) {
-    this.emit('notification.password_reset_link', data);
+    return this.emit('notification.password_reset_link', data);
   }
 
-  sendPasswordResetOtp(data: {
+  async sendPasswordResetOtp(data: {
     userId: string;
     tenantId: string;
     email: string;
     firstName: string;
     otp: string;
   }) {
-    this.emit('notification.password_reset_otp', data);
+    return this.emit('notification.password_reset_otp', data);
   }
 
-  sendSmsOtp(data: {
+  async sendSmsOtp(data: {
     userId: string;
     tenantId: string;
     phone: string;
     otp: string;
     context: string;
   }) {
-    this.emit('notification.sms_otp', data);
+    return this.emit('notification.sms_otp', data);
   }
 }

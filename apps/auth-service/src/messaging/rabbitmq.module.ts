@@ -15,7 +15,29 @@ import { RabbitMQPublisher } from './rabbitmq.publisher';
           queue: 'notification_queue',
           queueOptions: {
             durable: true,
-            arguments: { 'x-message-ttl': 3600000 },
+            arguments: {
+              'x-message-ttl': 3600000,
+              'x-dead-letter-exchange': 'workphelo.dlx',
+              'x-dead-letter-routing-key': 'notification_queue',
+            },
+          },
+        },
+      },
+      {
+        name: 'HR_SERVICE',
+        transport: Transport.RMQ,
+        options: {
+          urls: [
+            process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
+          ],
+          queue: 'hr_queue',
+          queueOptions: {
+            durable: true,
+            arguments: {
+              'x-message-ttl': 3600000,
+              'x-dead-letter-exchange': 'workphelo.dlx',
+              'x-dead-letter-routing-key': 'hr_queue',
+            },
           },
         },
       },
