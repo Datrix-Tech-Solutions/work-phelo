@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
 import { Button } from '@/components/atoms/Button';
 import { formatDate } from '@/lib/formatters';
@@ -21,7 +22,7 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
 
   const { data: myData, isLoading } = useQuery({
     queryKey: ['my-appraisals'],
-    queryFn: () => api.get('/hr/appraisals/my').then((r) => r.data),
+    queryFn: () => api.get('/hr/appraisals/my').then((r: { data: any }) => r.data),
   });
 
   const myRows = useMemo(() => {
@@ -41,7 +42,7 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
   const filteredRows = useMemo(() => {
     if (!search) return myRows;
     const q = search.toLowerCase();
-    return myRows.filter((r) => r.cycleName.toLowerCase().includes(q));
+    return myRows.filter((r: (typeof myRows)[0]) => r.cycleName.toLowerCase().includes(q));
   }, [myRows, search]);
 
   const pageData = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

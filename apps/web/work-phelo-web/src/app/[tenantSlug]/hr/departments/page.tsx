@@ -35,6 +35,10 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const { mutate: updateDeptMutate, isPending: isEditing } = useUpdateDepartment();
   const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
 
+  const handleAddMembers = async (departmentId: string, employeeIds: string[]) => {
+    await Promise.all(employeeIds.map((id) => updateEmployeeAsync({ id, departmentId })));
+  };
+
   const openCreate = () => setCreateOpen(true);
 
   const openEdit = (dept: any) => setEditTarget(dept);
@@ -72,7 +76,7 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
         onClose={() => setMembersTarget(null)}
         department={membersTarget}
         employees={employees}
-        onAddMembers={updateEmployeeAsync}
+        onAddMembers={handleAddMembers}
       />
 
       <SuccessModal

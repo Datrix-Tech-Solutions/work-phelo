@@ -61,6 +61,7 @@ export interface Employee {
   statusChangedByEmail?: string;
   offboardedAt?: string;
   createdAt?: string;
+  assets?: any[];
 }
 
 export interface UpdateEmployeePayload {

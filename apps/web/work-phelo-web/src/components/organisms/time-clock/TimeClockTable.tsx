@@ -31,7 +31,7 @@ export function TimeClockTabs({ activeTab, isManager, pendingCount, onTabChange 
       {tabs.map((tab) => (
         <button
           key={tab.key}
-          onClick={() => onTabChange(tab.key)}
+          onClick={() => onTabChange(tab.key as 'my' | 'live' | 'records' | 'corrections')}
           className={cn(
             'relative px-6 py-3 text-sm transition-colors whitespace-nowrap',
             activeTab === tab.key ? TAB_ACTIVE : TAB_IDLE,

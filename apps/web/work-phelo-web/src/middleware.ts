@@ -31,7 +31,19 @@ export function middleware(request: NextRequest) {
 
   // Redirect to login if no token
   if (!accessToken) {
-    const loginUrl = new URL('/login', request.url);
+    let loginPath = '/login';
+
+    if (pathname.startsWith('/platform')) {
+      loginPath = '/platform/login';
+    } else {
+      // Extract tenantSlug from /:tenantSlug/...
+      const tenantMatch = pathname.match(/^\/([^/]+)\//);
+      if (tenantMatch) {
+        loginPath = `/${tenantMatch[1]}/login`;
+      }
+    }
+
+    const loginUrl = new URL(loginPath, request.url);
     return NextResponse.redirect(loginUrl);
   }
 

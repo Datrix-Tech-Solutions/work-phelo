@@ -33,6 +33,7 @@ import {
   Upload,
   PlusIcon,
   ListFilter,
+  EllipsisVertical,
 } from 'lucide-react';
 
 export const Icons = {
@@ -54,6 +55,7 @@ export const Icons = {
   Upload,
   PlusIcon,
   ListFilter,
+  EllipsisVertical,
 
   // Time & Status
   Clock,
