@@ -10,11 +10,10 @@ export class RabbitMQSetupService implements OnModuleInit {
   async onModuleInit() {
     const url =
       process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672';
-    let connection: amqp.Connection | null = null;
+    let connection: Awaited<ReturnType<typeof amqp.connect>> | undefined;
     try {
       connection = await amqp.connect(url);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-      const channel: amqp.Channel = await connection.createChannel();
+      const channel = await connection.createChannel();
 
       await channel.assertExchange(DLX, 'direct', { durable: true });
 
@@ -30,8 +29,7 @@ export class RabbitMQSetupService implements OnModuleInit {
     } catch (err) {
       this.logger.error('Failed to set up RabbitMQ DLX/DLQs', err);
     } finally {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      if (connection) await connection.close();
+      await connection?.close();
     }
   }
 }
