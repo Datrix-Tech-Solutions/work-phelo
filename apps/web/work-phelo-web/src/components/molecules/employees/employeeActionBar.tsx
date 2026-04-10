@@ -4,6 +4,8 @@ import { Icons } from '@/lib/icons';
 interface EmployeeActionsBarProps {
   isPendingInvite: boolean;
   isOffboarded: boolean;
+  resendInvite: () => void;
+  isResending?: boolean;
   onAssignAsset: () => void;
   onOffboard: () => void;
   onEdit: () => void;
@@ -12,6 +14,8 @@ interface EmployeeActionsBarProps {
 export function EmployeeActionsBar({
   isPendingInvite,
   isOffboarded,
+  resendInvite,
+  isResending,
   onAssignAsset,
   onOffboard,
   onEdit,
@@ -19,7 +23,13 @@ export function EmployeeActionsBar({
   return (
     <div className="flex items-center justify-end gap-3">
       {isPendingInvite ? (
-        <Button variant="outline" size="sm">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={resendInvite}
+          isLoading={isResending}
+          loadingText="Sending..."
+        >
           Resend Invite
         </Button>
       ) : !isOffboarded ? (
