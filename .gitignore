@@ -52,3 +52,4 @@ packages/*/src/*.d.ts.map
 # Prisma generated clients
 **/prisma/generated/
 CLAUDE.md
+HOME

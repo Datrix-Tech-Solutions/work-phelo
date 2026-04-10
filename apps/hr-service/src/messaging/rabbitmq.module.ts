@@ -1,4 +1,5 @@
 import { LeaveModule } from '../leave/leave.module';
+import { PrismaModule } from '../prisma/prisma.module';
 import { Module } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RabbitMQPublisher } from './rabbitmq.publisher';
@@ -7,6 +8,7 @@ import { EventsHandler } from './events.handler';
 @Module({
   imports: [
     LeaveModule,
+    PrismaModule,
     ClientsModule.register([
       {
         name: 'NOTIFICATION_SERVICE',
@@ -18,7 +20,11 @@ import { EventsHandler } from './events.handler';
           queue: 'notification_queue',
           queueOptions: {
             durable: true,
-            arguments: { 'x-message-ttl': 3600000 },
+            arguments: {
+              'x-message-ttl': 3600000,
+              'x-dead-letter-exchange': 'workphelo.dlx',
+              'x-dead-letter-routing-key': 'notification_queue',
+            },
           },
         },
       },
@@ -32,12 +38,17 @@ import { EventsHandler } from './events.handler';
           queue: 'auth_queue',
           queueOptions: {
             durable: true,
-            arguments: { 'x-message-ttl': 3600000 },
+            arguments: {
+              'x-message-ttl': 3600000,
+              'x-dead-letter-exchange': 'workphelo.dlx',
+              'x-dead-letter-routing-key': 'auth_queue',
+            },
           },
         },
       },
     ]),
   ],
+  controllers: [EventsHandler],
   providers: [RabbitMQPublisher],
   exports: [RabbitMQPublisher],
 })

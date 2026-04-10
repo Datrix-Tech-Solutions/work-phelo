@@ -29,4 +29,4 @@ async function bootstrap() {
   console.log(`HR Service:    ${process.env.HR_SERVICE_URL}`);
 }
 
-bootstrap();
+void bootstrap();

@@ -4,21 +4,32 @@ export enum RoleType {
   EMPLOYEE = 'EMPLOYEE',
 }
 
-export interface User {
-  id: string;
-  tenantId: string;
-  email: string;
-  roleType: RoleType;
-  isActive: boolean;
-  mfaEnabled: boolean;
-}
-
+/** Shape of the JWT payload issued by the auth service */
 export interface JwtPayload {
   sub: string;
+  email: string;
+  role: string;
   tenantId: string;
   tenantSlug: string;
-  roleType: RoleType;
-  permissions: string[];
+  tenantName?: string;
+  firstName?: string;
+  companyRoleId?: string | null;
+  moduleConfig?: Record<string, boolean>;
+  featureConfig?: Record<string, Record<string, boolean>>;
   iat?: number;
   exp?: number;
+}
+
+/** Shape of request.user after JWT validation in any service */
+export interface RequestUser {
+  id: string;
+  email: string;
+  role: string;
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+  firstName: string;
+  companyRoleId: string | null;
+  moduleConfig: Record<string, boolean>;
+  featureConfig: Record<string, Record<string, boolean>>;
 }

@@ -15,9 +15,12 @@ async function bootstrap() {
         durable: true,
         arguments: {
           'x-message-ttl': 3600000,
+          'x-dead-letter-exchange': 'workphelo.dlx',
+          'x-dead-letter-routing-key': 'notification_queue',
         },
       },
-      noAck: false,
+      noAck: true,
+      prefetchCount: 10,
     },
   });
   app.setGlobalPrefix('api');

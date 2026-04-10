@@ -15,6 +15,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
+import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { FeatureGuard } from './auth/guards/feature.guard';
     NotificationsModule,
   ],
   providers: [
+    RabbitMQSetupService,
     ModuleGuard,
     FeatureGuard,
     {

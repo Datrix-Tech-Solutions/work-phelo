@@ -80,7 +80,8 @@ export function useForgotPassword() {
 export function useResetPassword() {
   return useMutation({
     mutationFn: async (payload: {
-      otpCode: string;
+      token?: string;
+      otpCode?: string;
       newPassword: string;
       email?: string;
       tenantSlug?: string;
