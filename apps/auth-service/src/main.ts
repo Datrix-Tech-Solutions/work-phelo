@@ -45,6 +45,8 @@ async function bootstrap() {
           'x-dead-letter-routing-key': 'auth_queue',
         },
       },
+      noAck: true,
+      prefetchCount: 10,
     },
   });
 
