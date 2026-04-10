@@ -1,7 +1,5 @@
 'use client';
 
-'use client';
-
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';

@@ -1,4 +1,3 @@
-// components/molecules/AnnouncementCard.tsx
 'use client';
 
 import { useState } from 'react';

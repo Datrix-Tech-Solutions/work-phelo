@@ -1,4 +1,3 @@
-// components/RecordsSection.tsx
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { formatDate, formatMinutes } from '@/lib/formatters';

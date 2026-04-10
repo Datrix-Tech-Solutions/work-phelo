@@ -12,74 +12,13 @@ import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { AddCompanyForm } from '@/components/organisms/superadmin/AddCompanyForm';
 import { useAuthStore } from '@/store/auth.store';
 import { Company } from '@/types/tenant';
+import { Building2, CalendarPlus, ShieldCheck, ShieldX } from 'lucide-react';
 
 /* ── Icons ── */
-const TotalCompaniesIcon = () => (
-  <svg
-    width="22"
-    height="22"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
-const ActiveIcon = () => (
-  <svg
-    width="22"
-    height="22"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-  </svg>
-);
-const InactiveIcon = () => (
-  <svg
-    width="22"
-    height="22"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-    <circle cx="12" cy="7" r="4" />
-    <line x1="18" y1="8" x2="23" y2="13" />
-    <line x1="23" y1="8" x2="18" y2="13" />
-  </svg>
-);
-const CalendarIcon = () => (
-  <svg
-    width="22"
-    height="22"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-    <line x1="16" y1="2" x2="16" y2="6" />
-    <line x1="8" y1="2" x2="8" y2="6" />
-    <line x1="3" y1="10" x2="21" y2="10" />
-  </svg>
-);
+const TotalCompaniesIcon = () => <Building2 />;
+const ActiveIcon = () => <ShieldCheck />;
+const InactiveIcon = () => <ShieldX />;
+const CalendarIcon = () => <CalendarPlus />;
 
 const PAGE_SIZE = 7;
 

@@ -91,7 +91,7 @@ export function AddMembersPanel({ isOpen, onClose, department, employees, onAddM
       </div>
 
       {/* Employee List */}
-      <div className="flex flex-col divide-y divide-gray-100 -mx-6 px-6 max-h-[420px] overflow-y-auto">
+      <div className="flex flex-col divide-y divide-gray-100 -mx-6 px-6 max-h-105 overflow-y-auto">
         {filteredEmployees.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No employees found</p>
         ) : (

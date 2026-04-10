@@ -1,4 +1,3 @@
-// components/CorrectionsSection.tsx
 import { Badge } from '@/components/atoms/Badge';
 import { formatDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
