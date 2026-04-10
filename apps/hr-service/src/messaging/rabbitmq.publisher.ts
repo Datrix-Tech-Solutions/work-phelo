@@ -17,7 +17,7 @@ export class RabbitMQPublisher {
         complete: () => resolve(),
         error: (err) => {
           this.logger.error(`Failed to emit event ${pattern}`, err);
-          reject(err);
+          reject(err instanceof Error ? err : new Error(String(err)));
         },
       });
     });
@@ -29,7 +29,7 @@ export class RabbitMQPublisher {
         complete: () => resolve(),
         error: (err) => {
           this.logger.error(`Failed to emit auth event ${pattern}`, err);
-          reject(err);
+          reject(err instanceof Error ? err : new Error(String(err)));
         },
       });
     });
