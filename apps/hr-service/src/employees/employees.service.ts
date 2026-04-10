@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
@@ -15,6 +16,8 @@ import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 
 @Injectable()
 export class EmployeesService {
+  private readonly logger = new Logger(EmployeesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
@@ -78,13 +81,24 @@ export class EmployeesService {
     });
 
     // Fire-and-forget — HR returns immediately, auth handles invite async
-    void this.rabbitmq.emitToAuth('auth.invite_employee', {
-      tenantId,
-      employeeId: employee.id,
-      email: employee.email,
-      firstName: employee.firstName,
-      lastName: employee.lastName,
-    });
+    this.logger.log(`Emitting auth.invite_employee for ${employee.email}`);
+    void this.rabbitmq
+      .emitToAuth('auth.invite_employee', {
+        tenantId,
+        employeeId: employee.id,
+        email: employee.email,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+      })
+      .then(() =>
+        this.logger.log(`auth.invite_employee emitted for ${employee.email}`),
+      )
+      .catch((err) =>
+        this.logger.error(
+          `Failed to emit auth.invite_employee for ${employee.email}`,
+          err,
+        ),
+      );
 
     return employee;
   }
