@@ -13,7 +13,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/lib/assetIcons';
-import { Asset, AssetStatus, AssetCondition } from '@/types/asset';
+import { Asset } from '@/types/asset';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 
 /* ── Types ── */

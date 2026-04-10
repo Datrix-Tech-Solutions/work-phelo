@@ -83,8 +83,8 @@ export function ClockInWidget({
   // Session duration — counts up from clock-in time
   useEffect(() => {
     if (!session?.clockIn || session.status === 'CLOCKED_OUT') {
-      setSessionMs(0);
-      return;
+      const id = setTimeout(() => setSessionMs(0), 0);
+      return () => clearTimeout(id);
     }
     const start = new Date(session.clockIn).getTime();
     const update = () => setSessionMs(Date.now() - start);

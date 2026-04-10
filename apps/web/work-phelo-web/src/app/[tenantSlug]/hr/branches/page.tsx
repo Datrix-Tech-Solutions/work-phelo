@@ -69,7 +69,7 @@ export default function BranchesPage() {
 
   const { data: branches = [], isLoading } = useBranches();
   const { data: empResult } = useEmployees({ limit: 500 });
-  const employees: Employee[] = empResult?.data ?? [];
+  const employees: Employee[] = useMemo(() => empResult?.data ?? [], [empResult?.data]);
 
   const employeeMap = useMemo(() => {
     const map = new Map<string, Employee>();

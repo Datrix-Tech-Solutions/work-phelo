@@ -14,11 +14,6 @@ import { useDeletePublicHoliday } from '@/hooks/usePublicHolidays';
 import { PublicHoliday } from '@/types/leave';
 import { formatDate } from '@/lib/formatters';
 
-function daysBetween(start: string, end: string) {
-  const diff = new Date(end).getTime() - new Date(start).getTime();
-  return Math.round(diff / (1000 * 60 * 60 * 24)) + 1;
-}
-
 export default function PublicHolidaysPage({
   params,
 }: {
@@ -127,8 +122,11 @@ export default function PublicHolidaysPage({
                     toast.success('Holiday deleted');
                     setDeleteTarget(null);
                   },
-                  onError: (err: any) =>
-                    toast.error(err?.response?.data?.message ?? 'Something went wrong'),
+                  onError: (err: unknown) =>
+                    toast.error(
+                      (err as { response?: { data?: { message?: string } } })?.response?.data
+                        ?.message ?? 'Something went wrong',
+                    ),
                 })
               }
             >

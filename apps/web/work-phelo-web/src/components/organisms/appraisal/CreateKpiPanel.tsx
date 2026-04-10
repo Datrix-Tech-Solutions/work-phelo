@@ -33,7 +33,6 @@ type FormValues = {
 export function CreateKpiPanel({
   isOpen,
   onClose,
-  tenantSlug,
   cycleId,
   editKpi,
   usedWeight,

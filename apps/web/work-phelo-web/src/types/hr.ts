@@ -61,7 +61,7 @@ export interface Employee {
   statusChangedByEmail?: string;
   offboardedAt?: string;
   createdAt?: string;
-  assets?: any[];
+  assets?: object[];
 }
 
 export interface UpdateEmployeePayload {
@@ -115,7 +115,7 @@ export interface CreateEmployeePayload {
 }
 
 export interface LeaveType {
-  maxCarryOverDays: any;
+  maxCarryOverDays: number | null;
   id: string;
   name: string;
   daysAllowed: number;

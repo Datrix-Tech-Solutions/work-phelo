@@ -1,8 +1,9 @@
 import Image from 'next/image';
 import { DetailField } from '../payroll/DetailField';
+import type { Employee } from '@/types/hr';
 
 interface EmployeeProfileCardProps {
-  employee: any;
+  employee: Employee;
 }
 
 export function EmployeeProfileCard({ employee }: EmployeeProfileCardProps) {

@@ -3,9 +3,10 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { formatDate, formatMinutes } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
+import type { TimeEntry } from '@/types/timeclock';
 
 interface Props {
-  recordsData: any;
+  recordsData: { data?: TimeEntry[]; totalPages?: number } | undefined;
   recordsLoading: boolean;
   recordsPage: number;
   onRecordsPageChange: (page: number) => void;
@@ -19,7 +20,7 @@ interface Props {
   onFilterDeptChange: (v: string) => void;
   onFilterStatusChange: (v: string) => void;
   onRecordsSearchChange: (v: string) => void;
-  departments: any[];
+  departments: { id: string; name: string }[];
 }
 
 export function RecordsSection({
@@ -41,7 +42,7 @@ export function RecordsSection({
   const recordsList = recordsData?.data ?? [];
   const recordsTotalPages = recordsData?.totalPages ?? 1;
 
-  const recordsColumns: Column<any>[] = [
+  const recordsColumns: Column<TimeEntry>[] = [
     {
       key: 'employeeName',
       label: 'Employee',

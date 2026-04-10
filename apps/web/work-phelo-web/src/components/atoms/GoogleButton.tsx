@@ -1,7 +1,7 @@
 import { ButtonHTMLAttributes, forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
-interface GoogleButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {}
+type GoogleButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
 export const GoogleButton = forwardRef<HTMLButtonElement, GoogleButtonProps>(
   ({ className, children = 'Google', disabled, ...props }, ref) => {

@@ -9,7 +9,6 @@ import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { StatPill } from '@/components/molecules/departments/StatPill';
-import { TenantUser } from '@/types/tenant';
 import { getGreeting } from '@/lib/formatters';
 
 /* ── Module definitions ── */
@@ -144,10 +143,10 @@ export default function TenantDashboardPage({
   const stats = useMemo(() => {
     const total = users.length;
 
-    const active = users.filter((u: any) => u.status === 'ACTIVE').length;
+    const active = users.filter((u: { status: string }) => u.status === 'ACTIVE').length;
 
     const pending = users.filter(
-      (u: any) => u.status === 'PENDING_VERIFICATION' || u.status === 'PENDING',
+      (u: { status: string }) => u.status === 'PENDING_VERIFICATION' || u.status === 'PENDING',
     ).length;
 
     return { total, active, pending };

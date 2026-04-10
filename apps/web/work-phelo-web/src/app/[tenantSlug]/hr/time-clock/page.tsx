@@ -29,7 +29,7 @@ import { RecordsSection } from '@/components/organisms/time-clock/RecordSection'
 import { CorrectionsSection } from '@/components/organisms/time-clock/CorrectionSection';
 
 export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
-  const { tenantSlug } = use(params);
+  use(params);
   const user = useAuthStore((s) => s.user);
   const toast = useToast();
 
@@ -38,7 +38,10 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
 
   const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>('my');
   const [correctionOpen, setCorrectionOpen] = useState(false);
-  const [reviewTarget, setReviewTarget] = useState<any>(null);
+  const [reviewTarget, setReviewTarget] = useState<{
+    req: { id: string; employeeName?: string; date: string };
+    action: 'APPROVED' | 'REJECTED';
+  } | null>(null);
 
   // My Time hooks
   const { data: session, isLoading: sessionLoading } = useMyTodaySession();

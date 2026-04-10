@@ -7,6 +7,7 @@ import {
   DepartmentFormFields,
   DeptForm,
 } from '@/components/molecules/departments/DepartmentFormFields';
+import { useCreateDepartment } from '@/hooks/useDepartments';
 
 interface Props {
   isOpen: boolean;
@@ -15,14 +16,21 @@ interface Props {
   onSuccess?: (name: string) => void;
 }
 
-export function CreateDepartmentPanel({ isOpen, onClose, tenantSlug, onSuccess }: Props) {
+export function CreateDepartmentPanel({ isOpen, onClose, onSuccess }: Props) {
   const form = useForm<DeptForm>();
+  const { mutate: createDepartment, isPending } = useCreateDepartment();
 
   const handleSubmit = (data: DeptForm) => {
-    // TODO: Call create mutation here
-    console.log('Creating department:', data);
-    onSuccess?.(data.name);
-    onClose();
+    createDepartment(
+      { name: data.name, description: data.description || undefined },
+      {
+        onSuccess: () => {
+          onSuccess?.(data.name);
+          onClose();
+          form.reset();
+        },
+      },
+    );
   };
 
   return (
@@ -37,7 +45,13 @@ export function CreateDepartmentPanel({ isOpen, onClose, tenantSlug, onSuccess }
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={form.handleSubmit(handleSubmit)}>Create Department</Button>
+          <Button
+            isLoading={isPending}
+            loadingText="Creating..."
+            onClick={form.handleSubmit(handleSubmit)}
+          >
+            Create Department
+          </Button>
         </div>
       }
     >

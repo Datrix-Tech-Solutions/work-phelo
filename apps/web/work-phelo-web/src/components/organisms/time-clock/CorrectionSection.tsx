@@ -3,14 +3,15 @@ import { Badge } from '@/components/atoms/Badge';
 import { formatDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { Column, DataTable } from '../shared/DataTable';
+import type { CorrectionRequest } from '@/types/timeclock';
 
 interface Props {
-  corrections: any[];
+  corrections: CorrectionRequest[];
   correctionsLoading: boolean;
   correctionStatusFilter: 'PENDING' | 'APPROVED' | 'REJECTED';
   onStatusFilterChange: (status: 'PENDING' | 'APPROVED' | 'REJECTED') => void;
   pendingCount: number;
-  onReview: (req: any, action: 'APPROVED' | 'REJECTED') => void;
+  onReview: (req: CorrectionRequest, action: 'APPROVED' | 'REJECTED') => void;
 }
 
 export function CorrectionsSection({
@@ -21,7 +22,7 @@ export function CorrectionsSection({
   pendingCount,
   onReview,
 }: Props) {
-  const correctionsColumns: Column<any>[] = [
+  const correctionsColumns: Column<CorrectionRequest>[] = [
     {
       key: 'employeeName',
       label: 'Employee',

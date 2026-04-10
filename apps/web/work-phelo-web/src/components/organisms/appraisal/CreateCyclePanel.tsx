@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -40,7 +40,6 @@ export function CreateCyclePanel({
     register,
     handleSubmit,
     control,
-    watch,
     reset,
     formState: { errors },
   } = useForm<FormValues>({
@@ -70,7 +69,7 @@ export function CreateCyclePanel({
     }
   }, [editCycle, reset]);
 
-  const startDate = watch('startDate');
+  const startDate = useWatch({ control, name: 'startDate' });
 
   const { mutate, isPending } = useMutation({
     mutationFn: (data: CreateAppraisalCycleDto) =>

@@ -110,21 +110,37 @@ export default function AdminDashboardPage() {
   const allCompanies: Company[] = useMemo(() => {
     if (!apiData) return [];
     const list = apiData ?? [];
-    return list.map((c: any) => ({
-      id: c.id ?? c._id,
-      name: c.name ?? c.companyName,
-      dateCreated:
-        (c.dateCreated ?? c.createdAt)
-          ? new Date(String(c.dateCreated ?? c.createdAt)).toLocaleDateString('en-US', {
-              month: 'short',
-              day: '2-digit',
-              year: 'numeric',
-            })
-          : '—',
-      contact: c.phone ?? c.contact ?? c.contactNumber ?? '—',
-      industry: c.industry ?? '—',
-      status: (c.status as Company['status']) ?? 'SUSPENDED',
-    }));
+    return list.map(
+      (c: {
+        id?: string;
+        _id?: string;
+        name?: string;
+        companyName?: string;
+        dateCreated?: string;
+        createdAt?: string;
+        phone?: string;
+        contact?: string;
+        contactNumber?: string;
+        industry?: string;
+        status?: string;
+        size?: string;
+        country?: string;
+      }) => ({
+        id: c.id ?? c._id,
+        name: c.name ?? c.companyName,
+        dateCreated:
+          (c.dateCreated ?? c.createdAt)
+            ? new Date(String(c.dateCreated ?? c.createdAt)).toLocaleDateString('en-US', {
+                month: 'short',
+                day: '2-digit',
+                year: 'numeric',
+              })
+            : '—',
+        contact: c.phone ?? c.contact ?? c.contactNumber ?? '—',
+        industry: c.industry ?? '—',
+        status: (c.status as Company['status']) ?? 'SUSPENDED',
+      }),
+    );
   }, [apiData]);
 
   /* ── Client-side search / filter ── */

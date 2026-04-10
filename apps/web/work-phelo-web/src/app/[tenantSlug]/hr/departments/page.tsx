@@ -4,9 +4,8 @@
 
 import { use, useState } from 'react';
 import { useDepartments } from '@/hooks/useDepartments';
-import { useEmployees } from '@/hooks/useEmployees';
-import { useCreateDepartment, useUpdateDepartment } from '@/hooks/useDepartments';
-import { useUpdateEmployee } from '@/hooks/useEmployees';
+import { useEmployees, useUpdateEmployee } from '@/hooks/useEmployees';
+import { Department } from '@/types/hr';
 import { useAuthStore } from '@/store/auth.store';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { DepartmentsTable } from '@/components/organisms/departments/departmentTable';
@@ -21,8 +20,8 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<any>(null);
-  const [membersTarget, setMembersTarget] = useState<any>(null);
+  const [editTarget, setEditTarget] = useState<Department | null>(null);
+  const [membersTarget, setMembersTarget] = useState<Department | null>(null);
   const [successName, setSuccessName] = useState<string | null>(null);
 
   // Data fetching
@@ -31,8 +30,6 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const employees = empResult?.data ?? [];
 
   // Mutations
-  const { mutate: createDeptMutate, isPending: isCreating } = useCreateDepartment();
-  const { mutate: updateDeptMutate, isPending: isEditing } = useUpdateDepartment();
   const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
 
   const handleAddMembers = async (departmentId: string, employeeIds: string[]) => {
@@ -41,9 +38,9 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
 
   const openCreate = () => setCreateOpen(true);
 
-  const openEdit = (dept: any) => setEditTarget(dept);
+  const openEdit = (dept: Department) => setEditTarget(dept);
 
-  const openMembers = (dept: any) => setMembersTarget(dept);
+  const openMembers = (dept: Department) => setMembersTarget(dept);
 
   return (
     <div className="p-8 flex flex-col gap-6 flex-1 min-h-0">
