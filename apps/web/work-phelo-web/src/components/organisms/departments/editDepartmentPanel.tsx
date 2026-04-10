@@ -8,16 +8,20 @@ import {
   DepartmentFormFields,
   DeptForm,
 } from '@/components/molecules/departments/DepartmentFormFields';
+import { useUpdateDepartment } from '@/hooks/useDepartments';
+import { useToast } from '@/hooks/useToast';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   tenantSlug: string;
-  editTarget: any;
+  editTarget: { id: string; name: string; description?: string; managerId?: string } | null;
 }
 
-export function EditDepartmentPanel({ isOpen, onClose, tenantSlug, editTarget }: Props) {
+export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
   const form = useForm<DeptForm>();
+  const toast = useToast();
+  const { mutate: updateDepartment, isPending } = useUpdateDepartment();
 
   useEffect(() => {
     if (editTarget) {
@@ -30,8 +34,17 @@ export function EditDepartmentPanel({ isOpen, onClose, tenantSlug, editTarget }:
   }, [editTarget, form]);
 
   const handleSubmit = (data: DeptForm) => {
-    console.log('Updating department:', data);
-    onClose();
+    if (!editTarget) return;
+    updateDepartment(
+      { id: editTarget.id, name: data.name, description: data.description || undefined },
+      {
+        onSuccess: () => {
+          toast.success('Department updated');
+          onClose();
+        },
+        onError: () => toast.error('Failed to update department'),
+      },
+    );
   };
 
   return (
@@ -46,7 +59,13 @@ export function EditDepartmentPanel({ isOpen, onClose, tenantSlug, editTarget }:
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={form.handleSubmit(handleSubmit)}>Save Changes</Button>
+          <Button
+            isLoading={isPending}
+            loadingText="Saving..."
+            onClick={form.handleSubmit(handleSubmit)}
+          >
+            Save Changes
+          </Button>
         </div>
       }
     >

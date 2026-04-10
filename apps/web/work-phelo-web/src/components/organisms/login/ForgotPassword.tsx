@@ -25,13 +25,16 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
 
   const { mutate, isPending } = useForgotPassword();
   const handleSubmit2 = (data: ForgotPasswordForm) => {
-    mutate({ ...data, tenantSlug } as any, {
-      onSuccess: () => {
-        sessionStorage.setItem('fpEmail', data.email);
-        const base = tenantSlug ? `/${tenantSlug}` : '';
-        router.push(`${base}/forgot-password/verify`);
+    mutate(
+      { ...data, tenantSlug: tenantSlug ?? '' },
+      {
+        onSuccess: () => {
+          sessionStorage.setItem('fpEmail', data.email);
+          const base = tenantSlug ? `/${tenantSlug}` : '';
+          router.push(`${base}/forgot-password/verify`);
+        },
       },
-    });
+    );
   };
 
   const backHref = tenantSlug ? `/${tenantSlug}/login` : '/login';

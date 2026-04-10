@@ -1,9 +1,10 @@
 import { ClockInWidget } from '@/components/organisms/time-clock/ClockInWidget';
 import { formatDate, formatTime, formatMinutes } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
+import type { TodaySession, TimeEntry } from '@/types/timeclock';
 
 interface Props {
-  session: any;
+  session: TodaySession | undefined;
   isLoading: boolean;
   onClockIn: () => void;
   onClockOut: () => void;
@@ -13,7 +14,7 @@ interface Props {
   isClockingIn: boolean;
   isClockingOut: boolean;
   isBreaking: boolean;
-  historyData: any;
+  historyData: { data?: TimeEntry[]; totalPages?: number } | undefined;
   historyLoading: boolean;
   historyPage: number;
   onHistoryPageChange: (page: number) => void;
@@ -38,7 +39,7 @@ export function MyTimeSection({
   const historyEntries = historyData?.data ?? [];
   const historyTotalPages = historyData?.totalPages ?? 1;
 
-  const historyColumns: Column<any>[] = [
+  const historyColumns: Column<TimeEntry>[] = [
     { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
     { key: 'clockIn', label: 'Clock In', render: (r) => <span>{formatTime(r.clockIn)}</span> },
     {

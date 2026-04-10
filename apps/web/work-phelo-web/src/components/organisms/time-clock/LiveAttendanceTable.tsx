@@ -28,15 +28,15 @@ function getInitials(name: string) {
 }
 
 export function LiveAttendanceTable() {
-  // Minute tick so duration column re-renders every 60 s without a full refetch
-  const [tick, setTick] = useState(0);
+  // Snapshot of current time, updated every 60 s to refresh durations
+  const [now, setNow] = useState(() => Date.now());
 
   const { data: entries = [], isLoading, dataUpdatedAt, refetch, isFetching } = useLiveAttendance();
 
   const { data: stats } = useAttendanceStats();
 
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 60_000);
+    const id = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -129,7 +129,7 @@ export function LiveAttendanceTable() {
           </div>
         ) : (
           entries.map((entry, i) => (
-            <LiveRow key={entry.id} entry={entry} isLast={i === entries.length - 1} tick={tick} />
+            <LiveRow key={entry.id} entry={entry} isLast={i === entries.length - 1} now={now} />
           ))
         )}
       </div>
@@ -140,13 +140,13 @@ export function LiveAttendanceTable() {
 function LiveRow({
   entry,
   isLast,
-  tick: _tick,
+  now,
 }: {
   entry: LiveAttendanceEntry;
   isLast: boolean;
-  tick: number;
+  now: number;
 }) {
-  const duration = formatDurationMs(Date.now() - new Date(entry.clockIn).getTime());
+  const duration = formatDurationMs(now - new Date(entry.clockIn).getTime());
 
   const statusBadge =
     entry.status === 'ON_BREAK' ? (

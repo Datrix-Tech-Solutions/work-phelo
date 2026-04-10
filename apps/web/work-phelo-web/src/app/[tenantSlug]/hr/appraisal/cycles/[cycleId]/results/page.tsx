@@ -13,9 +13,8 @@ import {
   FinalRating,
   CycleResultItem,
   CycleResultsSummary,
-  DEFAULT_PERFORMANCE_BANDS,
 } from '@/types/appraisal';
-import { RatingBadge, RATING_STYLES } from '@/components/molecules/appraisal/RatingBadge';
+import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
 import { formatDate } from '@/lib/formatters';
 
 /* ── Metric card ── */
@@ -102,7 +101,7 @@ export default function CycleResultsPage({
   });
 
   /* ── Derived stats ── */
-  const results: CycleResultItem[] = summary?.results ?? [];
+  const results = useMemo<CycleResultItem[]>(() => summary?.results ?? [], [summary?.results]);
 
   const exceeded = useMemo(
     () =>

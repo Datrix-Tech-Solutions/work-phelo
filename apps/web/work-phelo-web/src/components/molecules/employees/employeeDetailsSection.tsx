@@ -1,13 +1,14 @@
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { DetailField } from '@/components/molecules/payroll/DetailField';
+import type { Employee } from '@/types/hr';
 
 interface Props {
-  employee: any;
-  departments: any[];
-  allHrEmployees: any[];
+  employee: Employee;
+  departments: { id: string; name: string }[];
+  allHrEmployees: Employee[];
 }
 
-export function EmploymentDetailsSection({ employee, departments, allHrEmployees }: Props) {
+export function EmploymentDetailsSection({ employee, allHrEmployees }: Props) {
   const manager = employee?.managerId
     ? allHrEmployees.find((e) => e.id === employee.managerId)
     : null;

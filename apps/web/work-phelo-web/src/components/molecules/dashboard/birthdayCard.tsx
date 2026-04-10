@@ -1,4 +1,3 @@
-// components/molecules/BirthdaysCard.tsx
 'use client';
 
 import { ChevronLeft, ChevronRight, PartyPopper } from 'lucide-react';

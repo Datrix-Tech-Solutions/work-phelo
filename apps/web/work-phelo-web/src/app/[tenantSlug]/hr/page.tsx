@@ -156,7 +156,7 @@ export default function EmployeeDashboardPage({
 
   /* ── Derived: leave balances ── */
   const leaveBalances = Array.isArray(balancesRaw) ? balancesRaw : [];
-  const annualBalance = leaveBalances.find((b: any) =>
+  const annualBalance = leaveBalances.find((b: { leaveTypeName?: string }) =>
     b.leaveTypeName?.toLowerCase().includes('annual'),
   );
 
@@ -166,21 +166,26 @@ export default function EmployeeDashboardPage({
   /* ── Derived: announcements ── */
   const announcements: { id: string; title: string; date: string; body: string }[] = (
     dashboard?.announcements ?? []
-  ).map((a: any) => ({
-    id: a.id,
-    title: a.title,
-    date: new Date(a.publishedAt).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
+  ).map(
+    (a: { id: string; title: string; publishedAt: string; body?: string; preview?: string }) => ({
+      id: a.id,
+      title: a.title,
+      date: new Date(a.publishedAt).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+      }),
+      body: a.body ?? a.preview ?? '',
     }),
-    body: a.body ?? a.preview ?? '',
-  }));
+  );
 
   /* ── Derived: upcoming holidays (future only, first 5) ── */
   const holidays = (Array.isArray(holidaysRaw) ? holidaysRaw : [])
-    .filter((h: any) => new Date(h.date) >= new Date())
-    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .filter((h: { date: string }) => new Date(h.date) >= new Date())
+    .sort(
+      (a: { date: string }, b: { date: string }) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime(),
+    )
     .slice(0, 5);
 
   /* ── Derived: my leave requests ── */
@@ -347,7 +352,7 @@ export default function EmployeeDashboardPage({
               <EmptyState message="No upcoming public holidays" />
             ) : (
               <div className="flex flex-col gap-3">
-                {holidays.map((h: any) => (
+                {holidays.map((h: { id: string; name: string; date: string }) => (
                   <div key={h.id} className="flex items-center gap-3">
                     <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
                       <Calendar className="w-4 h-4 text-gray-500" />
@@ -384,35 +389,42 @@ export default function EmployeeDashboardPage({
           <EmptyState message="No payslips available yet" />
         ) : (
           <div className="flex flex-col gap-3">
-            {myPayslips.map((p: any) => {
-              const run = p.payrollRun;
-              const month = run
-                ? new Date(run.year, run.month - 1).toLocaleDateString('en-US', {
-                    month: 'long',
-                    year: 'numeric',
-                  })
-                : '—';
-              const gross = p.grossPay != null ? `GHS ${Number(p.grossPay).toFixed(2)}` : '—';
-              const net = p.netPay != null ? `GHS ${Number(p.netPay).toFixed(2)}` : '—';
-              const status = run?.status === 'PAID' ? 'Paid' : (run?.status ?? '—');
-              return (
-                <div
-                  key={p.id}
-                  className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
-                >
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{month}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Gross: {gross}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-gray-900">{net}</p>
-                      <p className="text-xs text-green-600 font-medium">{status}</p>
+            {myPayslips.map(
+              (p: {
+                id: string;
+                grossPay?: number | null;
+                netPay?: number | null;
+                payrollRun?: { year: number; month: number; status?: string };
+              }) => {
+                const run = p.payrollRun;
+                const month = run
+                  ? new Date(run.year, run.month - 1).toLocaleDateString('en-US', {
+                      month: 'long',
+                      year: 'numeric',
+                    })
+                  : '—';
+                const gross = p.grossPay != null ? `GHS ${Number(p.grossPay).toFixed(2)}` : '—';
+                const net = p.netPay != null ? `GHS ${Number(p.netPay).toFixed(2)}` : '—';
+                const status = run?.status === 'PAID' ? 'Paid' : (run?.status ?? '—');
+                return (
+                  <div
+                    key={p.id}
+                    className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900">{month}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Gross: {gross}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-900">{net}</p>
+                        <p className="text-xs text-green-600 font-medium">{status}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              },
+            )}
           </div>
         )}
       </SidePanel>
@@ -452,22 +464,30 @@ export default function EmployeeDashboardPage({
           <EmptyState message="No leave requests yet" />
         ) : (
           <div className="flex flex-col gap-3">
-            {myLeave.map((r: any) => (
-              <div
-                key={r.id}
-                className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    {r.leaveType?.name ?? 'Leave'}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {formatDateRange(r.startDate, r.endDate)}
-                  </p>
+            {myLeave.map(
+              (r: {
+                id: string;
+                startDate: string;
+                endDate: string;
+                status: string;
+                leaveType?: { name: string };
+              }) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {r.leaveType?.name ?? 'Leave'}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {formatDateRange(r.startDate, r.endDate)}
+                    </p>
+                  </div>
+                  <LeaveStatusBadge status={r.status} />
                 </div>
-                <LeaveStatusBadge status={r.status} />
-              </div>
-            ))}
+              ),
+            )}
           </div>
         )}
       </SidePanel>

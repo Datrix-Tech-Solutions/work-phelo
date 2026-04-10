@@ -111,9 +111,7 @@ function ProfileDropdown({
 export function TopNav({
   showMenuButton = false,
   onMenuClick,
-  tabs,
-  activeTab,
-  onTabChange,
+
   notificationCount,
   userInitials,
   userColor,
@@ -148,26 +146,6 @@ export function TopNav({
 
         {/* Logo */}
         <WorkPheloLogo className="text-base shrink-0" />
-
-        {/* Tabs — center */}
-        {tabs && tabs.length > 0 && (
-          <nav className="flex-1 flex items-end justify-end gap-6">
-            {tabs.map((tab) => (
-              <button
-                key={tab.value}
-                onClick={() => onTabChange?.(tab.value)}
-                className={cn(
-                  'relative text-sm pb-0.5 transition-colors',
-                  activeTab === tab.value
-                    ? 'text-black font-semibold after:absolute after:-bottom-4.25 after:left-0 after:right-0 after:h-0.5 after:bg-black after:rounded-full'
-                    : 'text-black/60 hover:text-/90',
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-        )}
 
         <div className="flex-1" />
 

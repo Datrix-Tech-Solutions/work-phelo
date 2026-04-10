@@ -22,24 +22,33 @@ export default function PayrollPage() {
 
   const payrollData = useMemo(() => {
     const employees = empData?.data ?? [];
-    return employees.map((e: any) => {
-      const basic = Number(e.basicSalary) || 0;
-      const allowances = 1000;
-      const calc = calculatePayroll({ basicSalary: basic, allowances });
-      return {
-        id: e.id,
-        employeeName: `${e.firstName} ${e.lastName}`,
-        avatarUrl: e.avatarUrl,
-        basicSalary: basic,
-        allowances,
-        grossSalary: calc.grossSalary,
-        employeeSSNIT: calc.employeeSSNIT,
-        taxableIncome: calc.taxableIncome,
-        paye: calc.paye,
-        netSalary: calc.netSalary,
-        department: e.department?.name,
-      };
-    });
+    return employees.map(
+      (e: {
+        id: string;
+        firstName: string;
+        lastName: string;
+        avatarUrl?: string;
+        basicSalary?: number | string;
+        department?: { name: string };
+      }) => {
+        const basic = Number(e.basicSalary) || 0;
+        const allowances = 1000;
+        const calc = calculatePayroll({ basicSalary: basic, allowances });
+        return {
+          id: e.id,
+          employeeName: `${e.firstName} ${e.lastName}`,
+          avatarUrl: e.avatarUrl,
+          basicSalary: basic,
+          allowances,
+          grossSalary: calc.grossSalary,
+          employeeSSNIT: calc.employeeSSNIT,
+          taxableIncome: calc.taxableIncome,
+          paye: calc.paye,
+          netSalary: calc.netSalary,
+          department: e.department?.name,
+        };
+      },
+    );
   }, [empData]);
 
   return (

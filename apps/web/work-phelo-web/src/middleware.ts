@@ -2,9 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const PUBLIC_ROUTES = ['/login', '/platform/login'];
 
-const SUPER_ADMIN_ROUTES = ['/platform'];
-const TENANT_ROUTES = ['/dashboard', '/home', '/employees', '/leave', '/payroll'];
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const accessToken = request.cookies.get('access_token')?.value;

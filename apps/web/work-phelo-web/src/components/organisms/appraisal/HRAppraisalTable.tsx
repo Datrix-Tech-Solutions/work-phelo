@@ -1,4 +1,3 @@
-// components/HRAppraisalsTable.tsx
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -7,8 +6,6 @@ import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { api } from '@/lib/api';
-
-const PAGE_SIZE = 10;
 
 interface Props {
   search: string;
@@ -30,14 +27,25 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
         .then((r) => r.data),
   });
 
-  const hrCycles = useMemo(() => {
+  type HRCycleRow = {
+    id: string;
+    title: string;
+    startDate: string;
+    endDate: string;
+    totalEmployees?: number;
+    completionRate?: number;
+    status?: string;
+    isActive?: boolean;
+  };
+
+  const hrCycles = useMemo<HRCycleRow[]>(() => {
     const list = Array.isArray(hrData) ? hrData : (hrData?.data ?? hrData?.cycles ?? []);
-    return list;
+    return list as HRCycleRow[];
   }, [hrData]);
 
   const totalPages = hrData?.totalPages ?? 1;
 
-  const columns: Column<any>[] = [
+  const columns: Column<HRCycleRow>[] = [
     {
       key: 'title',
       label: 'Cycle Name',

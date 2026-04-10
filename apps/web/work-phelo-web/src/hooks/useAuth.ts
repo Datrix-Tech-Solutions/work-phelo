@@ -5,7 +5,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { User, LoginPayload } from '@/types/auth';
 
 export function useMe() {
-  const { setUser, setLoading } = useAuthStore();
+  const { setUser } = useAuthStore();
 
   return useQuery({
     queryKey: ['me'],

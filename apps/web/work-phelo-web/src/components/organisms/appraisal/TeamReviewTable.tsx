@@ -1,4 +1,3 @@
-// components/TeamReviewTable.tsx
 function daysUntil(dateStr: string): number {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -8,7 +7,6 @@ function daysUntil(dateStr: string): number {
 }
 
 import { useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
@@ -24,8 +22,6 @@ interface Props {
 }
 
 export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props) {
-  const router = useRouter();
-
   const { data: teamData, isLoading } = useQuery({
     queryKey: ['team-appraisals'],
     queryFn: () => api.get('/hr/appraisals/team').then((r) => r.data),
@@ -33,16 +29,27 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
 
   const teamRows = useMemo(() => {
     const list = Array.isArray(teamData) ? teamData : (teamData?.data ?? []);
-    return list.map((r: any) => ({
-      id: String(r.id),
-      employeeId: String(r.employeeId),
-      employeeName: String(r.employeeName ?? ''),
-      cycleId: String(r.cycleId),
-      cycleName: String(r.cycleName ?? ''),
-      selfSubmittedAt: r.selfSubmittedAt ? String(r.selfSubmittedAt) : undefined,
-      managerReviewDeadline: String(r.managerReviewDeadline ?? ''),
-      overallStatus: r.overallStatus ?? 'NotStarted',
-    }));
+    return list.map(
+      (r: {
+        id: unknown;
+        employeeId: unknown;
+        employeeName?: unknown;
+        cycleId: unknown;
+        cycleName?: unknown;
+        selfSubmittedAt?: unknown;
+        managerReviewDeadline?: unknown;
+        overallStatus?: string;
+      }) => ({
+        id: String(r.id),
+        employeeId: String(r.employeeId),
+        employeeName: String(r.employeeName ?? ''),
+        cycleId: String(r.cycleId),
+        cycleName: String(r.cycleName ?? ''),
+        selfSubmittedAt: r.selfSubmittedAt ? String(r.selfSubmittedAt) : undefined,
+        managerReviewDeadline: String(r.managerReviewDeadline ?? ''),
+        overallStatus: r.overallStatus ?? 'NotStarted',
+      }),
+    );
   }, [teamData]);
 
   const filteredRows = useMemo(() => {
@@ -57,7 +64,8 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
   const pageData = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
 
-  const columns: Column<any>[] = [
+  type TeamRow = (typeof teamRows)[0];
+  const columns: Column<TeamRow>[] = [
     {
       key: 'employeeName',
       label: 'Employee',

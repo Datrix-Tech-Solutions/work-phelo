@@ -1,14 +1,14 @@
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { DetailField } from '@/components/molecules/payroll/DetailField';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
+import type { Employee } from '@/types/hr';
 
 interface Props {
-  employee: any;
+  employee: Employee;
 }
 
 export function AccountDetailsSection({ employee }: Props) {
   const isPendingInvite = !employee.userId;
-  const isOffboarded = employee.employmentStatus === 'OFFBOARDED';
 
   return (
     <SectionCard title="Account Details">

@@ -25,7 +25,6 @@ type FormValues = {
 export function CreatePublicHolidayPanel({
   isOpen,
   onClose,
-  tenantSlug,
   editHoliday,
 }: CreatePublicHolidayPanelProps) {
   const toast = useToast();
@@ -62,8 +61,11 @@ export function CreatePublicHolidayPanel({
             toast.success('Holiday updated');
             onClose();
           },
-          onError: (err: any) =>
-            toast.error(err?.response?.data?.message ?? 'Something went wrong'),
+          onError: (err: unknown) =>
+            toast.error(
+              (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                'Something went wrong',
+            ),
         },
       );
     } else {
@@ -74,8 +76,11 @@ export function CreatePublicHolidayPanel({
             toast.success('Holiday added');
             onClose();
           },
-          onError: (err: any) =>
-            toast.error(err?.response?.data?.message ?? 'Something went wrong'),
+          onError: (err: unknown) =>
+            toast.error(
+              (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+                'Something went wrong',
+            ),
         },
       );
     }

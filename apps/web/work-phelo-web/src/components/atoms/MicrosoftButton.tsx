@@ -1,7 +1,7 @@
 import { ButtonHTMLAttributes, forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
-interface MicrosoftButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {}
+type MicrosoftButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
 
 export const MicrosoftButton = forwardRef<HTMLButtonElement, MicrosoftButtonProps>(
   ({ className, children = 'Microsoft', disabled, ...props }, ref) => {

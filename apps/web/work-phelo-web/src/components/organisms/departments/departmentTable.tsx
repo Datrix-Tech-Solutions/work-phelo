@@ -1,21 +1,14 @@
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import { Button } from '@/components/atoms/Button';
-
-const APPLICABILITY_LABELS: Record<string, string> = {
-  All: 'All Employees',
-  FullTime: 'Full-time',
-  PartTime: 'Part-time',
-  Contract: 'Contract',
-};
+import type { Department } from '@/types/hr';
 
 interface DepartmentsTableProps {
-  departments: any[];
+  departments: Department[];
   isLoading: boolean;
   isEmployee: boolean;
   onCreate: () => void;
-  onEdit: (dept: any) => void;
-  onAddMembers: (dept: any) => void;
+  onEdit: (dept: Department) => void;
+  onAddMembers: (dept: Department) => void;
 }
 
 export function DepartmentsTable({
@@ -26,7 +19,7 @@ export function DepartmentsTable({
   onEdit,
   onAddMembers,
 }: DepartmentsTableProps) {
-  const COLUMNS: Column<any>[] = [
+  const COLUMNS: Column<Department>[] = [
     {
       key: 'name',
       label: 'Department Name',
@@ -35,10 +28,7 @@ export function DepartmentsTable({
     {
       key: 'manager',
       label: 'Department Head',
-      render: (row) => {
-        // You can enhance this with real manager name if available
-        return <span className="text-sm text-gray-500">—</span>;
-      },
+      render: () => <span className="text-sm text-gray-500">—</span>,
     },
     {
       key: 'memberCount',
@@ -50,12 +40,12 @@ export function DepartmentsTable({
     {
       key: 'status',
       label: 'Status',
-      render: (row) => (
-        <Badge
-          variant={row.isActive ? 'success' : 'neutral'}
-          label={row.isActive ? 'Active' : 'Inactive'}
-        />
-      ),
+      render: (row) => {
+        const count = row._count?.employees ?? 0;
+        if (!row.isActive) return <Badge variant="neutral" label="Inactive" />;
+        if (count === 0) return <Badge variant="warning" label="Empty" />;
+        return <Badge variant="success" label="Active" />;
+      },
     },
   ];
 

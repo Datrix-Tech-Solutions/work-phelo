@@ -25,19 +25,15 @@ interface DataTableProps<T extends { id: string | number }> {
   columns: Column<T>[];
   data: T[];
   isLoading?: boolean;
-  // Empty state
   emptyMessage?: string;
   emptyImage?: React.ReactNode;
-  // Toolbar
   searchPlaceholder?: string;
   onSearch?: (q: string) => void;
   filterOptions?: { value: string; label: string }[];
   onFilter?: (value: string) => void;
   onExport?: () => void;
   actionButton?: { label: string; onClick: () => void };
-  // Row actions
   rowActions?: (row: T) => RowAction[];
-  // Pagination
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -104,10 +100,9 @@ export function DataTable<T extends { id: string | number }>({
   onPageChange,
 }: DataTableProps<T>) {
   return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0">
+    <div className="flex flex-col gap-4 flex-1 min-h-0 h-full">
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap shrink-0">
-        {/* Search */}
         {onSearch && (
           <div className="relative flex-1 min-w-55 max-w-sm">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
@@ -120,7 +115,6 @@ export function DataTable<T extends { id: string | number }>({
           </div>
         )}
 
-        {/* Filter */}
         {filterOptions && onFilter && (
           <div className="relative">
             <select
@@ -134,14 +128,12 @@ export function DataTable<T extends { id: string | number }>({
                 </option>
               ))}
             </select>
-
             <Icons.ListFilter className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none h-4 w-4" />
           </div>
         )}
 
         <div className="flex-1" />
 
-        {/* Export */}
         {onExport && (
           <button
             onClick={onExport}
@@ -152,7 +144,6 @@ export function DataTable<T extends { id: string | number }>({
           </button>
         )}
 
-        {/* Action button */}
         {actionButton && (
           <button
             onClick={actionButton.onClick}
@@ -164,7 +155,7 @@ export function DataTable<T extends { id: string | number }>({
         )}
       </div>
 
-      {/* Table */}
+      {/* Table Container - This is the key part */}
       <div className="border border-gray-100 rounded-input overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Header */}
         <div
@@ -184,45 +175,40 @@ export function DataTable<T extends { id: string | number }>({
           {rowActions && <span />}
         </div>
 
-        {/* Rows */}
-        <div className="overflow-y-auto flex-1">
+        {/* Scrollable Content Area */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
           {isLoading ? (
-            <div
-              className="flex-1 min-h-200
-             flex items-center justify-center  border-gray-200 rounded-card"
-            >
+            /* Loading State - Full height centered */
+            <div className="h-full flex items-center justify-center bg-white">
               <div className="flex flex-col items-center gap-4">
-                {/* Spinner */}
                 <div className="w-8 h-8 border-4 border-gray-100 border-t-[#0D2244] rounded-full animate-spin" />
-
-                {/* Text */}
-                <p className="text-sm text-gray-500 font-medium tracking-wide">Loading...</p>
+                <p className="text-sm text-gray-500 font-medium">Loading...</p>
               </div>
             </div>
           ) : data.length === 0 ? (
-            <div className="flex-1 min-h-200 flex items-center justify-center  border-gray-200 rounded-card">
+            /* Empty State - Full height centered */
+            <div className="h-full flex items-center justify-center bg-white">
               <div className="flex flex-col items-center gap-5 text-center px-6">
                 {emptyImage ?? (
-                  <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-gray-300">
+                  <div className="w-20 h-20 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-300">
                     <NoSearchLogo />
                   </div>
                 )}
-
                 <div>
                   <p className="text-base font-medium text-gray-600 mb-1">{emptyMessage}</p>
-                  {emptyMessage.includes('found') && (
+                  {emptyMessage.toLowerCase().includes('found') && (
                     <p className="text-sm text-gray-400">Try adjusting your search or filters</p>
                   )}
                 </div>
               </div>
             </div>
           ) : (
+            /* Actual Rows */
             data.map((row, rowIndex) => (
               <div
                 key={row.id}
                 className={cn(
-                  'grid px-4 py-3.5 items-center text-sm text-gray-700',
-                  rowIndex !== data.length - 1 && 'border-b border-gray-100',
+                  'grid px-4 py-3.5 items-center text-sm text-gray-700 border-b border-gray-100 last:border-b-0',
                   'hover:bg-gray-50 transition-colors',
                 )}
                 style={{

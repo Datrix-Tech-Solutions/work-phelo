@@ -7,7 +7,6 @@ interface SuccessModalProps {
   onClose: () => void;
   title: string;
   message?: string;
-  /** Label for the primary action button. Defaults to "Done" */
   actionLabel?: string;
 }
 

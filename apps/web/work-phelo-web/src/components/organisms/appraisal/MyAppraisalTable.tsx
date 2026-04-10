@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
 import { Button } from '@/components/atoms/Button';
-import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 
@@ -22,21 +21,32 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
 
   const { data: myData, isLoading } = useQuery({
     queryKey: ['my-appraisals'],
-    queryFn: () => api.get('/hr/appraisals/my').then((r: { data: any }) => r.data),
+    queryFn: () => api.get('/hr/appraisals/my').then((r) => r.data),
   });
 
   const myRows = useMemo(() => {
     const list = Array.isArray(myData) ? myData : (myData?.data ?? []);
-    return list.map((r: any) => ({
-      id: String(r.id),
-      cycleId: String(r.cycleId),
-      cycleName: String(r.cycleName ?? ''),
-      cycleStatus: r.cycleStatus ?? 'Upcoming',
-      overallStatus: r.overallStatus ?? 'NotStarted',
-      overallScore: r.overallScore != null ? Number(r.overallScore) : undefined,
-      finalRating: r.finalRating,
-      selfAssessmentDeadline: String(r.selfAssessmentDeadline ?? ''),
-    }));
+    return list.map(
+      (r: {
+        id: unknown;
+        cycleId: unknown;
+        cycleName?: unknown;
+        cycleStatus?: string;
+        overallStatus?: string;
+        overallScore?: number | null;
+        finalRating?: unknown;
+        selfAssessmentDeadline?: unknown;
+      }) => ({
+        id: String(r.id),
+        cycleId: String(r.cycleId),
+        cycleName: String(r.cycleName ?? ''),
+        cycleStatus: r.cycleStatus ?? 'Upcoming',
+        overallStatus: r.overallStatus ?? 'NotStarted',
+        overallScore: r.overallScore != null ? Number(r.overallScore) : undefined,
+        finalRating: r.finalRating,
+        selfAssessmentDeadline: String(r.selfAssessmentDeadline ?? ''),
+      }),
+    );
   }, [myData]);
 
   const filteredRows = useMemo(() => {
@@ -48,7 +58,8 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
   const pageData = filteredRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
 
-  const columns: Column<any>[] = [
+  type MyRow = (typeof myRows)[0];
+  const columns: Column<MyRow>[] = [
     {
       key: 'cycleName',
       label: 'Cycle',

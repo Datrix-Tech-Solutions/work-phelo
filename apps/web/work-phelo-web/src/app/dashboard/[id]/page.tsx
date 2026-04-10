@@ -27,7 +27,9 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const updateModules = useUpdateModules(id);
   const updateFeatures = useUpdateFeatures(id);
 
-  const admin = (users as any[]).find((u: any) => u.role === 'TENANT_ADMIN');
+  const admin = (
+    users as { role: string; firstName: string; lastName: string; status: string; email: string }[]
+  ).find((u) => u.role === 'TENANT_ADMIN');
 
   const moduleConfig = (tenant?.moduleConfig as Record<string, boolean>) ?? {};
   const featureConfig = (tenant?.featureConfig as Record<string, Record<string, boolean>>) ?? {};
@@ -46,22 +48,30 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
     [JSON.stringify(moduleConfig), JSON.stringify(featureConfig)],
   );
 
-  const activities = (auditData?.logs ?? []).map((log: any) => ({
-    id: log.id,
-    title: `${log.resource} ${log.action.toLowerCase()}`,
-    description: log.changes?.after
-      ? Object.entries(log.changes.after)
-          .map(([k, v]) => `${k}: ${String(v)}`)
-          .join(', ')
-      : undefined,
-    date: new Date(log.createdAt)
-      .toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-      })
-      .replace(/\//g, '.'),
-  }));
+  const activities = (auditData?.logs ?? []).map(
+    (log: {
+      id: string;
+      resource: string;
+      action: string;
+      changes?: { after?: Record<string, unknown> };
+      createdAt: string;
+    }) => ({
+      id: log.id,
+      title: `${log.resource} ${log.action.toLowerCase()}`,
+      description: log.changes?.after
+        ? Object.entries(log.changes.after)
+            .map(([k, v]) => `${k}: ${String(v)}`)
+            .join(', ')
+        : undefined,
+      date: new Date(log.createdAt)
+        .toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        })
+        .replace(/\//g, '.'),
+    }),
+  );
 
   if (tenantLoading) {
     return (
@@ -129,7 +139,10 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             updatedModules.forEach((m) => {
               if (m.options && m.enabled) {
                 const features = Object.fromEntries(
-                  m.options.map((o) => [o.key, (o as any).enabled ?? false]),
+                  m.options.map((o) => [
+                    o.key,
+                    (o as { key: string; enabled?: boolean }).enabled ?? false,
+                  ]),
                 );
                 updateFeatures.mutate({ module: m.key, features });
               }

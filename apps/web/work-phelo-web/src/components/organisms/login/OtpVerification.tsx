@@ -33,12 +33,15 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
       return;
     }
 
-    mutate({ otp, tenantSlug } as any, {
-      onSuccess: () => {
-        const base = tenantSlug ? `/${tenantSlug}` : '';
-        router.push(`${base}/forgot-password/reset`);
+    mutate(
+      { otp, tenantSlug },
+      {
+        onSuccess: () => {
+          const base = tenantSlug ? `/${tenantSlug}` : '';
+          router.push(`${base}/forgot-password/reset`);
+        },
       },
-    });
+    );
   };
 
   const handleChange = (index: number, value: string) => {
@@ -76,7 +79,7 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
       const email = sessionStorage.getItem('fpEmail') ?? '';
       resendForgot({ email, tenantSlug: tenantSlug ?? '' });
     } else {
-      resend({ tenantSlug } as any);
+      resend({ tenantSlug });
     }
   };
 

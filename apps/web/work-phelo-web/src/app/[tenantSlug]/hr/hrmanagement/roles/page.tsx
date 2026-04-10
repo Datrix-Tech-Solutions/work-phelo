@@ -75,27 +75,35 @@ export default function RolesPage() {
         <p className="text-sm text-gray-500">Loading roles...</p>
       ) : (
         <div className="space-y-3">
-          {roles.map((role: any) => (
-            <div
-              key={role.id}
-              className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between"
-            >
-              <div>
-                <p className="font-medium text-gray-900 text-sm">{role.name}</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {role.isSystem ? 'System role' : 'Custom role'} · {role._count?.users ?? 0} users
-                </p>
+          {roles.map(
+            (role: {
+              id: string;
+              name: string;
+              isSystem?: boolean;
+              _count?: { users: number };
+            }) => (
+              <div
+                key={role.id}
+                className="bg-white border border-gray-200 rounded-xl p-4 flex items-center justify-between"
+              >
+                <div>
+                  <p className="font-medium text-gray-900 text-sm">{role.name}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {role.isSystem ? 'System role' : 'Custom role'} · {role._count?.users ?? 0}{' '}
+                    users
+                  </p>
+                </div>
+                {!role.isSystem && (
+                  <button
+                    onClick={() => handleDelete(role.id)}
+                    className="text-sm text-red-500 hover:text-red-700"
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
-              {!role.isSystem && (
-                <button
-                  onClick={() => handleDelete(role.id)}
-                  className="text-sm text-red-500 hover:text-red-700"
-                >
-                  Delete
-                </button>
-              )}
-            </div>
-          ))}
+            ),
+          )}
         </div>
       )}
     </div>

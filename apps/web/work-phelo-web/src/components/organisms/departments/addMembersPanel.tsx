@@ -4,12 +4,13 @@ import { useState, useMemo } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { MemberRow } from '@/components/molecules/departments/MemberRow';
+import type { Employee } from '@/types/hr';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  department: any;
-  employees: any[];
+  department: { id: string; name: string } | null;
+  employees: Employee[];
   onAddMembers: (departmentId: string, employeeIds: string[]) => Promise<void>;
 }
 
@@ -28,7 +29,11 @@ export function AddMembersPanel({ isOpen, onClose, department, employees, onAddM
   const toggleEmployee = (id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   };
@@ -86,7 +91,7 @@ export function AddMembersPanel({ isOpen, onClose, department, employees, onAddM
       </div>
 
       {/* Employee List */}
-      <div className="flex flex-col divide-y divide-gray-100 -mx-6 px-6 max-h-[420px] overflow-y-auto">
+      <div className="flex flex-col divide-y divide-gray-100 -mx-6 px-6 max-h-105 overflow-y-auto">
         {filteredEmployees.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-8">No employees found</p>
         ) : (
