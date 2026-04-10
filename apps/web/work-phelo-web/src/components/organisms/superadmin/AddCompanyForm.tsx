@@ -3,10 +3,10 @@
 import { useForm } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { SidePanel } from '@/components/organisms/SidePanel';
-import { SuccessModal } from '@/components/organisms/SuccessModal';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Button } from '@/components/atoms/Button';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/molecules/FormSection';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '../../atoms/SearchSelect';

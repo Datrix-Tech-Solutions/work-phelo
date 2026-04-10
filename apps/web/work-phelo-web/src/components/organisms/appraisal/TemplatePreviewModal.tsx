@@ -1,6 +1,6 @@
 'use client';
 
-import { Modal } from '@/components/organisms/Modal';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { cn } from '@/lib/utils';
 import { SectionType } from '@/types/appraisal';
 

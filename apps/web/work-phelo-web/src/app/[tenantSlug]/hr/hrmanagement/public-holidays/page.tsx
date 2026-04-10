@@ -4,8 +4,8 @@
 
 import { use, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { DataTable, Column } from '@/components/organisms/DataTable';
-import { Modal } from '@/components/organisms/Modal';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { CreatePublicHolidayPanel } from '@/components/organisms/leave/CreatePublicHolidayPanel';
 import { api } from '@/lib/api';

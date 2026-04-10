@@ -2,9 +2,9 @@
 
 import { useState, useMemo } from 'react';
 import { MapPin } from 'lucide-react';
-import { DataTable, Column } from '@/components/organisms/DataTable';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
-import { Modal } from '@/components/organisms/Modal';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { BranchFormPanel } from '@/components/organisms/branches/BranchFormPanel';
 import { BranchMembersPanel } from '@/components/organisms/branches/BranchMembersPanel';
 import { useToast } from '@/hooks/useToast';

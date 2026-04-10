@@ -2,9 +2,9 @@
 
 import { useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { useToast } from '@/hooks/useToast';
 import { PublicHoliday } from '@/types/leave';

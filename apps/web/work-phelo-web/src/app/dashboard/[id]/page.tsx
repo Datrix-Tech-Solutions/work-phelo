@@ -6,10 +6,10 @@ import { use, useMemo } from 'react';
 import { useTenant, useTenantUsers, useTenantAudit } from '@/hooks/useTenants';
 import { useUpdateModules, useUpdateFeatures } from '@/hooks/useModuleConfig';
 import Link from 'next/link';
-import { CompanyHeader } from '@/components/organisms/CompanyHeader';
-import { CompanyInfoCard } from '@/components/organisms/CompanyInfoCard';
-import { ModuleConfiguration, Module } from '@/components/organisms/ModuleConfiguration';
-import { RecentActivities } from '@/components/organisms/RecentActivities';
+import { CompanyHeader } from '@/components/organisms/shared/CompanyHeader';
+import { CompanyInfoCard } from '@/components/organisms/shared/CompanyInfoCard';
+import { ModuleConfiguration, Module } from '@/components/organisms/shared/ModuleConfiguration';
+import { RecentActivities } from '@/components/organisms/superadmin/RecentActivities';
 import { DEFAULT_MODULES } from '@/lib/ModuleDefaults';
 import { ChevronLeftIcon } from 'lucide-react';
 

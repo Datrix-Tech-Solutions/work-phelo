@@ -3,7 +3,7 @@
 import { use, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
-import { DataTable, Column } from '@/components/organisms/DataTable';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -13,7 +13,7 @@ import { LeaveRequestDetailPanel } from '@/components/organisms/leave/LeaveReque
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
-import { Modal } from '@/components/organisms/Modal';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { LeaveBalance, LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/leave';
 import { BalanceCard } from '@/components/molecules/leave/BalanceCard';
 import { formatDate } from '@/lib/formatters';

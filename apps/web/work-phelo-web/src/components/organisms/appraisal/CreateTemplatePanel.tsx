@@ -3,10 +3,10 @@
 import { useRef, useState, useEffect } from 'react';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { TemplatePreviewModal } from '@/components/organisms/appraisal/TemplatePreviewModal';
 import { api } from '@/lib/api';

@@ -5,16 +5,16 @@
 import { useState, use, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { useRouter } from 'next/navigation';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/lib/assetIcons';
 import { Asset, AssetStatus, AssetCondition } from '@/types/asset';
-import { FilterSelect } from '@/components/molecules/FilterSelect';
+import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 
 /* ── Types ── */
 

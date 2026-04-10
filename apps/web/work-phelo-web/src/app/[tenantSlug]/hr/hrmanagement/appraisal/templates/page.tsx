@@ -4,8 +4,8 @@
 
 import { use, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DataTable, Column } from '@/components/organisms/DataTable';
-import { Modal } from '@/components/organisms/Modal';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { CreateTemplatePanel } from '@/components/organisms/appraisal/CreateTemplatePanel';
 import { TemplatePreviewModal } from '@/components/organisms/appraisal/TemplatePreviewModal';

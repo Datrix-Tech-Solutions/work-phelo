@@ -12,8 +12,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
-import { Modal } from '@/components/organisms/Modal';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { useAuthStore } from '@/store/auth.store';
 import { api } from '@/lib/api';

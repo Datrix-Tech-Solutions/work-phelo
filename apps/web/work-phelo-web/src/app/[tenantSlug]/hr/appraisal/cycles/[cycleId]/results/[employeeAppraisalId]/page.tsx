@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
+import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import {
   EmployeeAppraisal,
   AppraisalCycle,

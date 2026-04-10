@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { SectionCard } from '@/components/molecules/sectionCard';
+import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { Button } from '@/components/atoms/Button';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
+import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { calculatePayroll } from '@/lib/payrollCalculations';
-import { DetailField } from '@/components/molecules/DetailField';
+import { DetailField } from '@/components/molecules/payroll/DetailField';
 import { Employee } from '@/types/hr';
 
 interface MyPayslipTabProps {

@@ -2,9 +2,9 @@
 
 import { useEffect } from 'react';
 import { useForm, Controller, useWatch } from 'react-hook-form';
-import { SidePanel } from '@/components/organisms/SidePanel';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { FormField } from '@/components/molecules/FormField';
+import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { useCreateLeaveType, useUpdateLeaveType } from '@/hooks/useLeave';

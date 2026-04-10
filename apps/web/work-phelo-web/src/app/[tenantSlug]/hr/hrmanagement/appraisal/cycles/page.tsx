@@ -5,9 +5,9 @@
 import { use, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { DataTable, Column } from '@/components/organisms/DataTable';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
-import { Modal } from '@/components/organisms/Modal';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateCyclePanel } from '@/components/organisms/appraisal/CreateCyclePanel';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';

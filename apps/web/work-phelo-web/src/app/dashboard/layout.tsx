@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
-import { TopNav } from '@/components/organisms/TopNav';
+import { TopNav } from '@/components/organisms/shared/TopNav';
 
 const NAV_TABS = [
   { label: 'Portal', value: 'portal' },

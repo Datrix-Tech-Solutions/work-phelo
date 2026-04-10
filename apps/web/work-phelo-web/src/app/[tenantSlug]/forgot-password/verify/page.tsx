@@ -1,7 +1,7 @@
 // TENANT OTP VERIFICATION PAGE //
 
-import { AuthPageShell } from '@/components/organisms/AuthPageShell';
-import { OtpVerification } from '@/components/organisms/OtpVerification';
+import { AuthPageShell } from '@/components/organisms/login/AuthPageShell';
+import { OtpVerification } from '@/components/organisms/login/OtpVerification';
 
 export default async function TenantOtpVerificationPage({
   params,

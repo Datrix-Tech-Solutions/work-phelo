@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { StatusBadge } from '@/components/molecules/StatusBadge';
+import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { Button } from '@/components/atoms/Button';
 
 interface CompanyHeaderProps {

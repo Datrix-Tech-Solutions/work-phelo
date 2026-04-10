@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { SidePanel } from '@/components/organisms/SidePanel';
-import { SuccessModal } from '@/components/organisms/SuccessModal';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 
 export interface ModuleOption {
   key: string;
