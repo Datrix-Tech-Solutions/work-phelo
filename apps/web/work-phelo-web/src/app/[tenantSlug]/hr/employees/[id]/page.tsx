@@ -3,9 +3,9 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useEmployee } from '@/hooks/useEmployees';
+import { useEmployee, useEmployees, useResendEmployeeInvite } from '@/hooks/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
-import { useEmployees } from '@/hooks/useEmployees';
+import { useToast } from '@/hooks/useToast';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
@@ -34,6 +34,16 @@ export default function EmployeeDetailPage({
   const { data: allHrResult } = useEmployees();
   const allHrEmployees = allHrResult?.data ?? [];
 
+  const toast = useToast();
+  const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
+
+  const handleResendInvite = () => {
+    resendInvite(id, {
+      onSuccess: () => toast.success('Invite resent successfully'),
+      onError: () => toast.error('Failed to resend invite'),
+    });
+  };
+
   if (isLoading) {
     return <EmployeeDetailSkeleton />;
   }
@@ -53,6 +63,8 @@ export default function EmployeeDetailPage({
       <EmployeeActionsBar
         isPendingInvite={!employee.userId}
         isOffboarded={employee.employmentStatus === 'OFFBOARDED'}
+        resendInvite={handleResendInvite}
+        isResending={isResending}
         onAssignAsset={() => setAssignAssetOpen(true)}
         onOffboard={() => setOffboardOpen(true)}
         onEdit={() => setEditOpen(true)}
