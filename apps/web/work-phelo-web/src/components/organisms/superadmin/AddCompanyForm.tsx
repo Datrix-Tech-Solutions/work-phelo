@@ -7,10 +7,11 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { FormSection } from '@/components/molecules/FormSection';
+import { FormSection } from '@/components/atoms/FormSection';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '../../atoms/SearchSelect';
 import { useState } from 'react';
+import { COMPANY_SIZE_OPTIONS, INDUSTRY_OPTIONS } from '@/lib/CompanyOptions';
 
 interface AddCompanyPayload {
   name: string;
@@ -27,26 +28,6 @@ interface AddCompanyFormProps {
   isOpen: boolean;
   onClose: () => void;
 }
-
-const COMPANY_SIZE_OPTIONS = [
-  { value: '1-10', label: '1 – 10 employees' },
-  { value: '11-50', label: '11 – 50 employees' },
-  { value: '51-200', label: '51 – 200 employees' },
-  { value: '201-500', label: '201 – 500 employees' },
-  { value: '500+', label: '500+ employees' },
-];
-
-const INDUSTRY_OPTIONS = [
-  { value: 'Agriculture', label: 'Agriculture' },
-  { value: 'Finance', label: 'Finance' },
-  { value: 'Healthcare', label: 'Healthcare' },
-  { value: 'Insurance', label: 'Insurance' },
-  { value: 'Logistics', label: 'Logistics' },
-  { value: 'Manufacturing', label: 'Manufacturing' },
-  { value: 'Retail', label: 'Retail' },
-  { value: 'Technology', label: 'Technology' },
-  { value: 'Other', label: 'Other' },
-];
 
 function generateSlug(name: string): string {
   return name
@@ -127,7 +108,7 @@ export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
             label="Company Name"
             registration={register('name', { required: 'Company name is required' })}
             error={errors.name}
-            placeholder="eg; Acme Corp Ltd"
+            placeholder="eg; Companyname Corp Ltd"
           />
 
           <SearchSelect
@@ -180,7 +161,7 @@ export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
             })}
             error={errors.email}
             type="email"
-            placeholder="eg; daniel@datrix.com"
+            placeholder="eg; name@companydomain.com"
           />
         </FormSection>
       </SidePanel>

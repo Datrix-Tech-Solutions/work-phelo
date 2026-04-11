@@ -85,7 +85,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         <p className="text-sm text-red-500">
           {tenantError ? 'Failed to load company. Please try again.' : 'Company not found.'}
         </p>
-        <Link href="/dashboard" className="text-sm text-[#0D2244] hover:underline">
+        <Link href="/dashboard" className="text-sm text-brand hover:underline">
           Back to Dashboard
         </Link>
       </div>

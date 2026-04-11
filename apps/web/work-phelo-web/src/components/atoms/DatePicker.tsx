@@ -139,7 +139,7 @@ export function DatePicker({
               <div className="flex items-center justify-between px-4 pt-4 pb-2">
                 <button
                   onClick={() => setView('monthYear')}
-                  className="flex items-center gap-1.5 text-sm font-bold text-[#0D2244] hover:opacity-70 transition-opacity"
+                  className="flex items-center gap-1.5 text-sm font-bold text-brand hover:opacity-70 transition-opacity"
                 >
                   {MONTHS[viewMonth]} {viewYear}
                   <ChevronDown className="w-4 h-4" />
@@ -194,9 +194,9 @@ export function DatePicker({
                         disabled
                           ? 'text-gray-300 cursor-not-allowed'
                           : isSelected
-                            ? 'bg-[#0D2244] text-white font-semibold shadow-sm'
+                            ? 'bg-brand text-white font-semibold shadow-sm'
                             : isCurrentDay
-                              ? 'border-2 border-[#0D2244] text-[#0D2244] font-medium'
+                              ? 'border-2 border-brand text-brand font-medium'
                               : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900',
                       )}
                     >
@@ -215,7 +215,7 @@ export function DatePicker({
               <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100">
                 <button
                   onClick={() => setView('days')}
-                  className="flex items-center gap-1.5 text-sm font-bold text-[#0D2244] hover:opacity-70 transition-opacity"
+                  className="flex items-center gap-1.5 text-sm font-bold text-brand hover:opacity-70 transition-opacity"
                 >
                   {MONTHS[viewMonth]} {viewYear}
                   <ChevronDown className="w-4 h-4 rotate-180" />
@@ -237,7 +237,7 @@ export function DatePicker({
                         className={cn(
                           'py-2 text-sm rounded-lg transition-colors font-medium',
                           idx === viewMonth
-                            ? 'bg-[#0D2244] text-white'
+                            ? 'bg-brand text-white'
                             : 'hover:bg-gray-100 text-gray-700',
                         )}
                       >
@@ -265,7 +265,7 @@ export function DatePicker({
                         className={cn(
                           'w-full text-left px-3 py-2.5 text-sm transition-colors',
                           isSelected
-                            ? 'bg-[#EEF1F8] text-[#0D2244] font-bold'
+                            ? 'bg-[#EEF1F8] text-brand font-bold'
                             : 'text-gray-700 hover:bg-gray-50',
                         )}
                       >

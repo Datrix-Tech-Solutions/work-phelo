@@ -127,7 +127,7 @@ export function OffboardEmployeePanel({
         <label className="text-sm font-bold text-gray-900">Reason</label>
         <select
           {...offboardForm.register('reason', { required: 'Reason is required' })}
-          className="w-full border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-[#0D2244]/20 focus:border-[#0D2244]"
+          className="w-full border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 bg-white focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand"
         >
           <option value="">Select reason</option>
           <option value="RESIGNATION">Resignation</option>
@@ -163,7 +163,7 @@ export function OffboardEmployeePanel({
             <input
               type="checkbox"
               {...offboardForm.register(field)}
-              className="w-4 h-4 rounded accent-[#0D2244] shrink-0"
+              className="w-4 h-4 rounded accent-brand shrink-0"
             />
             <span className="text-sm text-gray-700">{label}</span>
           </label>
@@ -177,7 +177,7 @@ export function OffboardEmployeePanel({
           {...offboardForm.register('exitNotes')}
           rows={4}
           placeholder="Add any notes from the exit interview…"
-          className="w-full border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-[#0D2244]/20 focus:border-[#0D2244] resize-none"
+          className="w-full border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand resize-none"
         />
       </div>
     </SidePanel>

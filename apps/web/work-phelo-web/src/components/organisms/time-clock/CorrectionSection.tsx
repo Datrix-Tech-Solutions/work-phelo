@@ -55,8 +55,8 @@ export function CorrectionsSection({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col gap-4 flex-1 min-h-0">
+      <div className="flex items-center gap-2 shrink-0">
         {(['PENDING', 'APPROVED', 'REJECTED'] as const).map((s) => (
           <button
             key={s}
@@ -64,7 +64,7 @@ export function CorrectionsSection({
             className={cn(
               'px-4 py-1.5 rounded-full text-sm font-medium transition-colors',
               correctionStatusFilter === s
-                ? 'bg-[#0D2244] text-white'
+                ? 'bg-brand text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
             )}
           >

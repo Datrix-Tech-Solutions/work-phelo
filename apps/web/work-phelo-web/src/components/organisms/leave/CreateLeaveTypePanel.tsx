@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -94,10 +95,7 @@ export function CreateLeaveTypePanel({
     };
 
     const handleError = (err: unknown) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
-      toast.error(message);
+      toast.error(extractError(err, 'Something went wrong'));
     };
 
     if (isEditing) {

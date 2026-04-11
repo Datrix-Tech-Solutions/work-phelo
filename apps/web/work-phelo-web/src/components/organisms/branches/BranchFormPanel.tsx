@@ -253,7 +253,7 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
             type="checkbox"
             id="isHeadOffice"
             {...form.register('isHeadOffice')}
-            className="w-4 h-4 rounded accent-[#0D2244]"
+            className="w-4 h-4 rounded accent-brand"
           />
           <label
             htmlFor="isHeadOffice"

@@ -1,5 +1,5 @@
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
-import { DetailField } from '@/components/molecules/payroll/DetailField';
+import { DetailField } from '@/components/molecules/shared/DetailField';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import type { Employee } from '@/types/hr';
 

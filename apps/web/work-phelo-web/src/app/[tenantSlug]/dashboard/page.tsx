@@ -10,80 +10,14 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { StatPill } from '@/components/molecules/departments/StatPill';
 import { getGreeting } from '@/lib/formatters';
+import { ModuleIcons, MODULE_COLORS } from '@/lib/icons';
 
 /* ── Module definitions ── */
-const HRIcon = () => (
-  <svg
-    width="26"
-    height="26"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-    <circle cx="9" cy="7" r="4" />
-    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
-
-const MarketingIcon = () => (
-  <svg
-    width="26"
-    height="26"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-  </svg>
-);
-
-const AccountingIcon = () => (
-  <svg
-    width="26"
-    height="26"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="white"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="12" y1="1" x2="12" y2="23" />
-    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-  </svg>
-);
-
-const OperationIcon = () => (
-  <svg
-    width="26"
-    height="26"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-    <path d="M4.93 4.93a10 10 0 0 0 0 14.14" />
-  </svg>
-);
-
 interface ModuleDef {
   key: string;
   name: string;
   description: string;
   icon: React.ReactNode;
-  iconBg: string;
   route: string;
 }
 
@@ -92,33 +26,29 @@ const MODULE_DEFS: ModuleDef[] = [
     key: 'hr',
     name: 'Human Resource',
     description: 'Manage employees, payroll, and attendance',
-    icon: <HRIcon />,
-    iconBg: '#0D2244',
+    icon: <ModuleIcons.hr className="w-7 h-7" />,
     route: 'hr',
   },
   {
     key: 'marketing',
     name: 'Marketing',
     description: 'Manage campaigns, leads, and analytics',
-    icon: <MarketingIcon />,
-    iconBg: '#22994A',
+    icon: <ModuleIcons.marketing className="w-7 h-7" />,
     route: 'marketing',
   },
   {
     key: 'accounting',
     name: 'Accounting',
     description: 'Manage invoices, expenses, and reports',
-    icon: <AccountingIcon />,
-    iconBg: '#D97706',
+    icon: <ModuleIcons.accounting className="w-7 h-7" />,
     route: 'accounting',
   },
   {
-    key: 'operation',
-    name: 'Operation',
+    key: 'operations',
+    name: 'Operations',
     description: 'Manage operations, workflows, and tasks',
-    icon: <OperationIcon />,
-    iconBg: '#6B7280',
-    route: 'operation',
+    icon: <ModuleIcons.operations className="w-7 h-7" />,
+    route: 'operations',
   },
 ];
 
@@ -172,7 +102,7 @@ export default function TenantDashboardPage({
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         {/* Welcome banner */}
-        <div className="bg-[#0D2244] mx-6 mt-6 rounded-card px-8 py-6 flex items-center justify-between">
+        <div className="bg-brand mx-6 mt-6 rounded-card px-8 py-6 flex items-center justify-between">
           <div>
             <p className="text-sm font-medium text-orange-400 mb-1">{tenantName}</p>
             <h1 className="text-2xl font-bold text-white">
@@ -203,7 +133,7 @@ export default function TenantDashboardPage({
                   name={mod.name}
                   description={mod.description}
                   icon={mod.icon}
-                  iconBg={mod.iconBg}
+                  iconBg={MODULE_COLORS[mod.key]}
                   enabled={enabled}
                   onClick={() => router.push(`/${tenantSlug}/${mod.route}`)}
                 />

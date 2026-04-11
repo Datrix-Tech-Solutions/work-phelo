@@ -72,9 +72,9 @@ export function LiveAttendanceTable() {
   ];
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 flex-1 min-h-0">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 shrink-0">
         {STAT_CARDS.map((card) => (
           <div
             key={card.label}
@@ -167,7 +167,7 @@ function LiveRow({
     >
       {/* Avatar + name */}
       <div className="flex items-center gap-3 min-w-0">
-        <div className="w-8 h-8 rounded-full bg-[#0D2244] text-white text-xs font-semibold flex items-center justify-center shrink-0 overflow-hidden">
+        <div className="w-8 h-8 rounded-full bg-brand text-white text-xs font-semibold flex items-center justify-center shrink-0 overflow-hidden">
           {entry.avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={entry.avatarUrl} alt="" className="w-full h-full object-cover" />

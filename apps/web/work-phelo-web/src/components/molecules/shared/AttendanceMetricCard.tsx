@@ -57,7 +57,7 @@ export function AttendanceMetricCard({
             size="sm"
             onClick={onClockIn}
             disabled={isLoading}
-            className="bg-[#0D2244] hover:bg-[#162d56]"
+            className="bg-brand hover:bg-brand-hover"
           >
             Clock In
           </Button>

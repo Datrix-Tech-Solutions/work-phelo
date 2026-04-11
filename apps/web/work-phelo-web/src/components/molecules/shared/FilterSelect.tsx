@@ -10,7 +10,7 @@ export function FilterSelect({ value, onChange, options, placeholder }: FilterSe
     <select
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#0D2244]/20 focus:border-[#0D2244]"
+      className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
     >
       <option value="">{placeholder}</option>
       {options.map((o) => (

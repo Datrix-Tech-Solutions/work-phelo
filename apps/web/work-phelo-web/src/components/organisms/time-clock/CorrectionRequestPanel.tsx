@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { extractError } from '@/lib/extractError';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
@@ -50,10 +51,7 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
           onClose();
         },
         onError: (err) => {
-          const msg =
-            (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-            'Failed to submit request';
-          toast.error(msg);
+          toast.error(extractError(err, 'Failed to submit request'));
         },
       },
     );

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/atoms/Button';
 import { formatDate } from '@/lib/formatters';
@@ -16,6 +16,7 @@ interface Props {
 
 export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Props) {
   const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const { data: hrData, isLoading } = useQuery({
     queryKey: ['appraisal-cycles-summary', search, page],
@@ -74,7 +75,7 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
           <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden max-w-24">
               <div
-                className="h-full bg-[#0D2244] rounded-full transition-all"
+                className="h-full bg-brand rounded-full transition-all"
                 style={{ width: `${rate}%` }}
               />
             </div>
@@ -93,7 +94,10 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
       label: '',
       render: (r) =>
         !r.isActive && r.completionRate === 100 ? (
-          <Button size="sm" onClick={() => router.push(`/hr/appraisal/cycles/${r.id}/results`)}>
+          <Button
+            size="sm"
+            onClick={() => router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.id}/results`)}
+          >
             View Results
           </Button>
         ) : null,

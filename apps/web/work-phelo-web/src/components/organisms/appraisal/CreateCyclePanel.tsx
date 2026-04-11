@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -82,10 +83,7 @@ export function CreateCyclePanel({
       onClose();
     },
     onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
-      toast.error(message);
+      toast.error(extractError(err, 'Something went wrong'));
     },
   });
 

@@ -7,6 +7,7 @@ import { useResetPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { cn } from '@/lib/utils';
+import { extractError } from '@/lib/extractError';
 
 interface ResetPasswordForm {
   password: string;
@@ -31,6 +32,7 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
     register,
     handleSubmit,
     control,
+    setError,
     formState: { errors },
   } = useForm<ResetPasswordForm>();
 
@@ -53,6 +55,9 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
           sessionStorage.removeItem('fpEmail');
           const base = tenantSlug ? `/${tenantSlug}` : '';
           router.push(`${base}/login`);
+        },
+        onError: (err) => {
+          setError('root', { message: extractError(err, 'Failed to reset password') });
         },
       },
     );
@@ -107,6 +112,8 @@ export function ResetPassword({ tenantSlug }: ResetPasswordProps) {
           type="password"
           placeholder="Re-enter new password"
         />
+
+        {errors.root && <p className="text-sm text-red-500 text-center">{errors.root.message}</p>}
 
         <Button
           type="submit"

@@ -4,7 +4,7 @@
 
 import { use, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
-import { AppraisalTabs } from '@/components/organisms/appraisal/AppraisalTab';
+import { AppraisalTabs } from '@/components/molecules/appraisal/AppraisalTabs';
 import { MyAppraisalsTable } from '@/components/organisms/appraisal/MyAppraisalTable';
 import { TeamReviewTable } from '@/components/organisms/appraisal/TeamReviewTable';
 import { HRAppraisalsTable } from '@/components/organisms/appraisal/HRAppraisalTable';

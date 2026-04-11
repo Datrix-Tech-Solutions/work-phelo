@@ -36,7 +36,7 @@ export function DepartmentFormFields({ form, employees }: DepartmentFormFieldsPr
         <label className="text-sm font-medium text-gray-700">Department Head</label>
         <select
           {...register('managerId')}
-          className="w-full border border-gray-300 rounded-input px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-[#0D2244]/20 focus:border-[#0D2244]"
+          className="w-full border border-gray-300 rounded-input px-3 py-2.5 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
         >
           <option value="">No head assigned</option>
           {employees.map((e) => (

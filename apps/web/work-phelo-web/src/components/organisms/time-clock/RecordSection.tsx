@@ -63,8 +63,8 @@ export function RecordsSection({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="flex flex-col gap-4 flex-1 min-h-0">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 shrink-0">
         <DatePicker placeholder="From date" value={filterFrom} onChange={onFilterFromChange} />
         <DatePicker placeholder="To date" value={filterTo} onChange={onFilterToChange} />
         <SearchSelect

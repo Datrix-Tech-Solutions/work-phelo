@@ -24,7 +24,7 @@ function RatingInput({ range }: { range: number }) {
       {Array.from({ length: range }, (_, i) => i + 1).map((n) => (
         <div
           key={n}
-          className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-sm font-medium text-gray-500 cursor-pointer hover:border-[#0D2244] hover:text-[#0D2244] transition-colors"
+          className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-sm font-medium text-gray-500 cursor-pointer hover:border-brand hover:text-brand transition-colors"
         >
           {n}
         </div>
@@ -37,7 +37,7 @@ function SectionPreview({ section, index }: { section: PreviewSection; index: nu
   return (
     <div className="flex flex-col gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50">
       <div className="flex items-center gap-2">
-        <span className="w-5 h-5 rounded-full bg-[#0D2244] text-white text-[10px] font-bold flex items-center justify-center shrink-0">
+        <span className="w-5 h-5 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center shrink-0">
           {index + 1}
         </span>
         <p className="text-sm font-semibold text-gray-900">
@@ -67,7 +67,7 @@ function SectionPreview({ section, index }: { section: PreviewSection; index: nu
           {['Yes', 'No'].map((opt) => (
             <div
               key={opt}
-              className="px-6 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-500 cursor-pointer hover:border-[#0D2244] hover:text-[#0D2244] transition-colors"
+              className="px-6 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-500 cursor-pointer hover:border-brand hover:text-brand transition-colors"
             >
               {opt}
             </div>
@@ -95,9 +95,9 @@ export function TemplatePreviewModal({
       width="max-w-xl"
     >
       <div className="mt-4 flex flex-col gap-3">
-        <div className="px-4 py-3 rounded-xl bg-[#0D2244]/5 border border-[#0D2244]/10">
-          <p className="text-xs text-[#0D2244]/60 font-medium uppercase tracking-wide">Template</p>
-          <p className="text-sm font-semibold text-[#0D2244] mt-0.5">
+        <div className="px-4 py-3 rounded-xl bg-brand/5 border border-brand/10">
+          <p className="text-xs text-brand/60 font-medium uppercase tracking-wide">Template</p>
+          <p className="text-sm font-semibold text-brand mt-0.5">
             {templateName || 'Untitled Template'}
           </p>
         </div>

@@ -34,6 +34,7 @@ interface DataTableProps<T extends { id: string | number }> {
   onExport?: () => void;
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
+  onRowClick?: (row: T) => void;
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -95,6 +96,7 @@ export function DataTable<T extends { id: string | number }>({
   onExport,
   actionButton,
   rowActions,
+  onRowClick,
   currentPage,
   totalPages,
   onPageChange,
@@ -147,7 +149,7 @@ export function DataTable<T extends { id: string | number }>({
         {actionButton && (
           <button
             onClick={actionButton.onClick}
-            className="flex items-center gap-2 px-4 py-2 bg-[#0D2244] text-white rounded-input text-sm font-medium hover:bg-[#162d56] transition-colors"
+            className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-input text-sm font-medium hover:bg-brand-hover transition-colors"
           >
             {actionButton.label}
             <Icons.Plus />
@@ -178,20 +180,23 @@ export function DataTable<T extends { id: string | number }>({
         {/* Scrollable Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {isLoading ? (
-            /* Loading State - Full height centered */
-            <div className="h-full flex items-center justify-center bg-white">
+            /* Loading State with spinning widget */
+            <div className="h-full flex items-center justify-center ">
               <div className="flex flex-col items-center gap-4">
-                <div className="w-8 h-8 border-4 border-gray-100 border-t-[#0D2244] rounded-full animate-spin" />
+                <div className="relative w-8 h-8">
+                  <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
+                  <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
+                </div>
                 <p className="text-sm text-gray-500 font-medium">Loading...</p>
               </div>
             </div>
           ) : data.length === 0 ? (
-            /* Empty State - Full height centered */
-            <div className="h-full flex items-center justify-center bg-white">
+            /* Empty State with logo */
+            <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
               <div className="flex flex-col items-center gap-5 text-center px-6">
                 {emptyImage ?? (
-                  <div className="w-20 h-20 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-300">
-                    <NoSearchLogo />
+                  <div className="w-28 h-28 rounded-3xl flex items-center justify-center">
+                    <NoSearchLogo className="w-25 h-25" />
                   </div>
                 )}
                 <div>
@@ -207,9 +212,11 @@ export function DataTable<T extends { id: string | number }>({
             data.map((row, rowIndex) => (
               <div
                 key={row.id}
+                onClick={() => onRowClick?.(row)}
                 className={cn(
                   'grid px-4 py-3.5 items-center text-sm text-gray-700 border-b border-gray-100 last:border-b-0',
                   'hover:bg-gray-50 transition-colors',
+                  onRowClick && 'cursor-pointer',
                 )}
                 style={{
                   gridTemplateColumns: [

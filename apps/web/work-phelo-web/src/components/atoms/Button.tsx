@@ -26,7 +26,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       'inline-flex items-center justify-center font-medium rounded-input transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-70 disabled:cursor-not-allowed';
 
     const variants = {
-      primary: 'bg-[#0D2244] text-white hover:bg-[#162d56] focus:ring-[#0D2244]',
+      primary: 'bg-brand text-white hover:bg-brand-hover focus:ring-brand',
       secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500',
       outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500',
       ghost: 'text-gray-700 hover:bg-gray-100 focus:ring-gray-500',
@@ -49,22 +49,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {isLoading ? (
           <span className="flex items-center gap-2">
             {loadingText ?? children}
-            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
-              <circle
-                cx="12"
-                cy="12"
-                r="9"
-                stroke="currentColor"
-                strokeOpacity="0.25"
-                strokeWidth="3"
-              />
-              <path
-                d="M12 3a9 9 0 0 1 9 9"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-              />
-            </svg>
+            <div className="relative w-5 h-5">
+              <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-[#FFFFFF] animate-spin" />
+              <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
+            </div>
           </span>
         ) : (
           children

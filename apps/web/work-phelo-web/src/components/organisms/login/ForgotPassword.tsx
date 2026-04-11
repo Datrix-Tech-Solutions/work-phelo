@@ -6,6 +6,7 @@ import { AppLogo } from '@/components/atoms/AppLogo';
 import { useForgotPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { extractError } from '@/lib/extractError';
 
 interface ForgotPasswordForm {
   email: string;
@@ -20,6 +21,7 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<ForgotPasswordForm>();
 
@@ -32,6 +34,9 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
           sessionStorage.setItem('fpEmail', data.email);
           const base = tenantSlug ? `/${tenantSlug}` : '';
           router.push(`${base}/forgot-password/verify`);
+        },
+        onError: (err) => {
+          setError('root', { message: extractError(err, 'Failed to send reset code') });
         },
       },
     );
@@ -59,6 +64,8 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
           placeholder="Enter your organization assigned email"
         />
 
+        {errors.root && <p className="text-sm text-red-500 text-center">{errors.root.message}</p>}
+
         <Button
           type="submit"
           isLoading={isPending}
@@ -71,7 +78,7 @@ export function ForgotPassword({ tenantSlug }: ForgotPasswordProps) {
 
       <p className="text-center text-xs text-gray-400 mt-6">
         Remembered it?{' '}
-        <a href={backHref} className="text-[#0D2244] font-medium hover:underline">
+        <a href={backHref} className="text-brand font-medium hover:underline">
           Sign in
         </a>
       </p>

@@ -6,6 +6,8 @@ import { AppLogo } from '@/components/atoms/AppLogo';
 import { useVerifyOtp, useResendOtp, useForgotPassword } from '@/hooks';
 import { Button } from '@/components/atoms/Button';
 import { cn } from '@/lib/utils';
+import { extractError } from '@/lib/extractError';
+import { useToast } from '@/hooks/useToast';
 
 const OTP_LENGTH = 6;
 
@@ -17,10 +19,12 @@ interface OtpVerificationProps {
 
 export function OtpVerification({ tenantSlug, mode = 'email-verification' }: OtpVerificationProps) {
   const router = useRouter();
+  const toast = useToast();
   const [digits, setDigits] = useState<string[]>(Array(OTP_LENGTH).fill(''));
+  const [verifyError, setVerifyError] = useState<string | null>(null);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const { mutate, isPending, isError } = useVerifyOtp();
+  const { mutate, isPending } = useVerifyOtp();
 
   const handleVerify = () => {
     const otp = digits.join('');
@@ -33,12 +37,16 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
       return;
     }
 
+    setVerifyError(null);
     mutate(
       { otp, tenantSlug },
       {
         onSuccess: () => {
           const base = tenantSlug ? `/${tenantSlug}` : '';
           router.push(`${base}/forgot-password/reset`);
+        },
+        onError: (err) => {
+          setVerifyError(extractError(err, 'Invalid code. Please try again.'));
         },
       },
     );
@@ -49,6 +57,7 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
     const next = [...digits];
     next[index] = char;
     setDigits(next);
+    setVerifyError(null);
     if (char && index < OTP_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
     }
@@ -77,9 +86,15 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
   const handleResend = () => {
     if (mode === 'password-reset') {
       const email = sessionStorage.getItem('fpEmail') ?? '';
-      resendForgot({ email, tenantSlug: tenantSlug ?? '' });
+      resendForgot(
+        { email, tenantSlug: tenantSlug ?? '' },
+        { onError: (err) => toast.error(extractError(err, 'Failed to resend code')) },
+      );
     } else {
-      resend({ tenantSlug });
+      resend(
+        { tenantSlug },
+        { onError: (err) => toast.error(extractError(err, 'Failed to resend code')) },
+      );
     }
   };
 
@@ -111,17 +126,15 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
             onPaste={handlePaste}
             className={cn(
               'w-11 h-13 text-center text-lg font-semibold border rounded-input',
-              'focus:outline-none focus:ring-2 focus:ring-[#0D2244] focus:border-[#0D2244]',
+              'focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand',
               'transition-colors text-gray-900',
-              isError ? 'border-red-500' : digit ? 'border-[#0D2244]' : 'border-gray-300',
+              verifyError ? 'border-red-500' : digit ? 'border-brand' : 'border-gray-300',
             )}
           />
         ))}
       </div>
 
-      {isError && (
-        <p className="text-xs text-red-500 text-center mb-4">Invalid code. Please try again.</p>
-      )}
+      {verifyError && <p className="text-xs text-red-500 text-center mb-4">{verifyError}</p>}
 
       <Button
         onClick={handleVerify}
@@ -138,7 +151,7 @@ export function OtpVerification({ tenantSlug, mode = 'email-verification' }: Otp
         <button
           onClick={handleResend}
           disabled={isResending || isResendingForgot}
-          className="text-[#0D2244] font-medium hover:underline disabled:opacity-50"
+          className="text-brand font-medium hover:underline disabled:opacity-50"
         >
           {isResending || isResendingForgot ? 'Resending...' : 'Resend'}
         </button>

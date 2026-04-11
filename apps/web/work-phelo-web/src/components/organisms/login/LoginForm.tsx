@@ -1,6 +1,7 @@
 'use client';
 
 import { useForm } from 'react-hook-form';
+import { extractError } from '@/lib/extractError';
 import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -48,10 +49,7 @@ export function LoginForm({
       router.push(destination);
     },
     onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Invalid email or password';
-      toast.error(message);
+      toast.error(extractError(err, 'Invalid email or password'));
     },
   });
 

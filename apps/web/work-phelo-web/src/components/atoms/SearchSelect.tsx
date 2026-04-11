@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
+import { Icons } from '@/lib/icons';
 
 export interface SearchSelectOption {
   value: string;
@@ -20,19 +21,7 @@ interface SearchSelectProps {
 
 function ChevronDown({ open }: { open: boolean }) {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={cn('transition-transform duration-150', open && 'rotate-180')}
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
+    <Icons.ChevronDown className={cn('transition-transform duration-150', open && 'rotate-180')} />
   );
 }
 
@@ -119,11 +108,7 @@ export function SearchSelect({
       <div
         className={cn(
           'flex items-center border rounded-input bg-white px-4 transition-colors',
-          open
-            ? 'border-[#0D2244] ring-1 ring-[#0D2244]/20'
-            : error
-              ? 'border-red-500'
-              : 'border-gray-300',
+          open ? 'border-brand ring-1 ring-brand/20' : error ? 'border-red-500' : 'border-gray-300',
         )}
       >
         <input
@@ -144,19 +129,7 @@ export function SearchSelect({
               onClick={handleClear}
               className="text-gray-300 hover:text-gray-500 transition-colors p-0.5"
             >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <Icons.X className="w-5 h-5" />
             </button>
           )}
           {/* Chevron toggle */}
@@ -188,7 +161,7 @@ export function SearchSelect({
                   className={cn(
                     'w-full text-left px-4 py-2.5 text-sm transition-colors flex flex-col',
                     opt.value === value
-                      ? 'bg-[#EEF1F8] text-[#0D2244] font-medium'
+                      ? 'bg-[#EEF1F8] text-brand font-medium'
                       : 'text-gray-900 hover:bg-gray-50',
                   )}
                 >

@@ -60,22 +60,24 @@ export function MyTimeSection({
   ];
 
   return (
-    <div className="flex flex-col gap-6">
-      <ClockInWidget
-        session={session}
-        isLoading={isLoading}
-        onClockIn={onClockIn}
-        onClockOut={onClockOut}
-        onStartBreak={onStartBreak}
-        onEndBreak={onEndBreak}
-        onReportMissed={onReportMissed}
-        isClockingIn={isClockingIn}
-        isClockingOut={isClockingOut}
-        isBreaking={isBreaking}
-      />
+    <div className="flex flex-col gap-6 flex-1 min-h-0">
+      <div className="shrink-0">
+        <ClockInWidget
+          session={session}
+          isLoading={isLoading}
+          onClockIn={onClockIn}
+          onClockOut={onClockOut}
+          onStartBreak={onStartBreak}
+          onEndBreak={onEndBreak}
+          onReportMissed={onReportMissed}
+          isClockingIn={isClockingIn}
+          isClockingOut={isClockingOut}
+          isBreaking={isBreaking}
+        />
+      </div>
 
-      <div>
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Attendance History</h2>
+      <div className="flex flex-col flex-1 min-h-0">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3 shrink-0">Attendance History</h2>
         <DataTable
           columns={historyColumns}
           data={historyEntries}

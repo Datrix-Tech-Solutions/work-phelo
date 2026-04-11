@@ -42,7 +42,7 @@ export default function RolesPage() {
         </div>
         <button
           onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-[#0D2244] text-white text-sm font-medium rounded-xl hover:bg-[#0D2244]/90"
+          className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-xl hover:bg-brand/90"
         >
           New Role
         </button>

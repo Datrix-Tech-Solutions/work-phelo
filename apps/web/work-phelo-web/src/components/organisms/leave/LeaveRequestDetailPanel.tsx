@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { extractError } from '@/lib/extractError';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -82,10 +83,7 @@ export function LeaveRequestDetailPanel({
       onClose();
     },
     onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
-      toast.error(message);
+      toast.error(extractError(err, 'Something went wrong'));
       setConfirmAction(null);
     },
   });
@@ -152,7 +150,7 @@ export function LeaveRequestDetailPanel({
           <DetailRow label="Start Date">{formatDate(request.startDate)}</DetailRow>
           <DetailRow label="End Date">{formatDate(request.endDate)}</DetailRow>
           <DetailRow label="Working Days">
-            <span className="font-semibold text-[#0D2244]">
+            <span className="font-semibold text-brand">
               {request.totalDays} day{request.totalDays !== 1 ? 's' : ''}
             </span>
           </DetailRow>
@@ -167,7 +165,7 @@ export function LeaveRequestDetailPanel({
             </p>
             <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#0D2244] rounded-full"
+                className="h-full bg-brand rounded-full"
                 style={{
                   width: `${typeBalance.entitled > 0 ? Math.min(100, (typeBalance.used / typeBalance.entitled) * 100) : 0}%`,
                 }}
@@ -216,7 +214,7 @@ export function LeaveRequestDetailPanel({
               href={request.documentationUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-[#0D2244] underline underline-offset-2 hover:opacity-70 transition-opacity break-all"
+              className="text-sm text-brand underline underline-offset-2 hover:opacity-70 transition-opacity break-all"
             >
               {request.documentationUrl}
             </a>

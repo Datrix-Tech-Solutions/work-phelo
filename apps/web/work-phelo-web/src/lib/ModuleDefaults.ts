@@ -92,4 +92,28 @@ export const DEFAULT_MODULES: Module[] = [
       },
     ],
   },
+  {
+    id: 'operations',
+    key: 'operations',
+    name: 'Operation Module',
+    description: 'Manage operations',
+    enabled: false,
+    options: [
+      {
+        key: 'leads',
+        label: 'Lead Management',
+        description: 'Manage leads and conversions',
+      },
+      {
+        key: 'pipeline',
+        label: 'Sales Pipeline',
+        description: 'Track deals through pipeline stages',
+      },
+      {
+        key: 'contacts',
+        label: 'Contact Management',
+        description: 'Manage customer contacts',
+      },
+    ],
+  },
 ];

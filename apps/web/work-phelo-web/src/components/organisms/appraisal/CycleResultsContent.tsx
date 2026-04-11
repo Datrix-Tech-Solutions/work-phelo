@@ -1,0 +1,254 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ChevronLeft } from 'lucide-react';
+import { api } from '@/lib/api';
+import {
+  AppraisalCycle,
+  FinalRating,
+  CycleResultItem,
+  CycleResultsSummary,
+} from '@/types/appraisal';
+import { MetricCard } from '@/components/molecules/shared/MetricCard';
+import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
+import { Column, DataTable } from '@/components/organisms/shared/DataTable';
+import { formatDate } from '@/lib/formatters';
+
+const ALL_RATINGS: FinalRating[] = [
+  'Outstanding',
+  'Very Good',
+  'Good',
+  'Satisfactory',
+  'Needs Improvement',
+];
+
+interface Props {
+  tenantSlug: string;
+  cycleId: string;
+}
+
+export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
+  const router = useRouter();
+
+  const [search, setSearch] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [ratingFilter, setRatingFilter] = useState('');
+
+  const { data: cycle, isLoading: cycleLoading } = useQuery<AppraisalCycle>({
+    queryKey: ['appraisal-cycle', cycleId],
+    queryFn: () => api.get(`/hr/appraisals/cycles/${cycleId}`).then((r) => r.data),
+  });
+
+  const { data: summary, isLoading: resultsLoading } = useQuery<CycleResultsSummary>({
+    queryKey: ['cycle-results', tenantSlug, cycleId],
+    queryFn: () => api.get(`/hr/appraisals/cycles/${cycleId}/results`).then((r) => r.data),
+    enabled: !!cycleId,
+  });
+
+  const results = useMemo<CycleResultItem[]>(() => summary?.results ?? [], [summary?.results]);
+
+  const exceeded = useMemo(
+    () =>
+      results.filter((r) => r.finalRating === 'Outstanding' || r.finalRating === 'Very Good')
+        .length,
+    [results],
+  );
+  const needsImprovement = useMemo(
+    () => results.filter((r) => r.finalRating === 'Needs Improvement').length,
+    [results],
+  );
+
+  const departments = useMemo(() => {
+    const set = new Set(results.map((r) => r.department));
+    return Array.from(set).sort();
+  }, [results]);
+
+  const filtered = useMemo(() => {
+    let data = results;
+    if (search) {
+      const q = search.toLowerCase();
+      data = data.filter((r) => r.employeeName.toLowerCase().includes(q));
+    }
+    if (deptFilter) data = data.filter((r) => r.department === deptFilter);
+    if (ratingFilter) data = data.filter((r) => r.finalRating === ratingFilter);
+    return [...data].sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+  }, [results, search, deptFilter, ratingFilter]);
+
+  const distribution = useMemo(() => {
+    const total = results.length || 1;
+    return ALL_RATINGS.map((rating) => {
+      const count = results.filter((r) => r.finalRating === rating).length;
+      return { rating, count, percentage: Math.round((count / total) * 100) };
+    });
+  }, [results]);
+
+  const columns: Column<CycleResultItem>[] = [
+    {
+      key: 'employeeName',
+      label: 'Employee',
+      width: '2fr',
+      render: (r) => <span className="font-medium text-gray-900">{r.employeeName}</span>,
+    },
+    { key: 'department', label: 'Department', render: (r) => <span>{r.department}</span> },
+    { key: 'jobTitle', label: 'Job Title', render: (r) => <span>{r.jobTitle}</span> },
+    { key: 'managerName', label: 'Manager', render: (r) => <span>{r.managerName}</span> },
+    { key: 'finalRating', label: 'Rating', render: (r) => <RatingBadge rating={r.finalRating} /> },
+    {
+      key: 'reviewCompletedAt',
+      label: 'Completed',
+      render: (r) => <span>{formatDate(r.reviewCompletedAt)}</span>,
+    },
+  ];
+
+  if (cycleLoading) {
+    return <div className="p-8 text-sm text-gray-400">Loading…</div>;
+  }
+
+  if (!cycle) {
+    return (
+      <div className="p-8 flex flex-col gap-4">
+        <p className="text-sm text-red-500">Cycle not found.</p>
+        <Link href={`/${tenantSlug}/hr/appraisal`} className="text-sm text-brand hover:underline">
+          Back to Appraisals
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 flex flex-col gap-6 min-h-full">
+      {/* Breadcrumb */}
+      <nav className="flex items-center gap-1.5 text-xs text-gray-400 shrink-0">
+        <Link
+          href={`/${tenantSlug}/hr/appraisal`}
+          className="flex items-center gap-1 hover:text-gray-600 transition-colors"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+          Appraisals
+        </Link>
+        <span>/</span>
+        <span className="text-gray-700 font-medium">{cycle.title}</span>
+      </nav>
+
+      {/* Cycle header */}
+      <div className="flex flex-col gap-1 shrink-0">
+        <h1 className="text-xl font-bold text-gray-900">{cycle.title}</h1>
+        <p className="text-sm text-gray-500">
+          {formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}
+        </p>
+      </div>
+
+      {resultsLoading ? (
+        <div className="text-sm text-gray-400">Loading results…</div>
+      ) : (
+        <>
+          {/* Metric cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+            <MetricCard
+              label="Total Reviewed"
+              value={summary?.reviewedCount ?? 0}
+              sub={`of ${summary?.totalEmployees ?? 0} employees`}
+            />
+            <MetricCard label="Completion Rate" value={`${summary?.completionRate ?? 0}%`} />
+            <MetricCard
+              label="Exceeded Expectations"
+              value={exceeded}
+              sub="Outstanding or Very Good"
+              highlight="green"
+            />
+            <MetricCard
+              label="Needs Improvement"
+              value={needsImprovement}
+              highlight={needsImprovement > 0 ? 'red' : undefined}
+            />
+          </div>
+
+          {/* Rating distribution */}
+          <div className="bg-white border border-gray-100 rounded-card shadow-sm shrink-0">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-900">Rating Distribution</h2>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500 font-medium border-b border-gray-100">
+                  <th className="px-5 py-3 text-left">Rating</th>
+                  <th className="px-5 py-3 text-left">Employees</th>
+                  <th className="px-5 py-3 text-left">Percentage</th>
+                  <th className="px-5 py-3 text-left w-48">Distribution</th>
+                </tr>
+              </thead>
+              <tbody>
+                {distribution.map(({ rating, count, percentage }) => (
+                  <tr key={rating} className="border-b border-gray-50 last:border-0">
+                    <td className="px-5 py-3">
+                      <RatingBadge rating={rating} />
+                    </td>
+                    <td className="px-5 py-3 font-medium text-gray-900">{count}</td>
+                    <td className="px-5 py-3 text-gray-600">{percentage}%</td>
+                    <td className="px-5 py-3">
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden w-36">
+                        <div
+                          className="h-full bg-brand rounded-full transition-all"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Individual results */}
+          <div className="flex flex-col gap-3 flex-1 min-h-0">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-sm font-semibold text-gray-900 mr-auto">Individual Results</h2>
+              <select
+                value={deptFilter}
+                onChange={(e) => setDeptFilter(e.target.value)}
+                className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+              >
+                <option value="">All Departments</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={ratingFilter}
+                onChange={(e) => setRatingFilter(e.target.value)}
+                className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+              >
+                <option value="">All Ratings</option>
+                {ALL_RATINGS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <DataTable<CycleResultItem>
+              columns={columns}
+              data={filtered}
+              isLoading={false}
+              searchPlaceholder="Search employee…"
+              onSearch={setSearch}
+              onRowClick={(row) =>
+                router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/results/${row.id}`)
+              }
+              emptyMessage="No results match your filters"
+              currentPage={1}
+              totalPages={1}
+              onPageChange={() => {}}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

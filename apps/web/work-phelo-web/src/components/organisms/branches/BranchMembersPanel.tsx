@@ -114,7 +114,7 @@ export function BranchMembersPanel({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search employees..."
-          className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#0D2244]/20 focus:border-[#0D2244]"
+          className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
         />
       </div>
 
@@ -141,9 +141,9 @@ export function BranchMembersPanel({
                   checked={checked || alreadyInBranch}
                   disabled={alreadyInBranch}
                   onChange={() => !alreadyInBranch && toggle(emp.id)}
-                  className="w-4 h-4 rounded accent-[#0D2244] shrink-0"
+                  className="w-4 h-4 rounded accent-brand shrink-0"
                 />
-                <div className="w-8 h-8 rounded-full bg-[#0D2244] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white text-xs font-bold shrink-0">
                   {initials}
                 </div>
                 <div className="flex-1 min-w-0">
