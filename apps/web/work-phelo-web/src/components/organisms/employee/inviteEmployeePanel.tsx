@@ -77,9 +77,7 @@ export function InviteEmployeePanel({
 
   const onSubmit = (d: InviteForm) => {
     const payload = Object.fromEntries(
-      Object.entries(d).filter(
-        ([k, v]) => k !== 'managerId' && v !== '' && v !== undefined && v !== null,
-      ),
+      Object.entries(d).filter(([, v]) => v !== '' && v !== undefined && v !== null),
     ) as unknown as CreateEmployeePayload;
 
     createEmployee(payload, {

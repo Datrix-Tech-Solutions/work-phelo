@@ -77,7 +77,7 @@ function ProfileDropdown({
         onClick={() => setOpen((v) => !v)}
         className={cn(
           'w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold transition-opacity hover:opacity-80',
-          userColor ?? 'bg-[#0D2244]',
+          userColor ?? 'bg-brand',
         )}
       >
         {userInitials}
@@ -132,12 +132,12 @@ export function TopNav({
 
   return (
     <>
-      <header className="w-full bg-[#d5dbe7] border-b border-white/10 px-5 h-14 flex items-center gap-4 shrink-0">
+      <header className="w-full bg-[#FFFFFF] border-b px-5 h-14 flex items-center gap-4 shrink-0">
         {/* Menu button */}
         {showMenuButton && (
           <button
             onClick={onMenuClick}
-            className="text-white/70 hover:text-black transition-colors"
+            className="text-blue-950 hover:text-black transition-colors"
             aria-label="Toggle menu"
           >
             <Menu />

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
+import { ModuleIcons } from '@/lib/icons';
+import { Users } from 'lucide-react';
 
 export interface ModuleOption {
   key: string;
@@ -55,16 +57,20 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
   );
 }
 
-const DefaultModuleIcon = () => (
-  <div className="w-10 h-10 rounded-input bg-[#0D2244] flex items-center justify-center shrink-0">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8">
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  </div>
-);
+function ModuleIcon({ moduleKey, className = '' }: { moduleKey: string; className?: string }) {
+  const IconComponent = ModuleIcons[moduleKey as keyof typeof ModuleIcons] || Users;
+
+  return (
+    <div
+      className={cn(
+        'w-10 h-10 rounded-xl bg-[#0D2244] flex items-center justify-center shrink-0',
+        className,
+      )}
+    >
+      <IconComponent className="w-5 h-5 text-white" />
+    </div>
+  );
+}
 
 export function ModuleConfiguration({
   modules: initialModules,
@@ -77,7 +83,6 @@ export function ModuleConfiguration({
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
-  // Sync local state when server data changes (after cache invalidation)
   useEffect(() => {
     setModules(initialModules);
   }, [initialModules]);
@@ -87,14 +92,16 @@ export function ModuleConfiguration({
     onToggle(id, enabled);
   };
 
-  const handleOptionToggle = (optKey: string, enabled: boolean) => {
-    if (!activeModule) return;
-    const updatedOptions = activeModule.options!.map((o) =>
-      o.key === optKey ? { ...o, enabled } : o,
+  const handleOptionToggle = (moduleId: string, optKey: string, enabled: boolean) => {
+    setModules((prev) =>
+      prev.map((mod) => {
+        if (mod.id !== moduleId || !mod.options) return mod;
+        return {
+          ...mod,
+          options: mod.options.map((o) => (o.key === optKey ? { ...o, enabled } : o)),
+        };
+      }),
     );
-    const updatedModule = { ...activeModule, options: updatedOptions };
-    setActiveModule(updatedModule);
-    setModules((prev) => prev.map((m) => (m.id === activeModule.id ? updatedModule : m)));
   };
 
   const handleRowClick = (mod: Module) => {
@@ -126,7 +133,7 @@ export function ModuleConfiguration({
   return (
     <>
       <div className="border border-gray-200 rounded-card flex flex-col h-full overflow-hidden">
-        {/* Fixed header */}
+        {/* Header */}
         <div className="px-6 pt-6 pb-4 shrink-0">
           <h3 className="text-sm font-semibold text-gray-900">Module Configuration</h3>
           <p className="text-sm text-gray-400 mt-1">
@@ -134,7 +141,7 @@ export function ModuleConfiguration({
           </p>
         </div>
 
-        {/* Scrollable module list */}
+        {/* Module List */}
         <div className="flex-1 overflow-y-auto px-6 flex flex-col divide-y divide-gray-100 min-h-0">
           {modules.map((mod) => (
             <div key={mod.id}>
@@ -147,33 +154,37 @@ export function ModuleConfiguration({
                     'cursor-pointer hover:bg-gray-50 -mx-6 px-6 transition-colors',
                 )}
               >
-                {mod.icon ?? <DefaultModuleIcon />}
+                {/* Unique Icon per Module */}
+                {mod.icon || <ModuleIcon moduleKey={mod.key} />}
+
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900">{mod.name}</p>
                   <p className="text-xs text-gray-400 mt-0.5 truncate">{mod.description}</p>
                 </div>
+
                 <Toggle enabled={mod.enabled} onChange={(v) => handleToggle(mod.id, v)} />
               </div>
+
               {validationErrors[mod.id] && (
-                <p className="text-xs text-red-500 pb-3 -mt-1">{validationErrors[mod.id]}</p>
+                <p className="text-xs text-red-500 pb-3 -mt-1 pl-14">{validationErrors[mod.id]}</p>
               )}
             </div>
           ))}
         </div>
 
-        {/* save button */}
+        {/* Save Button */}
         <div className="px-6 py-4 border-t border-gray-100 shrink-0 flex justify-end">
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="px-5 py-2.5 bg-gray-100 text-gray-700 text-sm font-medium rounded-input hover:bg-gray-200 transition-colors disabled:opacity-60"
+            className="px-5 py-2.5 bg-[#0D2244] text-white text-sm font-medium rounded-input hover:bg-[#162d56] transition-colors disabled:opacity-60"
           >
             {isSaving ? 'Saving…' : 'Save Configuration'}
           </button>
         </div>
       </div>
 
-      {/* Module options side panel */}
+      {/* Options Side Panel */}
       {activeModule && (
         <SidePanel
           isOpen={!!activeModule}
@@ -184,7 +195,7 @@ export function ModuleConfiguration({
             <div className="flex justify-end">
               <button
                 onClick={() => setActiveModule(null)}
-                className="px-4 py-2 bg-[#0D2244] text-white text-sm font-medium rounded-input hover:bg-[#162d55] transition-colors"
+                className="px-4 py-2 bg-[#0D2244] text-white text-sm font-medium rounded-input hover:bg-[#162d56] transition-colors"
               >
                 Done
               </button>
@@ -194,14 +205,14 @@ export function ModuleConfiguration({
           <div className="flex flex-col divide-y divide-gray-100">
             {activeModule.options?.map((opt) => (
               <div key={opt.key} className="flex items-center gap-4 py-4">
-                {opt.icon ?? <DefaultModuleIcon />}
+                {opt.icon || <ModuleIcon moduleKey={activeModule.key} />}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900">{opt.label}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{opt.description}</p>
                 </div>
                 <Toggle
                   enabled={opt.enabled ?? false}
-                  onChange={(v) => handleOptionToggle(opt.key, v)}
+                  onChange={(v) => handleOptionToggle(activeModule.id, opt.key, v)}
                 />
               </div>
             ))}
@@ -209,7 +220,6 @@ export function ModuleConfiguration({
         </SidePanel>
       )}
 
-      {/* Save success popup */}
       <SuccessModal
         isOpen={showSaveSuccess}
         onClose={() => setShowSaveSuccess(false)}

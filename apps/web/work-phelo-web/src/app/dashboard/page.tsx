@@ -5,7 +5,7 @@
 import { useState, useMemo } from 'react';
 import { useTenants } from '@/hooks/useTenants';
 import { useRouter } from 'next/navigation';
-import { WelcomeBanner } from '@/components/organisms/shared/WelcomeBanner';
+import { WelcomeBanner } from '@/components/molecules/shared/WelcomeBanner';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';

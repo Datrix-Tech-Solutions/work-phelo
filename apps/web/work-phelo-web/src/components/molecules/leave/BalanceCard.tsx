@@ -13,10 +13,7 @@ export function BalanceCard({ balance }: BalanceCardProps) {
         <span className="text-xs text-gray-400 shrink-0">{balance.entitled} days/yr</span>
       </div>
       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-[#0D2244] rounded-full transition-all"
-          style={{ width: `${pct}%` }}
-        />
+        <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${pct}%` }} />
       </div>
       <div className="flex items-center justify-between text-xs">
         <span className="text-gray-500">

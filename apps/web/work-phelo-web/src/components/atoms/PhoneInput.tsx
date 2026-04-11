@@ -2,6 +2,7 @@
 
 import { forwardRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { Icons } from '@/lib/icons';
 
 const COUNTRY_CODES = [
   { code: '+233', flag: 'GH' },
@@ -63,18 +64,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
               ))}
             </select>
             <div className="pointer-events-none absolute right-2 text-gray-400">
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+              <Icons.ChevronDown className="w-5 h-5" />
             </div>
           </div>
 

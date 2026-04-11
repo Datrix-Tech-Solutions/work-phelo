@@ -45,11 +45,8 @@ export function WelcomeBanner({ userName, companyName, stats, className }: Welco
         'w-full rounded-input px-6 py-4 flex items-center justify-between gap-6 overflow-hidden',
         className,
       )}
-      style={{
-        background: 'linear-gradient(to right, #0D1F44, #1E3A8A)',
-      }}
+      style={{ background: 'linear-gradient(to right, #0D1F44, #1E3A8A)' }}
     >
-      {/* Left — greeting block */}
       <div className="flex flex-col gap-0.5">
         {companyName && (
           <span className="text-sm font-semibold text-orange-400">{companyName}</span>
@@ -58,7 +55,6 @@ export function WelcomeBanner({ userName, companyName, stats, className }: Welco
         {!companyName && <span className="text-sm font-medium text-orange-400">{date}</span>}
       </div>
 
-      {/* Right — stats */}
       {stats && stats.length > 0 && (
         <div className="flex items-center gap-8 shrink-0">
           {stats.map((stat, i) => (

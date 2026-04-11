@@ -40,7 +40,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
     <span
       className={cn(
         'shrink-0 flex items-center justify-center',
-        isDeactivated ? 'text-gray-300' : isCurrent ? 'text-[#0D2244]' : 'text-gray-400',
+        isDeactivated ? 'text-gray-300' : isCurrent ? 'text-brand' : 'text-gray-400',
       )}
     >
       {item.icon}
@@ -64,7 +64,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
     <div className="relative group/tip px-2">
       {/* Active left-bar accent */}
       {isCurrent && !isDeactivated && (
-        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-[#0D2244] rounded-r-full" />
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-brand rounded-r-full" />
       )}
 
       {isDeactivated ? (
@@ -82,7 +82,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
           className={cn(
             baseRow,
             isCurrent
-              ? 'bg-[#EEF1F8] text-[#0D2244] font-semibold'
+              ? 'bg-[#EEF1F8] text-brand font-semibold'
               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
           )}
         >

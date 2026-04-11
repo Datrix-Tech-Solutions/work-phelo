@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { TrendingUp, TrendingDown } from 'lucide-react';
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { Button } from '@/components/atoms/Button';
+import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
-import { MetricCard } from '@/components/molecules/payroll/MetricCard';
-import { TrendingDown, TrendingUp } from 'lucide-react';
+import { useEmployees } from '@/hooks/useEmployees';
+import { calculatePayroll } from '@/lib/payrollCalculations';
+import { Employee } from '@/types/hr';
 
 interface PayrollRow {
   id: string;
@@ -15,62 +18,79 @@ interface PayrollRow {
   allowances: number;
   grossSalary: number;
   employeeSSNIT: number;
+  employerSSNIT: number;
   taxableIncome: number;
   paye: number;
   netSalary: number;
+  totalEmployerCost: number;
   department?: string;
 }
 
-interface ManagePayrollTabProps {
-  // We'll connect real data later
-  payrollData: PayrollRow[];
-  isLoading?: boolean;
-  onAllowancesChange: (employeeId: string, newAllowances: number) => void;
-  onDownloadPayslip: (employeeId: string) => void;
-  onExportFullPayroll: () => void;
-}
-
-export function ManagePayrollTab({
-  payrollData,
-  isLoading = false,
-  onAllowancesChange,
-  onDownloadPayslip,
-  onExportFullPayroll,
-}: ManagePayrollTabProps) {
+export function ManagePayrollTab() {
+  const { data: empData, isLoading } = useEmployees();
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedDepartment] = useState('');
+  const [allowancesMap, setAllowancesMap] = useState<Record<string, number>>({});
 
-  // Filter data
-  const filteredData = useMemo(() => {
-    return payrollData.filter((row) => {
-      const matchesSearch = row.employeeName.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesDepartment = !selectedDepartment || row.department === selectedDepartment;
-      return matchesSearch && matchesDepartment;
+  const payrollRows: PayrollRow[] = useMemo(() => {
+    const employees: Employee[] = empData?.data ?? [];
+    return employees.map((e) => {
+      const basic = Number(e.basicSalary) || 0;
+      const allowances = allowancesMap[e.id] ?? 1000;
+      const calc = calculatePayroll({
+        basicSalary: basic,
+        allowances,
+        country: 'GH',
+      });
+      return {
+        id: e.id,
+        employeeName: `${e.firstName} ${e.lastName}`,
+        avatarUrl: e.avatarUrl,
+        basicSalary: basic,
+        allowances,
+        grossSalary: calc.grossSalary,
+        employeeSSNIT: calc.employeeSSNIT,
+        employerSSNIT: calc.employerSSNIT,
+        taxableIncome: calc.taxableIncome,
+        paye: calc.paye,
+        netSalary: calc.netSalary,
+        totalEmployerCost: calc.totalEmployerCost,
+        department: e.department?.name,
+      };
     });
-  }, [payrollData, searchQuery, selectedDepartment]);
+  }, [empData, allowancesMap]);
 
-  // Calculate Totals
-  const totals = useMemo(() => {
-    return filteredData.reduce(
-      (acc, row) => ({
-        gross: acc.gross + row.grossSalary,
-        net: acc.net + row.netSalary,
-        paye: acc.paye + row.paye,
-        ssnit: acc.ssnit + row.employeeSSNIT,
-        employerCost: acc.employerCost + (row.grossSalary + row.employeeSSNIT * (13 / 5.5)), // rough
-      }),
-      { gross: 0, net: 0, paye: 0, ssnit: 0, employerCost: 0 },
-    );
-  }, [filteredData]);
+  const filteredData = useMemo(() => {
+    if (!searchQuery) return payrollRows;
+    const q = searchQuery.toLowerCase();
+    return payrollRows.filter((r) => r.employeeName.toLowerCase().includes(q));
+  }, [payrollRows, searchQuery]);
 
-  // Table Columns
+  const totals = useMemo(
+    () =>
+      filteredData.reduce(
+        (acc, r) => ({
+          gross: acc.gross + r.grossSalary,
+          net: acc.net + r.netSalary,
+          paye: acc.paye + r.paye,
+          ssnit: acc.ssnit + r.employeeSSNIT,
+          employerCost: acc.employerCost + r.totalEmployerCost,
+        }),
+        { gross: 0, net: 0, paye: 0, ssnit: 0, employerCost: 0 },
+      ),
+    [filteredData],
+  );
+
+  const handleAllowancesChange = (employeeId: string, value: number) => {
+    setAllowancesMap((prev) => ({ ...prev, [employeeId]: value }));
+  };
+
   const columns: Column<PayrollRow>[] = [
     {
       key: 'employee',
       label: 'Employee',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-[#0D2244] flex items-center justify-center text-white text-xs font-medium">
+          <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white text-xs font-medium shrink-0">
             {row.employeeName.substring(0, 2).toUpperCase()}
           </div>
           <div>
@@ -92,8 +112,8 @@ export function ManagePayrollTab({
         <input
           type="number"
           value={row.allowances}
-          onChange={(e) => onAllowancesChange(row.id, Number(e.target.value))}
-          className="w-28 px-3 py-1.5 border border-gray-200 rounded-input text-sm focus:outline-none focus:border-[#0D2244]"
+          onChange={(e) => handleAllowancesChange(row.id, Number(e.target.value))}
+          className="w-28 px-3 py-1.5 border border-gray-200 rounded-input text-sm focus:outline-none focus:border-brand"
         />
       ),
     },
@@ -127,8 +147,8 @@ export function ManagePayrollTab({
     {
       key: 'actions',
       label: '',
-      render: (row) => (
-        <Button variant="outline" size="sm" onClick={() => onDownloadPayslip(row.id)}>
+      render: () => (
+        <Button variant="outline" size="sm">
           Payslip
         </Button>
       ),
@@ -136,9 +156,8 @@ export function ManagePayrollTab({
   ];
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+    <div className="flex flex-col gap-6 flex-1 min-h-0">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
         <MetricCard
           title="Total Gross"
           value={`GHS ${totals.gross.toLocaleString()}`}
@@ -151,7 +170,6 @@ export function ManagePayrollTab({
           icon={TrendingUp}
           variant="success"
         />
-
         <MetricCard
           title="Total PAYE"
           value={`GHS ${totals.paye.toLocaleString()}`}
@@ -172,7 +190,6 @@ export function ManagePayrollTab({
         />
       </div>
 
-      {/* Payroll Table */}
       <SectionCard title="Payroll Management">
         <DataTable
           columns={columns}
@@ -180,11 +197,6 @@ export function ManagePayrollTab({
           isLoading={isLoading}
           searchPlaceholder="Search employee name..."
           onSearch={setSearchQuery}
-          onExport={onExportFullPayroll}
-          actionButton={{
-            label: 'Export Full Report',
-            onClick: onExportFullPayroll,
-          }}
           currentPage={1}
           totalPages={1}
           onPageChange={() => {}}

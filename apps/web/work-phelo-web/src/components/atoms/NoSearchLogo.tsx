@@ -1,12 +1,17 @@
+import { cn } from '@/lib/utils';
 import Image from 'next/image';
 
-export function NoSearchLogo() {
+interface NoSearchLogoProps {
+  className?: string;
+}
+
+export function NoSearchLogo({ className = '' }: NoSearchLogoProps) {
   return (
-    <div className="flex justify-center">
-      <div className="relative w-50 aspect-280/90">
+    <div className={cn('flex justify-center', className)}>
+      <div className="relative w-47.5 aspect-280/90">
         <Image
           src="/NoSearchLogo.png"
-          alt="Search Logo"
+          alt="No Search Results"
           fill
           className="object-contain"
           sizes="(max-width: 1200px) 190px, 220px"

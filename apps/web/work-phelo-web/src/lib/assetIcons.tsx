@@ -29,7 +29,7 @@ interface AssetTypeIconProps {
 
 export function AssetTypeIcon({ type, size = 'md', className = '' }: AssetTypeIconProps) {
   const iconSize = size === 'sm' ? 'w-5 h-5' : 'w-10 h-10';
-  const baseClasses = `${iconSize} text-[#0D2244] ${className}`.trim();
+  const baseClasses = `${iconSize} text-brand ${className}`.trim();
 
   switch (type) {
     case 'LAPTOP':

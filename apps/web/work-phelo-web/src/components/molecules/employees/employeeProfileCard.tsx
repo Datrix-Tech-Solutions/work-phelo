@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { DetailField } from '../payroll/DetailField';
+import { DetailField } from '../shared/DetailField';
 import type { Employee } from '@/types/hr';
 
 interface EmployeeProfileCardProps {
@@ -22,7 +22,7 @@ export function EmployeeProfileCard({ employee }: EmployeeProfileCardProps) {
           className="w-24 h-24 rounded-full object-cover"
         />
       ) : (
-        <div className="w-24 h-24 rounded-full bg-[#0D2244] flex items-center justify-center text-white text-2xl font-bold">
+        <div className="w-24 h-24 rounded-full bg-brand flex items-center justify-center text-white text-2xl font-bold">
           {initials}
         </div>
       )}

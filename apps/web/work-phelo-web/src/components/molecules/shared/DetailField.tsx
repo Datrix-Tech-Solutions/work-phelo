@@ -1,5 +1,3 @@
-'use client';
-
 interface DetailFieldProps {
   label: string;
   value?: string | number | null;

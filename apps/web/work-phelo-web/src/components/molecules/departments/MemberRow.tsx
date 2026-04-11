@@ -23,9 +23,9 @@ export function MemberRow({ employee: emp, checked, alreadyInDept, onToggle }: M
         checked={checked || alreadyInDept}
         disabled={alreadyInDept}
         onChange={() => !alreadyInDept && onToggle(emp.id)}
-        className="w-4 h-4 rounded accent-[#0D2244] shrink-0"
+        className="w-4 h-4 rounded accent-brand shrink-0"
       />
-      <div className="w-8 h-8 rounded-full bg-[#0D2244] flex items-center justify-center text-white text-xs font-bold shrink-0">
+      <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white text-xs font-bold shrink-0">
         {initials}
       </div>
       <div className="flex-1 min-w-0">

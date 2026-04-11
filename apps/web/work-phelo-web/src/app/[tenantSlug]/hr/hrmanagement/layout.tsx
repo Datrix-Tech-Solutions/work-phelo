@@ -34,7 +34,7 @@ function ManagementTabs({ groups }: { groups: TabGroup[] }) {
                 className={cn(
                   'relative px-4 py-3 text-sm transition-colors whitespace-nowrap',
                   isActive
-                    ? 'text-[#0D2244] font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#0D2244] after:rounded-t-full'
+                    ? 'text-brand font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand after:rounded-t-full'
                     : 'text-gray-500 hover:text-gray-800',
                 )}
               >

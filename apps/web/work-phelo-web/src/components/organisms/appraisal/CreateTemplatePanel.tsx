@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect } from 'react';
+import { extractError } from '@/lib/extractError';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -13,6 +14,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { AppraisalTemplate, CreateAppraisalTemplateDto, SectionType } from '@/types/appraisal';
+import { Icons } from '@/lib/icons';
 
 interface CreateTemplatePanelProps {
   isOpen: boolean;
@@ -94,7 +96,7 @@ function SectionRow({
       onDrop={onDrop}
       className={cn(
         'flex flex-col gap-3 p-4 rounded-xl border transition-colors',
-        isDragOver ? 'border-[#0D2244] bg-[#0D2244]/5' : 'border-gray-200 bg-gray-50',
+        isDragOver ? 'border-brand bg-brand/5' : 'border-gray-200 bg-gray-50',
       )}
     >
       {/* Row header */}
@@ -117,7 +119,7 @@ function SectionRow({
                 onClick={() => field.onChange(!field.value)}
                 className={cn(
                   'w-8 h-4 rounded-full transition-colors relative',
-                  field.value ? 'bg-[#0D2244]' : 'bg-gray-200',
+                  field.value ? 'bg-brand' : 'bg-gray-200',
                 )}
               >
                 <span
@@ -136,19 +138,7 @@ function SectionRow({
           className="p-1 text-gray-300 hover:text-red-400 transition-colors"
           aria-label="Remove section"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <Icons.X />
         </button>
       </div>
 
@@ -258,10 +248,7 @@ export function CreateTemplatePanel({
       onClose();
     },
     onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
-      toast.error(message);
+      toast.error(extractError(err, 'Something went wrong'));
     },
   });
 
@@ -335,21 +322,9 @@ export function CreateTemplatePanel({
             <button
               type="button"
               onClick={addSection}
-              className="flex items-center gap-1.5 text-sm text-[#0D2244] font-medium hover:opacity-70 transition-opacity"
+              className="flex items-center gap-1.5 text-sm text-brand font-medium hover:opacity-70 transition-opacity"
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
+              <Icons.Plus />
               Add Section
             </button>
           </div>
@@ -397,19 +372,7 @@ export function CreateTemplatePanel({
               onClick={addSection}
               className="flex items-center justify-center gap-2 py-3 rounded-xl border border-dashed border-gray-300 text-sm text-gray-400 hover:border-gray-400 hover:text-gray-600 transition-colors"
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
+              <Icons.Plus />
               Add Another Section
             </button>
           )}

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
@@ -18,6 +18,7 @@ interface Props {
 
 export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Props) {
   const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
   const { data: myData, isLoading } = useQuery({
     queryKey: ['my-appraisals'],
@@ -94,7 +95,9 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
           <Button
             size="sm"
             variant={isStartable ? 'primary' : 'secondary'}
-            onClick={() => router.push(`/hr/appraisal/${r.id}`)}
+            onClick={() =>
+              router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
+            }
           >
             {isStartable ? 'Start' : 'View'}
           </Button>

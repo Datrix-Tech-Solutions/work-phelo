@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
+import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -122,10 +123,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
         onClose();
       },
       onError: (err: unknown) => {
-        const message =
-          (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-          'Something went wrong';
-        toast.error(message);
+        toast.error(extractError(err, 'Something went wrong'));
       },
     });
   };

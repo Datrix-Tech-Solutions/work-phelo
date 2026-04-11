@@ -3,7 +3,8 @@
 'use client';
 
 import { use, useState, useRef } from 'react';
-import { Calendar, CircleDollarSign, MonitorSmartphone, CalendarRange } from 'lucide-react';
+import { Calendar } from 'lucide-react';
+import { ModuleIcons, moduleColor } from '@/lib/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
 import { useUpcomingBirthdays, useEmployeeDashboard } from '@/hooks';
@@ -15,8 +16,8 @@ import { UpcomingBirthday } from '@/types/hr';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
-import { MetricCard } from '@/components/molecules/payroll/MetricCard';
-import { AttendanceMetricCard } from '@/components/molecules/AttendanceMetricCard';
+import { MetricCard } from '@/components/molecules/shared/MetricCard';
+import { AttendanceMetricCard } from '@/components/molecules/shared/AttendanceMetricCard';
 import { AnnouncementCard } from '@/components/molecules/dashboard/announcmentCard';
 import { BirthdaysCard } from '@/components/molecules/dashboard/birthdayCard';
 import { cn } from '@/lib/utils';
@@ -270,7 +271,7 @@ export default function EmployeeDashboardPage({
           title="Annual Leave"
           value={annualBalance ? annualBalance.remaining : '—'}
           unit={annualBalance ? `/ ${annualBalance.entitled} Days` : undefined}
-          icon={Calendar}
+          icon={ModuleIcons.leave}
           actionLabel="Request Leave"
           onAction={() => setApplyLeaveOpen(true)}
         />
@@ -284,7 +285,7 @@ export default function EmployeeDashboardPage({
               ? formatDateRange(upcomingLeave.startDate, upcomingLeave.endDate)
               : 'No upcoming leave'
           }
-          icon={CalendarRange}
+          icon={ModuleIcons.leave}
         />
 
         {/* Clock In / Out */}
@@ -325,21 +326,21 @@ export default function EmployeeDashboardPage({
             <h2 className="text-base font-bold text-gray-900 mb-4">Quick Actions</h2>
             <div className="flex items-start justify-around">
               <QuickActionBtn
-                icon={<CircleDollarSign className="w-6 h-6" />}
+                icon={<ModuleIcons.payroll className="w-6 h-6" />}
                 label="My Payslips"
-                color="#22994A"
+                color={moduleColor('payroll')}
                 onClick={() => setPayslipsOpen(true)}
               />
               <QuickActionBtn
-                icon={<MonitorSmartphone className="w-6 h-6" />}
+                icon={<ModuleIcons.assets className="w-6 h-6" />}
                 label="My Assets"
-                color="#D97706"
+                color={moduleColor('assets')}
                 onClick={() => setAssetsOpen(true)}
               />
               <QuickActionBtn
-                icon={<CalendarRange className="w-6 h-6" />}
+                icon={<ModuleIcons.leave className="w-6 h-6" />}
                 label="My Leave"
-                color="#3B82F6"
+                color={moduleColor('leave')}
                 onClick={() => setMyLeaveOpen(true)}
               />
             </div>

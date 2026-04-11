@@ -93,7 +93,7 @@ export function AnnouncementCard({
           {isTruncatable && (
             <button
               onClick={() => setExpanded((e) => !e)}
-              className="ml-1 text-xs font-semibold text-[#0D2244] hover:underline"
+              className="ml-1 text-xs font-semibold text-brand hover:underline"
             >
               {expanded ? 'Show less' : 'Read more'}
             </button>

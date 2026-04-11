@@ -66,7 +66,7 @@ export function SuccessModal({
         {/* Action */}
         <button
           onClick={onClose}
-          className="w-full py-2.5 bg-[#0D2244] text-white text-sm font-semibold rounded-input hover:bg-[#162d55] transition-colors"
+          className="w-full py-2.5 bg-brand text-white text-sm font-semibold rounded-input hover:bg-brand-hover transition-colors"
         >
           {actionLabel}
         </button>

@@ -17,7 +17,7 @@ export function StatCard({ title, value, icon, className }: StatCardProps) {
     >
       <div className="flex items-start justify-between">
         <span className="text-sm text-gray-500 font-medium">{title}</span>
-        <div className="p-2 bg-gray-100 rounded-input text-[#0D2244]">{icon}</div>
+        <div className="p-2 bg-gray-100 rounded-input text-brand">{icon}</div>
       </div>
       <span className="text-xl font-medium text-gray-800">
         {value == null || value === 0 ? '—' : value}

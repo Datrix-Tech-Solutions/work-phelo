@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -86,10 +87,7 @@ export function CreateKpiPanel({
       onClose();
     },
     onError: (err) => {
-      const message =
-        (err as { response?: { data?: { message?: string } } }).response?.data?.message ??
-        'Something went wrong';
-      toast.error(message);
+      toast.error(extractError(err, 'Something went wrong'));
     },
   });
 
@@ -134,11 +132,7 @@ export function CreateKpiPanel({
           <span
             className={cn(
               'font-bold',
-              newTotal > 100
-                ? 'text-red-500'
-                : newTotal === 100
-                  ? 'text-green-600'
-                  : 'text-[#0D2244]',
+              newTotal > 100 ? 'text-red-500' : newTotal === 100 ? 'text-green-600' : 'text-brand',
             )}
           >
             {newTotal}% / 100%
@@ -148,7 +142,7 @@ export function CreateKpiPanel({
           <div
             className={cn(
               'h-full rounded-full transition-all duration-300',
-              newTotal > 100 ? 'bg-red-500' : newTotal === 100 ? 'bg-green-500' : 'bg-[#0D2244]',
+              newTotal > 100 ? 'bg-red-500' : newTotal === 100 ? 'bg-green-500' : 'bg-brand',
             )}
             style={{ width: `${Math.min(newTotal, 100)}%` }}
           />
@@ -253,15 +247,14 @@ export function CreateKpiPanel({
         {/* Visual split bar */}
         <div className="flex h-2 rounded-full overflow-hidden">
           <div
-            className="bg-[#0D2244] transition-all duration-300"
+            className="bg-brand transition-all duration-300"
             style={{ width: `${Math.min(Number(selfWeight) || 0, 100)}%` }}
           />
           <div className="flex-1 bg-orange-400" />
         </div>
         <div className="flex justify-between text-xs text-gray-400">
           <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#0D2244] inline-block" /> Self{' '}
-            {selfWeight || 0}%
+            <span className="w-2 h-2 rounded-full bg-brand inline-block" /> Self {selfWeight || 0}%
           </span>
           <span className="flex items-center gap-1.5">
             Manager {managerWeight}%{' '}

@@ -22,7 +22,7 @@ import {
   useCorrectionRequests,
   useReviewCorrectionRequest,
 } from '@/hooks/useTimeClock';
-import { TimeClockTabs } from '@/components/organisms/time-clock/TimeClockTable';
+import { TimeClockTabs } from '@/components/molecules/time-clock/TimeClockTabs';
 import { MyTimeSection } from '@/components/organisms/time-clock/MyTimeSection';
 import { LiveAttendanceTable } from '@/components/organisms/time-clock/LiveAttendanceTable';
 import { RecordsSection } from '@/components/organisms/time-clock/RecordSection';

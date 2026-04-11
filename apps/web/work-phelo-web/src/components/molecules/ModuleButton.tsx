@@ -63,7 +63,7 @@ export function ModuleButton({
           enabled && iconBg
             ? { backgroundColor: iconBg }
             : enabled
-              ? { backgroundColor: '#0D2244' }
+              ? { backgroundColor: 'var(--brand)' }
               : undefined
         }
       >

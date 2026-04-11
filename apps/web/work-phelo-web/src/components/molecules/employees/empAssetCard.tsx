@@ -15,7 +15,7 @@ export function AssetCard({ asset }: { asset: EmployeeAsset }) {
         <AssetTypeIcon
           type={asset.type}
           size="md"
-          className="text-[#0D2244] group-hover:scale-110 transition-transform duration-300"
+          className="text-brand group-hover:scale-110 transition-transform duration-300"
         />
       </div>
 

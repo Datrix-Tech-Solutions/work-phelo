@@ -59,7 +59,7 @@ function CompanyAvatar({ name, logoUrl }: { name: string; logoUrl?: string }) {
     .join('')
     .toUpperCase();
   return (
-    <div className="w-14 h-14 rounded-full bg-[#0D2244] flex items-center justify-center text-white text-base font-bold shadow-sm shrink-0">
+    <div className="w-14 h-14 rounded-full bg-brand flex items-center justify-center text-white text-base font-bold shadow-sm shrink-0">
       {initials}
     </div>
   );
