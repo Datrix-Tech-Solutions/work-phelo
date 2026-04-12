@@ -111,7 +111,7 @@ jobs:
             set -euo pipefail
 
             cd ${{ env.DEPLOY_PATH }}
-            git pull origin main
+            git pull origin prod
 
             export IMAGE_PREFIX="${{ env.IMAGE_PREFIX }}"
             export IMAGE_TAG="${{ github.sha }}"
@@ -119,7 +119,6 @@ jobs:
             export POSTGRES_PASSWORD="${{ secrets.PROD_POSTGRES_PASSWORD }}"
             export POSTGRES_DB="${{ secrets.PROD_POSTGRES_DB }}"
             export REDIS_PASSWORD="${{ secrets.PROD_REDIS_PASSWORD }}"
-            export NEXT_PUBLIC_API_URL="${{ secrets.PROD_API_URL }}"
 
             echo "Authenticated with GHCR"
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
