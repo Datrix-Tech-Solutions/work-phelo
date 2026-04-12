@@ -10,7 +10,7 @@ env:
   ORG: datrix-tech-solutions
   IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
   COMPOSE_FILE: infrastructure/docker-compose.prod.yml
-  DEPLOY_PATH: /var/www/apps/work-phelo.com/work-phelo
+  DEPLOY_PATH: /var/www/apps/workphelo.datrixtechsolutions.com/work-phelo
 
 jobs:
   quality-gates:
