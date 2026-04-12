@@ -39,8 +39,9 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-# Install production deps with full workspace context
-RUN npm ci --omit=dev --ignore-scripts && npm rebuild bcrypt --update-binary
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/auth-service/node_modules ./apps/auth-service/node_modules
+RUN npm rebuild bcrypt --update-binary
 # Copy built service
 COPY --from=builder /app/apps/auth-service/dist ./apps/auth-service/dist
 COPY --from=builder /app/apps/auth-service/prisma ./apps/auth-service/prisma

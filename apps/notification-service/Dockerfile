@@ -31,7 +31,8 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-RUN npm ci --omit=dev --ignore-scripts
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/notification-service/node_modules ./apps/notification-service/node_modules
 COPY --from=builder /app/apps/notification-service/prisma ./apps/notification-service/prisma
 RUN cd apps/notification-service && npx prisma@5.22.0 generate
 COPY --from=builder /app/apps/notification-service/dist ./apps/notification-service/dist
