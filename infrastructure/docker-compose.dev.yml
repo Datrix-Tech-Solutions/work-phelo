@@ -107,7 +107,7 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=http://157.245.220.205/api/v1
+      - NEXT_PUBLIC_API_URL=https://dev.workphelo.datrixtechsolutions.com/api/v1
     ports:
       - "127.0.0.1:3000:3000"
 
