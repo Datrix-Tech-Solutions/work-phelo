@@ -15,11 +15,9 @@ async function bootstrap() {
         durable: true,
         arguments: {
           'x-message-ttl': 3600000,
-          'x-dead-letter-exchange': 'workphelo.dlx',
-          'x-dead-letter-routing-key': 'notification_queue',
         },
       },
-      noAck: true,
+      noAck: false,
       prefetchCount: 10,
     },
   });

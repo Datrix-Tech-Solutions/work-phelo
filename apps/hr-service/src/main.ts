@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
@@ -8,6 +9,7 @@ import { setupSwagger } from './swagger.config';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  app.use(helmet());
   app.use(cookieParser());
 
   app.useGlobalPipes(
@@ -40,11 +42,9 @@ async function bootstrap() {
         durable: true,
         arguments: {
           'x-message-ttl': 3600000,
-          'x-dead-letter-exchange': 'workphelo.dlx',
-          'x-dead-letter-routing-key': 'hr_queue',
         },
       },
-      noAck: true,
+      noAck: false,
       prefetchCount: 10,
     },
   });

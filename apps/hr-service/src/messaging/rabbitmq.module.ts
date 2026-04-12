@@ -22,8 +22,6 @@ import { EventsHandler } from './events.handler';
             durable: true,
             arguments: {
               'x-message-ttl': 3600000,
-              'x-dead-letter-exchange': 'workphelo.dlx',
-              'x-dead-letter-routing-key': 'notification_queue',
             },
           },
         },
@@ -40,8 +38,6 @@ import { EventsHandler } from './events.handler';
             durable: true,
             arguments: {
               'x-message-ttl': 3600000,
-              'x-dead-letter-exchange': 'workphelo.dlx',
-              'x-dead-letter-routing-key': 'auth_queue',
             },
           },
         },

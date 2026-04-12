@@ -17,8 +17,6 @@ import { RabbitMQPublisher } from './rabbitmq.publisher';
             durable: true,
             arguments: {
               'x-message-ttl': 3600000,
-              'x-dead-letter-exchange': 'workphelo.dlx',
-              'x-dead-letter-routing-key': 'notification_queue',
             },
           },
         },
@@ -35,8 +33,6 @@ import { RabbitMQPublisher } from './rabbitmq.publisher';
             durable: true,
             arguments: {
               'x-message-ttl': 3600000,
-              'x-dead-letter-exchange': 'workphelo.dlx',
-              'x-dead-letter-routing-key': 'hr_queue',
             },
           },
         },
