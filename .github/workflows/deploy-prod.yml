@@ -42,12 +42,20 @@ jobs:
           filters: |
             api-gateway:
               - 'apps/api-gateway/**'
+              - 'packages/**'
+              - 'package-lock.json'
             auth-service:
               - 'apps/auth-service/**'
+              - 'packages/**'
+              - 'package-lock.json'
             hr-service:
               - 'apps/hr-service/**'
+              - 'packages/**'
+              - 'package-lock.json'
             notification-service:
               - 'apps/notification-service/**'
+              - 'packages/**'
+              - 'package-lock.json'
             nextjs-web:
               - 'apps/web/work-phelo-web/**'
 
