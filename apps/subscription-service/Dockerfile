@@ -42,3 +42,4 @@ COPY --from=builder /app/apps/subscription-service/prisma ./apps/subscription-se
 WORKDIR /app/apps/subscription-service
 EXPOSE 4005
 CMD ["node", "dist/main"]
+
