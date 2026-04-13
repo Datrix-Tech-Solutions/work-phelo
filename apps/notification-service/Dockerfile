@@ -41,3 +41,4 @@ WORKDIR /app/apps/notification-service
 EXPOSE 4004
 CMD ["node", "dist/main"]
 
+
