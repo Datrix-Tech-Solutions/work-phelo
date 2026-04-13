@@ -49,3 +49,4 @@ COPY --from=builder /app/apps/auth-service/prisma ./apps/auth-service/prisma
 WORKDIR /app/apps/auth-service
 EXPOSE 4001
 CMD ["node", "dist/main"]
+

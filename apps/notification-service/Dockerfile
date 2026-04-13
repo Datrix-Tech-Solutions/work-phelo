@@ -39,3 +39,4 @@ COPY --from=builder /app/apps/notification-service/dist ./apps/notification-serv
 WORKDIR /app/apps/notification-service
 EXPOSE 4004
 CMD ["node", "dist/main"]
+

@@ -42,3 +42,4 @@ COPY --from=builder /app/apps/marketing-service/prisma ./apps/marketing-service/
 WORKDIR /app/apps/marketing-service
 EXPOSE 4006
 CMD ["node", "dist/main"]
+

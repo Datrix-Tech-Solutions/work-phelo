@@ -36,3 +36,4 @@ COPY --from=builder /app/apps/api-gateway/dist ./apps/api-gateway/dist
 WORKDIR /app/apps/api-gateway
 EXPOSE 4000
 CMD ["node", "dist/main"]
+

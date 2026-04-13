@@ -39,3 +39,4 @@ COPY --from=builder /app/apps/hr-service/dist ./apps/hr-service/dist
 WORKDIR /app/apps/hr-service
 EXPOSE 4002
 CMD ["node", "dist/main"]
+
