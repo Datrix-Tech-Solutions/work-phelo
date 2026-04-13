@@ -9,6 +9,7 @@ COPY packages/utils ./packages/utils
 COPY packages/config ./packages/config
 COPY apps/notification-service ./apps/notification-service
 RUN npm ci
+RUN npm install --workspace=apps/notification-service @nestjs/platform-express --ignore-scripts
 RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
