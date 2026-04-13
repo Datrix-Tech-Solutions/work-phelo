@@ -9,6 +9,7 @@ COPY packages/utils/package.json ./packages/utils/
 COPY packages/config/package.json ./packages/config/
 COPY apps/marketing-service/package.json ./apps/marketing-service/
 RUN npm ci
+RUN npm install --workspace=apps/marketing-service @nestjs/platform-express --ignore-scripts
 COPY packages/types ./packages/types
 COPY packages/schemas ./packages/schemas
 COPY packages/utils ./packages/utils
