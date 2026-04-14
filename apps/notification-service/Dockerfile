@@ -9,6 +9,7 @@ COPY packages/utils ./packages/utils
 COPY packages/config ./packages/config
 COPY apps/notification-service ./apps/notification-service
 RUN npm ci
+RUN npm install --workspace=apps/notification-service @nestjs/platform-express --ignore-scripts
 RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
@@ -31,10 +32,13 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-RUN npm ci --omit=dev --ignore-scripts
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/notification-service/node_modules ./apps/notification-service/node_modules
 COPY --from=builder /app/apps/notification-service/prisma ./apps/notification-service/prisma
 RUN cd apps/notification-service && npx prisma@5.22.0 generate
 COPY --from=builder /app/apps/notification-service/dist ./apps/notification-service/dist
 WORKDIR /app/apps/notification-service
 EXPOSE 4004
 CMD ["node", "dist/main"]
+
+

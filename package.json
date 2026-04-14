@@ -48,5 +48,9 @@
     "apps/subscription-service",
     "apps/marketing-service",
     "packages/*"
-  ]
+  ],
+  "dependencies": {
+    "@nestjs/platform-express": "^10.4.0",
+    "@nestjs/microservices": "^10.4.0"
+  }
 }

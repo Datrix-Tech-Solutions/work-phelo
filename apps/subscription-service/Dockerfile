@@ -35,9 +35,11 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-RUN npm ci --omit=dev --ignore-scripts
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/subscription-service/node_modules ./apps/subscription-service/node_modules
 COPY --from=builder /app/apps/subscription-service/dist ./apps/subscription-service/dist
 COPY --from=builder /app/apps/subscription-service/prisma ./apps/subscription-service/prisma
 WORKDIR /app/apps/subscription-service
 EXPOSE 4005
 CMD ["node", "dist/main"]
+

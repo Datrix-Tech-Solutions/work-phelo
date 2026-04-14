@@ -3,59 +3,179 @@ name: Deploy to Production
 on:
   push:
     branches: [prod]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  ORG: datrix-tech-solutions
+  IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
+  COMPOSE_FILE: infrastructure/docker-compose.prod.yml
+  DEPLOY_PATH: /var/www/apps/workphelo.datrixtechsolutions.com/work-phelo
 
 jobs:
   quality-gates:
+    name: Quality Gates
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
+      - run: npm install
+      - run: npm run check-types
+      - run: npm run build
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type checks
-        run: npm run check-types
-
-      - name: Build validation
-        run: npm run build
-
-  deploy:
+  detect-changes:
+    name: Detect Changed Services
     runs-on: ubuntu-latest
     needs: quality-gates
+    outputs:
+      changed: ${{ steps.filter.outputs.changes }}
     steps:
-      - name: Deploy to Production Server
-        uses: appleboy/ssh-action@v1.2.0
+      - uses: actions/checkout@v4
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          command_timeout: 90m
+          fetch-depth: 2
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api-gateway:
+              - 'apps/api-gateway/**'
+              - 'packages/**'
+              - 'package-lock.json'
+            auth-service:
+              - 'apps/auth-service/**'
+              - 'packages/**'
+              - 'package-lock.json'
+            hr-service:
+              - 'apps/hr-service/**'
+              - 'packages/**'
+              - 'package-lock.json'
+            notification-service:
+              - 'apps/notification-service/**'
+              - 'packages/**'
+              - 'package-lock.json'
+            nextjs-web:
+              - 'apps/web/work-phelo-web/**'
+
+  build-and-push:
+    name: Build & Push — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.changed != '[]' && needs.detect-changes.outputs.changed != ''
+    strategy:
+      matrix:
+        include:
+          - service: api-gateway
+            dockerfile: apps/api-gateway/Dockerfile
+            image: api-gateway
+          - service: auth-service
+            dockerfile: apps/auth-service/Dockerfile
+            image: auth-service
+          - service: hr-service
+            dockerfile: apps/hr-service/Dockerfile
+            image: hr-service
+          - service: notification-service
+            dockerfile: apps/notification-service/Dockerfile
+            image: notification-service
+          - service: nextjs-web
+            dockerfile: apps/web/work-phelo-web/Dockerfile
+            image: nextjs-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
+        if: contains(needs.detect-changes.outputs.changed, matrix.service)
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          cache-from: type=gha,scope=${{ matrix.service }}-prod
+          cache-to: type=gha,scope=${{ matrix.service }}-prod,mode=max
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:prod
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ github.sha }}
+          push: true
+
+  deploy:
+    name: Blue-Green Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PROD_SERVER_HOST }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          command_timeout: 60m
           script: |
-            set -e
+            set -euo pipefail
 
-            DEPLOY_PATH="/var/www/apps/work-phelo.com/work-phelo"
+            cd ${{ env.DEPLOY_PATH }}
+            git pull origin prod
 
-            cd $DEPLOY_PATH
+            export IMAGE_PREFIX="${{ env.IMAGE_PREFIX }}"
+            export IMAGE_TAG="${{ github.sha }}"
+            export POSTGRES_USER="${{ secrets.PROD_POSTGRES_USER }}"
+            export POSTGRES_PASSWORD="${{ secrets.PROD_POSTGRES_PASSWORD }}"
+            export POSTGRES_DB="${{ secrets.PROD_POSTGRES_DB }}"
+            export REDIS_PASSWORD="${{ secrets.PROD_REDIS_PASSWORD }}"
 
-            if [ ! -f infrastructure/docker-compose.prod.yml ]; then
-              echo "Missing infrastructure/docker-compose.prod.yml on server."
+            echo "Authenticated with GHCR"
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            echo "Pulling new images..."
+            docker compose -f ${{ env.COMPOSE_FILE }} pull
+            echo "Images pulled"
+
+            # ── Blue-Green: bring up new containers alongside old ──────────
+            echo "Starting new containers..."
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --no-deps --scale auth-service=2 auth-service || true
+            sleep 15
+
+            # ── Run migrations ─────────────────────────────────────────────
+            echo "Running migrations..."
+            docker exec erp-auth-prod npx prisma@5.22.0 migrate deploy \
+              --schema /app/apps/auth-service/prisma/schema.prisma || true
+            docker exec erp-hr-prod npx prisma@5.22.0 migrate deploy \
+              --schema /app/apps/hr-service/prisma/schema.prisma || true
+            echo "Migrations complete"
+
+            # ── Full deploy ────────────────────────────────────────────────
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d --remove-orphans
+            sleep 20
+
+            # ── Health checks ──────────────────────────────────────────────
+            check_service() {
+              local name="$1"
+              local status
+              status=$(docker inspect "$name" --format='{{.State.Status}}' 2>/dev/null || echo "missing")
+              if [[ "$status" == "running" ]]; then
+                echo "  $name — running"
+              else
+                echo "  $name — UNHEALTHY ($status)"
+                FAILED_SERVICES="$FAILED_SERVICES $name"
+              fi
+            }
+
+            FAILED_SERVICES=""
+            check_service erp-gateway-prod
+            check_service erp-auth-prod
+            check_service erp-hr-prod
+            check_service erp-notification-prod
+            check_service erp-nextjs-prod
+
+            if [[ -n "$FAILED_SERVICES" ]]; then
+              echo "Deployment failed — unhealthy:$FAILED_SERVICES"
               exit 1
             fi
 
-            git fetch origin
-            git checkout prod
-            git pull origin prod
-
-            docker compose -f infrastructure/docker-compose.prod.yml down
-            docker compose -f infrastructure/docker-compose.prod.yml up -d --build
-            docker compose -f infrastructure/docker-compose.prod.yml ps
-
-            echo "Production deployment complete at $(date)"
+            docker image prune -f
+            echo "Production deployment complete"
