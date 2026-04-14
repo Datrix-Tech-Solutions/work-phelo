@@ -115,10 +115,28 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
         <MyTimeSection
           session={session}
           isLoading={sessionLoading}
-          onClockIn={() => clockIn(undefined)}
-          onClockOut={() => clockOut()}
-          onStartBreak={() => startBreak()}
-          onEndBreak={() => endBreak()}
+          onClockIn={() =>
+            clockIn(undefined, {
+              onSuccess: () => toast.success('Clocked in successfully'),
+              onError: (err) => toast.error(extractError(err, 'Failed to clock in')),
+            })
+          }
+          onClockOut={() =>
+            clockOut(undefined, {
+              onSuccess: () => toast.success('Clocked out successfully'),
+              onError: (err) => toast.error(extractError(err, 'Failed to clock out')),
+            })
+          }
+          onStartBreak={() =>
+            startBreak(undefined, {
+              onError: (err) => toast.error(extractError(err, 'Failed to start break')),
+            })
+          }
+          onEndBreak={() =>
+            endBreak(undefined, {
+              onError: (err) => toast.error(extractError(err, 'Failed to end break')),
+            })
+          }
           onReportMissed={() => setCorrectionOpen(true)}
           isClockingIn={isClockingIn}
           isClockingOut={isClockingOut}

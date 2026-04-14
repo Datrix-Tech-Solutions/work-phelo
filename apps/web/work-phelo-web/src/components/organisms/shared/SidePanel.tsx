@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { Icons } from '@/lib/icons';
 
 interface SidePanelProps {
   isOpen: boolean;
@@ -76,19 +77,7 @@ export function SidePanel({
               className="text-gray-400 hover:text-gray-500 p-2 rounded-full hover:bg-gray-100 transition-all"
               aria-label="Close panel"
             >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
+              <Icons.X />
             </button>
           </div>
         </div>

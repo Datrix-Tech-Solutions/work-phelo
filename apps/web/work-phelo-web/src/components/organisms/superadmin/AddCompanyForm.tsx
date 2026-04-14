@@ -56,8 +56,9 @@ export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
     mutationFn: (data: AddCompanyPayload) => api.post('/auth/tenants/register', data),
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      setSuccessCompany(vars.name);
       reset();
+      onClose();
+      setSuccessCompany(vars.name);
     },
   });
 

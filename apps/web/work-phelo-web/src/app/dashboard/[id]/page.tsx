@@ -11,11 +11,7 @@ import { CompanyInfoCard } from '@/components/organisms/shared/CompanyInfoCard';
 import { ModuleConfiguration, Module } from '@/components/organisms/shared/ModuleConfiguration';
 import { RecentActivities } from '@/components/organisms/superadmin/RecentActivities';
 import { DEFAULT_MODULES } from '@/lib/ModuleDefaults';
-import { ChevronLeftIcon } from 'lucide-react';
-
-function ChevronIcon() {
-  return <ChevronLeftIcon />;
-}
+import { Icons } from '@/lib/icons';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -99,7 +95,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         <Link href="/dashboard" className="hover:text-gray-700 transition-colors">
           Dashboard
         </Link>
-        <ChevronIcon />
+        <Icons.ChevronLeft className="w-5 h-5" />
         <span className="text-gray-700 font-medium">{tenant.name}</span>
       </nav>
 

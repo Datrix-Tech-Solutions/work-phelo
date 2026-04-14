@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/useToast';
 import { useUpdateEmployee } from '@/hooks';
 import { cn } from '@/lib/utils';
 import type { Branch, Employee } from '@/types/hr';
+import { Icons } from '@/lib/icons';
 
 interface BranchMembersPanelProps {
   isOpen: boolean;
@@ -95,20 +96,7 @@ export function BranchMembersPanel({
     >
       {/* Search */}
       <div className="relative">
-        <svg
-          className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
+        <Icons.Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
         <input
           type="text"
           value={search}

@@ -1,4 +1,6 @@
 // ── Leave Type ───────────────────────────────────────────
+export type LeaveApplicableTo = 'ALL' | 'FULL_TIME' | 'PART_TIME' | 'CONTRACT';
+
 export interface LeaveType {
   id: string;
   tenantId: string;
@@ -8,6 +10,7 @@ export interface LeaveType {
   isCarryOver: boolean;
   maxCarryOverDays?: number;
   requiresApproval: boolean;
+  applicableTo?: LeaveApplicableTo[];
   isDefault: boolean;
   isActive: boolean;
   createdAt: string;
@@ -21,6 +24,7 @@ export interface CreateLeaveTypeDto {
   isCarryOver: boolean;
   maxCarryOverDays?: number;
   requiresApproval: boolean;
+  applicableTo?: LeaveApplicableTo[];
 }
 
 export type UpdateLeaveTypeDto = Partial<CreateLeaveTypeDto>;

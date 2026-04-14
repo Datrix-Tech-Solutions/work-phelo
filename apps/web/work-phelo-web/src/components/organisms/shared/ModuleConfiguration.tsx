@@ -44,7 +44,7 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
       }}
       className={cn(
         'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200',
-        enabled ? 'bg-[#0D2244]' : 'bg-gray-200',
+        enabled ? 'bg-brand' : 'bg-gray-200',
       )}
     >
       <span
@@ -63,7 +63,7 @@ function ModuleIcon({ moduleKey, className = '' }: { moduleKey: string; classNam
   return (
     <div
       className={cn(
-        'w-10 h-10 rounded-xl bg-[#0D2244] flex items-center justify-center shrink-0',
+        'w-10 h-10 rounded-xl bg-brand flex items-center justify-center shrink-0',
         className,
       )}
     >
@@ -177,7 +177,7 @@ export function ModuleConfiguration({
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="px-5 py-2.5 bg-[#0D2244] text-white text-sm font-medium rounded-input hover:bg-[#162d56] transition-colors disabled:opacity-60"
+            className="px-5 py-2.5 bg-brand text-white text-sm font-medium rounded-input hover:bg-brand-hover transition-colors disabled:opacity-60"
           >
             {isSaving ? 'Saving…' : 'Save Configuration'}
           </button>
@@ -185,40 +185,45 @@ export function ModuleConfiguration({
       </div>
 
       {/* Options Side Panel */}
-      {activeModule && (
-        <SidePanel
-          isOpen={!!activeModule}
-          onClose={() => setActiveModule(null)}
-          title={activeModule.name}
-          description={activeModule.description}
-          footer={
-            <div className="flex justify-end">
-              <button
-                onClick={() => setActiveModule(null)}
-                className="px-4 py-2 bg-[#0D2244] text-white text-sm font-medium rounded-input hover:bg-[#162d56] transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          }
-        >
-          <div className="flex flex-col divide-y divide-gray-100">
-            {activeModule.options?.map((opt) => (
-              <div key={opt.key} className="flex items-center gap-4 py-4">
-                {opt.icon || <ModuleIcon moduleKey={activeModule.key} />}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{opt.label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{opt.description}</p>
+      {activeModule &&
+        (() => {
+          // Always read options from live `modules` state so toggles reflect immediately
+          const liveModule = modules.find((m) => m.id === activeModule.id) ?? activeModule;
+          return (
+            <SidePanel
+              isOpen={!!activeModule}
+              onClose={() => setActiveModule(null)}
+              title={liveModule.name}
+              description={liveModule.description}
+              footer={
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => setActiveModule(null)}
+                    className="px-4 py-2 bg-brand text-white text-sm font-medium rounded-input hover:bg-brand-hover transition-colors"
+                  >
+                    Done
+                  </button>
                 </div>
-                <Toggle
-                  enabled={opt.enabled ?? false}
-                  onChange={(v) => handleOptionToggle(activeModule.id, opt.key, v)}
-                />
+              }
+            >
+              <div className="flex flex-col divide-y divide-gray-100">
+                {liveModule.options?.map((opt) => (
+                  <div key={opt.key} className="flex items-center gap-4 py-4">
+                    {opt.icon || <ModuleIcon moduleKey={liveModule.key} />}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{opt.label}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">{opt.description}</p>
+                    </div>
+                    <Toggle
+                      enabled={opt.enabled ?? false}
+                      onChange={(v) => handleOptionToggle(liveModule.id, opt.key, v)}
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </SidePanel>
-      )}
+            </SidePanel>
+          );
+        })()}
 
       <SuccessModal
         isOpen={showSaveSuccess}

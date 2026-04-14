@@ -9,6 +9,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { api } from '@/lib/api';
 import { AppraisalCycle } from '@/types/appraisal';
 import { formatDate } from '@/lib/formatters';
+import { Icons } from '@/lib/icons';
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -55,18 +56,7 @@ export default function CycleDetailPage({
           href={`/${tenantSlug}/hr/hrmanagement/appraisal/cycles`}
           className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors w-fit"
         >
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <polyline points="15 18 9 12 15 6" />
-          </svg>
+          <Icons.ChevronLeft />
           Back to Cycles
         </Link>
 
