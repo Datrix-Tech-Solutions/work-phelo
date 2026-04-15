@@ -272,7 +272,7 @@ jobs:
 
             # ── Run seed (idempotent — safe to run on every deploy) ────────
             echo "Running database seed..."
-            docker exec               -e SUPER_ADMIN_EMAIL=superadmin@datrix.com               -e SUPER_ADMIN_PASSWORD=$SUPER_ADMIN_PASSWORD               erp-auth-dev node /app/apps/auth-service/prisma/seed.js               && echo " Seed complete"               || echo " Seed skipped (compiled seed not found — run manually)"
+            docker exec               -e SUPER_ADMIN_EMAIL=superadmin@datrix.com               -e SUPER_ADMIN_PASSWORD=${{ secrets.SUPER_ADMIN_PASSWORD }}               erp-auth-dev node /app/apps/auth-service/prisma/seed.js               && echo " Seed complete"               || echo " Seed skipped (compiled seed not found — run manually)"
 
             # ── 6. Health checks ───────────────────────────────────────────
             echo "Waiting 20s for services to initialise..."
