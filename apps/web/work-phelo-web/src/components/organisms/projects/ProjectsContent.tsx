@@ -7,7 +7,7 @@ import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { ProjectCard } from '@/components/molecules/ProjectCard';
 import { CreateProjectPanel } from '@/components/organisms/projects/CreateProjectPanel';
-import { useEmployees } from '@/hooks/useEmployees';
+import { useEmployees } from '@/hooks/hr/useEmployees';
 import { Project, CreateProjectDto } from '@/types/hr';
 
 // TODO: replace with useProjects() hook when endpoint is ready

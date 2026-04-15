@@ -142,20 +142,6 @@ export function useCompleteOffboard(employeeId: string) {
   });
 }
 
-export function useOffboardEmployee() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      const res = await api.patch(`/hr/employees/${id}/offboard`, { reason });
-      return res.data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['employees'] });
-    },
-  });
-}
-
 export function useResendEmployeeInvite() {
   return useMutation({
     mutationFn: async (employeeId: string) => {

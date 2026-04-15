@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useEmployees } from '@/hooks/useEmployees';
+import { useEmployees } from '@/hooks/hr/useEmployees';
 import { ShiftPanel, Shift } from './ShiftPanel';
 
 /* ── Week helpers ────────────────────────────────────────── */
@@ -129,7 +129,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span className="text-sm font-semibold text-gray-800 min-w-[180px] text-center">
+          <span className="text-sm font-semibold text-gray-800 min-w-45 text-center">
             {formatWeekRange(weekStart)}
           </span>
           <button
@@ -144,7 +144,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
 
       {/* ── Calendar grid ── */}
       <div className="flex-1 overflow-auto">
-        <div className="border border-gray-200 rounded-card bg-white shadow-sm overflow-hidden min-w-[600px]">
+        <div className="border border-gray-200 rounded-card bg-white shadow-sm overflow-hidden min-w-150">
           {/* Day headers */}
           <div className="grid grid-cols-5 border-b border-gray-200">
             {WEEKDAYS.map(({ label, isoDay }) => {
@@ -174,7 +174,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
           </div>
 
           {/* Shift cells */}
-          <div className="grid grid-cols-5 min-h-[480px]">
+          <div className="grid grid-cols-5 min-h-120">
             {WEEKDAYS.map(({ label, isoDay }) => {
               const date = toISODate(addDays(weekStart, isoDay - 1));
               const dayShifts = shiftsByDate[date] ?? [];

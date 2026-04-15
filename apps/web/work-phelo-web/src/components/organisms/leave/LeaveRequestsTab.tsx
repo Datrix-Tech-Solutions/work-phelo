@@ -7,7 +7,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { LeaveRequestDetailPanel } from '@/components/organisms/leave/LeaveRequestDetailPanel';
-import { useEmployees } from '@/hooks/useEmployees';
+import { useEmployees } from '@/hooks/hr/useEmployees';
 import { useLeaveTypes, useLeaveRequests } from '@/hooks/useLeave';
 import { useDepartments } from '@/hooks/useDepartments';
 import { formatDate } from '@/lib/formatters';

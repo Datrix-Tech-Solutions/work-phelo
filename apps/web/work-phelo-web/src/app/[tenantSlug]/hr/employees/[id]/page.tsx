@@ -6,10 +6,9 @@ import { use, useState } from 'react';
 import {
   useEmployee,
   useEmployees,
-  useOffboardEmployee,
   useResendEmployeeInvite,
   useUpdateEmployee,
-} from '@/hooks/useEmployees';
+} from '@/hooks/hr/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useToast } from '@/hooks/useToast';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
@@ -43,7 +42,6 @@ export default function EmployeeDetailPage({
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
-  const { mutate: offboardEmployee, isPending: isOffboarding } = useOffboardEmployee();
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -61,24 +59,6 @@ export default function EmployeeDetailPage({
           setEditOpen(false);
         },
         onError: () => toast.error('Failed to update employee'),
-      },
-    );
-  };
-
-  const handleOffboard = (data: {
-    employeeId: string;
-    reason: string;
-    offboardedAt: string;
-    assetReturn: boolean;
-  }) => {
-    offboardEmployee(
-      { id, reason: data.reason },
-      {
-        onSuccess: () => {
-          toast.success('Employee offboarded successfully');
-          setOffboardOpen(false);
-        },
-        onError: () => toast.error('Failed to offboard employee'),
       },
     );
   };
@@ -130,10 +110,8 @@ export default function EmployeeDetailPage({
       <OffboardEmployeePanel
         isOpen={offboardOpen}
         onClose={() => setOffboardOpen(false)}
-        employee={employee}
-        allHrEmployees={allHrEmployees}
-        onOffboard={handleOffboard}
-        isOffboarding={isOffboarding}
+        employeeId={id}
+        employeeName={name}
       />
 
       <EditEmployeePanel

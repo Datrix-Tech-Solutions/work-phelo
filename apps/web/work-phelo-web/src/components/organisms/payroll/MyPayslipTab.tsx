@@ -7,7 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { DetailField } from '@/components/molecules/shared/DetailField';
 import { useMyPayslips } from '@/hooks/usePayroll';
-import { useMyProfile } from '@/hooks/useEmployees';
+import { useMyProfile } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 
 const MONTH_NAMES = [
