@@ -195,9 +195,65 @@ model Employee {
   managedAppraisals Appraisal[]       @relation("AppraisalManager")
   documents         EmployeeDocument[]
   allowances        EmployeeAllowance[]
+  offboarding       OffboardingRecord?
 
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, email])
+  @@schema("hr")
+}
+
+// ── Offboarding Record ────────────────────────────────────────────────────────
+
+enum OffboardReason {
+  RESIGNATION
+  TERMINATION
+  CONTRACT_ENDED
+  RETIREMENT
+  REDUNDANCY
+  OTHER
+
+  @@schema("hr")
+}
+
+model OffboardingRecord {
+  id            String          @id @default(uuid())
+  tenantId      String
+  employeeId    String          @unique
+  reason        OffboardReason
+  otherReason   String?
+  lastWorkingDate DateTime
+  exitNotes     String?
+  isDraft       Boolean         @default(true)
+  completedAt   DateTime?
+  completedById String?
+  completedByEmail String?
+
+  // Clearance checklist — each item records who ticked it and when
+  assetReturnDone       Boolean   @default(false)
+  assetReturnDoneById   String?
+  assetReturnDoneByEmail String?
+  assetReturnDoneAt     DateTime?
+
+  hrClearanceDone       Boolean   @default(false)
+  hrClearanceDoneById   String?
+  hrClearanceDoneByEmail String?
+  hrClearanceDoneAt     DateTime?
+
+  financeClearanceDone  Boolean   @default(false)
+  financeClearanceDoneById String?
+  financeClearanceDoneByEmail String?
+  financeClearanceDoneAt DateTime?
+
+  managerApprovalDone   Boolean   @default(false)
+  managerApprovalDoneById String?
+  managerApprovalDoneByEmail String?
+  managerApprovalDoneAt DateTime?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
   @@schema("hr")
 }
 

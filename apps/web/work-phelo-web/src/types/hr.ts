@@ -65,6 +65,7 @@ export interface Employee {
   offboardedAt?: string;
   createdAt?: string;
   assets?: import('@/types/asset').EmployeeAsset[];
+  offboarding?: OffboardingRecord;
 }
 
 export interface UpdateEmployeePayload {
@@ -255,6 +256,58 @@ export interface EmployeeQuery {
   search?: string;
   departmentId?: string;
   status?: string;
+}
+
+export type OffboardReason =
+  | 'RESIGNATION'
+  | 'TERMINATION'
+  | 'CONTRACT_ENDED'
+  | 'RETIREMENT'
+  | 'REDUNDANCY'
+  | 'OTHER';
+
+export interface OffboardingRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  reason: OffboardReason;
+  otherReason?: string;
+  lastWorkingDate: string;
+  exitNotes?: string;
+  isDraft: boolean;
+  completedAt?: string;
+  completedById?: string;
+  completedByEmail?: string;
+  assetReturnDone: boolean;
+  assetReturnDoneById?: string;
+  assetReturnDoneByEmail?: string;
+  assetReturnDoneAt?: string;
+  hrClearanceDone: boolean;
+  hrClearanceDoneById?: string;
+  hrClearanceDoneByEmail?: string;
+  hrClearanceDoneAt?: string;
+  financeClearanceDone: boolean;
+  financeClearanceDoneById?: string;
+  financeClearanceDoneByEmail?: string;
+  financeClearanceDoneAt?: string;
+  managerApprovalDone: boolean;
+  managerApprovalDoneById?: string;
+  managerApprovalDoneByEmail?: string;
+  managerApprovalDoneAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InitiateOffboardDto {
+  reason: OffboardReason;
+  otherReason?: string;
+  lastWorkingDate: string;
+  exitNotes?: string;
+}
+
+export interface UpdateChecklistDto {
+  item: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'managerApproval';
+  done: boolean;
 }
 
 export interface OffboardPayload {

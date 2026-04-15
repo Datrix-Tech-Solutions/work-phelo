@@ -163,7 +163,7 @@ export class AuthService {
     }
     if (user.status === 'INACTIVE') {
       throw new ForbiddenException(
-        'Your account is inactive. Contact your administrator.',
+        'Your account has been deactivated. Please contact your HR administrator.',
       );
     }
 

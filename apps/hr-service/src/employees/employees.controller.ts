@@ -23,7 +23,10 @@ import {
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { OffboardEmployeeDto } from './dto/offboard-employee.dto';
+import {
+  InitiateOffboardDto,
+  UpdateChecklistDto,
+} from './dto/offboard-employee.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
@@ -122,17 +125,62 @@ export class EmployeesController {
     });
   }
 
-  @Patch(':id/offboard')
-  @ApiOperation({ summary: 'Offboard an employee' })
+  @Post(':id/offboard')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Initiate offboarding — creates a draft record' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
-  @ApiBody({ type: OffboardEmployeeDto })
-  @ApiResponse({ status: 200, description: 'Employee offboarded successfully' })
-  offboard(
+  @ApiBody({ type: InitiateOffboardDto })
+  @ApiResponse({ status: 201, description: 'Offboarding record created' })
+  initiateOffboard(
     @Param('id') id: string,
-    @Body() dto: OffboardEmployeeDto,
+    @Body() dto: InitiateOffboardDto,
     @Req() req: any,
   ) {
-    return this.employeesService.offboard(req.user.tenantId, id, dto);
+    return this.employeesService.initiateOffboard(req.user.tenantId, id, dto, {
+      id: req.user.id,
+      email: req.user.email,
+    });
+  }
+
+  @Get(':id/offboard')
+  @ApiOperation({ summary: 'Get existing offboarding record for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Offboarding record retrieved' })
+  getOffboardingRecord(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.getOffboardingRecord(req.user.tenantId, id);
+  }
+
+  @Patch(':id/offboard/checklist')
+  @ApiOperation({ summary: 'Tick or untick a clearance checklist item' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiBody({ type: UpdateChecklistDto })
+  @ApiResponse({ status: 200, description: 'Checklist item updated' })
+  updateChecklist(
+    @Param('id') id: string,
+    @Body() dto: UpdateChecklistDto,
+    @Req() req: any,
+  ) {
+    return this.employeesService.updateOffboardChecklist(
+      req.user.tenantId,
+      id,
+      dto,
+      { id: req.user.id, email: req.user.email },
+    );
+  }
+
+  @Post(':id/offboard/complete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Complete offboarding — sets employee to Offboarded and revokes access',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Offboarding completed' })
+  completeOffboard(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.completeOffboard(req.user.tenantId, id, {
+      id: req.user.id,
+      email: req.user.email,
+    });
   }
 
   @Post(':id/resend-invite')
