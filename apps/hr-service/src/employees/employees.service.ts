@@ -100,6 +100,20 @@ export class EmployeesService {
         ),
       );
 
+    // Initialise leave balances immediately so the employee can request leave
+    // as soon as their account is active. Uses upsert — safe to call multiple times.
+    void this.leaveService
+      .initializeLeaveBalances(tenantId, employee.id)
+      .then(() =>
+        this.logger.log(`Leave balances initialised for ${employee.email}`),
+      )
+      .catch((err) =>
+        this.logger.error(
+          `Failed to initialise leave balances for ${employee.email}`,
+          err,
+        ),
+      );
+
     return employee;
   }
 
