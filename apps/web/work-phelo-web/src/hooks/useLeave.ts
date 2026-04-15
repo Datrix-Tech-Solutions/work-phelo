@@ -18,6 +18,48 @@ export const leaveKeys = {
   balances: (employeeId?: string) => ['leave', 'balances', employeeId ?? 'me'] as const,
 };
 
+// ─── Response transformers ────────────────────────────────────────────────────
+// Backend returns snake_case-style DB fields and nested relations.
+// These adapters normalise the shape to what the frontend types expect.
+
+function transformBalance(b: any): LeaveBalance {
+  return {
+    leaveTypeId: b.leaveTypeId,
+    leaveTypeName: b.leaveType?.name ?? '',
+    entitled: b.totalDays,
+    used: b.usedDays,
+    pending: b.pendingDays,
+    remaining: b.remainingDays,
+    carriedOver: 0, // carry-over processing not yet implemented in backend
+  };
+}
+
+function transformRequest(r: any): LeaveRequest {
+  // Backend status is UPPER_CASE enum; frontend uses Title case for display/badge lookup.
+  const status = r.status.charAt(0).toUpperCase() + r.status.slice(1).toLowerCase();
+  return {
+    id: r.id,
+    tenantSlug: '',
+    employeeId: r.employeeId,
+    employeeName: r.employee ? `${r.employee.firstName} ${r.employee.lastName}` : '',
+    leaveTypeId: r.leaveTypeId,
+    leaveTypeName: r.leaveType?.name ?? '',
+    isPaid: r.leaveType?.isPaid ?? false,
+    startDate: r.startDate,
+    endDate: r.endDate,
+    totalDays: r.totalDays,
+    reason: r.reason,
+    documentationUrl: r.documentationUrl,
+    status: status as LeaveRequest['status'],
+    // Approved and rejected paths store reviewer in separate columns
+    reviewedBy: r.approvedBy ?? r.rejectedBy ?? undefined,
+    reviewedAt: r.approvedAt ?? r.rejectedAt ?? undefined,
+    reviewNote: r.rejectionNote ?? undefined,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt,
+  };
+}
+
 // ─── Leave Types ──────────────────────────────────────────────────────────────
 
 export function useLeaveTypes(tenantSlug: string) {
@@ -77,10 +119,10 @@ export function useLeaveRequests(status?: string) {
   return useQuery({
     queryKey: leaveKeys.requests(status),
     queryFn: async () => {
-      const res = await api.get<LeaveRequest[]>('/hr/leave/requests', {
+      const res = await api.get<any[]>('/hr/leave/requests', {
         params: status ? { status } : undefined,
       });
-      return res.data;
+      return res.data.map(transformRequest);
     },
   });
 }
@@ -89,8 +131,8 @@ export function useMyLeaveRequests() {
   return useQuery({
     queryKey: leaveKeys.myRequests(),
     queryFn: async () => {
-      const res = await api.get<LeaveRequest[]>('/hr/leave/requests/my');
-      return res.data;
+      const res = await api.get<any[]>('/hr/leave/requests/my');
+      return res.data.map(transformRequest);
     },
   });
 }
@@ -100,8 +142,8 @@ export function useCreateLeaveRequest() {
 
   return useMutation({
     mutationFn: async (payload: CreateLeaveRequestDto) => {
-      const res = await api.post<LeaveRequest>('/hr/leave/requests', payload);
-      return res.data;
+      const res = await api.post<any>('/hr/leave/requests', payload);
+      return transformRequest(res.data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
@@ -118,21 +160,24 @@ export function useReviewLeaveRequest() {
   return useMutation({
     mutationFn: async ({
       id,
-      status,
+      action,
       note,
     }: {
       id: string;
-      status: 'APPROVED' | 'REJECTED';
+      action: 'APPROVED' | 'REJECTED';
       note?: string;
     }) => {
-      const res = await api.patch<LeaveRequest>(`/hr/leave/requests/${id}/review`, {
-        status,
+      // Backend DTO expects { action, note } — not { status, reviewNote }
+      const res = await api.patch<any>(`/hr/leave/requests/${id}/review`, {
+        action,
         note,
       });
-      return res.data;
+      return transformRequest(res.data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
@@ -143,8 +188,8 @@ export function useCancelLeaveRequest() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await api.patch<LeaveRequest>(`/hr/leave/requests/${id}/cancel`);
-      return res.data;
+      const res = await api.patch<any>(`/hr/leave/requests/${id}/cancel`);
+      return transformRequest(res.data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
@@ -156,13 +201,14 @@ export function useCancelLeaveRequest() {
 
 // ─── Leave Balances ───────────────────────────────────────────────────────────
 
-export function useLeaveBalances(employeeId?: string) {
+export function useLeaveBalances(employeeId?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: leaveKeys.balances(employeeId),
     queryFn: async () => {
       const url = employeeId ? `/hr/leave/balances/${employeeId}` : '/hr/leave/balances/me';
-      const res = await api.get<LeaveBalance[]>(url);
-      return res.data;
+      const res = await api.get<any[]>(url);
+      return res.data.map(transformBalance);
     },
+    enabled: options?.enabled ?? true,
   });
 }
