@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '../../atoms/NoSearchLogo';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 export interface Column<T> {
   key: string;

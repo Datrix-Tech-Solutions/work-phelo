@@ -4,7 +4,7 @@
 
 import { use, useState, useRef } from 'react';
 import { Calendar } from 'lucide-react';
-import { ModuleIcons, moduleColor } from '@/lib/icons';
+import { ModuleIcons, moduleColor } from '@/components/atoms/icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
 import { useUpcomingBirthdays, useEmployeeDashboard } from '@/hooks';

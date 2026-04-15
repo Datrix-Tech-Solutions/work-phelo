@@ -7,7 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { useToast } from '@/hooks/useToast';
-import { PublicHoliday } from '@/types/leave';
+import { PublicHoliday } from '@/types/hr';
 import { useCreatePublicHoliday, useUpdatePublicHoliday } from '@/hooks';
 
 interface CreatePublicHolidayPanelProps {
@@ -92,7 +92,6 @@ export function CreatePublicHolidayPanel({
       onClose={onClose}
       title={isEditing ? 'Edit Public Holiday' : 'Add Public Holiday'}
       description="Public holidays are automatically excluded from leave day calculations."
-      width="w-[480px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>

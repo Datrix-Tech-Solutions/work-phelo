@@ -13,8 +13,8 @@ import { TemplatePreviewModal } from '@/components/organisms/appraisal/TemplateP
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
-import { AppraisalTemplate, CreateAppraisalTemplateDto, SectionType } from '@/types/appraisal';
-import { Icons } from '@/lib/icons';
+import { AppraisalTemplate, CreateAppraisalTemplateDto, SectionType } from '@/types/hr';
+import { Icons } from '@/components/atoms/icons';
 
 interface CreateTemplatePanelProps {
   isOpen: boolean;
@@ -277,7 +277,6 @@ export function CreateTemplatePanel({
         onClose={onClose}
         title={isEditing ? 'Edit Template' : 'New Appraisal Template'}
         description="Define sections that employees and managers fill in during a review."
-        width="w-[580px]"
         footer={
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => setPreviewOpen(true)}>

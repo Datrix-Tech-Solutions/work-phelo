@@ -1,6 +1,6 @@
 'use client';
 
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 import { useEffect } from 'react';
 
 interface SuccessModalProps {
@@ -44,7 +44,7 @@ export function SuccessModal({
       <div className="relative z-10 w-full max-w-sm bg-white rounded-card shadow-2xl p-8 flex flex-col items-center text-center gap-5">
         {/* Success icon */}
         <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center shrink-0">
-          <Icons.X />
+          <Icons.CircleCheck className="w-16 h-16 rounded-full bg-green-400" />
         </div>
 
         {/* Text */}

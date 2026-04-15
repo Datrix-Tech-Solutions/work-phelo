@@ -1,4 +1,4 @@
-import { LeaveBalance } from '@/types/leave';
+import { LeaveBalance } from '@/types/hr';
 
 interface BalanceCardProps {
   balance: LeaveBalance;

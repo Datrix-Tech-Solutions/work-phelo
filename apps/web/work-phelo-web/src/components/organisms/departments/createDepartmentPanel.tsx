@@ -39,7 +39,6 @@ export function CreateDepartmentPanel({ isOpen, onClose, onSuccess }: Props) {
       onClose={onClose}
       title="New Department"
       description="Add a new department to your organisation."
-      width="w-[440px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>

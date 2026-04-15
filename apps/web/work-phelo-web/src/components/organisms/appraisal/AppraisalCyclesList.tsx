@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateCyclePanel } from '@/components/organisms/appraisal/CreateCyclePanel';
-import { api } from '@/lib/api';
+import { useAppraisalCycles, useStartAppraisalCycle } from '@/hooks/useAppraisals';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
-import { AppraisalCycle } from '@/types/appraisal';
+import { AppraisalCycle } from '@/types/hr';
 
 interface Props {
   tenantSlug: string;
@@ -20,7 +19,6 @@ interface Props {
 
 export function AppraisalCyclesList({ tenantSlug }: Props) {
   const toast = useToast();
-  const queryClient = useQueryClient();
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -28,26 +26,11 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   const [editCycle, setEditCycle] = useState<AppraisalCycle | undefined>();
   const [startTarget, setStartTarget] = useState<AppraisalCycle | null>(null);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['appraisal-cycles', tenantSlug, page, search],
-    queryFn: () =>
-      api
-        .get('/hr/appraisals/cycles', { params: { page, search: search || undefined } })
-        .then((r) => r.data),
-  });
+  const { data, isLoading } = useAppraisalCycles({ page, search: search || undefined });
+  const cycles: AppraisalCycle[] = data ?? [];
+  const totalPages: number = 1;
 
-  const cycles: AppraisalCycle[] = Array.isArray(data) ? data : (data?.data ?? data?.cycles ?? []);
-  const totalPages: number = data?.totalPages ?? 1;
-
-  const { mutate: startCycle, isPending: isStarting } = useMutation({
-    mutationFn: (id: string) => api.post(`/hr/appraisals/cycles/${id}/start`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appraisal-cycles', tenantSlug] });
-      toast.success('Cycle started');
-      setStartTarget(null);
-    },
-    onError: (err) => toast.error(extractError(err, 'Failed to start cycle')),
-  });
+  const { mutate: startCycle, isPending: isStarting } = useStartAppraisalCycle();
 
   const columns: Column<AppraisalCycle>[] = [
     {
@@ -129,7 +112,6 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
           setPanelOpen(false);
           setEditCycle(undefined);
         }}
-        tenantSlug={tenantSlug}
         editCycle={editCycle}
       />
 
@@ -146,7 +128,16 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
             <Button
               isLoading={isStarting}
               loadingText="Starting..."
-              onClick={() => startTarget && startCycle(startTarget.id)}
+              onClick={() =>
+                startTarget &&
+                startCycle(startTarget.id, {
+                  onSuccess: () => {
+                    toast.success('Cycle started');
+                    setStartTarget(null);
+                  },
+                  onError: (err) => toast.error(extractError(err, 'Failed to start cycle')),
+                })
+              }
             >
               Start Cycle
             </Button>

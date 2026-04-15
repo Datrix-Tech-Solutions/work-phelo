@@ -1,5 +1,5 @@
 import { Button } from '@/components/atoms/Button';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface EmployeeActionsBarProps {
   isPendingInvite: boolean;

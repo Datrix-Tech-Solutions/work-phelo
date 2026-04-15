@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/useToast';
 import { useDeletePublicHoliday } from '@/hooks/usePublicHolidays';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
-import { PublicHoliday } from '@/types/leave';
+import { PublicHoliday } from '@/types/hr';
 
 interface Props {
   tenantSlug: string;

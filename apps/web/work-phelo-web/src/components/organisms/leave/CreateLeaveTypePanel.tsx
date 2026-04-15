@@ -3,13 +3,14 @@
 import { useEffect } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
-import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
+import { ApplicableTo, ALL_SPECIFIC } from '@/components/molecules/leave/ApplicableTo';
 import { useToast } from '@/hooks/useToast';
 import { useCreateLeaveType, useUpdateLeaveType } from '@/hooks/useLeave';
-import { LeaveType, LeaveApplicableTo } from '@/types/leave';
+import { LeaveType, LeaveApplicableTo } from '@/types/hr';
 
 interface CreateLeaveTypePanelProps {
   isOpen: boolean;
@@ -24,17 +25,9 @@ type FormValues = {
   daysAllowed: number | '';
   isCarryOver: boolean;
   maxCarryOverDays: number | '';
-  requiresApproval: boolean;
+  requiresDocument: boolean;
   applicableTo: LeaveApplicableTo[];
 };
-
-const EMPLOYMENT_TYPES: { value: LeaveApplicableTo; label: string }[] = [
-  { value: 'FULL_TIME', label: 'Full Time' },
-  { value: 'PART_TIME', label: 'Part Time' },
-  { value: 'CONTRACT', label: 'Contract' },
-];
-
-const ALL_SPECIFIC = EMPLOYMENT_TYPES.map((t) => t.value);
 
 const emptyDefaults: FormValues = {
   name: '',
@@ -42,56 +35,11 @@ const emptyDefaults: FormValues = {
   daysAllowed: '',
   isCarryOver: false,
   maxCarryOverDays: '',
-  requiresApproval: true,
+  requiresDocument: false,
   applicableTo: ['ALL', ...ALL_SPECIFIC],
 };
 
-/* ── Toggle ── */
-function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={enabled}
-      onClick={() => onChange(!enabled)}
-      className={cn(
-        'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full transition-colors duration-200',
-        enabled ? 'bg-brand' : 'bg-gray-200',
-      )}
-    >
-      <span
-        className={cn(
-          'inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform duration-200 mt-0.5',
-          enabled ? 'translate-x-5' : 'translate-x-0.5',
-        )}
-      />
-    </button>
-  );
-}
-
-/* ── Toggle Row ── */
-function ToggleRow({
-  label,
-  description,
-  enabled,
-  onChange,
-}: {
-  label: string;
-  description?: string;
-  enabled: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-medium text-gray-900">{label}</span>
-        {description && <span className="text-xs text-gray-400">{description}</span>}
-      </div>
-      <Toggle enabled={enabled} onChange={onChange} />
-    </div>
-  );
-}
-
+/* ── Main Panel ── */
 export function CreateLeaveTypePanel({
   isOpen,
   onClose,
@@ -124,7 +72,7 @@ export function CreateLeaveTypePanel({
         daysAllowed: editLeaveType.daysAllowed,
         isCarryOver: editLeaveType.isCarryOver,
         maxCarryOverDays: editLeaveType.maxCarryOverDays ?? '',
-        requiresApproval: editLeaveType.requiresApproval,
+        requiresDocument: editLeaveType.requiresDocument ?? false,
         applicableTo: applicable,
       });
     } else {
@@ -144,8 +92,9 @@ export function CreateLeaveTypePanel({
         values.isCarryOver && values.maxCarryOverDays !== ''
           ? Number(values.maxCarryOverDays)
           : undefined,
-      requiresApproval: values.requiresApproval,
-      applicableTo: values.applicableTo,
+      requiresApproval: true,
+      // requiresDocument: values.requiresDocument,
+      // applicableTo: values.applicableTo,
     };
 
     const handleSuccess = () => {
@@ -172,7 +121,6 @@ export function CreateLeaveTypePanel({
       onClose={onClose}
       title={isEditing ? 'Edit Leave Type' : 'Add New Leave Type'}
       description="Define the leave type and its entitlement rules."
-      width="w-[480px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
@@ -220,12 +168,12 @@ export function CreateLeaveTypePanel({
         />
 
         <Controller
-          name="requiresApproval"
+          name="requiresDocument"
           control={control}
           render={({ field }) => (
             <ToggleRow
-              label="Requires Approval"
-              description="Manager must approve before leave is confirmed"
+              label="Requires Approval Document"
+              description="Employee must upload a supporting document when applying"
               enabled={field.value}
               onChange={field.onChange}
             />
@@ -263,67 +211,7 @@ export function CreateLeaveTypePanel({
       <Controller
         name="applicableTo"
         control={control}
-        render={({ field }) => {
-          const selected = field.value;
-          const allChecked = ALL_SPECIFIC.every((t) => selected.includes(t));
-
-          const toggleAll = () => {
-            if (allChecked) {
-              field.onChange([]);
-            } else {
-              field.onChange(['ALL', ...ALL_SPECIFIC] as LeaveApplicableTo[]);
-            }
-          };
-
-          const toggleType = (type: LeaveApplicableTo) => {
-            let next: LeaveApplicableTo[];
-            if (selected.includes(type)) {
-              next = selected.filter((t) => t !== type && t !== 'ALL');
-            } else {
-              const withNew = [...selected.filter((t) => t !== 'ALL'), type];
-              const allNowSelected = ALL_SPECIFIC.every((t) => withNew.includes(t));
-              next = allNowSelected ? (['ALL', ...ALL_SPECIFIC] as LeaveApplicableTo[]) : withNew;
-            }
-            field.onChange(next);
-          };
-
-          return (
-            <div className="flex flex-col gap-3">
-              <div>
-                <span className="text-sm font-medium text-gray-900">Applicable To</span>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Select which employment types this leave applies to
-                </p>
-              </div>
-              <div className="flex flex-col gap-2.5">
-                {/* All Employees */}
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    onChange={toggleAll}
-                    className="w-4 h-4 rounded accent-brand shrink-0"
-                  />
-                  <span className="text-sm text-gray-700 font-medium">All Employees</span>
-                </label>
-                {/* Individual types */}
-                <div className="ml-7 flex flex-col gap-2.5">
-                  {EMPLOYMENT_TYPES.map(({ value, label }) => (
-                    <label key={value} className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(value)}
-                        onChange={() => toggleType(value)}
-                        className="w-4 h-4 rounded accent-brand shrink-0"
-                      />
-                      <span className="text-sm text-gray-600">{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-          );
-        }}
+        render={({ field }) => <ApplicableTo selected={field.value} onChange={field.onChange} />}
       />
     </SidePanel>
   );

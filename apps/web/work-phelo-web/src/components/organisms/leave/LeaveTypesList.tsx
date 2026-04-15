@@ -10,7 +10,7 @@ import { CreateLeaveTypePanel } from '@/components/organisms/leave/CreateLeaveTy
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { useDeleteLeaveType, leaveKeys } from '@/hooks/useLeave';
-import { LeaveType, PaginatedResponse } from '@/types/leave';
+import { LeaveType, PaginatedResponse } from '@/types/hr';
 import { extractError } from '@/lib/extractError';
 
 interface Props {

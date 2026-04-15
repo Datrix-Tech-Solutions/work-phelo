@@ -53,7 +53,6 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
       onClose={onClose}
       title="Edit Department"
       description={`Editing "${editTarget?.name}"`}
-      width="w-[440px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>

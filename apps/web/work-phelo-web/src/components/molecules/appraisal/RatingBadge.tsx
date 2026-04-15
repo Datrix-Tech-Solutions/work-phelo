@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { FinalRating } from '@/types/appraisal';
+import { FinalRating } from '@/types/hr';
 
 export const RATING_STYLES: Record<FinalRating, string> = {
   Outstanding: 'bg-green-100 text-green-700',

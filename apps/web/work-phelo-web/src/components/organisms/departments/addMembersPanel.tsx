@@ -5,7 +5,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { MemberRow } from '@/components/molecules/departments/MemberRow';
 import type { Employee } from '@/types/hr';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface Props {
   isOpen: boolean;
@@ -51,7 +51,6 @@ export function AddMembersPanel({ isOpen, onClose, department, employees, onAddM
       onClose={onClose}
       title="Add Members"
       description={`Select employees to add to "${department?.name}"`}
-      width="w-[460px]"
       footer={
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-gray-500">

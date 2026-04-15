@@ -6,7 +6,7 @@ import {
   LeaveBalance,
   CreateLeaveTypeDto,
   CreateLeaveRequestDto,
-} from '@/types/leave';
+} from '@/types/hr';
 
 // ─── Query Key Factory ────────────────────────────────────────────────────────
 
@@ -149,6 +149,7 @@ export function useCancelLeaveRequest() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
     },
   });
 }

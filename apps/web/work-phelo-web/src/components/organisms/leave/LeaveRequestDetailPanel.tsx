@@ -10,12 +10,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
-import {
-  LeaveBalance,
-  LeaveRequest,
-  LeaveRequestStatus,
-  ReviewLeaveRequestDto,
-} from '@/types/leave';
+import { LeaveBalance, LeaveRequest, LeaveRequestStatus, ReviewLeaveRequestDto } from '@/types/hr';
 
 interface LeaveRequestDetailPanelProps {
   isOpen: boolean;
@@ -107,7 +102,6 @@ export function LeaveRequestDetailPanel({
         onClose={onClose}
         title="Leave Request"
         description={`Submitted by ${request.employeeName}`}
-        width="w-[500px]"
         footer={
           isPending_ ? (
             <div className="flex items-center gap-3">

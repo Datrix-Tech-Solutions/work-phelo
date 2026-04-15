@@ -75,7 +75,6 @@ export function EditEmployeePanel({
       onClose={onClose}
       title="Edit Employee"
       description={`Editing ${name}`}
-      width="w-[500px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={onClose}>

@@ -57,7 +57,6 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
       onClose={handleClose}
       title="Add Asset"
       description="Register a new asset in the system."
-      width="w-[500px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>

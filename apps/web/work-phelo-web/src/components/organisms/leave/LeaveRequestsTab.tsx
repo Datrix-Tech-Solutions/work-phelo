@@ -3,13 +3,18 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { LeaveRequestDetailPanel } from '@/components/organisms/leave/LeaveRequestDetailPanel';
+import { useEmployees } from '@/hooks/useEmployees';
+import { useLeaveTypes } from '@/hooks/useLeave';
+import { useDepartments } from '@/hooks/useDepartments';
 import { api } from '@/lib/api';
 import { formatDate } from '@/lib/formatters';
-import { LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/leave';
+import { LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/hr';
+import { Users } from 'lucide-react';
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   Approved: 'success',
@@ -24,32 +29,31 @@ interface Props {
 
 export function LeaveRequestsTab({ tenantSlug }: Props) {
   const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+  const [search, setSearch] = useState('');
   const [filterLeaveType, setFilterLeaveType] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterFrom, setFilterFrom] = useState('');
-  const [filterTo, setFilterTo] = useState('');
+  const [filterTo] = useState('');
   const [reqPage, setReqPage] = useState(1);
 
-  const { data: leaveTypesRaw } = useQuery({
-    queryKey: ['leave-types'],
-    queryFn: () => api.get('/hr/leave/types').then((r) => r.data),
-  });
+  const { data: leaveTypesRaw } = useLeaveTypes(tenantSlug);
   const leaveTypes: LeaveType[] = Array.isArray(leaveTypesRaw)
     ? leaveTypesRaw
-    : (leaveTypesRaw?.data ?? []);
+    : ((leaveTypesRaw as { data?: LeaveType[] } | undefined)?.data ?? []);
 
-  const { data: departmentsRaw } = useQuery({
-    queryKey: ['departments'],
-    queryFn: () => api.get('/hr/departments').then((r) => r.data),
-  });
+  const { data: departmentsRaw } = useDepartments();
   const departments: { id: string; name: string }[] = Array.isArray(departmentsRaw)
     ? departmentsRaw
-    : (departmentsRaw?.data ?? []);
+    : ((departmentsRaw as { data?: { id: string; name: string }[] } | undefined)?.data ?? []);
+
+  const { data: employeesData, isLoading: employeesLoading } = useEmployees();
+  const totalEmployees = employeesData?.total ?? null;
 
   const { data: reqData, isLoading: reqLoading } = useQuery({
     queryKey: [
       'leave-requests',
       tenantSlug,
+      search,
       filterLeaveType,
       filterDepartment,
       filterFrom,
@@ -61,6 +65,7 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
         .get(`/${tenantSlug}/leave/requests`, {
           params: {
             page: reqPage,
+            search: search || undefined,
             leaveTypeId: filterLeaveType || undefined,
             departmentId: filterDepartment || undefined,
             fromDate: filterFrom || undefined,
@@ -76,6 +81,11 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   }, [reqData]);
 
   const reqTotalPages = reqData?.totalPages ?? 1;
+  const totalRequests = reqData?.totalCount ?? null;
+  const pendingCount = useMemo(
+    () => reqList.filter((r) => r.status === 'Pending').length || null,
+    [reqList],
+  );
 
   const columns: Column<LeaveRequest>[] = [
     {
@@ -118,47 +128,71 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   return (
     <>
       <div className="flex flex-col gap-4 flex-1 min-h-0">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 shrink-0">
-          <SearchSelect
-            placeholder="All leave types"
-            options={[
-              { value: '', label: 'All leave types' },
-              ...leaveTypes.map((t) => ({ value: t.id, label: t.name })),
-            ]}
-            value={filterLeaveType}
-            onChange={(v) => {
-              setFilterLeaveType(v);
+        {/* Stat cards */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 shrink-0">
+          <StatCard
+            title="Total Leave Requests"
+            value={reqLoading ? null : totalRequests}
+            icon={<Users className="w-5 h-5" />}
+          />
+          <StatCard
+            title="Pending Approval"
+            value={reqLoading ? null : pendingCount}
+            icon={<Users className="w-5 h-5" />}
+          />
+          <StatCard
+            title="Total Employees"
+            value={employeesLoading ? null : totalEmployees}
+            icon={<Users className="w-5 h-5" />}
+          />
+        </div>
+
+        {/* Search + Filters */}
+        <div className="flex items-center shrink-0 gap-6">
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
               setReqPage(1);
             }}
+            placeholder="Search by employee name..."
+            className="w-64 rounded-input border border-gray-300 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand"
           />
-          <SearchSelect
-            placeholder="All departments"
-            options={[
-              { value: '', label: 'All departments' },
-              ...departments.map((d) => ({ value: d.id, label: d.name })),
-            ]}
-            value={filterDepartment}
-            onChange={(v) => {
-              setFilterDepartment(v);
-              setReqPage(1);
-            }}
-          />
-          <DatePicker
-            placeholder="From date"
-            value={filterFrom}
-            onChange={(v) => {
-              setFilterFrom(v);
-              setReqPage(1);
-            }}
-          />
-          <DatePicker
-            placeholder="To date"
-            value={filterTo}
-            onChange={(v) => {
-              setFilterTo(v);
-              setReqPage(1);
-            }}
-          />
+          <div className="flex items-center gap-3">
+            <SearchSelect
+              placeholder="All leave types"
+              options={[
+                { value: '', label: 'All leave types' },
+                ...leaveTypes.map((t) => ({ value: t.id, label: t.name })),
+              ]}
+              value={filterLeaveType}
+              onChange={(v) => {
+                setFilterLeaveType(v);
+                setReqPage(1);
+              }}
+            />
+            <SearchSelect
+              placeholder="All departments"
+              options={[
+                { value: '', label: 'All departments' },
+                ...departments.map((d) => ({ value: d.id, label: d.name })),
+              ]}
+              value={filterDepartment}
+              onChange={(v) => {
+                setFilterDepartment(v);
+                setReqPage(1);
+              }}
+            />
+            <DatePicker
+              placeholder="Date Leave Submitted"
+              value={filterFrom}
+              onChange={(v) => {
+                setFilterFrom(v);
+                setReqPage(1);
+              }}
+            />
+          </div>
         </div>
 
         <DataTable

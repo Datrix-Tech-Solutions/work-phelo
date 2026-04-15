@@ -1,8 +1,7 @@
 'use client';
 
 import { useForm } from 'react-hook-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { useRegisterTenant } from '@/hooks/useTenants';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Button } from '@/components/atoms/Button';
@@ -38,8 +37,6 @@ function generateSlug(name: string): string {
 }
 
 export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
-  const queryClient = useQueryClient();
-
   const [industry, setIndustry] = useState('');
   const [size, setSize] = useState('');
   const [successCompany, setSuccessCompany] = useState<string | null>(null);
@@ -52,18 +49,19 @@ export function AddCompanyForm({ isOpen, onClose }: AddCompanyFormProps) {
     formState: { errors },
   } = useForm<AddCompanyPayload>();
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data: AddCompanyPayload) => api.post('/auth/tenants/register', data),
-    onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      reset();
-      onClose();
-      setSuccessCompany(vars.name);
-    },
-  });
+  const { mutate: registerTenant, isPending } = useRegisterTenant();
 
   const onSubmit = (data: AddCompanyPayload) => {
-    mutate({ ...data, slug: generateSlug(data.name) });
+    registerTenant(
+      { ...data, slug: generateSlug(data.name) },
+      {
+        onSuccess: (_, vars) => {
+          reset();
+          onClose();
+          setSuccessCompany(vars.name);
+        },
+      },
+    );
   };
 
   const handleClose = () => {

@@ -10,7 +10,7 @@ import type {
   FinalizedAppraisal,
   KpiScore,
   SectionResponse,
-} from '@/types/appraisal';
+} from '@/types/hr';
 
 interface Props {
   manager: AppraisalResponse | undefined;

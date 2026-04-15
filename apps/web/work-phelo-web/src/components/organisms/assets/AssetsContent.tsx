@@ -7,7 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { AddAssetPanel } from '@/components/organisms/assets/AddAssetPanel';
 import AssetCard from '@/components/molecules/AssetCard';
-import { AssetType } from '@/lib/assetIcons';
+import { AssetType } from '@/components/atoms/assetIcons';
 import { Asset } from '@/types/asset';
 
 const TYPE_LABELS: Record<AssetType, string> = {

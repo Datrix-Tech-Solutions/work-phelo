@@ -7,9 +7,9 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/atoms/Badge';
 import { api } from '@/lib/api';
-import { AppraisalCycle } from '@/types/appraisal';
+import { AppraisalCycle } from '@/types/hr';
 import { formatDate } from '@/lib/formatters';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (

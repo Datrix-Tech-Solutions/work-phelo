@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface AvailableAsset {
   id: string;
@@ -71,7 +71,6 @@ export function AssignAssetPanel({
       onClose={handleClose}
       title="Assign Asset"
       description={`Assign an available asset to ${employeeName}.`}
-      width="w-[480px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>

@@ -6,12 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { api } from '@/lib/api';
-import {
-  AppraisalCycle,
-  FinalRating,
-  CycleResultItem,
-  CycleResultsSummary,
-} from '@/types/appraisal';
+import { AppraisalCycle, FinalRating, CycleResultItem, CycleResultsSummary } from '@/types/hr';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';

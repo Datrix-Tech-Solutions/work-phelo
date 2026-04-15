@@ -1,11 +1,11 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
+import { useApproveTenant, useDeactivateTenant, useDeleteTenant } from '@/hooks/useTenants';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { Button } from '@/components/atoms/Button';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface CompanyHeaderProps {
   id: string;
@@ -18,28 +18,11 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['tenants'] });
-    queryClient.invalidateQueries({ queryKey: ['tenant', id] });
-  };
+  const { mutate: deactivate, isPending: isDeactivating } = useDeactivateTenant();
+  const { mutate: activate, isPending: isActivating } = useApproveTenant();
+  const { mutate: deleteTenant, isPending: isDeleting } = useDeleteTenant();
 
-  const { mutate: deactivate, isPending: isDeactivating } = useMutation({
-    mutationFn: () => api.patch(`/auth/tenants/${id}/deactivate`),
-    onSuccess: invalidate,
-  });
-
-  const { mutate: activate, isPending: isActivating } = useMutation({
-    mutationFn: () => api.patch(`/auth/tenants/${id}/approve`),
-    onSuccess: invalidate,
-  });
-
-  const { mutate: deleteTenant, isPending: isDeleting } = useMutation({
-    mutationFn: () => api.delete(`/auth/tenants/${id}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      router.push('/dashboard');
-    },
-  });
+  const invalidateTenant = () => queryClient.invalidateQueries({ queryKey: ['tenant', id] });
 
   const isSuspended = status === 'SUSPENDED';
   const workspaceUrl = `workphelo.com/${slug}/`;
@@ -60,7 +43,7 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => deleteTenant()}
+          onClick={() => deleteTenant(id, { onSuccess: () => router.push('/dashboard') })}
           isLoading={isDeleting}
           loadingText="Deleting..."
           className="gap-2"
@@ -72,7 +55,7 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => activate()}
+            onClick={() => activate(id, { onSuccess: invalidateTenant })}
             isLoading={isActivating}
             loadingText="Activating..."
             className="gap-2"
@@ -84,7 +67,7 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => deactivate()}
+            onClick={() => deactivate(id, { onSuccess: invalidateTenant })}
             isLoading={isDeactivating}
             loadingText="Deactivating..."
             className="gap-2"

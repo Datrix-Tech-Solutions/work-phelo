@@ -1,6 +1,6 @@
 'use client';
 
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface Activity {
   id: string;

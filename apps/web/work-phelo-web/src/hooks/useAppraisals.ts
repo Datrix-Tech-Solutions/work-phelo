@@ -1,16 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import type { AppraisalCycle, CreateAppraisalCycleDto } from '@/types/appraisal';
+import type { AppraisalCycle, CreateAppraisalCycleDto } from '@/types/hr';
 
 // ── Cycles ────────────────────────────────────────────────────────────────────
 
-export function useAppraisalCycles() {
+export function useAppraisalCycles(params?: { page?: number; search?: string }) {
   return useQuery<AppraisalCycle[]>({
-    queryKey: ['appraisal-cycles'],
+    queryKey: params ? ['appraisal-cycles', params] : ['appraisal-cycles'],
     queryFn: async () => {
-      const res = await api.get('/hr/appraisals/cycles');
+      const res = await api.get('/hr/appraisals/cycles', {
+        params: params ? { page: params.page, search: params.search || undefined } : undefined,
+      });
       const list = Array.isArray(res.data) ? res.data : (res.data?.data ?? res.data?.cycles ?? []);
-      // Normalise backend `title` → frontend `name`
       return list.map((c: Record<string, unknown>) => ({
         ...c,
         name: (c.name as string) ?? (c.title as string) ?? '',
@@ -24,6 +25,17 @@ export function useCreateAppraisalCycle() {
   return useMutation({
     mutationFn: (dto: Partial<CreateAppraisalCycleDto>) =>
       api.post('/hr/appraisals/cycles', dto).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appraisal-cycles'] });
+    },
+  });
+}
+
+export function useUpdateAppraisalCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: { id: string } & Partial<CreateAppraisalCycleDto>) =>
+      api.patch(`/hr/appraisals/cycles/${id}`, dto).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appraisal-cycles'] });
     },

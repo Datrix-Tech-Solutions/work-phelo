@@ -1,6 +1,6 @@
 // components/FinalRatingCard.tsx
 import { cn } from '@/lib/utils';
-import type { FinalizedAppraisal } from '@/types/appraisal';
+import type { FinalizedAppraisal } from '@/types/hr';
 
 const RATING_STYLES: Record<string, string> = {
   Outstanding: 'bg-green-100 text-green-700 border-green-200',

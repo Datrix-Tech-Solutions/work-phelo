@@ -2,17 +2,16 @@
 
 import { useState, useMemo } from 'react';
 import { extractError } from '@/lib/extractError';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { BalanceCard } from '@/components/molecules/leave/BalanceCard';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
-import { api } from '@/lib/api';
+import { useLeaveBalances, useMyLeaveRequests, useCancelLeaveRequest } from '@/hooks/useLeave';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/formatters';
-import { LeaveBalance, LeaveRequest, LeaveRequestStatus } from '@/types/leave';
+import { LeaveBalance, LeaveRequest, LeaveRequestStatus } from '@/types/hr';
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   Approved: 'success',
@@ -29,28 +28,23 @@ interface Props {
 
 export function MyLeaveTab({ tenantSlug }: Props) {
   const toast = useToast();
-  const queryClient = useQueryClient();
 
   const [applyOpen, setApplyOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
   const [mySearch, setMySearch] = useState('');
   const [myPage, setMyPage] = useState(1);
 
-  const { data: balancesRaw } = useQuery({
-    queryKey: ['leave-balances'],
-    queryFn: () => api.get('/hr/leave/balances/me').then((r) => r.data),
-  });
+  const { data: balancesRaw } = useLeaveBalances();
   const balancesData: LeaveBalance[] = Array.isArray(balancesRaw)
     ? balancesRaw
-    : (balancesRaw?.data ?? []);
+    : ((balancesRaw as { data?: LeaveBalance[] } | undefined)?.data ?? []);
 
-  const { data: myData, isLoading: myLoading } = useQuery({
-    queryKey: ['leave-requests', 'my'],
-    queryFn: () => api.get('/hr/leave/requests/my').then((r) => r.data),
-  });
+  const { data: myData, isLoading: myLoading } = useMyLeaveRequests();
 
   const myRequests: LeaveRequest[] = useMemo(() => {
-    return Array.isArray(myData) ? myData : (myData?.data ?? []);
+    return Array.isArray(myData)
+      ? myData
+      : ((myData as { data?: LeaveRequest[] } | undefined)?.data ?? []);
   }, [myData]);
 
   const myFiltered = useMemo(() => {
@@ -62,18 +56,7 @@ export function MyLeaveTab({ tenantSlug }: Props) {
   const myPageData = myFiltered.slice((myPage - 1) * PAGE_SIZE, myPage * PAGE_SIZE);
   const myTotalPages = Math.max(1, Math.ceil(myFiltered.length / PAGE_SIZE));
 
-  const { mutate: cancelRequest, isPending: isCancelling } = useMutation({
-    mutationFn: (id: string) => api.patch(`/hr/leave/requests/${id}/cancel`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['leave-balances'] });
-      toast.success('Leave request cancelled');
-      setCancelTarget(null);
-    },
-    onError: (err) => {
-      toast.error(extractError(err, 'Something went wrong'));
-    },
-  });
+  const { mutate: cancelRequest, isPending: isCancelling } = useCancelLeaveRequest();
 
   const columns: Column<LeaveRequest>[] = [
     {
@@ -184,7 +167,16 @@ export function MyLeaveTab({ tenantSlug }: Props) {
               variant="danger"
               isLoading={isCancelling}
               loadingText="Cancelling..."
-              onClick={() => cancelTarget && cancelRequest(cancelTarget.id)}
+              onClick={() =>
+                cancelTarget &&
+                cancelRequest(cancelTarget.id, {
+                  onSuccess: () => {
+                    toast.success('Leave request cancelled');
+                    setCancelTarget(null);
+                  },
+                  onError: (err) => toast.error(extractError(err, 'Something went wrong')),
+                })
+              }
             >
               Cancel Request
             </Button>

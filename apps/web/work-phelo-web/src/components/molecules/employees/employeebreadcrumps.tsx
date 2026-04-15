@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface BreadcrumbProps {
   tenantSlug: string;

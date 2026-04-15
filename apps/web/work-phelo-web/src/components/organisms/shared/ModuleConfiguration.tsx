@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
-import { ModuleIcons } from '@/lib/icons';
+import { ModuleIcons } from '@/components/atoms/icons';
 import { Users } from 'lucide-react';
 
 export interface ModuleOption {

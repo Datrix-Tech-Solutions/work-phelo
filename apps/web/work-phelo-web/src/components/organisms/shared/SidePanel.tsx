@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface SidePanelProps {
   isOpen: boolean;
@@ -21,7 +21,7 @@ export function SidePanel({
   description,
   children,
   footer,
-  width = 'w-[520px]',
+  width = 'w-[480px]',
 }: SidePanelProps) {
   // Close on Escape key
   useEffect(() => {

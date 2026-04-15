@@ -3,7 +3,13 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useEmployee, useEmployees, useResendEmployeeInvite } from '@/hooks/useEmployees';
+import {
+  useEmployee,
+  useEmployees,
+  useOffboardEmployee,
+  useResendEmployeeInvite,
+  useUpdateEmployee,
+} from '@/hooks/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useToast } from '@/hooks/useToast';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
@@ -36,12 +42,45 @@ export default function EmployeeDetailPage({
 
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
+  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { mutate: offboardEmployee, isPending: isOffboarding } = useOffboardEmployee();
 
   const handleResendInvite = () => {
     resendInvite(id, {
       onSuccess: () => toast.success('Invite resent successfully'),
       onError: () => toast.error('Failed to resend invite'),
     });
+  };
+
+  const handleUpdateEmployee = (data: import('@/types').UpdateEmployeePayload) => {
+    updateEmployee(
+      { id, ...data },
+      {
+        onSuccess: () => {
+          toast.success('Employee updated successfully');
+          setEditOpen(false);
+        },
+        onError: () => toast.error('Failed to update employee'),
+      },
+    );
+  };
+
+  const handleOffboard = (data: {
+    employeeId: string;
+    reason: string;
+    offboardedAt: string;
+    assetReturn: boolean;
+  }) => {
+    offboardEmployee(
+      { id, reason: data.reason },
+      {
+        onSuccess: () => {
+          toast.success('Employee offboarded successfully');
+          setOffboardOpen(false);
+        },
+        onError: () => toast.error('Failed to offboard employee'),
+      },
+    );
   };
 
   if (isLoading) {
@@ -93,8 +132,8 @@ export default function EmployeeDetailPage({
         onClose={() => setOffboardOpen(false)}
         employee={employee}
         allHrEmployees={allHrEmployees}
-        onOffboard={() => {}}
-        isOffboarding={false}
+        onOffboard={handleOffboard}
+        isOffboarding={isOffboarding}
       />
 
       <EditEmployeePanel
@@ -103,8 +142,8 @@ export default function EmployeeDetailPage({
         employee={employee}
         departments={departments}
         name={name}
-        onSave={() => {}}
-        isUpdating={false}
+        onSave={handleUpdateEmployee}
+        isUpdating={isUpdating}
       />
 
       <AssignAssetPanel

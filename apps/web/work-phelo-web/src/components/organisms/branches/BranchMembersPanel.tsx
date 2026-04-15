@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/useToast';
 import { useUpdateEmployee } from '@/hooks';
 import { cn } from '@/lib/utils';
 import type { Branch, Employee } from '@/types/hr';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface BranchMembersPanelProps {
   isOpen: boolean;
@@ -72,7 +72,6 @@ export function BranchMembersPanel({
       onClose={handleClose}
       title="Add Members"
       description={`Assign employees to "${branch?.name ?? ''}"`}
-      width="w-[460px]"
       footer={
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm text-gray-500">
