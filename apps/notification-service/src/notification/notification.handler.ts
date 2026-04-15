@@ -73,6 +73,23 @@ export class NotificationHandler {
     await this.notificationService.sendPasswordResetOtp(data);
   }
 
+  @EventPattern('notify.employee_termination')
+  async handleEmployeeTermination(
+    @Payload()
+    data: {
+      tenantId: string;
+      employeeId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      reason: string;
+      lastWorkingDate: string;
+    },
+  ) {
+    this.logger.log(`Handling termination notice for ${data.email}`);
+    await this.notificationService.sendTerminationNotice(data);
+  }
+
   @EventPattern('notification.sms_otp')
   async handleSmsOtp(
     @Payload()

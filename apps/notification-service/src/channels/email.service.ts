@@ -94,6 +94,62 @@ export class EmailService {
     );
   }
 
+  async sendTerminationNotice(
+    to: string,
+    firstName: string,
+    lastName: string,
+    reason: string,
+    lastWorkingDate: string,
+  ): Promise<boolean> {
+    const reasonLabels: Record<string, string> = {
+      TERMINATION: 'Termination',
+      CONTRACT_ENDED: 'End of Contract',
+    };
+    const reasonLabel = reasonLabels[reason] ?? reason;
+    const formattedDate = new Date(lastWorkingDate).toLocaleDateString(
+      'en-GB',
+      {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      },
+    );
+
+    return this.send(
+      to,
+      `Important notice regarding your employment — ${this.appName}`,
+      `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
+        <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
+          <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
+          <h2 style="color: #111827; margin: 0 0 24px 0;">Employment Notice</h2>
+          <p style="color: #374151;">Dear ${firstName} ${lastName},</p>
+          <p style="color: #374151;">
+            We are writing to formally notify you that your employment has ended
+            due to: <strong>${reasonLabel}</strong>.
+          </p>
+          <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px 16px; margin: 24px 0; border-radius: 0 4px 4px 0;">
+            <p style="color: #991b1b; margin: 0; font-size: 14px;">
+              Your last working date is <strong>${formattedDate}</strong>.
+            </p>
+          </div>
+          <p style="color: #374151;">
+            Please ensure all company assets are returned and any outstanding
+            clearance items are completed before your last working day.
+          </p>
+          <p style="color: #374151;">
+            Your access to WorkPhelo and all associated systems will be revoked
+            effective from your last working date.
+          </p>
+          <p style="color: #6b7280; font-size: 13px; margin-top: 32px;">
+            If you have any questions, please contact your HR department directly.
+          </p>
+        </div>
+      </div>
+      `,
+    );
+  }
+
   async sendPasswordResetLink(
     to: string,
     firstName: string,
