@@ -19,7 +19,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     api
       .get<{ user: User }>('/auth/me')
-      .then((res) => setUser(res.data.user))
+      .then(async (res) => {
+        const authUser = res.data.user;
+        // Employees have an HR profile — fetch isManager from it.
+        // TENANT_ADMIN and SUPER_ADMIN don't have employee records, skip.
+        if (authUser.role === 'EMPLOYEE' || authUser.role === 'MANAGER') {
+          try {
+            const empRes = await api.get<{ isManager: boolean }>('/hr/employees/me');
+            authUser.isManager = empRes.data.isManager ?? false;
+          } catch {
+            // Not critical — leave isManager undefined; UI falls back to role check
+          }
+        }
+        setUser(authUser);
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
