@@ -3,20 +3,18 @@
 import { useEffect } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { api } from '@/lib/api';
+import { useCreateAppraisalCycle, useUpdateAppraisalCycle } from '@/hooks/useAppraisals';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
-import { AppraisalCycle, CreateAppraisalCycleDto } from '@/types/appraisal';
+import { AppraisalCycle, CreateAppraisalCycleDto } from '@/types/hr';
 
 interface CreateCyclePanelProps {
   isOpen: boolean;
   onClose: () => void;
-  tenantSlug: string;
   editCycle?: AppraisalCycle;
 }
 
@@ -27,14 +25,8 @@ type FormValues = {
   endDate: string;
 };
 
-export function CreateCyclePanel({
-  isOpen,
-  onClose,
-  tenantSlug,
-  editCycle,
-}: CreateCyclePanelProps) {
+export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePanelProps) {
   const toast = useToast();
-  const queryClient = useQueryClient();
   const isEditing = !!editCycle;
 
   const {
@@ -72,28 +64,29 @@ export function CreateCyclePanel({
 
   const startDate = useWatch({ control, name: 'startDate' });
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data: CreateAppraisalCycleDto) =>
-      isEditing
-        ? api.patch(`/hr/appraisals/cycles/${editCycle!.id}`, data)
-        : api.post(`/hr/appraisals/cycles`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appraisal-cycles', tenantSlug] });
-      toast.success(isEditing ? 'Cycle updated' : 'Cycle created');
-      onClose();
-    },
-    onError: (err) => {
-      toast.error(extractError(err, 'Something went wrong'));
-    },
-  });
+  const { mutate: createCycle, isPending: isCreating } = useCreateAppraisalCycle();
+  const { mutate: updateCycle, isPending: isUpdating } = useUpdateAppraisalCycle();
+  const isPending = isCreating || isUpdating;
 
   const onSubmit = (values: FormValues) => {
-    mutate({
+    const payload: Partial<CreateAppraisalCycleDto> = {
       title: values.title,
       description: values.description || undefined,
       startDate: values.startDate,
       endDate: values.endDate,
-    });
+    };
+    const options = {
+      onSuccess: () => {
+        toast.success(isEditing ? 'Cycle updated' : 'Cycle created');
+        onClose();
+      },
+      onError: (err: unknown) => toast.error(extractError(err, 'Something went wrong')),
+    };
+    if (isEditing) {
+      updateCycle({ id: editCycle!.id, ...payload }, options);
+    } else {
+      createCycle(payload, options);
+    }
   };
 
   return (
@@ -102,7 +95,6 @@ export function CreateCyclePanel({
       onClose={onClose}
       title={isEditing ? 'Edit Cycle' : 'New Appraisal Cycle'}
       description="Schedule a performance review cycle for your organisation."
-      width="w-[480px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>

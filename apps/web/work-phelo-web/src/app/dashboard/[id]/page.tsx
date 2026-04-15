@@ -2,7 +2,7 @@
 
 'use client';
 
-import { use, useMemo } from 'react';
+import { use, useMemo, useState } from 'react';
 import { useTenant, useTenantUsers, useTenantAudit } from '@/hooks/useTenants';
 import { useUpdateModules, useUpdateFeatures } from '@/hooks/useModuleConfig';
 import Link from 'next/link';
@@ -10,15 +10,16 @@ import { CompanyHeader } from '@/components/organisms/shared/CompanyHeader';
 import { CompanyInfoCard } from '@/components/organisms/shared/CompanyInfoCard';
 import { ModuleConfiguration, Module } from '@/components/organisms/shared/ModuleConfiguration';
 import { RecentActivities } from '@/components/organisms/superadmin/RecentActivities';
+import { EditCompanyPanel } from '@/components/organisms/superadmin/EditCompanyPanel';
+import { EditAdminPanel } from '@/components/organisms/superadmin/EditAdminPanel';
 import { DEFAULT_MODULES } from '@/lib/ModuleDefaults';
-import { ChevronLeftIcon } from 'lucide-react';
-
-function ChevronIcon() {
-  return <ChevronLeftIcon />;
-}
+import { Icons } from '@/components/atoms/icons';
 
 export default function CompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+
+  const [editCompanyOpen, setEditCompanyOpen] = useState(false);
+  const [editAdminOpen, setEditAdminOpen] = useState(false);
 
   const { data: tenant, isLoading: tenantLoading, error: tenantError } = useTenant(id);
   const { data: users = [] } = useTenantUsers(id);
@@ -99,7 +100,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         <Link href="/dashboard" className="hover:text-gray-700 transition-colors">
           Dashboard
         </Link>
-        <ChevronIcon />
+        <Icons.ChevronLeft className="w-5 h-5" />
         <span className="text-gray-700 font-medium">{tenant.name}</span>
       </nav>
 
@@ -123,12 +124,8 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
                 }
               : undefined
           }
-          onEditCompany={function (): void {
-            throw new Error('Function not implemented.');
-          }}
-          onEditAdmin={function (): void {
-            throw new Error('Function not implemented.');
-          }}
+          onEditCompany={() => setEditCompanyOpen(true)}
+          onEditAdmin={() => setEditAdminOpen(true)}
         />
         <ModuleConfiguration
           modules={modules}
@@ -151,9 +148,31 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         />
       </div>
 
-      <div className="h-75 shrink-0">
+      <div className="h-80 shrink">
         <RecentActivities activities={activities} onViewAll={() => {}} />
       </div>
+
+      <EditCompanyPanel
+        isOpen={editCompanyOpen}
+        onClose={() => setEditCompanyOpen(false)}
+        tenant={{
+          id: tenant.id,
+          name: tenant.name,
+          size: tenant.size,
+          industry: tenant.industry,
+          country: tenant.country,
+          phone: tenant.phone,
+        }}
+      />
+
+      <EditAdminPanel
+        isOpen={editAdminOpen}
+        onClose={() => setEditAdminOpen(false)}
+        tenantId={tenant.id}
+        admin={
+          admin ? { name: `${admin.firstName} ${admin.lastName}`, email: admin.email } : undefined
+        }
+      />
     </main>
   );
 }

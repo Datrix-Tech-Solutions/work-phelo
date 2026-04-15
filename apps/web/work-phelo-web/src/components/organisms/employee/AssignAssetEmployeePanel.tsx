@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 interface AvailableAsset {
   id: string;
@@ -71,7 +71,6 @@ export function AssignAssetPanel({
       onClose={handleClose}
       title="Assign Asset"
       description={`Assign an available asset to ${employeeName}.`}
-      width="w-[480px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>
@@ -143,21 +142,7 @@ export function AssignAssetPanel({
                     >
                       {cond.label}
                     </span>
-                    {isSelected && (
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="var(--brand)"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="shrink-0"
-                      >
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
+                    {isSelected && <Icons.Check />}
                   </button>
                 );
               })
@@ -168,18 +153,7 @@ export function AssignAssetPanel({
         {/* Selected summary */}
         {selectedAsset && (
           <div className="flex items-center gap-2 px-4 py-3 bg-[#EEF1F8] rounded-card border border-brand/20">
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--brand)"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
+            <Icons.Check />
             <p className="text-sm text-brand font-semibold truncate">
               {selectedAsset.name} selected
             </p>

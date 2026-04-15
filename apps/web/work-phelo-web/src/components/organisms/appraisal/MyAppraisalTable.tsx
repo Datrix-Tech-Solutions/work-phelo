@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { useMyAppraisals } from '@/hooks/useAppraisals';
+import { FinalRating } from '@/types/hr';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
 import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '../shared/DataTable';
@@ -20,13 +20,10 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
-  const { data: myData, isLoading } = useQuery({
-    queryKey: ['my-appraisals'],
-    queryFn: () => api.get('/hr/appraisals/my').then((r) => r.data),
-  });
+  const { data: myData, isLoading } = useMyAppraisals();
 
   const myRows = useMemo(() => {
-    const list = Array.isArray(myData) ? myData : (myData?.data ?? []);
+    const list = Array.isArray(myData) ? myData : [];
     return list.map(
       (r: {
         id: unknown;
@@ -44,7 +41,7 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
         cycleStatus: r.cycleStatus ?? 'Upcoming',
         overallStatus: r.overallStatus ?? 'NotStarted',
         overallScore: r.overallScore != null ? Number(r.overallScore) : undefined,
-        finalRating: r.finalRating,
+        finalRating: r.finalRating as FinalRating | undefined,
         selfAssessmentDeadline: String(r.selfAssessmentDeadline ?? ''),
       }),
     );

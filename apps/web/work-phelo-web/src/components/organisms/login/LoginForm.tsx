@@ -2,13 +2,11 @@
 
 import { useForm } from 'react-hook-form';
 import { extractError } from '@/lib/extractError';
-import { useMutation } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { AppLogo } from '@/components/atoms/AppLogo';
-import { api } from '@/lib/api';
-import { LoginPayload, User } from '@/types/auth';
-import { useAuthStore } from '@/store/auth.store';
+import { LoginPayload } from '@/types/auth';
+import { useLogin, useSuperAdminLogin } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import { Button } from '@/components/atoms/Button';
 import { GoogleButton } from '@/components/atoms/GoogleButton';
@@ -29,7 +27,6 @@ export function LoginForm({
   redirectTo = '/dashboard',
 }: LoginFormProps) {
   const router = useRouter();
-  const setUser = useAuthStore((s) => s.setUser);
   const toast = useToast();
 
   const {
@@ -39,22 +36,25 @@ export function LoginForm({
   } = useForm<LoginPayload>();
 
   const isTenantLogin = !!tenantSlug;
-  const endpoint = isTenantLogin ? '/auth/login' : '/auth/admin/login';
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data: LoginPayload) => api.post<{ user: User }>(endpoint, data),
-    onSuccess: (res) => {
-      setUser(res.data.user);
-      const destination = isTenantLogin ? `/${tenantSlug}/dashboard` : (redirectTo ?? '/dashboard');
-      router.push(destination);
-    },
-    onError: (err) => {
-      toast.error(extractError(err, 'Invalid email or password'));
-    },
-  });
+  const { mutate: login, isPending: isTenantPending } = useLogin();
+  const { mutate: adminLogin, isPending: isAdminPending } = useSuperAdminLogin();
+  const isPending = isTenantPending || isAdminPending;
 
   const onSubmit = (data: LoginPayload) => {
-    mutate({ ...data, ...(tenantSlug ? { tenantSlug } : {}) });
+    const onSuccess = () => {
+      const destination = isTenantLogin ? `/${tenantSlug}/dashboard` : (redirectTo ?? '/dashboard');
+      router.push(destination);
+    };
+    const onError = (err: unknown) => {
+      toast.error(extractError(err, 'Invalid email or password'));
+    };
+
+    if (isTenantLogin) {
+      login({ ...data, tenantSlug }, { onSuccess, onError });
+    } else {
+      adminLogin(data, { onSuccess, onError });
+    }
   };
 
   return (

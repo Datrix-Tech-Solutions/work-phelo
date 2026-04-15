@@ -1,5 +1,4 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { User, LoginPayload } from '@/types/auth';
@@ -54,7 +53,6 @@ export function useSuperAdminLogin() {
 export function useLogout() {
   const { logout } = useAuthStore();
   const queryClient = useQueryClient();
-  const router = useRouter();
 
   return useMutation({
     mutationFn: async () => {
@@ -63,7 +61,6 @@ export function useLogout() {
     onSuccess: () => {
       logout();
       queryClient.clear();
-      router.push('/login');
     },
   });
 }

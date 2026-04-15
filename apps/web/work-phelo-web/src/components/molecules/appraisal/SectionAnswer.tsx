@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { SectionType, SectionResponse } from '@/types/appraisal';
+import { SectionType, SectionResponse } from '@/types/hr';
 
 interface Props {
   type: SectionType;

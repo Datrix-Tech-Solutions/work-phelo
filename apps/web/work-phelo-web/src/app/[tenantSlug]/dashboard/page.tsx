@@ -10,7 +10,7 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { StatPill } from '@/components/molecules/departments/StatPill';
 import { getGreeting } from '@/lib/formatters';
-import { ModuleIcons, MODULE_COLORS } from '@/lib/icons';
+import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
 
 /* ── Module definitions ── */
 interface ModuleDef {

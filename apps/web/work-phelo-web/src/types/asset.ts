@@ -1,4 +1,4 @@
-import { AssetType } from '@/lib/assetIcons';
+import { AssetType } from '@/components/atoms/assetIcons';
 
 export type AssetStatus = 'AVAILABLE' | 'ASSIGNED' | 'MAINTENANCE' | 'RETIRED';
 export type AssetCondition = 'NEW' | 'GOOD' | 'FAIR' | 'POOR';

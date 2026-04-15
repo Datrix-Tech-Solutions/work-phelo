@@ -156,7 +156,6 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
             ? `Editing "${branch.name}"`
             : 'Add a new office location to your organisation.'
         }
-        width="w-[480px]"
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={handleClose}>

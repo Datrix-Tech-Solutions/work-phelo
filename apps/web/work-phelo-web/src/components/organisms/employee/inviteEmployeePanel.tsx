@@ -97,7 +97,6 @@ export function InviteEmployeePanel({
       onClose={handleClose}
       title="Add New Employee"
       description="Add a new employee to onboard them onto WorkPhelo."
-      width="w-[500px]"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>

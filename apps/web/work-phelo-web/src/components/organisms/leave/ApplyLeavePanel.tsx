@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useQuery } from '@tanstack/react-query';
@@ -12,7 +12,8 @@ import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
 import { leaveKeys, useCreateLeaveRequest } from '@/hooks/useLeave';
-import { CreateLeaveRequestDto, LeaveBalance, LeaveType, PublicHoliday } from '@/types/leave';
+import { CreateLeaveRequestDto, LeaveBalance, LeaveType, PublicHoliday } from '@/types/hr';
+import { FileUpload } from '@/components/atoms/FileUpload';
 
 interface ApplyLeavePanelProps {
   isOpen: boolean;
@@ -26,7 +27,6 @@ type FormValues = {
   startDate: string;
   endDate: string;
   reason: string;
-  documentationUrl: string;
 };
 
 /* ── Working days calculator ── */
@@ -48,6 +48,8 @@ function calcWorkingDays(start: string, end: string, holidays: PublicHoliday[]):
 
 export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: ApplyLeavePanelProps) {
   const toast = useToast();
+  const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentError, setDocumentError] = useState('');
 
   const { data: leaveTypes = [] } = useQuery({
     queryKey: leaveKeys.types(tenantSlug),
@@ -79,17 +81,24 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
       startDate: '',
       endDate: '',
       reason: '',
-      documentationUrl: '',
     },
   });
 
-  useEffect(() => {
-    if (!isOpen) reset();
-  }, [isOpen, reset]);
+  const handleClose = useCallback(() => {
+    reset();
+    setDocumentFile(null);
+    setDocumentError('');
+    onClose();
+  }, [reset, onClose]);
 
   const leaveTypeId = useWatch({ control, name: 'leaveTypeId' });
   const startDate = useWatch({ control, name: 'startDate' });
   const endDate = useWatch({ control, name: 'endDate' });
+
+  const selectedLeaveType = useMemo(
+    () => leaveTypes.find((t) => t.id === leaveTypeId),
+    [leaveTypes, leaveTypeId],
+  );
 
   const selectedBalance = useMemo(
     () => balances.find((b) => b.leaveTypeId === leaveTypeId),
@@ -109,18 +118,23 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const onSubmit = (values: FormValues) => {
     if (!values.leaveTypeId) return;
 
+    if (selectedLeaveType?.requiresDocument && !documentFile) {
+      setDocumentError('A supporting document is required for this leave type');
+      return;
+    }
+
     const payload: CreateLeaveRequestDto = {
       leaveTypeId: values.leaveTypeId,
       startDate: values.startDate,
       endDate: values.endDate,
       reason: values.reason || undefined,
-      documentationUrl: values.documentationUrl || undefined,
+      documentationUrl: documentFile ? documentFile.name : undefined,
     };
 
     mutate(payload, {
       onSuccess: () => {
         toast.success('Leave request submitted');
-        onClose();
+        handleClose();
       },
       onError: (err: unknown) => {
         toast.error(extractError(err, 'Something went wrong'));
@@ -131,13 +145,12 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   return (
     <SidePanel
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title="Apply for Leave"
       description="Submit a leave request for your manager's approval."
-      width="w-[500px]"
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button
@@ -239,18 +252,20 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
         />
       </div>
 
-      {/* Supporting document (optional) */}
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-bold text-gray-900">
-          Supporting Document <span className="text-gray-400 font-normal">(optional)</span>
-        </label>
-        <input
-          type="text"
-          {...register('documentationUrl')}
-          placeholder="Paste document URL"
-          className={inputClass(errors.documentationUrl?.message)}
+      {/* Supporting document — required when leave type demands it */}
+      {selectedLeaveType?.requiresDocument && (
+        <FileUpload
+          label="Supporting Document"
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+          value={documentFile}
+          onChange={(file) => {
+            setDocumentFile(file);
+            if (file) setDocumentError('');
+          }}
+          error={documentError}
+          hint="Required for this leave type"
         />
-      </div>
+      )}
     </SidePanel>
   );
 }

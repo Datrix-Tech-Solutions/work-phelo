@@ -10,7 +10,7 @@ import { TemplatePreviewModal } from '@/components/organisms/appraisal/TemplateP
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { AppraisalTemplate } from '@/types/appraisal';
+import { AppraisalTemplate } from '@/types/hr';
 
 interface Props {
   tenantSlug: string;

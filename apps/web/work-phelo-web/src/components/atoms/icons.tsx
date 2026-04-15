@@ -65,6 +65,9 @@ import {
   DollarSign,
   Handshake,
   Calendar,
+  GripVertical,
+  Pencil,
+  Check,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -92,6 +95,9 @@ export const Icons = {
   CircleCheck,
   Eye,
   EyeOff,
+  GripVertical,
+  Pencil,
+  Check,
 
   // Time & Status
   Clock,

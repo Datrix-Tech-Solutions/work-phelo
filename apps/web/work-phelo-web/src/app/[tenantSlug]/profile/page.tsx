@@ -1,0 +1,99 @@
+// MY PROFILE PAGE
+
+'use client';
+
+import { use, useState } from 'react';
+import { useMyProfile, useUpdateEmployee } from '@/hooks/useEmployees';
+import { useAuthStore } from '@/store/auth.store';
+import { useToast } from '@/hooks/useToast';
+import { TopNav } from '@/components/organisms/shared/TopNav';
+import { EditMyProfilePanel } from '@/components/organisms/employee/EditMyProfilePanel';
+import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
+import { EmploymentDetailsSection } from '@/components/molecules/employees/employeeDetailsSection';
+import { AccountDetailsSection } from '@/components/molecules/employees/accountDetailSection';
+import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
+import { Button } from '@/components/atoms/Button';
+import { Icons } from '@/components/atoms/icons';
+import type { UpdateEmployeePayload } from '@/types/hr';
+
+export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
+  const { tenantSlug } = use(params);
+  const user = useAuthStore((s) => s.user);
+  const firstName = user?.firstName ?? 'User';
+  const initials = firstName.slice(0, 2).toUpperCase();
+
+  const [editOpen, setEditOpen] = useState(false);
+
+  const { data: employee, isLoading } = useMyProfile();
+  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const toast = useToast();
+
+  const handleSave = (data: UpdateEmployeePayload) => {
+    if (!employee) return;
+    updateEmployee(
+      { id: employee.id, ...data },
+      {
+        onSuccess: () => {
+          toast.success('Profile updated successfully');
+          setEditOpen(false);
+        },
+        onError: () => toast.error('Failed to update profile'),
+      },
+    );
+  };
+
+  return (
+    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+      <TopNav
+        userInitials={initials}
+        notificationCount={0}
+        activeTab="portal"
+        onTabChange={() => {}}
+      />
+
+      <main className="flex-1 min-h-0 overflow-y-auto">
+        {isLoading || !employee ? (
+          <EmployeeDetailSkeleton />
+        ) : (
+          <div className="p-8 flex flex-col gap-6">
+            {/* Page header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">My Profile</h1>
+                <p className="text-sm text-gray-400 mt-0.5">{tenantSlug}</p>
+              </div>
+              <Button className="gap-2" onClick={() => setEditOpen(true)}>
+                Edit Profile
+                <Icons.Pencil className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Main content */}
+            <div className="flex gap-6 items-start">
+              {/* Left sidebar */}
+              <EmployeeProfileCard employee={employee} />
+
+              {/* Right sections */}
+              <div className="flex-1 min-w-0 flex flex-col gap-4">
+                <EmploymentDetailsSection
+                  employee={employee}
+                  departments={[]}
+                  allHrEmployees={[]}
+                />
+                <AccountDetailsSection employee={employee} />
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      <EditMyProfilePanel
+        isOpen={editOpen}
+        onClose={() => setEditOpen(false)}
+        employee={employee!}
+        onSave={handleSave}
+        isUpdating={isUpdating}
+      />
+    </div>
+  );
+}

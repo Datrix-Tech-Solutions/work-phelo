@@ -16,7 +16,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { useAuthStore } from '@/store/auth.store';
-import { api } from '@/lib/api';
+import { useLogout } from '@/hooks/useAuth';
 import { useRouter, usePathname } from 'next/navigation';
 
 export interface NavTab {
@@ -39,10 +39,12 @@ interface TopNavProps {
 function ProfileDropdown({
   userInitials,
   userColor,
+  onProfileClick,
   onLogoutClick,
 }: {
   userInitials: string;
   userColor?: string;
+  onProfileClick: () => void;
   onLogoutClick: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -52,7 +54,10 @@ function ProfileDropdown({
       label: 'Profile',
       icon: <UserIcon className="w-5 h-5" />,
       danger: false,
-      onClick: () => setOpen(false),
+      onClick: () => {
+        setOpen(false);
+        onProfileClick();
+      },
     },
     {
       label: 'Settings',
@@ -118,16 +123,21 @@ export function TopNav({
 }: TopNavProps) {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const { logout, user } = useAuthStore();
+  const { user } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
 
-  const handleLogout = async () => {
-    await api.post('/auth/logout').catch(() => {});
+  const { mutate: performLogout, isPending: isLoggingOut } = useLogout();
+
+  const handleLogout = () => {
     const redirectTo =
       user?.role === 'SUPER_ADMIN' ? '/platform/login' : `/${user?.tenantSlug}/login`;
-    logout();
-    router.push(redirectTo);
+    performLogout(undefined, { onSuccess: () => router.push(redirectTo) });
+  };
+
+  const handleProfileClick = () => {
+    const slug = user?.tenantSlug || pathname.split('/')[1];
+    router.push(`/${slug}/profile`);
   };
 
   return (
@@ -190,6 +200,7 @@ export function TopNav({
           <ProfileDropdown
             userInitials={userInitials}
             userColor={userColor}
+            onProfileClick={handleProfileClick}
             onLogoutClick={() => setLogoutOpen(true)}
           />
         </div>
@@ -201,7 +212,6 @@ export function TopNav({
         onClose={() => setNotificationsOpen(false)}
         title="Notifications"
         description="Stay up to date with what's happening."
-        width="w-[400px]"
       >
         <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
           <div className="w-14 h-14 rounded-full bg-gray-100 flex items-center justify-center text-gray-300">
@@ -223,7 +233,12 @@ export function TopNav({
             <Button variant="secondary" onClick={() => setLogoutOpen(false)}>
               Stay
             </Button>
-            <Button variant="outline" onClick={handleLogout}>
+            <Button
+              variant="outline"
+              onClick={handleLogout}
+              isLoading={isLoggingOut}
+              loadingText="Logging out..."
+            >
               Logout
             </Button>
           </>

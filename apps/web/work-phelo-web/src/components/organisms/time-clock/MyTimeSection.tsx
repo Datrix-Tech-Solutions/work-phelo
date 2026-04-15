@@ -41,20 +41,20 @@ export function MyTimeSection({
 
   const historyColumns: Column<TimeEntry>[] = [
     { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
-    { key: 'clockIn', label: 'Clock In', render: (r) => <span>{formatTime(r.clockIn)}</span> },
+    { key: 'clockIn', label: 'CLOCK IN', render: (r) => <span>{formatTime(r.clockIn)}</span> },
     {
       key: 'clockOut',
-      label: 'Clock Out',
+      label: 'Clock out',
       render: (r) => <span>{r.clockOut ? formatTime(r.clockOut) : '—'}</span>,
     },
     {
-      key: 'breakMinutes',
-      label: 'Break',
+      key: 'totalMinutes',
+      label: 'hours',
       render: (r) => <span>{r.breakMinutes > 0 ? formatMinutes(r.breakMinutes) : '—'}</span>,
     },
     {
-      key: 'totalMinutes',
-      label: 'Hours',
+      key: 'status',
+      label: 'status',
       render: (r) => <span className="font-semibold">{formatMinutes(r.totalMinutes)}</span>,
     },
   ];

@@ -10,6 +10,7 @@ import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { InviteEmployeePanel } from '@/components/organisms/employee/inviteEmployeePanel';
 import { useAuthStore } from '@/store/auth.store';
 import { SearchIcon } from 'lucide-react';
@@ -27,7 +28,16 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const [typeFilter, setTypeFilter] = useState('');
 
   const [panelOpen, setPanelOpen] = useState(false);
+  const [noDeptWarning, setNoDeptWarning] = useState(false);
   const [successEmployee, setSuccessEmployee] = useState<string | null>(null);
+
+  const handleInviteClick = () => {
+    if (departments.length === 0) {
+      setNoDeptWarning(true);
+    } else {
+      setPanelOpen(true);
+    }
+  };
 
   const { data: empResult, isLoading } = useEmployees({
     search: search || undefined,
@@ -49,7 +59,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
             {isLoading ? '—' : `${employees.length} employee${employees.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        {!isEmployee && <Button onClick={() => setPanelOpen(true)}>+ Invite Employee</Button>}
+        {!isEmployee && <Button onClick={handleInviteClick}>+ Invite Employee</Button>}
       </div>
 
       {/* Toolbar */}
@@ -147,6 +157,28 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           ))}
         </div>
       )}
+
+      <Modal
+        isOpen={noDeptWarning}
+        onClose={() => setNoDeptWarning(false)}
+        title="No Departments Found"
+        description="You need at least one department before inviting employees. Create a department first, then come back to add your team."
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setNoDeptWarning(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setNoDeptWarning(false);
+                router.push(`/${tenantSlug}/hr/departments`);
+              }}
+            >
+              Go to Departments
+            </Button>
+          </div>
+        }
+      />
 
       <SuccessModal
         isOpen={!!successEmployee}

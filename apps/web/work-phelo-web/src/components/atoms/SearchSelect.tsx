@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 
 export interface SearchSelectOption {
   value: string;

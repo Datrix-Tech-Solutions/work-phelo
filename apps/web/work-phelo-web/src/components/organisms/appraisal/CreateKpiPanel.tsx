@@ -12,7 +12,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { inputClass, cn } from '@/lib/utils';
-import { AppraisalKpi, CreateAppraisalKpiDto } from '@/types/appraisal';
+import { AppraisalKpi, CreateAppraisalKpiDto } from '@/types/hr';
 
 interface CreateKpiPanelProps {
   isOpen: boolean;

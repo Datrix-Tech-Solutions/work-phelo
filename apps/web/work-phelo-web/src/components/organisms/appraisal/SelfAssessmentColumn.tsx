@@ -8,7 +8,7 @@ import type {
   AppraisalSection,
   KpiScore,
   SectionResponse,
-} from '@/types/appraisal';
+} from '@/types/hr';
 
 interface Props {
   self: AppraisalResponse | undefined;

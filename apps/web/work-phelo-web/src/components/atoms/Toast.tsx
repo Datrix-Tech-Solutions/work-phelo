@@ -1,6 +1,6 @@
 'use client';
 
-import { Icons } from '@/lib/icons';
+import { Icons } from '@/components/atoms/icons';
 import { cn } from '@/lib/utils';
 import { useToastStore, ToastItem } from '@/store/toast.store';
 

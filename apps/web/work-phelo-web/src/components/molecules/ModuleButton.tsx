@@ -10,7 +10,7 @@ interface ModuleButtonProps {
   iconBg?: string;
   onClick?: () => void;
 }
-
+//lock logo for the module can't find replacement?
 const LockIcon = () => (
   <svg
     width="16"

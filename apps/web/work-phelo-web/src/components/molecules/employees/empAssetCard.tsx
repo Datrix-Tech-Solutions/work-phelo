@@ -1,4 +1,4 @@
-import { AssetTypeIcon } from '@/lib/assetIcons';
+import { AssetTypeIcon } from '@/components/atoms/assetIcons';
 import { EmployeeAsset } from '@/types/asset';
 
 export function AssetCard({ asset }: { asset: EmployeeAsset }) {

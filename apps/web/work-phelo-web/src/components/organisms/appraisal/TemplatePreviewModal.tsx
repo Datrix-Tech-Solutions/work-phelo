@@ -2,7 +2,7 @@
 
 import { Modal } from '@/components/organisms/shared/Modal';
 import { cn } from '@/lib/utils';
-import { SectionType } from '@/types/appraisal';
+import { SectionType } from '@/types/hr';
 
 interface PreviewSection {
   name: string;

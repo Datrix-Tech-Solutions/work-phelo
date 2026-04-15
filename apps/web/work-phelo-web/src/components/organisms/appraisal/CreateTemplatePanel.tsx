@@ -13,8 +13,8 @@ import { TemplatePreviewModal } from '@/components/organisms/appraisal/TemplateP
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
-import { AppraisalTemplate, CreateAppraisalTemplateDto, SectionType } from '@/types/appraisal';
-import { Icons } from '@/lib/icons';
+import { AppraisalTemplate, CreateAppraisalTemplateDto, SectionType } from '@/types/hr';
+import { Icons } from '@/components/atoms/icons';
 
 interface CreateTemplatePanelProps {
   isOpen: boolean;
@@ -50,16 +50,7 @@ const RATING_RANGES = [
 
 /* ── Drag-handle icon ── */
 function GripIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" className="text-gray-300">
-      <circle cx="9" cy="6" r="1.5" />
-      <circle cx="15" cy="6" r="1.5" />
-      <circle cx="9" cy="12" r="1.5" />
-      <circle cx="15" cy="12" r="1.5" />
-      <circle cx="9" cy="18" r="1.5" />
-      <circle cx="15" cy="18" r="1.5" />
-    </svg>
-  );
+  return <Icons.GripVertical />;
 }
 
 /* ── Section row ── */
@@ -286,7 +277,6 @@ export function CreateTemplatePanel({
         onClose={onClose}
         title={isEditing ? 'Edit Template' : 'New Appraisal Template'}
         description="Define sections that employees and managers fill in during a review."
-        width="w-[580px]"
         footer={
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => setPreviewOpen(true)}>

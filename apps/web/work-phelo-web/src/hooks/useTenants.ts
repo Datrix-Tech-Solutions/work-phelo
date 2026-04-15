@@ -54,6 +54,32 @@ export function useSuspendTenant() {
   });
 }
 
+export function useDeactivateTenant() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (tenantId: string) => {
+      const res = await api.patch(`/auth/tenants/${tenantId}/deactivate`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+  });
+}
+
+export function useDeleteTenant() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (tenantId: string) => {
+      const res = await api.delete(`/auth/tenants/${tenantId}`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+  });
+}
+
 export function useAssignAdmin() {
   return useMutation({
     mutationFn: async (payload: {
@@ -133,5 +159,33 @@ export function useTenantAudit(id: string) {
     queryKey: ['tenant-audit', id],
     queryFn: () => api.get(`/auth/tenants/${id}/audit`).then((r) => r.data),
     enabled: !!id,
+  });
+}
+
+export function useUpdateTenant(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      name?: string;
+      size?: string;
+      industry?: string;
+      country?: string;
+      phone?: string;
+    }) => api.patch(`/auth/tenants/${id}`, payload).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenant', id] });
+      queryClient.invalidateQueries({ queryKey: ['tenants'] });
+    },
+  });
+}
+
+export function useUpdateTenantAdmin(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { firstName: string; lastName: string; email: string }) =>
+      api.patch(`/auth/tenants/${id}/admin`, payload).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenant-users', id] });
+    },
   });
 }
