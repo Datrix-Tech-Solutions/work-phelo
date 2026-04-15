@@ -157,6 +157,41 @@ export class NotificationService {
     });
   }
 
+  async sendTerminationNotice(data: {
+    tenantId: string;
+    employeeId: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    reason: string;
+    lastWorkingDate: string;
+  }) {
+    if (
+      await this.isDuplicate(data.email, NotificationType.EMPLOYEE_TERMINATION)
+    ) {
+      this.logger.warn(
+        `Duplicate EMPLOYEE_TERMINATION suppressed for ${data.email}`,
+      );
+      return;
+    }
+    const success = await this.email.sendTerminationNotice(
+      data.email,
+      data.firstName,
+      data.lastName,
+      data.reason,
+      data.lastWorkingDate,
+    );
+    await this.log({
+      userId: data.employeeId,
+      tenantId: data.tenantId,
+      type: 'EMPLOYEE_TERMINATION',
+      channel: 'EMAIL',
+      recipient: data.email,
+      subject: 'Important notice regarding your employment',
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendSmsOtp(data: {
     userId?: string;
     tenantId?: string;
