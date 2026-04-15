@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Employee, CreateEmployeePayload, EmployeeQuery } from '@/types/hr';
+import {
+  Employee,
+  CreateEmployeePayload,
+  EmployeeQuery,
+  OffboardingRecord,
+  InitiateOffboardDto,
+  UpdateChecklistDto,
+} from '@/types/hr';
 
 export function useEmployees(query?: EmployeeQuery) {
   return useQuery({
@@ -69,6 +76,68 @@ export function useUpdateEmployee() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       queryClient.invalidateQueries({ queryKey: ['employees', id] });
+    },
+  });
+}
+
+export function useOffboardingRecord(employeeId: string) {
+  return useQuery({
+    queryKey: ['employees', employeeId, 'offboarding'],
+    queryFn: async () => {
+      const res = await api.get<OffboardingRecord | null>(`/hr/employees/${employeeId}/offboard`);
+      return res.data;
+    },
+    enabled: !!employeeId,
+  });
+}
+
+export function useInitiateOffboard(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (dto: InitiateOffboardDto) => {
+      const res = await api.post<OffboardingRecord>(`/hr/employees/${employeeId}/offboard`, dto);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['employees', employeeId, 'offboarding'],
+      });
+    },
+  });
+}
+
+export function useUpdateOffboardChecklist(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (dto: UpdateChecklistDto) => {
+      const res = await api.patch<OffboardingRecord>(
+        `/hr/employees/${employeeId}/offboard/checklist`,
+        dto,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['employees', employeeId, 'offboarding'],
+      });
+    },
+  });
+}
+
+export function useCompleteOffboard(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post(`/hr/employees/${employeeId}/offboard/complete`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+      queryClient.invalidateQueries({
+        queryKey: ['employees', employeeId, 'offboarding'],
+      });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
 }

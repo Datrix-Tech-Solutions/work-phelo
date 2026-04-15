@@ -1,12 +1,16 @@
 import { Controller, Logger } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { UsersService } from './users.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Controller()
 export class UsersHandler {
   private readonly logger = new Logger(UsersHandler.name);
 
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   @EventPattern('auth.invite_employee')
   async handleInviteEmployee(
@@ -31,6 +35,39 @@ export class UsersHandler {
     } catch (e: any) {
       this.logger.warn(
         `Employee invite skipped for ${data.email}: ${e.message}`,
+      );
+    }
+  }
+
+  @EventPattern('hr.employee_offboarded')
+  async handleEmployeeOffboarded(
+    @Payload()
+    data: {
+      tenantId: string;
+      userId: string;
+      email: string;
+      reason: string;
+    },
+  ) {
+    this.logger.log(
+      `Deactivating user account for offboarded employee ${data.email}`,
+    );
+    try {
+      await this.prisma.user.update({
+        where: { id: data.userId },
+        data: { status: 'INACTIVE' },
+      });
+      // Revoke all active refresh tokens
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: data.userId, isRevoked: false },
+        data: { isRevoked: true },
+      });
+      this.logger.log(
+        `Account deactivated and tokens revoked for ${data.email}`,
+      );
+    } catch (e: any) {
+      this.logger.warn(
+        `Failed to deactivate account for ${data.email}: ${e.message}`,
       );
     }
   }

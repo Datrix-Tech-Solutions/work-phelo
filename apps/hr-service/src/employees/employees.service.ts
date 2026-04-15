@@ -10,7 +10,11 @@ import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { LeaveService } from '../leave/leave.service';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
-import { OffboardEmployeeDto } from './dto/offboard-employee.dto';
+import {
+  InitiateOffboardDto,
+  UpdateChecklistDto,
+  OffboardReason,
+} from './dto/offboard-employee.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 
@@ -169,6 +173,7 @@ export class EmployeesService {
         allowances: true,
         documents: true,
         leaveBalances: { include: { leaveType: true } },
+        offboarding: true,
       },
     });
     if (!employee) throw new NotFoundException('Employee not found');
@@ -218,20 +223,230 @@ export class EmployeesService {
     });
   }
 
-  async offboard(tenantId: string, id: string, dto: OffboardEmployeeDto) {
+  // ── Offboarding ───────────────────────────────────────────────────────────
+
+  async initiateOffboard(
+    tenantId: string,
+    id: string,
+    dto: InitiateOffboardDto,
+    actor: { id: string; email: string },
+  ) {
     const employee = await this.findById(tenantId, id);
-    if (employee.employmentStatus === 'OFFBOARDED') {
-      throw new BadRequestException('Employee is already offboarded');
+
+    if (
+      employee.employmentStatus !== 'ACTIVE' &&
+      employee.employmentStatus !== 'PROBATION'
+    ) {
+      throw new BadRequestException(
+        'Offboarding can only be initiated for Active or Probation employees',
+      );
     }
 
-    return this.prisma.employee.update({
-      where: { id },
-      data: {
-        employmentStatus: 'OFFBOARDED',
-        offboardedAt: new Date(dto.offboardedAt),
-        offboardReason: dto.reason,
+    if (dto.reason === OffboardReason.OTHER && !dto.otherReason?.trim()) {
+      throw new BadRequestException(
+        'A specific reason is required when "Other" is selected',
+      );
+    }
+
+    const lastWorkingDate = new Date(dto.lastWorkingDate);
+    if (lastWorkingDate < employee.hireDate) {
+      throw new BadRequestException(
+        'Last working date cannot be before the employee hire date',
+      );
+    }
+
+    return this.prisma.offboardingRecord.upsert({
+      where: { employeeId: id },
+      create: {
+        tenantId,
+        employeeId: id,
+        reason: dto.reason,
+        otherReason: dto.otherReason,
+        lastWorkingDate,
+        exitNotes: dto.exitNotes,
+        isDraft: true,
+      },
+      update: {
+        reason: dto.reason,
+        otherReason: dto.otherReason,
+        lastWorkingDate,
+        exitNotes: dto.exitNotes,
+        isDraft: true,
       },
     });
+  }
+
+  async getOffboardingRecord(tenantId: string, employeeId: string) {
+    const record = await this.prisma.offboardingRecord.findFirst({
+      where: { employeeId, tenantId },
+    });
+    return record;
+  }
+
+  async updateOffboardChecklist(
+    tenantId: string,
+    employeeId: string,
+    dto: UpdateChecklistDto,
+    actor: { id: string; email: string },
+  ) {
+    await this.findById(tenantId, employeeId);
+
+    const record = await this.prisma.offboardingRecord.findFirst({
+      where: { employeeId, tenantId },
+    });
+    if (!record) {
+      throw new BadRequestException(
+        'No offboarding record found. Initiate offboarding first.',
+      );
+    }
+    if (!record.isDraft) {
+      throw new BadRequestException('Offboarding is already completed');
+    }
+
+    const now = new Date();
+    const fieldMap: Record<
+      UpdateChecklistDto['item'],
+      {
+        done: string;
+        doneById: string;
+        doneByEmail: string;
+        doneAt: string;
+      }
+    > = {
+      assetReturn: {
+        done: 'assetReturnDone',
+        doneById: 'assetReturnDoneById',
+        doneByEmail: 'assetReturnDoneByEmail',
+        doneAt: 'assetReturnDoneAt',
+      },
+      hrClearance: {
+        done: 'hrClearanceDone',
+        doneById: 'hrClearanceDoneById',
+        doneByEmail: 'hrClearanceDoneByEmail',
+        doneAt: 'hrClearanceDoneAt',
+      },
+      financeClearance: {
+        done: 'financeClearanceDone',
+        doneById: 'financeClearanceDoneById',
+        doneByEmail: 'financeClearanceDoneByEmail',
+        doneAt: 'financeClearanceDoneAt',
+      },
+      managerApproval: {
+        done: 'managerApprovalDone',
+        doneById: 'managerApprovalDoneById',
+        doneByEmail: 'managerApprovalDoneByEmail',
+        doneAt: 'managerApprovalDoneAt',
+      },
+    };
+
+    const fields = fieldMap[dto.item];
+    return this.prisma.offboardingRecord.update({
+      where: { id: record.id },
+      data: {
+        [fields.done]: dto.done,
+        [fields.doneById]: dto.done ? actor.id : null,
+        [fields.doneByEmail]: dto.done ? actor.email : null,
+        [fields.doneAt]: dto.done ? now : null,
+      },
+    });
+  }
+
+  async completeOffboard(
+    tenantId: string,
+    employeeId: string,
+    actor: { id: string; email: string },
+  ) {
+    await this.findById(tenantId, employeeId);
+
+    const record = await this.prisma.offboardingRecord.findFirst({
+      where: { employeeId, tenantId },
+    });
+    if (!record) {
+      throw new BadRequestException(
+        'No offboarding record found. Initiate offboarding first.',
+      );
+    }
+    if (!record.isDraft) {
+      throw new BadRequestException('Offboarding is already completed');
+    }
+
+    const allClear =
+      record.assetReturnDone &&
+      record.hrClearanceDone &&
+      record.financeClearanceDone &&
+      record.managerApprovalDone;
+
+    if (!allClear) {
+      throw new BadRequestException(
+        'All four clearance checklist items must be completed before offboarding can be finalised',
+      );
+    }
+
+    const now = new Date();
+
+    // 1. Mark record complete + set employee status in a transaction
+    const [, employee] = await this.prisma.$transaction([
+      this.prisma.offboardingRecord.update({
+        where: { id: record.id },
+        data: {
+          isDraft: false,
+          completedAt: now,
+          completedById: actor.id,
+          completedByEmail: actor.email,
+        },
+      }),
+      this.prisma.employee.update({
+        where: { id: employeeId },
+        data: {
+          employmentStatus: 'OFFBOARDED',
+          offboardedAt: record.lastWorkingDate,
+          offboardReason: record.reason,
+          statusChangedAt: now,
+          statusChangedById: actor.id,
+          statusChangedByEmail: actor.email,
+        },
+      }),
+    ]);
+
+    // 2. Revoke auth access (fire-and-forget)
+    if (employee.userId) {
+      void this.rabbitmq
+        .emitToAuth('hr.employee_offboarded', {
+          tenantId,
+          userId: employee.userId,
+          email: employee.email,
+          reason: record.reason,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit hr.employee_offboarded for ${employee.email}`,
+            err,
+          ),
+        );
+    }
+
+    // 3. Send termination notification for relevant reasons
+    const notifyReasons: string[] = ['TERMINATION', 'CONTRACT_ENDED'];
+    if (notifyReasons.includes(record.reason)) {
+      void this.rabbitmq
+        .emit('notify.employee_termination', {
+          tenantId,
+          employeeId,
+          email: employee.email,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+          reason: record.reason,
+          lastWorkingDate: record.lastWorkingDate,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit termination notification for ${employee.email}`,
+            err,
+          ),
+        );
+    }
+
+    return { message: 'Offboarding completed successfully', employee };
   }
 
   async addAllowance(tenantId: string, employeeId: string, dto: any) {
