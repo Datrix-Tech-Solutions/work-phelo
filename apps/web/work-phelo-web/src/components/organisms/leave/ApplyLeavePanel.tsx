@@ -3,16 +3,15 @@
 import { useCallback, useMemo, useState } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
-import { useQuery } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
-import { leaveKeys, useCreateLeaveRequest } from '@/hooks/useLeave';
-import { CreateLeaveRequestDto, LeaveBalance, LeaveType, PublicHoliday } from '@/types/hr';
+import { useLeaveTypes, useCreateLeaveRequest } from '@/hooks/useLeave';
+import { usePublicHolidays } from '@/hooks/usePublicHolidays';
+import { CreateLeaveRequestDto, LeaveBalance, PublicHoliday } from '@/types/hr';
 import { FileUpload } from '@/components/atoms/FileUpload';
 
 interface ApplyLeavePanelProps {
@@ -51,23 +50,8 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentError, setDocumentError] = useState('');
 
-  const { data: leaveTypes = [] } = useQuery({
-    queryKey: leaveKeys.types(tenantSlug),
-    queryFn: async () => {
-      const res = await api.get<LeaveType[]>('/hr/leave/types');
-      return res.data;
-    },
-    enabled: isOpen,
-  });
-
-  const { data: holidays = [] } = useQuery({
-    queryKey: ['public-holidays', tenantSlug],
-    queryFn: async () => {
-      const res = await api.get<PublicHoliday[]>('/hr/leave/public-holidays');
-      return res.data;
-    },
-    enabled: isOpen,
-  });
+  const { data: leaveTypes = [] } = useLeaveTypes(tenantSlug);
+  const { data: holidays = [] } = usePublicHolidays();
 
   const {
     register,

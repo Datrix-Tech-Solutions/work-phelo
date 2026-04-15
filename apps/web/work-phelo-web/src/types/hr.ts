@@ -221,12 +221,43 @@ export interface PayrollRun {
   id: string;
   month: number;
   year: number;
-  status: 'DRAFT' | 'APPROVED' | 'PAID';
-  description?: string;
-  totalGross: number;
-  totalNet: number;
-  totalTax: number;
+  status: 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+  notes?: string;
+  totalGross: string;
+  totalNet: string;
+  totalSSNIT: string;
+  totalPAYE: string;
+  runBy: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  paidAt?: string;
   createdAt: string;
+}
+
+// ── Project ───────────────────────────────────────────────
+export type ProjectStatus = 'PLANNING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
+
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  status: ProjectStatus;
+  startDate: string;
+  endDate?: string;
+  budget?: number;
+  managerId?: string;
+  managerName?: string;
+  assignedCount: number;
+  createdAt: string;
+}
+
+export interface CreateProjectDto {
+  name: string;
+  description?: string;
+  startDate: string;
+  endDate?: string;
+  budget?: number;
+  managerId?: string;
 }
 
 // ── Dashboard ─────────────────────────────────────────────

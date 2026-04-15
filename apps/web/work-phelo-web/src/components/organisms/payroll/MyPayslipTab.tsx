@@ -8,7 +8,7 @@ import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { DetailField } from '@/components/molecules/shared/DetailField';
 import { useMyPayslips } from '@/hooks/usePayroll';
 import { useMyProfile } from '@/hooks/useEmployees';
-import { calculatePayroll } from '@/lib/payrollCalculations';
+import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 
 const MONTH_NAMES = [
   'January',
@@ -59,7 +59,9 @@ export function MyPayslipTab() {
   const breakdown = useMemo(() => {
     const basic = Number(employee?.basicSalary) || 0;
     if (!basic || !grossSalary) return null;
-    const allowances = Math.max(0, grossSalary - basic);
+    const allowanceAmount = Math.max(0, grossSalary - basic);
+    const allowances: AllowanceItem[] =
+      allowanceAmount > 0 ? [{ name: 'Allowances', amount: allowanceAmount }] : [];
     return calculatePayroll({
       basicSalary: basic,
       allowances,
@@ -137,7 +139,7 @@ export function MyPayslipTab() {
               />
               <DetailField
                 label="Allowances"
-                value={`GHS ${breakdown.allowances.toLocaleString()}`}
+                value={`GHS ${breakdown.totalAllowances.toLocaleString()}`}
               />
               <DetailField
                 label="Gross Salary"
@@ -145,7 +147,7 @@ export function MyPayslipTab() {
               />
               <DetailField
                 label="Employee SSNIT (5.5%)"
-                value={`GHS ${breakdown.employeeSSNIT.toLocaleString()}`}
+                value={`GHS ${breakdown.employeeStatutoryContrib.toLocaleString()}`}
               />
               <DetailField
                 label="Taxable Income"
@@ -163,7 +165,7 @@ export function MyPayslipTab() {
             <div className="grid grid-cols-2 gap-x-8 gap-y-6">
               <DetailField
                 label="Employer SSNIT (13%)"
-                value={`GHS ${breakdown.employerSSNIT.toLocaleString()}`}
+                value={`GHS ${breakdown.employerStatutoryContrib.toLocaleString()}`}
               />
               <DetailField
                 label="Total Employer Cost"

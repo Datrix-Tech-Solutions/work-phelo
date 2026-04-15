@@ -1,22 +1,56 @@
 export type Country = 'GH' | 'NG' | 'KE';
 
+export interface AllowanceItem {
+  name: string;
+  amount: number;
+}
+
+export interface GhanaPensionConfig {
+  tier2FundName?: string;
+  providentFundEmployeeRate?: number;
+  providentFundEmployerRate?: number;
+  providentFundName?: string;
+}
+
+export interface NigeriaPensionConfig {
+  voluntaryEmployeeRate?: number;
+  voluntaryEmployerRate?: number;
+  pfaName?: string;
+}
+
+export interface KenyaPensionConfig {
+  occupationalEmployeeRate?: number;
+  occupationalEmployerRate?: number;
+  schemeName?: string;
+}
+
 export interface PayrollInput {
   country: Country;
   basicSalary: number;
-  allowances: number;
+  allowances: AllowanceItem[];
   otherDeductions?: number;
-  /** Nigeria only: monthly rent relief amount */
   rentRelief?: number;
+  ghanaPension?: GhanaPensionConfig;
+  nigeriaPension?: NigeriaPensionConfig;
+  kenyaPension?: KenyaPensionConfig;
 }
 
 export interface PayrollResult {
   basicSalary: number;
-  allowances: number;
+  allowances: AllowanceItem[];
+  totalAllowances: number;
   grossSalary: number;
-  employeePensionOrSSNIT: number;
-  employeeSSNIT: number;
-  employerPensionOrSSNIT: number;
-  employerSSNIT: number;
+
+  employeeStatutoryContrib: number;
+  employerStatutoryContrib: number;
+
+  tier2Contribution?: number;
+  tier2FundName?: string;
+
+  voluntaryPensionEmployee?: number;
+  voluntaryPensionEmployer?: number;
+  voluntaryPensionName?: string;
+
   taxableIncome: number;
   paye: number;
   netSalary: number;
@@ -31,53 +65,138 @@ export class PayrollValidationError extends Error {
   }
 }
 
+/* ── 2026 Statutory Rates ── */
 const PAYROLL_CONFIG = {
   GH: {
     currency: 'GHS' as const,
-    employeeRate: 0.055,
-    employerRate: 0.13,
+    tier1EmployeeRate: 0.055,
+    tier1EmployerRate: 0.13,
+    tier2EmployerRate: 0.05,
     maxInsurableEarnings: 69_000,
   },
   NG: {
     currency: 'NGN' as const,
-    employeeRate: 0.08,
-    employerRate: 0.1,
+    statutoryEmployeeRate: 0.08,
+    statutoryEmployerRate: 0.1,
   },
   KE: {
     currency: 'KES' as const,
     nssfLowerLimit: 9_000,
     nssfUpperLimit: 108_000,
     personalRelief: 2_400,
+    occupationalExemptCap: 20_000,
   },
 } as const;
 
+/* ── Validation ── */
 function validateInput(input: PayrollInput): void {
-  const { country, basicSalary, allowances, otherDeductions = 0, rentRelief = 0 } = input;
+  const {
+    country,
+    basicSalary,
+    allowances,
+    otherDeductions = 0,
+    rentRelief = 0,
+    ghanaPension,
+    nigeriaPension,
+    kenyaPension,
+  } = input;
 
   if (!Number.isFinite(basicSalary) || basicSalary < 0)
-    throw new PayrollValidationError('basicSalary must be a non-negative number');
-  if (!Number.isFinite(allowances) || allowances < 0)
-    throw new PayrollValidationError('allowances must be a non-negative number');
+    throw new PayrollValidationError('Basic salary must be a non-negative number');
+
+  if (!Array.isArray(allowances)) throw new PayrollValidationError('Allowances must be an array');
+
+  for (const item of allowances) {
+    if (!item.name?.trim())
+      throw new PayrollValidationError('Each allowance must have a non-empty name');
+    if (!Number.isFinite(item.amount) || item.amount < 0)
+      throw new PayrollValidationError(`Allowance "${item.name}" amount must be non-negative`);
+  }
+
+  // FIX: restore Number.isFinite guards — a NaN or Infinity here corrupts taxableIncome
   if (!Number.isFinite(otherDeductions) || otherDeductions < 0)
-    throw new PayrollValidationError('otherDeductions must be a non-negative number');
+    throw new PayrollValidationError('Other deductions must be a non-negative number');
   if (!Number.isFinite(rentRelief) || rentRelief < 0)
-    throw new PayrollValidationError('rentRelief must be a non-negative number');
+    throw new PayrollValidationError('Rent relief must be a non-negative number');
+
   if (rentRelief > 0 && country !== 'NG')
-    throw new PayrollValidationError(
-      `rentRelief is only applicable for Nigeria, received ${country}`,
-    );
-  if (otherDeductions > basicSalary + allowances)
-    throw new PayrollValidationError('otherDeductions cannot exceed gross salary');
+    throw new PayrollValidationError('Rent relief is only applicable for Nigeria');
+
+  const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
+  if (otherDeductions > basicSalary + totalAllowances)
+    throw new PayrollValidationError('Other deductions cannot exceed gross salary');
+
+  if (ghanaPension && country !== 'GH')
+    throw new PayrollValidationError('ghanaPension is only applicable for Ghana');
+  if (nigeriaPension && country !== 'NG')
+    throw new PayrollValidationError('nigeriaPension is only applicable for Nigeria');
+  if (kenyaPension && country !== 'KE')
+    throw new PayrollValidationError('kenyaPension is only applicable for Kenya');
+
+  if (country === 'GH' && ghanaPension) {
+    const { providentFundEmployeeRate = 0, providentFundEmployerRate = 0 } = ghanaPension;
+    if (
+      !Number.isFinite(providentFundEmployeeRate) ||
+      providentFundEmployeeRate < 0 ||
+      providentFundEmployeeRate > 1
+    )
+      throw new PayrollValidationError('providentFundEmployeeRate must be between 0 and 1');
+    if (
+      !Number.isFinite(providentFundEmployerRate) ||
+      providentFundEmployerRate < 0 ||
+      providentFundEmployerRate > 1
+    )
+      throw new PayrollValidationError('providentFundEmployerRate must be between 0 and 1');
+  }
+
+  if (country === 'NG' && nigeriaPension) {
+    const { voluntaryEmployeeRate = 0, voluntaryEmployerRate = 0 } = nigeriaPension;
+    if (
+      !Number.isFinite(voluntaryEmployeeRate) ||
+      voluntaryEmployeeRate < 0 ||
+      voluntaryEmployeeRate > 1
+    )
+      throw new PayrollValidationError('voluntaryEmployeeRate must be between 0 and 1');
+    if (
+      !Number.isFinite(voluntaryEmployerRate) ||
+      voluntaryEmployerRate < 0 ||
+      voluntaryEmployerRate > 1
+    )
+      throw new PayrollValidationError('voluntaryEmployerRate must be between 0 and 1');
+  }
+
+  if (country === 'KE' && kenyaPension) {
+    const { occupationalEmployeeRate = 0, occupationalEmployerRate = 0 } = kenyaPension;
+    if (
+      !Number.isFinite(occupationalEmployeeRate) ||
+      occupationalEmployeeRate < 0 ||
+      occupationalEmployeeRate > 1
+    )
+      throw new PayrollValidationError('occupationalEmployeeRate must be between 0 and 1');
+    if (
+      !Number.isFinite(occupationalEmployerRate) ||
+      occupationalEmployerRate < 0 ||
+      occupationalEmployerRate > 1
+    )
+      throw new PayrollValidationError('occupationalEmployerRate must be between 0 and 1');
+  }
 }
 
+/* ── PAYE Calculators ── */
+
+/**
+ * Ghana PAYE — monthly 2026 progressive bands.
+ * The first GHS 490 zero-rate band IS the personal allowance.
+ * Do NOT subtract 490 from taxableIncome before calling this function —
+ * it is handled internally. Doing so would double-count the relief.
+ */
 function calculatePAYE_GH(taxableIncome: number): number {
   if (taxableIncome <= 0) return 0;
   let tax = 0;
   let r = taxableIncome;
 
-  // 0% on first 490
-  if (r > 490) r -= 490;
-  else return 0;
+  if (r <= 490) return 0;
+  r -= 490;
 
   const b2 = Math.min(r, 110);
   tax += b2 * 0.05;
@@ -85,7 +204,7 @@ function calculatePAYE_GH(taxableIncome: number): number {
   const b3 = Math.min(r, 130);
   tax += b3 * 0.1;
   r -= b3;
-  const b4 = Math.min(r, 3166.67);
+  const b4 = Math.min(r, 3_166.67);
   tax += b4 * 0.175;
   r -= b4;
   const b5 = Math.min(r, 16_000);
@@ -99,6 +218,7 @@ function calculatePAYE_GH(taxableIncome: number): number {
   return Math.round(tax);
 }
 
+/** Nigeria PAYE — annual bands divided by 12. */
 function calculatePAYE_NG(annualTaxable: number, rentReliefAnnual = 0): number {
   if (annualTaxable <= 0) return 0;
 
@@ -112,17 +232,18 @@ function calculatePAYE_NG(annualTaxable: number, rentReliefAnnual = 0): number {
   ];
 
   let tax = 0,
-    previous = 0;
+    prev = 0;
   for (const band of bands) {
-    const inBand = Math.min(annualTaxable, band.threshold) - previous;
+    const inBand = Math.min(annualTaxable, band.threshold) - prev;
     if (inBand > 0) tax += inBand * band.rate;
-    previous = band.threshold;
+    prev = band.threshold;
     if (annualTaxable <= band.threshold) break;
   }
 
   return Math.round(Math.max(0, tax - rentReliefAnnual) / 12);
 }
 
+/** Kenya NSSF — tiered 6% each side. */
 function calculateNSSF_KE(basicSalary: number): { employee: number; employer: number } {
   const { nssfLowerLimit, nssfUpperLimit } = PAYROLL_CONFIG.KE;
   const tier1 = Math.min(basicSalary, nssfLowerLimit);
@@ -131,70 +252,161 @@ function calculateNSSF_KE(basicSalary: number): { employee: number; employer: nu
   return { employee: contrib, employer: contrib };
 }
 
+/** Kenya PAYE — monthly progressive bands with KRA personal relief credit. */
 function calculatePAYE_KE(taxableIncome: number, personalRelief: number): number {
   if (taxableIncome <= 0) return 0;
 
-  let grossTax: number;
-  if (taxableIncome <= 24_000) grossTax = taxableIncome * 0.1;
-  else if (taxableIncome <= 32_333) grossTax = 2_400 + (taxableIncome - 24_000) * 0.25;
-  else if (taxableIncome <= 500_000) grossTax = 2_400 + 2_083.25 + (taxableIncome - 32_333) * 0.3;
-  else if (taxableIncome <= 800_000)
-    grossTax = 2_400 + 2_083.25 + 140_300.1 + (taxableIncome - 500_000) * 0.325;
-  else grossTax = 2_400 + 2_083.25 + 140_300.1 + 97_500 + (taxableIncome - 800_000) * 0.35;
+  let grossTax = 0;
+  let r = taxableIncome;
+
+  const b1 = Math.min(r, 24_000);
+  grossTax += b1 * 0.1;
+  r -= b1;
+  const b2 = Math.min(r, 8_333);
+  grossTax += b2 * 0.25;
+  r -= b2;
+  const b3 = Math.min(r, 467_667);
+  grossTax += b3 * 0.3;
+  r -= b3;
+  const b4 = Math.min(r, 300_000);
+  grossTax += b4 * 0.325;
+  r -= b4;
+  if (r > 0) grossTax += r * 0.35;
 
   return Math.round(Math.max(0, grossTax - personalRelief));
 }
 
+/* ── Main Payroll Calculator ── */
 export function calculatePayroll(input: PayrollInput): PayrollResult {
   validateInput(input);
 
-  const { country, basicSalary, allowances, otherDeductions = 0, rentRelief = 0 } = input;
-  const grossSalary = basicSalary + allowances;
+  const {
+    country,
+    basicSalary,
+    allowances,
+    otherDeductions = 0,
+    rentRelief = 0,
+    ghanaPension = {},
+    nigeriaPension = {},
+    kenyaPension = {},
+  } = input;
 
-  let employeeContrib = 0;
-  let employerContrib = 0;
+  const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
+  const grossSalary = basicSalary + totalAllowances;
+
+  let employeeStatutoryContrib = 0;
+  let employerStatutoryContrib = 0;
+  let tier2Contribution: number | undefined;
+  let tier2FundName: string | undefined;
+  let voluntaryPensionEmployee: number | undefined;
+  let voluntaryPensionEmployer: number | undefined;
+  let voluntaryPensionName: string | undefined;
   let paye = 0;
   let taxableIncome = 0;
 
   switch (country) {
     case 'GH': {
-      const { employeeRate, employerRate, maxInsurableEarnings } = PAYROLL_CONFIG.GH;
-      const insurable = Math.min(basicSalary, maxInsurableEarnings);
-      employeeContrib = Math.round(insurable * employeeRate);
-      employerContrib = Math.round(insurable * employerRate);
-      taxableIncome = Math.max(0, grossSalary - employeeContrib - otherDeductions);
+      const cfg = PAYROLL_CONFIG.GH;
+      const insurable = Math.min(basicSalary, cfg.maxInsurableEarnings);
+
+      // Tier 1 — SSNIT (employee 5.5%, employer 13%)
+      employeeStatutoryContrib = Math.round(insurable * cfg.tier1EmployeeRate);
+      employerStatutoryContrib = Math.round(insurable * cfg.tier1EmployerRate);
+
+      // Tier 2 — mandatory occupational pension, employer only (5%)
+      // Separate from and additional to Tier 1 employer SSNIT.
+      tier2Contribution = Math.round(insurable * cfg.tier2EmployerRate);
+      tier2FundName = ghanaPension.tier2FundName;
+
+      // Tier 3 — voluntary provident fund (both sides tax-deductible for employee)
+      const pfEmployee = Math.round(basicSalary * (ghanaPension.providentFundEmployeeRate ?? 0));
+      const pfEmployer = Math.round(basicSalary * (ghanaPension.providentFundEmployerRate ?? 0));
+
+      if (pfEmployee > 0 || pfEmployer > 0) {
+        voluntaryPensionEmployee = pfEmployee;
+        voluntaryPensionEmployer = pfEmployer;
+        voluntaryPensionName = ghanaPension.providentFundName;
+      }
+
+      // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax)
+      taxableIncome = Math.max(
+        0,
+        grossSalary - employeeStatutoryContrib - pfEmployee - otherDeductions,
+      );
       paye = calculatePAYE_GH(taxableIncome);
       break;
     }
+
     case 'NG': {
-      const { employeeRate, employerRate } = PAYROLL_CONFIG.NG;
-      employeeContrib = Math.round(basicSalary * employeeRate);
-      employerContrib = Math.round(basicSalary * employerRate);
-      taxableIncome = Math.max(0, grossSalary - employeeContrib - otherDeductions);
+      const cfg = PAYROLL_CONFIG.NG;
+      employeeStatutoryContrib = Math.round(basicSalary * cfg.statutoryEmployeeRate);
+      employerStatutoryContrib = Math.round(basicSalary * cfg.statutoryEmployerRate);
+
+      const volEmployee = Math.round(basicSalary * (nigeriaPension.voluntaryEmployeeRate ?? 0));
+      const volEmployer = Math.round(basicSalary * (nigeriaPension.voluntaryEmployerRate ?? 0));
+
+      if (volEmployee > 0 || volEmployer > 0) {
+        voluntaryPensionEmployee = volEmployee;
+        voluntaryPensionEmployer = volEmployer;
+        voluntaryPensionName = nigeriaPension.pfaName;
+      }
+
+      taxableIncome = Math.max(
+        0,
+        grossSalary - employeeStatutoryContrib - volEmployee - otherDeductions,
+      );
       paye = calculatePAYE_NG(taxableIncome * 12, rentRelief * 12);
       break;
     }
+
     case 'KE': {
       const nssf = calculateNSSF_KE(basicSalary);
-      employeeContrib = nssf.employee;
-      employerContrib = nssf.employer;
-      taxableIncome = Math.max(0, grossSalary - employeeContrib - otherDeductions);
+      employeeStatutoryContrib = nssf.employee;
+      employerStatutoryContrib = nssf.employer;
+
+      const occEmployeeRaw = Math.round(basicSalary * (kenyaPension.occupationalEmployeeRate ?? 0));
+      const occEmployer = Math.round(basicSalary * (kenyaPension.occupationalEmployerRate ?? 0));
+      // Cap the deductible portion at the KES 20,000/month statutory exempt limit
+      const occEmployeeDeductible = Math.min(
+        occEmployeeRaw,
+        PAYROLL_CONFIG.KE.occupationalExemptCap,
+      );
+
+      if (occEmployeeRaw > 0 || occEmployer > 0) {
+        voluntaryPensionEmployee = occEmployeeRaw;
+        voluntaryPensionEmployer = occEmployer;
+        voluntaryPensionName = kenyaPension.schemeName;
+      }
+
+      taxableIncome = Math.max(
+        0,
+        grossSalary - employeeStatutoryContrib - occEmployeeDeductible - otherDeductions,
+      );
       paye = calculatePAYE_KE(taxableIncome, PAYROLL_CONFIG.KE.personalRelief);
       break;
     }
   }
 
   const netSalary = Math.round(taxableIncome - paye);
-  const totalEmployerCost = Math.round(grossSalary + employerContrib);
+  const totalEmployerCost = Math.round(
+    grossSalary +
+      employerStatutoryContrib +
+      (tier2Contribution ?? 0) +
+      (voluntaryPensionEmployer ?? 0),
+  );
 
   return {
     basicSalary: Math.round(basicSalary),
-    allowances: Math.round(allowances),
+    allowances,
+    totalAllowances: Math.round(totalAllowances),
     grossSalary: Math.round(grossSalary),
-    employeePensionOrSSNIT: employeeContrib,
-    employeeSSNIT: employeeContrib,
-    employerPensionOrSSNIT: employerContrib,
-    employerSSNIT: employerContrib,
+    employeeStatutoryContrib,
+    employerStatutoryContrib,
+    tier2Contribution,
+    tier2FundName,
+    voluntaryPensionEmployee,
+    voluntaryPensionEmployer,
+    voluntaryPensionName,
     taxableIncome: Math.round(taxableIncome),
     paye,
     netSalary,
@@ -203,277 +415,46 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   };
 }
 
+/* ── UI Metadata ── */
 export const COUNTRY_META: Record<
   Country,
   {
     label: string;
     flag: string;
-    pensionLabel: string;
+    statutoryLabel: string;
     employeeRate: string;
     employerRate: string;
+    tier2Label?: string;
+    voluntaryLabel?: string;
     note?: string;
   }
 > = {
   GH: {
     label: 'Ghana',
     flag: '🇬🇭',
-    pensionLabel: 'SSNIT',
+    statutoryLabel: 'SSNIT Tier 1',
     employeeRate: '5.5%',
     employerRate: '13%',
-    note: 'Max insurable earnings: GHS 69,000/month',
+    tier2Label: 'Tier 2 (occupational)',
+    voluntaryLabel: 'Tier 3 (provident fund)',
+    note: 'Max insurable: GHS 69,000/month · Tier 2 is an additional 5% employer obligation',
   },
   NG: {
     label: 'Nigeria',
     flag: '🇳🇬',
-    pensionLabel: 'Pension',
+    statutoryLabel: 'Pension (PRA 2014)',
     employeeRate: '8%',
     employerRate: '10%',
-    note: 'PAYE computed annually then divided by 12',
+    voluntaryLabel: 'Voluntary top-up',
+    note: 'PAYE calculated annually then divided by 12',
   },
   KE: {
     label: 'Kenya',
     flag: '🇰🇪',
-    pensionLabel: 'NSSF',
-    employeeRate: '6% tiered',
-    employerRate: '6% tiered',
-    note: 'Personal relief: KES 2,400/month applied post-tax',
+    statutoryLabel: 'NSSF',
+    employeeRate: '6% (tiered)',
+    employerRate: '6% (tiered)',
+    voluntaryLabel: 'Occupational pension',
+    note: 'Occupational pension exempt up to KES 20,000/month · Personal relief KES 2,400/month',
   },
 };
-
-// export type Country = 'GH' | 'NG' | 'KE';
-
-// export interface AllowanceItem {
-//   name: string;
-//   amount: number;
-// }
-
-// export interface PayrollInput {
-//   country: Country;
-//   basicSalary: number;
-//   allowances: AllowanceItem[];
-//   otherDeductions?: number;
-//   /** Nigeria only: monthly rent relief amount */
-//   rentRelief?: number;
-// }
-
-// export interface PayrollResult {
-//   basicSalary: number;
-//   allowances: AllowanceItem[];
-//   totalAllowances: number;
-//   grossSalary: number;
-//   employeePensionOrSSNIT: number;
-//   employerPensionOrSSNIT: number;
-//   taxableIncome: number;
-//   paye: number;
-//   netSalary: number;
-//   totalEmployerCost: number;
-//   currency: string;
-// }
-
-// export class PayrollValidationError extends Error {
-//   constructor(message: string) {
-//     super(message);
-//     this.name = 'PayrollValidationError';
-//   }
-// }
-
-// const PAYROLL_CONFIG = {
-//   GH: {
-//     currency: 'GHS' as const,
-//     employeeRate: 0.055,
-//     employerRate: 0.13,
-//     maxInsurableEarnings: 69_000,
-//   },
-//   NG: {
-//     currency: 'NGN' as const,
-//     employeeRate: 0.08,
-//     employerRate: 0.10,
-//   },
-//   KE: {
-//     currency: 'KES' as const,
-//     nssfLowerLimit: 9_000,
-//     nssfUpperLimit: 108_000,
-//     personalRelief: 2_400,
-//   },
-// } as const;
-
-// function validateInput(input: PayrollInput): void {
-//   const { country, basicSalary, allowances, otherDeductions = 0, rentRelief = 0 } = input;
-
-//   if (!Number.isFinite(basicSalary) || basicSalary < 0)
-//     throw new PayrollValidationError('basicSalary must be a non-negative number');
-
-//   if (!Array.isArray(allowances))
-//     throw new PayrollValidationError('allowances must be an array');
-
-//   for (const item of allowances) {
-//     if (!item.name || item.name.trim() === '')
-//       throw new PayrollValidationError('Each allowance must have a name');
-//     if (!Number.isFinite(item.amount) || item.amount < 0)
-//       throw new PayrollValidationError(`Allowance "${item.name}" must have a non-negative amount`);
-//   }
-
-//   if (!Number.isFinite(otherDeductions) || otherDeductions < 0)
-//     throw new PayrollValidationError('otherDeductions must be a non-negative number');
-//   if (!Number.isFinite(rentRelief) || rentRelief < 0)
-//     throw new PayrollValidationError('rentRelief must be a non-negative number');
-//   if (rentRelief > 0 && country !== 'NG')
-//     throw new PayrollValidationError(`rentRelief is only applicable for Nigeria, received ${country}`);
-
-//   const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
-//   if (otherDeductions > basicSalary + totalAllowances)
-//     throw new PayrollValidationError('otherDeductions cannot exceed gross salary');
-// }
-
-// function calculatePAYE_GH(taxableIncome: number): number {
-//   if (taxableIncome <= 0) return 0;
-//   let tax = 0;
-//   let r = taxableIncome;
-
-//   if (r > 490) r -= 490; else return 0;
-
-//   const b2 = Math.min(r, 110);     tax += b2 * 0.05;   r -= b2;
-//   const b3 = Math.min(r, 130);     tax += b3 * 0.10;   r -= b3;
-//   const b4 = Math.min(r, 3166.67); tax += b4 * 0.175;  r -= b4;
-//   const b5 = Math.min(r, 16_000);  tax += b5 * 0.25;   r -= b5;
-//   const b6 = Math.min(r, 30_520);  tax += b6 * 0.30;   r -= b6;
-//   if (r > 0) tax += r * 0.35;
-
-//   return Math.round(tax);
-// }
-
-// function calculatePAYE_NG(annualTaxable: number, rentReliefAnnual = 0): number {
-//   if (annualTaxable <= 0) return 0;
-
-//   const bands = [
-//     { threshold: 800_000,    rate: 0    },
-//     { threshold: 3_000_000,  rate: 0.15 },
-//     { threshold: 12_000_000, rate: 0.18 },
-//     { threshold: 25_000_000, rate: 0.21 },
-//     { threshold: 50_000_000, rate: 0.23 },
-//     { threshold: Infinity,   rate: 0.25 },
-//   ];
-
-//   let tax = 0, previous = 0;
-//   for (const band of bands) {
-//     const inBand = Math.min(annualTaxable, band.threshold) - previous;
-//     if (inBand > 0) tax += inBand * band.rate;
-//     previous = band.threshold;
-//     if (annualTaxable <= band.threshold) break;
-//   }
-
-//   return Math.round(Math.max(0, tax - rentReliefAnnual) / 12);
-// }
-
-// function calculateNSSF_KE(basicSalary: number): { employee: number; employer: number } {
-//   const { nssfLowerLimit, nssfUpperLimit } = PAYROLL_CONFIG.KE;
-//   const tier1 = Math.min(basicSalary, nssfLowerLimit);
-//   const tier2 = Math.max(0, Math.min(basicSalary, nssfUpperLimit) - nssfLowerLimit);
-//   const contrib = Math.round((tier1 + tier2) * 0.06);
-//   return { employee: contrib, employer: contrib };
-// }
-
-// function calculatePAYE_KE(taxableIncome: number, personalRelief: number): number {
-//   if (taxableIncome <= 0) return 0;
-
-//   let grossTax: number;
-//   if      (taxableIncome <= 24_000)  grossTax = taxableIncome * 0.10;
-//   else if (taxableIncome <= 32_333)  grossTax = 2_400 + (taxableIncome - 24_000) * 0.25;
-//   else if (taxableIncome <= 500_000) grossTax = 2_400 + 2_083.25 + (taxableIncome - 32_333) * 0.30;
-//   else if (taxableIncome <= 800_000) grossTax = 2_400 + 2_083.25 + 140_300.10 + (taxableIncome - 500_000) * 0.325;
-//   else                               grossTax = 2_400 + 2_083.25 + 140_300.10 + 97_500 + (taxableIncome - 800_000) * 0.35;
-
-//   return Math.round(Math.max(0, grossTax - personalRelief));
-// }
-
-// export function calculatePayroll(input: PayrollInput): PayrollResult {
-//   validateInput(input);
-
-//   const { country, basicSalary, allowances, otherDeductions = 0, rentRelief = 0 } = input;
-//   const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
-//   const grossSalary = basicSalary + totalAllowances;
-
-//   let employeeContrib = 0;
-//   let employerContrib = 0;
-//   let paye = 0;
-//   let taxableIncome = 0;
-
-//   switch (country) {
-//     case 'GH': {
-//       const { employeeRate, employerRate, maxInsurableEarnings } = PAYROLL_CONFIG.GH;
-//       const insurable = Math.min(basicSalary, maxInsurableEarnings);
-//       employeeContrib = Math.round(insurable * employeeRate);
-//       employerContrib = Math.round(insurable * employerRate);
-//       taxableIncome   = Math.max(0, grossSalary - employeeContrib - otherDeductions);
-//       paye            = calculatePAYE_GH(taxableIncome);
-//       break;
-//     }
-//     case 'NG': {
-//       const { employeeRate, employerRate } = PAYROLL_CONFIG.NG;
-//       employeeContrib = Math.round(basicSalary * employeeRate);
-//       employerContrib = Math.round(basicSalary * employerRate);
-//       taxableIncome   = Math.max(0, grossSalary - employeeContrib - otherDeductions);
-//       paye            = calculatePAYE_NG(taxableIncome * 12, rentRelief * 12);
-//       break;
-//     }
-//     case 'KE': {
-//       const nssf      = calculateNSSF_KE(basicSalary);
-//       employeeContrib = nssf.employee;
-//       employerContrib = nssf.employer;
-//       taxableIncome   = Math.max(0, grossSalary - employeeContrib - otherDeductions);
-//       paye            = calculatePAYE_KE(taxableIncome, PAYROLL_CONFIG.KE.personalRelief);
-//       break;
-//     }
-//   }
-
-//   const netSalary         = Math.round(taxableIncome - paye);
-//   const totalEmployerCost = Math.round(grossSalary + employerContrib);
-
-//   return {
-//     basicSalary:            Math.round(basicSalary),
-//     allowances,
-//     totalAllowances:        Math.round(totalAllowances),
-//     grossSalary:            Math.round(grossSalary),
-//     employeePensionOrSSNIT: employeeContrib,
-//     employerPensionOrSSNIT: employerContrib,
-//     taxableIncome:          Math.round(taxableIncome),
-//     paye,
-//     netSalary,
-//     totalEmployerCost,
-//     currency:               PAYROLL_CONFIG[country].currency,
-//   };
-// }
-
-// export const COUNTRY_META: Record<Country, {
-//   label: string;
-//   flag: string;
-//   pensionLabel: string;
-//   employeeRate: string;
-//   employerRate: string;
-//   note?: string;
-// }> = {
-//   GH: {
-//     label: 'Ghana',
-//     flag: '🇬🇭',
-//     pensionLabel: 'SSNIT',
-//     employeeRate: '5.5%',
-//     employerRate: '13%',
-//     note: 'Max insurable earnings: GHS 69,000/month',
-//   },
-//   NG: {
-//     label: 'Nigeria',
-//     flag: '🇳🇬',
-//     pensionLabel: 'Pension',
-//     employeeRate: '8%',
-//     employerRate: '10%',
-//     note: 'PAYE computed annually then divided by 12',
-//   },
-//   KE: {
-//     label: 'Kenya',
-//     flag: '🇰🇪',
-//     pensionLabel: 'NSSF',
-//     employeeRate: '6% tiered',
-//     employerRate: '6% tiered',
-//     note: 'Personal relief: KES 2,400/month applied post-tax',
-//   },
-// };
