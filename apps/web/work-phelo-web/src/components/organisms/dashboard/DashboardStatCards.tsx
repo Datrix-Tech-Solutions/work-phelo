@@ -42,8 +42,8 @@ export function DashboardStatCards({
     <div className="grid grid-cols-3 gap-4 shrink-0">
       <MetricCard
         title="Annual Leave"
-        value={annualBalance ? annualBalance.remaining : '—'}
-        unit={annualBalance ? `/ ${annualBalance.entitled} Days` : undefined}
+        value={annualBalance ? `${annualBalance.remaining}/${annualBalance.entitled}` : '—'}
+        sub={annualBalance ? 'Days remaining' : undefined}
         icon={ModuleIcons.leave}
         actionLabel="Request Leave"
         onAction={onRequestLeave}

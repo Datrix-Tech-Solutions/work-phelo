@@ -10,7 +10,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { Employee, Department, CreateEmployeePayload } from '@/types/hr';
-import { useCreateEmployee } from '@/hooks/useEmployees';
+import { useCreateEmployee } from '@/hooks/hr/useEmployees';
 
 /* ── Types ── */
 

@@ -4,7 +4,7 @@
 
 import { use, useState } from 'react';
 import { useDepartments } from '@/hooks/useDepartments';
-import { useEmployees, useUpdateEmployee } from '@/hooks/useEmployees';
+import { useEmployees, useUpdateEmployee } from '@/hooks/hr/useEmployees';
 import { Department } from '@/types/hr';
 import { useAuthStore } from '@/store/auth.store';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';

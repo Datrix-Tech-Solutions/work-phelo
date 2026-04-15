@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
-import { useEmployees } from '@/hooks/useEmployees';
+import { useEmployees } from '@/hooks/hr/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useLeaveRequests } from '@/hooks/useLeave';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';

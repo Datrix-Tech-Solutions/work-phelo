@@ -3,7 +3,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useMyProfile, useUpdateEmployee } from '@/hooks/useEmployees';
+import { useMyProfile, useUpdateEmployee } from '@/hooks/hr/useEmployees';
 import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { TopNav } from '@/components/organisms/shared/TopNav';

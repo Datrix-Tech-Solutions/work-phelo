@@ -1,6 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { OffboardPayload } from '@/types/hr';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 interface Options {
   onSuccess?: () => void;

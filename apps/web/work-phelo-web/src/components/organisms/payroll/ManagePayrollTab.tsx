@@ -6,7 +6,7 @@ import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
-import { useEmployees } from '@/hooks/useEmployees';
+import { useEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 
