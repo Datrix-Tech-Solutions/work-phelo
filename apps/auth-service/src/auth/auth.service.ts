@@ -69,8 +69,14 @@ export class AuthService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    await this.prisma.refreshToken.create({
-      data: {
+    await this.prisma.refreshToken.upsert({
+      where: { token },
+      update: {
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ipAddress,
+        userAgent,
+      },
+      create: {
         userId,
         token,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
