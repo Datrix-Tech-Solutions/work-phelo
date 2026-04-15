@@ -45,7 +45,6 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
 export function LeaveRequestDetailPanel({
   isOpen,
   onClose,
-  tenantSlug,
   request,
 }: LeaveRequestDetailPanelProps) {
   const toast = useToast();

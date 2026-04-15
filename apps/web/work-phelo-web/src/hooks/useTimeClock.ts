@@ -30,6 +30,7 @@ export function useClockIn() {
       queryClient.invalidateQueries({ queryKey: ['timeclock', 'history'] });
       queryClient.invalidateQueries({ queryKey: ['timeclock', 'live'] });
       queryClient.invalidateQueries({ queryKey: ['timeclock', 'stats'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-dashboard'] });
     },
   });
 }
@@ -46,6 +47,7 @@ export function useClockOut() {
       queryClient.invalidateQueries({ queryKey: ['timeclock', 'history'] });
       queryClient.invalidateQueries({ queryKey: ['timeclock', 'live'] });
       queryClient.invalidateQueries({ queryKey: ['timeclock', 'stats'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-dashboard'] });
     },
   });
 }

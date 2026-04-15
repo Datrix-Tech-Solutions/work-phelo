@@ -9,6 +9,7 @@ import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { useEmployees } from '@/hooks/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
+import { useLeaveRequests } from '@/hooks/useLeave';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { InviteEmployeePanel } from '@/components/organisms/employee/inviteEmployeePanel';
@@ -48,6 +49,14 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const employees = empResult?.data ?? [];
 
   const { data: departments = [] } = useDepartments();
+
+  const { data: approvedLeave = [] } = useLeaveRequests('APPROVED');
+  const today = new Date();
+  const onLeaveEmployeeIds = new Set(
+    approvedLeave
+      .filter((r) => new Date(r.startDate) <= today && new Date(r.endDate) >= today)
+      .map((r) => r.employeeId),
+  );
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
@@ -152,6 +161,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
               status={emp.employmentStatus}
               department={emp.department?.name}
               hireDate={emp.hireDate}
+              isOnLeave={onLeaveEmployeeIds.has(emp.id)}
               onClick={() => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)}
             />
           ))}

@@ -24,39 +24,6 @@ const DUMMY_PROJECTS: Project[] = [
     assignedCount: 5,
     createdAt: '2026-01-10T00:00:00Z',
   },
-  {
-    id: '2',
-    name: 'ERP Integration',
-    description: 'Connect legacy ERP system to new cloud infrastructure.',
-    status: 'PLANNING',
-    startDate: '2026-03-01',
-    endDate: '2026-12-31',
-    budget: 120000,
-    managerName: 'Ama Owusu',
-    assignedCount: 3,
-    createdAt: '2026-02-20T00:00:00Z',
-  },
-  {
-    id: '3',
-    name: 'Q1 Marketing Campaign',
-    description: 'Social media and digital campaign for Q1 product launch.',
-    status: 'COMPLETED',
-    startDate: '2026-01-01',
-    endDate: '2026-03-31',
-    budget: 18000,
-    managerName: 'Efua Asante',
-    assignedCount: 2,
-    createdAt: '2025-12-15T00:00:00Z',
-  },
-  {
-    id: '4',
-    name: 'Office Renovation',
-    status: 'ON_HOLD',
-    startDate: '2026-02-01',
-    budget: 75000,
-    assignedCount: 1,
-    createdAt: '2026-01-28T00:00:00Z',
-  },
 ];
 
 interface Props {
@@ -117,17 +84,12 @@ export function ProjectsContent({ tenantSlug }: Props) {
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
-        <MetricCard
-          title="Total Projects"
-          value={metrics.total}
-          icon={Layers}
-          variant="highlight"
-        />
+        <MetricCard title="Total Projects" value={metrics.total} icon={Layers} variant="default" />
         <MetricCard
           title="Active Projects"
           value={metrics.active}
           icon={ClipboardList}
-          variant="success"
+          variant="default"
         />
         <MetricCard
           title="Completed"
@@ -139,7 +101,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
           title="In Planning"
           value={metrics.planning}
           icon={ClipboardList}
-          variant="warning"
+          variant="default"
         />
       </div>
 

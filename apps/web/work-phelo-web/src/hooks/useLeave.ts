@@ -18,11 +18,41 @@ export const leaveKeys = {
   balances: (employeeId?: string) => ['leave', 'balances', employeeId ?? 'me'] as const,
 };
 
-// ─── Response transformers ────────────────────────────────────────────────────
-// Backend returns snake_case-style DB fields and nested relations.
-// These adapters normalise the shape to what the frontend types expect.
+// ─── Raw backend shapes ──────────────────────────────────────────────────────
 
-function transformBalance(b: any): LeaveBalance {
+interface RawBalance {
+  leaveTypeId: string;
+  leaveType?: { name: string };
+  totalDays: number;
+  usedDays: number;
+  pendingDays: number;
+  remainingDays: number;
+}
+
+interface RawLeaveRequest {
+  id: string;
+  employeeId: string;
+  employee?: { firstName: string; lastName: string };
+  leaveTypeId: string;
+  leaveType?: { name: string; isPaid: boolean };
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  reason?: string;
+  documentationUrl?: string;
+  status: string;
+  approvedBy?: string;
+  rejectedBy?: string;
+  approvedAt?: string;
+  rejectedAt?: string;
+  rejectionNote?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+// ─── Response transformers ────────────────────────────────────────────────────
+
+function transformBalance(b: RawBalance): LeaveBalance {
   return {
     leaveTypeId: b.leaveTypeId,
     leaveTypeName: b.leaveType?.name ?? '',
@@ -30,12 +60,11 @@ function transformBalance(b: any): LeaveBalance {
     used: b.usedDays,
     pending: b.pendingDays,
     remaining: b.remainingDays,
-    carriedOver: 0, // carry-over processing not yet implemented in backend
+    carriedOver: 0,
   };
 }
 
-function transformRequest(r: any): LeaveRequest {
-  // Backend status is UPPER_CASE enum; frontend uses Title case for display/badge lookup.
+function transformRequest(r: RawLeaveRequest): LeaveRequest {
   const status = r.status.charAt(0).toUpperCase() + r.status.slice(1).toLowerCase();
   return {
     id: r.id,
@@ -51,7 +80,6 @@ function transformRequest(r: any): LeaveRequest {
     reason: r.reason,
     documentationUrl: r.documentationUrl,
     status: status as LeaveRequest['status'],
-    // Approved and rejected paths store reviewer in separate columns
     reviewedBy: r.approvedBy ?? r.rejectedBy ?? undefined,
     reviewedAt: r.approvedAt ?? r.rejectedAt ?? undefined,
     reviewNote: r.rejectionNote ?? undefined,
@@ -119,7 +147,7 @@ export function useLeaveRequests(status?: string) {
   return useQuery({
     queryKey: leaveKeys.requests(status),
     queryFn: async () => {
-      const res = await api.get<any[]>('/hr/leave/requests', {
+      const res = await api.get<RawLeaveRequest[]>('/hr/leave/requests', {
         params: status ? { status } : undefined,
       });
       return res.data.map(transformRequest);
@@ -131,7 +159,7 @@ export function useMyLeaveRequests() {
   return useQuery({
     queryKey: leaveKeys.myRequests(),
     queryFn: async () => {
-      const res = await api.get<any[]>('/hr/leave/requests/my');
+      const res = await api.get<RawLeaveRequest[]>('/hr/leave/requests/my');
       return res.data.map(transformRequest);
     },
   });
@@ -142,7 +170,7 @@ export function useCreateLeaveRequest() {
 
   return useMutation({
     mutationFn: async (payload: CreateLeaveRequestDto) => {
-      const res = await api.post<any>('/hr/leave/requests', payload);
+      const res = await api.post<RawLeaveRequest>('/hr/leave/requests', payload);
       return transformRequest(res.data);
     },
     onSuccess: () => {
@@ -167,8 +195,7 @@ export function useReviewLeaveRequest() {
       action: 'APPROVED' | 'REJECTED';
       note?: string;
     }) => {
-      // Backend DTO expects { action, note } — not { status, reviewNote }
-      const res = await api.patch<any>(`/hr/leave/requests/${id}/review`, {
+      const res = await api.patch<RawLeaveRequest>(`/hr/leave/requests/${id}/review`, {
         action,
         note,
       });
@@ -188,7 +215,7 @@ export function useCancelLeaveRequest() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await api.patch<any>(`/hr/leave/requests/${id}/cancel`);
+      const res = await api.patch<RawLeaveRequest>(`/hr/leave/requests/${id}/cancel`);
       return transformRequest(res.data);
     },
     onSuccess: () => {
@@ -206,7 +233,7 @@ export function useLeaveBalances(employeeId?: string, options?: { enabled?: bool
     queryKey: leaveKeys.balances(employeeId),
     queryFn: async () => {
       const url = employeeId ? `/hr/leave/balances/${employeeId}` : '/hr/leave/balances/me';
-      const res = await api.get<any[]>(url);
+      const res = await api.get<RawBalance[]>(url);
       return res.data.map(transformBalance);
     },
     enabled: options?.enabled ?? true,

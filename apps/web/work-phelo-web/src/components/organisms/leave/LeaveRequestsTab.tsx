@@ -31,7 +31,6 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   const [filterLeaveType, setFilterLeaveType] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterFrom, setFilterFrom] = useState('');
-  const [filterTo] = useState('');
   const [reqPage, setReqPage] = useState(1);
 
   const { data: leaveTypesRaw } = useLeaveTypes(tenantSlug);
