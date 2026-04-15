@@ -10,6 +10,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import { CreateProjectDto } from '@/types/hr';
 import { Employee } from '@/types/hr';
+// import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 
 interface CreateProjectPanelProps {
   isOpen: boolean;
@@ -131,6 +132,17 @@ export function CreateProjectPanel({
           )}
         />
       </div>
+
+      {/* <CurrencyInput
+        label="Budget"
+        value={basicSalaryValue}
+        currency={salaryCurrency}
+        onValueChange={register('budget', {
+          min: { value: 0, message: 'Budget must be a positive number' },
+        })}
+        onCurrencyChange={setSalaryCurrency}
+        placeholder="0.00"
+      /> */}
 
       <FormField
         label="Budget (GHS)"

@@ -28,6 +28,13 @@ export function formatMinutes(minutes: number): string {
 }
 
 /**
+ * Format two ISO date strings as a range: "02 Apr 2025 – 10 Apr 2025"
+ */
+export function formatDateRange(start: string, end: string): string {
+  return `${formatDate(start)} – ${formatDate(end)}`;
+}
+
+/**
  * Returns a time-of-day greeting string.
  */
 export function getGreeting(): string {

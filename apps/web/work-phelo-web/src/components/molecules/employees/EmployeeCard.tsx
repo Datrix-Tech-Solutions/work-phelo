@@ -17,6 +17,7 @@ export interface EmployeeCardProps {
   hireDate?: string;
   status: string;
   avatarUrl?: string;
+  isOnLeave?: boolean;
   onClick?: () => void;
 }
 
@@ -105,6 +106,7 @@ export function EmployeeCard({
   hireDate,
   status,
   avatarUrl,
+  isOnLeave,
   onClick,
 }: EmployeeCardProps) {
   const formattedDate = hireDate
@@ -127,7 +129,15 @@ export function EmployeeCard({
       {/* Top row — avatar + status */}
       <div className="flex items-start justify-between">
         <Avatar firstName={firstName} lastName={lastName} avatarUrl={avatarUrl} />
-        <StatusBadge status={status} />
+        <div className="flex flex-col items-end gap-1.5">
+          <StatusBadge status={status} />
+          {isOnLeave && (
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
+              <span className="w-2 h-2 rounded-full shrink-0 bg-blue-500" />
+              On Leave
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Name + job title */}

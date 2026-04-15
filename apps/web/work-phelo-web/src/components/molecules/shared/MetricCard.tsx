@@ -61,7 +61,7 @@ export function MetricCard({
 
       <div className="flex items-end justify-between flex-1">
         <div>
-          <p className={cn('text-2xl font-bold', valueColor)}>
+          <p className={cn('text-l ', valueColor)}>
             {value}
             {unit && <span className="text-base font-normal text-gray-400 ml-1">{unit}</span>}
           </p>
