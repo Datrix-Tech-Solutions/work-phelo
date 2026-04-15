@@ -3,15 +3,29 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { User, LoginPayload } from '@/types/auth';
 
+async function fetchMeWithManagerFlag(): Promise<User> {
+  const res = await api.get<{ user: User }>('/auth/me');
+  const authUser = res.data.user;
+  if (authUser.role === 'EMPLOYEE' || authUser.role === 'MANAGER') {
+    try {
+      const empRes = await api.get<{ isManager: boolean }>('/hr/employees/me');
+      authUser.isManager = empRes.data.isManager ?? false;
+    } catch {
+      // Not critical — leave isManager undefined
+    }
+  }
+  return authUser;
+}
+
 export function useMe() {
   const { setUser } = useAuthStore();
 
   return useQuery({
     queryKey: ['me'],
     queryFn: async () => {
-      const res = await api.get<{ user: User }>('/auth/me');
-      setUser(res.data.user);
-      return res.data.user;
+      const user = await fetchMeWithManagerFlag();
+      setUser(user);
+      return user;
     },
     retry: false,
     staleTime: 1000 * 60 * 5,

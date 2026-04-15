@@ -1,18 +1,49 @@
-import { IsString, IsDateString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsString,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsBoolean,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-export class OffboardEmployeeDto {
-  @ApiProperty({
-    description: 'Effective offboarding date',
-    example: '2026-05-31',
-  })
+export enum OffboardReason {
+  RESIGNATION = 'RESIGNATION',
+  TERMINATION = 'TERMINATION',
+  CONTRACT_ENDED = 'CONTRACT_ENDED',
+  RETIREMENT = 'RETIREMENT',
+  REDUNDANCY = 'REDUNDANCY',
+  OTHER = 'OTHER',
+}
+
+export class InitiateOffboardDto {
+  @ApiProperty({ enum: OffboardReason })
+  @IsEnum(OffboardReason)
+  reason!: OffboardReason;
+
+  @ApiPropertyOptional({ description: 'Required when reason is OTHER' })
+  @IsOptional()
+  @IsString()
+  otherReason?: string;
+
+  @ApiProperty({ example: '2026-05-31', description: 'Last working date' })
   @IsDateString()
-  offboardedAt!: string;
+  lastWorkingDate!: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  exitNotes?: string;
+}
+
+export class UpdateChecklistDto {
   @ApiProperty({
-    description: 'Reason for offboarding',
-    example: 'Contract ended',
+    enum: ['assetReturn', 'hrClearance', 'financeClearance', 'managerApproval'],
   })
   @IsString()
-  reason!: string;
+  item!: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'managerApproval';
+
+  @ApiProperty()
+  @IsBoolean()
+  done!: boolean;
 }
