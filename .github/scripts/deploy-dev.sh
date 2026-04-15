@@ -53,8 +53,21 @@ echo "✓ Directory structure ready"
 #   - shared vars appear in multiple services from one source of truth
 #   - service-specific vars are scoped with a prefix
 #   - non-secret constants (PORT, internal URLs) are hardcoded here
+#
+# DATABASE_URL is the base connection string (no schema param).
+# Prisma multiSchema requires each service's URL to include ?schema=<name>
+# so Prisma knows which PostgreSQL schema owns the _prisma_migrations table.
+# The helper below appends ?schema or &schema depending on existing query params.
+db_url() {
+  local schema="$1"
+  if [[ "$DATABASE_URL" == *"?"* ]]; then
+    echo "${DATABASE_URL}&schema=${schema}"
+  else
+    echo "${DATABASE_URL}?schema=${schema}"
+  fi
+}
 
-# api-gateway — shared + gateway service-discovery URLs (internal Docker network)
+# api-gateway — no DB, shared config + internal Docker service URLs
 cat > apps/api-gateway/.env <<EOF
 PORT=4000
 NODE_ENV=production
@@ -67,11 +80,11 @@ SUBSCRIPTION_SERVICE_URL=http://erp-subscription-dev:4005
 MARKETING_SERVICE_URL=http://erp-marketing-dev:4006
 EOF
 
-# auth-service — shared + OAuth + cookie + frontend URL
+# auth-service — schema: auth
 cat > apps/auth-service/.env <<EOF
 PORT=4001
 NODE_ENV=production
-DATABASE_URL=${DATABASE_URL}
+DATABASE_URL=$(db_url auth)
 RABBITMQ_URL=${RABBITMQ_URL}
 JWT_SECRET=${JWT_SECRET}
 ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
@@ -88,21 +101,21 @@ MICROSOFT_CLIENT_SECRET=${AUTH_MICROSOFT_CLIENT_SECRET}
 MICROSOFT_CALLBACK_URL=${AUTH_MICROSOFT_CALLBACK_URL}
 EOF
 
-# hr-service — shared only (no service-specific secrets yet)
+# hr-service — schema: hr
 cat > apps/hr-service/.env <<EOF
 PORT=4002
 NODE_ENV=production
-DATABASE_URL=${DATABASE_URL}
+DATABASE_URL=$(db_url hr)
 RABBITMQ_URL=${RABBITMQ_URL}
 JWT_SECRET=${JWT_SECRET}
 ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
 EOF
 
-# notification-service — shared + Resend (email) + Termii (SMS)
+# notification-service — schema: notify
 cat > apps/notification-service/.env <<EOF
 PORT=4004
 NODE_ENV=production
-DATABASE_URL=${DATABASE_URL}
+DATABASE_URL=$(db_url notify)
 RABBITMQ_URL=${RABBITMQ_URL}
 RESEND_API_KEY=${NOTIFY_RESEND_API_KEY}
 RESEND_FROM_EMAIL=${NOTIFY_RESEND_FROM_EMAIL}
@@ -110,7 +123,7 @@ TERMII_API_KEY=${NOTIFY_TERMII_API_KEY}
 TERMII_SENDER_ID=${NOTIFY_TERMII_SENDER_ID}
 EOF
 
-# subscription-service — shared only (add billing secrets here when wired up)
+# subscription-service — default public schema (no multiSchema)
 cat > apps/subscription-service/.env <<EOF
 PORT=4005
 NODE_ENV=production
@@ -118,7 +131,7 @@ DATABASE_URL=${DATABASE_URL}
 RABBITMQ_URL=${RABBITMQ_URL}
 EOF
 
-# marketing-service — shared only (add campaign secrets here when wired up)
+# marketing-service — default public schema (no multiSchema)
 cat > apps/marketing-service/.env <<EOF
 PORT=4006
 NODE_ENV=production
