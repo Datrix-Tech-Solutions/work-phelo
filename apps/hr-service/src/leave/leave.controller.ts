@@ -181,7 +181,7 @@ export class LeaveController {
   getRequests(@Query('status') status: string, @Req() req: any) {
     return this.leaveService.getRequests(req.user.tenantId, {
       status,
-      managerId: req.user.role === 'HR_MANAGER' ? req.user.id : undefined,
+      managerId: req.user.role !== 'TENANT_ADMIN' ? req.user.id : undefined,
     });
   }
 

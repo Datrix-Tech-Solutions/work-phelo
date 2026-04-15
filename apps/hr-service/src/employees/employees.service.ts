@@ -181,7 +181,10 @@ export class EmployeesService {
       include: { department: true, allowances: true },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
-    return employee;
+    const managedDeptCount = await this.prisma.department.count({
+      where: { managerId: employee.id, tenantId },
+    });
+    return { ...employee, isManager: managedDeptCount > 0 };
   }
 
   async update(
