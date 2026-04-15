@@ -38,17 +38,17 @@ export function RunPayrollPanel({ isOpen, onClose }: Props) {
   const toast = useToast();
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
   const [year, setYear] = useState(String(currentYear));
-  const [description, setDescription] = useState('');
+  const [notes, setNotes] = useState('');
 
   const { mutate, isPending } = useRunPayroll();
 
   const handleSubmit = () => {
     mutate(
-      { month: Number(month), year: Number(year), description: description.trim() || undefined },
+      { month: Number(month), year: Number(year), notes: notes.trim() || undefined },
       {
         onSuccess: () => {
           toast.success('Payroll run started');
-          setDescription('');
+          setNotes('');
           onClose();
         },
         onError: (err) => toast.error(extractError(err, 'Failed to run payroll')),
@@ -81,8 +81,8 @@ export function RunPayrollPanel({ isOpen, onClose }: Props) {
             Description <span className="text-gray-400 font-normal">(optional)</span>
           </label>
           <input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
             placeholder="e.g. April 2026 payroll"
             className="w-full px-3 py-2.5 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
           />

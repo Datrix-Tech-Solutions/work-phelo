@@ -7,7 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
 import { useEmployees } from '@/hooks/useEmployees';
-import { calculatePayroll } from '@/lib/payrollCalculations';
+import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 
 interface PayrollRow {
@@ -17,8 +17,8 @@ interface PayrollRow {
   basicSalary: number;
   allowances: number;
   grossSalary: number;
-  employeeSSNIT: number;
-  employerSSNIT: number;
+  employeeStatutoryContrib: number;
+  employerStatutoryContrib: number;
   taxableIncome: number;
   paye: number;
   netSalary: number;
@@ -29,13 +29,14 @@ interface PayrollRow {
 export function ManagePayrollTab() {
   const { data: empData, isLoading } = useEmployees();
   const [searchQuery, setSearchQuery] = useState('');
-  const [allowancesMap, setAllowancesMap] = useState<Record<string, number>>({});
+  const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
 
   const payrollRows: PayrollRow[] = useMemo(() => {
     const employees: Employee[] = empData?.data ?? [];
     return employees.map((e) => {
       const basic = Number(e.basicSalary) || 0;
-      const allowances = allowancesMap[e.id] ?? 1000;
+      const allowances = allowancesMap[e.id] ?? [];
+      const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
       const calc = calculatePayroll({
         basicSalary: basic,
         allowances,
@@ -46,10 +47,10 @@ export function ManagePayrollTab() {
         employeeName: `${e.firstName} ${e.lastName}`,
         avatarUrl: e.avatarUrl,
         basicSalary: basic,
-        allowances,
+        allowances: totalAllowances,
         grossSalary: calc.grossSalary,
-        employeeSSNIT: calc.employeeSSNIT,
-        employerSSNIT: calc.employerSSNIT,
+        employeeStatutoryContrib: calc.employeeStatutoryContrib,
+        employerStatutoryContrib: calc.employerStatutoryContrib,
         taxableIncome: calc.taxableIncome,
         paye: calc.paye,
         netSalary: calc.netSalary,
@@ -72,7 +73,7 @@ export function ManagePayrollTab() {
           gross: acc.gross + r.grossSalary,
           net: acc.net + r.netSalary,
           paye: acc.paye + r.paye,
-          ssnit: acc.ssnit + r.employeeSSNIT,
+          ssnit: acc.ssnit + r.employeeStatutoryContrib,
           employerCost: acc.employerCost + r.totalEmployerCost,
         }),
         { gross: 0, net: 0, paye: 0, ssnit: 0, employerCost: 0 },
@@ -80,8 +81,11 @@ export function ManagePayrollTab() {
     [filteredData],
   );
 
-  const handleAllowancesChange = (employeeId: string, value: number) => {
-    setAllowancesMap((prev) => ({ ...prev, [employeeId]: value }));
+  const handleAllowancesChange = (employeeId: string, amount: number) => {
+    setAllowancesMap((prev) => ({
+      ...prev,
+      [employeeId]: amount > 0 ? [{ name: 'Allowances', amount }] : [],
+    }));
   };
 
   const columns: Column<PayrollRow>[] = [
@@ -125,7 +129,7 @@ export function ManagePayrollTab() {
     {
       key: 'employeeSSNIT',
       label: 'SSNIT',
-      render: (row) => `GHS ${row.employeeSSNIT.toLocaleString()}`,
+      render: (row) => `GHS ${row.employeeStatutoryContrib.toLocaleString()}`,
     },
     {
       key: 'taxableIncome',

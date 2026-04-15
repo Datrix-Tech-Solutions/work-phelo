@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -8,6 +8,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Employee, Department, UpdateEmployeePayload } from '@/types/hr';
+import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;
@@ -31,6 +32,8 @@ export function EditEmployeePanel({
   const editForm = useForm<UpdateEmployeePayload>();
   const { reset } = editForm;
 
+  const [salaryCurrency, setSalaryCurrency] = useState('GHS');
+
   // Watch values for controlled components
   const editDobValue = useWatch({ control: editForm.control, name: 'dateOfBirth' });
   const editDeptValue = useWatch({ control: editForm.control, name: 'departmentId' });
@@ -38,6 +41,7 @@ export function EditEmployeePanel({
   const editStatusValue = useWatch({ control: editForm.control, name: 'employmentStatus' });
   const editGenderValue = useWatch({ control: editForm.control, name: 'gender' });
   const editMaritalValue = useWatch({ control: editForm.control, name: 'maritalStatus' });
+  const basicSalaryValue = useWatch({ control: editForm.control, name: 'basicSalary' });
 
   // Reset form when employee data changes
   useEffect(() => {
@@ -224,12 +228,15 @@ export function EditEmployeePanel({
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Banking & Compliance
         </p>
-        <FormField
-          label="Basic Salary (GHS)"
-          registration={editForm.register('basicSalary')}
-          type="number"
-          placeholder="5000"
+        <CurrencyInput
+          label="Basic Salary"
+          value={basicSalaryValue}
+          currency={salaryCurrency}
+          onValueChange={(v) => editForm.setValue('basicSalary', parseFloat(v) || undefined)}
+          onCurrencyChange={setSalaryCurrency}
+          placeholder="0.00"
         />
+
         <FormField
           label="Bank Name"
           registration={editForm.register('bankName')}

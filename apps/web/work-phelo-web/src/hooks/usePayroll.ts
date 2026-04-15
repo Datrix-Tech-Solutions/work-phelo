@@ -37,7 +37,7 @@ export function useRunPayroll() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (payload: { month: number; year: number; description?: string }) => {
+    mutationFn: async (payload: { month: number; year: number; notes?: string }) => {
       const res = await api.post<PayrollRun>('/hr/payroll/run', payload);
       return res.data;
     },
