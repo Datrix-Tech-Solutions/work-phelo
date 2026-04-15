@@ -238,6 +238,15 @@ jobs:
             git reset --hard origin/dev
             echo " Code updated to $(git rev-parse --short HEAD)"
 
+            # ── Write env files from GitHub secrets ───────────────────────
+            printf '%s\n' "${{ secrets.AUTH_ENV }}" > apps/auth-service/.env
+            printf '%s\n' "${{ secrets.HR_ENV }}" > apps/hr-service/.env
+            printf '%s\n' "${{ secrets.NOTIFICATION_ENV }}" > apps/notification-service/.env
+            printf '%s\n' "${{ secrets.GATEWAY_ENV }}" > apps/api-gateway/.env
+            printf '%s\n' "${{ secrets.SUBSCRIPTION_ENV }}" > apps/subscription-service/.env
+            printf '%s\n' "${{ secrets.MARKETING_ENV }}" > apps/marketing-service/.env
+            echo " Env files written from secrets"
+
             # ── 2. Authenticate with GHCR ─────────────────────────────────
             # CR_PAT is a Classic PAT with read:packages scope only.
             # We use --password-stdin to avoid the token appearing in
