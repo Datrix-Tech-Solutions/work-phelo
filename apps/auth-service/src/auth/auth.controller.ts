@@ -369,7 +369,10 @@ export class AuthController {
       'GOOGLE',
       tenantSlug,
     );
-    const frontendUrl = process.env.APP_URL || 'http://localhost:3000';
+    const frontendUrl =
+      process.env.FRONTEND_URL ||
+      process.env.APP_URL ||
+      'http://localhost:3000';
     setAuthCookies(res, result.accessToken, result.refreshToken);
     res.redirect(`${frontendUrl}/auth/social-callback`);
   }
@@ -397,7 +400,10 @@ export class AuthController {
       'MICROSOFT',
       tenantSlug,
     );
-    const frontendUrl = process.env.APP_URL || 'http://localhost:3000';
+    const frontendUrl =
+      process.env.FRONTEND_URL ||
+      process.env.APP_URL ||
+      'http://localhost:3000';
     setAuthCookies(res, result.accessToken, result.refreshToken);
     res.redirect(`${frontendUrl}/auth/social-callback`);
   }

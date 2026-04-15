@@ -31,13 +31,34 @@ export class EventsHandler {
   ) {
     this.logger.log(`Linking userId to employee ${data.email}`);
     try {
-      await this.prisma.employee.updateMany({
+      const employee = await this.prisma.employee.findFirst({
         where: { tenantId: data.tenantId, email: data.email },
+      });
+      if (!employee) {
+        this.logger.warn(
+          `No employee found for ${data.email} — skipping activation`,
+        );
+        return;
+      }
+
+      await this.prisma.employee.update({
+        where: { id: employee.id },
         data: { userId: data.userId },
       });
       this.logger.log(`userId linked for employee ${data.email}`);
+
+      // Ensure balances exist now that the employee is fully active.
+      // initializeLeaveBalances uses upsert so this is safe even if balances
+      // were already created at hire time.
+      await this.leaveService.initializeLeaveBalances(
+        data.tenantId,
+        employee.id,
+      );
+      this.logger.log(`Leave balances confirmed for ${data.email}`);
     } catch (e: any) {
-      this.logger.warn(`Failed to link userId for ${data.email}: ${e.message}`);
+      this.logger.warn(
+        `Failed to activate employee ${data.email}: ${e.message}`,
+      );
     }
   }
 }

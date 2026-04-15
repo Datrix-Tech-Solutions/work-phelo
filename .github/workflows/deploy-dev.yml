@@ -1,0 +1,274 @@
+name: Deploy to Dev
+
+on:
+  push:
+    branches: [dev]
+
+# ── 1. Concurrency control ─────────────────────────────────────────────────────
+# Only one dev deployment runs at a time; a newer push cancels the in-flight one.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  ORG: datrix-tech-solutions
+  IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
+  COMPOSE_FILE: infrastructure/docker-compose.dev.yml
+  DEPLOY_PATH: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo
+
+jobs:
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Type checks
+        run: npm run check-types
+
+      - name: Build validation
+        run: npm run build
+
+
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    needs: quality-gates
+
+    # ── 6. Per-service boolean outputs ──────────────────────────────────────────
+    # Each output is 'true'/'false' so the build matrix can skip unchanged services
+    # without fragile inline jq parsing of a JSON array.
+    outputs:
+      changed: ${{ steps.filter.outputs.changes }}
+      api-gateway: ${{ steps.filter.outputs.api-gateway }}
+      auth-service: ${{ steps.filter.outputs.auth-service }}
+      hr-service: ${{ steps.filter.outputs.hr-service }}
+      notification-service: ${{ steps.filter.outputs.notification-service }}
+      subscription-service: ${{ steps.filter.outputs.subscription-service }}
+      marketing-service: ${{ steps.filter.outputs.marketing-service }}
+      nextjs-web: ${{ steps.filter.outputs.nextjs-web }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed services
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api-gateway:
+              - 'apps/api-gateway/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+            auth-service:
+              - 'apps/auth-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+            hr-service:
+              - 'apps/hr-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+            notification-service:
+              - 'apps/notification-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+            subscription-service:
+              - 'apps/subscription-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+            marketing-service:
+              - 'apps/marketing-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
+            nextjs-web:
+              - 'apps/web/work-phelo-web/**'
+          list-files: none
+
+
+  build-and-push:
+    name: Build & Push — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs: detect-changes
+
+    if: needs.detect-changes.outputs.changed != '[]' && needs.detect-changes.outputs.changed != ''
+
+    permissions:
+      contents: read
+      packages: write
+
+    # ── 2. Next.js moved into the unified change-filtered matrix ──────────────
+    # All services share one job definition; per-service dockerfile paths are
+    # declared here so there is no separate nextjs-build-push job to maintain.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api-gateway
+            dockerfile: apps/api-gateway/Dockerfile
+          - service: auth-service
+            dockerfile: apps/auth-service/Dockerfile
+          - service: hr-service
+            dockerfile: apps/hr-service/Dockerfile
+          - service: notification-service
+            dockerfile: apps/notification-service/Dockerfile
+          - service: subscription-service
+            dockerfile: apps/subscription-service/Dockerfile
+          - service: marketing-service
+            dockerfile: apps/marketing-service/Dockerfile
+          - service: nextjs-web
+            dockerfile: apps/web/work-phelo-web/Dockerfile
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 6. Use per-service boolean output — no inline jq ──────────────────
+      - name: Check if service changed
+        id: changed
+        env:
+          SERVICE_CHANGED: ${{ needs.detect-changes.outputs[matrix.service] }}
+        run: |
+          if [[ "$SERVICE_CHANGED" == "true" ]]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "⚡ ${{ matrix.service }} unchanged — skipping build"
+          fi
+
+      - name: Log in to GitHub Container Registry
+        if: steps.changed.outputs.skip == 'false'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        if: steps.changed.outputs.skip == 'false'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.changed.outputs.skip == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push ${{ matrix.service }}
+        if: steps.changed.outputs.skip == 'false'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:dev
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
+            BUILD_REF=${{ github.ref_name }}
+
+
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    # ── 3. Fixed deploy condition ──────────────────────────────────────────────
+    # Deploy if quality gates pass AND the build either succeeded or was
+    # legitimately skipped (no services changed). Prevents deploying stale images
+    # after a build failure.
+    needs: [quality-gates, detect-changes, build-and-push]
+    if: |
+      always() &&
+      needs.quality-gates.result == 'success' &&
+      (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
+
+    # ── 8. Use GITHUB_TOKEN for GHCR pull on the server ───────────────────────
+    # packages: read grants the token pull access; no long-lived CR_PAT needed.
+    permissions:
+      contents: read
+      packages: read
+
+    environment:
+      name: dev
+      url: https://dev.workphelo.datrixtechsolutions.com
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Upload the compose file — the server needs nothing else from the repo.
+      # Source code is already baked into the images; git is not used on the server.
+      - name: Upload Docker Compose file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ vars.DEV_SERVER_HOST }}
+          username: ${{ vars.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          port: 22
+          source: infrastructure/docker-compose.dev.yml
+          target: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo/
+          strip_components: 0
+
+      # ── 10. SSH deploy via extracted script ───────────────────────────────
+      # All secrets are injected as env vars; the script lives in .github/scripts/
+      # so it is version-controlled and reviewable independently of this workflow.
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ── Shared across multiple services ── secrets (contain credentials)
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          # ── Shared across multiple services ── variables (non-sensitive config)
+          ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+          # ── auth-service ── variables (public URLs and behaviour flags)
+          AUTH_FRONTEND_BASE_URL: ${{ vars.AUTH_FRONTEND_BASE_URL }}
+          AUTH_COOKIE_SECURE: ${{ vars.AUTH_COOKIE_SECURE }}
+          AUTH_COOKIE_SAME_SITE: ${{ vars.AUTH_COOKIE_SAME_SITE }}
+          AUTH_GOOGLE_CLIENT_ID: ${{ vars.AUTH_GOOGLE_CLIENT_ID }}
+          AUTH_GOOGLE_CALLBACK_URL: ${{ vars.AUTH_GOOGLE_CALLBACK_URL }}
+          AUTH_MICROSOFT_CLIENT_ID: ${{ vars.AUTH_MICROSOFT_CLIENT_ID }}
+          AUTH_MICROSOFT_CALLBACK_URL: ${{ vars.AUTH_MICROSOFT_CALLBACK_URL }}
+          # ── auth-service ── secrets (OAuth client secrets)
+          AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
+          AUTH_MICROSOFT_CLIENT_SECRET: ${{ secrets.AUTH_MICROSOFT_CLIENT_SECRET }}
+          # ── notification-service ── variables (non-sensitive config)
+          NOTIFY_RESEND_FROM_EMAIL: ${{ vars.NOTIFY_RESEND_FROM_EMAIL }}
+          NOTIFY_TERMII_SENDER_ID: ${{ vars.NOTIFY_TERMII_SENDER_ID }}
+          # ── notification-service ── secrets (API keys)
+          NOTIFY_RESEND_API_KEY: ${{ secrets.NOTIFY_RESEND_API_KEY }}
+          NOTIFY_TERMII_API_KEY: ${{ secrets.NOTIFY_TERMII_API_KEY }}
+          # ── seed ──────────────────────────────────────────────────────────
+          SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
+          # ── build metadata ────────────────────────────────────────────────
+          BUILD_SHA: ${{ github.sha }}
+          BUILD_REF: ${{ github.ref_name }}
+        with:
+          host: ${{ vars.DEV_SERVER_HOST }}
+          username: ${{ vars.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          port: 22
+          command_timeout: 60m
+          script_path: .github/scripts/deploy-dev.sh
+          envs: GHCR_TOKEN,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,SUPER_ADMIN_PASSWORD,BUILD_SHA,BUILD_REF

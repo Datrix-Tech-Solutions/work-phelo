@@ -2,15 +2,14 @@
 
 import { useState } from 'react';
 import { extractError } from '@/lib/extractError';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
-import { LeaveBalance, LeaveRequest, LeaveRequestStatus, ReviewLeaveRequestDto } from '@/types/hr';
+import { useLeaveBalances, useReviewLeaveRequest } from '@/hooks/useLeave';
+import { LeaveRequest, LeaveRequestStatus } from '@/types/hr';
 
 interface LeaveRequestDetailPanelProps {
   isOpen: boolean;
@@ -50,45 +49,41 @@ export function LeaveRequestDetailPanel({
   request,
 }: LeaveRequestDetailPanelProps) {
   const toast = useToast();
-  const queryClient = useQueryClient();
   const [reviewNote, setReviewNote] = useState('');
   const [confirmAction, setConfirmAction] = useState<'approve' | 'reject' | null>(null);
 
   /* ── Employee balance for this leave type ── */
-  const { data: employeeBalances = [] } = useQuery<LeaveBalance[]>({
-    queryKey: ['employee-leave-balance', tenantSlug, request?.employeeId],
-    queryFn: () =>
-      api.get(`/${tenantSlug}/leave/balance/employee/${request!.employeeId}`).then((r) => r.data),
+  const { data: employeeBalances = [] } = useLeaveBalances(request?.employeeId, {
     enabled: isOpen && !!request?.employeeId,
   });
 
   const typeBalance = employeeBalances.find((b) => b.leaveTypeId === request?.leaveTypeId);
 
-  const { mutate: reviewRequest, isPending } = useMutation({
-    mutationFn: (dto: ReviewLeaveRequestDto) =>
-      api.put(`/${tenantSlug}/leave/requests/${request!.id}/review`, dto),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['leave-requests', tenantSlug] });
-      queryClient.invalidateQueries({ queryKey: ['leave-pending-count', tenantSlug] });
-      toast.success(
-        confirmAction === 'approve' ? 'Leave request approved' : 'Leave request rejected',
-      );
-      setConfirmAction(null);
-      setReviewNote('');
-      onClose();
-    },
-    onError: (err) => {
-      toast.error(extractError(err, 'Something went wrong'));
-      setConfirmAction(null);
-    },
-  });
+  const { mutate: reviewRequest, isPending } = useReviewLeaveRequest();
 
   const handleConfirm = () => {
     if (!confirmAction || !request) return;
-    reviewRequest({
-      status: confirmAction === 'approve' ? 'Approved' : 'Rejected',
-      reviewNote: reviewNote || undefined,
-    });
+    reviewRequest(
+      {
+        id: request.id,
+        action: confirmAction === 'approve' ? 'APPROVED' : 'REJECTED',
+        note: reviewNote || undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.success(
+            confirmAction === 'approve' ? 'Leave request approved' : 'Leave request rejected',
+          );
+          setConfirmAction(null);
+          setReviewNote('');
+          onClose();
+        },
+        onError: (err) => {
+          toast.error(extractError(err, 'Something went wrong'));
+          setConfirmAction(null);
+        },
+      },
+    );
   };
 
   if (!request) return null;

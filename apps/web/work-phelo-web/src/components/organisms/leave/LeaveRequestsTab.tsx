@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { Badge } from '@/components/atoms/Badge';
@@ -9,9 +8,8 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { LeaveRequestDetailPanel } from '@/components/organisms/leave/LeaveRequestDetailPanel';
 import { useEmployees } from '@/hooks/useEmployees';
-import { useLeaveTypes } from '@/hooks/useLeave';
+import { useLeaveTypes, useLeaveRequests } from '@/hooks/useLeave';
 import { useDepartments } from '@/hooks/useDepartments';
-import { api } from '@/lib/api';
 import { formatDate } from '@/lib/formatters';
 import { LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/hr';
 import { Users } from 'lucide-react';
@@ -49,39 +47,10 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   const { data: employeesData, isLoading: employeesLoading } = useEmployees();
   const totalEmployees = employeesData?.total ?? null;
 
-  const { data: reqData, isLoading: reqLoading } = useQuery({
-    queryKey: [
-      'leave-requests',
-      tenantSlug,
-      search,
-      filterLeaveType,
-      filterDepartment,
-      filterFrom,
-      filterTo,
-      reqPage,
-    ],
-    queryFn: () =>
-      api
-        .get(`/${tenantSlug}/leave/requests`, {
-          params: {
-            page: reqPage,
-            search: search || undefined,
-            leaveTypeId: filterLeaveType || undefined,
-            departmentId: filterDepartment || undefined,
-            fromDate: filterFrom || undefined,
-            toDate: filterTo || undefined,
-            sort: 'createdAt:asc',
-          },
-        })
-        .then((r) => r.data),
-  });
+  const { data: reqList = [], isLoading: reqLoading } = useLeaveRequests();
 
-  const reqList: LeaveRequest[] = useMemo(() => {
-    return Array.isArray(reqData) ? reqData : (reqData?.data ?? []);
-  }, [reqData]);
-
-  const reqTotalPages = reqData?.totalPages ?? 1;
-  const totalRequests = reqData?.totalCount ?? null;
+  const reqTotalPages = 1;
+  const totalRequests = reqList.length || null;
   const pendingCount = useMemo(
     () => reqList.filter((r) => r.status === 'Pending').length || null,
     [reqList],

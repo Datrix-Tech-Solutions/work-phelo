@@ -201,8 +201,8 @@ export interface CreateLeaveRequestDto {
 }
 
 export interface ReviewLeaveRequestDto {
-  status: 'Approved' | 'Rejected';
-  reviewNote?: string;
+  action: 'APPROVED' | 'REJECTED';
+  note?: string;
 }
 
 // ── Leave Balance ─────────────────────────────────────────
