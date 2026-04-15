@@ -33,6 +33,7 @@ enum NotificationType {
   PASSWORD_RESET_OTP
   SMS_OTP
   PUSH_GENERAL
+  EMPLOYEE_TERMINATION
 
   @@schema("notify")
 }
