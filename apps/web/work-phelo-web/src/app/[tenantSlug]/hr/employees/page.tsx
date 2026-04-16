@@ -162,7 +162,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
               department={emp.department?.name}
               hireDate={emp.hireDate}
               isOnLeave={onLeaveEmployeeIds.has(emp.id)}
-              onClick={() => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)}
+              onClick={
+                !isEmployee ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`) : undefined
+              }
             />
           ))}
         </div>

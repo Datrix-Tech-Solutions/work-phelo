@@ -62,8 +62,8 @@ export function InviteEmployeePanel({
   const phoneValue = useWatch({ control, name: 'phone' });
   const hireDateValue = useWatch({ control, name: 'hireDate' });
   const dobValue = useWatch({ control, name: 'dateOfBirth' });
-  // const probationDateValue = useWatch({ control, name: 'probationEndDate' });
-  // const contractDateValue = useWatch({ control, name: 'contractEndDate' });
+  const probationDateValue = useWatch({ control, name: 'probationEndDate' });
+  const contractDateValue = useWatch({ control, name: 'contractEndDate' });
   const deptFormValue = useWatch({ control, name: 'departmentId' });
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
@@ -189,11 +189,11 @@ export function InviteEmployeePanel({
           error={errors.hireDate?.message}
           disableFuture
         />
-        {/* <DatePicker
+        <DatePicker
           label="Probation End Date"
           value={probationDateValue}
           onChange={(v) => setValue('probationEndDate', v)}
-        /> */}
+        />
         <SearchSelect
           label="Employment Type"
           placeholder="Select employment type"
@@ -207,7 +207,7 @@ export function InviteEmployeePanel({
           ]}
         />
 
-        {/* {employmentTypeValue === 'CONTRACT' && (
+        {employmentTypeValue === 'CONTRACT' && (
           <DatePicker
             label="Contract End Date"
             value={contractDateValue}
@@ -216,7 +216,7 @@ export function InviteEmployeePanel({
             error={errors.contractEndDate?.message}
             disablePast
           />
-        )} */}
+        )}
       </div>
     </SidePanel>
   );
