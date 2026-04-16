@@ -87,7 +87,7 @@ export class EmployeesService {
     // Fire-and-forget — HR returns immediately, auth handles invite async
     this.logger.log(`Emitting auth.invite_employee for ${employee.email}`);
     void this.rabbitmq
-      .emitToAuth('auth.invite_employee', {
+      .authInviteEmployee({
         tenantId,
         employeeId: employee.id,
         email: employee.email,
@@ -411,7 +411,7 @@ export class EmployeesService {
     // 2. Revoke auth access (fire-and-forget)
     if (employee.userId) {
       void this.rabbitmq
-        .emitToAuth('hr.employee_offboarded', {
+        .authEmployeeOffboarded({
           tenantId,
           userId: employee.userId,
           email: employee.email,
@@ -429,14 +429,16 @@ export class EmployeesService {
     const notifyReasons: string[] = ['TERMINATION', 'CONTRACT_ENDED'];
     if (notifyReasons.includes(record.reason)) {
       void this.rabbitmq
-        .emit('notify.employee_termination', {
+        .notificationEmployeeTermination({
           tenantId,
           employeeId,
           email: employee.email,
           firstName: employee.firstName,
           lastName: employee.lastName,
           reason: record.reason,
-          lastWorkingDate: record.lastWorkingDate,
+          lastWorkingDate: record.lastWorkingDate
+            ? record.lastWorkingDate.toISOString()
+            : new Date().toISOString(),
         })
         .catch((err) =>
           this.logger.error(
@@ -478,7 +480,7 @@ export class EmployeesService {
       throw new BadRequestException('Employee has no email address on record');
     }
 
-    void this.rabbitmq.emitToAuth('auth.resend_employee_invite', {
+    void this.rabbitmq.authResendEmployeeInvite({
       tenantId,
       employeeId,
       email: employee.email,

@@ -62,7 +62,7 @@ export class NotificationService {
     tenantId?: string;
     email: string;
     firstName: string;
-    inviteToken: string;
+    inviteToken?: string;
     acceptInviteUrl: string;
     tenantName: string;
   }) {

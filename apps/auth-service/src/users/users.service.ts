@@ -83,7 +83,7 @@ export class UsersService {
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
     void this.rabbitmq
-      .sendInviteEmail({
+      .notificationInviteUser({
         userId: user.id,
         tenantId,
         email: user.email,
@@ -163,7 +163,7 @@ export class UsersService {
       // emit it here to guarantee seeding regardless of whether the super admin
       // calls that endpoint.
       void this.rabbitmq
-        .emitToHr('hr.tenant_approved', { tenantId: updated.tenantId })
+        .hrTenantApproved({ tenantId: updated.tenantId })
         .catch((err) =>
           this.logger.error(
             `Failed to emit hr.tenant_approved for ${updated.tenantId}`,
@@ -174,7 +174,7 @@ export class UsersService {
 
     // Link the auth userId back to the HR employee record
     void this.rabbitmq
-      .emitToHr('hr.employee_activated', {
+      .hrEmployeeActivated({
         tenantId: updated.tenantId,
         email: updated.email,
         userId: updated.id,
@@ -251,7 +251,7 @@ export class UsersService {
     );
 
     void this.rabbitmq
-      .emit('notification.invite_user', {
+      .notificationInviteUser({
         email: user.email,
         firstName: user.firstName,
         tenantName: user.tenant.name,
