@@ -135,6 +135,22 @@ export class CreateEmployeeDto {
   @IsString()
   departmentId!: string;
 
+  @ApiPropertyOptional({
+    description: 'Branch ID of the employee',
+    example: 'branch-789',
+  })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Employee ID of the reporting manager',
+    example: 'emp-123',
+  })
+  @IsOptional()
+  @IsString()
+  managerId?: string;
+
   @ApiProperty({ description: 'Job title or role', example: 'HR Manager' })
   @IsString()
   jobTitle!: string;
@@ -157,6 +173,22 @@ export class CreateEmployeeDto {
   @IsOptional()
   @IsDateString()
   probationEndsAt?: string;
+
+  @ApiPropertyOptional({
+    description: 'End date of contract (CONTRACT employment type)',
+    example: '2026-12-31',
+  })
+  @IsOptional()
+  @IsDateString()
+  contractEndDate?: string;
+
+  @ApiPropertyOptional({
+    description: 'National ID number',
+    example: 'GHA-000000000-0',
+  })
+  @IsOptional()
+  @IsString()
+  nationalId?: string;
 
   @ApiPropertyOptional({
     description: 'Bank name for salary payments',

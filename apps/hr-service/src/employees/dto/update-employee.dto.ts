@@ -114,6 +114,38 @@ export class UpdateEmployeeDto {
   departmentId?: string;
 
   @ApiPropertyOptional({
+    description: 'Branch ID of the employee',
+    example: 'branch-789',
+  })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Employee ID of the reporting manager',
+    example: 'emp-123',
+  })
+  @IsOptional()
+  @IsString()
+  managerId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Probation end date',
+    example: '2026-07-01',
+  })
+  @IsOptional()
+  @IsDateString()
+  probationEndsAt?: string;
+
+  @ApiPropertyOptional({
+    description: 'Contract end date (CONTRACT employment type)',
+    example: '2026-12-31',
+  })
+  @IsOptional()
+  @IsDateString()
+  contractEndDate?: string;
+
+  @ApiPropertyOptional({
     description: 'Updated job title',
     example: 'HR Manager',
   })
@@ -136,6 +168,14 @@ export class UpdateEmployeeDto {
   @IsOptional()
   @IsEnum(EmploymentStatus)
   employmentStatus?: EmploymentStatus;
+
+  @ApiPropertyOptional({
+    description: 'National ID number',
+    example: 'GHA-000000000-0',
+  })
+  @IsOptional()
+  @IsString()
+  nationalId?: string;
 
   @ApiPropertyOptional({
     description: 'Updated bank name',

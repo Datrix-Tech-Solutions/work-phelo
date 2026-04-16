@@ -1,13 +1,13 @@
 import { LeaveModule } from '../leave/leave.module';
 import { PrismaModule } from '../prisma/prisma.module';
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RabbitMQPublisher } from './rabbitmq.publisher';
 import { EventsHandler } from './events.handler';
 
 @Module({
   imports: [
-    LeaveModule,
+    forwardRef(() => LeaveModule),
     PrismaModule,
     ClientsModule.register([
       {

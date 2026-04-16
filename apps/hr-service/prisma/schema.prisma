@@ -120,6 +120,31 @@ enum AllowanceType {
   @@schema("hr")
 }
 
+// ── Branch ───────────────────────────────────────────────────────────────
+
+model Branch {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  code        String?
+  address     String?
+  city        String?
+  region      String?
+  country     String?
+  phone       String?
+  email       String?
+  managerId   String?
+  isActive    Boolean  @default(true)
+  isHeadOffice Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employees   Employee[]
+
+  @@unique([tenantId, name])
+  @@schema("hr")
+}
+
 // ── Department ────────────────────────────────────────────────────────────
 
 model Department {
@@ -163,6 +188,8 @@ model Employee {
   emergencyPhone    String?
   emergencyRelation String?
   departmentId      String?
+  branchId          String?
+  managerId         String?
   jobTitle          String
   employmentType    EmploymentType   @default(FULL_TIME)
   employmentStatus      EmploymentStatus @default(PROBATION)
@@ -171,11 +198,13 @@ model Employee {
   statusChangedByEmail  String?
   hireDate          DateTime
   probationEndsAt   DateTime?
+  contractEndDate   DateTime?
   offboardedAt      DateTime?
   offboardReason    String?
   bankName          String?
   bankAccountNumber String?
   bankBranch        String?
+  nationalId        String?
   ssnit             String?
   tinNumber         String?
   basicSalary       Decimal          @db.Decimal(15, 2)
@@ -184,6 +213,7 @@ model Employee {
   updatedAt         DateTime         @updatedAt
 
   department        Department?       @relation(fields: [departmentId], references: [id])
+  branch            Branch?           @relation(fields: [branchId], references: [id])
   leaveBalances     LeaveBalance[]
   leaveRequests     LeaveRequest[]
   clockRecords      ClockRecord[]

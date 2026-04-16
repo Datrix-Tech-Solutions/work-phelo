@@ -4,6 +4,7 @@ import { APP_PIPE } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { BranchesModule } from './branches/branches.module';
 import { EmployeesModule } from './employees/employees.module';
 import { LeaveModule } from './leave/leave.module';
 import { TimeModule } from './time/time.module';
@@ -13,6 +14,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { RabbitMQModule } from './messaging/rabbitmq.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { SchedulingModule } from './scheduling/scheduling.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
@@ -22,6 +24,7 @@ import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     DepartmentsModule,
+    BranchesModule,
     EmployeesModule,
     LeaveModule,
     TimeModule,
@@ -31,6 +34,7 @@ import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
     RabbitMQModule,
     AnnouncementsModule,
     NotificationsModule,
+    SchedulingModule,
   ],
   providers: [
     RabbitMQSetupService,

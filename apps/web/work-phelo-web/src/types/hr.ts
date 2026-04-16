@@ -37,7 +37,6 @@ export interface Employee {
   dateOfBirth?: string;
   maritalStatus?: string;
   nationality?: string;
-  nationalID?: string;
   address?: string;
   city?: string;
   region?: string;
@@ -45,6 +44,8 @@ export interface Employee {
   employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
   employmentStatus: 'ACTIVE' | 'PROBATION' | 'ON_LEAVE' | 'SUSPENDED' | 'TERMINATED' | 'OFFBOARDED';
   hireDate: string;
+  probationEndsAt?: string;
+  contractEndDate?: string;
   basicSalary?: number;
   departmentId?: string;
   department?: Department;
@@ -56,6 +57,7 @@ export interface Employee {
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;
+  nationalId?: string;
   ssnit?: string;
   tinNumber?: string;
   emergencyName?: string;
@@ -77,13 +79,16 @@ export interface UpdateEmployeePayload {
   gender?: string;
   maritalStatus?: string;
   nationality?: string;
-  nationalID?: string;
+  nationalId?: string;
   address?: string;
   city?: string;
   region?: string;
   jobTitle?: string;
   departmentId?: string;
   branchId?: string;
+  managerId?: string;
+  probationEndsAt?: string;
+  contractEndDate?: string;
   employmentType?: string;
   employmentStatus?: string;
   basicSalary?: number;
@@ -110,6 +115,10 @@ export interface CreateEmployeePayload {
   basicSalary?: number;
   departmentId: string;
   branchId?: string;
+  managerId?: string;
+  probationEndsAt?: string;
+  contractEndDate?: string;
+  nationalId?: string;
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;

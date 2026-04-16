@@ -4,8 +4,12 @@ import {
   ConflictException,
   BadRequestException,
   ForbiddenException,
+  Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
@@ -50,7 +54,13 @@ const DEFAULT_LEAVE_TYPES = [
 
 @Injectable()
 export class LeaveService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(LeaveService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(forwardRef(() => RabbitMQPublisher))
+    private readonly rabbitmq: RabbitMQPublisher,
+  ) {}
 
   // ── Seed default leave types for new tenant ───────────────────────────────
   async seedDefaultLeaveTypes(tenantId: string) {
@@ -71,40 +81,20 @@ export class LeaveService {
     if (existing) {
       throw new ConflictException('A leave type with this name already exists');
     }
-
     const leaveType = await this.prisma.leaveType.create({
       data: { tenantId, ...dto },
     });
 
-    // Backfill a balance record for every active employee so they can
-    // immediately apply for this leave type without a manual balance init.
-    const year = new Date().getFullYear();
+    // Backfill leave balances for all existing active employees so they
+    // immediately get an entitlement for this new leave type. Uses upsert
+    // internally — safe to call on employees who already have balances.
     const employees = await this.prisma.employee.findMany({
       where: { tenantId, employmentStatus: { not: 'OFFBOARDED' } },
       select: { id: true },
     });
-    for (const emp of employees) {
-      await this.prisma.leaveBalance.upsert({
-        where: {
-          employeeId_leaveTypeId_year: {
-            employeeId: emp.id,
-            leaveTypeId: leaveType.id,
-            year,
-          },
-        },
-        update: {},
-        create: {
-          tenantId,
-          employeeId: emp.id,
-          leaveTypeId: leaveType.id,
-          year,
-          totalDays: dto.daysAllowed,
-          usedDays: 0,
-          pendingDays: 0,
-          remainingDays: dto.daysAllowed,
-        },
-      });
-    }
+    await Promise.all(
+      employees.map((emp) => this.initializeLeaveBalances(tenantId, emp.id)),
+    );
 
     return leaveType;
   }
@@ -422,6 +412,17 @@ export class LeaveService {
       },
     });
 
+    // Notify the employee's manager (fire-and-forget)
+    void this.notifyManagerOfLeaveRequest(
+      tenantId,
+      empRecord,
+      leaveType.name,
+      dto.startDate,
+      dto.endDate,
+      totalDays,
+      dto.reason,
+    );
+
     return request;
   }
 
@@ -527,7 +528,139 @@ export class LeaveService {
       }
     }
 
+    // Notify the employee of the decision (fire-and-forget)
+    void this.notifyEmployeeOfLeaveDecision(
+      tenantId,
+      request.employeeId,
+      request.leaveTypeId,
+      dto.action,
+      request.startDate,
+      request.endDate,
+      request.totalDays,
+      dto.note,
+    );
+
     return updated;
+  }
+
+  // ── Private notification helpers ─────────────────────────────────────────
+
+  private async notifyManagerOfLeaveRequest(
+    tenantId: string,
+    employee: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      managerId: string | null;
+      departmentId: string | null;
+    },
+    leaveTypeName: string,
+    startDate: string,
+    endDate: string,
+    totalDays: number,
+    reason?: string,
+  ) {
+    try {
+      let managerEmail: string | null = null;
+
+      // Prefer the employee's direct manager
+      if (employee.managerId) {
+        const manager = await this.prisma.employee.findUnique({
+          where: { id: employee.managerId },
+          select: { email: true },
+        });
+        managerEmail = manager?.email ?? null;
+      }
+
+      // Fall back to the department manager
+      if (!managerEmail && employee.departmentId) {
+        const dept = await this.prisma.department.findUnique({
+          where: { id: employee.departmentId },
+          select: { managerId: true },
+        });
+        if (dept?.managerId) {
+          const deptManager = await this.prisma.employee.findUnique({
+            where: { id: dept.managerId },
+            select: { email: true },
+          });
+          managerEmail = deptManager?.email ?? null;
+        }
+      }
+
+      if (!managerEmail) {
+        this.logger.warn(
+          `No manager found for employee ${employee.id} — leave request notification skipped`,
+        );
+        return;
+      }
+
+      await this.rabbitmq.notificationLeaveRequested({
+        tenantId,
+        employeeId: employee.id,
+        employeeFirstName: employee.firstName,
+        employeeLastName: employee.lastName,
+        managerEmail,
+        leaveTypeName,
+        startDate,
+        endDate,
+        totalDays,
+        reason,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to emit leave requested notification for employee ${employee.id}`,
+        err,
+      );
+    }
+  }
+
+  private async notifyEmployeeOfLeaveDecision(
+    tenantId: string,
+    employeeId: string,
+    leaveTypeId: string,
+    status: 'APPROVED' | 'REJECTED',
+    startDate: Date,
+    endDate: Date,
+    totalDays: number,
+    note?: string,
+  ) {
+    try {
+      const [employee, leaveType] = await Promise.all([
+        this.prisma.employee.findUnique({
+          where: { id: employeeId },
+          select: { email: true, firstName: true },
+        }),
+        this.prisma.leaveType.findUnique({
+          where: { id: leaveTypeId },
+          select: { name: true },
+        }),
+      ]);
+
+      if (!employee) {
+        this.logger.warn(
+          `Employee ${employeeId} not found — leave reviewed notification skipped`,
+        );
+        return;
+      }
+
+      await this.rabbitmq.notificationLeaveReviewed({
+        tenantId,
+        employeeId,
+        employeeEmail: employee.email,
+        employeeFirstName: employee.firstName,
+        status,
+        leaveTypeName: leaveType?.name ?? 'Leave',
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        totalDays,
+        note,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to emit leave reviewed notification for employee ${employeeId}`,
+        err,
+      );
+    }
   }
 
   async cancelRequest(tenantId: string, requestId: string, userId: string) {

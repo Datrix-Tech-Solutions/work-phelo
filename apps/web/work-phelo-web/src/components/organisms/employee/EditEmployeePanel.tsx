@@ -7,16 +7,17 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { Employee, Department, UpdateEmployeePayload } from '@/types/hr';
+import { Employee, Department, Branch, UpdateEmployeePayload } from '@/types/hr';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
-import { FileUpload } from '@/components/atoms/FileUpload';
-import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { MonthPicker } from '@/components/atoms/endDatePicker';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;
   onClose: () => void;
   employee: Employee;
   departments: Department[];
+  branches?: Branch[];
+  employees?: Employee[];
   name: string;
   onSave: (data: UpdateEmployeePayload) => void;
   isUpdating: boolean;
@@ -27,6 +28,8 @@ export function EditEmployeePanel({
   onClose,
   employee,
   departments,
+  branches = [],
+  employees = [],
   name,
   onSave,
   isUpdating,
@@ -35,17 +38,19 @@ export function EditEmployeePanel({
   const { reset } = editForm;
 
   const [salaryCurrency, setSalaryCurrency] = useState('GHS');
-  const [nationalIDFile, setNationalIDFile] = useState<File | null>(null);
 
   // Watch values for controlled components
-  const editPhoneValue = useWatch({ control: editForm.control, name: 'phone' });
   const editDobValue = useWatch({ control: editForm.control, name: 'dateOfBirth' });
   const editDeptValue = useWatch({ control: editForm.control, name: 'departmentId' });
+  const editBranchValue = useWatch({ control: editForm.control, name: 'branchId' });
+  const editManagerValue = useWatch({ control: editForm.control, name: 'managerId' });
   const editTypeValue = useWatch({ control: editForm.control, name: 'employmentType' });
   const editStatusValue = useWatch({ control: editForm.control, name: 'employmentStatus' });
   const editGenderValue = useWatch({ control: editForm.control, name: 'gender' });
   const editMaritalValue = useWatch({ control: editForm.control, name: 'maritalStatus' });
   const basicSalaryValue = useWatch({ control: editForm.control, name: 'basicSalary' });
+  const probationValue = useWatch({ control: editForm.control, name: 'probationEndsAt' });
+  const contractEndValue = useWatch({ control: editForm.control, name: 'contractEndDate' });
 
   // Reset form when employee data changes
   useEffect(() => {
@@ -56,13 +61,15 @@ export function EditEmployeePanel({
       phone: employee.phone ?? '',
       jobTitle: employee.jobTitle,
       departmentId: employee.departmentId ?? '',
+      branchId: employee.branchId ?? '',
+      managerId: employee.managerId ?? '',
       employmentType: employee.employmentType,
       employmentStatus: employee.employmentStatus,
       dateOfBirth: employee.dateOfBirth ?? '',
       gender: employee.gender ?? '',
       maritalStatus: employee.maritalStatus ?? '',
       nationality: employee.nationality ?? '',
-      nationalID: employee.nationalID ?? '',
+      nationalId: employee.nationalId ?? '',
       address: employee.address ?? '',
       city: employee.city ?? '',
       region: employee.region ?? '',
@@ -75,6 +82,8 @@ export function EditEmployeePanel({
       bankBranch: employee.bankBranch ?? '',
       ssnit: employee.ssnit ?? '',
       tinNumber: employee.tinNumber ?? '',
+      probationEndsAt: employee.probationEndsAt ?? '',
+      contractEndDate: employee.contractEndDate ?? '',
     });
   }, [employee, reset]);
 
@@ -115,10 +124,10 @@ export function EditEmployeePanel({
           error={editForm.formState.errors.lastName}
           placeholder="eg; Boateng"
         />
-        <PhoneInput
+        <FormField
           label="Phone"
-          value={editPhoneValue ?? ''}
-          onChange={(v) => editForm.setValue('phone', v)}
+          registration={editForm.register('phone')}
+          placeholder="+233 24 000 0000"
         />
         <DatePicker
           label="Date of Birth"
@@ -154,17 +163,15 @@ export function EditEmployeePanel({
           placeholder="eg; Ghanaian"
         />
         <FormField
-          label="National ID"
-          registration={editForm.register('nationalID')}
-          placeholder="GHA-xxxxxxxxx-x"
+          label="National ID Number"
+          registration={editForm.register('nationalId')}
+          placeholder="eg; GHA-000000000-0"
         />
-        <FileUpload
-          label="Ghana Card Image"
-          accept="image/*"
-          hint="Picture size should not exceed 5mb"
-          value={nationalIDFile}
-          onChange={setNationalIDFile}
-        />
+        {/* <FileUpload
+          onChange={function (file: File | null): void {
+            throw new Error('Function not implemented.');
+          }}
+        /> */}
         <FormField
           label="Address"
           registration={editForm.register('address')}
@@ -216,6 +223,30 @@ export function EditEmployeePanel({
           onChange={(v) => editForm.setValue('departmentId', v)}
           options={departments.map((d) => ({ value: d.id, label: d.name }))}
         />
+        {branches.length > 0 && (
+          <SearchSelect
+            label="Branch"
+            placeholder="Select branch (optional)"
+            value={editBranchValue}
+            onChange={(v) => editForm.setValue('branchId', v)}
+            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+          />
+        )}
+        {employees.length > 0 && (
+          <SearchSelect
+            label="Reporting Manager"
+            placeholder="Select manager (optional)"
+            value={editManagerValue}
+            onChange={(v) => editForm.setValue('managerId', v)}
+            options={employees
+              .filter((e) => e.id !== employee.id)
+              .map((e) => ({
+                value: e.id,
+                label: `${e.firstName} ${e.lastName}`,
+                sublabel: e.jobTitle,
+              }))}
+          />
+        )}
         <SearchSelect
           label="Employment Type"
           placeholder="Select type"
@@ -239,6 +270,20 @@ export function EditEmployeePanel({
             { value: 'SUSPENDED', label: 'Suspended' },
           ]}
         />
+        {editTypeValue !== 'CONTRACT' && (
+          <MonthPicker
+            label="Probation End Date"
+            value={probationValue}
+            onChange={(v) => editForm.setValue('probationEndsAt', v)}
+          />
+        )}
+        {editTypeValue === 'CONTRACT' && (
+          <MonthPicker
+            label="Contract End Date"
+            value={contractEndValue}
+            onChange={(v) => editForm.setValue('contractEndDate', v)}
+          />
+        )}
       </div>
 
       <div className="flex flex-col gap-4">

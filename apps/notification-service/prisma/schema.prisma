@@ -34,6 +34,8 @@ enum NotificationType {
   SMS_OTP
   PUSH_GENERAL
   EMPLOYEE_TERMINATION
+  LEAVE_REQUESTED
+  LEAVE_REVIEWED
 
   @@schema("notify")
 }

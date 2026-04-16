@@ -10,6 +10,7 @@ import {
   useUpdateEmployee,
 } from '@/hooks/hr/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
+import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
@@ -36,6 +37,7 @@ export default function EmployeeDetailPage({
   // Data fetching
   const { data: employee, isLoading } = useEmployee(id);
   const { data: departments = [] } = useDepartments();
+  const { data: branches = [] } = useBranches();
   const { data: allHrResult } = useEmployees();
   const allHrEmployees = allHrResult?.data ?? [];
 
@@ -119,6 +121,8 @@ export default function EmployeeDetailPage({
         onClose={() => setEditOpen(false)}
         employee={employee}
         departments={departments}
+        branches={branches}
+        employees={allHrEmployees}
         name={name}
         onSave={handleUpdateEmployee}
         isUpdating={isUpdating}

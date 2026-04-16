@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -8,8 +8,6 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Employee, UpdateEmployeePayload } from '@/types/hr';
-import { FileUpload } from '@/components/atoms/FileUpload';
-import { PhoneInput } from '@/components/atoms/PhoneInput';
 
 interface EditMyProfilePanelProps {
   isOpen: boolean;
@@ -28,9 +26,7 @@ export function EditMyProfilePanel({
 }: EditMyProfilePanelProps) {
   const form = useForm<UpdateEmployeePayload>();
   const { reset } = form;
-  const [nationalIDFile, setNationalIDFile] = useState<File | null>(null);
 
-  const phoneValue = useWatch({ control: form.control, name: 'phone' });
   const dobValue = useWatch({ control: form.control, name: 'dateOfBirth' });
   const genderValue = useWatch({ control: form.control, name: 'gender' });
   const maritalValue = useWatch({ control: form.control, name: 'maritalStatus' });
@@ -45,7 +41,7 @@ export function EditMyProfilePanel({
       gender: employee.gender ?? '',
       maritalStatus: employee.maritalStatus ?? '',
       nationality: employee.nationality ?? '',
-      nationalID: employee.nationalID ?? '',
+      nationalId: employee.nationalId ?? '',
       address: employee.address ?? '',
       city: employee.city ?? '',
       region: employee.region ?? '',
@@ -93,10 +89,10 @@ export function EditMyProfilePanel({
           error={form.formState.errors.lastName}
           placeholder="eg; Boateng"
         />
-        <PhoneInput
+        <FormField
           label="Phone"
-          value={phoneValue ?? ''}
-          onChange={(v) => form.setValue('phone', v)}
+          registration={form.register('phone')}
+          placeholder="+233 24 000 0000"
         />
         <DatePicker
           label="Date of Birth"
@@ -132,16 +128,9 @@ export function EditMyProfilePanel({
           placeholder="eg; Ghanaian"
         />
         <FormField
-          label="National ID"
-          registration={form.register('nationalID')}
-          placeholder="GHA-xxxxxxxxx-x"
-        />
-        <FileUpload
-          label="Ghana Card Image"
-          accept="image/*"
-          hint="Picture size should not exceed 5mb"
-          value={nationalIDFile}
-          onChange={setNationalIDFile}
+          label="National ID Number"
+          registration={form.register('nationalId')}
+          placeholder="eg; GHA-000000000-0"
         />
         <FormField
           label="Address"

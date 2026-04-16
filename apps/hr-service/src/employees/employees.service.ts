@@ -73,15 +73,21 @@ export class EmployeesService {
         probationEndsAt: dto.probationEndsAt
           ? new Date(dto.probationEndsAt)
           : undefined,
+        contractEndDate: dto.contractEndDate
+          ? new Date(dto.contractEndDate)
+          : undefined,
         basicSalary: dto.basicSalary ?? 0,
+        nationalId: dto.nationalId,
         bankName: dto.bankName,
         bankAccountNumber: dto.bankAccountNumber,
         bankBranch: dto.bankBranch,
         ssnit: dto.ssnit,
         tinNumber: dto.tinNumber,
         ...(dto.departmentId && { departmentId: dto.departmentId }),
+        ...(dto.branchId && { branchId: dto.branchId }),
+        ...(dto.managerId && { managerId: dto.managerId }),
       },
-      include: { department: true },
+      include: { department: true, branch: true },
     });
 
     // Fire-and-forget — HR returns immediately, auth handles invite async
@@ -156,6 +162,7 @@ export class EmployeesService {
           hireDate: true,
           avatarUrl: true,
           department: { select: { id: true, name: true } },
+          branch: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -170,6 +177,7 @@ export class EmployeesService {
       where: { id, tenantId },
       include: {
         department: true,
+        branch: true,
         allowances: true,
         documents: true,
         leaveBalances: { include: { leaveType: true } },
@@ -200,7 +208,13 @@ export class EmployeesService {
   ) {
     const existing = await this.findById(tenantId, id);
 
-    const { employmentStatus, dateOfBirth, ...rest } = dto;
+    const {
+      employmentStatus,
+      dateOfBirth,
+      probationEndsAt,
+      contractEndDate,
+      ...rest
+    } = dto;
 
     // Track status change
     const statusChanged =
@@ -218,8 +232,14 @@ export class EmployeesService {
             statusChangedByEmail: actor.email,
           }),
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+        probationEndsAt: probationEndsAt
+          ? new Date(probationEndsAt)
+          : undefined,
+        contractEndDate: contractEndDate
+          ? new Date(contractEndDate)
+          : undefined,
       },
-      include: { department: true },
+      include: { department: true, branch: true },
     });
   }
 
@@ -425,28 +445,25 @@ export class EmployeesService {
         );
     }
 
-    // 3. Send termination notification for relevant reasons
-    const notifyReasons: string[] = ['TERMINATION', 'CONTRACT_ENDED'];
-    if (notifyReasons.includes(record.reason)) {
-      void this.rabbitmq
-        .notificationEmployeeTermination({
-          tenantId,
-          employeeId,
-          email: employee.email,
-          firstName: employee.firstName,
-          lastName: employee.lastName,
-          reason: record.reason,
-          lastWorkingDate: record.lastWorkingDate
-            ? record.lastWorkingDate.toISOString()
-            : new Date().toISOString(),
-        })
-        .catch((err) =>
-          this.logger.error(
-            `Failed to emit termination notification for ${employee.email}`,
-            err,
-          ),
-        );
-    }
+    // 3. Notify the employee their employment has ended (all offboard reasons)
+    void this.rabbitmq
+      .notificationEmployeeTermination({
+        tenantId,
+        employeeId,
+        email: employee.email,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        reason: record.reason,
+        lastWorkingDate: record.lastWorkingDate
+          ? record.lastWorkingDate.toISOString()
+          : new Date().toISOString(),
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to emit termination notification for ${employee.email}`,
+          err,
+        ),
+      );
 
     return { message: 'Offboarding completed successfully', employee };
   }

@@ -9,7 +9,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { Employee, Department, CreateEmployeePayload } from '@/types/hr';
+import { Employee, Department, Branch, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 
@@ -22,11 +22,13 @@ interface InviteForm {
   phone?: string;
   jobTitle: string;
   departmentId?: string;
+  branchId?: string;
   managerId?: string;
   employmentType: string;
   hireDate: string;
   dateOfBirth?: string;
   probationEndsAt?: string;
+  contractEndDate?: string;
 }
 
 interface InviteEmployeePanelProps {
@@ -34,6 +36,7 @@ interface InviteEmployeePanelProps {
   onClose: () => void;
   onSuccess: (fullName: string) => void;
   departments: Department[];
+  branches: Branch[];
   employees: Employee[];
 }
 
@@ -44,6 +47,7 @@ export function InviteEmployeePanel({
   onClose,
   onSuccess,
   departments,
+  branches,
   employees,
 }: InviteEmployeePanelProps) {
   const toast = useToast();
@@ -63,8 +67,9 @@ export function InviteEmployeePanel({
   const hireDateValue = useWatch({ control, name: 'hireDate' });
   const dobValue = useWatch({ control, name: 'dateOfBirth' });
   const probationDateValue = useWatch({ control, name: 'probationEndsAt' });
-  const contractDateValue = useWatch({ control, name: 'probationEndsAt' });
+  const contractDateValue = useWatch({ control, name: 'contractEndDate' });
   const deptFormValue = useWatch({ control, name: 'departmentId' });
+  const branchFormValue = useWatch({ control, name: 'branchId' });
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
 
@@ -165,6 +170,15 @@ export function InviteEmployeePanel({
           onChange={(v) => setValue('departmentId', v)}
           options={departments.map((d) => ({ value: d.id, label: d.name }))}
         />
+        {branches.length > 0 && (
+          <SearchSelect
+            label="Branch"
+            placeholder="Select branch (optional)"
+            value={branchFormValue}
+            onChange={(v) => setValue('branchId', v)}
+            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+          />
+        )}
         <FormField
           label="Job Title"
           registration={register('jobTitle', { required: 'Required' })}
@@ -173,7 +187,7 @@ export function InviteEmployeePanel({
         />
         <SearchSelect
           label="Reporting Manager"
-          placeholder="Select manager"
+          placeholder="Select manager (optional)"
           value={managerValue}
           onChange={(v) => setValue('managerId', v)}
           options={employees.map((e) => ({
@@ -189,12 +203,6 @@ export function InviteEmployeePanel({
           error={errors.hireDate?.message}
           disableFuture
         />
-
-        <MonthPicker
-          label="Probation End Date"
-          value={probationDateValue}
-          onChange={(v) => setValue('probationEndsAt', v)}
-        />
         <SearchSelect
           label="Employment Type"
           placeholder="Select employment type"
@@ -207,15 +215,18 @@ export function InviteEmployeePanel({
             { value: 'INTERN', label: 'Intern' },
           ]}
         />
-
+        {employmentTypeValue !== 'CONTRACT' && (
+          <MonthPicker
+            label="Probation End Date"
+            value={probationDateValue}
+            onChange={(v) => setValue('probationEndsAt', v)}
+          />
+        )}
         {employmentTypeValue === 'CONTRACT' && (
           <MonthPicker
             label="Contract End Date"
             value={contractDateValue}
-            onChange={(v) => setValue('probationEndsAt', v)}
-            // Optional: make it required when contract is selected
-            // error={errors.probationEndsAt?.message}
-            // disablePast
+            onChange={(v) => setValue('contractEndDate', v)}
           />
         )}
       </div>
