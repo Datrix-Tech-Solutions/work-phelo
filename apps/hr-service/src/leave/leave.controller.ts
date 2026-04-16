@@ -125,19 +125,19 @@ export class LeaveController {
     return this.leaveService.getLeaveTypes(req.user.tenantId);
   }
 
+  @Get('balances/me')
+  @ApiOperation({ summary: 'Get leave balances for the logged-in employee' })
+  @ApiResponse({ status: 200, description: 'My leave balances retrieved' })
+  getMyBalances(@Req() req: any) {
+    return this.leaveService.getMyLeaveBalances(req.user.tenantId, req.user.id);
+  }
+
   @Get('balances/:employeeId')
   @ApiOperation({ summary: 'Get leave balances for a specific employee' })
   @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Leave balances retrieved' })
   getBalances(@Param('employeeId') employeeId: string, @Req() req: any) {
     return this.leaveService.getLeaveBalances(req.user.tenantId, employeeId);
-  }
-
-  @Get('balances/me')
-  @ApiOperation({ summary: 'Get leave balances for the logged-in employee' })
-  @ApiResponse({ status: 200, description: 'My leave balances retrieved' })
-  getMyBalances(@Req() req: any) {
-    return this.leaveService.getMyLeaveBalances(req.user.tenantId, req.user.id);
   }
 
   @Post('balances/backfill')
