@@ -316,8 +316,7 @@ export class LeaveService {
     if (end < start)
       throw new BadRequestException('End date must be after start date');
 
-    const totalDays =
-      Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const totalDays = await this.countWorkingDays(tenantId, start, end);
 
     const year = start.getFullYear();
     const balance = await this.prisma.leaveBalance.findUnique({
