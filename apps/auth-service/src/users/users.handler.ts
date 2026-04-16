@@ -2,6 +2,12 @@ import { Controller, Logger } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  WithMeta,
+  InviteEmployeeEvent,
+  EmployeeOffboardedEvent,
+  ResendEmployeeInviteEvent,
+} from '@work-phelo/types';
 
 @Controller()
 export class UsersHandler {
@@ -13,101 +19,87 @@ export class UsersHandler {
   ) {}
 
   @EventPattern('auth.invite_employee')
-  async handleInviteEmployee(
-    @Payload()
-    data: {
-      tenantId: string;
-      employeeId: string;
-      email: string;
-      firstName: string;
-      lastName: string;
-    },
-  ) {
-    this.logger.log(`Handling employee invite for ${data.email}`);
+  async handleInviteEmployee(@Payload() data: WithMeta<InviteEmployeeEvent>) {
+    const { tenantId, email, firstName, lastName, _meta } = data;
+    this.logger.log(
+      `[auth.invite_employee] Received | email=${email} | corrId=${_meta?.correlationId}`,
+    );
     try {
-      await this.usersService.invite(data.tenantId, {
-        email: data.email,
-        firstName: data.firstName,
-        lastName: data.lastName,
+      await this.usersService.invite(tenantId, {
+        email,
+        firstName,
+        lastName,
         role: 'EMPLOYEE' as any,
       });
-      this.logger.log(`Invite sent to ${data.email}`);
+      this.logger.log(
+        `[auth.invite_employee] Invite sent | email=${email} | corrId=${_meta?.correlationId}`,
+      );
     } catch (e: any) {
       this.logger.warn(
-        `Employee invite skipped for ${data.email}: ${e.message}`,
+        `[auth.invite_employee] Skipped | email=${email} | corrId=${_meta?.correlationId} | reason=${e.message}`,
       );
     }
   }
 
   @EventPattern('hr.employee_offboarded')
   async handleEmployeeOffboarded(
-    @Payload()
-    data: {
-      tenantId: string;
-      userId: string;
-      email: string;
-      reason: string;
-    },
+    @Payload() data: WithMeta<EmployeeOffboardedEvent>,
   ) {
+    const { userId, email, _meta } = data;
     this.logger.log(
-      `Deactivating user account for offboarded employee ${data.email}`,
+      `[hr.employee_offboarded] Received | email=${email} | corrId=${_meta?.correlationId}`,
     );
     try {
       await this.prisma.user.update({
-        where: { id: data.userId },
+        where: { id: userId },
         data: { status: 'INACTIVE' },
       });
-      // Revoke all active refresh tokens
       await this.prisma.refreshToken.updateMany({
-        where: { userId: data.userId, isRevoked: false },
+        where: { userId, isRevoked: false },
         data: { isRevoked: true },
       });
       this.logger.log(
-        `Account deactivated and tokens revoked for ${data.email}`,
+        `[hr.employee_offboarded] Account deactivated and tokens revoked | email=${email} | corrId=${_meta?.correlationId}`,
       );
     } catch (e: any) {
       this.logger.warn(
-        `Failed to deactivate account for ${data.email}: ${e.message}`,
+        `[hr.employee_offboarded] Failed | email=${email} | corrId=${_meta?.correlationId} | error=${e.message}`,
       );
     }
   }
 
   @EventPattern('auth.resend_employee_invite')
   async handleResendEmployeeInvite(
-    @Payload()
-    data: {
-      tenantId: string;
-      employeeId: string;
-      email: string;
-      firstName: string;
-      lastName?: string;
-    },
+    @Payload() data: WithMeta<ResendEmployeeInviteEvent>,
   ) {
-    this.logger.log(`Resending employee invite for ${data.email}`);
+    const { tenantId, email, firstName, lastName, _meta } = data;
+    this.logger.log(
+      `[auth.resend_employee_invite] Received | email=${email} | corrId=${_meta?.correlationId}`,
+    );
     try {
-      const user = await this.usersService.findByEmail(
-        data.tenantId,
-        data.email,
-      );
+      const user = await this.usersService.findByEmail(tenantId, email);
       if (!user) {
-        // User was never created (original invite was lost) — create fresh
         this.logger.warn(
-          `No user found for ${data.email} — sending fresh invite`,
+          `[auth.resend_employee_invite] No user found — sending fresh invite | email=${email} | corrId=${_meta?.correlationId}`,
         );
-        await this.usersService.invite(data.tenantId, {
-          email: data.email,
-          firstName: data.firstName,
-          lastName: data.lastName ?? '',
+        await this.usersService.invite(tenantId, {
+          email,
+          firstName,
+          lastName: lastName ?? '',
           role: 'EMPLOYEE' as any,
         });
-        this.logger.log(`Fresh invite sent to ${data.email}`);
+        this.logger.log(
+          `[auth.resend_employee_invite] Fresh invite sent | email=${email} | corrId=${_meta?.correlationId}`,
+        );
         return;
       }
-      await this.usersService.resendInvite(data.tenantId, user.id);
-      this.logger.log(`Invite resent to ${data.email}`);
+      await this.usersService.resendInvite(tenantId, user.id);
+      this.logger.log(
+        `[auth.resend_employee_invite] Invite resent | email=${email} | corrId=${_meta?.correlationId}`,
+      );
     } catch (e: any) {
       this.logger.warn(
-        `Failed to resend invite for ${data.email}: ${e.message}`,
+        `[auth.resend_employee_invite] Failed | email=${email} | corrId=${_meta?.correlationId} | error=${e.message}`,
       );
     }
   }

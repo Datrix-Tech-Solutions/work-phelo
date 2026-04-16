@@ -365,12 +365,13 @@ export class AuthService {
       },
     });
 
-    void this.rabbitmq.sendEmailVerification({
+    void this.rabbitmq.notificationEmailVerification({
       userId: user.id,
       tenantId: user.tenantId,
       email: user.email,
       firstName: user.firstName,
       otp: code,
+      tenantName: tenant.name,
     });
 
     return {
@@ -481,7 +482,7 @@ export class AuthService {
 
     if (dto.method === 'sms' && user.phone) {
       void this.rabbitmq
-        .emit('notification.password_reset_otp', {
+        .notificationPasswordResetOtp({
           phone: user.phone,
           otp: code,
           firstName: user.firstName,
@@ -495,7 +496,7 @@ export class AuthService {
     } else {
       const resetLink = WorkspaceUrl.resetPassword(tenant.slug, code);
       void this.rabbitmq
-        .emit('notification.password_reset_link', {
+        .notificationPasswordResetLink({
           email: user.email,
           firstName: user.firstName,
           resetLink,
@@ -747,7 +748,7 @@ export class AuthService {
       },
     });
 
-    void this.rabbitmq.sendSmsOtp({
+    void this.rabbitmq.notificationSmsOtp({
       userId: user.id,
       tenantId: user.tenantId,
       phone: user.phone,

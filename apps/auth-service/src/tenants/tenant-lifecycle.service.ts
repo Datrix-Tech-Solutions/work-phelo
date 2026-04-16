@@ -78,7 +78,7 @@ export class TenantLifecycleService {
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
     void this.rabbitmq
-      .emit('notification.invite_user', {
+      .notificationInviteUser({
         email: user.email,
         firstName: user.firstName,
         tenantName: tenant.name,
@@ -192,7 +192,7 @@ export class TenantLifecycleService {
     });
 
     void this.rabbitmq
-      .emitToHr('hr.tenant_approved', { tenantId: id })
+      .hrTenantApproved({ tenantId: id })
       .catch((err) =>
         this.logger.error(`Failed to emit hr.tenant_approved for ${id}`, err),
       );

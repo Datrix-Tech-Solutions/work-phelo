@@ -70,7 +70,7 @@ export class TenantAdminService {
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
     void this.rabbitmq
-      .emit('notification.invite_user', {
+      .notificationInviteUser({
         email: user.email,
         firstName: user.firstName,
         tenantName: tenant.name,
@@ -103,7 +103,7 @@ export class TenantAdminService {
     });
 
     void this.rabbitmq
-      .sendInviteEmail({
+      .notificationInviteUser({
         userId: admin.id,
         tenantId,
         email: admin.email,

@@ -2,6 +2,11 @@ import { Controller, Logger } from '@nestjs/common';
 import { EventPattern, Payload } from '@nestjs/microservices';
 import { LeaveService } from '../leave/leave.service';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  WithMeta,
+  TenantApprovedEvent,
+  EmployeeActivatedEvent,
+} from '@work-phelo/types';
 
 @Controller()
 export class EventsHandler {
@@ -13,51 +18,57 @@ export class EventsHandler {
   ) {}
 
   @EventPattern('hr.tenant_approved')
-  async handleTenantApproved(@Payload() data: { tenantId: string }) {
-    this.logger.log(`Seeding default data for tenant ${data.tenantId}`);
+  async handleTenantApproved(@Payload() data: WithMeta<TenantApprovedEvent>) {
+    const { tenantId, _meta } = data;
+    this.logger.log(
+      `[hr.tenant_approved] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
+    );
     try {
-      await this.leaveService.seedDefaultLeaveTypes(data.tenantId);
-      this.logger.log(`Default leave types seeded for tenant ${data.tenantId}`);
+      await this.leaveService.seedDefaultLeaveTypes(tenantId);
+      this.logger.log(
+        `[hr.tenant_approved] Default leave types seeded | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
+      );
     } catch (e: any) {
       this.logger.warn(
-        `Failed to seed leave types for ${data.tenantId}: ${e.message}`,
+        `[hr.tenant_approved] Failed to seed leave types | tenantId=${tenantId} | corrId=${_meta?.correlationId} | error=${e.message}`,
       );
     }
   }
 
   @EventPattern('hr.employee_activated')
   async handleEmployeeActivated(
-    @Payload() data: { tenantId: string; email: string; userId: string },
+    @Payload() data: WithMeta<EmployeeActivatedEvent>,
   ) {
-    this.logger.log(`Linking userId to employee ${data.email}`);
+    const { tenantId, email, userId, _meta } = data;
+    this.logger.log(
+      `[hr.employee_activated] Received | email=${email} | corrId=${_meta?.correlationId}`,
+    );
     try {
       const employee = await this.prisma.employee.findFirst({
-        where: { tenantId: data.tenantId, email: data.email },
+        where: { tenantId, email },
       });
       if (!employee) {
         this.logger.warn(
-          `No employee found for ${data.email} — skipping activation`,
+          `[hr.employee_activated] No employee record found | email=${email} | corrId=${_meta?.correlationId} — skipping balance init`,
         );
         return;
       }
 
       await this.prisma.employee.update({
         where: { id: employee.id },
-        data: { userId: data.userId },
+        data: { userId },
       });
-      this.logger.log(`userId linked for employee ${data.email}`);
-
-      // Ensure balances exist now that the employee is fully active.
-      // initializeLeaveBalances uses upsert so this is safe even if balances
-      // were already created at hire time.
-      await this.leaveService.initializeLeaveBalances(
-        data.tenantId,
-        employee.id,
+      this.logger.log(
+        `[hr.employee_activated] userId linked | email=${email} | corrId=${_meta?.correlationId}`,
       );
-      this.logger.log(`Leave balances confirmed for ${data.email}`);
+
+      await this.leaveService.initializeLeaveBalances(tenantId, employee.id);
+      this.logger.log(
+        `[hr.employee_activated] Leave balances initialised | email=${email} | corrId=${_meta?.correlationId}`,
+      );
     } catch (e: any) {
       this.logger.warn(
-        `Failed to activate employee ${data.email}: ${e.message}`,
+        `[hr.employee_activated] Failed | email=${email} | corrId=${_meta?.correlationId} | error=${e.message}`,
       );
     }
   }
