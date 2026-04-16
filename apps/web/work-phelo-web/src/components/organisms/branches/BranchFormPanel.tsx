@@ -11,6 +11,7 @@ import { extractError } from '@/lib/extractError';
 import { useCreateBranch, useUpdateBranch } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import type { Branch, Employee } from '@/types/hr';
+import { PhoneInput } from '@/components/atoms/PhoneInput';
 
 interface BranchForm {
   name: string;
@@ -28,6 +29,7 @@ interface BranchForm {
 interface BranchFormPanelProps {
   isOpen: boolean;
   onClose: () => void;
+
   /** Pass a Branch to edit, omit for create mode */
   branch?: Branch | null;
   employees: Employee[];
@@ -35,6 +37,7 @@ interface BranchFormPanelProps {
 
 export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFormPanelProps) {
   const isEditMode = !!branch;
+
   const toast = useToast();
   const [successBranch, setSuccessBranch] = useState<string | null>(null);
 
@@ -213,24 +216,28 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
         </div>
 
         {/* Contact */}
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Contact</p>
-          <div className="flex flex-col gap-3 p-3 bg-gray-50 rounded-input border border-gray-100">
-            <div className="grid grid-cols-2 gap-3">
-              <FormField
-                label="Phone"
-                registration={form.register('phone')}
-                placeholder="e.g. +233 30 000 0000"
-              />
-              <FormField
-                label="Email"
-                registration={form.register('email')}
-                type="email"
-                placeholder="e.g. accra@company.com"
-              />
-            </div>
-          </div>
-        </div>
+        <Controller
+          control={form.control}
+          name="phone"
+          render={({ field, fieldState }) => (
+            <PhoneInput
+              label="Phone"
+              value={field.value}
+              onChange={field.onChange}
+              error={fieldState.error?.message}
+              placeholder="30 000 0000"
+            />
+          )}
+        />
+        <FormField
+          label="Email"
+          registration={form.register('email', {
+            pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email address' },
+          })}
+          error={form.formState.errors.email}
+          placeholder="e.g. accra@company.com"
+          type="email"
+        />
 
         {/* Manager — controlled via Controller since SearchSelect isn't a native input */}
         <Controller

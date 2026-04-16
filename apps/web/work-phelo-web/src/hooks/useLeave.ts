@@ -215,8 +215,7 @@ export function useCancelLeaveRequest() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await api.patch<RawLeaveRequest>(`/hr/leave/requests/${id}/cancel`);
-      return transformRequest(res.data);
+      await api.patch(`/hr/leave/requests/${id}/cancel`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });

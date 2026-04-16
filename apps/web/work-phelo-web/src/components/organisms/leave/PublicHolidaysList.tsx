@@ -31,16 +31,16 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
     queryFn: () => api.get('/hr/leave/public-holidays', { params: { page } }).then((r) => r.data),
   });
 
-  const holidays: PublicHoliday[] = Array.isArray(data)
-    ? data
-    : (data?.data ?? data?.holidays ?? []);
   const totalPages: number = data?.totalPages ?? 1;
 
   const filteredHolidays = useMemo(() => {
+    const holidays: PublicHoliday[] = Array.isArray(data)
+      ? data
+      : (data?.data ?? data?.holidays ?? []);
     if (!search) return holidays;
     const q = search.toLowerCase();
     return holidays.filter((h) => h.name.toLowerCase().includes(q));
-  }, [holidays, search]);
+  }, [data, search]);
 
   const { mutate: deleteHoliday, isPending: isDeleting } = useDeletePublicHoliday();
 
@@ -76,6 +76,10 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        onRowClick={(row) => {
+          setEditHoliday(row);
+          setPanelOpen(true);
+        }}
         rowActions={(row) => [
           {
             label: 'Edit',

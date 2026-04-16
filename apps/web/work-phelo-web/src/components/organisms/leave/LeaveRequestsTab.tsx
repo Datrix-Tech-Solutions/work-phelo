@@ -163,6 +163,19 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
                 setReqPage(1);
               }}
             />
+            {/* <SearchSelect
+              placeholder="All Statuses"
+              options={[
+                { value: '', label: 'All statuses' },
+                ...status.map((d) => ({ value: d.id, label: d.name })),
+              ]}
+              value={filterStatus}
+              onChange={(v) => {
+                filterStatus(v);
+                setReqPage(1);
+              }}
+            /> */}
+
             {/* <DatePicker
               placeholder="Date Leave Submitted"
               value={filterFrom}
@@ -182,6 +195,7 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
           currentPage={reqPage}
           totalPages={reqTotalPages}
           onPageChange={setReqPage}
+          onRowClick={(row) => setSelectedRequest(row)}
           rowActions={(row) =>
             row.status === 'Pending'
               ? [{ label: 'Review', onClick: () => setSelectedRequest(row) }]

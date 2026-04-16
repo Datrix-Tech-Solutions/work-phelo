@@ -59,6 +59,7 @@ export function EditEmployeePanel({
       maritalStatus: employee.maritalStatus ?? '',
       nationality: employee.nationality ?? '',
       address: employee.address ?? '',
+      // nationalID: employee.nationalID ?? '',
       city: employee.city ?? '',
       region: employee.region ?? '',
       emergencyName: employee.emergencyName ?? '',
@@ -148,6 +149,16 @@ export function EditEmployeePanel({
           registration={editForm.register('nationality')}
           placeholder="eg; Ghanaian"
         />
+        {/* <FormField
+          label="National ID"
+          registration={editForm.register('nationalID')}
+          placeholder="GHA-xxxxxxxxx-x"
+        /> */}
+        {/* <FileUpload
+          onChange={function (file: File | null): void {
+            throw new Error('Function not implemented.');
+          }}
+        /> */}
         <FormField
           label="Address"
           registration={editForm.register('address')}
