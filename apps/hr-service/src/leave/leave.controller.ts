@@ -137,7 +137,18 @@ export class LeaveController {
   @ApiOperation({ summary: 'Get leave balances for the logged-in employee' })
   @ApiResponse({ status: 200, description: 'My leave balances retrieved' })
   getMyBalances(@Req() req: any) {
-    return this.leaveService.getLeaveBalances(req.user.tenantId, req.user.id);
+    return this.leaveService.getMyLeaveBalances(req.user.tenantId, req.user.id);
+  }
+
+  @Post('balances/backfill')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Backfill leave balances for all employees in the tenant — Admin only',
+  })
+  @ApiResponse({ status: 200, description: 'Backfill complete' })
+  backfillBalances(@Req() req: any) {
+    return this.leaveService.backfillLeaveBalances(req.user.tenantId);
   }
 
   @Post('balances/:employeeId/initialize')
@@ -203,9 +214,13 @@ export class LeaveController {
   @Get('requests/my')
   @ApiOperation({ summary: "Get the logged-in employee's own leave requests" })
   @ApiResponse({ status: 200, description: 'My leave requests retrieved' })
-  getMyRequests(@Req() req: any) {
+  async getMyRequests(@Req() req: any) {
+    const employee = await this.leaveService.getEmployeeByUserId(
+      req.user.tenantId,
+      req.user.id,
+    );
     return this.leaveService.getRequests(req.user.tenantId, {
-      employeeId: req.user.id,
+      employeeId: employee?.id,
     });
   }
 

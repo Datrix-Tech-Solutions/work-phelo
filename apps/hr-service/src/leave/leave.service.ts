@@ -203,9 +203,19 @@ export class LeaveService {
   // ── Leave Balances ────────────────────────────────────────────────────────
   async initializeLeaveBalances(tenantId: string, employeeId: string) {
     const year = new Date().getFullYear();
-    const leaveTypes = await this.prisma.leaveType.findMany({
+    let leaveTypes = await this.prisma.leaveType.findMany({
       where: { tenantId, isActive: true },
     });
+
+    // If the tenant has no leave types yet (tenant pre-dates the approval event,
+    // or the event was missed), seed defaults now so the employee always gets
+    // balances regardless of event delivery.
+    if (leaveTypes.length === 0) {
+      await this.seedDefaultLeaveTypes(tenantId);
+      leaveTypes = await this.prisma.leaveType.findMany({
+        where: { tenantId, isActive: true },
+      });
+    }
 
     for (const lt of leaveTypes) {
       await this.prisma.leaveBalance.upsert({
@@ -233,6 +243,30 @@ export class LeaveService {
       where: { tenantId, employeeId, year },
       include: { leaveType: true },
     });
+  }
+
+  async getEmployeeByUserId(tenantId: string, userId: string) {
+    return this.prisma.employee.findFirst({ where: { userId, tenantId } });
+  }
+
+  async getMyLeaveBalances(tenantId: string, userId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId, tenantId },
+    });
+    if (!employee) return [];
+    return this.getLeaveBalances(tenantId, employee.id);
+  }
+
+  async backfillLeaveBalances(tenantId: string) {
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId },
+    });
+    for (const emp of employees) {
+      await this.initializeLeaveBalances(tenantId, emp.id);
+    }
+    return {
+      message: `Leave balances backfilled for ${employees.length} employees`,
+    };
   }
 
   // ── Leave Requests ────────────────────────────────────────────────────────
