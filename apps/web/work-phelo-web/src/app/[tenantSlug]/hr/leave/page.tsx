@@ -10,7 +10,8 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const { tenantSlug } = use(params);
   const user = useAuthStore((s) => s.user);
   const isManager = user?.role === 'TENANT_ADMIN' || user?.isManager === true;
-  const [activeTab, setActiveTab] = useState('my');
+  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
+  const [activeTab, setActiveTab] = useState(isEmployee ? 'my' : 'requests');
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
@@ -19,9 +20,14 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
         <p className="text-sm text-gray-400 mt-0.5">Manage your leave requests and balances</p>
       </div>
 
-      <LeaveTabs activeTab={activeTab} isManager={isManager} onTabChange={setActiveTab} />
+      <LeaveTabs
+        activeTab={activeTab}
+        isManager={isManager}
+        isEmployee={isEmployee}
+        onTabChange={setActiveTab}
+      />
 
-      {activeTab === 'my' && <MyLeaveTab tenantSlug={tenantSlug} />}
+      {activeTab === 'my' && isEmployee && <MyLeaveTab tenantSlug={tenantSlug} />}
       {activeTab === 'requests' && isManager && <LeaveRequestsTab tenantSlug={tenantSlug} />}
     </div>
   );

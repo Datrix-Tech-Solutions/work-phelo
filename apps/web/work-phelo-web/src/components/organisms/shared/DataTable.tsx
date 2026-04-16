@@ -28,6 +28,7 @@ interface DataTableProps<T extends { id: string | number }> {
   emptyMessage?: string;
   emptyImage?: React.ReactNode;
   searchPlaceholder?: string;
+  searchValue?: string;
   onSearch?: (q: string) => void;
   filterOptions?: { value: string; label: string }[];
   onFilter?: (value: string) => void;
@@ -101,6 +102,7 @@ export function DataTable<T extends { id: string | number }>({
   emptyMessage = 'No items found',
   emptyImage,
   searchPlaceholder = 'Search...',
+  searchValue,
   onSearch,
   filterOptions,
   onFilter,
@@ -122,6 +124,7 @@ export function DataTable<T extends { id: string | number }>({
             <input
               type="text"
               placeholder={searchPlaceholder}
+              value={searchValue ?? undefined}
               onChange={(e) => onSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
             />
