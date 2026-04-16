@@ -8,6 +8,8 @@ import {
   EmployeeOffboardedEvent,
   ResendEmployeeInviteEvent,
   EmployeeTerminationEvent,
+  LeaveRequestedEvent,
+  LeaveReviewedEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -102,6 +104,30 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_EMPLOYEE_TERMINATION,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationLeaveRequested(
+    data: LeaveRequestedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_LEAVE_REQUESTED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationLeaveReviewed(
+    data: LeaveReviewedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_LEAVE_REVIEWED,
       data,
       correlationId,
     );

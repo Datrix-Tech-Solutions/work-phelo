@@ -180,6 +180,10 @@ export class EmailService {
     const reasonLabels: Record<string, string> = {
       TERMINATION: 'Termination',
       CONTRACT_ENDED: 'End of Contract',
+      RESIGNATION: 'Resignation',
+      RETIREMENT: 'Retirement',
+      REDUNDANCY: 'Redundancy',
+      OTHER: 'Other',
     };
     const reasonLabel = reasonLabels[reason] ?? reason;
     const formattedDate = new Date(lastWorkingDate).toLocaleDateString(
@@ -220,6 +224,137 @@ export class EmailService {
           <p style="color: #6b7280; font-size: 13px; margin-top: 32px;">
             If you have any questions, please contact your HR department directly.
           </p>
+        </div>
+      </div>
+      `,
+    );
+  }
+
+  async sendLeaveRequestedNotification(
+    to: string,
+    employeeFirstName: string,
+    employeeLastName: string,
+    leaveTypeName: string,
+    startDate: string,
+    endDate: string,
+    totalDays: number,
+    reason?: string,
+  ): Promise<boolean> {
+    const fmt = (d: string) =>
+      new Date(d).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+    return this.send(
+      to,
+      `Leave request from ${employeeFirstName} ${employeeLastName}`,
+      `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
+        <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
+          <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
+          <h2 style="color: #111827; margin: 0 0 24px 0;">Leave Request</h2>
+          <p style="color: #374151;">
+            <strong>${employeeFirstName} ${employeeLastName}</strong> has submitted a leave request for your review.
+          </p>
+          <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px; border-radius: 4px 0 0 0;">Leave Type</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827; font-weight: 600;">${leaveTypeName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">From</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(startDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">To</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(endDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px; border-radius: 0 0 0 4px;">Duration</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${totalDays} working day${totalDays !== 1 ? 's' : ''}</td>
+            </tr>
+            ${
+              reason
+                ? `<tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">Reason</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #374151;">${reason}</td>
+            </tr>`
+                : ''
+            }
+          </table>
+          <p style="color: #374151;">Please log in to WorkPhelo to approve or reject this request.</p>
+          <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">© 2026 WorkPhelo. All rights reserved.</p>
+        </div>
+      </div>
+      `,
+    );
+  }
+
+  async sendLeaveReviewedNotification(
+    to: string,
+    firstName: string,
+    status: 'APPROVED' | 'REJECTED',
+    leaveTypeName: string,
+    startDate: string,
+    endDate: string,
+    totalDays: number,
+    note?: string,
+  ): Promise<boolean> {
+    const fmt = (d: string) =>
+      new Date(d).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+    const isApproved = status === 'APPROVED';
+    const accentColor = isApproved ? '#16a34a' : '#dc2626';
+    const bgColor = isApproved ? '#f0fdf4' : '#fef2f2';
+    const borderColor = isApproved ? '#86efac' : '#fca5a5';
+
+    return this.send(
+      to,
+      `Your ${leaveTypeName} request has been ${status.toLowerCase()}`,
+      `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
+        <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
+          <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
+          <h2 style="color: #111827; margin: 0 0 24px 0;">Leave Request Update</h2>
+          <p style="color: #374151;">Hi ${firstName},</p>
+          <div style="background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 6px; padding: 16px; margin: 20px 0;">
+            <p style="color: ${accentColor}; margin: 0; font-weight: 600; font-size: 16px;">
+              Your leave request has been <strong>${isApproved ? 'Approved' : 'Rejected'}</strong>.
+            </p>
+          </div>
+          <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">Leave Type</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827; font-weight: 600;">${leaveTypeName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">From</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(startDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">To</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(endDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">Duration</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${totalDays} working day${totalDays !== 1 ? 's' : ''}</td>
+            </tr>
+            ${
+              note
+                ? `<tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">Note</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #374151;">${note}</td>
+            </tr>`
+                : ''
+            }
+          </table>
+          <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">© 2026 WorkPhelo. All rights reserved.</p>
         </div>
       </div>
       `,

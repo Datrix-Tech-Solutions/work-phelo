@@ -445,28 +445,25 @@ export class EmployeesService {
         );
     }
 
-    // 3. Send termination notification for relevant reasons
-    const notifyReasons: string[] = ['TERMINATION', 'CONTRACT_ENDED'];
-    if (notifyReasons.includes(record.reason)) {
-      void this.rabbitmq
-        .notificationEmployeeTermination({
-          tenantId,
-          employeeId,
-          email: employee.email,
-          firstName: employee.firstName,
-          lastName: employee.lastName,
-          reason: record.reason,
-          lastWorkingDate: record.lastWorkingDate
-            ? record.lastWorkingDate.toISOString()
-            : new Date().toISOString(),
-        })
-        .catch((err) =>
-          this.logger.error(
-            `Failed to emit termination notification for ${employee.email}`,
-            err,
-          ),
-        );
-    }
+    // 3. Notify the employee their employment has ended (all offboard reasons)
+    void this.rabbitmq
+      .notificationEmployeeTermination({
+        tenantId,
+        employeeId,
+        email: employee.email,
+        firstName: employee.firstName,
+        lastName: employee.lastName,
+        reason: record.reason,
+        lastWorkingDate: record.lastWorkingDate
+          ? record.lastWorkingDate.toISOString()
+          : new Date().toISOString(),
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to emit termination notification for ${employee.email}`,
+          err,
+        ),
+      );
 
     return { message: 'Offboarding completed successfully', employee };
   }

@@ -192,6 +192,94 @@ export class NotificationService {
     });
   }
 
+  async sendLeaveRequestedNotification(data: {
+    tenantId: string;
+    employeeId: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    managerEmail: string;
+    leaveTypeName: string;
+    startDate: string;
+    endDate: string;
+    totalDays: number;
+    reason?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.managerEmail,
+        NotificationType.LEAVE_REQUESTED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate LEAVE_REQUESTED suppressed for ${data.managerEmail}`,
+      );
+      return;
+    }
+    const success = await this.email.sendLeaveRequestedNotification(
+      data.managerEmail,
+      data.employeeFirstName,
+      data.employeeLastName,
+      data.leaveTypeName,
+      data.startDate,
+      data.endDate,
+      data.totalDays,
+      data.reason,
+    );
+    await this.log({
+      userId: data.employeeId,
+      tenantId: data.tenantId,
+      type: 'LEAVE_REQUESTED',
+      channel: 'EMAIL',
+      recipient: data.managerEmail,
+      subject: `Leave request from ${data.employeeFirstName} ${data.employeeLastName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendLeaveReviewedNotification(data: {
+    tenantId: string;
+    employeeId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    status: 'APPROVED' | 'REJECTED';
+    leaveTypeName: string;
+    startDate: string;
+    endDate: string;
+    totalDays: number;
+    note?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.LEAVE_REVIEWED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate LEAVE_REVIEWED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+    const success = await this.email.sendLeaveReviewedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.status,
+      data.leaveTypeName,
+      data.startDate,
+      data.endDate,
+      data.totalDays,
+      data.note,
+    );
+    await this.log({
+      userId: data.employeeId,
+      tenantId: data.tenantId,
+      type: 'LEAVE_REVIEWED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your ${data.leaveTypeName} request has been ${data.status.toLowerCase()}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendSmsOtp(data: {
     userId?: string;
     tenantId?: string;

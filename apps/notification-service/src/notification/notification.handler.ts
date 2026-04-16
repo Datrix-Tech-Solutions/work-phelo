@@ -9,6 +9,8 @@ import {
   PasswordResetOtpEvent,
   SmsOtpEvent,
   EmployeeTerminationEvent,
+  LeaveRequestedEvent,
+  LeaveReviewedEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -71,5 +73,25 @@ export class NotificationHandler {
       `[notification.sms_otp] Received | phone=${data.phone} | corrId=${data._meta?.correlationId}`,
     );
     await this.notificationService.sendSmsOtp(data);
+  }
+
+  @EventPattern('notify.leave_requested')
+  async handleLeaveRequested(@Payload() data: WithMeta<LeaveRequestedEvent>) {
+    this.logger.log(
+      `[notify.leave_requested] Received | employee=${data.employeeFirstName} ${data.employeeLastName} | managerEmail=${data.managerEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    if (!data.managerEmail) return;
+    await this.notificationService.sendLeaveRequestedNotification({
+      ...data,
+      managerEmail: data.managerEmail,
+    });
+  }
+
+  @EventPattern('notify.leave_reviewed')
+  async handleLeaveReviewed(@Payload() data: WithMeta<LeaveReviewedEvent>) {
+    this.logger.log(
+      `[notify.leave_reviewed] Received | email=${data.employeeEmail} | status=${data.status} | corrId=${data._meta?.correlationId}`,
+    );
+    await this.notificationService.sendLeaveReviewedNotification(data);
   }
 }
