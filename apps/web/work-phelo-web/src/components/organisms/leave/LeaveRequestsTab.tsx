@@ -5,7 +5,6 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { DatePicker } from '@/components/atoms/DatePicker';
 import { LeaveRequestDetailPanel } from '@/components/organisms/leave/LeaveRequestDetailPanel';
 import { useEmployees } from '@/hooks/hr/useEmployees';
 import { useLeaveTypes, useLeaveRequests } from '@/hooks/useLeave';
@@ -30,7 +29,7 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   const [search, setSearch] = useState('');
   const [filterLeaveType, setFilterLeaveType] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
-  const [filterFrom, setFilterFrom] = useState('');
+  const [filterFrom] = useState('');
   const [reqPage, setReqPage] = useState(1);
 
   const { data: leaveTypesRaw } = useLeaveTypes(tenantSlug);
@@ -48,12 +47,24 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
 
   const { data: reqList = [], isLoading: reqLoading } = useLeaveRequests();
 
-  const reqTotalPages = 1;
   const totalRequests = reqList.length || null;
   const pendingCount = useMemo(
     () => reqList.filter((r) => r.status === 'Pending').length || null,
     [reqList],
   );
+
+  const filteredRequests = useMemo(() => {
+    return reqList.filter((r) => {
+      if (search && !r.employeeName.toLowerCase().includes(search.toLowerCase())) return false;
+      if (filterLeaveType && r.leaveTypeId !== filterLeaveType) return false;
+      if (filterFrom && r.createdAt.slice(0, 10) < filterFrom) return false;
+      return true;
+    });
+  }, [reqList, search, filterLeaveType, filterFrom]);
+
+  const PAGE_SIZE = 10;
+  const reqTotalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
+  const pagedRequests = filteredRequests.slice((reqPage - 1) * PAGE_SIZE, reqPage * PAGE_SIZE);
 
   const columns: Column<LeaveRequest>[] = [
     {
@@ -152,20 +163,20 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
                 setReqPage(1);
               }}
             />
-            <DatePicker
+            {/* <DatePicker
               placeholder="Date Leave Submitted"
               value={filterFrom}
               onChange={(v) => {
                 setFilterFrom(v);
                 setReqPage(1);
               }}
-            />
+            /> */}
           </div>
         </div>
 
         <DataTable
           columns={columns}
-          data={reqList}
+          data={pagedRequests}
           isLoading={reqLoading}
           emptyMessage="No leave requests found"
           currentPage={reqPage}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
@@ -27,17 +27,20 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<PublicHoliday | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['public-holidays', { page, search }],
-    queryFn: () =>
-      api
-        .get('/hr/leave/public-holidays', { params: { page, search: search || undefined } })
-        .then((r) => r.data),
+    queryKey: ['public-holidays', { page }],
+    queryFn: () => api.get('/hr/leave/public-holidays', { params: { page } }).then((r) => r.data),
   });
 
   const holidays: PublicHoliday[] = Array.isArray(data)
     ? data
     : (data?.data ?? data?.holidays ?? []);
   const totalPages: number = data?.totalPages ?? 1;
+
+  const filteredHolidays = useMemo(() => {
+    if (!search) return holidays;
+    const q = search.toLowerCase();
+    return holidays.filter((h) => h.name.toLowerCase().includes(q));
+  }, [holidays, search]);
 
   const { mutate: deleteHoliday, isPending: isDeleting } = useDeletePublicHoliday();
 
@@ -58,7 +61,7 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
     <>
       <DataTable
         columns={columns}
-        data={holidays}
+        data={filteredHolidays}
         isLoading={isLoading}
         searchPlaceholder="Search holidays..."
         onSearch={setSearch}

@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { CalendarDays, Clock, CheckCircle2, XCircle, Ban } from 'lucide-react';
 import { extractError } from '@/lib/extractError';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { BalanceCard } from '@/components/molecules/leave/BalanceCard';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
 import { useLeaveBalances, useMyLeaveRequests, useCancelLeaveRequest } from '@/hooks/useLeave';
 import { useToast } from '@/hooks/useToast';
@@ -20,6 +21,13 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger
   Cancelled: 'neutral',
 };
 
+const STATUS_ICON: Record<LeaveRequestStatus, React.ReactNode> = {
+  Approved: <CheckCircle2 className="w-5 h-5 text-green-500" />,
+  Pending: <Clock className="w-5 h-5 text-yellow-500" />,
+  Rejected: <XCircle className="w-5 h-5 text-red-500" />,
+  Cancelled: <Ban className="w-5 h-5 text-gray-400" />,
+};
+
 const PAGE_SIZE = 10;
 
 interface Props {
@@ -30,6 +38,7 @@ export function MyLeaveTab({ tenantSlug }: Props) {
   const toast = useToast();
 
   const [applyOpen, setApplyOpen] = useState(false);
+  const [detailRequest, setDetailRequest] = useState<LeaveRequest | null>(null);
   const [cancelTarget, setCancelTarget] = useState<LeaveRequest | null>(null);
   const [mySearch, setMySearch] = useState('');
   const [myPage, setMyPage] = useState(1);
@@ -58,6 +67,11 @@ export function MyLeaveTab({ tenantSlug }: Props) {
 
   const { mutate: cancelRequest, isPending: isCancelling } = useCancelLeaveRequest();
 
+  /* Balance for the currently open detail request */
+  const detailBalance = detailRequest
+    ? (balancesData.find((b) => b.leaveTypeId === detailRequest.leaveTypeId) ?? null)
+    : null;
+
   const columns: Column<LeaveRequest>[] = [
     {
       key: 'leaveTypeName',
@@ -65,10 +79,12 @@ export function MyLeaveTab({ tenantSlug }: Props) {
       render: (r) => <span className="font-medium text-gray-900">{r.leaveTypeName}</span>,
     },
     {
-      key: 'paid',
-      label: 'Paid',
+      key: 'period',
+      label: 'Period',
       render: (r) => (
-        <Badge variant={r.isPaid ? 'success' : 'neutral'} label={r.isPaid ? 'Yes' : 'No'} />
+        <span className="text-sm text-gray-500">
+          {formatDate(r.startDate)} – {formatDate(r.endDate)}
+        </span>
       ),
     },
     {
@@ -77,38 +93,23 @@ export function MyLeaveTab({ tenantSlug }: Props) {
       render: (r) => <span className="text-gray-700">{r.totalDays}</span>,
     },
     {
-      key: 'usedDays',
-      label: 'Total Days',
-      render: (r) => {
-        const b = balancesData.find((b) => b.leaveTypeId === r.leaveTypeId);
-        return <span className="text-gray-700">{b ? b.used : '—'}</span>;
-      },
-    },
-    {
-      key: 'carryOver',
-      label: 'Carry Over',
-      render: (r) => {
-        const b = balancesData.find((b) => b.leaveTypeId === r.leaveTypeId);
-        return (
-          <span className="text-gray-700">{b && b.carriedOver > 0 ? b.carriedOver : '—'}</span>
-        );
-      },
-    },
-    {
       key: 'status',
       label: 'Status',
       render: (r) => <Badge variant={STATUS_VARIANT[r.status]} label={r.status} />,
     },
-    {
-      key: 'period',
-      label: 'Period',
-      render: (r) => (
-        <span className="text-xs text-gray-500">
-          {formatDate(r.startDate)} – {formatDate(r.endDate)}
-        </span>
-      ),
-    },
   ];
+
+  const handleCancelConfirm = () => {
+    if (!cancelTarget) return;
+    cancelRequest(cancelTarget.id, {
+      onSuccess: () => {
+        toast.success('Leave request cancelled');
+        setCancelTarget(null);
+        setDetailRequest(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Something went wrong')),
+    });
+  };
 
   return (
     <>
@@ -117,20 +118,13 @@ export function MyLeaveTab({ tenantSlug }: Props) {
           <Button onClick={() => setApplyOpen(true)}>Apply for Leave</Button>
         </div>
 
-        {balancesData.length > 0 && (
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-4 shrink-0">
-            {balancesData.map((b) => (
-              <BalanceCard key={b.leaveTypeId} balance={b} />
-            ))}
-          </div>
-        )}
-
         <DataTable
           columns={columns}
           data={myPageData}
           isLoading={myLoading}
           emptyMessage="You have no leave requests yet"
           searchPlaceholder="Search by leave type..."
+          searchValue={mySearch}
           onSearch={(q) => {
             setMySearch(q);
             setMyPage(1);
@@ -138,14 +132,16 @@ export function MyLeaveTab({ tenantSlug }: Props) {
           currentPage={myPage}
           totalPages={myTotalPages}
           onPageChange={setMyPage}
+          onRowClick={(row) => setDetailRequest(row)}
           rowActions={(row) =>
             row.status === 'Pending'
-              ? [{ label: 'Cancel Request', danger: true, onClick: () => setCancelTarget(row) }]
-              : []
+              ? [{ label: 'View Details', onClick: () => setDetailRequest(row) }]
+              : [{ label: 'View Details', onClick: () => setDetailRequest(row) }]
           }
         />
       </div>
 
+      {/* ── Apply leave panel ── */}
       <ApplyLeavePanel
         isOpen={applyOpen}
         onClose={() => setApplyOpen(false)}
@@ -153,6 +149,127 @@ export function MyLeaveTab({ tenantSlug }: Props) {
         balances={balancesData}
       />
 
+      {/* ── Leave detail side panel ── */}
+      <SidePanel
+        isOpen={!!detailRequest}
+        onClose={() => setDetailRequest(null)}
+        title={detailRequest?.leaveTypeName ?? ''}
+        description="Leave request details"
+        footer={
+          detailRequest?.status === 'Pending' ? (
+            <Button
+              variant="danger"
+              className="w-full"
+              onClick={() => setCancelTarget(detailRequest)}
+            >
+              Cancel Request
+            </Button>
+          ) : undefined
+        }
+      >
+        {detailRequest && (
+          <div className="flex flex-col gap-6">
+            {/* Status */}
+            <div className="flex items-center gap-3 p-4 rounded-2xl bg-gray-50 border border-gray-100">
+              {STATUS_ICON[detailRequest.status]}
+              <div>
+                <p className="text-sm font-semibold text-gray-900">{detailRequest.status}</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {detailRequest.status === 'Approved' && 'Your leave has been approved'}
+                  {detailRequest.status === 'Pending' && 'Awaiting approval from your manager'}
+                  {detailRequest.status === 'Rejected' && 'Your leave request was not approved'}
+                  {detailRequest.status === 'Cancelled' && 'This request was cancelled'}
+                </p>
+              </div>
+            </div>
+
+            {/* Dates */}
+            <div className="flex flex-col gap-3">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Period</p>
+              <div className="flex items-center gap-3">
+                <CalendarDays className="w-4 h-4 text-gray-400 shrink-0" />
+                <span className="text-sm text-gray-900">
+                  {formatDate(detailRequest.startDate)} – {formatDate(detailRequest.endDate)}
+                </span>
+              </div>
+              <p className="text-sm text-gray-500 pl-7">
+                <span className="font-semibold text-gray-900">{detailRequest.totalDays}</span>{' '}
+                working day{detailRequest.totalDays !== 1 ? 's' : ''}
+              </p>
+            </div>
+
+            {/* Type */}
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Type</p>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-900">{detailRequest.leaveTypeName}</span>
+                <Badge
+                  variant={detailRequest.isPaid ? 'success' : 'neutral'}
+                  label={detailRequest.isPaid ? 'Paid' : 'Unpaid'}
+                />
+              </div>
+            </div>
+
+            {/* Reason */}
+            {detailRequest.reason && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  Reason
+                </p>
+                <p className="text-sm text-gray-700 leading-relaxed">{detailRequest.reason}</p>
+              </div>
+            )}
+
+            {/* Review note */}
+            {detailRequest.reviewNote && (
+              <div className="flex flex-col gap-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  Manager Note
+                </p>
+                <p className="text-sm text-gray-700 leading-relaxed">{detailRequest.reviewNote}</p>
+              </div>
+            )}
+
+            {/* Balance */}
+            {detailBalance && (
+              <div className="flex flex-col gap-3">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  Balance
+                </p>
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 flex flex-col gap-3">
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{detailBalance.leaveTypeName}</span>
+                    <span>{detailBalance.entitled} days/yr</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-brand rounded-full transition-all"
+                      style={{
+                        width: `${detailBalance.entitled > 0 ? Math.min(100, (detailBalance.used / detailBalance.entitled) * 100) : 0}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-gray-500">
+                      <span className="font-semibold text-gray-900">{detailBalance.remaining}</span>{' '}
+                      remaining
+                    </span>
+                    <span className="text-gray-400">{detailBalance.used} used</span>
+                  </div>
+                  {detailBalance.pending > 0 && (
+                    <p className="text-xs text-orange-500">
+                      {detailBalance.pending} day{detailBalance.pending !== 1 ? 's' : ''} pending
+                      approval
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </SidePanel>
+
+      {/* ── Cancel confirmation modal ── */}
       <Modal
         isOpen={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
@@ -167,16 +284,7 @@ export function MyLeaveTab({ tenantSlug }: Props) {
               variant="danger"
               isLoading={isCancelling}
               loadingText="Cancelling..."
-              onClick={() =>
-                cancelTarget &&
-                cancelRequest(cancelTarget.id, {
-                  onSuccess: () => {
-                    toast.success('Leave request cancelled');
-                    setCancelTarget(null);
-                  },
-                  onError: (err) => toast.error(extractError(err, 'Something went wrong')),
-                })
-              }
+              onClick={handleCancelConfirm}
             >
               Cancel Request
             </Button>
