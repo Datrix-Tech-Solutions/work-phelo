@@ -57,6 +57,7 @@ export interface Employee {
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;
+  nationalId?: string;
   ssnit?: string;
   tinNumber?: string;
   emergencyName?: string;
@@ -78,6 +79,7 @@ export interface UpdateEmployeePayload {
   gender?: string;
   maritalStatus?: string;
   nationality?: string;
+  nationalId?: string;
   address?: string;
   city?: string;
   region?: string;
@@ -116,6 +118,7 @@ export interface CreateEmployeePayload {
   managerId?: string;
   probationEndsAt?: string;
   contractEndDate?: string;
+  nationalId?: string;
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;

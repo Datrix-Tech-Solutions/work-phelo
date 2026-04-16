@@ -170,6 +170,14 @@ export class UpdateEmployeeDto {
   employmentStatus?: EmploymentStatus;
 
   @ApiPropertyOptional({
+    description: 'National ID number',
+    example: 'GHA-000000000-0',
+  })
+  @IsOptional()
+  @IsString()
+  nationalId?: string;
+
+  @ApiPropertyOptional({
     description: 'Updated bank name',
     example: 'GCB Bank',
   })

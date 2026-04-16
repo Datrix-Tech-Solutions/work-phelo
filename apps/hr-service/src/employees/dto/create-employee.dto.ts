@@ -183,6 +183,14 @@ export class CreateEmployeeDto {
   contractEndDate?: string;
 
   @ApiPropertyOptional({
+    description: 'National ID number',
+    example: 'GHA-000000000-0',
+  })
+  @IsOptional()
+  @IsString()
+  nationalId?: string;
+
+  @ApiPropertyOptional({
     description: 'Bank name for salary payments',
     example: 'GCB Bank',
   })

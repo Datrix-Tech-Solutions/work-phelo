@@ -204,6 +204,7 @@ model Employee {
   bankName          String?
   bankAccountNumber String?
   bankBranch        String?
+  nationalId        String?
   ssnit             String?
   tinNumber         String?
   basicSalary       Decimal          @db.Decimal(15, 2)

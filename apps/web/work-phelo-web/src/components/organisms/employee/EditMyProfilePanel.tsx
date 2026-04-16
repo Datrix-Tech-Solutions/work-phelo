@@ -41,7 +41,7 @@ export function EditMyProfilePanel({
       gender: employee.gender ?? '',
       maritalStatus: employee.maritalStatus ?? '',
       nationality: employee.nationality ?? '',
-      // nationalID: employee.nationalID ?? '',
+      nationalId: employee.nationalId ?? '',
       address: employee.address ?? '',
       city: employee.city ?? '',
       region: employee.region ?? '',
@@ -127,16 +127,11 @@ export function EditMyProfilePanel({
           registration={form.register('nationality')}
           placeholder="eg; Ghanaian"
         />
-        {/* <FormField
-          label="National ID"
-          registration={form.register('nationalID')}
-          placeholder="GHA-xxxxxxxxx-x"
-        /> 
-        <FileUpload
-          onChange={function (file: File | null): void {
-            throw new Error('Function not implemented.');
-          }}
-        /> */}
+        <FormField
+          label="National ID Number"
+          registration={form.register('nationalId')}
+          placeholder="eg; GHA-000000000-0"
+        />
         <FormField
           label="Address"
           registration={form.register('address')}

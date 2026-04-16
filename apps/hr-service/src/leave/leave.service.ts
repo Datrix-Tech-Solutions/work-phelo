@@ -71,7 +71,22 @@ export class LeaveService {
     if (existing) {
       throw new ConflictException('A leave type with this name already exists');
     }
-    return this.prisma.leaveType.create({ data: { tenantId, ...dto } });
+    const leaveType = await this.prisma.leaveType.create({
+      data: { tenantId, ...dto },
+    });
+
+    // Backfill leave balances for all existing active employees so they
+    // immediately get an entitlement for this new leave type. Uses upsert
+    // internally — safe to call on employees who already have balances.
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, employmentStatus: { not: 'OFFBOARDED' } },
+      select: { id: true },
+    });
+    await Promise.all(
+      employees.map((emp) => this.initializeLeaveBalances(tenantId, emp.id)),
+    );
+
+    return leaveType;
   }
 
   async updateLeaveType(

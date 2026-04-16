@@ -77,6 +77,7 @@ export class EmployeesService {
           ? new Date(dto.contractEndDate)
           : undefined,
         basicSalary: dto.basicSalary ?? 0,
+        nationalId: dto.nationalId,
         bankName: dto.bankName,
         bankAccountNumber: dto.bankAccountNumber,
         bankBranch: dto.bankBranch,
