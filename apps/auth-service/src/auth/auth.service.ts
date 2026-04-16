@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -29,6 +30,8 @@ const LOCKOUT_DURATION_MINUTES = 30;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -477,20 +480,34 @@ export class AuthService {
     });
 
     if (dto.method === 'sms' && user.phone) {
-      await this.rabbitmq.emit('notification.password_reset_otp', {
-        phone: user.phone,
-        otp: code,
-        firstName: user.firstName,
-      });
+      void this.rabbitmq
+        .emit('notification.password_reset_otp', {
+          phone: user.phone,
+          otp: code,
+          firstName: user.firstName,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit password_reset_otp for ${user.phone}`,
+            err,
+          ),
+        );
     } else {
       const resetLink = WorkspaceUrl.resetPassword(tenant.slug, code);
-      await this.rabbitmq.emit('notification.password_reset_link', {
-        email: user.email,
-        firstName: user.firstName,
-        resetLink,
-        otpCode: code,
-        tenantName: tenant.name,
-      });
+      void this.rabbitmq
+        .emit('notification.password_reset_link', {
+          email: user.email,
+          firstName: user.firstName,
+          resetLink,
+          otpCode: code,
+          tenantName: tenant.name,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit password_reset_link for ${user.email}`,
+            err,
+          ),
+        );
     }
 
     return {

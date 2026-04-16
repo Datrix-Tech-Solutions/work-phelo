@@ -44,15 +44,20 @@ async function bootstrap() {
           'x-message-ttl': 3600000,
         },
       },
-      noAck: false,
+      noAck: true,
       prefetchCount: 10,
     },
   });
 
-  await app.startAllMicroservices();
   const port = process.env.PORT || 4002;
   await app.listen(port);
   console.log(`HR service running on port ${port}`);
+  // Start RabbitMQ consumer after HTTP is up — connection failures won't block the HTTP server
+  app
+    .startAllMicroservices()
+    .catch((err) =>
+      console.error('RabbitMQ microservice failed to start:', err.message),
+    );
 }
 
 bootstrap();
