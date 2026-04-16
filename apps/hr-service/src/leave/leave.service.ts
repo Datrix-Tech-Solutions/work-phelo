@@ -119,6 +119,28 @@ export class LeaveService {
       data: dto,
     });
 
+    // When daysAllowed changes, update all existing balance records for the
+    // current year so employees see the correct entitlement immediately.
+    if (
+      dto.daysAllowed !== undefined &&
+      dto.daysAllowed !== leaveType.daysAllowed
+    ) {
+      const diff = dto.daysAllowed - leaveType.daysAllowed;
+      const year = new Date().getFullYear();
+      const balances = await this.prisma.leaveBalance.findMany({
+        where: { leaveTypeId: id, year },
+      });
+      for (const balance of balances) {
+        await this.prisma.leaveBalance.update({
+          where: { id: balance.id },
+          data: {
+            totalDays: dto.daysAllowed,
+            remainingDays: Math.max(0, balance.remainingDays + diff),
+          },
+        });
+      }
+    }
+
     return {
       ...updated,
       warning:

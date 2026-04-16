@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -66,6 +66,19 @@ export function CreateKpiPanel({
     }
   }, [editKpi, reset]);
 
+  const emptyDefaults = {
+    title: '',
+    description: '',
+    weight: '' as const,
+    maxScore: '' as const,
+    selfWeight: 40,
+  };
+
+  const handleClose = useCallback(() => {
+    reset(emptyDefaults);
+    onClose();
+  }, [reset, onClose]);
+
   const selfWeight = useWatch({ control, name: 'selfWeight' });
   const managerWeight = selfWeight !== '' ? Math.max(0, 100 - Number(selfWeight)) : 60;
   const weight = useWatch({ control, name: 'weight' });
@@ -84,7 +97,7 @@ export function CreateKpiPanel({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cycle-kpis', cycleId] });
       toast.success(isEditing ? 'KPI updated' : 'KPI added');
-      onClose();
+      handleClose();
     },
     onError: (err) => {
       toast.error(extractError(err, 'Something went wrong'));
@@ -111,12 +124,12 @@ export function CreateKpiPanel({
   return (
     <SidePanel
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={isEditing ? 'Edit KPI' : 'Add KPI'}
       description="Define a performance objective for this cycle."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onSubmit)}>

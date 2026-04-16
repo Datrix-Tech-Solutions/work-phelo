@@ -60,7 +60,7 @@ export function InviteEmployeePanel({
     setValue,
     formState: { errors },
   } = useForm<InviteForm>({
-    defaultValues: { employmentType: 'FULL_TIME' },
+    defaultValues: { employmentType: 'FULL_TIME', phone: '' },
   });
 
   const phoneValue = useWatch({ control, name: 'phone' });
