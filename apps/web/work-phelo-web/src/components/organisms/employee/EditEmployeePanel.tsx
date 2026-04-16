@@ -9,6 +9,8 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Employee, Department, UpdateEmployeePayload } from '@/types/hr';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
+import { FileUpload } from '@/components/atoms/FileUpload';
+import { PhoneInput } from '@/components/atoms/PhoneInput';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;
@@ -33,8 +35,10 @@ export function EditEmployeePanel({
   const { reset } = editForm;
 
   const [salaryCurrency, setSalaryCurrency] = useState('GHS');
+  const [nationalIDFile, setNationalIDFile] = useState<File | null>(null);
 
   // Watch values for controlled components
+  const editPhoneValue = useWatch({ control: editForm.control, name: 'phone' });
   const editDobValue = useWatch({ control: editForm.control, name: 'dateOfBirth' });
   const editDeptValue = useWatch({ control: editForm.control, name: 'departmentId' });
   const editTypeValue = useWatch({ control: editForm.control, name: 'employmentType' });
@@ -58,8 +62,8 @@ export function EditEmployeePanel({
       gender: employee.gender ?? '',
       maritalStatus: employee.maritalStatus ?? '',
       nationality: employee.nationality ?? '',
+      nationalID: employee.nationalID ?? '',
       address: employee.address ?? '',
-      // nationalID: employee.nationalID ?? '',
       city: employee.city ?? '',
       region: employee.region ?? '',
       emergencyName: employee.emergencyName ?? '',
@@ -111,10 +115,10 @@ export function EditEmployeePanel({
           error={editForm.formState.errors.lastName}
           placeholder="eg; Boateng"
         />
-        <FormField
+        <PhoneInput
           label="Phone"
-          registration={editForm.register('phone')}
-          placeholder="+233 24 000 0000"
+          value={editPhoneValue ?? ''}
+          onChange={(v) => editForm.setValue('phone', v)}
         />
         <DatePicker
           label="Date of Birth"
@@ -149,16 +153,18 @@ export function EditEmployeePanel({
           registration={editForm.register('nationality')}
           placeholder="eg; Ghanaian"
         />
-        {/* <FormField
+        <FormField
           label="National ID"
           registration={editForm.register('nationalID')}
           placeholder="GHA-xxxxxxxxx-x"
-        /> */}
-        {/* <FileUpload
-          onChange={function (file: File | null): void {
-            throw new Error('Function not implemented.');
-          }}
-        /> */}
+        />
+        <FileUpload
+          label="Ghana Card Image"
+          accept="image/*"
+          hint="Picture size should not exceed 5mb"
+          value={nationalIDFile}
+          onChange={setNationalIDFile}
+        />
         <FormField
           label="Address"
           registration={editForm.register('address')}

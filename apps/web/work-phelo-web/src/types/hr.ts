@@ -37,6 +37,7 @@ export interface Employee {
   dateOfBirth?: string;
   maritalStatus?: string;
   nationality?: string;
+  nationalID?: string;
   address?: string;
   city?: string;
   region?: string;
@@ -76,6 +77,7 @@ export interface UpdateEmployeePayload {
   gender?: string;
   maritalStatus?: string;
   nationality?: string;
+  nationalID?: string;
   address?: string;
   city?: string;
   region?: string;

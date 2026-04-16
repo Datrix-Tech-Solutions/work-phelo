@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -80,6 +80,11 @@ export function CreateLeaveTypePanel({
     }
   }, [editLeaveType, reset]);
 
+  const handleClose = useCallback(() => {
+    reset(emptyDefaults);
+    onClose();
+  }, [reset, onClose]);
+
   const isCarryOver = useWatch({ control, name: 'isCarryOver' });
 
   const onSubmit = (values: FormValues) => {
@@ -105,7 +110,7 @@ export function CreateLeaveTypePanel({
 
     const handleSuccess = () => {
       toast.success(isEditing ? 'Leave type updated' : 'Leave type created');
-      onClose();
+      handleClose();
     };
     const handleError = (err: unknown) => {
       toast.error(extractError(err, 'Something went wrong'));
@@ -124,12 +129,12 @@ export function CreateLeaveTypePanel({
   return (
     <SidePanel
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={isEditing ? 'Edit Leave Type' : 'Add New Leave Type'}
       description="Define the leave type and its entitlement rules."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onSubmit)}>
