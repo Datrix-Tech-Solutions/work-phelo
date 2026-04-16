@@ -28,8 +28,11 @@ async function bootstrap() {
   // Start RabbitMQ consumer after HTTP is up — connection failures won't block the HTTP server
   app
     .startAllMicroservices()
-    .catch((err) =>
-      console.error('RabbitMQ microservice failed to start:', err.message),
+    .catch((err: unknown) =>
+      console.error(
+        'RabbitMQ microservice failed to start:',
+        err instanceof Error ? err.message : String(err),
+      ),
     );
 }
 void bootstrap();
