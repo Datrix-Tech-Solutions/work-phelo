@@ -189,6 +189,7 @@ model Employee {
   emergencyRelation String?
   departmentId      String?
   branchId          String?
+  managerId         String?
   jobTitle          String
   employmentType    EmploymentType   @default(FULL_TIME)
   employmentStatus      EmploymentStatus @default(PROBATION)
@@ -197,6 +198,7 @@ model Employee {
   statusChangedByEmail  String?
   hireDate          DateTime
   probationEndsAt   DateTime?
+  contractEndDate   DateTime?
   offboardedAt      DateTime?
   offboardReason    String?
   bankName          String?

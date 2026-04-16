@@ -44,6 +44,8 @@ export interface Employee {
   employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
   employmentStatus: 'ACTIVE' | 'PROBATION' | 'ON_LEAVE' | 'SUSPENDED' | 'TERMINATED' | 'OFFBOARDED';
   hireDate: string;
+  probationEndsAt?: string;
+  contractEndDate?: string;
   basicSalary?: number;
   departmentId?: string;
   department?: Department;
@@ -82,6 +84,9 @@ export interface UpdateEmployeePayload {
   jobTitle?: string;
   departmentId?: string;
   branchId?: string;
+  managerId?: string;
+  probationEndsAt?: string;
+  contractEndDate?: string;
   employmentType?: string;
   employmentStatus?: string;
   basicSalary?: number;
@@ -108,6 +113,9 @@ export interface CreateEmployeePayload {
   basicSalary?: number;
   departmentId: string;
   branchId?: string;
+  managerId?: string;
+  probationEndsAt?: string;
+  contractEndDate?: string;
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;

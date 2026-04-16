@@ -73,6 +73,9 @@ export class EmployeesService {
         probationEndsAt: dto.probationEndsAt
           ? new Date(dto.probationEndsAt)
           : undefined,
+        contractEndDate: dto.contractEndDate
+          ? new Date(dto.contractEndDate)
+          : undefined,
         basicSalary: dto.basicSalary ?? 0,
         bankName: dto.bankName,
         bankAccountNumber: dto.bankAccountNumber,
@@ -81,6 +84,7 @@ export class EmployeesService {
         tinNumber: dto.tinNumber,
         ...(dto.departmentId && { departmentId: dto.departmentId }),
         ...(dto.branchId && { branchId: dto.branchId }),
+        ...(dto.managerId && { managerId: dto.managerId }),
       },
       include: { department: true, branch: true },
     });
@@ -203,7 +207,13 @@ export class EmployeesService {
   ) {
     const existing = await this.findById(tenantId, id);
 
-    const { employmentStatus, dateOfBirth, ...rest } = dto;
+    const {
+      employmentStatus,
+      dateOfBirth,
+      probationEndsAt,
+      contractEndDate,
+      ...rest
+    } = dto;
 
     // Track status change
     const statusChanged =
@@ -221,6 +231,12 @@ export class EmployeesService {
             statusChangedByEmail: actor.email,
           }),
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
+        probationEndsAt: probationEndsAt
+          ? new Date(probationEndsAt)
+          : undefined,
+        contractEndDate: contractEndDate
+          ? new Date(contractEndDate)
+          : undefined,
       },
       include: { department: true, branch: true },
     });

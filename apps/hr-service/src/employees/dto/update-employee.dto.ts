@@ -122,6 +122,30 @@ export class UpdateEmployeeDto {
   branchId?: string;
 
   @ApiPropertyOptional({
+    description: 'Employee ID of the reporting manager',
+    example: 'emp-123',
+  })
+  @IsOptional()
+  @IsString()
+  managerId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Probation end date',
+    example: '2026-07-01',
+  })
+  @IsOptional()
+  @IsDateString()
+  probationEndsAt?: string;
+
+  @ApiPropertyOptional({
+    description: 'Contract end date (CONTRACT employment type)',
+    example: '2026-12-31',
+  })
+  @IsOptional()
+  @IsDateString()
+  contractEndDate?: string;
+
+  @ApiPropertyOptional({
     description: 'Updated job title',
     example: 'HR Manager',
   })

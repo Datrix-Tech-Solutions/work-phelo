@@ -28,6 +28,7 @@ interface InviteForm {
   hireDate: string;
   dateOfBirth?: string;
   probationEndsAt?: string;
+  contractEndDate?: string;
 }
 
 interface InviteEmployeePanelProps {
@@ -66,7 +67,7 @@ export function InviteEmployeePanel({
   const hireDateValue = useWatch({ control, name: 'hireDate' });
   const dobValue = useWatch({ control, name: 'dateOfBirth' });
   const probationDateValue = useWatch({ control, name: 'probationEndsAt' });
-  const contractDateValue = useWatch({ control, name: 'probationEndsAt' });
+  const contractDateValue = useWatch({ control, name: 'contractEndDate' });
   const deptFormValue = useWatch({ control, name: 'departmentId' });
   const branchFormValue = useWatch({ control, name: 'branchId' });
   const managerValue = useWatch({ control, name: 'managerId' });
@@ -186,7 +187,7 @@ export function InviteEmployeePanel({
         />
         <SearchSelect
           label="Reporting Manager"
-          placeholder="Select manager"
+          placeholder="Select manager (optional)"
           value={managerValue}
           onChange={(v) => setValue('managerId', v)}
           options={employees.map((e) => ({
@@ -202,12 +203,6 @@ export function InviteEmployeePanel({
           error={errors.hireDate?.message}
           disableFuture
         />
-
-        <MonthPicker
-          label="Probation End Date"
-          value={probationDateValue}
-          onChange={(v) => setValue('probationEndsAt', v)}
-        />
         <SearchSelect
           label="Employment Type"
           placeholder="Select employment type"
@@ -220,15 +215,18 @@ export function InviteEmployeePanel({
             { value: 'INTERN', label: 'Intern' },
           ]}
         />
-
+        {employmentTypeValue !== 'CONTRACT' && (
+          <MonthPicker
+            label="Probation End Date"
+            value={probationDateValue}
+            onChange={(v) => setValue('probationEndsAt', v)}
+          />
+        )}
         {employmentTypeValue === 'CONTRACT' && (
           <MonthPicker
             label="Contract End Date"
             value={contractDateValue}
-            onChange={(v) => setValue('probationEndsAt', v)}
-            // Optional: make it required when contract is selected
-            // error={errors.probationEndsAt?.message}
-            // disablePast
+            onChange={(v) => setValue('contractEndDate', v)}
           />
         )}
       </div>
