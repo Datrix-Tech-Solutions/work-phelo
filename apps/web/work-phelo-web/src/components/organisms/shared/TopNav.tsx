@@ -137,7 +137,7 @@ export function TopNav({
 
   const handleProfileClick = () => {
     const slug = user?.tenantSlug || pathname.split('/')[1];
-    router.push(`/${slug}/profile`);
+    router.push(`/${slug}/hr/profile`);
   };
 
   return (
