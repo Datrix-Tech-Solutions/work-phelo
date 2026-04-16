@@ -13,6 +13,7 @@ import { useLeaveTypes, useCreateLeaveRequest } from '@/hooks/useLeave';
 import { usePublicHolidays } from '@/hooks/usePublicHolidays';
 import { CreateLeaveRequestDto, LeaveBalance, PublicHoliday } from '@/types/hr';
 import { FileUpload } from '@/components/atoms/FileUpload';
+import { LeaveBalanceBar } from '@/components/molecules/leave/LeaveBalanceBar';
 
 interface ApplyLeavePanelProps {
   isOpen: boolean;
@@ -50,15 +51,8 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentError, setDocumentError] = useState('');
 
-  const { data: allLeaveTypes = [] } = useLeaveTypes(tenantSlug);
+  const { data: leaveTypes = [] } = useLeaveTypes(tenantSlug);
   const { data: holidays = [] } = usePublicHolidays();
-
-  // Only show leave types the employee has a balance for — this naturally restricts
-  // to types applicable to their employment type (set at balance initialisation).
-  const leaveTypes = useMemo(
-    () => allLeaveTypes.filter((t) => balances.some((b) => b.leaveTypeId === t.id)),
-    [allLeaveTypes, balances],
-  );
 
   const {
     register,
@@ -206,27 +200,24 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
         />
       </div>
 
+      {/* Balance bar — shown as soon as a leave type is selected */}
+      {selectedBalance && (
+        <LeaveBalanceBar
+          balance={selectedBalance}
+          overBy={isOverBalance ? workingDays - selectedBalance.remaining : 0}
+        />
+      )}
+
       {/* Working days summary */}
       {workingDays > 0 && (
         <div
-          className={`rounded-xl px-4 py-3 text-sm ${
-            isOverBalance
-              ? 'bg-orange-50 border border-orange-200'
-              : 'bg-blue-50 border border-blue-200'
-          }`}
+          className={`rounded-xl px-4 py-3 text-sm ${isOverBalance ? 'bg-orange-50 border border-orange-200' : 'bg-blue-50 border border-blue-200'}`}
         >
           <p
             className={isOverBalance ? 'text-orange-700 font-medium' : 'text-blue-700 font-medium'}
           >
             This request covers {workingDays} working {workingDays === 1 ? 'day' : 'days'}.
           </p>
-          {isOverBalance && selectedBalance && (
-            <p className="text-orange-600 mt-0.5">
-              You only have {selectedBalance.remaining}{' '}
-              {selectedBalance.remaining === 1 ? 'day' : 'days'} available for this leave type. You
-              are requesting {workingDays} days.
-            </p>
-          )}
         </div>
       )}
 

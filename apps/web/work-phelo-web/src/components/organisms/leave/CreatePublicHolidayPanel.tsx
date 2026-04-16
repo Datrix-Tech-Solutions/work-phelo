@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -52,6 +52,11 @@ export function CreatePublicHolidayPanel({
     }
   }, [editHoliday, reset]);
 
+  const handleClose = useCallback(() => {
+    reset({ name: '', date: '' });
+    onClose();
+  }, [reset, onClose]);
+
   const onSubmit = (values: FormValues) => {
     if (isEditing) {
       update(
@@ -59,7 +64,7 @@ export function CreatePublicHolidayPanel({
         {
           onSuccess: () => {
             toast.success('Holiday updated');
-            onClose();
+            handleClose();
           },
           onError: (err: unknown) =>
             toast.error(
@@ -74,7 +79,7 @@ export function CreatePublicHolidayPanel({
         {
           onSuccess: () => {
             toast.success('Holiday added');
-            onClose();
+            handleClose();
           },
           onError: (err: unknown) =>
             toast.error(
@@ -89,12 +94,12 @@ export function CreatePublicHolidayPanel({
   return (
     <SidePanel
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={isEditing ? 'Edit Public Holiday' : 'Add Public Holiday'}
       description="Public holidays are automatically excluded from leave day calculations."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
+          <Button variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onSubmit)}>
