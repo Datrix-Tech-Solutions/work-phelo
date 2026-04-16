@@ -156,6 +156,20 @@ export class UsersService {
         where: { id: updated.tenantId },
         data: { status: 'ACTIVE' },
       });
+
+      // Seed default leave types for the newly activated tenant.
+      // hr.tenant_approved is only emitted from approveTenant() (a separate
+      // super-admin action that is not part of the normal invite flow), so we
+      // emit it here to guarantee seeding regardless of whether the super admin
+      // calls that endpoint.
+      void this.rabbitmq
+        .emitToHr('hr.tenant_approved', { tenantId: updated.tenantId })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit hr.tenant_approved for ${updated.tenantId}`,
+            err,
+          ),
+        );
     }
 
     // Link the auth userId back to the HR employee record
