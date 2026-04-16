@@ -25,8 +25,7 @@ interface InviteForm {
   employmentType: string;
   hireDate: string;
   dateOfBirth?: string;
-  probationEndDate?: string;
-  contractEndDate?: string;
+  probationEndsAt?: string;
 }
 
 interface InviteEmployeePanelProps {
@@ -62,8 +61,8 @@ export function InviteEmployeePanel({
   const phoneValue = useWatch({ control, name: 'phone' });
   const hireDateValue = useWatch({ control, name: 'hireDate' });
   const dobValue = useWatch({ control, name: 'dateOfBirth' });
-  const probationDateValue = useWatch({ control, name: 'probationEndDate' });
-  const contractDateValue = useWatch({ control, name: 'contractEndDate' });
+  const probationDateValue = useWatch({ control, name: 'probationEndsAt' });
+  const contractDateValue = useWatch({ control, name: 'probationEndsAt' });
   const deptFormValue = useWatch({ control, name: 'departmentId' });
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
@@ -192,7 +191,7 @@ export function InviteEmployeePanel({
         <DatePicker
           label="Probation End Date"
           value={probationDateValue}
-          onChange={(v) => setValue('probationEndDate', v)}
+          onChange={(v) => setValue('probationEndsAt', v)}
         />
         <SearchSelect
           label="Employment Type"
@@ -211,9 +210,9 @@ export function InviteEmployeePanel({
           <DatePicker
             label="Contract End Date"
             value={contractDateValue}
-            onChange={(v) => setValue('contractEndDate', v)}
+            onChange={(v) => setValue('probationEndsAt', v)}
             // Optional: make it required when contract is selected
-            error={errors.contractEndDate?.message}
+            error={errors.probationEndsAt?.message}
             disablePast
           />
         )}
