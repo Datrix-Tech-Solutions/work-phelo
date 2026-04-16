@@ -36,14 +36,14 @@ export function LeaveTypesList({ tenantSlug }: Props) {
     },
   });
 
-  const leaveTypes: LeaveType[] = Array.isArray(data) ? data : (data?.data ?? []);
   const totalPages: number = Array.isArray(data) ? 1 : (data?.totalPages ?? 1);
 
   const filteredLeaveTypes = useMemo(() => {
+    const leaveTypes: LeaveType[] = Array.isArray(data) ? data : (data?.data ?? []);
     if (!search) return leaveTypes;
     const q = search.toLowerCase();
     return leaveTypes.filter((t) => t.name.toLowerCase().includes(q));
-  }, [leaveTypes, search]);
+  }, [data, search]);
 
   const { mutate: deleteLeaveType, isPending: isDeleting } = useDeleteLeaveType(tenantSlug);
 
@@ -128,6 +128,10 @@ export function LeaveTypesList({ tenantSlug }: Props) {
         isLoading={isLoading}
         searchPlaceholder="Search leave types..."
         onSearch={setSearch}
+        onRowClick={(row) => {
+          setEditLeaveType(row);
+          setPanelOpen(true);
+        }}
         actionButton={{
           label: 'Add Leave Type',
           onClick: () => {

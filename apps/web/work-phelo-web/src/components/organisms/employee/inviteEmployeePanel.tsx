@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { Employee, Department, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
+import { MonthPicker } from '@/components/atoms/endDatePicker';
 
 /* ── Types ── */
 
@@ -188,7 +189,8 @@ export function InviteEmployeePanel({
           error={errors.hireDate?.message}
           disableFuture
         />
-        <DatePicker
+
+        <MonthPicker
           label="Probation End Date"
           value={probationDateValue}
           onChange={(v) => setValue('probationEndsAt', v)}
@@ -207,13 +209,13 @@ export function InviteEmployeePanel({
         />
 
         {employmentTypeValue === 'CONTRACT' && (
-          <DatePicker
+          <MonthPicker
             label="Contract End Date"
             value={contractDateValue}
             onChange={(v) => setValue('probationEndsAt', v)}
             // Optional: make it required when contract is selected
-            error={errors.probationEndsAt?.message}
-            disablePast
+            // error={errors.probationEndsAt?.message}
+            // disablePast
           />
         )}
       </div>

@@ -170,6 +170,7 @@ export default function AdminDashboardPage() {
             }}
             onExport={() => console.log('export')}
             actionButton={{ label: 'New Company', onClick: () => setPanelOpen(true) }}
+            onRowClick={(row) => router.push(`/dashboard/${row.id}`)}
             rowActions={(row) => [
               { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
               { label: 'Deactivate', onClick: () => console.log('deact', row.id), danger: true },
