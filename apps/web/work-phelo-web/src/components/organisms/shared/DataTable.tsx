@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
@@ -28,6 +28,7 @@ interface DataTableProps<T extends { id: string | number }> {
   emptyMessage?: string;
   emptyImage?: React.ReactNode;
   searchPlaceholder?: string;
+  searchValue?: string;
   onSearch?: (q: string) => void;
   filterOptions?: { value: string; label: string }[];
   onFilter?: (value: string) => void;
@@ -40,13 +41,24 @@ interface DataTableProps<T extends { id: string | number }> {
   onPageChange: (page: number) => void;
 }
 
-function ThreeDotMenu({ actions, isNearBottom }: { actions: RowAction[]; isNearBottom: boolean }) {
+function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const handleToggle = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setOpenUpward(window.innerHeight - rect.bottom < 120);
+    }
+    setOpen((v) => !v);
+  };
 
   return (
     <div className="relative">
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={buttonRef}
+        onClick={handleToggle}
         className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
       >
         <Icons.EllipsisVertical />
@@ -58,7 +70,7 @@ function ThreeDotMenu({ actions, isNearBottom }: { actions: RowAction[]; isNearB
           <div
             className={cn(
               'absolute right-0 z-20 min-w-35 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden',
-              isNearBottom ? 'bottom-8' : 'top-8',
+              openUpward ? 'bottom-8' : 'top-8',
             )}
           >
             {actions.map((action) => (
@@ -90,6 +102,7 @@ export function DataTable<T extends { id: string | number }>({
   emptyMessage = 'No items found',
   emptyImage,
   searchPlaceholder = 'Search...',
+  searchValue,
   onSearch,
   filterOptions,
   onFilter,
@@ -111,6 +124,7 @@ export function DataTable<T extends { id: string | number }>({
             <input
               type="text"
               placeholder={searchPlaceholder}
+              value={searchValue ?? undefined}
               onChange={(e) => onSearch(e.target.value)}
               className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
             />
@@ -209,7 +223,7 @@ export function DataTable<T extends { id: string | number }>({
             </div>
           ) : (
             /* Actual Rows */
-            data.map((row, rowIndex) => (
+            data.map((row) => (
               <div
                 key={row.id}
                 onClick={() => onRowClick?.(row)}
@@ -234,10 +248,7 @@ export function DataTable<T extends { id: string | number }>({
                 ))}
                 {rowActions && (
                   <div className="flex justify-end">
-                    <ThreeDotMenu
-                      actions={rowActions(row)}
-                      isNearBottom={rowIndex >= data.length - 2}
-                    />
+                    <ThreeDotMenu actions={rowActions(row)} />
                   </div>
                 )}
               </div>

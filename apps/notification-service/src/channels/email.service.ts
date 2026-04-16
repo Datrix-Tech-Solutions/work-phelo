@@ -7,10 +7,13 @@ export class EmailService {
   private readonly apiKey: string;
   private readonly fromEmail: string;
   private readonly appName = 'WorkPhelo ERP';
+  private readonly serviceUrl: string;
 
   constructor() {
     this.apiKey = process.env.RESEND_API_KEY || '';
     this.fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+    this.serviceUrl =
+      process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4004';
   }
 
   private async send(
@@ -71,26 +74,99 @@ export class EmailService {
   ): Promise<boolean> {
     return this.send(
       to,
-      `You've been invited to ${tenantName} on ${this.appName}`,
-      `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
-        <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
-          <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
-          <h2 style="color: #111827; margin: 0 0 24px 0;">You've been invited to ${tenantName}</h2>
-          <p style="color: #374151;">Hi ${firstName},</p>
-          <p style="color: #374151;"><strong>${tenantName}</strong> has added you as a team member on ${this.appName}.</p>
-          <div style="background: #fff7ed; border-left: 4px solid #f97316; padding: 12px 16px; margin: 24px 0; border-radius: 0 4px 4px 0;">
-            <p style="color: #92400e; margin: 0; font-size: 14px;">⏰ This link expires in <strong>48 hours</strong>.</p>
-          </div>
-          <div style="text-align: center; margin: 32px 0;">
-            <a href="${acceptInviteUrl}" style="background: #f97316; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 16px; display: inline-block;">
-              Set Your Password
-            </a>
-          </div>
-          <p style="color: #9ca3af; font-size: 12px;">Or copy: <span style="word-break: break-all;">${acceptInviteUrl}</span></p>
-        </div>
-      </div>
-      `,
+      `You're invited to ${tenantName} on ${this.appName}`,
+      `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Invitation</title>
+</head>
+<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, sans-serif;">
+
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; margin:40px auto; border-radius:8px; overflow:hidden;">
+
+    <tr>
+      <td style="padding:20px 30px;">
+        <h2 style="margin:0; font-weight:bold;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h2>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#eef1f4; padding:40px 30px;">
+        <table width="100%">
+          <tr>
+            <td style="font-size:28px; font-weight:600; color:#555;">
+              You've been invited
+            </td>
+            <td align="right">
+              <img src="${this.serviceUrl}/public/mail_image.png" alt="Invitation image" width="120" />
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
+
+        <p>Hi ${firstName},</p>
+
+        <p>
+          Welcome to <strong>${tenantName}</strong>. Your HR administrator has set up your account on WorkPhelo.
+        </p>
+
+        <p>To get started, click the button below to set your password and log in for the first time.</p>
+
+        <p style="margin:30px 0;">
+          <a href="${acceptInviteUrl}" style="
+            background:#1a3557;
+            color:#ffffff;
+            padding:12px 20px;
+            text-decoration:none;
+            border-radius:6px;
+            display:inline-block;
+            font-weight:500;
+          ">
+            Set My Password →
+          </a>
+        </p>
+
+        <p style="color:#777;">
+          This link expires in 48 hours. If it expires before you use it, contact your HR administrator and they will send you a new one.
+        </p>
+
+        <hr style="border:none; border-top:1px solid #eee; margin:24px 0;" />
+
+        <p style="color:#555;">Once you're in, you'll be able to:</p>
+        <ul style="color:#555; padding-left:20px; line-height:1.8;">
+          <li>View your leave balance and request time off</li>
+          <li>Clock in and out</li>
+          <li>Access your payslips</li>
+          <li>Update your personal information</li>
+        </ul>
+
+        <p style="margin-top:24px;">Welcome aboard.</p>
+
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 30px; border-top:1px solid #eee;">
+        <h3 style="margin:0;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h3>
+        <p style="color:#888; font-size:12px; margin-top:5px;">
+          © 2026 WorkPhelo All rights reserved
+        </p>
+      </td>
+    </tr>
+
+  </table>
+
+</body>
+</html>`,
     );
   }
 

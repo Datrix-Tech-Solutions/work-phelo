@@ -473,9 +473,14 @@ export class LeaveService {
     return updated;
   }
 
-  async cancelRequest(tenantId: string, requestId: string, employeeId: string) {
+  async cancelRequest(tenantId: string, requestId: string, userId: string) {
+    const empRecord = await this.prisma.employee.findFirst({
+      where: { userId, tenantId },
+    });
+    if (!empRecord) throw new NotFoundException('Employee profile not found');
+
     const request = await this.prisma.leaveRequest.findFirst({
-      where: { id: requestId, tenantId, employeeId },
+      where: { id: requestId, tenantId, employeeId: empRecord.id },
     });
 
     if (!request) throw new NotFoundException('Leave request not found');

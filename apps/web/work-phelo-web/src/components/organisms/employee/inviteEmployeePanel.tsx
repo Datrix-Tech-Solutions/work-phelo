@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { Employee, Department, Branch, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
+import { MonthPicker } from '@/components/atoms/endDatePicker';
 
 /* ── Types ── */
 
@@ -26,8 +27,7 @@ interface InviteForm {
   employmentType: string;
   hireDate: string;
   dateOfBirth?: string;
-  probationEndDate?: string;
-  contractEndDate?: string;
+  probationEndsAt?: string;
 }
 
 interface InviteEmployeePanelProps {
@@ -65,8 +65,8 @@ export function InviteEmployeePanel({
   const phoneValue = useWatch({ control, name: 'phone' });
   const hireDateValue = useWatch({ control, name: 'hireDate' });
   const dobValue = useWatch({ control, name: 'dateOfBirth' });
-  // const probationDateValue = useWatch({ control, name: 'probationEndDate' });
-  // const contractDateValue = useWatch({ control, name: 'contractEndDate' });
+  const probationDateValue = useWatch({ control, name: 'probationEndsAt' });
+  const contractDateValue = useWatch({ control, name: 'probationEndsAt' });
   const deptFormValue = useWatch({ control, name: 'departmentId' });
   const branchFormValue = useWatch({ control, name: 'branchId' });
   const managerValue = useWatch({ control, name: 'managerId' });
@@ -202,11 +202,12 @@ export function InviteEmployeePanel({
           error={errors.hireDate?.message}
           disableFuture
         />
-        {/* <DatePicker
+
+        <MonthPicker
           label="Probation End Date"
           value={probationDateValue}
-          onChange={(v) => setValue('probationEndDate', v)}
-        /> */}
+          onChange={(v) => setValue('probationEndsAt', v)}
+        />
         <SearchSelect
           label="Employment Type"
           placeholder="Select employment type"
@@ -220,16 +221,16 @@ export function InviteEmployeePanel({
           ]}
         />
 
-        {/* {employmentTypeValue === 'CONTRACT' && (
-          <DatePicker
+        {employmentTypeValue === 'CONTRACT' && (
+          <MonthPicker
             label="Contract End Date"
             value={contractDateValue}
-            onChange={(v) => setValue('contractEndDate', v)}
+            onChange={(v) => setValue('probationEndsAt', v)}
             // Optional: make it required when contract is selected
-            error={errors.contractEndDate?.message}
-            disablePast
+            // error={errors.probationEndsAt?.message}
+            // disablePast
           />
-        )} */}
+        )}
       </div>
     </SidePanel>
   );

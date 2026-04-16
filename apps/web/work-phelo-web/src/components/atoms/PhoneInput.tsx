@@ -13,6 +13,15 @@ const COUNTRY_CODES = [
   { code: '+254', flag: 'KE' },
 ];
 
+const ALL_CODES = COUNTRY_CODES.map((c) => c.code);
+
+function parsePhone(raw: string): { code: string; number: string } {
+  const matched = ALL_CODES.find((c) => raw.startsWith(c));
+  return matched
+    ? { code: matched, number: raw.slice(matched.length).replace(/\D/g, '') }
+    : { code: '+233', number: raw.replace(/\D/g, '') };
+}
+
 interface PhoneInputProps {
   label?: string;
   error?: string;
@@ -36,8 +45,14 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
     },
     ref,
   ) => {
-    const [countryCode, setCountryCode] = useState(defaultCountryCode);
-    const [localValue, setLocalValue] = useState(value ?? '');
+    const isControlled = value !== undefined;
+    const parsed = isControlled ? parsePhone(value!) : { code: defaultCountryCode, number: '' };
+
+    const [internalCode, setInternalCode] = useState(defaultCountryCode);
+    const [internalNumber, setInternalNumber] = useState('');
+
+    const countryCode = isControlled ? parsed.code : internalCode;
+    const localValue = isControlled ? parsed.number : internalNumber;
 
     return (
       <div className="flex flex-col gap-1.5">
@@ -54,7 +69,10 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
           <div className="relative flex items-center border-r border-gray-300 px-3 bg-white shrink-0">
             <select
               value={countryCode}
-              onChange={(e) => setCountryCode(e.target.value)}
+              onChange={(e) => {
+                if (!isControlled) setInternalCode(e.target.value);
+                onChange?.(e.target.value + localValue);
+              }}
               className="appearance-none bg-transparent text-sm text-gray-800 pr-5 focus:outline-none cursor-pointer"
             >
               {COUNTRY_CODES.map((c) => (
@@ -75,8 +93,8 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
             value={localValue}
             onChange={(e) => {
               const numeric = e.target.value.replace(/\D/g, '').slice(0, 10);
-              setLocalValue(numeric);
-              onChange?.(numeric);
+              if (!isControlled) setInternalNumber(numeric);
+              onChange?.(countryCode + numeric);
             }}
             placeholder={placeholder}
             className="flex-1 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 bg-transparent focus:outline-none"

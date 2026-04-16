@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
@@ -27,17 +27,23 @@ export function LeaveTypesList({ tenantSlug }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<LeaveType | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: [...leaveKeys.types(tenantSlug), page, search],
+    queryKey: [...leaveKeys.types(tenantSlug), page],
     queryFn: async () => {
       const res = await api.get<PaginatedResponse<LeaveType> | LeaveType[]>('/hr/leave/types', {
-        params: { page, search: search || undefined },
+        params: { page },
       });
       return res.data;
     },
   });
 
-  const leaveTypes: LeaveType[] = Array.isArray(data) ? data : (data?.data ?? []);
   const totalPages: number = Array.isArray(data) ? 1 : (data?.totalPages ?? 1);
+
+  const filteredLeaveTypes = useMemo(() => {
+    const leaveTypes: LeaveType[] = Array.isArray(data) ? data : (data?.data ?? []);
+    if (!search) return leaveTypes;
+    const q = search.toLowerCase();
+    return leaveTypes.filter((t) => t.name.toLowerCase().includes(q));
+  }, [data, search]);
 
   const { mutate: deleteLeaveType, isPending: isDeleting } = useDeleteLeaveType(tenantSlug);
 
@@ -118,10 +124,14 @@ export function LeaveTypesList({ tenantSlug }: Props) {
     <>
       <DataTable
         columns={columns}
-        data={leaveTypes}
+        data={filteredLeaveTypes}
         isLoading={isLoading}
         searchPlaceholder="Search leave types..."
         onSearch={setSearch}
+        onRowClick={(row) => {
+          setEditLeaveType(row);
+          setPanelOpen(true);
+        }}
         actionButton={{
           label: 'Add Leave Type',
           onClick: () => {

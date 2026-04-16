@@ -5,10 +5,11 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 interface Props {
   activeTab: string;
   isManager: boolean;
+  isEmployee: boolean;
   onTabChange: (tab: string) => void;
 }
 
-export function LeaveTabs({ activeTab, isManager, onTabChange }: Props) {
+export function LeaveTabs({ activeTab, isManager, isEmployee, onTabChange }: Props) {
   const { data: pendingList = [] } = useQuery({
     queryKey: ['leave-requests-pending'],
     queryFn: () =>
@@ -21,7 +22,7 @@ export function LeaveTabs({ activeTab, isManager, onTabChange }: Props) {
   const pendingCount = (pendingList as unknown[]).length;
 
   const tabs = [
-    { key: 'my', label: 'My Leave' },
+    ...(isEmployee ? [{ key: 'my', label: 'My Leave' }] : []),
     ...(isManager ? [{ key: 'requests', label: 'Leave Requests', count: pendingCount }] : []),
   ];
 
