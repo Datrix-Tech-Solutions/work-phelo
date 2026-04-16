@@ -50,8 +50,15 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const [documentFile, setDocumentFile] = useState<File | null>(null);
   const [documentError, setDocumentError] = useState('');
 
-  const { data: leaveTypes = [] } = useLeaveTypes(tenantSlug);
+  const { data: allLeaveTypes = [] } = useLeaveTypes(tenantSlug);
   const { data: holidays = [] } = usePublicHolidays();
+
+  // Only show leave types the employee has a balance for — this naturally restricts
+  // to types applicable to their employment type (set at balance initialisation).
+  const leaveTypes = useMemo(
+    () => allLeaveTypes.filter((t) => balances.some((b) => b.leaveTypeId === t.id)),
+    [allLeaveTypes, balances],
+  );
 
   const {
     register,

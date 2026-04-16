@@ -99,6 +99,25 @@ export function LeaveTypesList({ tenantSlug }: Props) {
         />
       ),
     },
+    {
+      key: 'applicableTo',
+      label: 'Applicable To',
+      render: (row) => {
+        const types = row.applicableTo ?? [];
+        if (types.length === 0) return <span className="text-gray-500 text-sm">All</span>;
+        const labels: Record<string, string> = {
+          FULL_TIME: 'Full Time',
+          PART_TIME: 'Part Time',
+          CONTRACT: 'Contract',
+          INTERN: 'Intern',
+        };
+        return (
+          <span className="text-gray-700 text-sm">
+            {types.map((t) => labels[t] ?? t).join(', ')}
+          </span>
+        );
+      },
+    },
   ];
 
   return (

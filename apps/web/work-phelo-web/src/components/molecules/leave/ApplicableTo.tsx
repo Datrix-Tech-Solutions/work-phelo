@@ -9,6 +9,7 @@ const EMPLOYMENT_TYPES: { value: LeaveApplicableTo; label: string }[] = [
   { value: 'FULL_TIME', label: 'Full Time' },
   { value: 'PART_TIME', label: 'Part Time' },
   { value: 'CONTRACT', label: 'Contract' },
+  { value: 'INTERN', label: 'Intern' },
 ];
 
 const ALL_SPECIFIC = EMPLOYMENT_TYPES.map((t) => t.value);

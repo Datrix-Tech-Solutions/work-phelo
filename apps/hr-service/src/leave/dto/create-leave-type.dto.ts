@@ -1,5 +1,13 @@
-import { IsString, IsInt, IsBoolean, IsOptional, Min } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsBoolean,
+  IsOptional,
+  Min,
+  IsEnum,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { EmploymentType } from '../../../prisma/generated/client';
 
 export class CreateLeaveTypeDto {
   @ApiProperty({
@@ -45,4 +53,15 @@ export class CreateLeaveTypeDto {
   @IsOptional()
   @IsBoolean()
   isPaid?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Employment types eligible for this leave. Empty array means all types are eligible.',
+    enum: EmploymentType,
+    isArray: true,
+    example: ['FULL_TIME', 'CONTRACT'],
+  })
+  @IsOptional()
+  @IsEnum(EmploymentType, { each: true })
+  applicableTo?: EmploymentType[];
 }
