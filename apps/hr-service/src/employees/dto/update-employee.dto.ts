@@ -114,6 +114,14 @@ export class UpdateEmployeeDto {
   departmentId?: string;
 
   @ApiPropertyOptional({
+    description: 'Branch ID of the employee',
+    example: 'branch-789',
+  })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
+  @ApiPropertyOptional({
     description: 'Updated job title',
     example: 'HR Manager',
   })

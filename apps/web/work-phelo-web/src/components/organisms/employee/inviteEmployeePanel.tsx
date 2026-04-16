@@ -9,7 +9,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { Employee, Department, CreateEmployeePayload } from '@/types/hr';
+import { Employee, Department, Branch, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
 
 /* ── Types ── */
@@ -21,6 +21,7 @@ interface InviteForm {
   phone?: string;
   jobTitle: string;
   departmentId?: string;
+  branchId?: string;
   managerId?: string;
   employmentType: string;
   hireDate: string;
@@ -34,6 +35,7 @@ interface InviteEmployeePanelProps {
   onClose: () => void;
   onSuccess: (fullName: string) => void;
   departments: Department[];
+  branches: Branch[];
   employees: Employee[];
 }
 
@@ -44,6 +46,7 @@ export function InviteEmployeePanel({
   onClose,
   onSuccess,
   departments,
+  branches,
   employees,
 }: InviteEmployeePanelProps) {
   const toast = useToast();
@@ -65,6 +68,7 @@ export function InviteEmployeePanel({
   // const probationDateValue = useWatch({ control, name: 'probationEndDate' });
   // const contractDateValue = useWatch({ control, name: 'contractEndDate' });
   const deptFormValue = useWatch({ control, name: 'departmentId' });
+  const branchFormValue = useWatch({ control, name: 'branchId' });
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
 
@@ -165,6 +169,15 @@ export function InviteEmployeePanel({
           onChange={(v) => setValue('departmentId', v)}
           options={departments.map((d) => ({ value: d.id, label: d.name }))}
         />
+        {branches.length > 0 && (
+          <SearchSelect
+            label="Branch"
+            placeholder="Select branch (optional)"
+            value={branchFormValue}
+            onChange={(v) => setValue('branchId', v)}
+            options={branches.map((b) => ({ value: b.id, label: b.name }))}
+          />
+        )}
         <FormField
           label="Job Title"
           registration={register('jobTitle', { required: 'Required' })}

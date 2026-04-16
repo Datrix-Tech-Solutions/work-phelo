@@ -135,6 +135,14 @@ export class CreateEmployeeDto {
   @IsString()
   departmentId!: string;
 
+  @ApiPropertyOptional({
+    description: 'Branch ID of the employee',
+    example: 'branch-789',
+  })
+  @IsOptional()
+  @IsString()
+  branchId?: string;
+
   @ApiProperty({ description: 'Job title or role', example: 'HR Manager' })
   @IsString()
   jobTitle!: string;

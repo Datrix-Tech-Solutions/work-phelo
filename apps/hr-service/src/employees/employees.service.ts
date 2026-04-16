@@ -80,8 +80,9 @@ export class EmployeesService {
         ssnit: dto.ssnit,
         tinNumber: dto.tinNumber,
         ...(dto.departmentId && { departmentId: dto.departmentId }),
+        ...(dto.branchId && { branchId: dto.branchId }),
       },
-      include: { department: true },
+      include: { department: true, branch: true },
     });
 
     // Fire-and-forget — HR returns immediately, auth handles invite async
@@ -156,6 +157,7 @@ export class EmployeesService {
           hireDate: true,
           avatarUrl: true,
           department: { select: { id: true, name: true } },
+          branch: { select: { id: true, name: true } },
         },
         orderBy: { createdAt: 'desc' },
       }),
@@ -170,6 +172,7 @@ export class EmployeesService {
       where: { id, tenantId },
       include: {
         department: true,
+        branch: true,
         allowances: true,
         documents: true,
         leaveBalances: { include: { leaveType: true } },
@@ -219,7 +222,7 @@ export class EmployeesService {
           }),
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
       },
-      include: { department: true },
+      include: { department: true, branch: true },
     });
   }
 

@@ -4,6 +4,7 @@ import { APP_PIPE } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { BranchesModule } from './branches/branches.module';
 import { EmployeesModule } from './employees/employees.module';
 import { LeaveModule } from './leave/leave.module';
 import { TimeModule } from './time/time.module';
@@ -22,6 +23,7 @@ import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     DepartmentsModule,
+    BranchesModule,
     EmployeesModule,
     LeaveModule,
     TimeModule,
