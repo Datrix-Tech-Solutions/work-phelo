@@ -71,7 +71,42 @@ export class LeaveService {
     if (existing) {
       throw new ConflictException('A leave type with this name already exists');
     }
-    return this.prisma.leaveType.create({ data: { tenantId, ...dto } });
+
+    const leaveType = await this.prisma.leaveType.create({
+      data: { tenantId, ...dto },
+    });
+
+    // Backfill a balance record for every active employee so they can
+    // immediately apply for this leave type without a manual balance init.
+    const year = new Date().getFullYear();
+    const employees = await this.prisma.employee.findMany({
+      where: { tenantId, employmentStatus: { not: 'OFFBOARDED' } },
+      select: { id: true },
+    });
+    for (const emp of employees) {
+      await this.prisma.leaveBalance.upsert({
+        where: {
+          employeeId_leaveTypeId_year: {
+            employeeId: emp.id,
+            leaveTypeId: leaveType.id,
+            year,
+          },
+        },
+        update: {},
+        create: {
+          tenantId,
+          employeeId: emp.id,
+          leaveTypeId: leaveType.id,
+          year,
+          totalDays: dto.daysAllowed,
+          usedDays: 0,
+          pendingDays: 0,
+          remainingDays: dto.daysAllowed,
+        },
+      });
+    }
+
+    return leaveType;
   }
 
   async updateLeaveType(
@@ -93,6 +128,28 @@ export class LeaveService {
       where: { id },
       data: dto,
     });
+
+    // When daysAllowed changes, update all existing balance records for the
+    // current year so employees see the correct entitlement immediately.
+    if (
+      dto.daysAllowed !== undefined &&
+      dto.daysAllowed !== leaveType.daysAllowed
+    ) {
+      const diff = dto.daysAllowed - leaveType.daysAllowed;
+      const year = new Date().getFullYear();
+      const balances = await this.prisma.leaveBalance.findMany({
+        where: { leaveTypeId: id, year },
+      });
+      for (const balance of balances) {
+        await this.prisma.leaveBalance.update({
+          where: { id: balance.id },
+          data: {
+            totalDays: dto.daysAllowed,
+            remainingDays: Math.max(0, balance.remainingDays + diff),
+          },
+        });
+      }
+    }
 
     return {
       ...updated,

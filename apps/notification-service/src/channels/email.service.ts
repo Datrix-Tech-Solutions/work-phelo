@@ -101,7 +101,7 @@ export class EmailService {
               You've been invited
             </td>
             <td align="right">
-              <img src="${this.serviceUrl}/public/mail_image.png" alt="Invitation image" width="120" />
+              <img src="${this.serviceUrl}/public/mail_image.png" alt="" width="120" />
             </td>
           </tr>
         </table>
