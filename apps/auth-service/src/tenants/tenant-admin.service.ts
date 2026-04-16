@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
@@ -7,6 +7,8 @@ import { WorkspaceUrl } from '../common/workspace-url.helper';
 
 @Injectable()
 export class TenantAdminService {
+  private readonly logger = new Logger(TenantAdminService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
@@ -67,12 +69,16 @@ export class TenantAdminService {
     });
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
-    await this.rabbitmq.emit('notification.invite_user', {
-      email: user.email,
-      firstName: user.firstName,
-      tenantName: tenant.name,
-      acceptInviteUrl,
-    });
+    void this.rabbitmq
+      .emit('notification.invite_user', {
+        email: user.email,
+        firstName: user.firstName,
+        tenantName: tenant.name,
+        acceptInviteUrl,
+      })
+      .catch((err) =>
+        this.logger.error(`Failed to emit invite for ${user.email}`, err),
+      );
 
     return { message: 'Admin assigned. Invite email sent.', user };
   }
@@ -96,18 +102,22 @@ export class TenantAdminService {
       data: { inviteToken, inviteExpiresAt },
     });
 
-    await this.rabbitmq.sendInviteEmail({
-      userId: admin.id,
-      tenantId,
-      email: admin.email,
-      firstName: admin.firstName,
-      inviteToken,
-      acceptInviteUrl: WorkspaceUrl.acceptInvite(
-        admin.tenant.slug,
+    void this.rabbitmq
+      .sendInviteEmail({
+        userId: admin.id,
+        tenantId,
+        email: admin.email,
+        firstName: admin.firstName,
         inviteToken,
-      ),
-      tenantName: admin.tenant.name,
-    });
+        acceptInviteUrl: WorkspaceUrl.acceptInvite(
+          admin.tenant.slug,
+          inviteToken,
+        ),
+        tenantName: admin.tenant.name,
+      })
+      .catch((err) =>
+        this.logger.error(`Failed to resend invite for ${admin.email}`, err),
+      );
 
     return { message: 'Invitation resent successfully' };
   }

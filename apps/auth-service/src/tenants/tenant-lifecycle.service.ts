@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -14,6 +15,8 @@ import { WorkspaceUrl } from '../common/workspace-url.helper';
 
 @Injectable()
 export class TenantLifecycleService {
+  private readonly logger = new Logger(TenantLifecycleService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
@@ -74,12 +77,16 @@ export class TenantLifecycleService {
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
-    await this.rabbitmq.emit('notification.invite_user', {
-      email: user.email,
-      firstName: user.firstName,
-      tenantName: tenant.name,
-      acceptInviteUrl,
-    });
+    void this.rabbitmq
+      .emit('notification.invite_user', {
+        email: user.email,
+        firstName: user.firstName,
+        tenantName: tenant.name,
+        acceptInviteUrl,
+      })
+      .catch((err) =>
+        this.logger.error(`Failed to emit invite for ${user.email}`, err),
+      );
 
     await this.audit.log({
       tenantId: tenant.id,
@@ -184,7 +191,11 @@ export class TenantLifecycleService {
       status: 'SUCCESS',
     });
 
-    await this.rabbitmq.emitToHr('hr.tenant_approved', { tenantId: id });
+    void this.rabbitmq
+      .emitToHr('hr.tenant_approved', { tenantId: id })
+      .catch((err) =>
+        this.logger.error(`Failed to emit hr.tenant_approved for ${id}`, err),
+      );
 
     return { message: 'Tenant approved successfully', tenant: updated };
   }

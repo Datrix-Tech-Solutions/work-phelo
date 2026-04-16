@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
@@ -17,6 +18,8 @@ import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
@@ -79,15 +82,19 @@ export class UsersService {
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
-    await this.rabbitmq.sendInviteEmail({
-      userId: user.id,
-      tenantId,
-      email: user.email,
-      firstName: user.firstName,
-      inviteToken,
-      acceptInviteUrl,
-      tenantName: tenant.name,
-    });
+    void this.rabbitmq
+      .sendInviteEmail({
+        userId: user.id,
+        tenantId,
+        email: user.email,
+        firstName: user.firstName,
+        inviteToken,
+        acceptInviteUrl,
+        tenantName: tenant.name,
+      })
+      .catch((err) =>
+        this.logger.error(`Failed to send invite for ${user.email}`, err),
+      );
 
     await this.audit.log({
       tenantId,
@@ -152,11 +159,18 @@ export class UsersService {
     }
 
     // Link the auth userId back to the HR employee record
-    await this.rabbitmq.emitToHr('hr.employee_activated', {
-      tenantId: updated.tenantId,
-      email: updated.email,
-      userId: updated.id,
-    });
+    void this.rabbitmq
+      .emitToHr('hr.employee_activated', {
+        tenantId: updated.tenantId,
+        email: updated.email,
+        userId: updated.id,
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to emit hr.employee_activated for ${updated.email}`,
+          err,
+        ),
+      );
 
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {
@@ -222,12 +236,16 @@ export class UsersService {
       inviteToken,
     );
 
-    await this.rabbitmq.emit('notification.invite_user', {
-      email: user.email,
-      firstName: user.firstName,
-      tenantName: user.tenant.name,
-      acceptInviteUrl,
-    });
+    void this.rabbitmq
+      .emit('notification.invite_user', {
+        email: user.email,
+        firstName: user.firstName,
+        tenantName: user.tenant.name,
+        acceptInviteUrl,
+      })
+      .catch((err) =>
+        this.logger.error(`Failed to resend invite for ${user.email}`, err),
+      );
 
     return { message: 'Invitation resent successfully' };
   }

@@ -17,15 +17,22 @@ async function bootstrap() {
           'x-message-ttl': 3600000,
         },
       },
-      noAck: false,
+      noAck: true,
       prefetchCount: 10,
     },
   });
   app.setGlobalPrefix('api');
-  await app.startAllMicroservices();
   const port = process.env.PORT || 4004;
   await app.listen(port);
   console.log(`Notification service running on port ${port}`);
-  console.log(`Listening on RabbitMQ queue: notification_queue`);
+  // Start RabbitMQ consumer after HTTP is up — connection failures won't block the HTTP server
+  app
+    .startAllMicroservices()
+    .catch((err: unknown) =>
+      console.error(
+        'RabbitMQ microservice failed to start:',
+        err instanceof Error ? err.message : String(err),
+      ),
+    );
 }
 void bootstrap();
