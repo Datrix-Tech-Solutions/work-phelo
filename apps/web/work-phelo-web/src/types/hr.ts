@@ -119,7 +119,7 @@ export interface CreateEmployeePayload {
 }
 
 // ── Leave Type ───────────────────────────────────────────
-export type LeaveApplicableTo = 'ALL' | 'FULL_TIME' | 'PART_TIME' | 'CONTRACT';
+export type LeaveApplicableTo = 'ALL' | 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
 
 export interface LeaveType {
   id: string;

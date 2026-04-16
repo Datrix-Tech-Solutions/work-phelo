@@ -298,18 +298,19 @@ model EmployeeAllowance {
 // ── Leave ─────────────────────────────────────────────────────────────────
 
 model LeaveType {
-  id               String   @id @default(uuid())
+  id               String           @id @default(uuid())
   tenantId         String
   name             String
   daysAllowed      Int
-  isCarryOver      Boolean  @default(false)
+  isCarryOver      Boolean          @default(false)
   maxCarryOverDays Int?
-  requiresApproval Boolean  @default(true)
-  isPaid           Boolean  @default(true)
-  isActive         Boolean  @default(true)
-  isDefault        Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  requiresApproval Boolean          @default(true)
+  isPaid           Boolean          @default(true)
+  isActive         Boolean          @default(true)
+  isDefault        Boolean          @default(false)
+  applicableTo     EmploymentType[] @default([])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   balances         LeaveBalance[]
   requests         LeaveRequest[]

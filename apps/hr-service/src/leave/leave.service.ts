@@ -217,7 +217,21 @@ export class LeaveService {
       });
     }
 
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { employmentType: true },
+    });
+
     for (const lt of leaveTypes) {
+      // Skip leave types that don't apply to this employee's employment type
+      if (
+        employee &&
+        lt.applicableTo.length > 0 &&
+        !lt.applicableTo.includes(employee.employmentType)
+      ) {
+        continue;
+      }
+
       await this.prisma.leaveBalance.upsert({
         where: {
           employeeId_leaveTypeId_year: { employeeId, leaveTypeId: lt.id, year },
@@ -280,6 +294,22 @@ export class LeaveService {
     });
     if (!empRecord) throw new NotFoundException('Employee profile not found');
     const employeeId = empRecord.id;
+
+    // Check leave type eligibility based on employment type
+    const leaveType = await this.prisma.leaveType.findFirst({
+      where: { id: dto.leaveTypeId, tenantId, isActive: true },
+    });
+    if (!leaveType) {
+      throw new NotFoundException('Leave type not found');
+    }
+    if (
+      leaveType.applicableTo.length > 0 &&
+      !leaveType.applicableTo.includes(empRecord.employmentType)
+    ) {
+      throw new ForbiddenException(
+        `This leave type is not available for your employment type (${empRecord.employmentType.replace('_', ' ').toLowerCase()})`,
+      );
+    }
     const start = new Date(dto.startDate);
     const end = new Date(dto.endDate);
 

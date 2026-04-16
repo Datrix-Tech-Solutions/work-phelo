@@ -83,6 +83,13 @@ export function CreateLeaveTypePanel({
   const isCarryOver = useWatch({ control, name: 'isCarryOver' });
 
   const onSubmit = (values: FormValues) => {
+    // Strip the synthetic 'ALL' sentinel — backend expects only EmploymentType values.
+    // If every specific type is selected we send [] (= applies to all).
+    const specificTypes = values.applicableTo.filter(
+      (t): t is Exclude<LeaveApplicableTo, 'ALL'> => t !== 'ALL',
+    );
+    const applicableTo = specificTypes.length === ALL_SPECIFIC.length ? [] : specificTypes;
+
     const payload = {
       name: values.name,
       isPaid: values.isPaid,
@@ -93,8 +100,7 @@ export function CreateLeaveTypePanel({
           ? Number(values.maxCarryOverDays)
           : undefined,
       requiresApproval: true,
-      // requiresDocument: values.requiresDocument,
-      // applicableTo: values.applicableTo,
+      applicableTo,
     };
 
     const handleSuccess = () => {
