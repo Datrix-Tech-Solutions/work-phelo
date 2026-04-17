@@ -2,26 +2,37 @@
 
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import { useEmployees, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import {
   DepartmentFormFields,
   DeptForm,
 } from '@/components/molecules/departments/DepartmentFormFields';
-import { useUpdateDepartment } from '@/hooks/useDepartments';
+import { useDepartments, useUpdateDepartment } from '@/hooks/useDepartments';
 import { useToast } from '@/hooks/useToast';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  tenantSlug: string;
-  editTarget: { id: string; name: string; description?: string; managerId?: string } | null;
+  editTarget: {
+    id: string;
+    name: string;
+    description?: string;
+    managerId?: string;
+  } | null;
 }
 
 export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
-  const form = useForm<DeptForm>();
   const toast = useToast();
-  const { mutate: updateDepartment, isPending } = useUpdateDepartment();
+  const form = useForm<DeptForm>();
+  const { mutateAsync: updateDepartmentAsync, isPending } = useUpdateDepartment();
+  const { mutate: updateEmployee } = useUpdateEmployee();
+
+  const { data: empResult } = useEmployees({ limit: 100 });
+  const employees = empResult?.data ?? [];
+  const { data: departments = [] } = useDepartments();
 
   useEffect(() => {
     if (editTarget) {
@@ -33,18 +44,42 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
     }
   }, [editTarget, form]);
 
-  const handleSubmit = (data: DeptForm) => {
+  const handleSubmit = async (data: DeptForm) => {
     if (!editTarget) return;
-    updateDepartment(
-      { id: editTarget.id, name: data.name, description: data.description || undefined },
-      {
-        onSuccess: () => {
-          toast.success('Department updated');
-          onClose();
-        },
-        onError: () => toast.error('Failed to update department'),
-      },
-    );
+
+    const newManagerId = data.managerId || null;
+
+    try {
+      // If a new manager is being set, clear their headship in any other department first
+      if (newManagerId) {
+        const prevHeadOf = departments.find(
+          (d) => d.managerId === newManagerId && d.id !== editTarget.id,
+        );
+        if (prevHeadOf) {
+          await updateDepartmentAsync({ id: prevHeadOf.id, managerId: null });
+        }
+      }
+
+      await updateDepartmentAsync({
+        id: editTarget.id,
+        name: data.name,
+        description: data.description || undefined,
+        managerId: newManagerId,
+      });
+
+      // Auto-add the new manager as a member of this department
+      if (newManagerId) {
+        const manager = employees.find((e) => e.id === newManagerId);
+        if (manager && manager.departmentId !== editTarget.id) {
+          updateEmployee({ id: newManagerId, departmentId: editTarget.id });
+        }
+      }
+
+      toast.success('Department updated successfully');
+      onClose();
+    } catch {
+      toast.error('Failed to update department');
+    }
   };
 
   return (
@@ -68,7 +103,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
         </div>
       }
     >
-      <DepartmentFormFields form={form} employees={[]} />
+      <DepartmentFormFields form={form} employees={employees} />
     </SidePanel>
   );
 }

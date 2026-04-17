@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -24,14 +24,11 @@ const EMPTY_ITEM = (): AllowanceItem & { _key: number } => ({
 
 type DraftItem = AllowanceItem & { _key: number };
 
-export function PayrollItemsPanel({ isOpen, onClose, type, employeeName, items, onSave }: Props) {
-  const [draft, setDraft] = useState<DraftItem[]>([]);
-
-  useEffect(() => {
-    if (isOpen) {
-      setDraft(items.length > 0 ? items.map((i, idx) => ({ ...i, _key: idx })) : [EMPTY_ITEM()]);
-    }
-  }, [isOpen, items]);
+/* ── Inner form — remounted via key each time the panel opens ── */
+function PayrollItemsForm({ onClose, type, employeeName, items, onSave }: Omit<Props, 'isOpen'>) {
+  const [draft, setDraft] = useState<DraftItem[]>(
+    items.length > 0 ? items.map((i, idx) => ({ ...i, _key: idx })) : [EMPTY_ITEM()],
+  );
 
   const label = type === 'allowance' ? 'Allowance' : 'Deduction';
 
@@ -56,7 +53,7 @@ export function PayrollItemsPanel({ isOpen, onClose, type, employeeName, items, 
 
   return (
     <SidePanel
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       title={`Edit ${label}s`}
       description={employeeName}
@@ -111,5 +108,23 @@ export function PayrollItemsPanel({ isOpen, onClose, type, employeeName, items, 
         </div>
       )}
     </SidePanel>
+  );
+}
+
+/* ── Public wrapper ── */
+export function PayrollItemsPanel({ isOpen, ...props }: Props) {
+  if (!isOpen) {
+    return (
+      <SidePanel isOpen={false} onClose={props.onClose} title="">
+        {null}
+      </SidePanel>
+    );
+  }
+
+  return (
+    <PayrollItemsForm
+      key={`${props.type}-${props.employeeName}-${props.items.length}`}
+      {...props}
+    />
   );
 }

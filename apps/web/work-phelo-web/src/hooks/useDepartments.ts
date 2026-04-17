@@ -33,6 +33,7 @@ export function useCreateDepartment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
   });
 }
@@ -41,12 +42,21 @@ export function useUpdateDepartment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...payload }: { id: string; name?: string; description?: string }) => {
+    mutationFn: async ({
+      id,
+      ...payload
+    }: {
+      id: string;
+      name?: string;
+      description?: string;
+      managerId?: string | null;
+    }) => {
       const res = await api.patch<Department>(`/hr/departments/${id}`, payload);
       return res.data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
   });
 }
