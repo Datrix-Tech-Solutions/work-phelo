@@ -4,6 +4,7 @@ import {
   IsEnum,
   IsDateString,
   IsNumber,
+  IsUUID,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -110,7 +111,7 @@ export class UpdateEmployeeDto {
     example: 'dept-456',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   departmentId?: string;
 
   @ApiPropertyOptional({
@@ -118,7 +119,7 @@ export class UpdateEmployeeDto {
     example: 'branch-789',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   branchId?: string;
 
   @ApiPropertyOptional({
@@ -126,7 +127,7 @@ export class UpdateEmployeeDto {
     example: 'emp-123',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   managerId?: string;
 
   @ApiPropertyOptional({

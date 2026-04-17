@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
@@ -9,6 +10,8 @@ import { UpdateDepartmentDto } from './dto/update-department.dto';
 
 @Injectable()
 export class DepartmentsService {
+  private readonly logger = new Logger(DepartmentsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async create(tenantId: string, dto: CreateDepartmentDto) {
@@ -53,6 +56,21 @@ export class DepartmentsService {
 
   async update(tenantId: string, id: string, dto: UpdateDepartmentDto) {
     await this.findById(tenantId, id);
+
+    if (dto.managerId) {
+      const manager = await this.prisma.employee.findFirst({
+        where: { id: dto.managerId, tenantId },
+      });
+      if (!manager) throw new NotFoundException('Manager not found');
+    }
+
+    if (dto.parentId) {
+      const parent = await this.prisma.department.findFirst({
+        where: { id: dto.parentId, tenantId, isActive: true },
+      });
+      if (!parent) throw new NotFoundException('Parent department not found');
+    }
+
     return this.prisma.department.update({
       where: { id },
       data: dto,

@@ -5,6 +5,7 @@ import {
   IsDateString,
   IsEmail,
   IsNumber,
+  IsUUID,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -132,7 +133,7 @@ export class CreateEmployeeDto {
     description: 'Department ID of the employee',
     example: 'dept-456',
   })
-  @IsString()
+  @IsUUID()
   departmentId!: string;
 
   @ApiPropertyOptional({
@@ -140,7 +141,7 @@ export class CreateEmployeeDto {
     example: 'branch-789',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   branchId?: string;
 
   @ApiPropertyOptional({
@@ -148,7 +149,7 @@ export class CreateEmployeeDto {
     example: 'emp-123',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   managerId?: string;
 
   @ApiProperty({ description: 'Job title or role', example: 'HR Manager' })
