@@ -22,6 +22,7 @@ export function AddMembersPanel({ isOpen, onClose, department, employees, onAddM
   const filteredEmployees = useMemo(() => {
     const q = memberSearch.toLowerCase();
     return employees.filter((e) => {
+      if (e.employmentStatus === 'OFFBOARDED' || e.employmentStatus === 'TERMINATED') return false;
       const name = `${e.firstName} ${e.lastName}`.toLowerCase();
       return !q || name.includes(q) || e.jobTitle?.toLowerCase().includes(q);
     });
@@ -89,7 +90,9 @@ export function AddMembersPanel({ isOpen, onClose, department, employees, onAddM
               key={emp.id}
               employee={emp}
               checked={selectedIds.has(emp.id)}
-              alreadyInDept={emp.departmentId === department?.id}
+              alreadyInDept={
+                emp.departmentId === department?.id || emp.department?.id === department?.id
+              }
               onToggle={toggleEmployee}
             />
           ))

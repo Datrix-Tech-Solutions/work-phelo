@@ -9,15 +9,17 @@ import {
   DeptForm,
 } from '@/components/molecules/departments/DepartmentFormFields';
 import { useCreateDepartment } from '@/hooks/useDepartments';
+import { Employee } from '@/types/hr';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   tenantSlug: string;
+  employees: Employee[];
   onSuccess?: (name: string) => void;
 }
 
-export function CreateDepartmentPanel({ isOpen, onClose, onSuccess }: Props) {
+export function CreateDepartmentPanel({ isOpen, onClose, onSuccess, employees }: Props) {
   const form = useForm<DeptForm>();
   const { mutate: createDepartment, isPending } = useCreateDepartment();
 
@@ -59,7 +61,7 @@ export function CreateDepartmentPanel({ isOpen, onClose, onSuccess }: Props) {
         </div>
       }
     >
-      <DepartmentFormFields form={form} employees={[]} />
+      <DepartmentFormFields form={form} employees={employees} />
     </SidePanel>
   );
 }

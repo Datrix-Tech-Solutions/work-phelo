@@ -10,7 +10,22 @@ import type {
 
 // ── Transform raw backend ClockRecord → TimeEntry ────────────────────────────
 
-function transformAttendanceRecord(r: any): TimeEntry {
+interface RawAttendanceRecord {
+  id: string;
+  employeeId: string;
+  clockIn: string | Date;
+  clockOut?: string | Date | null;
+  hoursWorked?: number | null;
+  date: string | Date;
+  employee?: {
+    firstName: string;
+    lastName: string;
+    jobTitle?: string;
+    department?: { name: string };
+  };
+}
+
+function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
   const clockOut = r.clockOut ? new Date(r.clockOut) : null;
   const clockIn = new Date(r.clockIn);
   const hoursWorked = r.hoursWorked != null ? parseFloat(String(r.hoursWorked)) : 0;
@@ -115,7 +130,7 @@ export function useMyAttendanceHistory(page: number = 1) {
       try {
         const res = await api.get('/hr/time/attendance', { params: { mine: 'true' } });
         const raw = res.data;
-        const records: any[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+        const records: RawAttendanceRecord[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
         return { data: records.map(transformAttendanceRecord), totalPages: 1 };
       } catch {
         return { data: [], totalPages: 1 };
