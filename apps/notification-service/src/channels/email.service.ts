@@ -18,7 +18,8 @@ export class EmailService {
       throw new Error('NOTIFICATION_SERVICE_URL is required');
     this.apiKey = process.env.RESEND_API_KEY;
     this.fromEmail = process.env.RESEND_FROM_EMAIL;
-    this.serviceUrl = process.env.NOTIFICATION_SERVICE_URL;
+    this.serviceUrl =
+      process.env.NOTIFICATION_SERVICE_URL || 'apps/notification-service/src/';
   }
 
   private async send(
