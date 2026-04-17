@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsUUID } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateDepartmentDto {
@@ -23,7 +23,7 @@ export class UpdateDepartmentDto {
     example: 'user-789',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   managerId?: string;
 
   @ApiPropertyOptional({
@@ -31,7 +31,7 @@ export class UpdateDepartmentDto {
     example: 'dept-123',
   })
   @IsOptional()
-  @IsString()
+  @IsUUID()
   parentId?: string;
 
   @ApiPropertyOptional({

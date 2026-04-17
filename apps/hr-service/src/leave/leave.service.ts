@@ -557,6 +557,10 @@ export class LeaveService {
           },
         });
       }
+    } else {
+      this.logger.warn(
+        `Leave balance not found for employee=${request.employeeId} leaveType=${request.leaveTypeId} year=${year} — balance counters not updated for request ${requestId}`,
+      );
     }
 
     // Notify the employee of the decision (fire-and-forget)

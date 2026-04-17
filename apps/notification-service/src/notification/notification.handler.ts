@@ -26,7 +26,14 @@ export class NotificationHandler {
     this.logger.log(
       `[notification.email_verification] Received | email=${data.email} | corrId=${data._meta?.correlationId}`,
     );
-    await this.notificationService.sendEmailVerification(data);
+    try {
+      await this.notificationService.sendEmailVerification(data);
+    } catch (err) {
+      this.logger.error(
+        '[notification.email_verification] Handler failed',
+        err,
+      );
+    }
   }
 
   @EventPattern('notification.invite_user')
@@ -34,7 +41,11 @@ export class NotificationHandler {
     this.logger.log(
       `[notification.invite_user] Received | email=${data.email} | corrId=${data._meta?.correlationId}`,
     );
-    await this.notificationService.sendInvite(data);
+    try {
+      await this.notificationService.sendInvite(data);
+    } catch (err) {
+      this.logger.error('[notification.invite_user] Handler failed', err);
+    }
   }
 
   @EventPattern('notification.password_reset_link')
@@ -44,7 +55,14 @@ export class NotificationHandler {
     this.logger.log(
       `[notification.password_reset_link] Received | email=${data.email} | corrId=${data._meta?.correlationId}`,
     );
-    await this.notificationService.sendPasswordResetLink(data);
+    try {
+      await this.notificationService.sendPasswordResetLink(data);
+    } catch (err) {
+      this.logger.error(
+        '[notification.password_reset_link] Handler failed',
+        err,
+      );
+    }
   }
 
   @EventPattern('notification.password_reset_otp')
@@ -54,7 +72,14 @@ export class NotificationHandler {
     this.logger.log(
       `[notification.password_reset_otp] Received | phone=${data.phone} | corrId=${data._meta?.correlationId}`,
     );
-    await this.notificationService.sendPasswordResetOtp(data);
+    try {
+      await this.notificationService.sendPasswordResetOtp(data);
+    } catch (err) {
+      this.logger.error(
+        '[notification.password_reset_otp] Handler failed',
+        err,
+      );
+    }
   }
 
   @EventPattern('notify.employee_termination')
@@ -64,7 +89,11 @@ export class NotificationHandler {
     this.logger.log(
       `[notify.employee_termination] Received | email=${data.email} | corrId=${data._meta?.correlationId}`,
     );
-    await this.notificationService.sendTerminationNotice(data);
+    try {
+      await this.notificationService.sendTerminationNotice(data);
+    } catch (err) {
+      this.logger.error('[notify.employee_termination] Handler failed', err);
+    }
   }
 
   @EventPattern('notification.sms_otp')
@@ -72,7 +101,11 @@ export class NotificationHandler {
     this.logger.log(
       `[notification.sms_otp] Received | phone=${data.phone} | corrId=${data._meta?.correlationId}`,
     );
-    await this.notificationService.sendSmsOtp(data);
+    try {
+      await this.notificationService.sendSmsOtp(data);
+    } catch (err) {
+      this.logger.error('[notification.sms_otp] Handler failed', err);
+    }
   }
 
   @EventPattern('notify.leave_requested')
@@ -81,10 +114,14 @@ export class NotificationHandler {
       `[notify.leave_requested] Received | employee=${data.employeeFirstName} ${data.employeeLastName} | managerEmail=${data.managerEmail} | corrId=${data._meta?.correlationId}`,
     );
     if (!data.managerEmail) return;
-    await this.notificationService.sendLeaveRequestedNotification({
-      ...data,
-      managerEmail: data.managerEmail,
-    });
+    try {
+      await this.notificationService.sendLeaveRequestedNotification({
+        ...data,
+        managerEmail: data.managerEmail,
+      });
+    } catch (err) {
+      this.logger.error('[notify.leave_requested] Handler failed', err);
+    }
   }
 
   @EventPattern('notify.leave_reviewed')
@@ -92,6 +129,10 @@ export class NotificationHandler {
     this.logger.log(
       `[notify.leave_reviewed] Received | email=${data.employeeEmail} | status=${data.status} | corrId=${data._meta?.correlationId}`,
     );
-    await this.notificationService.sendLeaveReviewedNotification(data);
+    try {
+      await this.notificationService.sendLeaveReviewedNotification(data);
+    } catch (err) {
+      this.logger.error('[notify.leave_reviewed] Handler failed', err);
+    }
   }
 }

@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
+import { GlobalExceptionFilter } from './common/prisma-exception.filter';
 
 async function bootstrap() {
   if (!process.env.RABBITMQ_URL) throw new Error('RABBITMQ_URL is required');
@@ -13,6 +14,7 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
+  app.useGlobalFilters(new GlobalExceptionFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({
