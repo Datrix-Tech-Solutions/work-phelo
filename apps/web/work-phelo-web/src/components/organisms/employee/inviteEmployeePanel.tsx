@@ -220,6 +220,7 @@ export function InviteEmployeePanel({
             label="Probation End Date"
             value={probationDateValue}
             onChange={(v) => setValue('probationEndsAt', v)}
+            disablePast={true}
           />
         )}
         {employmentTypeValue === 'CONTRACT' && (
@@ -227,6 +228,7 @@ export function InviteEmployeePanel({
             label="Contract End Date"
             value={contractDateValue}
             onChange={(v) => setValue('contractEndDate', v)}
+            disablePast={true}
           />
         )}
       </div>

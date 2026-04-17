@@ -19,10 +19,10 @@ interface LeaveRequestDetailPanelProps {
 }
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  Approved: 'success',
-  Pending: 'warning',
-  Rejected: 'danger',
-  Cancelled: 'neutral',
+  APPROVED: 'success',
+  PENDING: 'warning',
+  REJECTED: 'danger',
+  CANCELLED: 'neutral',
 };
 
 function formatDate(d: string) {
@@ -87,7 +87,7 @@ export function LeaveRequestDetailPanel({
 
   if (!request) return null;
 
-  const isPending_ = request.status === 'Pending';
+  const isPending_ = request.status === 'PENDING';
 
   return (
     <>
