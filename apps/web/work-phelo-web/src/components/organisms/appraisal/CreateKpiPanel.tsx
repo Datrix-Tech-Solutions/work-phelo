@@ -31,6 +31,14 @@ type FormValues = {
   selfWeight: number | '';
 };
 
+const KPI_EMPTY_DEFAULTS = {
+  title: '',
+  description: '',
+  weight: '' as const,
+  maxScore: '' as const,
+  selfWeight: 40,
+};
+
 export function CreateKpiPanel({
   isOpen,
   onClose,
@@ -62,20 +70,12 @@ export function CreateKpiPanel({
         selfWeight: editKpi.selfWeight,
       });
     } else {
-      reset({ title: '', description: '', weight: '', maxScore: '', selfWeight: 40 });
+      reset(KPI_EMPTY_DEFAULTS);
     }
   }, [editKpi, reset]);
 
-  const emptyDefaults = {
-    title: '',
-    description: '',
-    weight: '' as const,
-    maxScore: '' as const,
-    selfWeight: 40,
-  };
-
   const handleClose = useCallback(() => {
-    reset(emptyDefaults);
+    reset(KPI_EMPTY_DEFAULTS);
     onClose();
   }, [reset, onClose]);
 

@@ -36,7 +36,9 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const isAdmin = user?.role === 'TENANT_ADMIN';
   const isManager = isAdmin || user?.isManager === true;
 
-  const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>('my');
+  const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>(
+    isAdmin ? 'live' : 'my',
+  );
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<{
     req: { id: string; employeeName?: string; date: string };
@@ -107,11 +109,12 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
       <TimeClockTabs
         activeTab={activeTab}
         isManager={isManager}
+        isEmployee={!isAdmin}
         pendingCount={pendingCount}
         onTabChange={setActiveTab}
       />
 
-      {activeTab === 'my' && (
+      {activeTab === 'my' && !isAdmin && (
         <MyTimeSection
           session={session}
           isLoading={sessionLoading}

@@ -1,3 +1,4 @@
+import { ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
 
@@ -7,6 +8,7 @@ interface EmployeeActionsBarProps {
   resendInvite: () => void;
   isResending?: boolean;
   onAssignAsset: () => void;
+  onAssignRole?: () => void;
   onOffboard: () => void;
   onEdit: () => void;
 }
@@ -17,11 +19,19 @@ export function EmployeeActionsBar({
   resendInvite,
   isResending,
   onAssignAsset,
+  onAssignRole,
   onOffboard,
   onEdit,
 }: EmployeeActionsBarProps) {
   return (
     <div className="flex items-center justify-end gap-3">
+      {onAssignRole && !isOffboarded && !isPendingInvite && (
+        <Button variant="outline" size="sm" onClick={onAssignRole} className="gap-2">
+          Assign Role
+          <ShieldCheck className="w-4 h-4" />
+        </Button>
+      )}
+
       {isPendingInvite ? (
         <Button
           variant="outline"

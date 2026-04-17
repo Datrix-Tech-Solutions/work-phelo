@@ -19,6 +19,7 @@ import { DashboardStatCards } from '@/components/organisms/dashboard/DashboardSt
 import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
+import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
 import { UpcomingBirthday } from '@/types/hr';
 import { formatTime } from '@/lib/formatters';
 
@@ -52,7 +53,7 @@ export default function EmployeeDashboardPage({
   const tenantName = user?.tenantName ?? 'Your Company';
 
   /* ── Remote data ── */
-  const { data: dashboard } = useEmployeeDashboard();
+  const { data: dashboard, isLoading: isDashboardLoading } = useEmployeeDashboard();
   const { data: balancesRaw } = useLeaveBalances();
   const { data: myLeaveRaw } = useMyLeaveRequests();
   const { data: myPayslipsRaw } = useMyPayslips();
@@ -155,6 +156,8 @@ export default function EmployeeDashboardPage({
   const scrollBirthdays = (dir: 'left' | 'right') => {
     birthdayRef.current?.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
   };
+
+  if (isDashboardLoading) return <DashboardSkeleton />;
 
   /* ── Render ── */
   return (

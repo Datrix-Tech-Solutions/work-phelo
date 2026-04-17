@@ -12,9 +12,16 @@ import {
 import { useDepartments } from '@/hooks/useDepartments';
 import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
+import {
+  useCompanyRoles,
+  useAssignCompanyRole,
+  useCurrentTenantUsers,
+  useUserPermissions,
+} from '@/hooks/useTenants';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
+import { AssignRolePanel } from '@/components/organisms/roles/AssignRolePanel';
 import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
 import { EmployeeActionsBar } from '@/components/molecules/employees/employeeActionBar';
 import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
@@ -33,6 +40,7 @@ export default function EmployeeDetailPage({
   const [offboardOpen, setOffboardOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [assignAssetOpen, setAssignAssetOpen] = useState(false);
+  const [assignRoleOpen, setAssignRoleOpen] = useState(false);
 
   // Data fetching
   const { data: employee, isLoading } = useEmployee(id);
@@ -44,6 +52,28 @@ export default function EmployeeDetailPage({
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { mutate: assignRole, isPending: isAssigningRole } = useAssignCompanyRole();
+
+  // Roles data
+  const { data: rolesRaw = [] } = useCompanyRoles();
+  const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
+
+  // Resolve the current company role for this employee via their userId
+  const { data: tenantUsersRaw } = useCurrentTenantUsers();
+  const tenantUsers: {
+    id: string;
+    companyRoleId?: string | null;
+    companyRole?: { id: string; name: string } | null;
+  }[] = Array.isArray(tenantUsersRaw) ? tenantUsersRaw : [];
+  const matchedUser = employee ? tenantUsers.find((u) => u.id === employee.userId) : null;
+  const currentRoleId = matchedUser?.companyRoleId ?? null;
+  const currentRoleName = matchedUser?.companyRole?.name ?? null;
+
+  // Effective permission sets assigned to this user (for stacking)
+  const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
+  const assignedSets: { id: string; name: string }[] =
+    (userPermsRaw as { permissionSets?: { id: string; name: string }[] } | undefined)
+      ?.permissionSets ?? [];
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -87,6 +117,7 @@ export default function EmployeeDetailPage({
         resendInvite={handleResendInvite}
         isResending={isResending}
         onAssignAsset={() => setAssignAssetOpen(true)}
+        onAssignRole={employee.userId ? () => setAssignRoleOpen(true) : undefined}
         onOffboard={() => setOffboardOpen(true)}
         onEdit={() => setEditOpen(true)}
       />
@@ -94,7 +125,13 @@ export default function EmployeeDetailPage({
       {/* Main Content */}
       <div className="flex gap-6 items-start">
         {/* Left Sidebar */}
-        <EmployeeProfileCard employee={employee} />
+        <EmployeeProfileCard
+          employee={employee}
+          roles={[
+            ...(currentRoleName ? [currentRoleName] : []),
+            ...assignedSets.filter((s) => s.name !== `${currentRoleName} Set`).map((s) => s.name),
+          ]}
+        />
 
         {/* Right Sections */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -102,6 +139,7 @@ export default function EmployeeDetailPage({
             employee={employee}
             departments={departments}
             allHrEmployees={allHrEmployees}
+            currentRoleName={currentRoleName}
           />
           <AccountDetailsSection employee={employee} />
           <AssetsSection assets={employee.assets || []} />
@@ -135,6 +173,30 @@ export default function EmployeeDetailPage({
         availableAssets={[]}
         onAssign={() => {}}
       />
+
+      {employee.userId && (
+        <AssignRolePanel
+          isOpen={assignRoleOpen}
+          onClose={() => setAssignRoleOpen(false)}
+          employeeName={name}
+          userId={employee.userId}
+          currentRoleId={currentRoleId}
+          roles={roles}
+          isAssigning={isAssigningRole}
+          onAssign={(companyRoleId, userId) => {
+            assignRole(
+              { companyRoleId, userId },
+              {
+                onSuccess: () => {
+                  toast.success(`Role assigned to ${name}`);
+                  setAssignRoleOpen(false);
+                },
+                onError: () => toast.error('Failed to assign role'),
+              },
+            );
+          }}
+        />
+      )}
     </div>
   );
 }

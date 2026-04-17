@@ -1,6 +1,6 @@
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { formatDate, formatMinutes } from '@/lib/formatters';
+import { formatDate, formatTime, formatMinutes } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import type { TimeEntry } from '@/types/timeclock';
 
@@ -49,11 +49,11 @@ export function RecordsSection({
     },
     { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
     { key: 'department', label: 'Department', render: (r) => <span>{r.department ?? '—'}</span> },
-    { key: 'clockIn', label: 'Clock In', render: (r) => <span>{formatDate(r.clockIn)}</span> },
+    { key: 'clockIn', label: 'Clock In', render: (r) => <span>{formatTime(r.clockIn)}</span> },
     {
       key: 'clockOut',
       label: 'Clock Out',
-      render: (r) => <span>{r.clockOut ? formatDate(r.clockOut) : '—'}</span>,
+      render: (r) => <span>{r.clockOut ? formatTime(r.clockOut) : '—'}</span>,
     },
     {
       key: 'totalMinutes',

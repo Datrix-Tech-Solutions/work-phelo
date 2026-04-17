@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCompanyRoleDto } from './dto/create-company-role.dto';
@@ -10,6 +11,8 @@ import { UpdateCompanyRoleDto } from './dto/update-company-role.dto';
 
 @Injectable()
 export class CompanyRolesService {
+  private readonly logger = new Logger(CompanyRolesService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async seedDefaultRoles(tenantId: string) {
@@ -95,16 +98,69 @@ export class CompanyRolesService {
 
   async assignRoleToUser(
     tenantId: string,
+    assignedBy: string,
     userId: string,
     companyRoleId: string,
   ) {
-    await this.findById(tenantId, companyRoleId);
+    const newRole = await this.findById(tenantId, companyRoleId);
 
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
+      include: {
+        companyRole: true,
+        permissionSets: { select: { permissionSetId: true } },
+      },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException('User not found in this tenant');
 
+    // ── Swap permission sets ──────────────────────────────────────────────────
+    // Remove the permission set that matched the previous role (if any),
+    // then assign the one that matches the new role.
+    // Convention: a role named "Manager" has a matching set named "Manager Set".
+
+    if (user.companyRole) {
+      const oldSetName = `${user.companyRole.name} Set`;
+      const oldSet = await this.prisma.permissionSet.findFirst({
+        where: { tenantId, name: oldSetName, isActive: true },
+      });
+      if (oldSet) {
+        const isAssigned = user.permissionSets.some(
+          (ps) => ps.permissionSetId === oldSet.id,
+        );
+        if (isAssigned) {
+          await this.prisma.userPermissionSet.delete({
+            where: {
+              userId_permissionSetId: { userId, permissionSetId: oldSet.id },
+            },
+          });
+        }
+      }
+    }
+
+    const newSetName = `${newRole.name} Set`;
+    const newSet = await this.prisma.permissionSet.findFirst({
+      where: { tenantId, name: newSetName, isActive: true },
+    });
+
+    if (newSet) {
+      await this.prisma.userPermissionSet.upsert({
+        where: {
+          userId_permissionSetId: { userId, permissionSetId: newSet.id },
+        },
+        update: { grantedBy: assignedBy, grantedAt: new Date() },
+        create: {
+          userId,
+          permissionSetId: newSet.id,
+          grantedBy: assignedBy,
+        },
+      });
+    } else {
+      this.logger.warn(
+        `No permission set found for role "${newRole.name}" (looked for "${newSetName}") in tenant ${tenantId}`,
+      );
+    }
+
+    // ── Update the user's company role ────────────────────────────────────────
     return this.prisma.user.update({
       where: { id: userId },
       data: { companyRoleId },
@@ -115,6 +171,7 @@ export class CompanyRolesService {
         lastName: true,
         role: true,
         companyRoleId: true,
+        companyRole: { select: { id: true, name: true } },
       },
     });
   }

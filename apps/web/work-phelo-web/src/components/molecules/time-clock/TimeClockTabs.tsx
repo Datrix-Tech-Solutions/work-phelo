@@ -3,13 +3,20 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 interface Props {
   activeTab: 'my' | 'live' | 'records' | 'corrections';
   isManager: boolean;
+  isEmployee: boolean;
   pendingCount: number;
   onTabChange: (tab: 'my' | 'live' | 'records' | 'corrections') => void;
 }
 
-export function TimeClockTabs({ activeTab, isManager, pendingCount, onTabChange }: Props) {
+export function TimeClockTabs({
+  activeTab,
+  isManager,
+  isEmployee,
+  pendingCount,
+  onTabChange,
+}: Props) {
   const tabs = [
-    { key: 'my', label: 'My Time' },
+    ...(isEmployee ? [{ key: 'my', label: 'My Time' }] : []),
     ...(isManager
       ? [
           { key: 'live', label: 'Live' },

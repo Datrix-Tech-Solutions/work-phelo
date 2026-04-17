@@ -8,6 +8,48 @@ import type {
   CorrectionRequest,
 } from '@/types/timeclock';
 
+// ── Transform raw backend ClockRecord → TimeEntry ────────────────────────────
+
+interface RawAttendanceRecord {
+  id: string;
+  employeeId: string;
+  clockIn: string | Date;
+  clockOut?: string | Date | null;
+  hoursWorked?: number | null;
+  date: string | Date;
+  employee?: {
+    firstName: string;
+    lastName: string;
+    jobTitle?: string;
+    department?: { name: string };
+  };
+}
+
+function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
+  const clockOut = r.clockOut ? new Date(r.clockOut) : null;
+  const clockIn = new Date(r.clockIn);
+  const hoursWorked = r.hoursWorked != null ? parseFloat(String(r.hoursWorked)) : 0;
+  const totalMinutes = clockOut
+    ? Math.round(hoursWorked * 60)
+    : Math.floor((Date.now() - clockIn.getTime()) / 60000);
+  const date =
+    typeof r.date === 'string' ? r.date.slice(0, 10) : new Date(r.date).toISOString().slice(0, 10);
+  return {
+    id: r.id,
+    employeeId: r.employeeId,
+    employeeName: r.employee ? `${r.employee.firstName} ${r.employee.lastName}` : '',
+    department: r.employee?.department?.name ?? undefined,
+    jobTitle: r.employee?.jobTitle ?? undefined,
+    date,
+    clockIn: clockIn.toISOString(),
+    clockOut: clockOut?.toISOString() ?? undefined,
+    totalMinutes,
+    breakMinutes: 0,
+    status: clockOut ? 'CLOCKED_OUT' : 'CLOCKED_IN',
+    isLate: false,
+  };
+}
+
 // ── Employee ─────────────────────────────────────────────────────────────────
 
 export function useMyTodaySession() {
@@ -85,12 +127,14 @@ export function useMyAttendanceHistory(page: number = 1) {
   return useQuery<{ data: TimeEntry[]; totalPages: number }>({
     queryKey: ['timeclock', 'history', page],
     queryFn: async () => {
-      const res = await api.get('/hr/time/attendance', {
-        params: { page, limit: 10 },
-      });
-      const raw = res.data;
-      if (Array.isArray(raw)) return { data: raw, totalPages: 1 };
-      return { data: raw?.data ?? [], totalPages: raw?.totalPages ?? 1 };
+      try {
+        const res = await api.get('/hr/time/attendance', { params: { mine: 'true' } });
+        const raw = res.data;
+        const records: RawAttendanceRecord[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+        return { data: records.map(transformAttendanceRecord), totalPages: 1 };
+      } catch {
+        return { data: [], totalPages: 1 };
+      }
     },
   });
 }
@@ -155,9 +199,10 @@ export function useAttendanceRecords(params: {
           to: params.toDate || undefined,
         },
       });
-      const raw = res.data;
-      if (Array.isArray(raw)) return { data: raw, totalPages: 1 };
-      return { data: raw?.data ?? [], totalPages: raw?.totalPages ?? 1 };
+      const raw = res.data as TimeEntry[] | { data: TimeEntry[]; totalPages: number };
+      const records: TimeEntry[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      const totalPages = Array.isArray(raw) ? 1 : (raw?.totalPages ?? 1);
+      return { data: records.map(transformAttendanceRecord), totalPages };
     },
   });
 }
