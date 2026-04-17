@@ -9,9 +9,7 @@ import { RabbitMQPublisher } from './rabbitmq.publisher';
         name: 'NOTIFICATION_SERVICE',
         transport: Transport.RMQ,
         options: {
-          urls: [
-            process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
-          ],
+          urls: [process.env.RABBITMQ_URL as string],
           queue: 'notification_queue',
           queueOptions: {
             durable: true,
@@ -25,9 +23,7 @@ import { RabbitMQPublisher } from './rabbitmq.publisher';
         name: 'HR_SERVICE',
         transport: Transport.RMQ,
         options: {
-          urls: [
-            process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
-          ],
+          urls: [process.env.RABBITMQ_URL as string],
           queue: 'hr_queue',
           queueOptions: {
             durable: true,

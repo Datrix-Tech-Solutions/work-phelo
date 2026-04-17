@@ -34,8 +34,8 @@ export class UsersService {
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     // Block superadmin email
-    const superAdminEmail =
-      process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com';
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+    if (!superAdminEmail) throw new Error('SUPER_ADMIN_EMAIL is required');
     if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
       throw new ForbiddenException(
         'This email is reserved for the platform owner.',

@@ -4,9 +4,11 @@ import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
+  if (!process.env.RABBITMQ_URL) throw new Error('RABBITMQ_URL is required');
+
   const app = await NestFactory.create(AppModule);
 
   app.use(helmet());
@@ -36,9 +38,7 @@ async function bootstrap() {
   app.connectMicroservice<any>({
     transport: Transport.RMQ,
     options: {
-      urls: [
-        process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
-      ],
+      urls: [process.env.RABBITMQ_URL],
       queue: 'auth_queue',
       queueOptions: {
         durable: true,
@@ -57,9 +57,9 @@ async function bootstrap() {
   // Start RabbitMQ consumer after HTTP is up — connection failures won't block the HTTP server
   app
     .startAllMicroservices()
-    .catch((err) =>
+    .catch((err: Error) =>
       console.error('RabbitMQ microservice failed to start:', err.message),
     );
 }
 
-bootstrap();
+void bootstrap();
