@@ -15,17 +15,17 @@ import { formatDate } from '@/lib/formatters';
 import { LeaveBalance, LeaveRequest, LeaveRequestStatus } from '@/types/hr';
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  Approved: 'success',
-  Pending: 'warning',
-  Rejected: 'danger',
-  Cancelled: 'neutral',
+  APPROVED: 'success',
+  PENDING: 'warning',
+  REJECTED: 'danger',
+  CANCELLED: 'neutral',
 };
 
 const STATUS_ICON: Record<LeaveRequestStatus, React.ReactNode> = {
-  Approved: <CheckCircle2 className="w-5 h-5 text-green-500" />,
-  Pending: <Clock className="w-5 h-5 text-yellow-500" />,
-  Rejected: <XCircle className="w-5 h-5 text-red-500" />,
-  Cancelled: <Ban className="w-5 h-5 text-gray-400" />,
+  APPROVED: <CheckCircle2 className="w-5 h-5 text-green-500" />,
+  PENDING: <Clock className="w-5 h-5 text-yellow-500" />,
+  REJECTED: <XCircle className="w-5 h-5 text-red-500" />,
+  CANCELLED: <Ban className="w-5 h-5 text-gray-400" />,
 };
 
 const PAGE_SIZE = 10;
@@ -134,7 +134,7 @@ export function MyLeaveTab({ tenantSlug }: Props) {
           onPageChange={setMyPage}
           onRowClick={(row) => setDetailRequest(row)}
           rowActions={(row) =>
-            row.status === 'Pending'
+            row.status === 'PENDING'
               ? [{ label: 'View Details', onClick: () => setDetailRequest(row) }]
               : [{ label: 'View Details', onClick: () => setDetailRequest(row) }]
           }
@@ -156,7 +156,7 @@ export function MyLeaveTab({ tenantSlug }: Props) {
         title={detailRequest?.leaveTypeName ?? ''}
         description="Leave request details"
         footer={
-          detailRequest?.status === 'Pending' ? (
+          detailRequest?.status === 'PENDING' ? (
             <Button
               variant="danger"
               className="w-full"
@@ -175,10 +175,10 @@ export function MyLeaveTab({ tenantSlug }: Props) {
               <div>
                 <p className="text-sm font-semibold text-gray-900">{detailRequest.status}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {detailRequest.status === 'Approved' && 'Your leave has been approved'}
-                  {detailRequest.status === 'Pending' && 'Awaiting approval from your manager'}
-                  {detailRequest.status === 'Rejected' && 'Your leave request was not approved'}
-                  {detailRequest.status === 'Cancelled' && 'This request was cancelled'}
+                  {detailRequest.status === 'APPROVED' && 'Your leave has been approved'}
+                  {detailRequest.status === 'PENDING' && 'Awaiting approval from your manager'}
+                  {detailRequest.status === 'REJECTED' && 'Your leave request was not approved'}
+                  {detailRequest.status === 'CANCELLED' && 'This request was cancelled'}
                 </p>
               </div>
             </div>

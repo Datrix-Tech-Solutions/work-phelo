@@ -128,10 +128,10 @@ export function LeaveTypesList({ tenantSlug }: Props) {
         isLoading={isLoading}
         searchPlaceholder="Search leave types..."
         onSearch={setSearch}
-        onRowClick={(row) => {
-          setEditLeaveType(row);
-          setPanelOpen(true);
-        }}
+        // onRowClick={(row) => {
+        //   setEditLeaveType(row);
+        //   setPanelOpen(true);
+        // }}
         actionButton={{
           label: 'Add Leave Type',
           onClick: () => {

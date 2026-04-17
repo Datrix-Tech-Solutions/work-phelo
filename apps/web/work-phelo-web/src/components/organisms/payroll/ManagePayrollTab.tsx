@@ -112,6 +112,7 @@ export function ManagePayrollTab() {
     {
       key: 'employee',
       label: 'Employee',
+      width: '2fr',
       render: (row) => (
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white text-xs font-medium shrink-0">
@@ -197,6 +198,7 @@ export function ManagePayrollTab() {
     {
       key: 'actions',
       label: '',
+      width: '72px',
       render: () => (
         <Button variant="outline" size="sm">
           Save
