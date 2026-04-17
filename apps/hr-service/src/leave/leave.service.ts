@@ -248,8 +248,11 @@ export class LeaveService {
   }
 
   // ── Leave Balances ────────────────────────────────────────────────────────
-  async initializeLeaveBalances(tenantId: string, employeeId: string) {
-    const year = new Date().getFullYear();
+  async initializeLeaveBalances(
+    tenantId: string,
+    employeeId: string,
+    year = new Date().getFullYear(),
+  ) {
     let leaveTypes = await this.prisma.leaveType.findMany({
       where: { tenantId, isActive: true },
     });
@@ -300,10 +303,23 @@ export class LeaveService {
 
   async getLeaveBalances(tenantId: string, employeeId: string) {
     const year = new Date().getFullYear();
-    return this.prisma.leaveBalance.findMany({
+    let balances = await this.prisma.leaveBalance.findMany({
       where: { tenantId, employeeId, year },
       include: { leaveType: true },
     });
+
+    // Self-heal: if this employee has no balances for the current year
+    // (e.g. first access after a year rollover, or created before the
+    // balance-init flow existed), initialise them now and re-fetch.
+    if (balances.length === 0) {
+      await this.initializeLeaveBalances(tenantId, employeeId, year);
+      balances = await this.prisma.leaveBalance.findMany({
+        where: { tenantId, employeeId, year },
+        include: { leaveType: true },
+      });
+    }
+
+    return balances;
   }
 
   async getEmployeeByUserId(tenantId: string, userId: string) {
@@ -366,7 +382,7 @@ export class LeaveService {
     const totalDays = await this.countWorkingDays(tenantId, start, end);
 
     const year = start.getFullYear();
-    const balance = await this.prisma.leaveBalance.findUnique({
+    let balance = await this.prisma.leaveBalance.findUnique({
       where: {
         employeeId_leaveTypeId_year: {
           employeeId,
@@ -375,6 +391,21 @@ export class LeaveService {
         },
       },
     });
+
+    if (!balance) {
+      // Self-heal: first access after a year rollover or a missed init event.
+      // Initialise balances for this year and try once more.
+      await this.initializeLeaveBalances(tenantId, employeeId, year);
+      balance = await this.prisma.leaveBalance.findUnique({
+        where: {
+          employeeId_leaveTypeId_year: {
+            employeeId,
+            leaveTypeId: dto.leaveTypeId,
+            year,
+          },
+        },
+      });
+    }
 
     if (!balance)
       throw new BadRequestException(

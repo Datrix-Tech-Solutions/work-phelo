@@ -21,6 +21,76 @@ export class SchedulingService {
    * 'CONTRACT_ENDED' so HR can action it. We don't fully auto-offboard
    * because the clearance checklist still needs to be completed.
    */
+  /**
+   * Runs at 00:01 UTC on 1 January every year.
+   *
+   * Creates fresh leave balance records for the new year for every
+   * non-offboarded employee. Uses the same upsert-with-empty-update pattern
+   * so it is idempotent and safe to run multiple times.
+   */
+  @Cron('1 0 1 1 *')
+  async rolloverLeaveBalances() {
+    const year = new Date().getFullYear();
+    this.logger.log(`[scheduler] Starting leave balance rollover for ${year}`);
+
+    const tenants = await this.prisma.employee.groupBy({
+      by: ['tenantId'],
+      where: { employmentStatus: { not: 'OFFBOARDED' } },
+    });
+
+    let totalEmployees = 0;
+
+    for (const { tenantId } of tenants) {
+      const [employees, leaveTypes] = await Promise.all([
+        this.prisma.employee.findMany({
+          where: { tenantId, employmentStatus: { not: 'OFFBOARDED' } },
+          select: { id: true, employmentType: true },
+        }),
+        this.prisma.leaveType.findMany({
+          where: { tenantId, isActive: true },
+        }),
+      ]);
+
+      for (const emp of employees) {
+        for (const lt of leaveTypes) {
+          if (
+            lt.applicableTo.length > 0 &&
+            !lt.applicableTo.includes(emp.employmentType)
+          ) {
+            continue;
+          }
+
+          await this.prisma.leaveBalance.upsert({
+            where: {
+              employeeId_leaveTypeId_year: {
+                employeeId: emp.id,
+                leaveTypeId: lt.id,
+                year,
+              },
+            },
+            update: {},
+            create: {
+              tenantId,
+              employeeId: emp.id,
+              leaveTypeId: lt.id,
+              year,
+              totalDays: lt.daysAllowed,
+              usedDays: 0,
+              pendingDays: 0,
+              remainingDays: lt.daysAllowed,
+            },
+          });
+        }
+      }
+
+      totalEmployees += employees.length;
+    }
+
+    this.logger.log(
+      `[scheduler] Leave balance rollover complete — ${totalEmployees} employee(s) across ${tenants.length} tenant(s) for year ${year}`,
+    );
+  }
+
   @Cron(CronExpression.EVERY_DAY_AT_1AM)
   async runDailyStatusTransitions() {
     const today = new Date();
