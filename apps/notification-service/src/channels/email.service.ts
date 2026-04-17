@@ -7,19 +7,14 @@ export class EmailService {
   private readonly apiKey: string;
   private readonly fromEmail: string;
   private readonly appName = 'WorkPhelo ERP';
-  private readonly serviceUrl: string;
 
   constructor() {
     if (!process.env.RESEND_API_KEY)
       throw new Error('RESEND_API_KEY is required');
     if (!process.env.RESEND_FROM_EMAIL)
       throw new Error('RESEND_FROM_EMAIL is required');
-    if (!process.env.NOTIFICATION_SERVICE_URL)
-      throw new Error('NOTIFICATION_SERVICE_URL is required');
     this.apiKey = process.env.RESEND_API_KEY;
     this.fromEmail = process.env.RESEND_FROM_EMAIL;
-    this.serviceUrl =
-      process.env.NOTIFICATION_SERVICE_URL || 'apps/notification-service/src/';
   }
 
   private async send(
@@ -105,9 +100,6 @@ export class EmailService {
           <tr>
             <td style="font-size:28px; font-weight:600; color:#555;">
               You've been invited
-            </td>
-            <td align="right">
-              <img src="${this.serviceUrl}/public/mail_image.png" alt="" width="120" />
             </td>
           </tr>
         </table>
