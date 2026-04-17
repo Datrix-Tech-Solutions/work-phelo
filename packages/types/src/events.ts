@@ -47,6 +47,7 @@ export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
 
 export interface TenantApprovedEvent {
   tenantId: string;
+  adminEmail: string;
 }
 
 export interface EmployeeActivatedEvent {

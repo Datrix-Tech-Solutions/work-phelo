@@ -19,20 +19,36 @@ export class EventsHandler {
 
   @EventPattern('hr.tenant_approved')
   async handleTenantApproved(@Payload() data: WithMeta<TenantApprovedEvent>) {
-    const { tenantId, _meta } = data;
+    const { tenantId, adminEmail, _meta } = data;
     this.logger.log(
       `[hr.tenant_approved] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
     );
-    try {
-      await this.leaveService.seedDefaultLeaveTypes(tenantId);
-      this.logger.log(
-        `[hr.tenant_approved] Default leave types seeded | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
-      );
-    } catch (e: any) {
-      this.logger.warn(
-        `[hr.tenant_approved] Failed to seed leave types | tenantId=${tenantId} | corrId=${_meta?.correlationId} | error=${e.message}`,
-      );
-    }
+
+    await Promise.allSettled([
+      this.leaveService
+        .seedDefaultLeaveTypes(tenantId)
+        .catch((e: any) =>
+          this.logger.warn(
+            `[hr.tenant_approved] Failed to seed leave types | tenantId=${tenantId} | corrId=${_meta?.correlationId} | error=${e.message}`,
+          ),
+        ),
+      this.prisma.tenantConfig
+        .upsert({
+          where: { tenantId },
+          create: { tenantId, adminEmail },
+          update: { adminEmail },
+        })
+        .then(() =>
+          this.logger.log(
+            `[hr.tenant_approved] TenantConfig stored | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
+          ),
+        )
+        .catch((e: any) =>
+          this.logger.warn(
+            `[hr.tenant_approved] Failed to store TenantConfig | tenantId=${tenantId} | corrId=${_meta?.correlationId} | error=${e.message}`,
+          ),
+        ),
+    ]);
   }
 
   @EventPattern('hr.employee_activated')

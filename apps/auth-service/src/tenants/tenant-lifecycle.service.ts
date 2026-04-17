@@ -192,7 +192,7 @@ export class TenantLifecycleService {
     });
 
     void this.rabbitmq
-      .hrTenantApproved({ tenantId: id })
+      .hrTenantApproved({ tenantId: id, adminEmail: updated.email })
       .catch((err) =>
         this.logger.error(`Failed to emit hr.tenant_approved for ${id}`, err),
       );

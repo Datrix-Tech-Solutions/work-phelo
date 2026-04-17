@@ -163,7 +163,10 @@ export class UsersService {
       // emit it here to guarantee seeding regardless of whether the super admin
       // calls that endpoint.
       void this.rabbitmq
-        .hrTenantApproved({ tenantId: updated.tenantId })
+        .hrTenantApproved({
+          tenantId: updated.tenantId,
+          adminEmail: updated.tenant.email,
+        })
         .catch((err) =>
           this.logger.error(
             `Failed to emit hr.tenant_approved for ${updated.tenantId}`,

@@ -615,3 +615,13 @@ model PublicHoliday {
   @@unique([tenantId, date])
   @@schema("hr")
 }
+
+model TenantConfig {
+  id         String   @id @default(uuid())
+  tenantId   String   @unique
+  adminEmail String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@schema("hr")
+}

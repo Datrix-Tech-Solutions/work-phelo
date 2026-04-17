@@ -618,9 +618,14 @@ export class LeaveService {
         }
       }
 
+      // Fall back to the tenant admin email
+      if (!managerEmail) {
+        managerEmail = await this.getTenantAdminEmail(tenantId);
+      }
+
       if (!managerEmail) {
         this.logger.warn(
-          `No manager found for employee ${employee.id} — leave request notification skipped`,
+          `No manager or tenant admin found for tenant ${tenantId} — leave request notification skipped`,
         );
         return;
       }
@@ -692,6 +697,14 @@ export class LeaveService {
         err,
       );
     }
+  }
+
+  private async getTenantAdminEmail(tenantId: string): Promise<string | null> {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { adminEmail: true },
+    });
+    return config?.adminEmail ?? null;
   }
 
   async cancelRequest(tenantId: string, requestId: string, userId: string) {
