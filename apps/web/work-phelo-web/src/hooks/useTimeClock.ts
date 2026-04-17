@@ -199,9 +199,10 @@ export function useAttendanceRecords(params: {
           to: params.toDate || undefined,
         },
       });
-      const raw = res.data;
-      const records: any[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
-      return { data: records.map(transformAttendanceRecord), totalPages: raw?.totalPages ?? 1 };
+      const raw = res.data as TimeEntry[] | { data: TimeEntry[]; totalPages: number };
+      const records: TimeEntry[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      const totalPages = Array.isArray(raw) ? 1 : (raw?.totalPages ?? 1);
+      return { data: records.map(transformAttendanceRecord), totalPages };
     },
   });
 }
