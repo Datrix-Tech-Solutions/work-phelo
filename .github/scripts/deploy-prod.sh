@@ -224,20 +224,41 @@ echo "Running database migrations..."
 # Ensure schemas exist — idempotent DDL.
 docker exec erp-postgres-prod psql \
   -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-  -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS hr; CREATE SCHEMA IF NOT EXISTS notify;" \
+  -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS hr; CREATE SCHEMA IF NOT EXISTS notify; CREATE SCHEMA IF NOT EXISTS billing; CREATE SCHEMA IF NOT EXISTS marketing;" \
   2>/dev/null || true
 
 # Auth service — hard failure stops the deployment.
-docker exec erp-auth-prod npx prisma@5.22.0 migrate deploy \
-  --schema /app/apps/auth-service/prisma/schema.prisma
+docker exec erp-auth-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
 
 # HR service — hard failure stops the deployment.
-docker exec erp-hr-prod npx prisma@5.22.0 migrate deploy \
-  --schema /app/apps/hr-service/prisma/schema.prisma
+docker exec erp-hr-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
 
-# Notification service — hard failure stops the deployment.
-docker exec erp-notification-prod npx prisma@5.22.0 migrate deploy \
-  --schema /app/apps/notification-service/prisma/schema.prisma
+# Notification service — baseline if schema exists but was never migration-tracked (P3005 guard).
+# Only triggers when notify has tables but no _prisma_migrations; on a fresh server migrate deploy
+# runs normally and creates everything from scratch.
+NOTIFY_HAS_TABLES=$(docker exec erp-postgres-prod psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc \
+  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='notify' AND table_name NOT IN ('_prisma_migrations')" \
+  2>/dev/null | tr -d '[:space:]' || echo "0")
+NOTIFY_TRACKED=$(docker exec erp-postgres-prod psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc \
+  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='notify' AND table_name='_prisma_migrations'" \
+  2>/dev/null | tr -d '[:space:]' || echo "0")
+
+if [ "$NOTIFY_HAS_TABLES" != "0" ] && [ "$NOTIFY_TRACKED" = "0" ]; then
+  echo "Untracked notify schema detected — baselining all existing migrations..."
+  for migration in $(docker exec erp-notification-prod sh -c "ls /app/apps/notification-service/prisma/migrations/ | grep -E '^[0-9]'"); do
+    echo "  Marking applied: $migration"
+    docker exec erp-notification-prod sh -c "npx prisma@5.22.0 migrate resolve --applied $migration --schema /app/apps/notification-service/prisma/schema.prisma"
+  done
+  echo "✓ Notification service baselined"
+fi
+
+docker exec erp-notification-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
+
+# Subscription service — no-op until models are added; schema isolation already set.
+docker exec erp-subscription-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" 2>/dev/null || true
+
+# Marketing service — no-op until models are added; schema isolation already set.
+docker exec erp-marketing-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" 2>/dev/null || true
 
 echo "✓ Migrations complete"
 
