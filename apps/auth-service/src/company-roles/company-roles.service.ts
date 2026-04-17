@@ -99,6 +99,12 @@ export class CompanyRolesService {
     companyRoleId: string,
   ) {
     await this.findById(tenantId, companyRoleId);
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
     return this.prisma.user.update({
       where: { id: userId },
       data: { companyRoleId },

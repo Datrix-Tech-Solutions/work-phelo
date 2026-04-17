@@ -10,10 +10,15 @@ export class EmailService {
   private readonly serviceUrl: string;
 
   constructor() {
-    this.apiKey = process.env.RESEND_API_KEY || '';
-    this.fromEmail = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
-    this.serviceUrl =
-      process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4004';
+    if (!process.env.RESEND_API_KEY)
+      throw new Error('RESEND_API_KEY is required');
+    if (!process.env.RESEND_FROM_EMAIL)
+      throw new Error('RESEND_FROM_EMAIL is required');
+    if (!process.env.NOTIFICATION_SERVICE_URL)
+      throw new Error('NOTIFICATION_SERVICE_URL is required');
+    this.apiKey = process.env.RESEND_API_KEY;
+    this.fromEmail = process.env.RESEND_FROM_EMAIL;
+    this.serviceUrl = process.env.NOTIFICATION_SERVICE_URL;
   }
 
   private async send(

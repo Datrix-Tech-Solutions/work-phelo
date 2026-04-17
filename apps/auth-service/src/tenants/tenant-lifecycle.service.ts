@@ -24,8 +24,8 @@ export class TenantLifecycleService {
   ) {}
 
   async register(dto: CreateTenantDto) {
-    const superAdminEmail =
-      process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com';
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+    if (!superAdminEmail) throw new Error('SUPER_ADMIN_EMAIL is required');
     if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
       throw new ForbiddenException(
         'This email address cannot be used to register a company',

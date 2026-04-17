@@ -187,6 +187,11 @@ export class TimeService {
     createdBy: string,
     dto: CreateScheduleDto,
   ) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: dto.employeeId, tenantId },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+
     return this.prisma.shiftSchedule.create({
       data: {
         tenantId,

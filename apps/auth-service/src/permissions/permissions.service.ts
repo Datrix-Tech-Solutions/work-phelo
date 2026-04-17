@@ -171,6 +171,17 @@ export class PermissionsService {
     description: string,
     resources: { resourceId: string; action: string }[],
   ) {
+    if (resources.length > 0) {
+      const resourceIds = resources.map((r) => r.resourceId);
+      const found = await this.prisma.resource.findMany({
+        where: { id: { in: resourceIds } },
+        select: { id: true },
+      });
+      if (found.length !== resourceIds.length) {
+        throw new NotFoundException('One or more resources not found');
+      }
+    }
+
     return this.prisma.permissionSet.create({
       data: {
         tenantId,

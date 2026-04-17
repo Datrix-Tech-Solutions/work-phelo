@@ -45,6 +45,20 @@ export class EmployeesService {
     if (existing)
       throw new ConflictException('Employee with this email already exists');
 
+    if (dto.branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: dto.branchId, tenantId },
+      });
+      if (!branch) throw new NotFoundException('Branch not found');
+    }
+
+    if (dto.departmentId) {
+      const dept = await this.prisma.department.findFirst({
+        where: { id: dto.departmentId, tenantId },
+      });
+      if (!dept) throw new NotFoundException('Department not found');
+    }
+
     const count = await this.prisma.employee.count({ where: { tenantId } });
     const employeeNumber = `EMP-${String(count + 1).padStart(4, '0')}`;
 
@@ -215,6 +229,27 @@ export class EmployeesService {
       contractEndDate,
       ...rest
     } = dto;
+
+    if (rest.branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: rest.branchId, tenantId },
+      });
+      if (!branch) throw new NotFoundException('Branch not found');
+    }
+
+    if (rest.departmentId) {
+      const dept = await this.prisma.department.findFirst({
+        where: { id: rest.departmentId, tenantId },
+      });
+      if (!dept) throw new NotFoundException('Department not found');
+    }
+
+    if (rest.managerId) {
+      const manager = await this.prisma.employee.findFirst({
+        where: { id: rest.managerId, tenantId },
+      });
+      if (!manager) throw new NotFoundException('Manager not found');
+    }
 
     // Track status change
     const statusChanged =

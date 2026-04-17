@@ -14,9 +14,7 @@ import { EventsHandler } from './events.handler';
         name: 'NOTIFICATION_SERVICE',
         transport: Transport.RMQ,
         options: {
-          urls: [
-            process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
-          ],
+          urls: [process.env.RABBITMQ_URL as string],
           queue: 'notification_queue',
           queueOptions: {
             durable: true,
@@ -30,9 +28,7 @@ import { EventsHandler } from './events.handler';
         name: 'AUTH_SERVICE',
         transport: Transport.RMQ,
         options: {
-          urls: [
-            process.env.RABBITMQ_URL || 'amqp://erp:erppassword@localhost:5672',
-          ],
+          urls: [process.env.RABBITMQ_URL as string],
           queue: 'auth_queue',
           queueOptions: {
             durable: true,

@@ -4,12 +4,26 @@ import * as http from 'http';
 import * as https from 'https';
 import * as jwt from 'jsonwebtoken';
 
+const requiredServiceEnvVars = [
+  'AUTH_SERVICE_URL',
+  'HR_SERVICE_URL',
+  'NOTIFICATION_SERVICE_URL',
+  'SUBSCRIPTION_SERVICE_URL',
+  'MARKETING_SERVICE_URL',
+];
+const missingVars = requiredServiceEnvVars.filter((v) => !process.env[v]);
+if (missingVars.length > 0) {
+  throw new Error(
+    `Missing required environment variables: ${missingVars.join(', ')}`,
+  );
+}
+
 const SERVICES: Record<string, string> = {
-  auth: process.env.AUTH_SERVICE_URL || 'http://localhost:4001',
-  hr: process.env.HR_SERVICE_URL || 'http://localhost:4002',
-  notification: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4004',
-  subscription: process.env.SUBSCRIPTION_SERVICE_URL || 'http://localhost:4005',
-  marketing: process.env.MARKETING_SERVICE_URL || 'http://localhost:4006',
+  auth: process.env.AUTH_SERVICE_URL as string,
+  hr: process.env.HR_SERVICE_URL as string,
+  notification: process.env.NOTIFICATION_SERVICE_URL as string,
+  subscription: process.env.SUBSCRIPTION_SERVICE_URL as string,
+  marketing: process.env.MARKETING_SERVICE_URL as string,
 };
 
 const PUBLIC_PATTERNS = [
