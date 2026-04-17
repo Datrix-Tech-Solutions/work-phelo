@@ -1,14 +1,24 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { join } from 'path';
+import { GlobalExceptionFilter } from './common/prisma-exception.filter';
 
 async function bootstrap() {
   if (!process.env.RABBITMQ_URL) throw new Error('RABBITMQ_URL is required');
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.useStaticAssets(join(__dirname, 'public'), { prefix: '/public' });
+  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
