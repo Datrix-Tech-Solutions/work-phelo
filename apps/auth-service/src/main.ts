@@ -4,7 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
-import { MicroserviceOptions, Transport } from '@nestjs/microservices';
+import { Transport } from '@nestjs/microservices';
 
 async function bootstrap() {
   if (!process.env.RABBITMQ_URL) throw new Error('RABBITMQ_URL is required');
@@ -57,9 +57,9 @@ async function bootstrap() {
   // Start RabbitMQ consumer after HTTP is up — connection failures won't block the HTTP server
   app
     .startAllMicroservices()
-    .catch((err) =>
+    .catch((err: Error) =>
       console.error('RabbitMQ microservice failed to start:', err.message),
     );
 }
 
-bootstrap();
+void bootstrap();
