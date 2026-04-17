@@ -49,13 +49,17 @@ export function MyTimeSection({
     },
     {
       key: 'totalMinutes',
-      label: 'hours',
-      render: (r) => <span>{r.breakMinutes > 0 ? formatMinutes(r.breakMinutes) : '—'}</span>,
+      label: 'Hours',
+      render: (r) => <span>{r.totalMinutes > 0 ? formatMinutes(r.totalMinutes) : '—'}</span>,
     },
     {
       key: 'status',
-      label: 'status',
-      render: (r) => <span className="font-semibold">{formatMinutes(r.totalMinutes)}</span>,
+      label: 'Status',
+      render: (r) => (
+        <span className="font-semibold capitalize">
+          {r.status === 'CLOCKED_IN' ? 'Active' : r.status === 'ON_BREAK' ? 'On Break' : 'Done'}
+        </span>
+      ),
     },
   ];
 

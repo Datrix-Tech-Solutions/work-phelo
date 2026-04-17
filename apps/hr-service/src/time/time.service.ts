@@ -114,6 +114,27 @@ export class TimeService {
     return this.transformRecord(record);
   }
 
+  async getMyAttendance(tenantId: string, userId: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId, tenantId },
+    });
+    if (!employee) return [];
+    return this.prisma.clockRecord.findMany({
+      where: { tenantId, employeeId: employee.id },
+      include: {
+        employee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            jobTitle: true,
+            department: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { date: 'desc' },
+    });
+  }
+
   async getAttendance(
     tenantId: string,
     filters: {
@@ -134,7 +155,13 @@ export class TimeService {
       where,
       include: {
         employee: {
-          select: { firstName: true, lastName: true, employeeNumber: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            jobTitle: true,
+            department: { select: { name: true } },
+          },
         },
       },
       orderBy: { date: 'desc' },
@@ -236,5 +263,64 @@ export class TimeService {
       },
       orderBy: { effectiveFrom: 'desc' },
     });
+  }
+
+  async getLiveAttendance(tenantId: string) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    const records = await this.prisma.clockRecord.findMany({
+      where: {
+        tenantId,
+        date: { gte: todayStart, lte: todayEnd },
+        clockOut: null,
+      },
+      include: {
+        employee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            avatarUrl: true,
+            jobTitle: true,
+            department: { select: { name: true } },
+          },
+        },
+      },
+      orderBy: { clockIn: 'asc' },
+    });
+    return records.map((r) => ({
+      id: r.id,
+      employeeId: r.employeeId,
+      employeeName: `${r.employee.firstName} ${r.employee.lastName}`,
+      avatarUrl: r.employee.avatarUrl ?? undefined,
+      department: r.employee.department?.name ?? undefined,
+      jobTitle: r.employee.jobTitle ?? undefined,
+      clockIn: r.clockIn.toISOString(),
+      breakStart: undefined,
+      status: 'CLOCKED_IN',
+      isLate: false,
+    }));
+  }
+
+  async getAttendanceStats(tenantId: string) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    const [total, todayRecords] = await Promise.all([
+      this.prisma.employee.count({
+        where: {
+          tenantId,
+          employmentStatus: { in: ['ACTIVE', 'PROBATION', 'SUSPENDED'] },
+        },
+      }),
+      this.prisma.clockRecord.findMany({
+        where: { tenantId, date: { gte: todayStart, lte: todayEnd } },
+      }),
+    ]);
+    const clockedIn = todayRecords.filter((r) => !r.clockOut).length;
+    const absent = Math.max(0, total - todayRecords.length);
+    return { clockedIn, absent, late: 0, onBreak: 0, total };
   }
 }

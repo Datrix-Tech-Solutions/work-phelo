@@ -9,6 +9,7 @@ import { Column, DataTable } from '../shared/DataTable';
 import { useEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
+import { PayrollItemsPanel } from './PayrollItemsPanel';
 
 interface PayrollRow {
   id: string;
@@ -16,6 +17,7 @@ interface PayrollRow {
   avatarUrl?: string;
   basicSalary: number;
   allowances: number;
+  deductions: number;
   grossSalary: number;
   employeeStatutoryContrib: number;
   employerStatutoryContrib: number;
@@ -29,17 +31,27 @@ interface PayrollRow {
 export function ManagePayrollTab() {
   const { data: empData, isLoading } = useEmployees();
   const [searchQuery, setSearchQuery] = useState('');
+  const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
+  const [deductionsMap, setDeductionsMap] = useState<Record<string, AllowanceItem[]>>({});
+  const [panel, setPanel] = useState<{
+    rowId: string;
+    rowName: string;
+    type: 'allowance' | 'deduction';
+  } | null>(null);
 
   const payrollRows: PayrollRow[] = useMemo(() => {
     const employees: Employee[] = empData?.data ?? [];
     return employees.map((e) => {
-      const basic = Number(e.basicSalary) || 0;
+      const basic = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
       const allowances = allowancesMap[e.id] ?? [];
       const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
+      const deductionItems = deductionsMap[e.id] ?? [];
+      const otherDeductions = deductionItems.reduce((sum, d) => sum + d.amount, 0);
       const calc = calculatePayroll({
         basicSalary: basic,
         allowances,
+        otherDeductions,
         country: 'GH',
       });
       return {
@@ -48,6 +60,8 @@ export function ManagePayrollTab() {
         avatarUrl: e.avatarUrl,
         basicSalary: basic,
         allowances: totalAllowances,
+        deductions: otherDeductions,
+
         grossSalary: calc.grossSalary,
         employeeStatutoryContrib: calc.employeeStatutoryContrib,
         employerStatutoryContrib: calc.employerStatutoryContrib,
@@ -58,7 +72,7 @@ export function ManagePayrollTab() {
         department: e.department?.name,
       };
     });
-  }, [empData, allowancesMap]);
+  }, [empData, basicMap, allowancesMap, deductionsMap]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery) return payrollRows;
@@ -81,11 +95,17 @@ export function ManagePayrollTab() {
     [filteredData],
   );
 
-  const handleAllowancesChange = (employeeId: string, amount: number) => {
-    setAllowancesMap((prev) => ({
-      ...prev,
-      [employeeId]: amount > 0 ? [{ name: 'Allowances', amount }] : [],
-    }));
+  const handleBasicChange = (employeeId: string, amount: number) => {
+    setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
+  };
+
+  const handlePanelSave = (items: AllowanceItem[]) => {
+    if (!panel) return;
+    if (panel.type === 'allowance') {
+      setAllowancesMap((prev) => ({ ...prev, [panel.rowId]: items }));
+    } else {
+      setDeductionsMap((prev) => ({ ...prev, [panel.rowId]: items }));
+    }
   };
 
   const columns: Column<PayrollRow>[] = [
@@ -104,21 +124,47 @@ export function ManagePayrollTab() {
         </div>
       ),
     },
+
     {
       key: 'basicSalary',
       label: 'Basic Salary',
-      render: (row) => `GHS ${row.basicSalary.toLocaleString()}`,
+      render: (row) => (
+        <input
+          type="number"
+          value={row.basicSalary}
+          onChange={(e) => handleBasicChange(row.id, Number(e.target.value))}
+          className="w-28 px-3 py-1.5 border border-gray-200 rounded-input text-sm focus:outline-none focus:border-brand"
+        />
+      ),
     },
     {
       key: 'allowances',
       label: 'Allowances',
       render: (row) => (
-        <input
-          type="number"
-          value={row.allowances}
-          onChange={(e) => handleAllowancesChange(row.id, Number(e.target.value))}
-          className="w-28 px-3 py-1.5 border border-gray-200 rounded-input text-sm focus:outline-none focus:border-brand"
-        />
+        <button
+          onClick={() => setPanel({ rowId: row.id, rowName: row.employeeName, type: 'allowance' })}
+          className="text-left min-w-24"
+        >
+          <p className="text-sm font-medium text-gray-900">
+            {row.allowances > 0 ? `GHS ${row.allowances.toLocaleString()}` : '—'}
+          </p>
+          <p className="text-xs text-brand">Edit</p>
+        </button>
+      ),
+    },
+    {
+      key: 'deductions',
+      label: 'Deductions',
+      render: (row) => (
+        <button
+          onClick={() => setPanel({ rowId: row.id, rowName: row.employeeName, type: 'deduction' })}
+          className="text-left min-w-24"
+        >
+          <p className="text-sm font-medium text-gray-900">
+            {row.deductions > 0 ? `GHS ${row.deductions.toLocaleString()}` : '—'}
+          </p>
+          <p className="text-xs text-brand">Edit</p>
+        </button>
       ),
     },
     {
@@ -153,7 +199,7 @@ export function ManagePayrollTab() {
       label: '',
       render: () => (
         <Button variant="outline" size="sm">
-          Payslip
+          Save
         </Button>
       ),
     },
@@ -206,6 +252,21 @@ export function ManagePayrollTab() {
           onPageChange={() => {}}
         />
       </SectionCard>
+
+      <PayrollItemsPanel
+        isOpen={!!panel}
+        onClose={() => setPanel(null)}
+        type={panel?.type ?? 'allowance'}
+        employeeName={panel?.rowName ?? ''}
+        items={
+          panel
+            ? panel.type === 'allowance'
+              ? (allowancesMap[panel.rowId] ?? [])
+              : (deductionsMap[panel.rowId] ?? [])
+            : []
+        }
+        onSave={handlePanelSave}
+      />
     </div>
   );
 }

@@ -70,30 +70,34 @@ export class TimeController {
     return this.timeService.getTodayStatus(req.user.tenantId, req.user.id);
   }
 
+  @Get('my-history')
+  @ApiOperation({ summary: "Get current employee's own attendance history" })
+  @ApiResponse({ status: 200, description: 'My attendance records' })
+  getMyAttendance(@Req() req: any) {
+    return this.timeService.getMyAttendance(req.user.tenantId, req.user.id);
+  }
+
   @Get('attendance')
   @ApiOperation({ summary: 'Get attendance records with date range filter' })
+  @ApiQuery({ name: 'employeeId', required: false })
+  @ApiQuery({ name: 'from', required: false })
+  @ApiQuery({ name: 'to', required: false })
   @ApiQuery({
-    name: 'employeeId',
+    name: 'mine',
     required: false,
-    description: 'Filter by employee',
-  })
-  @ApiQuery({
-    name: 'from',
-    required: false,
-    description: 'Start date (YYYY-MM-DD)',
-  })
-  @ApiQuery({
-    name: 'to',
-    required: false,
-    description: 'End date (YYYY-MM-DD)',
+    description: 'Filter to current user only',
   })
   @ApiResponse({ status: 200, description: 'Attendance records retrieved' })
-  getAttendance(
+  async getAttendance(
     @Query('employeeId') employeeId: string,
     @Query('from') from: string,
     @Query('to') to: string,
+    @Query('mine') mine: string,
     @Req() req: any,
   ) {
+    if (mine === 'true') {
+      return this.timeService.getMyAttendance(req.user.tenantId, req.user.id);
+    }
     return this.timeService.getAttendance(req.user.tenantId, {
       employeeId,
       from,
@@ -142,6 +146,20 @@ export class TimeController {
       req.user.id,
       dto,
     );
+  }
+
+  @Get('live')
+  @ApiOperation({ summary: 'Get all employees currently clocked in' })
+  @ApiResponse({ status: 200, description: 'Live attendance list' })
+  getLiveAttendance(@Req() req: any) {
+    return this.timeService.getLiveAttendance(req.user.tenantId);
+  }
+
+  @Get('stats/today')
+  @ApiOperation({ summary: "Get today's attendance stats" })
+  @ApiResponse({ status: 200, description: 'Attendance stats' })
+  getAttendanceStats(@Req() req: any) {
+    return this.timeService.getAttendanceStats(req.user.tenantId);
   }
 
   @Post('schedules')

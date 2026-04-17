@@ -17,7 +17,6 @@ export function TimeClockTabs({
 }: Props) {
   const tabs = [
     ...(isEmployee ? [{ key: 'my', label: 'My Time' }] : []),
-    // { key: 'my', label: 'My Time' },
     ...(isManager
       ? [
           { key: 'live', label: 'Live' },
