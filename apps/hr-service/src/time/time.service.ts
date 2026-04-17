@@ -14,6 +14,28 @@ import { CreateScheduleDto } from './dto/create-schedule.dto';
 export class TimeService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private transformRecord(record: {
+    id: string;
+    clockIn: Date;
+    clockOut: Date | null;
+    hoursWorked: any;
+  }) {
+    const status = record.clockOut ? 'CLOCKED_OUT' : 'CLOCKED_IN';
+    const totalMinutes = record.clockOut
+      ? Math.round(Number(record.hoursWorked) * 60)
+      : 0;
+    return {
+      entryId: record.id,
+      status,
+      clockIn: record.clockIn.toISOString(),
+      clockOut: record.clockOut?.toISOString() ?? null,
+      breakStart: null,
+      totalMinutes,
+      breakMinutes: 0,
+      isLate: false,
+    };
+  }
+
   private async getEmployeeByUserId(tenantId: string, userId: string) {
     const employee = await this.prisma.employee.findFirst({
       where: { userId, tenantId },
@@ -41,7 +63,7 @@ export class TimeService {
 
     if (existing) throw new BadRequestException('Already clocked in for today');
 
-    return this.prisma.clockRecord.create({
+    const record = await this.prisma.clockRecord.create({
       data: {
         tenantId,
         employeeId: employee.id,
@@ -52,6 +74,7 @@ export class TimeService {
         note: dto.note,
       },
     });
+    return this.transformRecord(record);
   }
 
   async clockOut(tenantId: string, userId: string) {
@@ -73,19 +96,22 @@ export class TimeService {
       .toDecimalPlaces(2)
       .toString();
 
-    return this.prisma.clockRecord.update({
+    const updated = await this.prisma.clockRecord.update({
       where: { id: record.id },
       data: { clockOut, hoursWorked },
     });
+    return this.transformRecord(updated);
   }
 
   async getTodayStatus(tenantId: string, userId: string) {
     const employee = await this.getEmployeeByUserId(tenantId, userId);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    return this.prisma.clockRecord.findFirst({
+    const record = await this.prisma.clockRecord.findFirst({
       where: { tenantId, employeeId: employee.id, date: today },
     });
+    if (!record) return null;
+    return this.transformRecord(record);
   }
 
   async getAttendance(

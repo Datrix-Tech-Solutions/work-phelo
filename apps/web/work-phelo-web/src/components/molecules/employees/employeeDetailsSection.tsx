@@ -6,9 +6,10 @@ interface Props {
   employee: Employee;
   departments: { id: string; name: string }[];
   allHrEmployees: Employee[];
+  currentRoleName?: string | null;
 }
 
-export function EmploymentDetailsSection({ employee, allHrEmployees }: Props) {
+export function EmploymentDetailsSection({ employee, allHrEmployees, currentRoleName }: Props) {
   const manager = employee?.managerId
     ? allHrEmployees.find((e) => e.id === employee.managerId)
     : null;
@@ -23,6 +24,7 @@ export function EmploymentDetailsSection({ employee, allHrEmployees }: Props) {
         <DetailField label="Reporting Manager" value={managerName} />
         <DetailField label="Date of Hire" value={formatDate(employee?.hireDate)} />
         <DetailField label="Employment Type" value={formatType(employee?.employmentType)} />
+        <DetailField label="System Role" value={currentRoleName} />
         {employee?.dateOfBirth && (
           <DetailField label="Date of Birth" value={formatDate(employee.dateOfBirth)} />
         )}

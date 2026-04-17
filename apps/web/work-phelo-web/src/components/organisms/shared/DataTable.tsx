@@ -179,7 +179,7 @@ export function DataTable<T extends { id: string | number }>({
           style={{
             gridTemplateColumns: [
               ...columns.map((c) => c.width ?? '1fr'),
-              ...(rowActions ? ['48px'] : []),
+              ...(rowActions ? ['auto'] : []),
             ].join(' '),
           }}
         >
@@ -235,7 +235,7 @@ export function DataTable<T extends { id: string | number }>({
                 style={{
                   gridTemplateColumns: [
                     ...columns.map((c) => c.width ?? '1fr'),
-                    ...(rowActions ? ['48px'] : []),
+                    ...(rowActions ? ['auto'] : []),
                   ].join(' '),
                 }}
               >
@@ -246,11 +246,37 @@ export function DataTable<T extends { id: string | number }>({
                       : String((row as Record<string, unknown>)[col.key] ?? '')}
                   </div>
                 ))}
-                {rowActions && (
-                  <div className="flex justify-end">
-                    <ThreeDotMenu actions={rowActions(row)} />
-                  </div>
-                )}
+                {rowActions &&
+                  (() => {
+                    const actions = rowActions(row);
+                    if (actions.length === 0) return null;
+                    if (actions.length === 1) {
+                      const action = actions[0];
+                      return (
+                        <div className="flex justify-end">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              action.onClick();
+                            }}
+                            className={cn(
+                              'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
+                              action.danger
+                                ? 'text-red-600 hover:bg-red-50'
+                                : 'text-brand hover:bg-brand/5',
+                            )}
+                          >
+                            {action.label}
+                          </button>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="flex justify-end">
+                        <ThreeDotMenu actions={actions} />
+                      </div>
+                    );
+                  })()}
               </div>
             ))
           )}

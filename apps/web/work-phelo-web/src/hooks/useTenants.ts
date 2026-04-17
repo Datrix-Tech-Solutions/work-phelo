@@ -116,8 +116,11 @@ export function useCompanyRoles() {
 export function useCreateCompanyRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (dto: { name: string; description?: string }) =>
-      api.post('/auth/company-roles', dto).then((r) => r.data),
+    mutationFn: (dto: {
+      name: string;
+      description?: string;
+      permissions?: Record<string, string[]>;
+    }) => api.post('/auth/company-roles', dto).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['company-roles'] }),
   });
 }
@@ -127,6 +130,74 @@ export function useDeleteCompanyRole() {
   return useMutation({
     mutationFn: (id: string) => api.delete(`/auth/company-roles/${id}`).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['company-roles'] }),
+  });
+}
+
+export function useUpdateCompanyRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...dto
+    }: {
+      id: string;
+      name?: string;
+      description?: string;
+      permissions?: Record<string, string[]>;
+    }) => api.patch(`/auth/company-roles/${id}`, dto).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['company-roles'] }),
+  });
+}
+
+export function usePermissionSets() {
+  return useQuery({
+    queryKey: ['permission-sets'],
+    queryFn: () => api.get('/auth/permissions/sets').then((r) => r.data),
+  });
+}
+
+export function useAssignPermissionSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, permissionSetId }: { userId: string; permissionSetId: string }) =>
+      api.post('/auth/permissions/sets/assign', { userId, permissionSetId }).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['current-tenant-users'] });
+      qc.invalidateQueries({ queryKey: ['user-permissions'] });
+    },
+  });
+}
+
+export function useRemovePermissionSet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, permissionSetId }: { userId: string; permissionSetId: string }) =>
+      api.patch(`/auth/permissions/sets/remove/${userId}/${permissionSetId}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['current-tenant-users'] });
+      qc.invalidateQueries({ queryKey: ['user-permissions'] });
+    },
+  });
+}
+
+export function useUserPermissions(userId: string) {
+  return useQuery({
+    queryKey: ['user-permissions', userId],
+    queryFn: () => api.get(`/auth/permissions/users/${userId}`).then((r) => r.data),
+    enabled: !!userId,
+  });
+}
+
+export function useAssignCompanyRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ companyRoleId, userId }: { companyRoleId: string; userId: string }) =>
+      api.patch(`/auth/company-roles/${companyRoleId}/assign/${userId}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-roles'] });
+      qc.invalidateQueries({ queryKey: ['employees'] });
+      qc.invalidateQueries({ queryKey: ['current-tenant-users'] });
+    },
   });
 }
 

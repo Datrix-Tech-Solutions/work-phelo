@@ -131,6 +131,7 @@ export class CompanyRolesController {
   ) {
     return this.companyRolesService.assignRoleToUser(
       req.user.tenantId,
+      req.user.id,
       userId,
       id,
     );
