@@ -63,11 +63,7 @@ export class CompanyRolesService {
     // Create the matching PermissionSet so assignRoleToUser can find it.
     // Convention: a role named "Leave Manager" gets a set named "Leave Manager Set".
     if (dto.permissions && Object.keys(dto.permissions).length > 0) {
-      await this.syncPermissionSet(
-        tenantId,
-        role.name,
-        dto.permissions as Record<string, string[]>,
-      );
+      await this.syncPermissionSet(tenantId, role.name, dto.permissions);
     }
 
     return role;
@@ -90,11 +86,7 @@ export class CompanyRolesService {
 
     // Keep the PermissionSet in sync whenever permissions are updated.
     if (dto.permissions) {
-      await this.syncPermissionSet(
-        tenantId,
-        updated.name,
-        dto.permissions as Record<string, string[]>,
-      );
+      await this.syncPermissionSet(tenantId, updated.name, dto.permissions);
     }
 
     return updated;
