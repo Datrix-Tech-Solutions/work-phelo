@@ -2,7 +2,7 @@
 
 'use client';
 
-import { use, useState, useEffect } from 'react';
+import { use, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -21,12 +21,13 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   // Department head OR explicitly granted manager-review permission
   const canSeeTeamReview = user?.isManager === true || canReviewTeam || isHR;
 
-  const [activeTab, setActiveTab] = useState<'my' | 'team' | 'hr'>('my');
-
-  // Admin has no personal appraisal record — default them to team review on load.
-  useEffect(() => {
-    if (isHR) setActiveTab((t) => (t === 'my' ? 'team' : t));
-  }, [isHR]);
+  // Admin (TENANT_ADMIN) has no personal appraisal record — default to team review.
+  // Use getState() so the initializer reads the correct role on first render
+  // without needing a useEffect.
+  const [activeTab, setActiveTab] = useState<'my' | 'team' | 'hr'>(() => {
+    const role = useAuthStore.getState().user?.role;
+    return role === 'TENANT_ADMIN' ? 'team' : 'my';
+  });
   const [mySearch, setMySearch] = useState('');
   const [teamSearch, setTeamSearch] = useState('');
   const [hrSearch, setHrSearch] = useState('');

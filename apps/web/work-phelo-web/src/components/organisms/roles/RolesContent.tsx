@@ -196,6 +196,7 @@ export function RolesContent() {
       />
 
       <RolePermissionsPanel
+        key={permissionsTarget?.id}
         isOpen={!!permissionsTarget}
         onClose={() => setPermissionsTarget(null)}
         role={permissionsTarget}

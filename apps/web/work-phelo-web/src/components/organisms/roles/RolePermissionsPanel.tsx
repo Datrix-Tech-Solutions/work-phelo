@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import {
@@ -24,26 +24,21 @@ interface RolePermissionsPanelProps {
   isSaving: boolean;
 }
 
-export function RolePermissionsPanel({
+// Inner component — remounted via key={role.id} in RolesContent so the
+// lazy useState initializer re-runs whenever a different role is opened.
+function RolePermissionsPanelInner({
   isOpen,
   onClose,
   role,
   onSave,
   isSaving,
-}: RolePermissionsPanelProps) {
-  const [featurePermissions, setFeaturePermissions] = useState<FeaturePermissions>({});
-
-  // Populate from existing role permissions when panel opens
-  useEffect(() => {
-    if (!isOpen || !role) return;
+}: RolePermissionsPanelProps & { role: CompanyRole }) {
+  const [featurePermissions, setFeaturePermissions] = useState<FeaturePermissions>(() => {
     const backend = (role.permissions ?? {}) as Record<string, string[]>;
-    setFeaturePermissions(reverseTransformFeaturePermissions(backend));
-  }, [isOpen, role]);
-
-  if (!role) return null;
+    return reverseTransformFeaturePermissions(backend);
+  });
 
   const handleClose = () => {
-    setFeaturePermissions({});
     onClose();
   };
 
@@ -75,4 +70,9 @@ export function RolePermissionsPanel({
       />
     </SidePanel>
   );
+}
+
+export function RolePermissionsPanel(props: RolePermissionsPanelProps) {
+  if (!props.role) return null;
+  return <RolePermissionsPanelInner {...props} role={props.role} />;
 }

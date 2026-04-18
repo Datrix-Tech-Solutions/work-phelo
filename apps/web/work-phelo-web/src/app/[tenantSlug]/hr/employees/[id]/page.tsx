@@ -16,7 +16,6 @@ import {
   useCompanyRoles,
   useAssignCompanyRole,
   useRemoveCompanyRole,
-  useCurrentTenantUsers,
   useUserPermissions,
 } from '@/hooks/useTenants';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
@@ -71,15 +70,7 @@ export default function EmployeeDetailPage({
     | undefined;
 
   const currentRoleName = userPerms?.companyRole ?? null;
-  const currentRoleId = roles.find((r) => r.name === currentRoleName)?.id ?? null;
   const assignedSets: { id: string; name: string }[] = userPerms?.permissionSets ?? [];
-
-  // Still fetch tenant users so AssignRolePanel has the userId for the current user
-  const { data: tenantUsersRaw } = useCurrentTenantUsers();
-  const tenantUsers: { id: string; companyRoleId?: string | null }[] = Array.isArray(tenantUsersRaw)
-    ? tenantUsersRaw
-    : [];
-  const matchedUser = employee ? tenantUsers.find((u) => u.id === employee.userId) : null;
 
   const handleResendInvite = () => {
     resendInvite(id, {
