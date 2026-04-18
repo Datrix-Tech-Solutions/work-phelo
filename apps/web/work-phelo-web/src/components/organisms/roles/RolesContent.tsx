@@ -12,6 +12,7 @@ import {
   CreateRoleSubmitValues,
 } from '@/components/organisms/roles/CreateRolePanel';
 import { RolePermissionsPanel } from '@/components/organisms/roles/RolePermissionsPanel';
+import { RoleMembersPanel } from '@/components/organisms/roles/RoleMembersPanel';
 import { FeaturePermissions } from '@/components/molecules/roles/PermissionMatrix';
 import {
   useCompanyRoles,
@@ -20,6 +21,7 @@ import {
   useDeleteCompanyRole,
 } from '@/hooks/useTenants';
 import { useToast } from '@/hooks/useToast';
+import { transformFeaturePermissions } from '@/lib/permissionMap';
 
 interface CompanyRole {
   id: string;
@@ -34,6 +36,7 @@ export function RolesContent() {
   const toast = useToast();
   const [panelOpen, setPanelOpen] = useState(false);
   const [permissionsTarget, setPermissionsTarget] = useState<CompanyRole | null>(null);
+  const [membersTarget, setMembersTarget] = useState<CompanyRole | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CompanyRole | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -104,7 +107,7 @@ export function RolesContent() {
       {
         name: values.name,
         description: values.description || undefined,
-        permissions: values.featurePermissions,
+        permissions: transformFeaturePermissions(values.featurePermissions),
       },
       {
         onSuccess: () => {
@@ -118,7 +121,7 @@ export function RolesContent() {
 
   const handleSavePermissions = (roleId: string, featurePermissions: FeaturePermissions) => {
     updateRole(
-      { id: roleId, permissions: featurePermissions },
+      { id: roleId, permissions: transformFeaturePermissions(featurePermissions) },
       {
         onSuccess: () => {
           toast.success('Permissions saved');
@@ -170,6 +173,7 @@ export function RolesContent() {
           totalPages={totalPages}
           onPageChange={setPage}
           rowActions={(row) => [
+            { label: 'View Members', onClick: () => setMembersTarget(row) },
             { label: 'Permissions', onClick: () => setPermissionsTarget(row) },
             ...(!row.isSystem
               ? [{ label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) }]
@@ -183,6 +187,12 @@ export function RolesContent() {
         onClose={() => setPanelOpen(false)}
         onSubmit={handleCreate}
         isSubmitting={isCreating}
+      />
+
+      <RoleMembersPanel
+        isOpen={!!membersTarget}
+        onClose={() => setMembersTarget(null)}
+        role={membersTarget}
       />
 
       <RolePermissionsPanel

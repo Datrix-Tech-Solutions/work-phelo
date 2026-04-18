@@ -6,7 +6,8 @@ import { use, useState } from 'react';
 import { useDepartments, useUpdateDepartment, useDeleteDepartment } from '@/hooks/useDepartments';
 import { useEmployees, useUpdateEmployee } from '@/hooks/hr/useEmployees';
 import { Department } from '@/types/hr';
-import { useAuthStore } from '@/store/auth.store';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
@@ -21,8 +22,7 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const { tenantSlug } = use(params);
   const toast = useToast();
 
-  const user = useAuthStore((s) => s.user);
-  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
+  const canManage = usePermission(Permission.CREATE_DEPARTMENT);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Department | null>(null);
@@ -70,7 +70,7 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
         departments={departments}
         employees={employees}
         isLoading={isLoading}
-        isEmployee={isEmployee}
+        isEmployee={!canManage}
         onCreate={() => setCreateOpen(true)}
         onEdit={(dept) => setEditTarget(dept)}
         onAddMembers={(dept) => setMembersTarget(dept)}

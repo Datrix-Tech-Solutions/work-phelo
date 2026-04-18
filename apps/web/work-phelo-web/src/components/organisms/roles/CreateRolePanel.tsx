@@ -47,7 +47,7 @@ export function CreateRolePanel({ isOpen, onClose, onSubmit, isSubmitting }: Cre
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="New Role"
+      title="Create Role"
       description="Create a custom role and define what it can access."
       footer={
         <div className="flex justify-end gap-3">
@@ -66,11 +66,7 @@ export function CreateRolePanel({ isOpen, onClose, onSubmit, isSubmitting }: Cre
     >
       <RoleFormFields register={register} errors={errors} />
 
-      <div className="flex flex-col gap-2">
-        <p className="text-sm font-bold text-gray-900">Feature Permissions</p>
-        <p className="text-xs text-gray-400">Select what this role can do across each feature.</p>
-        <PermissionMatrix value={featurePermissions} onChange={setFeaturePermissions} />
-      </div>
+      <PermissionMatrix value={featurePermissions} onChange={setFeaturePermissions} />
     </SidePanel>
   );
 }

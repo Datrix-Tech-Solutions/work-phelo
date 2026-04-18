@@ -50,28 +50,36 @@ export class CompanyRolesService {
     if (existing)
       throw new ConflictException('A role with this name already exists');
 
-    return this.prisma.companyRole.create({
+    const role = await this.prisma.companyRole.create({
       data: {
         tenantId,
         name: dto.name,
         description: dto.description,
         isSystem: false,
-        permissions: dto.permissions ?? {
-          hr: 'none',
-          accounting: 'none',
-          marketing: 'none',
-        },
+        permissions: dto.permissions ?? {},
       },
     });
+
+    // Create the matching PermissionSet so assignRoleToUser can find it.
+    // Convention: a role named "Leave Manager" gets a set named "Leave Manager Set".
+    if (dto.permissions && Object.keys(dto.permissions).length > 0) {
+      await this.syncPermissionSet(
+        tenantId,
+        role.name,
+        dto.permissions as Record<string, string[]>,
+      );
+    }
+
+    return role;
   }
 
   async update(tenantId: string, id: string, dto: UpdateCompanyRoleDto) {
-    await this.findById(tenantId, id);
     const role = await this.findById(tenantId, id);
     if (role.isSystem) {
       throw new ForbiddenException('Default roles cannot be edited');
     }
-    return this.prisma.companyRole.update({
+
+    const updated = await this.prisma.companyRole.update({
       where: { id },
       data: {
         ...(dto.name && { name: dto.name }),
@@ -79,6 +87,123 @@ export class CompanyRolesService {
         ...(dto.permissions && { permissions: dto.permissions }),
       },
     });
+
+    // Keep the PermissionSet in sync whenever permissions are updated.
+    if (dto.permissions) {
+      await this.syncPermissionSet(
+        tenantId,
+        updated.name,
+        dto.permissions as Record<string, string[]>,
+      );
+    }
+
+    return updated;
+  }
+
+  // Creates or replaces the PermissionSet for a custom role, then ensures any users
+  // already assigned this role also have the new set applied.
+  private async syncPermissionSet(
+    tenantId: string,
+    roleName: string,
+    permissions: Record<string, string[]>,
+  ) {
+    const setName = `${roleName} Set`;
+
+    // Resolve resource IDs from the Resource table
+    const resourceNames = Object.keys(permissions);
+    const resources = await this.prisma.resource.findMany({
+      where: { name: { in: resourceNames } },
+      select: { id: true, name: true },
+    });
+    const resourceMap = new Map(resources.map((r) => [r.name, r.id]));
+
+    this.logger.log(
+      `syncPermissionSet "${setName}": ` +
+        `requested ${resourceNames.length} resources, found ${resources.length} in DB ` +
+        `(missing: ${resourceNames.filter((n) => !resourceMap.has(n)).join(', ') || 'none'})`,
+    );
+
+    // Build resource-action pairs, skipping resources not yet seeded
+    const seen = new Set<string>();
+    const resourceActions: { resourceId: string; action: string }[] = [];
+    for (const [resourceName, actions] of Object.entries(permissions)) {
+      const resourceId = resourceMap.get(resourceName);
+      if (!resourceId) continue;
+      for (const action of actions) {
+        const key = `${resourceId}:${action}`;
+        if (seen.has(key)) continue; // deduplicate
+        seen.add(key);
+        resourceActions.push({ resourceId, action });
+      }
+    }
+
+    this.logger.log(
+      `syncPermissionSet "${setName}": ${resourceActions.length} resource-action pairs`,
+    );
+
+    // Upsert the PermissionSet
+    let permSet = await this.prisma.permissionSet.findUnique({
+      where: { tenantId_name: { tenantId, name: setName } },
+    });
+
+    if (permSet) {
+      // Replace all resources on the existing set
+      await this.prisma.permissionSetResource.deleteMany({
+        where: { permissionSetId: permSet.id },
+      });
+      await this.prisma.permissionSetResource.createMany({
+        data: resourceActions.map((ra) => ({
+          permissionSetId: permSet!.id,
+          resourceId: ra.resourceId,
+          action: ra.action as any,
+        })),
+        skipDuplicates: true,
+      });
+    } else {
+      permSet = await this.prisma.permissionSet.create({
+        data: {
+          tenantId,
+          name: setName,
+          isSystem: false,
+          resources: {
+            create: resourceActions.map((ra) => ({
+              resourceId: ra.resourceId,
+              action: ra.action as any,
+            })),
+          },
+        },
+      });
+    }
+
+    // Assign the set to any users who already have this role but don't yet have the set.
+    // This covers roles that were assigned before the set existed.
+    const role = await this.prisma.companyRole.findUnique({
+      where: { tenantId_name: { tenantId, name: roleName } },
+      select: { id: true },
+    });
+    if (!role) return;
+
+    const usersWithRole = await this.prisma.user.findMany({
+      where: { tenantId, companyRoleId: role.id },
+      select: { id: true },
+    });
+
+    for (const user of usersWithRole) {
+      await this.prisma.userPermissionSet.upsert({
+        where: {
+          userId_permissionSetId: {
+            userId: user.id,
+            permissionSetId: permSet.id,
+          },
+        },
+        update: {},
+        create: {
+          userId: user.id,
+          permissionSetId: permSet.id,
+          grantedBy: 'system',
+        },
+      });
+    }
   }
 
   async remove(tenantId: string, id: string) {
@@ -106,61 +231,42 @@ export class CompanyRolesService {
 
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      include: {
-        companyRole: true,
-        permissionSets: { select: { permissionSetId: true } },
-      },
     });
     if (!user) throw new NotFoundException('User not found in this tenant');
 
-    // ── Swap permission sets ──────────────────────────────────────────────────
-    // Remove the permission set that matched the previous role (if any),
-    // then assign the one that matches the new role.
-    // Convention: a role named "Manager" has a matching set named "Manager Set".
+    const setName = `${newRole.name} Set`;
 
-    if (user.companyRole) {
-      const oldSetName = `${user.companyRole.name} Set`;
-      const oldSet = await this.prisma.permissionSet.findFirst({
-        where: { tenantId, name: oldSetName, isActive: true },
-      });
-      if (oldSet) {
-        const isAssigned = user.permissionSets.some(
-          (ps) => ps.permissionSetId === oldSet.id,
-        );
-        if (isAssigned) {
-          await this.prisma.userPermissionSet.delete({
-            where: {
-              userId_permissionSetId: { userId, permissionSetId: oldSet.id },
-            },
-          });
-        }
-      }
+    // Always sync the PermissionSet before assigning — this guarantees it exists
+    // and is up-to-date, even if the role was created before this logic existed.
+    const rolePerms = newRole.permissions as Record<string, string[]> | null;
+    if (rolePerms && Object.keys(rolePerms).length > 0) {
+      this.logger.log(
+        `Syncing permission set "${setName}" for role "${newRole.name}"`,
+      );
+      await this.syncPermissionSet(tenantId, newRole.name, rolePerms);
     }
 
-    const newSetName = `${newRole.name} Set`;
-    const newSet = await this.prisma.permissionSet.findFirst({
-      where: { tenantId, name: newSetName, isActive: true },
+    const permSet = await this.prisma.permissionSet.findFirst({
+      where: { tenantId, name: setName },
     });
 
-    if (newSet) {
+    this.logger.log(
+      permSet
+        ? `Found permission set "${setName}" (${permSet.id}) — assigning to user ${userId}`
+        : `No permission set found for "${setName}" — role may have no permissions defined`,
+    );
+
+    if (permSet) {
       await this.prisma.userPermissionSet.upsert({
         where: {
-          userId_permissionSetId: { userId, permissionSetId: newSet.id },
+          userId_permissionSetId: { userId, permissionSetId: permSet.id },
         },
         update: { grantedBy: assignedBy, grantedAt: new Date() },
-        create: {
-          userId,
-          permissionSetId: newSet.id,
-          grantedBy: assignedBy,
-        },
+        create: { userId, permissionSetId: permSet.id, grantedBy: assignedBy },
       });
-    } else {
-      this.logger.warn(
-        `No permission set found for role "${newRole.name}" (looked for "${newSetName}") in tenant ${tenantId}`,
-      );
     }
 
-    // ── Update the user's company role ────────────────────────────────────────
+    // ── Update companyRoleId to the latest assigned role (primary display) ───
     return this.prisma.user.update({
       where: { id: userId },
       data: { companyRoleId },
@@ -174,5 +280,40 @@ export class CompanyRolesService {
         companyRole: { select: { id: true, name: true } },
       },
     });
+  }
+
+  async removeRoleFromUser(
+    tenantId: string,
+    userId: string,
+    companyRoleId: string,
+  ) {
+    const role = await this.findById(tenantId, companyRoleId);
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      include: { permissionSets: { select: { permissionSetId: true } } },
+    });
+    if (!user) throw new NotFoundException('User not found in this tenant');
+
+    // Remove the role's permission set from the user
+    const setName = `${role.name} Set`;
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { tenantId, name: setName },
+    });
+    if (set) {
+      await this.prisma.userPermissionSet.deleteMany({
+        where: { userId, permissionSetId: set.id },
+      });
+    }
+
+    // If this was the primary role, clear companyRoleId
+    if (user.companyRoleId === companyRoleId) {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { companyRoleId: null },
+      });
+    }
+
+    return { message: `Role "${role.name}" removed from user` };
   }
 }

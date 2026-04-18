@@ -136,4 +136,20 @@ export class CompanyRolesController {
       id,
     );
   }
+
+  @Delete(':id/assign/:userId')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ASSIGN_ROLE)
+  @ApiOperation({ summary: 'Remove a company role from a user' })
+  removeFromUser(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Req() req: any,
+  ) {
+    return this.companyRolesService.removeRoleFromUser(
+      req.user.tenantId,
+      userId,
+      id,
+    );
+  }
 }

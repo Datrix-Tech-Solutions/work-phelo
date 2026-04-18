@@ -1,6 +1,13 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Button } from '@/components/atoms/Button';
+import {
+  PermissionMatrix,
+  FeaturePermissions,
+} from '@/components/molecules/roles/PermissionMatrix';
+import { reverseTransformFeaturePermissions } from '@/lib/permissionMap';
 
 interface CompanyRole {
   id: string;
@@ -13,21 +20,59 @@ interface RolePermissionsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   role: CompanyRole | null;
-  onSave: (roleId: string, featurePermissions: Record<string, string[]>) => void;
+  onSave: (roleId: string, featurePermissions: FeaturePermissions) => void;
   isSaving: boolean;
 }
 
-export function RolePermissionsPanel({ isOpen, onClose, role }: RolePermissionsPanelProps) {
+export function RolePermissionsPanel({
+  isOpen,
+  onClose,
+  role,
+  onSave,
+  isSaving,
+}: RolePermissionsPanelProps) {
+  const [featurePermissions, setFeaturePermissions] = useState<FeaturePermissions>({});
+
+  // Populate from existing role permissions when panel opens
+  useEffect(() => {
+    if (!isOpen || !role) return;
+    const backend = (role.permissions ?? {}) as Record<string, string[]>;
+    setFeaturePermissions(reverseTransformFeaturePermissions(backend));
+  }, [isOpen, role]);
+
   if (!role) return null;
+
+  const handleClose = () => {
+    setFeaturePermissions({});
+    onClose();
+  };
 
   return (
     <SidePanel
       isOpen={isOpen}
-      onClose={onClose}
+      onClose={handleClose}
       title={`${role.name} — Permissions`}
-      description="Set Permissions for selected roles"
+      description="Set what this role can access across each feature."
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            isLoading={isSaving}
+            loadingText="Saving..."
+            onClick={() => onSave(role.id, featurePermissions)}
+          >
+            Save Permissions
+          </Button>
+        </div>
+      }
     >
-      {null}
+      <PermissionMatrix
+        value={featurePermissions}
+        onChange={role.isSystem ? undefined : setFeaturePermissions}
+        readOnly={role.isSystem}
+      />
     </SidePanel>
   );
 }
