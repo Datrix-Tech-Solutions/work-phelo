@@ -3,6 +3,8 @@
 import { use } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import { LeaveTabs } from '@/components/molecules/leave/LeaveTabs';
 import { MyLeaveTab } from '@/components/organisms/leave/MyLeaveTab';
 import { LeaveRequestsTab } from '@/components/organisms/leave/LeaveRequestsTab';
@@ -16,10 +18,17 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const searchParams = useSearchParams();
 
   const user = useAuthStore((s) => s.user);
-  const isManager = user?.role === 'TENANT_ADMIN' || user?.isManager === true;
-  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
+  // isManager comes from the employee profile (department head), not from permissions.
+  // Admins (TENANT_ADMIN) bypass permission checks and see requests only — no HR profile.
+  const hasHRProfile = user?.role === 'EMPLOYEE';
+  const isAdmin = user?.role === 'TENANT_ADMIN';
+  const canApproveLeave = usePermission(Permission.APPROVE_TEAM_LEAVE);
+  // Department head OR explicitly granted approve-leave permission
+  const canSeeRequests = user?.isManager === true || canApproveLeave || isAdmin;
 
-  const defaultTab: Tab = isEmployee ? 'my' : 'requests';
+  // Employees and managers land on their own leave first.
+  // Admins have no personal HR profile so they land on requests.
+  const defaultTab: Tab = hasHRProfile ? 'my' : 'requests';
   const tabParam = searchParams.get('tab') as Tab | null;
   const activeTab: Tab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : defaultTab;
 
@@ -38,13 +47,13 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
 
       <LeaveTabs
         activeTab={activeTab}
-        isManager={isManager}
-        isEmployee={isEmployee}
+        isManager={canSeeRequests}
+        isEmployee={hasHRProfile}
         onTabChange={handleTabChange}
       />
 
-      {activeTab === 'my' && isEmployee && <MyLeaveTab tenantSlug={tenantSlug} />}
-      {activeTab === 'requests' && isManager && <LeaveRequestsTab tenantSlug={tenantSlug} />}
+      {activeTab === 'my' && hasHRProfile && <MyLeaveTab tenantSlug={tenantSlug} />}
+      {activeTab === 'requests' && canSeeRequests && <LeaveRequestsTab tenantSlug={tenantSlug} />}
     </div>
   );
 }

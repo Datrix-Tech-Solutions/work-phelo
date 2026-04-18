@@ -1,4 +1,5 @@
 export * from './useAuth';
+export * from './usePermission';
 export * from './useTenants';
 export * from './useDepartments';
 export * from './hr/useEmployees';

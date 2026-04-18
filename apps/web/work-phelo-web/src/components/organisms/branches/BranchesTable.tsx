@@ -12,7 +12,8 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { useBranches, useDeleteBranch, useEmployees } from '@/hooks';
 import type { Branch, Employee } from '@/types/hr';
-import { useAuthStore } from '@/store/auth.store';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 const PAGE_SIZE = 8;
 
@@ -22,8 +23,7 @@ function branchLocation(b: Branch) {
 
 export function BranchesTable() {
   const toast = useToast();
-  const user = useAuthStore((s) => s.user);
-  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
+  const canManage = usePermission(Permission.CREATE_DEPARTMENT);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -145,11 +145,11 @@ export function BranchesTable() {
           setSearch(q);
           setPage(1);
         }}
-        {...(!isEmployee && {
+        {...(canManage && {
           actionButton: { label: 'New Branch', onClick: () => setCreateOpen(true) },
         })}
         rowActions={
-          isEmployee
+          !canManage
             ? undefined
             : (row) => [
                 { label: 'Edit Branch', onClick: () => setEditTarget(row) },
@@ -163,7 +163,7 @@ export function BranchesTable() {
         onPageChange={setPage}
       />
 
-      {!isEmployee && (
+      {canManage && (
         <>
           <BranchFormPanel
             isOpen={createOpen}

@@ -2,6 +2,8 @@
 
 import { use, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
@@ -34,11 +36,11 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const toast = useToast();
 
   const isAdmin = user?.role === 'TENANT_ADMIN';
-  const isManager = isAdmin || user?.isManager === true;
+  const canManageTime = usePermission(Permission.APPROVE_TEAM_TIME);
+  // Department head OR explicitly granted approve-time permission
+  const isManager = user?.isManager === true || canManageTime || isAdmin;
 
-  const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>(
-    isAdmin ? 'live' : 'my',
-  );
+  const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>('my');
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<{
     req: { id: string; employeeName?: string; date: string };

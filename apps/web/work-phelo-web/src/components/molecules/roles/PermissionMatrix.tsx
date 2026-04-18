@@ -1,99 +1,40 @@
 'use client';
 
+import { useState } from 'react';
+import { ChevronDown, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
 
+const ACTIONS = [
+  { key: 'CREATE', label: 'Create' },
+  { key: 'VIEW', label: 'Read' },
+  { key: 'EDIT', label: 'Update' },
+  { key: 'DELETE', label: 'Delete' },
+];
+
+// featureKey matches the keys in user.featureConfig.hr
+// 'management' has no toggle — always available
+const HR_FEATURES = [
+  { key: 'departments', label: 'Department Management' },
+  { key: 'branches', label: 'Branch Management' },
+  { key: 'employees', label: 'Employee Management' },
+  { key: 'leave', label: 'Leave Management' },
+  { key: 'appraisal', label: 'Appraisal Management' },
+  { key: 'timeclock', label: 'Time Management' },
+  { key: 'projects', label: 'Project Management' },
+  { key: 'payroll', label: 'Payroll Management' },
+  { key: 'assets', label: 'Asset Management' },
+  { key: 'management', label: 'HR Management' },
+];
+
+export type FeaturePermissions = Record<string, string[]>;
+
+// Kept for any existing imports that reference FeatureDefinition
 export interface FeatureDefinition {
   key: string;
   label: string;
   actions: { key: string; label: string }[];
 }
-
-export const FEATURE_DEFINITIONS: FeatureDefinition[] = [
-  {
-    key: 'employees',
-    label: 'Employees',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'CREATE', label: 'Create' },
-      { key: 'EDIT', label: 'Edit' },
-      { key: 'DELETE', label: 'Offboard' },
-    ],
-  },
-  {
-    key: 'departments',
-    label: 'Departments',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'CREATE', label: 'Create' },
-      { key: 'EDIT', label: 'Edit' },
-      { key: 'DELETE', label: 'Delete' },
-    ],
-  },
-  {
-    key: 'branches',
-    label: 'Branches',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'CREATE', label: 'Create' },
-      { key: 'EDIT', label: 'Edit' },
-      { key: 'DELETE', label: 'Delete' },
-    ],
-  },
-  {
-    key: 'leave',
-    label: 'Leave',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'CREATE', label: 'Create' },
-      { key: 'APPROVE', label: 'Approve' },
-    ],
-  },
-  {
-    key: 'attendance',
-    label: 'Attendance',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'APPROVE', label: 'Approve' },
-    ],
-  },
-  {
-    key: 'timesheets',
-    label: 'Timesheets',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'APPROVE', label: 'Approve' },
-    ],
-  },
-  {
-    key: 'schedules',
-    label: 'Schedules',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'CREATE', label: 'Create' },
-      { key: 'EDIT', label: 'Edit' },
-    ],
-  },
-  {
-    key: 'payroll',
-    label: 'Payroll',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'RUN', label: 'Run' },
-      { key: 'APPROVE', label: 'Approve' },
-    ],
-  },
-  {
-    key: 'appraisals',
-    label: 'Appraisals',
-    actions: [
-      { key: 'VIEW', label: 'View' },
-      { key: 'CREATE', label: 'Create' },
-      { key: 'APPROVE', label: 'Approve' },
-    ],
-  },
-];
-
-export type FeaturePermissions = Record<string, string[]>;
 
 interface PermissionMatrixProps {
   value: FeaturePermissions;
@@ -101,7 +42,18 @@ interface PermissionMatrixProps {
   readOnly?: boolean;
 }
 
+const EMPTY_HR_FEATURES: Record<string, boolean> = {};
+
 export function PermissionMatrix({ value, onChange, readOnly = false }: PermissionMatrixProps) {
+  const [expanded, setExpanded] = useState(true);
+  const hrFeatures = useAuthStore((s) => s.user?.featureConfig?.hr ?? EMPTY_HR_FEATURES);
+
+  const isLocked = (featureKey: string) => {
+    if (featureKey === 'management') return false;
+    // Locked when the tenant has the feature explicitly disabled
+    return featureKey in hrFeatures && hrFeatures[featureKey] === false;
+  };
+
   const toggle = (featureKey: string, actionKey: string) => {
     if (readOnly || !onChange) return;
     const current = value[featureKey] ?? [];
@@ -111,99 +63,69 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: Permissi
     onChange({ ...value, [featureKey]: next });
   };
 
-  const toggleAll = (featureKey: string, feature: FeatureDefinition) => {
-    if (readOnly || !onChange) return;
-    const current = value[featureKey] ?? [];
-    const all = feature.actions.map((a) => a.key);
-    const isAllSelected = all.every((a) => current.includes(a));
-    onChange({ ...value, [featureKey]: isAllSelected ? [] : all });
-  };
-
   return (
-    <div className="flex flex-col border border-gray-200 rounded-xl overflow-hidden text-sm">
-      {/* Column header */}
-      <div
-        className="grid bg-gray-50 border-b border-gray-200 px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide"
-        style={{ gridTemplateColumns: '1fr repeat(4, 80px)' }}
-      >
-        <span>Feature</span>
-        <span className="text-center">View</span>
-        <span className="text-center">Create</span>
-        <span className="text-center">Edit</span>
-        <span className="text-center">Delete / Other</span>
-      </div>
+    <div className="flex flex-col gap-3">
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Access Levels</p>
 
-      {FEATURE_DEFINITIONS.map((feature, i) => {
-        const granted = value[feature.key] ?? [];
-        const allSelected = feature.actions.every((a) => granted.includes(a.key));
-        const someSelected = feature.actions.some((a) => granted.includes(a.key));
-
-        // Map actions to fixed columns: VIEW, CREATE, EDIT, DELETE/other
-        const COL_KEYS = ['VIEW', 'CREATE', 'EDIT', 'DELETE'];
-
-        return (
-          <div
-            key={feature.key}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        {/* Module header */}
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors"
+        >
+          <ChevronDown
             className={cn(
-              'grid items-center px-4 py-3',
-              i < FEATURE_DEFINITIONS.length - 1 && 'border-b border-gray-100',
-              someSelected && 'bg-brand/[0.02]',
+              'w-4 h-4 text-gray-500 transition-transform duration-200',
+              !expanded && '-rotate-90',
             )}
-            style={{ gridTemplateColumns: '1fr repeat(4, 80px)' }}
-          >
-            {/* Feature label + select-all checkbox */}
-            <div className="flex items-center gap-2">
-              {!readOnly && (
-                <input
-                  type="checkbox"
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected && !allSelected;
-                  }}
-                  onChange={() => toggleAll(feature.key, feature)}
-                  className="w-3.5 h-3.5 accent-brand cursor-pointer"
-                />
-              )}
-              <span className={cn('font-medium text-gray-700', someSelected && 'text-gray-900')}>
-                {feature.label}
-              </span>
-            </div>
+          />
+          <span className="text-sm font-semibold text-gray-700">Human Resource</span>
+        </button>
 
-            {/* Action columns */}
-            {COL_KEYS.map((colKey) => {
-              // Find an action in this feature that maps to this column
-              // VIEW→VIEW, CREATE→CREATE, EDIT→EDIT, DELETE→DELETE or other actions (APPROVE, RUN, etc.)
-              let action = feature.actions.find((a) => a.key === colKey);
-              if (!action && colKey === 'DELETE') {
-                // Put APPROVE, RUN, ASSIGN in the last column if no DELETE
-                action = feature.actions.find((a) => ['APPROVE', 'RUN', 'ASSIGN'].includes(a.key));
-              }
+        {expanded && (
+          <div className="divide-y divide-gray-100">
+            {HR_FEATURES.map((feature) => {
+              const locked = isLocked(feature.key);
+              const granted = value[feature.key] ?? [];
 
-              if (!action) {
-                return <span key={colKey} />;
-              }
-
-              const checked = granted.includes(action.key);
               return (
-                <div key={colKey} className="flex flex-col items-center gap-1">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={readOnly}
-                    onChange={() => toggle(feature.key, action!.key)}
-                    className="w-3.5 h-3.5 accent-brand cursor-pointer disabled:cursor-default"
-                  />
-                  {colKey === 'DELETE' && action.key !== 'DELETE' && (
-                    <span className="text-[10px] text-gray-400 leading-tight text-center">
-                      {action.label}
-                    </span>
+                <div key={feature.key} className="px-4 py-3.5">
+                  <p className="text-sm font-semibold text-gray-800 mb-2.5">{feature.label}</p>
+
+                  {locked ? (
+                    <div className="flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-100 text-gray-400">
+                      <Lock className="w-4 h-4" />
+                      <span className="text-sm">Upgrade to unlock</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-6">
+                      {ACTIONS.map((action) => (
+                        <label
+                          key={action.key}
+                          className={cn(
+                            'flex items-center gap-1.5 select-none',
+                            readOnly ? 'cursor-default' : 'cursor-pointer',
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={granted.includes(action.key)}
+                            disabled={readOnly}
+                            onChange={() => toggle(feature.key, action.key)}
+                            className="w-4 h-4 accent-brand rounded cursor-pointer disabled:cursor-default"
+                          />
+                          <span className="text-sm text-gray-600">{action.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   )}
                 </div>
               );
             })}
           </div>
-        );
-      })}
+        )}
+      </div>
     </div>
   );
 }

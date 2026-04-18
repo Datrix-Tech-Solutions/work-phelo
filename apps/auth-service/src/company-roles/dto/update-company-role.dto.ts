@@ -11,5 +11,5 @@ export class UpdateCompanyRoleDto {
 
   @IsOptional()
   @IsObject()
-  permissions?: Record<string, 'none' | 'view' | 'edit'>;
+  permissions?: Record<string, string[]>;
 }

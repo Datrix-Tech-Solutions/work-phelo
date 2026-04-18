@@ -14,15 +14,16 @@ import { useLeaveRequests } from '@/hooks/useLeave';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { InviteEmployeePanel } from '@/components/organisms/employee/inviteEmployeePanel';
-import { useAuthStore } from '@/store/auth.store';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '@/components/atoms/NoSearchLogo';
 
 export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
-  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
+  const canInvite = usePermission(Permission.CREATE_EMPLOYEE);
+  const canViewDetail = usePermission(Permission.UPDATE_EMPLOYEE);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -70,7 +71,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
             {isLoading ? '—' : `${employees.length} employee${employees.length !== 1 ? 's' : ''}`}
           </p>
         </div>
-        {!isEmployee && <Button onClick={handleInviteClick}>+ Invite Employee</Button>}
+        {canInvite && <Button onClick={handleInviteClick}>+ Invite Employee</Button>}
       </div>
 
       {/* Toolbar */}
@@ -165,7 +166,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
               hireDate={emp.hireDate}
               isOnLeave={onLeaveEmployeeIds.has(emp.id)}
               onClick={
-                !isEmployee ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`) : undefined
+                canViewDetail
+                  ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)
+                  : undefined
               }
             />
           ))}
@@ -201,7 +204,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
         message={`An invite has been sent to ${successEmployee}. They will receive an email to set up their account.`}
       />
 
-      {!isEmployee && (
+      {canInvite && (
         <InviteEmployeePanel
           isOpen={panelOpen}
           onClose={() => setPanelOpen(false)}

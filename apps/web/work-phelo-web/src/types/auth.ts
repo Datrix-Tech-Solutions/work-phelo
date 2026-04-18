@@ -9,6 +9,7 @@ export interface User {
   firstName: string;
   lastName?: string;
   companyRoleId?: string;
+  companyRoleName?: string | null;
   moduleConfig?: Record<string, boolean>;
   featureConfig?: Record<string, Record<string, boolean>>;
 }

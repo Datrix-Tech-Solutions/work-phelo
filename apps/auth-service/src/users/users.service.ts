@@ -292,6 +292,8 @@ export class UsersService {
         updatedAt: true,
         tenantId: true,
         forcePasswordReset: true,
+        companyRoleId: true,
+        companyRole: { select: { id: true, name: true, description: true } },
       },
     });
   }

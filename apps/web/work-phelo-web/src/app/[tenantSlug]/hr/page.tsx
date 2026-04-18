@@ -49,7 +49,10 @@ export default function EmployeeDashboardPage({
 
   /* ── Identity ── */
   const user = useAuthStore((s) => s.user);
-  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Employee';
+  const authLoading = useAuthStore((s) => s.isLoading);
+  const fullName = !authLoading
+    ? [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Employee'
+    : '';
   const tenantName = user?.tenantName ?? 'Your Company';
 
   /* ── Remote data ── */
@@ -157,7 +160,7 @@ export default function EmployeeDashboardPage({
     birthdayRef.current?.scrollBy({ left: dir === 'left' ? -200 : 200, behavior: 'smooth' });
   };
 
-  if (isDashboardLoading) return <DashboardSkeleton />;
+  if (authLoading || isDashboardLoading) return <DashboardSkeleton />;
 
   /* ── Render ── */
   return (
