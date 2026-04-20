@@ -12,12 +12,8 @@ import {
 import { useDepartments } from '@/hooks/useDepartments';
 import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
-import {
-  useCompanyRoles,
-  useAssignCompanyRole,
-  useRemoveCompanyRole,
-  useUserPermissions,
-} from '@/hooks/useTenants';
+import { useCompanyRoles, useUserPermissions } from '@/hooks/useRoles';
+import { useAssignCompanyRole, useRemoveCompanyRole } from '@/hooks/useTenants';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';

@@ -106,13 +106,6 @@ export function useResendInvite() {
   });
 }
 
-export function useCompanyRoles() {
-  return useQuery({
-    queryKey: ['company-roles'],
-    queryFn: () => api.get('/auth/company-roles').then((r) => r.data),
-  });
-}
-
 export function useCreateCompanyRole() {
   const qc = useQueryClient();
   return useMutation({
@@ -149,13 +142,6 @@ export function useUpdateCompanyRole() {
   });
 }
 
-export function usePermissionSets() {
-  return useQuery({
-    queryKey: ['permission-sets'],
-    queryFn: () => api.get('/auth/permissions/sets').then((r) => r.data),
-  });
-}
-
 export function useAssignPermissionSet() {
   const qc = useQueryClient();
   return useMutation({
@@ -177,14 +163,6 @@ export function useRemovePermissionSet() {
       qc.invalidateQueries({ queryKey: ['current-tenant-users'] });
       qc.invalidateQueries({ queryKey: ['user-permissions'] });
     },
-  });
-}
-
-export function useUserPermissions(userId: string) {
-  return useQuery({
-    queryKey: ['user-permissions', userId],
-    queryFn: () => api.get(`/auth/permissions/users/${userId}`).then((r) => r.data),
-    enabled: !!userId,
   });
 }
 

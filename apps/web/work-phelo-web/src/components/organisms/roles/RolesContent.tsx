@@ -14,8 +14,8 @@ import {
 import { RolePermissionsPanel } from '@/components/organisms/roles/RolePermissionsPanel';
 import { RoleMembersPanel } from '@/components/organisms/roles/RoleMembersPanel';
 import { FeaturePermissions } from '@/components/molecules/roles/PermissionMatrix';
+import { useCompanyRoles } from '@/hooks/useRoles';
 import {
-  useCompanyRoles,
   useCreateCompanyRole,
   useUpdateCompanyRole,
   useDeleteCompanyRole,
