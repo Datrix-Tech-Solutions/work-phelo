@@ -17,15 +17,12 @@ import {
   useUserPermissions,
   useAssignRole,
   useUnassignRole,
-  usePermissionSets,
-  useAssignPermissionSet,
-  useRemovePermissionSet,
 } from '@/hooks/useRoles';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
 import { AssignRolePanel } from '@/components/organisms/roles/AssignRolePanel';
-import { EmployeePermissionsPanel } from '@/components/organisms/roles/EmployeePermissionsPanel';
+import { AssignPermissionPanel } from '@/components/organisms/roles/assignPermissionPanel';
 import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
 import { EmployeeActionsBar } from '@/components/molecules/employees/employeeActionBar';
 import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
@@ -45,7 +42,7 @@ export default function EmployeeDetailPage({
   const [editOpen, setEditOpen] = useState(false);
   const [assignAssetOpen, setAssignAssetOpen] = useState(false);
   const [assignRoleOpen, setAssignRoleOpen] = useState(false);
-  const [extraPermsOpen, setExtraPermsOpen] = useState(false);
+  const [assignPermOpen, setAssignPermOpen] = useState(false);
 
   // Data fetching
   const { data: employee, isLoading } = useEmployee(id);
@@ -59,13 +56,10 @@ export default function EmployeeDetailPage({
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
   const { mutate: assignRole, isPending: isAssigningRole } = useAssignRole();
   const { mutate: unassignRole, isPending: isRemovingRole } = useUnassignRole();
-  const { mutate: assignPermSet, isPending: isAssigningPermSet } = useAssignPermissionSet();
-  const { mutate: removePermSet, isPending: isRemovingPermSet } = useRemovePermissionSet();
 
-  // Roles & permission sets data
+  // Roles data
   const { data: rolesRaw = [] } = useCompanyRoles();
   const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
-  const { data: permissionSets = [] } = usePermissionSets();
 
   // /auth/permissions/users/:id is the authoritative source — always returns companyRole name
   // regardless of whether GET /auth/users includes the companyRole relation.
@@ -117,7 +111,7 @@ export default function EmployeeDetailPage({
         isResending={isResending}
         onAssignAsset={() => setAssignAssetOpen(true)}
         onAssignRole={employee.userId ? () => setAssignRoleOpen(true) : undefined}
-        onExtraPerms={employee.userId ? () => setExtraPermsOpen(true) : undefined}
+        onAssignPermission={employee.userId ? () => setAssignPermOpen(true) : undefined}
         onOffboard={() => setOffboardOpen(true)}
         onEdit={() => setEditOpen(true)}
       />
@@ -206,34 +200,11 @@ export default function EmployeeDetailPage({
       )}
 
       {employee.userId && (
-        <EmployeePermissionsPanel
-          isOpen={extraPermsOpen}
-          onClose={() => setExtraPermsOpen(false)}
+        <AssignPermissionPanel
+          isOpen={assignPermOpen}
+          onClose={() => setAssignPermOpen(false)}
           employeeName={name}
           userId={employee.userId}
-          availableSets={permissionSets}
-          assignedSets={assignedSets}
-          baseSetName={currentRoleName ? `${currentRoleName} Set` : null}
-          isAssigning={isAssigningPermSet}
-          isRemoving={isRemovingPermSet}
-          onAssign={(permissionSetId) => {
-            assignPermSet(
-              { userId: employee.userId!, permissionSetId },
-              {
-                onSuccess: () => toast.success('Permission set assigned'),
-                onError: () => toast.error('Failed to assign permission set'),
-              },
-            );
-          }}
-          onRemove={(permissionSetId) => {
-            removePermSet(
-              { userId: employee.userId!, permissionSetId },
-              {
-                onSuccess: () => toast.success('Permission set removed'),
-                onError: () => toast.error('Failed to remove permission set'),
-              },
-            );
-          }}
         />
       )}
     </div>

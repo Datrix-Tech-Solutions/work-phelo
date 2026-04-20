@@ -5,7 +5,7 @@ import { ChevronDown, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
 
-const ACTIONS = [
+export const ACTIONS = [
   { key: 'CREATE', label: 'Create' },
   { key: 'VIEW', label: 'Read' },
   { key: 'EDIT', label: 'Update' },
@@ -14,7 +14,7 @@ const ACTIONS = [
 
 // featureKey matches the keys in user.featureConfig.hr
 // 'management' has no toggle — always available
-const HR_FEATURES = [
+export const HR_FEATURES = [
   { key: 'departments', label: 'Department Management' },
   { key: 'branches', label: 'Branch Management' },
   { key: 'employees', label: 'Employee Management' },

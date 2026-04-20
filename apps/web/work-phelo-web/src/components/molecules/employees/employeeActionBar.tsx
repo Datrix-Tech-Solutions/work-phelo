@@ -1,4 +1,4 @@
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, ShieldCog } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
 
@@ -9,7 +9,7 @@ interface EmployeeActionsBarProps {
   isResending?: boolean;
   onAssignAsset: () => void;
   onAssignRole?: () => void;
-  onExtraPerms?: () => void;
+  onAssignPermission?: () => void;
   onOffboard: () => void;
   onEdit: () => void;
 }
@@ -21,7 +21,7 @@ export function EmployeeActionsBar({
   isResending,
   onAssignAsset,
   onAssignRole,
-  onExtraPerms,
+  onAssignPermission,
   onOffboard,
   onEdit,
 }: EmployeeActionsBarProps) {
@@ -30,12 +30,6 @@ export function EmployeeActionsBar({
       {onAssignRole && !isOffboarded && !isPendingInvite && (
         <Button variant="outline" size="sm" onClick={onAssignRole} className="gap-2">
           Assign Role
-          <ShieldCheck className="w-4 h-4" />
-        </Button>
-      )}
-      {onExtraPerms && !isOffboarded && !isPendingInvite && (
-        <Button variant="outline" size="sm" onClick={onExtraPerms} className="gap-2">
-          Permissions
           <ShieldCheck className="w-4 h-4" />
         </Button>
       )}
@@ -52,6 +46,10 @@ export function EmployeeActionsBar({
         </Button>
       ) : !isOffboarded ? (
         <>
+          <Button variant="outline" size="sm" onClick={onAssignPermission} className="gap-2">
+            Assign Permissions
+            <ShieldCog className="w-4 h-4" />
+          </Button>
           <Button variant="outline" size="sm" onClick={onAssignAsset}>
             Assign Asset
           </Button>
