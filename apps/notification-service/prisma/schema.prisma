@@ -36,6 +36,7 @@ enum NotificationType {
   EMPLOYEE_TERMINATION
   LEAVE_REQUESTED
   LEAVE_REVIEWED
+  LEAVE_CANCELLED
 
   @@schema("notify")
 }

@@ -13,3 +13,4 @@ export * from './useEmployeeDashboard';
 export * from './useTimeClock';
 export * from './useBranches';
 export * from './useAppraisals';
+export * from './useRoles';

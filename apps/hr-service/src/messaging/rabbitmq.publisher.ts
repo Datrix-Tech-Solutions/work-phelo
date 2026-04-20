@@ -10,6 +10,7 @@ import {
   EmployeeTerminationEvent,
   LeaveRequestedEvent,
   LeaveReviewedEvent,
+  LeaveCancelledEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -128,6 +129,18 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_LEAVE_REVIEWED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationLeaveCancelled(
+    data: LeaveCancelledEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_LEAVE_CANCELLED,
       data,
       correlationId,
     );

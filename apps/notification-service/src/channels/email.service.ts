@@ -359,6 +359,58 @@ export class EmailService {
     );
   }
 
+  async sendLeaveCancelledNotification(
+    to: string,
+    employeeFirstName: string,
+    employeeLastName: string,
+    leaveTypeName: string,
+    startDate: string,
+    endDate: string,
+    totalDays: number,
+  ): Promise<boolean> {
+    const fmt = (d: string) =>
+      new Date(d).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+    return this.send(
+      to,
+      `Leave request cancelled — ${employeeFirstName} ${employeeLastName}`,
+      `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
+        <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
+          <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
+          <h2 style="color: #111827; margin: 0 0 24px 0;">Leave Request Cancelled</h2>
+          <p style="color: #374151;">
+            <strong>${employeeFirstName} ${employeeLastName}</strong> has cancelled their leave request. No action is required.
+          </p>
+          <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px; border-radius: 4px 0 0 0;">Leave Type</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827; font-weight: 600;">${leaveTypeName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">From</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(startDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">To</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(endDate)}</td>
+            </tr>
+            <tr>
+              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px; border-radius: 0 0 0 4px;">Duration</td>
+              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${totalDays} working day${totalDays !== 1 ? 's' : ''}</td>
+            </tr>
+          </table>
+          <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">© 2026 WorkPhelo. All rights reserved.</p>
+        </div>
+      </div>
+      `,
+    );
+  }
+
   async sendPasswordResetLink(
     to: string,
     firstName: string,

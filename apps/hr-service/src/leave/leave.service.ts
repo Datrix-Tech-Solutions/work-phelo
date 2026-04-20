@@ -719,6 +719,7 @@ export class LeaveService {
 
     const request = await this.prisma.leaveRequest.findFirst({
       where: { id: requestId, tenantId, employeeId: empRecord.id },
+      include: { leaveType: { select: { name: true } } },
     });
 
     if (!request) throw new NotFoundException('Leave request not found');
@@ -745,6 +746,91 @@ export class LeaveService {
       },
     });
 
+    // Notify manager that the request was withdrawn (fire-and-forget)
+    void this.notifyManagerOfLeaveCancellation(
+      tenantId,
+      {
+        id: empRecord.id,
+        firstName: empRecord.firstName,
+        lastName: empRecord.lastName,
+        managerId: empRecord.managerId,
+        departmentId: empRecord.departmentId,
+      },
+      request.leaveType.name,
+      request.startDate.toISOString(),
+      request.endDate.toISOString(),
+      request.totalDays,
+    );
+
     return { message: 'Leave request cancelled' };
+  }
+
+  private async notifyManagerOfLeaveCancellation(
+    tenantId: string,
+    employee: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      managerId: string | null;
+      departmentId: string | null;
+    },
+    leaveTypeName: string,
+    startDate: string,
+    endDate: string,
+    totalDays: number,
+  ) {
+    try {
+      let managerEmail: string | null = null;
+
+      if (employee.managerId) {
+        const manager = await this.prisma.employee.findUnique({
+          where: { id: employee.managerId },
+          select: { email: true },
+        });
+        managerEmail = manager?.email ?? null;
+      }
+
+      if (!managerEmail && employee.departmentId) {
+        const dept = await this.prisma.department.findUnique({
+          where: { id: employee.departmentId },
+          select: { managerId: true },
+        });
+        if (dept?.managerId) {
+          const deptManager = await this.prisma.employee.findUnique({
+            where: { id: dept.managerId },
+            select: { email: true },
+          });
+          managerEmail = deptManager?.email ?? null;
+        }
+      }
+
+      if (!managerEmail) {
+        managerEmail = await this.getTenantAdminEmail(tenantId);
+      }
+
+      if (!managerEmail) {
+        this.logger.warn(
+          `No manager or tenant admin found for tenant ${tenantId} — leave cancellation notification skipped`,
+        );
+        return;
+      }
+
+      await this.rabbitmq.notificationLeaveCancelled({
+        tenantId,
+        employeeId: employee.id,
+        employeeFirstName: employee.firstName,
+        employeeLastName: employee.lastName,
+        managerEmail,
+        leaveTypeName,
+        startDate,
+        endDate,
+        totalDays,
+      });
+    } catch (err) {
+      this.logger.error(
+        `Failed to emit leave cancelled notification for employee ${employee.id}`,
+        err,
+      );
+    }
   }
 }

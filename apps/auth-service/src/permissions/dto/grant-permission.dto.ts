@@ -1,4 +1,13 @@
-import { IsString, IsEnum, IsOptional, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsDateString,
+  IsUUID,
+  IsArray,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
 export enum PermissionAction {
   VIEW = 'VIEW',
@@ -12,10 +21,10 @@ export enum PermissionAction {
 }
 
 export class GrantPermissionDto {
-  @IsString()
+  @IsUUID()
   userId!: string;
 
-  @IsString()
+  @IsUUID()
   resourceId!: string;
 
   @IsEnum(PermissionAction)
@@ -31,10 +40,10 @@ export class GrantPermissionDto {
 }
 
 export class RevokePermissionDto {
-  @IsString()
+  @IsUUID()
   userId!: string;
 
-  @IsString()
+  @IsUUID()
   resourceId!: string;
 
   @IsEnum(PermissionAction)
@@ -46,9 +55,46 @@ export class RevokePermissionDto {
 }
 
 export class AssignPermissionSetDto {
-  @IsString()
+  @IsUUID()
   userId!: string;
 
-  @IsString()
+  @IsUUID()
   permissionSetId!: string;
+}
+
+export class PermissionSetResourceDto {
+  @IsUUID()
+  resourceId!: string;
+
+  @IsEnum(PermissionAction)
+  action!: PermissionAction;
+}
+
+export class CreatePermissionSetDto {
+  @IsString()
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PermissionSetResourceDto)
+  resources!: PermissionSetResourceDto[];
+}
+
+export class UpdatePermissionSetDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PermissionSetResourceDto)
+  resources!: PermissionSetResourceDto[];
 }

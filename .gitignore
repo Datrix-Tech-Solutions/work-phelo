@@ -53,3 +53,6 @@ packages/*/src/*.d.ts.map
 **/prisma/generated/
 CLAUDE.md
 HOME
+
+# Local UI specs / design references
+roles-ui-spec/

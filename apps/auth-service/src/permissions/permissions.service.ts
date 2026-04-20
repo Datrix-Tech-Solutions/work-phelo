@@ -10,6 +10,8 @@ import {
   GrantPermissionDto,
   RevokePermissionDto,
   AssignPermissionSetDto,
+  CreatePermissionSetDto,
+  UpdatePermissionSetDto,
 } from './dto/grant-permission.dto';
 import { PermissionAction } from './dto/grant-permission.dto';
 
@@ -165,7 +167,87 @@ export class PermissionsService {
 
   // ── Permission Sets ────────────────────────────────────────────────────────
 
-  async createPermissionSet(
+  async createPermissionSet(tenantId: string, dto: CreatePermissionSetDto) {
+    const existing = await this.prisma.permissionSet.findFirst({
+      where: { tenantId, name: dto.name },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `A permission set named "${dto.name}" already exists`,
+      );
+    }
+
+    if (dto.resources.length > 0) {
+      const resourceIds = dto.resources.map((r) => r.resourceId);
+      const found = await this.prisma.resource.findMany({
+        where: { id: { in: resourceIds } },
+        select: { id: true },
+      });
+      if (found.length !== resourceIds.length) {
+        throw new NotFoundException('One or more resources not found');
+      }
+    }
+
+    return this.prisma.permissionSet.create({
+      data: {
+        tenantId,
+        name: dto.name,
+        description: dto.description,
+        resources: {
+          create: dto.resources.map((r) => ({
+            resourceId: r.resourceId,
+            action: r.action as any,
+          })),
+        },
+      },
+      include: { resources: { include: { resource: true } } },
+    });
+  }
+
+  async updatePermissionSet(
+    tenantId: string,
+    id: string,
+    dto: UpdatePermissionSetDto,
+  ) {
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { id, tenantId, isActive: true },
+    });
+    if (!set) throw new NotFoundException('Permission set not found');
+
+    if (dto.resources.length > 0) {
+      const resourceIds = dto.resources.map((r) => r.resourceId);
+      const found = await this.prisma.resource.findMany({
+        where: { id: { in: resourceIds } },
+        select: { id: true },
+      });
+      if (found.length !== resourceIds.length) {
+        throw new NotFoundException('One or more resources not found');
+      }
+    }
+
+    // Replace all resources atomically
+    await this.prisma.permissionSetResource.deleteMany({
+      where: { permissionSetId: id },
+    });
+
+    return this.prisma.permissionSet.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        resources: {
+          create: dto.resources.map((r) => ({
+            resourceId: r.resourceId,
+            action: r.action as any,
+          })),
+        },
+      },
+      include: { resources: { include: { resource: true } } },
+    });
+  }
+
+  // kept for internal seeding use
+  async _createPermissionSetRaw(
     tenantId: string,
     name: string,
     description: string,

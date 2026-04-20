@@ -136,4 +136,35 @@ export class CompanyRolesController {
       id,
     );
   }
+
+  @Delete(':id/assign/:userId')
+  @RequirePermissions(Permission.ASSIGN_ROLE)
+  @ApiOperation({
+    summary:
+      'Remove a role from a user — automatically falls back to the Employee role',
+  })
+  @ApiParam({ name: 'id', description: 'Company role UUID to remove' })
+  @ApiParam({ name: 'userId', description: 'User UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Role removed — user reverted to Employee role',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'User is not assigned to this role',
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({ status: 404, description: 'Role or user not found' })
+  unassignFromUser(
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+    @Req() req: any,
+  ) {
+    return this.companyRolesService.unassignRoleFromUser(
+      req.user.tenantId,
+      userId,
+      id,
+    );
+  }
 }

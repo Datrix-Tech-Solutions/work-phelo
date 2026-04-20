@@ -3,6 +3,7 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -172,6 +173,101 @@ export class CompanyRolesService {
         role: true,
         companyRoleId: true,
         companyRole: { select: { id: true, name: true } },
+      },
+    });
+  }
+
+  async unassignRoleFromUser(
+    tenantId: string,
+    userId: string,
+    companyRoleId: string,
+  ) {
+    const role = await this.findById(tenantId, companyRoleId);
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      include: {
+        companyRole: true,
+        permissionSets: { select: { permissionSetId: true } },
+      },
+    });
+    if (!user) throw new NotFoundException('User not found in this tenant');
+
+    if (user.companyRoleId !== companyRoleId) {
+      throw new BadRequestException('User is not assigned to this role');
+    }
+
+    // Remove the current role's permission set
+    const currentSetName = `${role.name} Set`;
+    const currentSet = await this.prisma.permissionSet.findFirst({
+      where: { tenantId, name: currentSetName, isActive: true },
+    });
+    if (currentSet) {
+      const isAssigned = user.permissionSets.some(
+        (ps) => ps.permissionSetId === currentSet.id,
+      );
+      if (isAssigned) {
+        await this.prisma.userPermissionSet.delete({
+          where: {
+            userId_permissionSetId: { userId, permissionSetId: currentSet.id },
+          },
+        });
+      }
+    }
+
+    // Fall back to Employee role — the floor all users must have
+    const employeeRole = await this.prisma.companyRole.findFirst({
+      where: { tenantId, name: 'Employee', isSystem: true },
+    });
+
+    if (employeeRole) {
+      const employeeSet = await this.prisma.permissionSet.findFirst({
+        where: { tenantId, name: 'Employee Set', isActive: true },
+      });
+      if (employeeSet) {
+        await this.prisma.userPermissionSet.upsert({
+          where: {
+            userId_permissionSetId: {
+              userId,
+              permissionSetId: employeeSet.id,
+            },
+          },
+          update: { grantedAt: new Date() },
+          create: {
+            userId,
+            permissionSetId: employeeSet.id,
+            grantedBy: 'system',
+          },
+        });
+      }
+      return this.prisma.user.update({
+        where: { id: userId },
+        data: { companyRoleId: employeeRole.id },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          role: true,
+          companyRoleId: true,
+          companyRole: { select: { id: true, name: true } },
+        },
+      });
+    }
+
+    this.logger.warn(
+      `Employee system role not found for tenant ${tenantId} — clearing companyRoleId without fallback`,
+    );
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { companyRoleId: null },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        companyRoleId: true,
       },
     });
   }
