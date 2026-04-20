@@ -47,11 +47,13 @@ export function DepartmentsTable({
     {
       key: 'name',
       label: 'Department Name',
+      width: '2fr',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
       key: 'manager',
       label: 'Department Head',
+      width: '2fr',
       render: (row) => (
         <span className="text-sm text-gray-500">
           {row.managerId ? (employeeMap.get(row.managerId) ?? '—') : '—'}

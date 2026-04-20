@@ -101,7 +101,13 @@ export function EditEmployeePanel({
           <Button
             isLoading={isUpdating}
             loadingText="Saving…"
-            onClick={editForm.handleSubmit(onSave)}
+            onClick={editForm.handleSubmit((data) => {
+              const dateFields = ['dateOfBirth', 'probationEndsAt', 'contractEndDate'] as const;
+              for (const field of dateFields) {
+                if (!data[field]) data[field] = undefined;
+              }
+              onSave(data);
+            })}
           >
             Save Changes
           </Button>
@@ -275,6 +281,7 @@ export function EditEmployeePanel({
             label="Probation End Date"
             value={probationValue}
             onChange={(v) => editForm.setValue('probationEndsAt', v)}
+            disablePast={true}
           />
         )}
         {editTypeValue === 'CONTRACT' && (
@@ -282,6 +289,7 @@ export function EditEmployeePanel({
             label="Contract End Date"
             value={contractEndValue}
             onChange={(v) => editForm.setValue('contractEndDate', v)}
+            disablePast={true}
           />
         )}
       </div>

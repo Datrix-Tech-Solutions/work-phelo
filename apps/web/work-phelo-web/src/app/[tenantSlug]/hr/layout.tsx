@@ -4,6 +4,8 @@
 
 import { use, useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
@@ -23,16 +25,15 @@ export default function HRLayout({
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('portal');
 
+  const canManage = usePermission(Permission.APPROVE_TEAM_LEAVE);
+
   // Feature toggles from the user's tenant config
   const hrFeatures = user?.featureConfig?.hr ?? {};
 
   // Only dashboard and management are always active (no toggle exists for them)
   const coreKeys = new Set(['dashboard', 'management']);
 
-  //TODO: this is a temp fix just for the presentation remove after
-  const isEmployee = user?.role === 'EMPLOYEE' && !user?.isManager;
-
-  const groups = HR_NAV_GROUPS.filter((group) => !(isEmployee && group.label === 'Management')).map(
+  const groups = HR_NAV_GROUPS.filter((group) => !(group.label === 'Management' && !canManage)).map(
     (group) => ({
       ...group,
       items: group.items.map((item) => ({

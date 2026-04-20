@@ -14,10 +14,10 @@ import { LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/hr';
 import { Users } from 'lucide-react';
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  Approved: 'success',
-  Pending: 'warning',
-  Rejected: 'danger',
-  Cancelled: 'neutral',
+  APPROVED: 'success',
+  PENDING: 'warning',
+  REJECTED: 'danger',
+  CANCELLED: 'neutral',
 };
 
 interface Props {
@@ -49,7 +49,7 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
 
   const totalRequests = reqList.length || null;
   const pendingCount = useMemo(
-    () => reqList.filter((r) => r.status === 'Pending').length || null,
+    () => reqList.filter((r) => r.status === 'PENDING').length || null,
     [reqList],
   );
 
@@ -70,6 +70,7 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
     {
       key: 'employeeName',
       label: 'Employee Name',
+      width: '1.5fr',
       render: (r) => <span className="font-medium text-gray-900">{r.employeeName}</span>,
     },
     {
@@ -89,12 +90,13 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
     },
     {
       key: 'totalDays',
-      label: 'Working Days',
+      label: 'Days',
+      width: '72px',
       render: (r) => <span className="text-gray-700">{r.totalDays}</span>,
     },
     {
       key: 'createdAt',
-      label: 'Date Submitted',
+      label: 'Submitted',
       render: (r) => <span className="text-gray-500 text-sm">{formatDate(r.createdAt)}</span>,
     },
     {
@@ -196,11 +198,6 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
           totalPages={reqTotalPages}
           onPageChange={setReqPage}
           onRowClick={(row) => setSelectedRequest(row)}
-          rowActions={(row) =>
-            row.status === 'Pending'
-              ? [{ label: 'Review', onClick: () => setSelectedRequest(row) }]
-              : [{ label: 'View', onClick: () => setSelectedRequest(row) }]
-          }
         />
       </div>
 

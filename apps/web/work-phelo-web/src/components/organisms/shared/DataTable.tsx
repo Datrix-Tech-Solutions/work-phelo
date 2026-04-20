@@ -175,7 +175,7 @@ export function DataTable<T extends { id: string | number }>({
       <div className="border border-gray-100 rounded-input overflow-hidden flex flex-col flex-1 min-h-0">
         {/* Header */}
         <div
-          className="grid text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50 px-4 py-3 shrink-0"
+          className="grid text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50 px-4 py-3 shrink-0 "
           style={{
             gridTemplateColumns: [
               ...columns.map((c) => c.width ?? '1fr'),
@@ -253,7 +253,7 @@ export function DataTable<T extends { id: string | number }>({
                     if (actions.length === 1) {
                       const action = actions[0];
                       return (
-                        <div className="flex justify-end">
+                        <div className="flex justify-center">
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -272,7 +272,7 @@ export function DataTable<T extends { id: string | number }>({
                       );
                     }
                     return (
-                      <div className="flex justify-end">
+                      <div className="flex justify-end w-4">
                         <ThreeDotMenu actions={actions} />
                       </div>
                     );

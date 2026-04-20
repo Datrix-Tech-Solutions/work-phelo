@@ -181,7 +181,7 @@ export interface CreatePublicHolidayDto {
 export type UpdatePublicHolidayDto = Partial<CreatePublicHolidayDto>;
 
 // ── Leave Request ─────────────────────────────────────────
-export type LeaveRequestStatus = 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
+export type LeaveRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 export interface LeaveRequest {
   id: string;

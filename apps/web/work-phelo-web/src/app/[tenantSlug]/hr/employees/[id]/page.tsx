@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/useToast';
 import {
   useCompanyRoles,
   useAssignCompanyRole,
-  useCurrentTenantUsers,
+  useRemoveCompanyRole,
   useUserPermissions,
 } from '@/hooks/useTenants';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
@@ -53,27 +53,24 @@ export default function EmployeeDetailPage({
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
   const { mutate: assignRole, isPending: isAssigningRole } = useAssignCompanyRole();
+  const { mutate: removeRole, isPending: isRemovingRole } = useRemoveCompanyRole();
 
   // Roles data
   const { data: rolesRaw = [] } = useCompanyRoles();
   const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
 
-  // Resolve the current company role for this employee via their userId
-  const { data: tenantUsersRaw } = useCurrentTenantUsers();
-  const tenantUsers: {
-    id: string;
-    companyRoleId?: string | null;
-    companyRole?: { id: string; name: string } | null;
-  }[] = Array.isArray(tenantUsersRaw) ? tenantUsersRaw : [];
-  const matchedUser = employee ? tenantUsers.find((u) => u.id === employee.userId) : null;
-  const currentRoleId = matchedUser?.companyRoleId ?? null;
-  const currentRoleName = matchedUser?.companyRole?.name ?? null;
-
-  // Effective permission sets assigned to this user (for stacking)
+  // /auth/permissions/users/:id is the authoritative source — always returns companyRole name
+  // regardless of whether GET /auth/users includes the companyRole relation.
   const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
-  const assignedSets: { id: string; name: string }[] =
-    (userPermsRaw as { permissionSets?: { id: string; name: string }[] } | undefined)
-      ?.permissionSets ?? [];
+  const userPerms = userPermsRaw as
+    | {
+        companyRole?: string | null;
+        permissionSets?: { id: string; name: string }[];
+      }
+    | undefined;
+
+  const currentRoleName = userPerms?.companyRole ?? null;
+  const assignedSets: { id: string; name: string }[] = userPerms?.permissionSets ?? [];
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -180,18 +177,25 @@ export default function EmployeeDetailPage({
           onClose={() => setAssignRoleOpen(false)}
           employeeName={name}
           userId={employee.userId}
-          currentRoleId={currentRoleId}
+          assignedSets={assignedSets}
           roles={roles}
           isAssigning={isAssigningRole}
+          isRemoving={isRemovingRole}
           onAssign={(companyRoleId, userId) => {
             assignRole(
               { companyRoleId, userId },
               {
-                onSuccess: () => {
-                  toast.success(`Role assigned to ${name}`);
-                  setAssignRoleOpen(false);
-                },
+                onSuccess: () => toast.success(`Role added to ${name}`),
                 onError: () => toast.error('Failed to assign role'),
+              },
+            );
+          }}
+          onRemove={(companyRoleId, userId) => {
+            removeRole(
+              { companyRoleId, userId },
+              {
+                onSuccess: () => toast.success(`Role removed from ${name}`),
+                onError: () => toast.error('Failed to remove role'),
               },
             );
           }}

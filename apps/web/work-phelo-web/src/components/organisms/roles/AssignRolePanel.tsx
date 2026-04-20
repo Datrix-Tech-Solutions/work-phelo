@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, X } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -9,6 +9,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 interface CompanyRole {
   id: string;
   name: string;
+  description?: string | null;
   isSystem: boolean;
   _count?: { users: number };
 }
@@ -18,114 +19,144 @@ interface AssignRolePanelProps {
   onClose: () => void;
   employeeName: string;
   userId: string;
-  currentRoleId?: string | null;
+  // All permission sets currently assigned to this user
+  assignedSets: { id: string; name: string }[];
   roles: CompanyRole[];
   onAssign: (companyRoleId: string, userId: string) => void;
+  onRemove: (companyRoleId: string, userId: string) => void;
   isAssigning: boolean;
+  isRemoving: boolean;
 }
 
-/* ── Inner form — remounted via key each time the panel opens ── */
 function AssignRoleForm({
   onClose,
   employeeName,
   userId,
-  currentRoleId,
+  assignedSets,
   roles,
   onAssign,
+  onRemove,
   isAssigning,
+  isRemoving,
 }: Omit<AssignRolePanelProps, 'isOpen'>) {
-  const [selectedRoleId, setSelectedRoleId] = useState(currentRoleId ?? '');
+  const [selectedRoleId, setSelectedRoleId] = useState('');
   const [error, setError] = useState('');
 
-  const currentRole = roles.find((r) => r.id === currentRoleId);
+  // Roles that are currently active (have a matching " Set" in assignedSets)
+  const assignedRoles = roles.filter((r) => assignedSets.some((s) => s.name === `${r.name} Set`));
+
+  // Only show roles not already assigned in the picker
+  const availableOptions = roles
+    .filter((r) => !assignedRoles.some((ar) => ar.id === r.id))
+    .map((r) => ({
+      value: r.id,
+      label: r.name,
+      sublabel: r.isSystem ? 'System role' : 'Custom role',
+    }));
+
   const selectedRole = roles.find((r) => r.id === selectedRoleId);
-  const isUnchanged = selectedRoleId === currentRoleId;
 
   const handleAssign = () => {
     if (!selectedRoleId) {
-      setError('Please select a role');
-      return;
-    }
-    if (isUnchanged) {
-      onClose();
+      setError('Please select a role to add');
       return;
     }
     onAssign(selectedRoleId, userId);
+    setSelectedRoleId('');
+    setError('');
   };
-
-  const options = roles.map((r) => ({
-    value: r.id,
-    label: r.name,
-    sublabel: r.isSystem ? 'System role' : 'Custom role',
-  }));
 
   return (
     <SidePanel
       isOpen
       onClose={onClose}
-      title="Assign Role"
-      description={`Set the system role for ${employeeName}.`}
+      title="Manage Roles"
+      description={`Assign or remove roles for ${employeeName}. Roles stack — each adds its permissions.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            isLoading={isAssigning}
-            loadingText="Assigning..."
-            onClick={handleAssign}
-            disabled={!selectedRoleId}
-          >
-            {isUnchanged ? 'No Changes' : 'Assign Role'}
+            Done
           </Button>
         </div>
       }
     >
-      {/* Current role indicator */}
-      {currentRole && (
-        <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
-          <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
-            <ShieldCheck className="w-4 h-4 text-brand" />
-          </div>
-          <div>
-            <p className="text-xs text-gray-400 font-medium">Current role</p>
-            <p className="text-sm font-semibold text-gray-900">{currentRole.name}</p>
-          </div>
-        </div>
-      )}
+      {/* Currently assigned roles */}
+      <div className="flex flex-col gap-2">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+          Assigned Roles {assignedRoles.length > 0 && `(${assignedRoles.length})`}
+        </p>
 
-      <SearchSelect
-        label="Select New Role"
-        placeholder="Choose a role..."
-        options={options}
-        value={selectedRoleId}
-        onChange={(v) => {
-          setSelectedRoleId(v);
-          setError('');
-        }}
-        error={error}
-      />
+        {assignedRoles.length === 0 ? (
+          <p className="text-sm text-gray-400 py-2">No roles assigned yet.</p>
+        ) : (
+          assignedRoles.map((role) => (
+            <div
+              key={role.id}
+              className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
+            >
+              <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
+                <ShieldCheck className="w-4 h-4 text-brand" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900">{role.name}</p>
+                {role.description && (
+                  <p className="text-xs text-gray-400 truncate">{role.description}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemove(role.id, userId)}
+                disabled={isRemoving}
+                className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))
+        )}
+      </div>
 
-      {/* Role description hint */}
-      {selectedRole && (
-        <div className="rounded-xl border border-brand/20 bg-brand/5 px-4 py-3 text-sm text-brand">
-          <p className="font-medium">{selectedRole.name}</p>
-          <p className="text-xs text-brand/70 mt-0.5">
-            {selectedRole.name === 'Company Admin' && 'Full access to all HR modules and settings.'}
-            {selectedRole.name === 'Manager' &&
-              'Can approve leave, review timesheets and manage their team.'}
-            {selectedRole.name === 'Employee' &&
-              'Standard access — can apply for leave, clock in/out and view own data.'}
-            {!['Company Admin', 'Manager', 'Employee'].includes(selectedRole.name) &&
-              'Custom role with permissions defined by your organisation.'}
-          </p>
-        </div>
-      )}
+      {/* Add a new role */}
+      <div className="flex flex-col gap-3">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Add Role</p>
+
+        {availableOptions.length === 0 ? (
+          <p className="text-sm text-gray-400">All available roles have been assigned.</p>
+        ) : (
+          <>
+            <SearchSelect
+              placeholder="Choose a role to add..."
+              options={availableOptions}
+              value={selectedRoleId}
+              onChange={(v) => {
+                setSelectedRoleId(v);
+                setError('');
+              }}
+              error={error}
+            />
+
+            {selectedRole?.description && (
+              <div className="rounded-xl border border-brand/20 bg-brand/5 px-4 py-3">
+                <p className="text-sm font-medium text-brand">{selectedRole.name}</p>
+                <p className="text-xs text-brand/70 mt-0.5">{selectedRole.description}</p>
+              </div>
+            )}
+
+            <Button
+              onClick={handleAssign}
+              isLoading={isAssigning}
+              loadingText="Assigning..."
+              disabled={!selectedRoleId}
+            >
+              Add Role
+            </Button>
+          </>
+        )}
+      </div>
     </SidePanel>
   );
 }
 
-/* ── Public wrapper — closed state renders a hidden panel, open state remounts form ── */
 export function AssignRolePanel({ isOpen, ...props }: AssignRolePanelProps) {
   if (!isOpen) {
     return (
@@ -134,6 +165,5 @@ export function AssignRolePanel({ isOpen, ...props }: AssignRolePanelProps) {
       </SidePanel>
     );
   }
-
-  return <AssignRoleForm key={`${props.userId}-${props.currentRoleId}`} {...props} />;
+  return <AssignRoleForm key={props.userId} {...props} />;
 }

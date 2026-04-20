@@ -197,6 +197,21 @@ export function useAssignCompanyRole() {
       qc.invalidateQueries({ queryKey: ['company-roles'] });
       qc.invalidateQueries({ queryKey: ['employees'] });
       qc.invalidateQueries({ queryKey: ['current-tenant-users'] });
+      qc.invalidateQueries({ queryKey: ['user-permissions'] });
+    },
+  });
+}
+
+export function useRemoveCompanyRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ companyRoleId, userId }: { companyRoleId: string; userId: string }) =>
+      api.delete(`/auth/company-roles/${companyRoleId}/assign/${userId}`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-roles'] });
+      qc.invalidateQueries({ queryKey: ['employees'] });
+      qc.invalidateQueries({ queryKey: ['current-tenant-users'] });
+      qc.invalidateQueries({ queryKey: ['user-permissions'] });
     },
   });
 }

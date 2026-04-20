@@ -6,11 +6,12 @@ import { cn } from '@/lib/utils';
 
 interface MonthPickerProps {
   label?: string;
-  value?: string; // ISO string: "2026-07" (YYYY-MM)
-  onChange: (value: string) => void; // returns "YYYY-MM"
+  value?: string;
+  onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  disablePast?: boolean;
 }
 
 const MONTH_NAMES = [
@@ -35,29 +36,40 @@ export function MonthPicker({
   placeholder = 'Select month',
   className,
   disabled = false,
+  disablePast = false,
 }: MonthPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const currentMonth = today.getMonth();
 
-  // Parse current value
+  // Use current year or the year from value
+  const [viewYear, setViewYear] = useState(value ? parseInt(value.split('-')[0]) : currentYear);
+
   const selectedDate = value ? new Date(value + '-01') : null;
 
-  // Generate months for current year (you can extend to show multiple years if needed)
-  const months = Array.from({ length: 12 }, (_, i) => ({
-    month: i,
-    name: MONTH_NAMES[i],
-    value: `${currentYear}-${String(i + 1).padStart(2, '0')}`,
-  }));
+  // Generate months for the current viewed year
+  const months = Array.from({ length: 12 }, (_, i) => {
+    const monthValue = `${viewYear}-${String(i + 1).padStart(2, '0')}`;
+    const isPast =
+      disablePast && (viewYear < currentYear || (viewYear === currentYear && i < currentMonth));
+
+    return {
+      month: i,
+      name: MONTH_NAMES[i],
+      value: monthValue,
+      isPast,
+    };
+  });
 
   const handleSelect = (monthValue: string) => {
     onChange(monthValue);
     setIsOpen(false);
   };
 
-  const goToPrevYear = () => setCurrentYear((y) => y - 1);
-  const goToNextYear = () => setCurrentYear((y) => y + 1);
+  const goToPrevYear = () => setViewYear((y) => y - 1);
+  const goToNextYear = () => setViewYear((y) => y + 1);
 
-  // Format display text
   const displayText = selectedDate
     ? `${MONTH_NAMES[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`
     : placeholder;
@@ -90,7 +102,7 @@ export function MonthPicker({
             >
               <ChevronLeft className="w-5 h-5" />
             </button>
-            <span className="font-semibold text-gray-900">{currentYear}</span>
+            <span className="font-semibold text-gray-900">{viewYear}</span>
             <button
               onClick={goToNextYear}
               className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
@@ -101,23 +113,22 @@ export function MonthPicker({
 
           {/* Months Grid */}
           <div className="grid grid-cols-3 gap-2">
-            {months.map((m) => {
-              const isSelected = value === m.value;
-              return (
-                <button
-                  key={m.value}
-                  onClick={() => handleSelect(m.value)}
-                  className={cn(
-                    'py-3 px-4 text-sm rounded-xl transition-all',
-                    isSelected
-                      ? 'bg-brand text-white font-medium'
-                      : 'hover:bg-gray-100 text-gray-700',
-                  )}
-                >
-                  {m.name}
-                </button>
-              );
-            })}
+            {months.map((m) => (
+              <button
+                key={m.value}
+                onClick={() => !m.isPast && handleSelect(m.value)}
+                disabled={m.isPast}
+                className={cn(
+                  'py-3 px-4 text-sm rounded-xl transition-all',
+                  m.isPast && 'opacity-40 cursor-not-allowed',
+                  value === m.value
+                    ? 'bg-brand text-white font-medium'
+                    : !m.isPast && 'hover:bg-gray-100 text-gray-700',
+                )}
+              >
+                {m.name}
+              </button>
+            ))}
           </div>
 
           {/* Quick "3 Months from now" button */}
