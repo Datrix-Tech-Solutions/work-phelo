@@ -5,17 +5,7 @@ import { ShieldCheck, X } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-
-interface PermissionSet {
-  id: string;
-  name: string;
-  isSystem?: boolean;
-}
-
-interface AssignedSet {
-  id: string;
-  name: string;
-}
+import type { PermissionSet } from '@/types/roles';
 
 interface EmployeePermissionsPanelProps {
   isOpen: boolean;
@@ -26,7 +16,7 @@ interface EmployeePermissionsPanelProps {
   /** All permission sets available in this tenant */
   availableSets: PermissionSet[];
   /** Permission sets already assigned to this user */
-  assignedSets: AssignedSet[];
+  assignedSets: { id: string; name: string }[];
   /** The base role's set name — shown but cannot be removed here */
   baseSetName?: string | null;
   onAssign: (permissionSetId: string) => void;
@@ -51,9 +41,9 @@ export function EmployeePermissionsPanel({
 
   const assignedIds = new Set(assignedSets.map((s) => s.id));
 
-  // Only show custom (non-system) sets that aren't already assigned
+  // Only show sets not already assigned
   const assignableOptions = availableSets
-    .filter((s) => !s.isSystem && !assignedIds.has(s.id))
+    .filter((s) => !assignedIds.has(s.id))
     .map((s) => ({ value: s.id, label: s.name }));
 
   const handleAssign = () => {

@@ -14,23 +14,10 @@ import {
 import { RolePermissionsPanel } from '@/components/organisms/roles/RolePermissionsPanel';
 import { RoleMembersPanel } from '@/components/organisms/roles/RoleMembersPanel';
 import { FeaturePermissions } from '@/components/molecules/roles/PermissionMatrix';
-import { useCompanyRoles } from '@/hooks/useRoles';
-import {
-  useCreateCompanyRole,
-  useUpdateCompanyRole,
-  useDeleteCompanyRole,
-} from '@/hooks/useTenants';
+import { useCompanyRoles, useCreateRole, useUpdateRole, useDeleteRole } from '@/hooks/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { transformFeaturePermissions } from '@/lib/permissionMap';
-
-interface CompanyRole {
-  id: string;
-  name: string;
-  description?: string | null;
-  isSystem: boolean;
-  isActive: boolean;
-  _count?: { users: number };
-}
+import type { CompanyRole } from '@/types/roles';
 
 export function RolesContent() {
   const toast = useToast();
@@ -44,9 +31,9 @@ export function RolesContent() {
   const { data: rolesRaw = [], isLoading } = useCompanyRoles();
   const roles: CompanyRole[] = Array.isArray(rolesRaw) ? rolesRaw : [];
 
-  const { mutate: createRole, isPending: isCreating } = useCreateCompanyRole();
-  const { mutate: updateRole, isPending: isSavingPermissions } = useUpdateCompanyRole();
-  const { mutate: deleteRole, isPending: isDeleting } = useDeleteCompanyRole();
+  const { mutate: createRole, isPending: isCreating } = useCreateRole();
+  const { mutate: updateRole, isPending: isSavingPermissions } = useUpdateRole();
+  const { mutate: deleteRole, isPending: isDeleting } = useDeleteRole();
 
   const filtered = roles.filter((r) =>
     search ? r.name.toLowerCase().includes(search.toLowerCase()) : true,

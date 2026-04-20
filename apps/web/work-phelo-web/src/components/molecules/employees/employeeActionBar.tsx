@@ -9,6 +9,7 @@ interface EmployeeActionsBarProps {
   isResending?: boolean;
   onAssignAsset: () => void;
   onAssignRole?: () => void;
+  onExtraPerms?: () => void;
   onOffboard: () => void;
   onEdit: () => void;
 }
@@ -20,6 +21,7 @@ export function EmployeeActionsBar({
   isResending,
   onAssignAsset,
   onAssignRole,
+  onExtraPerms,
   onOffboard,
   onEdit,
 }: EmployeeActionsBarProps) {
@@ -28,6 +30,12 @@ export function EmployeeActionsBar({
       {onAssignRole && !isOffboarded && !isPendingInvite && (
         <Button variant="outline" size="sm" onClick={onAssignRole} className="gap-2">
           Assign Role
+          <ShieldCheck className="w-4 h-4" />
+        </Button>
+      )}
+      {onExtraPerms && !isOffboarded && !isPendingInvite && (
+        <Button variant="outline" size="sm" onClick={onExtraPerms} className="gap-2">
+          Permissions
           <ShieldCheck className="w-4 h-4" />
         </Button>
       )}

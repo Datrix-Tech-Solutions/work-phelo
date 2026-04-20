@@ -5,14 +5,7 @@ import { ShieldCheck, X } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-
-interface CompanyRole {
-  id: string;
-  name: string;
-  description?: string | null;
-  isSystem: boolean;
-  _count?: { users: number };
-}
+import type { CompanyRole } from '@/types/roles';
 
 interface AssignRolePanelProps {
   isOpen: boolean;
