@@ -109,7 +109,8 @@ export class TenantsController {
   }
 
   @Get(':id/users')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get all users for a tenant — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
@@ -119,7 +120,8 @@ export class TenantsController {
   }
 
   @Get(':id/audit')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get audit logs for a tenant — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
@@ -150,7 +152,8 @@ export class TenantsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update tenant details — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
@@ -161,7 +164,8 @@ export class TenantsController {
   }
 
   @Patch(':id/admin')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Assign or update tenant admin — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
@@ -175,7 +179,8 @@ export class TenantsController {
   }
 
   @Patch(':id/approve')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Approve pending tenant — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
@@ -187,7 +192,8 @@ export class TenantsController {
   }
 
   @Patch(':id/deactivate')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Deactivate active tenant — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
@@ -199,7 +205,8 @@ export class TenantsController {
   }
 
   @Patch(':id/suspend')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Suspend active tenant — SuperAdmin only' })
   @ApiParam({ name: 'id', description: 'Tenant UUID' })
