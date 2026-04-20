@@ -7,7 +7,7 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { Employee, UpdateEmployeePayload } from '@/types/hr';
+import { Employee, UpdateEmployeePayload, Gender, MaritalStatus } from '@/types/hr';
 
 interface EditMyProfilePanelProps {
   isOpen: boolean;
@@ -38,8 +38,8 @@ export function EditMyProfilePanel({
       lastName: employee.lastName,
       phone: employee.phone ?? '',
       dateOfBirth: employee.dateOfBirth ?? '',
-      gender: employee.gender ?? '',
-      maritalStatus: employee.maritalStatus ?? '',
+      gender: employee.gender ?? undefined,
+      maritalStatus: employee.maritalStatus ?? undefined,
       nationality: employee.nationality ?? '',
       nationalId: employee.nationalId ?? '',
       address: employee.address ?? '',
@@ -104,7 +104,7 @@ export function EditMyProfilePanel({
           label="Gender"
           placeholder="Select gender"
           value={genderValue}
-          onChange={(v) => form.setValue('gender', v)}
+          onChange={(v) => form.setValue('gender', v as Gender)}
           options={[
             { value: 'MALE', label: 'Male' },
             { value: 'FEMALE', label: 'Female' },
@@ -114,7 +114,7 @@ export function EditMyProfilePanel({
           label="Marital Status"
           placeholder="Select status"
           value={maritalValue}
-          onChange={(v) => form.setValue('maritalStatus', v)}
+          onChange={(v) => form.setValue('maritalStatus', v as MaritalStatus)}
           options={[
             { value: 'SINGLE', label: 'Single' },
             { value: 'MARRIED', label: 'Married' },

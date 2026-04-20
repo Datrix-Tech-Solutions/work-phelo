@@ -7,7 +7,16 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { Employee, Department, Branch, UpdateEmployeePayload } from '@/types/hr';
+import {
+  Employee,
+  Department,
+  Branch,
+  UpdateEmployeePayload,
+  Gender,
+  MaritalStatus,
+  EmploymentType,
+  EmploymentStatus,
+} from '@/types/hr';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 
@@ -66,8 +75,8 @@ export function EditEmployeePanel({
       employmentType: employee.employmentType,
       employmentStatus: employee.employmentStatus,
       dateOfBirth: employee.dateOfBirth ?? '',
-      gender: employee.gender ?? '',
-      maritalStatus: employee.maritalStatus ?? '',
+      gender: employee.gender ?? undefined,
+      maritalStatus: employee.maritalStatus ?? undefined,
       nationality: employee.nationality ?? '',
       nationalId: employee.nationalId ?? '',
       address: employee.address ?? '',
@@ -145,7 +154,7 @@ export function EditEmployeePanel({
           label="Gender"
           placeholder="Select gender"
           value={editGenderValue}
-          onChange={(v) => editForm.setValue('gender', v)}
+          onChange={(v) => editForm.setValue('gender', v as Gender)}
           options={[
             { value: 'MALE', label: 'Male' },
             { value: 'FEMALE', label: 'Female' },
@@ -155,7 +164,7 @@ export function EditEmployeePanel({
           label="Marital Status"
           placeholder="Select status"
           value={editMaritalValue}
-          onChange={(v) => editForm.setValue('maritalStatus', v)}
+          onChange={(v) => editForm.setValue('maritalStatus', v as MaritalStatus)}
           options={[
             { value: 'SINGLE', label: 'Single' },
             { value: 'MARRIED', label: 'Married' },
@@ -257,7 +266,7 @@ export function EditEmployeePanel({
           label="Employment Type"
           placeholder="Select type"
           value={editTypeValue}
-          onChange={(v) => editForm.setValue('employmentType', v)}
+          onChange={(v) => editForm.setValue('employmentType', v as EmploymentType)}
           options={[
             { value: 'FULL_TIME', label: 'Full Time' },
             { value: 'PART_TIME', label: 'Part Time' },
@@ -269,7 +278,7 @@ export function EditEmployeePanel({
           label="Employment Status"
           placeholder="Select status"
           value={editStatusValue}
-          onChange={(v) => editForm.setValue('employmentStatus', v)}
+          onChange={(v) => editForm.setValue('employmentStatus', v as EmploymentStatus)}
           options={[
             { value: 'ACTIVE', label: 'Active' },
             { value: 'PROBATION', label: 'Probation' },
