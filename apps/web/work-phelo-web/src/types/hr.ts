@@ -25,6 +25,27 @@ export interface Department {
   _count?: { employees: number };
 }
 
+// ── Shared Enums ─────────────────────────────────────────
+export type Gender = 'MALE' | 'FEMALE' | 'OTHER';
+export type MaritalStatus = 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
+export type EmploymentType = 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
+export type EmploymentStatus =
+  | 'ACTIVE'
+  | 'PROBATION'
+  | 'ON_LEAVE'
+  | 'SUSPENDED'
+  | 'TERMINATED'
+  | 'OFFBOARDED';
+export type AllowanceType = 'TRANSPORT' | 'HOUSING' | 'MEDICAL' | 'OTHER';
+export type DocumentType =
+  | 'CONTRACT'
+  | 'ID_CARD'
+  | 'PASSPORT'
+  | 'CERTIFICATE'
+  | 'OFFER_LETTER'
+  | 'NDA'
+  | 'OTHER';
+
 // ── Employee ─────────────────────────────────────────────
 export interface Employee {
   id: string;
@@ -33,16 +54,16 @@ export interface Employee {
   lastName: string;
   email: string;
   phone?: string;
-  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  gender?: Gender;
   dateOfBirth?: string;
-  maritalStatus?: string;
+  maritalStatus?: MaritalStatus;
   nationality?: string;
   address?: string;
   city?: string;
   region?: string;
   jobTitle: string;
-  employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
-  employmentStatus: 'ACTIVE' | 'PROBATION' | 'ON_LEAVE' | 'SUSPENDED' | 'TERMINATED' | 'OFFBOARDED';
+  employmentType: EmploymentType;
+  employmentStatus: EmploymentStatus;
   hireDate: string;
   probationEndsAt?: string;
   contractEndDate?: string;
@@ -68,7 +89,40 @@ export interface Employee {
   offboardedAt?: string;
   createdAt?: string;
   assets?: import('@/types/asset').EmployeeAsset[];
+  allowances?: EmployeeAllowance[];
   offboarding?: OffboardingRecord;
+}
+
+export interface EmployeeAllowance {
+  id: string;
+  employeeId: string;
+  type: AllowanceType;
+  amount: number;
+  description?: string;
+  effectiveFrom: string;
+  createdAt: string;
+}
+
+export interface EmployeeDocument {
+  id: string;
+  employeeId: string;
+  type: DocumentType;
+  url: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface AddAllowancePayload {
+  type: AllowanceType;
+  amount: number;
+  description?: string;
+  effectiveFrom: string;
+}
+
+export interface UploadDocumentPayload {
+  type: DocumentType;
+  url: string;
+  name: string;
 }
 
 export interface UpdateEmployeePayload {
@@ -76,8 +130,8 @@ export interface UpdateEmployeePayload {
   lastName?: string;
   phone?: string;
   dateOfBirth?: string;
-  gender?: string;
-  maritalStatus?: string;
+  gender?: Gender;
+  maritalStatus?: MaritalStatus;
   nationality?: string;
   nationalId?: string;
   address?: string;
@@ -89,14 +143,15 @@ export interface UpdateEmployeePayload {
   managerId?: string;
   probationEndsAt?: string;
   contractEndDate?: string;
-  employmentType?: string;
-  employmentStatus?: string;
+  employmentType?: EmploymentType;
+  employmentStatus?: EmploymentStatus;
   basicSalary?: number;
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;
   ssnit?: string;
   tinNumber?: string;
+  avatarUrl?: string;
   emergencyName?: string;
   emergencyPhone?: string;
   emergencyRelation?: string;
@@ -107,10 +162,15 @@ export interface CreateEmployeePayload {
   lastName: string;
   email: string;
   phone?: string;
-  gender?: string;
+  gender?: Gender;
   dateOfBirth?: string;
+  maritalStatus?: MaritalStatus;
+  nationality?: string;
+  address?: string;
+  city?: string;
+  region?: string;
   jobTitle: string;
-  employmentType: string;
+  employmentType: EmploymentType;
   hireDate: string;
   basicSalary?: number;
   departmentId: string;

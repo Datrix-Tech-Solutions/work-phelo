@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
   Employee,
+  EmployeeAllowance,
+  EmployeeDocument,
   CreateEmployeePayload,
+  UpdateEmployeePayload,
+  AddAllowancePayload,
+  UploadDocumentPayload,
   EmployeeQuery,
   OffboardingRecord,
   InitiateOffboardDto,
@@ -13,18 +18,14 @@ export function useEmployees(query?: EmployeeQuery) {
   return useQuery({
     queryKey: ['employees', query],
     queryFn: async () => {
-      const res = await api.get('/hr/employees', { params: query });
-      const raw = res.data;
-      // Backend returns { employees, meta } — normalise to { data, total }
-      if (Array.isArray(raw)) return { data: raw as Employee[], total: raw.length };
-      if (Array.isArray(raw?.employees))
-        return {
-          data: raw.employees as Employee[],
-          total: raw.meta?.total ?? raw.employees.length,
-        };
-      if (Array.isArray(raw?.data))
-        return { data: raw.data as Employee[], total: raw.total ?? raw.data.length };
-      return { data: [] as Employee[], total: 0 };
+      const res = await api.get<{ employees: Employee[]; meta: { total: number } }>(
+        '/hr/employees',
+        { params: query },
+      );
+      return {
+        data: res.data.employees,
+        total: res.data.meta.total,
+      };
     },
   });
 }
@@ -69,7 +70,7 @@ export function useUpdateEmployee() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...payload }: Partial<CreateEmployeePayload> & { id: string }) => {
+    mutationFn: async ({ id, ...payload }: UpdateEmployeePayload & { id: string }) => {
       const res = await api.patch<Employee>(`/hr/employees/${id}`, payload);
       return res.data;
     },
@@ -148,6 +149,38 @@ export function useResendEmployeeInvite() {
     mutationFn: async (employeeId: string) => {
       const res = await api.post(`/hr/employees/${employeeId}/resend-invite`);
       return res.data;
+    },
+  });
+}
+
+export function useAddAllowance(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: AddAllowancePayload) => {
+      const res = await api.post<EmployeeAllowance>(
+        `/hr/employees/${employeeId}/allowances`,
+        payload,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+    },
+  });
+}
+
+export function useUploadDocument(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: UploadDocumentPayload) => {
+      const res = await api.post<EmployeeDocument>(
+        `/hr/employees/${employeeId}/documents`,
+        payload,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
     },
   });
 }
