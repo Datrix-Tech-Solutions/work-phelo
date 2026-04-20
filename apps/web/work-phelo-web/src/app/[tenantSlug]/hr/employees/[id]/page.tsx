@@ -12,12 +12,17 @@ import {
 import { useDepartments } from '@/hooks/useDepartments';
 import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
-import { useCompanyRoles, useUserPermissions } from '@/hooks/useRoles';
-import { useAssignCompanyRole, useRemoveCompanyRole } from '@/hooks/useTenants';
+import {
+  useCompanyRoles,
+  useUserPermissions,
+  useAssignRole,
+  useUnassignRole,
+} from '@/hooks/useRoles';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
 import { AssignRolePanel } from '@/components/organisms/roles/AssignRolePanel';
+import { AssignPermissionPanel } from '@/components/organisms/roles/assignPermissionPanel';
 import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
 import { EmployeeActionsBar } from '@/components/molecules/employees/employeeActionBar';
 import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
@@ -37,6 +42,7 @@ export default function EmployeeDetailPage({
   const [editOpen, setEditOpen] = useState(false);
   const [assignAssetOpen, setAssignAssetOpen] = useState(false);
   const [assignRoleOpen, setAssignRoleOpen] = useState(false);
+  const [assignPermOpen, setAssignPermOpen] = useState(false);
 
   // Data fetching
   const { data: employee, isLoading } = useEmployee(id);
@@ -48,8 +54,8 @@ export default function EmployeeDetailPage({
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
-  const { mutate: assignRole, isPending: isAssigningRole } = useAssignCompanyRole();
-  const { mutate: removeRole, isPending: isRemovingRole } = useRemoveCompanyRole();
+  const { mutate: assignRole, isPending: isAssigningRole } = useAssignRole();
+  const { mutate: unassignRole, isPending: isRemovingRole } = useUnassignRole();
 
   // Roles data
   const { data: rolesRaw = [] } = useCompanyRoles();
@@ -57,16 +63,10 @@ export default function EmployeeDetailPage({
 
   // /auth/permissions/users/:id is the authoritative source — always returns companyRole name
   // regardless of whether GET /auth/users includes the companyRole relation.
-  const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
-  const userPerms = userPermsRaw as
-    | {
-        companyRole?: string | null;
-        permissionSets?: { id: string; name: string }[];
-      }
-    | undefined;
+  const { data: userPerms } = useUserPermissions(employee?.userId ?? '');
 
   const currentRoleName = userPerms?.companyRole ?? null;
-  const assignedSets: { id: string; name: string }[] = userPerms?.permissionSets ?? [];
+  const assignedSets = userPerms?.permissionSets ?? [];
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -111,6 +111,7 @@ export default function EmployeeDetailPage({
         isResending={isResending}
         onAssignAsset={() => setAssignAssetOpen(true)}
         onAssignRole={employee.userId ? () => setAssignRoleOpen(true) : undefined}
+        onAssignPermission={employee.userId ? () => setAssignPermOpen(true) : undefined}
         onOffboard={() => setOffboardOpen(true)}
         onEdit={() => setEditOpen(true)}
       />
@@ -177,24 +178,33 @@ export default function EmployeeDetailPage({
           roles={roles}
           isAssigning={isAssigningRole}
           isRemoving={isRemovingRole}
-          onAssign={(companyRoleId, userId) => {
+          onAssign={(roleId, userId) => {
             assignRole(
-              { companyRoleId, userId },
+              { roleId, userId },
               {
                 onSuccess: () => toast.success(`Role added to ${name}`),
                 onError: () => toast.error('Failed to assign role'),
               },
             );
           }}
-          onRemove={(companyRoleId, userId) => {
-            removeRole(
-              { companyRoleId, userId },
+          onRemove={(roleId, userId) => {
+            unassignRole(
+              { roleId, userId },
               {
                 onSuccess: () => toast.success(`Role removed from ${name}`),
                 onError: () => toast.error('Failed to remove role'),
               },
             );
           }}
+        />
+      )}
+
+      {employee.userId && (
+        <AssignPermissionPanel
+          isOpen={assignPermOpen}
+          onClose={() => setAssignPermOpen(false)}
+          employeeName={name}
+          userId={employee.userId}
         />
       )}
     </div>

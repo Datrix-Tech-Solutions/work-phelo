@@ -46,8 +46,8 @@ export interface CompanyRole {
   description?: string;
   isSystem: boolean;
   isActive: boolean;
-  /** Sidebar visibility JSON — keys are module names, values are 'none' | 'view' | 'edit' */
-  permissions: Record<string, 'none' | 'view' | 'edit'>;
+  /** Feature-action map — keys are feature names, values are arrays of PermissionAction strings */
+  permissions: Record<string, string[]>;
   createdAt: string;
   _count?: { users: number };
 }
@@ -91,13 +91,18 @@ export interface UserEffectivePermissions {
 export interface CreateCompanyRoleDto {
   name: string;
   description?: string;
-  permissions?: Record<string, 'none' | 'view' | 'edit'>;
+  permissions?: Record<string, string[]>;
 }
 
 export interface UpdateCompanyRoleDto {
   name?: string;
   description?: string;
-  permissions?: Record<string, 'none' | 'view' | 'edit'>;
+  permissions?: Record<string, string[]>;
+}
+
+export interface AssignPermissionSetDto {
+  userId: string;
+  permissionSetId: string;
 }
 
 export interface PermissionSetResourceDto {

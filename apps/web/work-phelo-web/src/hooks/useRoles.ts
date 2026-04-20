@@ -12,6 +12,7 @@ import {
   UpdatePermissionSetDto,
   GrantPermissionDto,
   RevokePermissionDto,
+  AssignPermissionSetDto,
 } from '@/types/roles';
 
 // ── Company Roles ─────────────────────────────────────────
@@ -86,9 +87,11 @@ export function useAssignRole() {
       const res = await api.patch(`/auth/company-roles/${roleId}/assign/${userId}`);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, { userId }) => {
       queryClient.invalidateQueries({ queryKey: ['company-roles'] });
-      queryClient.invalidateQueries({ queryKey: ['permissions'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'users', userId] });
     },
   });
 }
@@ -100,9 +103,41 @@ export function useUnassignRole() {
       const res = await api.delete(`/auth/company-roles/${roleId}/assign/${userId}`);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, { userId }) => {
       queryClient.invalidateQueries({ queryKey: ['company-roles'] });
-      queryClient.invalidateQueries({ queryKey: ['permissions'] });
+      queryClient.invalidateQueries({ queryKey: ['employees'] });
+      queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'users', userId] });
+    },
+  });
+}
+
+// ── Permission Set Assignment ─────────────────────────────
+
+export function useAssignPermissionSet() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (dto: AssignPermissionSetDto) => {
+      const res = await api.post('/auth/permissions/sets/assign', dto);
+      return res.data;
+    },
+    onSuccess: (_, { userId }) => {
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'users', userId] });
+      queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
+    },
+  });
+}
+
+export function useRemovePermissionSet() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId, permissionSetId }: AssignPermissionSetDto) => {
+      const res = await api.patch(`/auth/permissions/sets/remove/${userId}/${permissionSetId}`);
+      return res.data;
+    },
+    onSuccess: (_, { userId }) => {
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'users', userId] });
+      queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
     },
   });
 }
