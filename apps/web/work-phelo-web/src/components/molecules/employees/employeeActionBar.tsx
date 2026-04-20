@@ -1,4 +1,4 @@
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, ShieldCog } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
 
@@ -9,6 +9,7 @@ interface EmployeeActionsBarProps {
   isResending?: boolean;
   onAssignAsset: () => void;
   onAssignRole?: () => void;
+  onAssignPermission?: () => void;
   onOffboard: () => void;
   onEdit: () => void;
 }
@@ -20,6 +21,7 @@ export function EmployeeActionsBar({
   isResending,
   onAssignAsset,
   onAssignRole,
+  onAssignPermission,
   onOffboard,
   onEdit,
 }: EmployeeActionsBarProps) {
@@ -44,6 +46,10 @@ export function EmployeeActionsBar({
         </Button>
       ) : !isOffboarded ? (
         <>
+          <Button variant="outline" size="sm" onClick={onAssignPermission} className="gap-2">
+            Assign Permissions
+            <ShieldCog className="w-4 h-4" />
+          </Button>
           <Button variant="outline" size="sm" onClick={onAssignAsset}>
             Assign Asset
           </Button>

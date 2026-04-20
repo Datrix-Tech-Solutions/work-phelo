@@ -3,8 +3,8 @@
 'use client';
 
 import { useState } from 'react';
-import { useMyProfile } from '@/hooks/hr/useEmployees';
-import { useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useMyProfile, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useUserPermissions } from '@/hooks/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
@@ -28,13 +28,22 @@ function formatEnum(val?: string | null) {
   if (!val) return undefined;
   return val.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
-
 export default function MyProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
   const toast = useToast();
 
   const { data: employee, isLoading } = useMyProfile();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+
+  const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
+  const userPerms = userPermsRaw as
+    | {
+        companyRole?: string | null;
+        permissionSets?: { id: string; name: string }[];
+      }
+    | undefined;
+  const currentRoleName = userPerms?.companyRole ?? null;
+  const assignedSets: { id: string; name: string }[] = userPerms?.permissionSets ?? [];
 
   const handleSave = (data: UpdateEmployeePayload) => {
     if (!employee) return;
@@ -73,7 +82,13 @@ export default function MyProfilePage() {
       {/* Content */}
       <div className="flex gap-6 items-start">
         {/* Left — avatar card */}
-        <EmployeeProfileCard employee={employee} />
+        <EmployeeProfileCard
+          employee={employee}
+          roles={[
+            ...(currentRoleName ? [currentRoleName] : []),
+            ...assignedSets.filter((s) => s.name !== `${currentRoleName} Set`).map((s) => s.name),
+          ]}
+        />
 
         {/* Right — detail sections */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
