@@ -11,6 +11,7 @@ import {
   EmployeeTerminationEvent,
   LeaveRequestedEvent,
   LeaveReviewedEvent,
+  LeaveCancelledEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -133,6 +134,22 @@ export class NotificationHandler {
       await this.notificationService.sendLeaveReviewedNotification(data);
     } catch (err) {
       this.logger.error('[notify.leave_reviewed] Handler failed', err);
+    }
+  }
+
+  @EventPattern('notify.leave_cancelled')
+  async handleLeaveCancelled(@Payload() data: WithMeta<LeaveCancelledEvent>) {
+    this.logger.log(
+      `[notify.leave_cancelled] Received | employee=${data.employeeFirstName} ${data.employeeLastName} | managerEmail=${data.managerEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    if (!data.managerEmail) return;
+    try {
+      await this.notificationService.sendLeaveCancelledNotification({
+        ...data,
+        managerEmail: data.managerEmail,
+      });
+    } catch (err) {
+      this.logger.error('[notify.leave_cancelled] Handler failed', err);
     }
   }
 }

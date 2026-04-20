@@ -39,6 +39,7 @@ export const EventPatterns = {
   NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
   NOTIFY_LEAVE_REQUESTED: 'notify.leave_requested',
   NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
+  NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -165,4 +166,17 @@ export interface LeaveReviewedEvent {
   endDate: string;
   totalDays: number;
   note?: string;
+}
+
+export interface LeaveCancelledEvent {
+  tenantId: string;
+  employeeId: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  /** Manager's email — null if no manager found */
+  managerEmail: string | null;
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
 }

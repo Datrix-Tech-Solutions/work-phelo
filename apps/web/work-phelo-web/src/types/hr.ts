@@ -352,12 +352,6 @@ export interface UpdateChecklistDto {
   done: boolean;
 }
 
-export interface OffboardPayload {
-  employeeId: string;
-  offboardedAt: string;
-  reason: string;
-}
-
 // ── Pagination ────────────────────────────────────────────
 export interface PaginatedResponse<T> {
   data: T[];

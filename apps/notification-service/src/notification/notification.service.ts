@@ -280,6 +280,48 @@ export class NotificationService {
     });
   }
 
+  async sendLeaveCancelledNotification(data: {
+    tenantId: string;
+    employeeId: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    managerEmail: string;
+    leaveTypeName: string;
+    startDate: string;
+    endDate: string;
+    totalDays: number;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.managerEmail,
+        NotificationType.LEAVE_CANCELLED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate LEAVE_CANCELLED suppressed for ${data.managerEmail}`,
+      );
+      return;
+    }
+    const success = await this.email.sendLeaveCancelledNotification(
+      data.managerEmail,
+      data.employeeFirstName,
+      data.employeeLastName,
+      data.leaveTypeName,
+      data.startDate,
+      data.endDate,
+      data.totalDays,
+    );
+    await this.log({
+      userId: data.employeeId,
+      tenantId: data.tenantId,
+      type: 'LEAVE_CANCELLED',
+      channel: 'EMAIL',
+      recipient: data.managerEmail,
+      subject: `Leave request cancelled — ${data.employeeFirstName} ${data.employeeLastName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendSmsOtp(data: {
     userId?: string;
     tenantId?: string;

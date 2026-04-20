@@ -7,6 +7,8 @@ import {
   Param,
   UseGuards,
   Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -21,6 +23,8 @@ import {
   GrantPermissionDto,
   RevokePermissionDto,
   AssignPermissionSetDto,
+  CreatePermissionSetDto,
+  UpdatePermissionSetDto,
 } from './dto/grant-permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -120,6 +124,67 @@ export class PermissionsController {
   @ApiResponse({ status: 200, description: 'Permission sets retrieved' })
   getPermissionSets(@Req() req: any) {
     return this.permissionsService.getPermissionSets(req.user.tenantId);
+  }
+
+  @Post('sets')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a new permission set with resource-action pairs',
+  })
+  @ApiBody({
+    description: 'Create permission set payload',
+    schema: {
+      example: {
+        name: 'Leave Manager Set',
+        description: 'Can view employees and approve leave requests',
+        resources: [
+          { resourceId: 'uuid', action: 'VIEW' },
+          { resourceId: 'uuid', action: 'APPROVE' },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Permission set created' })
+  @ApiResponse({
+    status: 400,
+    description: 'Set name already exists or invalid resources',
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  createSet(@Body() dto: CreatePermissionSetDto, @Req() req: any) {
+    return this.permissionsService.createPermissionSet(req.user.tenantId, dto);
+  }
+
+  @Patch('sets/:id')
+  @ApiOperation({
+    summary:
+      'Replace all resource-action pairs on a permission set — this is how the Permission Matrix saves',
+  })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiBody({
+    description: 'Update permission set payload',
+    schema: {
+      example: {
+        resources: [
+          { resourceId: 'uuid', action: 'VIEW' },
+          { resourceId: 'uuid', action: 'APPROVE' },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Permission set updated' })
+  @ApiResponse({ status: 400, description: 'Invalid resources' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  updateSet(
+    @Param('id') id: string,
+    @Body() dto: UpdatePermissionSetDto,
+    @Req() req: any,
+  ) {
+    return this.permissionsService.updatePermissionSet(
+      req.user.tenantId,
+      id,
+      dto,
+    );
   }
 
   @Post('sets/assign')
