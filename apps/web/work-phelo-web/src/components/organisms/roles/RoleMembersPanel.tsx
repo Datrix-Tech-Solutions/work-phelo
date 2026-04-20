@@ -4,12 +4,7 @@ import { useMemo } from 'react';
 import { UserCircle } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { useCurrentTenantUsers } from '@/hooks/useTenants';
-
-interface CompanyRole {
-  id: string;
-  name: string;
-  description?: string | null;
-}
+import type { CompanyRole } from '@/types/roles';
 
 interface RoleMembersPanelProps {
   isOpen: boolean;
@@ -18,7 +13,7 @@ interface RoleMembersPanelProps {
 }
 
 export function RoleMembersPanel({ isOpen, onClose, role }: RoleMembersPanelProps) {
-  const { data: usersRaw, isLoading } = useCurrentTenantUsers();
+  const { data: usersRaw, isLoading } = useCurrentTenantUsers({ enabled: isOpen && !!role });
 
   const members = useMemo(() => {
     if (!role || !Array.isArray(usersRaw)) return [];
