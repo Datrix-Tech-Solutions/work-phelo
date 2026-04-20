@@ -84,7 +84,9 @@ function AssignPermissionPanelInner({
     return m;
   }, [resources]);
 
-  const featureLabel = HR_FEATURES.find((f) => f.key === selectedFeature)?.label ?? '';
+  const selectedFeatureDef = HR_FEATURES.find((f) => f.key === selectedFeature);
+  const featureLabel = selectedFeatureDef?.label ?? '';
+  const featureDeleteLabel = selectedFeatureDef?.deleteLabel ?? 'Delete';
 
   const toggleAction = (action: string) => {
     setSelectedActions((prev) => {
@@ -257,29 +259,32 @@ function AssignPermissionPanelInner({
         <div className="flex flex-col gap-2.5">
           <p className="text-sm font-semibold text-gray-800">{featureLabel}</p>
           <div className="flex flex-col gap-2">
-            {ACTIONS.map((action) => (
-              <label
-                key={action.key}
-                className="flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedActions.has(action.key)}
-                  onChange={() => toggleAction(action.key)}
-                  className="w-4 h-4 accent-brand cursor-pointer rounded"
-                />
-                <span
-                  className={cn(
-                    'text-sm',
-                    selectedActions.has(action.key)
-                      ? 'font-semibold text-gray-900'
-                      : 'text-gray-600',
-                  )}
+            {ACTIONS.map((action) => {
+              const label = action.key === 'DELETE' ? featureDeleteLabel : action.label;
+              return (
+                <label
+                  key={action.key}
+                  className="flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
                 >
-                  {action.label}
-                </span>
-              </label>
-            ))}
+                  <input
+                    type="checkbox"
+                    checked={selectedActions.has(action.key)}
+                    onChange={() => toggleAction(action.key)}
+                    className="w-4 h-4 accent-brand cursor-pointer rounded"
+                  />
+                  <span
+                    className={cn(
+                      'text-sm',
+                      selectedActions.has(action.key)
+                        ? 'font-semibold text-gray-900'
+                        : 'text-gray-600',
+                    )}
+                  >
+                    {label}
+                  </span>
+                </label>
+              );
+            })}
           </div>
         </div>
       )}

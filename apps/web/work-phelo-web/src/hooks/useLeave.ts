@@ -65,7 +65,7 @@ function transformBalance(b: RawBalance): LeaveBalance {
 }
 
 function transformRequest(r: RawLeaveRequest): LeaveRequest {
-  const status = r.status.charAt(0).toUpperCase() + r.status.slice(1).toLowerCase();
+  const status = r.status.toUpperCase();
   return {
     id: r.id,
     tenantSlug: '',
@@ -143,7 +143,7 @@ export function useDeleteLeaveType(tenantSlug: string) {
 
 // ─── Leave Requests ───────────────────────────────────────────────────────────
 
-export function useLeaveRequests(status?: string) {
+export function useLeaveRequests(status?: string, options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: leaveKeys.requests(status),
     queryFn: async () => {
@@ -152,6 +152,7 @@ export function useLeaveRequests(status?: string) {
       });
       return res.data.map(transformRequest);
     },
+    enabled: options?.enabled ?? true,
   });
 }
 

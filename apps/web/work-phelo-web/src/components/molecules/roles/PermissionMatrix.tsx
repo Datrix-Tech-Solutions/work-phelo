@@ -18,12 +18,12 @@ export const HR_FEATURES = [
   { key: 'departments', label: 'Department Management' },
   { key: 'branches', label: 'Branch Management' },
   { key: 'employees', label: 'Employee Management' },
-  { key: 'leave', label: 'Leave Management' },
-  { key: 'appraisal', label: 'Appraisal Management' },
+  { key: 'leave', label: 'Leave Management', deleteLabel: 'Approve' },
+  { key: 'appraisal', label: 'Appraisal Management', deleteLabel: 'Approve' },
   { key: 'timeclock', label: 'Time Management' },
-  { key: 'projects', label: 'Project Management' },
-  { key: 'payroll', label: 'Payroll Management' },
-  { key: 'assets', label: 'Asset Management' },
+  { key: 'projects', label: 'Project Management', deleteLabel: 'Assign' },
+  { key: 'payroll', label: 'Payroll Management', deleteLabel: 'Approve' },
+  { key: 'assets', label: 'Asset Management', deleteLabel: 'Assign' },
   { key: 'management', label: 'HR Management' },
 ];
 
@@ -100,24 +100,30 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: Permissi
                     </div>
                   ) : (
                     <div className="flex items-center gap-6">
-                      {ACTIONS.map((action) => (
-                        <label
-                          key={action.key}
-                          className={cn(
-                            'flex items-center gap-1.5 select-none',
-                            readOnly ? 'cursor-default' : 'cursor-pointer',
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={granted.includes(action.key)}
-                            disabled={readOnly}
-                            onChange={() => toggle(feature.key, action.key)}
-                            className="w-4 h-4 accent-brand rounded cursor-pointer disabled:cursor-default"
-                          />
-                          <span className="text-sm text-gray-600">{action.label}</span>
-                        </label>
-                      ))}
+                      {ACTIONS.map((action) => {
+                        const label =
+                          action.key === 'DELETE'
+                            ? (feature.deleteLabel ?? action.label)
+                            : action.label;
+                        return (
+                          <label
+                            key={action.key}
+                            className={cn(
+                              'flex items-center gap-1.5 select-none',
+                              readOnly ? 'cursor-default' : 'cursor-pointer',
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={granted.includes(action.key)}
+                              disabled={readOnly}
+                              onChange={() => toggle(feature.key, action.key)}
+                              className="w-4 h-4 accent-brand rounded cursor-pointer disabled:cursor-default"
+                            />
+                            <span className="text-sm text-gray-600">{label}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
