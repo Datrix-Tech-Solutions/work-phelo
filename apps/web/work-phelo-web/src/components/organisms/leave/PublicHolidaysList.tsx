@@ -55,6 +55,39 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
       label: 'Date',
       render: (row) => <span className="text-gray-700">{formatDate(row.date)}</span>,
     },
+    {
+      key: '_view',
+      label: '',
+      width: '72px',
+      render: (row) => (
+        <div className="flex justify-center">
+          <button
+            onClick={() => {
+              setEditHoliday(row);
+              setPanelOpen(true);
+            }}
+            className="text-sm font-medium px-2 py-1 rounded-lg text-brand hover:bg-brand/5 transition-colors"
+          >
+            View
+          </button>
+        </div>
+      ),
+    },
+    {
+      key: '_delete',
+      label: '',
+      width: '72px',
+      render: (row) => (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setDeleteTarget(row)}
+            className="text-sm font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -76,20 +109,6 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
-        onRowClick={(row) => {
-          setEditHoliday(row);
-          setPanelOpen(true);
-        }}
-        rowActions={(row) => [
-          {
-            label: 'Edit',
-            onClick: () => {
-              setEditHoliday(row);
-              setPanelOpen(true);
-            },
-          },
-          { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
-        ]}
       />
 
       <CreatePublicHolidayPanel

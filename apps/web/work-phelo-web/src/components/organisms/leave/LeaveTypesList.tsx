@@ -118,6 +118,40 @@ export function LeaveTypesList({ tenantSlug }: Props) {
         );
       },
     },
+    {
+      key: '_view',
+      label: '',
+      width: '72px',
+      render: (row) => (
+        <div className="flex justify-center">
+          <button
+            onClick={() => {
+              setEditLeaveType(row);
+              setPanelOpen(true);
+            }}
+            className="text-sm font-medium px-2 py-1 rounded-lg text-brand hover:bg-brand/5 transition-colors"
+          >
+            View
+          </button>
+        </div>
+      ),
+    },
+    {
+      key: '_delete',
+      label: '',
+      width: '72px',
+      render: (row) =>
+        row.isDefault ? null : (
+          <div className="flex justify-center">
+            <button
+              onClick={() => setDeleteTarget(row)}
+              className="text-sm font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Delete
+            </button>
+          </div>
+        ),
+    },
   ];
 
   return (
@@ -143,18 +177,6 @@ export function LeaveTypesList({ tenantSlug }: Props) {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
-        rowActions={(row) => [
-          {
-            label: 'Edit',
-            onClick: () => {
-              setEditLeaveType(row);
-              setPanelOpen(true);
-            },
-          },
-          ...(row.isDefault
-            ? []
-            : [{ label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) }]),
-        ]}
       />
 
       <CreateLeaveTypePanel
