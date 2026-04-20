@@ -89,7 +89,8 @@ function AssignPermissionPanelInner({
   const toggleAction = (action: string) => {
     setSelectedActions((prev) => {
       const next = new Set(prev);
-      next.has(action) ? next.delete(action) : next.add(action);
+      if (next.has(action)) next.delete(action);
+      else next.add(action);
       return next;
     });
   };
