@@ -153,7 +153,7 @@ wait_for_http_ok "prod auth-service" "http://127.0.0.1:4101/health"
 wait_for_http_ok "prod hr-service" "http://127.0.0.1:4102/health"
 wait_for_http_ok "prod notification-service" "http://127.0.0.1:4104/api/health"
 wait_for_http_ok "prod api-gateway" "http://127.0.0.1:4110/health"
-wait_for_http_ok "prod nextjs" "http://127.0.0.1:3001/"
+wait_for_http_ok "prod nextjs" "http://127.0.0.1:3001/health"
 
 section "Container Status"
 docker_compose ps

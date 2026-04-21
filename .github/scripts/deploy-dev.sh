@@ -201,7 +201,7 @@ wait_for_http_ok "dev notification-service" "http://127.0.0.1:4004/api/health"
 wait_for_http_ok "dev subscription-service" "http://127.0.0.1:4005/api/health"
 wait_for_http_ok "dev marketing-service" "http://127.0.0.1:4006/api/health"
 wait_for_http_ok "dev api-gateway" "http://127.0.0.1:4010/health"
-wait_for_http_ok "dev nextjs" "http://127.0.0.1:3000/"
+wait_for_http_ok "dev nextjs" "http://127.0.0.1:3000/health"
 
 section "Container Status"
 docker_compose ps
