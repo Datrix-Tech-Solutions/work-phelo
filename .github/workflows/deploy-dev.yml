@@ -255,9 +255,9 @@ jobs:
       NOTIFY_TERMII_API_KEY: ${{ secrets.NOTIFY_TERMII_API_KEY }}
       SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
       SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
-      BUILD_SHA: ${{ env.BUILD_SHA }}
-      BUILD_REF: ${{ env.BUILD_REF }}
-      IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
+      BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+      BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+      IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
       CHANGED_SERVICES: ${{ needs.detect-changes.outputs.changed }}
 
     steps:
