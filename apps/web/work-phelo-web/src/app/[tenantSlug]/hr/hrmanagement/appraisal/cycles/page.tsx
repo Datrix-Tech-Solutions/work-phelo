@@ -1,7 +1,10 @@
 'use client';
 
-import { use } from 'react';
+import { use, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth.store';
 import { AppraisalCyclesList } from '@/components/organisms/appraisal/AppraisalCyclesList';
+import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 
 export default function AppraisalCyclesPage({
   params,
@@ -9,6 +12,20 @@ export default function AppraisalCyclesPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const { canConfigureAppraisal } = useHrManagementAccess();
+
+  useEffect(() => {
+    if (user !== null && !canConfigureAppraisal) {
+      router.replace(`/${tenantSlug}/hr`);
+    }
+  }, [canConfigureAppraisal, router, tenantSlug, user]);
+
+  if (user !== null && !canConfigureAppraisal) {
+    return null;
+  }
+
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
       <div className="shrink-0">

@@ -208,7 +208,7 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     DELETE: [{ resource: 'departments', action: 'DELETE' }],
   },
 
-  // resource: 'branches' (not yet seeded — wire up when branch resource is added)
+  // resource: 'branches' (seeded)
   branches: {
     CREATE: [{ resource: 'branches', action: 'CREATE' }],
     VIEW: [{ resource: 'branches', action: 'VIEW' }],
@@ -265,7 +265,7 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     DELETE: [{ resource: 'schedules', action: 'DELETE' }],
   },
 
-  // resource: 'projects' (not yet seeded) — DELETE col maps to ASSIGN
+  // resource: 'projects' — DELETE col maps to ASSIGN
   projects: {
     CREATE: [{ resource: 'projects', action: 'CREATE' }],
     VIEW: [{ resource: 'projects', action: 'VIEW' }],
@@ -281,7 +281,7 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     DELETE: [{ resource: 'payroll', action: 'APPROVE' }], // approve payroll run
   },
 
-  // resource: 'assets' (not yet seeded) — DELETE col maps to ASSIGN
+  // resource: 'assets' — DELETE col maps to ASSIGN
   assets: {
     CREATE: [{ resource: 'assets', action: 'CREATE' }],
     VIEW: [{ resource: 'assets', action: 'VIEW' }],

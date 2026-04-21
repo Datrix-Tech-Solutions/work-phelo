@@ -8,12 +8,9 @@ interface Props {
   isLoading: boolean;
   onClockIn: () => void;
   onClockOut: () => void;
-  onStartBreak: () => void;
-  onEndBreak: () => void;
   onReportMissed: () => void;
   isClockingIn: boolean;
   isClockingOut: boolean;
-  isBreaking: boolean;
   historyData: { data?: TimeEntry[]; totalPages?: number } | undefined;
   historyLoading: boolean;
   historyPage: number;
@@ -25,12 +22,9 @@ export function MyTimeSection({
   isLoading,
   onClockIn,
   onClockOut,
-  onStartBreak,
-  onEndBreak,
   onReportMissed,
   isClockingIn,
   isClockingOut,
-  isBreaking,
   historyData,
   historyLoading,
   historyPage,
@@ -71,12 +65,9 @@ export function MyTimeSection({
           isLoading={isLoading}
           onClockIn={onClockIn}
           onClockOut={onClockOut}
-          onStartBreak={onStartBreak}
-          onEndBreak={onEndBreak}
           onReportMissed={onReportMissed}
           isClockingIn={isClockingIn}
           isClockingOut={isClockingOut}
-          isBreaking={isBreaking}
         />
       </div>
 
