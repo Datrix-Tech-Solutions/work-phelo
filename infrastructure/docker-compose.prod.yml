@@ -1,24 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: erp-postgres-prod
-    restart: always
-    networks:
-      - prod-network
-    ports:
-      - '127.0.0.1:5433:5432'
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   redis:
     image: redis:7-alpine
     container_name: erp-redis-prod
@@ -59,8 +39,6 @@ services:
     env_file:
       - ../apps/auth-service/.env.prod
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -75,8 +53,6 @@ services:
     env_file:
       - ../apps/hr-service/.env.prod
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -111,5 +87,4 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
   redis_data:
