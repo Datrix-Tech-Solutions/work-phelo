@@ -11,6 +11,7 @@ export enum Permission {
   UPDATE_USER = 'update:user',
   DEACTIVATE_USER = 'deactivate:user',
   FORCE_RESET_USER = 'force_reset:user',
+  VIEW_PERMISSION_SETS = 'view:permission_sets',
   GRANT_PERMISSION = 'grant:permission',
 
   // ── Company Roles ─────────────────────────────────────────────────────────
@@ -152,13 +153,6 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.SUBMIT_MANAGER_REVIEW,
     Permission.READ_OWN_REVIEW,
-    Permission.CREATE_PROJECT,
-    Permission.READ_PROJECTS,
-    Permission.UPDATE_PROJECT,
-    Permission.ASSIGN_PROJECT,
-    Permission.MANAGE_ASSETS,
-    Permission.READ_ASSETS,
-    Permission.ASSIGN_ASSET,
   ],
 
   Manager: [
@@ -184,8 +178,6 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.SUBMIT_MANAGER_REVIEW,
     Permission.READ_OWN_REVIEW,
-    Permission.READ_PROJECTS,
-    Permission.READ_ASSETS,
   ],
 
   Employee: [
@@ -198,6 +190,5 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.READ_OWN_PAYSLIP,
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.READ_OWN_REVIEW,
-    Permission.READ_PROJECTS,
   ],
 };

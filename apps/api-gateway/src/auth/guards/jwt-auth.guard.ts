@@ -44,6 +44,7 @@ export class JwtAuthGuard implements CanActivate {
         companyRoleId: payload.companyRoleId ?? null,
         moduleConfig: payload.moduleConfig ?? {},
         featureConfig: payload.featureConfig ?? {},
+        permissions: payload.permissions ?? [],
       };
 
       request.user = user;

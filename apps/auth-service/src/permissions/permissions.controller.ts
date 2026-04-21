@@ -27,15 +27,19 @@ import {
   UpdatePermissionSetDto,
 } from './dto/grant-permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
 
 @ApiTags('Permissions')
 @Controller('permissions')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth('access-token')
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
   @Get('resources')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({ summary: 'List all platform resources' })
   @ApiResponse({ status: 200, description: 'Resources list retrieved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
@@ -44,6 +48,7 @@ export class PermissionsController {
   }
 
   @Get('users/:userId')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({
     summary: 'Get effective permissions for a user — direct + from sets',
   })
@@ -62,6 +67,7 @@ export class PermissionsController {
   }
 
   @Get('users/:userId/history')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({
     summary: 'Full permission history including revoked — useful for audit',
   })
@@ -76,6 +82,7 @@ export class PermissionsController {
   }
 
   @Post('grant')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({
     summary: 'Grant a direct permission to a user on a resource',
   })
@@ -100,6 +107,7 @@ export class PermissionsController {
   }
 
   @Patch('revoke')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({
     summary: 'Revoke a permission — soft update, row is never deleted',
   })
@@ -120,6 +128,7 @@ export class PermissionsController {
   }
 
   @Get('sets')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({ summary: 'List all permission sets in tenant' })
   @ApiResponse({ status: 200, description: 'Permission sets retrieved' })
   getPermissionSets(@Req() req: any) {
@@ -127,6 +136,7 @@ export class PermissionsController {
   }
 
   @Post('sets')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create a new permission set with resource-action pairs',
@@ -155,6 +165,7 @@ export class PermissionsController {
   }
 
   @Patch('sets/:id')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({
     summary:
       'Replace all resource-action pairs on a permission set — this is how the Permission Matrix saves',
@@ -188,6 +199,7 @@ export class PermissionsController {
   }
 
   @Post('sets/assign')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({ summary: 'Assign a permission set to a user' })
   @ApiBody({
     description: 'Assign permission set payload',
@@ -208,6 +220,7 @@ export class PermissionsController {
   }
 
   @Patch('sets/remove/:userId/:permissionSetId')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({ summary: 'Remove a permission set from a user' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   @ApiParam({ name: 'permissionSetId', description: 'Permission set UUID' })

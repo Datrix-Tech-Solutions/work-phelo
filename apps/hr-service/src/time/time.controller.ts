@@ -27,18 +27,25 @@ import { ReviewCorrectionDto } from './dto/review-correction.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
+import { FeatureGuard } from '../auth/guards/feature.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { RequireFeature } from '../auth/decorators/feature.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
 
 @ApiTags('Time')
 @Controller('time')
-@UseGuards(JwtAuthGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('hr')
+@RequireFeature('hr', 'time')
 @ApiBearerAuth('access-token')
 export class TimeController {
   constructor(private readonly timeService: TimeService) {}
 
   @Post('clock-in')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.CLOCK_IN_OUT)
   @ApiOperation({ summary: 'Clock in for the day' })
   @ApiBody({ type: ClockInDto })
   @ApiResponse({ status: 200, description: 'Clocked in successfully' })
@@ -54,6 +61,7 @@ export class TimeController {
 
   @Post('clock-out')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.CLOCK_IN_OUT)
   @ApiOperation({ summary: 'Clock out for the day' })
   @ApiResponse({ status: 200, description: 'Clocked out successfully' })
   @ApiResponse({ status: 400, description: 'Not clocked in today' })
@@ -107,6 +115,7 @@ export class TimeController {
 
   @Post('corrections')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.SUBMIT_TIME_CORRECTION)
   @ApiOperation({ summary: 'Submit a time correction request' })
   @ApiBody({ type: TimeCorrectionDto })
   @ApiResponse({ status: 201, description: 'Time correction submitted' })
@@ -131,6 +140,7 @@ export class TimeController {
   }
 
   @Patch('corrections/:id/review')
+  @RequirePermissions(Permission.APPROVE_TEAM_TIME)
   @ApiOperation({ summary: 'Approve or reject a time correction' })
   @ApiParam({ name: 'id', description: 'Time correction UUID' })
   @ApiBody({ type: ReviewCorrectionDto })
@@ -164,6 +174,7 @@ export class TimeController {
 
   @Post('schedules')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Create a shift schedule for an employee' })
   @ApiBody({ type: CreateScheduleDto })
   @ApiResponse({ status: 201, description: 'Schedule created' })

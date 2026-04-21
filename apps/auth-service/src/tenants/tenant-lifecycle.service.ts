@@ -12,6 +12,7 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { generateSecureToken } from '../common/otp.helper';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
+import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
 
 @Injectable()
 export class TenantLifecycleService {
@@ -74,6 +75,17 @@ export class TenantLifecycleService {
         inviteExpiresAt,
       },
     });
+
+    await syncUserSystemPermissionSet(
+      this.prisma,
+      {
+        tenantId: tenant.id,
+        userId: user.id,
+        role: user.role,
+        grantedBy: user.id,
+      },
+      this.logger,
+    );
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 

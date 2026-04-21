@@ -30,11 +30,14 @@ import {
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
 
 @ApiTags('Employees')
 @Controller('employees')
-@UseGuards(JwtAuthGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
 @RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class EmployeesController {
@@ -42,6 +45,7 @@ export class EmployeesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.CREATE_EMPLOYEE)
   @ApiOperation({ summary: 'Create a new employee profile' })
   @ApiBody({
     schema: {
@@ -74,6 +78,7 @@ export class EmployeesController {
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({
     summary: 'List all employees — supports filtering and search',
   })
@@ -92,6 +97,7 @@ export class EmployeesController {
   }
 
   @Get('me')
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
   @ApiOperation({ summary: 'Get the employee profile of the logged-in user' })
   @ApiResponse({ status: 200, description: 'Employee profile retrieved' })
   @ApiResponse({ status: 404, description: 'Employee profile not found' })
@@ -109,6 +115,7 @@ export class EmployeesController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
   @ApiOperation({ summary: 'Update an employee profile' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: UpdateEmployeeDto })
@@ -127,6 +134,7 @@ export class EmployeesController {
 
   @Post(':id/offboard')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
   @ApiOperation({ summary: 'Initiate offboarding — creates a draft record' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: InitiateOffboardDto })
@@ -185,6 +193,7 @@ export class EmployeesController {
 
   @Post(':id/resend-invite')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
   @ApiOperation({
     summary: 'Resend invite email to employee — invalidates previous link',
   })
@@ -197,6 +206,7 @@ export class EmployeesController {
 
   @Post(':id/allowances')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
   @ApiOperation({ summary: 'Add an allowance to an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({
@@ -215,6 +225,7 @@ export class EmployeesController {
 
   @Post(':id/documents')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.MANAGE_DOCUMENTS)
   @ApiOperation({ summary: 'Upload a document for an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({

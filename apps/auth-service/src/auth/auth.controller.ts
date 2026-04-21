@@ -197,6 +197,7 @@ export class AuthController {
         moduleConfig: req.user.moduleConfig ?? {},
         featureConfig: req.user.featureConfig ?? {},
       },
+      permissions: req.user.permissions ?? [],
     };
   }
 
