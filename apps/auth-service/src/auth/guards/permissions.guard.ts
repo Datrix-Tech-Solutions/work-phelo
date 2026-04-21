@@ -56,11 +56,13 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.FORCE_RESET_USER]: [
     { resource: 'users', actions: [PermissionAction.EDIT] },
   ],
+  [Permission.VIEW_PERMISSION_SETS]: [
+    { resource: 'permission-sets', actions: [PermissionAction.VIEW] },
+  ],
   [Permission.GRANT_PERMISSION]: [
     {
       resource: 'permission-sets',
       actions: [
-        PermissionAction.VIEW,
         PermissionAction.CREATE,
         PermissionAction.EDIT,
         PermissionAction.DELETE,

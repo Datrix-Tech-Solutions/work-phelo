@@ -39,7 +39,7 @@ export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
   @Get('resources')
-  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({ summary: 'List all platform resources' })
   @ApiResponse({ status: 200, description: 'Resources list retrieved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
@@ -48,7 +48,7 @@ export class PermissionsController {
   }
 
   @Get('users/:userId')
-  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({
     summary: 'Get effective permissions for a user — direct + from sets',
   })
@@ -67,7 +67,7 @@ export class PermissionsController {
   }
 
   @Get('users/:userId/history')
-  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({
     summary: 'Full permission history including revoked — useful for audit',
   })
@@ -128,7 +128,7 @@ export class PermissionsController {
   }
 
   @Get('sets')
-  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({ summary: 'List all permission sets in tenant' })
   @ApiResponse({ status: 200, description: 'Permission sets retrieved' })
   getPermissionSets(@Req() req: any) {

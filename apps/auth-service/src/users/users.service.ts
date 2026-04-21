@@ -15,6 +15,7 @@ import { generateSecureToken } from '../common/otp.helper';
 import * as bcrypt from 'bcrypt';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { AuditService } from '../audit/audit.service';
+import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
 
 @Injectable()
 export class UsersService {
@@ -59,6 +60,16 @@ export class UsersService {
           where: { id: existingAdmin.id },
           data: { role: 'EMPLOYEE' },
         });
+        await syncUserSystemPermissionSet(
+          this.prisma,
+          {
+            tenantId,
+            userId: existingAdmin.id,
+            role: 'EMPLOYEE',
+            grantedBy: existingAdmin.id,
+          },
+          this.logger,
+        );
       }
     }
 
@@ -66,6 +77,18 @@ export class UsersService {
     const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
 
     const userRole = ((dto.role as any) || 'EMPLOYEE') as string;
+    let companyRoleName: string | null = null;
+
+    if (dto.companyRoleId) {
+      const companyRole = await this.prisma.companyRole.findFirst({
+        where: { id: dto.companyRoleId, tenantId, isActive: true },
+        select: { name: true },
+      });
+      if (!companyRole) {
+        throw new NotFoundException('Company role not found in this tenant');
+      }
+      companyRoleName = companyRole.name;
+    }
 
     const user = await this.prisma.user.create({
       data: {
@@ -75,6 +98,7 @@ export class UsersService {
         lastName: dto.lastName,
         phone: dto.phone,
         role: userRole as any,
+        companyRoleId: dto.companyRoleId,
         status: 'PENDING_VERIFICATION',
         forcePasswordReset: true,
         inviteToken,
@@ -82,25 +106,17 @@ export class UsersService {
       },
     });
 
-    // Auto-assign the matching system permission set for the user's role
-    const setName =
-      userRole === 'TENANT_ADMIN' ? 'Company Admin Set' : 'Employee Set';
-    const defaultSet = await this.prisma.permissionSet.findFirst({
-      where: { tenantId, name: setName, isSystem: true },
-    });
-    if (!defaultSet) {
-      throw new NotFoundException(
-        `Required default permission set \"${setName}\" not found for this tenant`,
-      );
-    }
-
-    await this.prisma.userPermissionSet.create({
-      data: {
+    await syncUserSystemPermissionSet(
+      this.prisma,
+      {
+        tenantId,
         userId: user.id,
-        permissionSetId: defaultSet.id,
+        role: userRole,
+        companyRoleName,
         grantedBy: user.id,
       },
-    });
+      this.logger,
+    );
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
