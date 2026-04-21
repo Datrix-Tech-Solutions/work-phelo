@@ -24,225 +24,235 @@ import { PermissionAction } from '../../prisma/generated/client';
 
 type ResourceAction = { resource: string; action: PermissionAction };
 
-const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> = {
-  [AppPermission.READ_TENANT]: [
-    { resource: 'tenants', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.UPDATE_TENANT]: [
-    { resource: 'tenants', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.MANAGE_MODULES]: [
-    { resource: 'tenants', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.VIEW_AUDIT_LOGS]: [
-    { resource: 'audit-logs', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.INVITE_USER]: [
-    { resource: 'users', action: PermissionAction.CREATE },
-  ],
-  [AppPermission.READ_USERS]: [{ resource: 'users', action: PermissionAction.VIEW }],
-  [AppPermission.UPDATE_USER]: [{ resource: 'users', action: PermissionAction.EDIT }],
-  [AppPermission.DEACTIVATE_USER]: [
-    { resource: 'users', action: PermissionAction.DELETE },
-  ],
-  [AppPermission.FORCE_RESET_USER]: [
-    { resource: 'users', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.VIEW_PERMISSION_SETS]: [
-    { resource: 'permission-sets', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.GRANT_PERMISSION]: [
-    { resource: 'permission-sets', action: PermissionAction.VIEW },
-    { resource: 'permission-sets', action: PermissionAction.CREATE },
-    { resource: 'permission-sets', action: PermissionAction.EDIT },
-    { resource: 'permission-sets', action: PermissionAction.DELETE },
-    { resource: 'permission-sets', action: PermissionAction.ASSIGN },
-  ],
-  [AppPermission.MANAGE_COMPANY_ROLES]: [
-    { resource: 'company-roles', action: PermissionAction.CREATE },
-    { resource: 'company-roles', action: PermissionAction.EDIT },
-    { resource: 'company-roles', action: PermissionAction.DELETE },
-  ],
-  [AppPermission.READ_COMPANY_ROLES]: [
-    { resource: 'company-roles', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.CREATE_EMPLOYEE]: [
-    { resource: 'employees', action: PermissionAction.CREATE },
-  ],
-  [AppPermission.READ_EMPLOYEES]: [
-    { resource: 'employees', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.READ_TEAM_EMPLOYEES]: [
-    { resource: 'employees', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.READ_OWN_PROFILE]: [
-    { resource: 'employees', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.UPDATE_EMPLOYEE]: [
-    { resource: 'employees', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.UPDATE_OWN_PROFILE]: [
-    { resource: 'employees', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.DELETE_EMPLOYEE]: [
-    { resource: 'employees', action: PermissionAction.DELETE },
-  ],
-  [AppPermission.OFFBOARD_EMPLOYEE]: [
-    { resource: 'employees', action: PermissionAction.DELETE },
-  ],
-  [AppPermission.MANAGE_DOCUMENTS]: [
-    { resource: 'documents', action: PermissionAction.CREATE },
-    { resource: 'documents', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.EXPORT_EMPLOYEES]: [
-    { resource: 'employees', action: PermissionAction.EXPORT },
-  ],
-  [AppPermission.CREATE_DEPARTMENT]: [
-    { resource: 'departments', action: PermissionAction.CREATE },
-    { resource: 'branches', action: PermissionAction.CREATE },
-  ],
-  [AppPermission.READ_DEPARTMENTS]: [
-    { resource: 'departments', action: PermissionAction.VIEW },
-    { resource: 'branches', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.UPDATE_DEPARTMENT]: [
-    { resource: 'departments', action: PermissionAction.EDIT },
-    { resource: 'branches', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.DELETE_DEPARTMENT]: [
-    { resource: 'departments', action: PermissionAction.DELETE },
-    { resource: 'branches', action: PermissionAction.DELETE },
-  ],
-  [AppPermission.MANAGE_ROLES]: [
-    { resource: 'company-roles', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.ASSIGN_ROLE]: [
-    { resource: 'company-roles', action: PermissionAction.ASSIGN },
-  ],
-  [AppPermission.REQUEST_LEAVE]: [
-    { resource: 'leave', action: PermissionAction.CREATE },
-  ],
-  [AppPermission.APPROVE_LEAVE]: [
-    { resource: 'leave', action: PermissionAction.APPROVE },
-  ],
-  [AppPermission.APPROVE_TEAM_LEAVE]: [
-    { resource: 'leave', action: PermissionAction.APPROVE },
-  ],
-  [AppPermission.READ_ALL_LEAVES]: [
-    { resource: 'leave', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.READ_TEAM_LEAVES]: [
-    { resource: 'leave', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.READ_OWN_LEAVE]: [
-    { resource: 'leave', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.MANAGE_LEAVE_TYPES]: [
-    { resource: 'leave', action: PermissionAction.CREATE },
-    { resource: 'leave', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.CLOCK_IN_OUT]: [
-    { resource: 'attendance', action: PermissionAction.CREATE },
-  ],
-  [AppPermission.READ_ATTENDANCE]: [
-    { resource: 'attendance', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.READ_TEAM_ATTENDANCE]: [
-    { resource: 'attendance', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.SUBMIT_TIME_CORRECTION]: [
-    { resource: 'time-corrections', action: PermissionAction.CREATE },
-  ],
-  [AppPermission.APPROVE_TIME_CORRECTION]: [
-    { resource: 'time-corrections', action: PermissionAction.APPROVE },
-  ],
-  [AppPermission.APPROVE_TEAM_TIME]: [
-    { resource: 'time-corrections', action: PermissionAction.APPROVE },
-  ],
-  [AppPermission.READ_TIMESHEETS]: [
-    { resource: 'timesheets', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.APPROVE_TIMESHEET]: [
-    { resource: 'timesheets', action: PermissionAction.APPROVE },
-  ],
-  [AppPermission.MANAGE_SCHEDULES]: [
-    { resource: 'schedules', action: PermissionAction.CREATE },
-    { resource: 'schedules', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.MANAGE_TEAM_SCHEDULES]: [
-    { resource: 'schedules', action: PermissionAction.CREATE },
-    { resource: 'schedules', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.READ_PAYROLL]: [
-    { resource: 'payroll', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.RUN_PAYROLL]: [{ resource: 'payroll', action: PermissionAction.RUN }],
-  [AppPermission.APPROVE_PAYROLL]: [
-    { resource: 'payroll', action: PermissionAction.APPROVE },
-  ],
-  [AppPermission.READ_OWN_PAYSLIP]: [
-    { resource: 'payroll', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.MANAGE_PAYROLL_SETTINGS]: [
-    { resource: 'payroll', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.CONFIGURE_APPRAISAL]: [
-    { resource: 'appraisals', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.CREATE_APPRAISAL]: [
-    { resource: 'appraisals', action: PermissionAction.CREATE },
-  ],
-  [AppPermission.READ_APPRAISALS]: [
-    { resource: 'appraisals', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.READ_TEAM_APPRAISALS]: [
-    { resource: 'appraisals', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.SUBMIT_SELF_ASSESSMENT]: [
-    { resource: 'appraisals', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.SUBMIT_MANAGER_REVIEW]: [
-    { resource: 'appraisals', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.READ_OWN_REVIEW]: [
-    { resource: 'appraisals', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.CREATE_PROJECT]: [
-    { resource: 'projects', action: PermissionAction.CREATE },
-  ],
-  [AppPermission.READ_PROJECTS]: [
-    { resource: 'projects', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.UPDATE_PROJECT]: [
-    { resource: 'projects', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.ASSIGN_PROJECT]: [
-    { resource: 'projects', action: PermissionAction.ASSIGN },
-  ],
-  [AppPermission.MANAGE_ASSETS]: [
-    { resource: 'assets', action: PermissionAction.CREATE },
-    { resource: 'assets', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.READ_ASSETS]: [{ resource: 'assets', action: PermissionAction.VIEW }],
-  [AppPermission.ASSIGN_ASSET]: [
-    { resource: 'assets', action: PermissionAction.ASSIGN },
-  ],
-  [AppPermission.MANAGE_LEADS]: [
-    { resource: 'leads', action: PermissionAction.CREATE },
-    { resource: 'leads', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.READ_LEADS]: [{ resource: 'leads', action: PermissionAction.VIEW }],
-  [AppPermission.MANAGE_CAMPAIGNS]: [
-    { resource: 'campaigns', action: PermissionAction.CREATE },
-    { resource: 'campaigns', action: PermissionAction.EDIT },
-  ],
-  [AppPermission.READ_CAMPAIGNS]: [
-    { resource: 'campaigns', action: PermissionAction.VIEW },
-  ],
-  [AppPermission.VIEW_ANALYTICS]: [
-    { resource: 'analytics', action: PermissionAction.VIEW },
-  ],
-};
+const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
+  {
+    [AppPermission.READ_TENANT]: [
+      { resource: 'tenants', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.UPDATE_TENANT]: [
+      { resource: 'tenants', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.MANAGE_MODULES]: [
+      { resource: 'tenants', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.VIEW_AUDIT_LOGS]: [
+      { resource: 'audit-logs', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.INVITE_USER]: [
+      { resource: 'users', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.READ_USERS]: [
+      { resource: 'users', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.UPDATE_USER]: [
+      { resource: 'users', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.DEACTIVATE_USER]: [
+      { resource: 'users', action: PermissionAction.DELETE },
+    ],
+    [AppPermission.FORCE_RESET_USER]: [
+      { resource: 'users', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.VIEW_PERMISSION_SETS]: [
+      { resource: 'permission-sets', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.GRANT_PERMISSION]: [
+      { resource: 'permission-sets', action: PermissionAction.CREATE },
+      { resource: 'permission-sets', action: PermissionAction.EDIT },
+      { resource: 'permission-sets', action: PermissionAction.DELETE },
+      { resource: 'permission-sets', action: PermissionAction.ASSIGN },
+    ],
+    [AppPermission.MANAGE_COMPANY_ROLES]: [
+      { resource: 'company-roles', action: PermissionAction.CREATE },
+      { resource: 'company-roles', action: PermissionAction.EDIT },
+      { resource: 'company-roles', action: PermissionAction.DELETE },
+    ],
+    [AppPermission.READ_COMPANY_ROLES]: [
+      { resource: 'company-roles', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.CREATE_EMPLOYEE]: [
+      { resource: 'employees', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.READ_EMPLOYEES]: [
+      { resource: 'employees', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_TEAM_EMPLOYEES]: [
+      { resource: 'employees', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_OWN_PROFILE]: [
+      { resource: 'employees', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.UPDATE_EMPLOYEE]: [
+      { resource: 'employees', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.UPDATE_OWN_PROFILE]: [
+      { resource: 'employees', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.DELETE_EMPLOYEE]: [
+      { resource: 'employees', action: PermissionAction.DELETE },
+    ],
+    [AppPermission.OFFBOARD_EMPLOYEE]: [
+      { resource: 'employees', action: PermissionAction.DELETE },
+    ],
+    [AppPermission.MANAGE_DOCUMENTS]: [
+      { resource: 'documents', action: PermissionAction.CREATE },
+      { resource: 'documents', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.EXPORT_EMPLOYEES]: [
+      { resource: 'employees', action: PermissionAction.EXPORT },
+    ],
+    [AppPermission.CREATE_DEPARTMENT]: [
+      { resource: 'departments', action: PermissionAction.CREATE },
+      { resource: 'branches', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.READ_DEPARTMENTS]: [
+      { resource: 'departments', action: PermissionAction.VIEW },
+      { resource: 'branches', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.UPDATE_DEPARTMENT]: [
+      { resource: 'departments', action: PermissionAction.EDIT },
+      { resource: 'branches', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.DELETE_DEPARTMENT]: [
+      { resource: 'departments', action: PermissionAction.DELETE },
+      { resource: 'branches', action: PermissionAction.DELETE },
+    ],
+    [AppPermission.MANAGE_ROLES]: [
+      { resource: 'company-roles', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.ASSIGN_ROLE]: [
+      { resource: 'company-roles', action: PermissionAction.ASSIGN },
+    ],
+    [AppPermission.REQUEST_LEAVE]: [
+      { resource: 'leave', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.APPROVE_LEAVE]: [
+      { resource: 'leave', action: PermissionAction.APPROVE },
+    ],
+    [AppPermission.APPROVE_TEAM_LEAVE]: [
+      { resource: 'leave', action: PermissionAction.APPROVE },
+    ],
+    [AppPermission.READ_ALL_LEAVES]: [
+      { resource: 'leave', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_TEAM_LEAVES]: [
+      { resource: 'leave', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_OWN_LEAVE]: [
+      { resource: 'leave', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.MANAGE_LEAVE_TYPES]: [
+      { resource: 'leave', action: PermissionAction.CREATE },
+      { resource: 'leave', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.CLOCK_IN_OUT]: [
+      { resource: 'attendance', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.READ_ATTENDANCE]: [
+      { resource: 'attendance', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_TEAM_ATTENDANCE]: [
+      { resource: 'attendance', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.SUBMIT_TIME_CORRECTION]: [
+      { resource: 'time-corrections', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.APPROVE_TIME_CORRECTION]: [
+      { resource: 'time-corrections', action: PermissionAction.APPROVE },
+    ],
+    [AppPermission.APPROVE_TEAM_TIME]: [
+      { resource: 'time-corrections', action: PermissionAction.APPROVE },
+    ],
+    [AppPermission.READ_TIMESHEETS]: [
+      { resource: 'timesheets', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.APPROVE_TIMESHEET]: [
+      { resource: 'timesheets', action: PermissionAction.APPROVE },
+    ],
+    [AppPermission.MANAGE_SCHEDULES]: [
+      { resource: 'schedules', action: PermissionAction.CREATE },
+      { resource: 'schedules', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.MANAGE_TEAM_SCHEDULES]: [
+      { resource: 'schedules', action: PermissionAction.CREATE },
+      { resource: 'schedules', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.READ_PAYROLL]: [
+      { resource: 'payroll', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.RUN_PAYROLL]: [
+      { resource: 'payroll', action: PermissionAction.RUN },
+    ],
+    [AppPermission.APPROVE_PAYROLL]: [
+      { resource: 'payroll', action: PermissionAction.APPROVE },
+    ],
+    [AppPermission.READ_OWN_PAYSLIP]: [
+      { resource: 'payroll', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.MANAGE_PAYROLL_SETTINGS]: [
+      { resource: 'payroll', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.CONFIGURE_APPRAISAL]: [
+      { resource: 'appraisals', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.CREATE_APPRAISAL]: [
+      { resource: 'appraisals', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.READ_APPRAISALS]: [
+      { resource: 'appraisals', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_TEAM_APPRAISALS]: [
+      { resource: 'appraisals', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.SUBMIT_SELF_ASSESSMENT]: [
+      { resource: 'appraisals', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.SUBMIT_MANAGER_REVIEW]: [
+      { resource: 'appraisals', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.READ_OWN_REVIEW]: [
+      { resource: 'appraisals', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.CREATE_PROJECT]: [
+      { resource: 'projects', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.READ_PROJECTS]: [
+      { resource: 'projects', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.UPDATE_PROJECT]: [
+      { resource: 'projects', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.ASSIGN_PROJECT]: [
+      { resource: 'projects', action: PermissionAction.ASSIGN },
+    ],
+    [AppPermission.MANAGE_ASSETS]: [
+      { resource: 'assets', action: PermissionAction.CREATE },
+      { resource: 'assets', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.READ_ASSETS]: [
+      { resource: 'assets', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.ASSIGN_ASSET]: [
+      { resource: 'assets', action: PermissionAction.ASSIGN },
+    ],
+    [AppPermission.MANAGE_LEADS]: [
+      { resource: 'leads', action: PermissionAction.CREATE },
+      { resource: 'leads', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.READ_LEADS]: [
+      { resource: 'leads', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.MANAGE_CAMPAIGNS]: [
+      { resource: 'campaigns', action: PermissionAction.CREATE },
+      { resource: 'campaigns', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.READ_CAMPAIGNS]: [
+      { resource: 'campaigns', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.VIEW_ANALYTICS]: [
+      { resource: 'analytics', action: PermissionAction.VIEW },
+    ],
+  };
 
 const SYSTEM_PERMISSION_SETS = [
   { name: 'Company Admin Set', roleName: 'Company Admin', isSystem: true },
@@ -580,9 +590,8 @@ export class TenantLifecycleService {
       }
 
       const rolePermissions = COMPANY_ROLE_PERMISSIONS[set.roleName] ?? [];
-      const roleResourceActions = this.resolveResourceActionsForPermissions(
-        rolePermissions,
-      );
+      const roleResourceActions =
+        this.resolveResourceActionsForPermissions(rolePermissions);
 
       const setResources: { resourceId: string; action: PermissionAction }[] =
         [];

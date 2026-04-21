@@ -104,9 +104,6 @@ export const SYSTEM_ROLE_ACCESS: Record<string, string[]> = {
 // Default company role permissions — seeded for every new tenant
 export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
   'Company Admin': [
-    Permission.READ_TENANT,
-    Permission.UPDATE_TENANT,
-    Permission.VIEW_AUDIT_LOGS,
     Permission.INVITE_USER,
     Permission.READ_USERS,
     Permission.UPDATE_USER,
@@ -154,17 +151,9 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.SUBMIT_MANAGER_REVIEW,
     Permission.READ_OWN_REVIEW,
-    Permission.CREATE_PROJECT,
-    Permission.READ_PROJECTS,
-    Permission.UPDATE_PROJECT,
-    Permission.ASSIGN_PROJECT,
-    Permission.MANAGE_ASSETS,
-    Permission.READ_ASSETS,
-    Permission.ASSIGN_ASSET,
   ],
 
   Manager: [
-    Permission.READ_USERS,
     Permission.READ_COMPANY_ROLES,
     Permission.READ_EMPLOYEES,
     Permission.READ_TEAM_EMPLOYEES,
@@ -186,8 +175,6 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.SUBMIT_MANAGER_REVIEW,
     Permission.READ_OWN_REVIEW,
-    Permission.READ_PROJECTS,
-    Permission.READ_ASSETS,
   ],
 
   Employee: [
@@ -200,6 +187,5 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.READ_OWN_PAYSLIP,
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.READ_OWN_REVIEW,
-    Permission.READ_PROJECTS,
   ],
 };

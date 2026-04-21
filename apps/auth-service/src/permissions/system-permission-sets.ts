@@ -29,7 +29,6 @@ type SyncUserSystemPermissionSetParams = {
 };
 
 const MANAGER_SET: PermissionResourceMap = {
-  users: [PermissionAction.VIEW],
   'company-roles': [PermissionAction.VIEW],
   employees: [PermissionAction.VIEW],
   departments: [PermissionAction.VIEW],
@@ -86,7 +85,6 @@ const COMPANY_ADMIN_SET: PermissionResourceMap = {
     PermissionAction.DELETE,
     PermissionAction.ASSIGN,
   ],
-  'audit-logs': [PermissionAction.VIEW],
   employees: [
     PermissionAction.VIEW,
     PermissionAction.CREATE,

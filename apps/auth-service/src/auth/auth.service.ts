@@ -43,6 +43,15 @@ export class AuthService {
   // ── Token Generation ────────────────────────────────────────────────────
   private async generateTokens(user: any, tenant: any) {
     let permissions: string[] = [];
+    let companyRoleName: string | null = user.companyRole?.name ?? null;
+
+    if (!companyRoleName && user.companyRoleId) {
+      const companyRole = await this.prisma.companyRole.findUnique({
+        where: { id: user.companyRoleId },
+        select: { name: true },
+      });
+      companyRoleName = companyRole?.name ?? null;
+    }
 
     if (user.role === 'EMPLOYEE') {
       const [allDirectPerms, setAssignments] = await Promise.all([
@@ -85,6 +94,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       companyRoleId: user.companyRoleId,
+      companyRoleName,
       tenantId: tenant.id,
       tenantSlug: tenant.slug,
       tenantName: tenant.name,
@@ -269,6 +279,7 @@ export class AuthService {
         tenantSlug: tenant.slug,
         tenantName: tenant.name,
         companyRoleId: user.companyRoleId ?? null,
+        companyRoleName: null,
         moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {
           hr: false,
           accounting: false,
@@ -333,6 +344,7 @@ export class AuthService {
         lastName: user.lastName,
         role: user.role,
         tenantId: user.tenantId,
+        companyRoleName: null,
       },
     };
   }
@@ -722,6 +734,7 @@ export class AuthService {
         role: user.role,
         tenantId: user.tenantId,
         tenantSlug: user.tenant.slug,
+        companyRoleName: null,
       },
     };
   }
