@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/usePermission';
@@ -18,6 +18,13 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const searchParams = useSearchParams();
 
   const user = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    if (user !== null && !user.featureConfig?.hr?.leave) {
+      router.replace(`/${tenantSlug}/hr`);
+    }
+  }, [user, tenantSlug, router]);
+
   // isManager comes from the employee profile (department head), not from permissions.
   // Admins (TENANT_ADMIN) bypass permission checks and see requests only — no HR profile.
   const hasHRProfile = user?.role === 'EMPLOYEE';

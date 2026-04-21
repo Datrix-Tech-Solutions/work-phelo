@@ -1,13 +1,55 @@
-// HR MANAGEMENT PAGE //
+'use client';
 
-import { redirect } from 'next/navigation';
+import { use, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth.store';
+import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 
-export default async function HRManagementPage({
+export default function HRManagementPage({
   params,
 }: {
   params: Promise<{ tenantSlug: string }>;
 }) {
-  const { tenantSlug } = await params;
+  const { tenantSlug } = use(params);
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const {
+    canManageLeaveTypes,
+    canConfigureAppraisal,
+    canAccessRoles,
+    hasAnyManagementAccess,
+  } = useHrManagementAccess();
 
-  redirect(`/${tenantSlug}/hr/hrmanagement/leave-types`);
+  useEffect(() => {
+    if (user === null) return;
+
+    if (!hasAnyManagementAccess) {
+      router.replace(`/${tenantSlug}/hr`);
+      return;
+    }
+
+    if (canManageLeaveTypes) {
+      router.replace(`/${tenantSlug}/hr/hrmanagement/leave-types`);
+      return;
+    }
+
+    if (canConfigureAppraisal) {
+      router.replace(`/${tenantSlug}/hr/hrmanagement/appraisal/templates`);
+      return;
+    }
+
+    if (canAccessRoles) {
+      router.replace(`/${tenantSlug}/hr/hrmanagement/roles`);
+    }
+  }, [
+    canAccessRoles,
+    canConfigureAppraisal,
+    canManageLeaveTypes,
+    hasAnyManagementAccess,
+    router,
+    tenantSlug,
+    user,
+  ]);
+
+  return null;
 }

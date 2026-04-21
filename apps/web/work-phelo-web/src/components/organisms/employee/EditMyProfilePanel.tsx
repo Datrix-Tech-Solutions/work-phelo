@@ -89,7 +89,6 @@ export function EditMyProfilePanel({
           error={form.formState.errors.lastName}
           placeholder="eg; Boateng"
         />
-
         <FormField
           label="Phone"
           registration={form.register('phone')}

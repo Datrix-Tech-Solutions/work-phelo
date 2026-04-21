@@ -2,7 +2,8 @@
 
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -12,8 +13,15 @@ import { TeamReviewTable } from '@/components/organisms/appraisal/TeamReviewTabl
 import { HRAppraisalsTable } from '@/components/organisms/appraisal/HRAppraisalTable';
 
 export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
-  use(params);
+  const { tenantSlug } = use(params);
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    if (user !== null && !user.featureConfig?.hr?.appraisals) {
+      router.replace(`/${tenantSlug}/hr`);
+    }
+  }, [user, tenantSlug, router]);
   // isManager comes from the employee profile (department head), not from permissions.
   const isHR = user?.role === 'TENANT_ADMIN';
   const hasHRProfile = user?.role === 'EMPLOYEE';
