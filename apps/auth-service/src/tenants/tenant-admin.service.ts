@@ -68,6 +68,27 @@ export class TenantAdminService {
       },
     });
 
+    // Auto-assign Company Admin Set to the new admin
+    const companyAdminSet = await this.prisma.permissionSet.findFirst({
+      where: { tenantId: id, name: 'Company Admin Set', isSystem: true },
+    });
+    if (companyAdminSet) {
+      await this.prisma.userPermissionSet.upsert({
+        where: {
+          userId_permissionSetId: {
+            userId: user.id,
+            permissionSetId: companyAdminSet.id,
+          },
+        },
+        update: { grantedBy: user.id },
+        create: {
+          userId: user.id,
+          permissionSetId: companyAdminSet.id,
+          grantedBy: user.id,
+        },
+      });
+    }
+
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
     void this.rabbitmq
       .notificationInviteUser({

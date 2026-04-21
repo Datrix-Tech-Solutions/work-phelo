@@ -24,7 +24,8 @@ export const RESOURCES = [
 
   // ── HR module ──────────────────────────────────────────────────
   { name: 'employees', module: 'HR', description: 'Employee profiles' },
-  { name: 'departments', module: 'HR', description: 'Departments' },
+  { name: 'departments', module: 'HR', description: 'Department management' },
+  { name: 'branches', module: 'HR', description: 'Branch locations' },
   { name: 'leave', module: 'HR', description: 'Leave requests and types' },
   { name: 'attendance', module: 'HR', description: 'Clock-in/out records' },
   { name: 'timesheets', module: 'HR', description: 'Weekly timesheets' },

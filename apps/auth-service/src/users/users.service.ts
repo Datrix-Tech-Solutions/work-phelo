@@ -65,6 +65,8 @@ export class UsersService {
     const inviteToken = generateSecureToken();
     const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
 
+    const userRole = ((dto.role as any) || 'EMPLOYEE') as string;
+
     const user = await this.prisma.user.create({
       data: {
         tenantId,
@@ -72,11 +74,31 @@ export class UsersService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
-        role: (dto.role as any) || 'EMPLOYEE',
+        role: userRole as any,
         status: 'PENDING_VERIFICATION',
         forcePasswordReset: true,
         inviteToken,
         inviteExpiresAt,
+      },
+    });
+
+    // Auto-assign the matching system permission set for the user's role
+    const setName =
+      userRole === 'TENANT_ADMIN' ? 'Company Admin Set' : 'Employee Set';
+    const defaultSet = await this.prisma.permissionSet.findFirst({
+      where: { tenantId, name: setName, isSystem: true },
+    });
+    if (!defaultSet) {
+      throw new NotFoundException(
+        `Required default permission set \"${setName}\" not found for this tenant`,
+      );
+    }
+
+    await this.prisma.userPermissionSet.create({
+      data: {
+        userId: user.id,
+        permissionSetId: defaultSet.id,
+        grantedBy: user.id,
       },
     });
 
@@ -189,6 +211,12 @@ export class UsersService {
         ),
       );
 
+    const permissions = await this.resolveEffectivePermissions(
+      updated.id,
+      updated.tenantId,
+      updated.role,
+    );
+
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {
       sub: updated.id,
@@ -198,6 +226,7 @@ export class UsersService {
       tenantSlug: updated.tenant.slug,
       tenantName: updated.tenant.name,
       firstName: updated.firstName,
+      permissions,
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
@@ -228,6 +257,47 @@ export class UsersService {
         tenantName: updated.tenant.name,
       },
     };
+  }
+
+  private async resolveEffectivePermissions(
+    userId: string,
+    tenantId: string,
+    role: string,
+  ): Promise<string[]> {
+    if (role !== 'EMPLOYEE') return [];
+
+    const [allDirectPerms, setAssignments] = await Promise.all([
+      this.prisma.userPermission.findMany({
+        where: { tenantId, userId },
+        include: { resource: true },
+      }),
+      this.prisma.userPermissionSet.findMany({
+        where: { userId },
+        include: {
+          permissionSet: {
+            include: { resources: { include: { resource: true } } },
+          },
+        },
+      }),
+    ]);
+
+    const direct = allDirectPerms
+      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
+      .map((p) => `${p.resource.name}:${p.action}`);
+
+    const explicitlyRevoked = new Set(
+      allDirectPerms
+        .filter((p) => !p.isActive)
+        .map((p) => `${p.resource.name}:${p.action}`),
+    );
+
+    const fromSets = setAssignments.flatMap((a) =>
+      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
+    );
+
+    return [...new Set([...direct, ...fromSets])].filter(
+      (perm) => !explicitlyRevoked.has(perm),
+    );
   }
 
   async resendInvite(tenantId: string, userId: string) {

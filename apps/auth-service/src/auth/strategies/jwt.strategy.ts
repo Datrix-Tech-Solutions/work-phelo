@@ -44,6 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           string,
           Record<string, boolean>
         >) ?? {},
+      permissions: (payload as any).permissions ?? [],
     };
   }
 }

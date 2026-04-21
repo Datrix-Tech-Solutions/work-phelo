@@ -13,6 +13,7 @@ import {
   Req,
   ParseIntPipe,
   DefaultValuePipe,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -253,10 +254,11 @@ export class TenantsController {
 
   @Patch(':id/features')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('SUPER_ADMIN')
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Update feature config for a module within a company',
+    summary:
+      'Update feature config for a module within a company — SuperAdmin or Tenant Admin',
   })
   @ApiParam({ name: 'id', description: 'Tenant ID' })
   @ApiBody({
@@ -277,6 +279,11 @@ export class TenantsController {
     @Body() dto: { module: string; features: Record<string, boolean> },
     @Req() req: any,
   ) {
+    if (req.user.role === 'TENANT_ADMIN' && id !== req.user.tenantId) {
+      throw new ForbiddenException(
+        'You can only update features for your own company.',
+      );
+    }
     return this.config.updateFeatures(
       id,
       dto.module,
