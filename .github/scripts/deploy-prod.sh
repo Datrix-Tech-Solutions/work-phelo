@@ -10,8 +10,8 @@
 #   3. Infrastructure constants (hardcoded here — not secrets, never change per-env):
 #      Internal Docker service URLs, PORT values
 #
-# Compose-level variables (postgres/redis managed by compose):
-#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, REDIS_PASSWORD
+# Compose-level variables (redis managed by compose):
+#   REDIS_PASSWORD
 #   IMAGE_PREFIX, IMAGE_TAG (BUILD_SHA)
 #
 # GitHub secret names to create in the `production` environment:
@@ -22,7 +22,6 @@
 #                PROD_AUTH_MICROSOFT_CLIENT_ID, PROD_AUTH_MICROSOFT_CLIENT_SECRET, PROD_AUTH_MICROSOFT_CALLBACK_URL
 #   Notify:      PROD_NOTIFY_RESEND_API_KEY, PROD_NOTIFY_RESEND_FROM_EMAIL,
 #                PROD_NOTIFY_TERMII_API_KEY, PROD_NOTIFY_TERMII_SENDER_ID
-#   Postgres:    PROD_POSTGRES_USER, PROD_POSTGRES_PASSWORD, PROD_POSTGRES_DB
 #   Redis:       PROD_REDIS_PASSWORD
 #   Seed:        PROD_SUPER_ADMIN_PASSWORD
 #   GHCR:        (GITHUB_TOKEN — automatic, passed as GHCR_TOKEN by workflow)
@@ -55,13 +54,10 @@ echo "✓ Directory structure ready"
 # ── 2. Write compose-level .env ────────────────────────────────
 # docker compose reads .env from the working directory ($DEPLOY_PATH).
 # These variables are interpolated in docker-compose.prod.yml itself
-# (postgres/redis config + image tags) — NOT passed into containers.
+# (redis config + image tags) — NOT passed into containers.
 cat > .env <<EOF
 IMAGE_PREFIX=${IMAGE_PREFIX:-ghcr.io/datrix-tech-solutions/work-phelo}
 IMAGE_TAG=${BUILD_SHA}
-POSTGRES_USER=${POSTGRES_USER}
-POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-POSTGRES_DB=${POSTGRES_DB}
 REDIS_PASSWORD=${REDIS_PASSWORD}
 EOF
 echo "✓ Compose .env written"
@@ -114,6 +110,7 @@ GOOGLE_CALLBACK_URL=${AUTH_GOOGLE_CALLBACK_URL}
 MICROSOFT_CLIENT_ID=${AUTH_MICROSOFT_CLIENT_ID}
 MICROSOFT_CLIENT_SECRET=${AUTH_MICROSOFT_CLIENT_SECRET}
 MICROSOFT_CALLBACK_URL=${AUTH_MICROSOFT_CALLBACK_URL}
+SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}
 EOF
 
 # hr-service — schema: hr
@@ -208,7 +205,6 @@ wait_healthy() {
 # Wait for infrastructure before running migrations
 echo ""
 echo "── Infrastructure Health ─────────────"
-wait_healthy postgres
 wait_healthy redis
 
 if [[ -n "$FAILED_SERVICES" ]]; then
@@ -221,44 +217,23 @@ fi
 echo ""
 echo "Running database migrations..."
 
-# Ensure schemas exist — idempotent DDL.
-docker exec erp-postgres-prod psql \
-  -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
-  -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS hr; CREATE SCHEMA IF NOT EXISTS notify; CREATE SCHEMA IF NOT EXISTS billing; CREATE SCHEMA IF NOT EXISTS marketing;" \
-  2>/dev/null || true
-
 # Auth service — hard failure stops the deployment.
 docker exec erp-auth-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
 
 # HR service — hard failure stops the deployment.
 docker exec erp-hr-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
 
-# Notification service — baseline if schema exists but was never migration-tracked (P3005 guard).
-# Only triggers when notify has tables but no _prisma_migrations; on a fresh server migrate deploy
-# runs normally and creates everything from scratch.
-NOTIFY_HAS_TABLES=$(docker exec erp-postgres-prod psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc \
-  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='notify' AND table_name NOT IN ('_prisma_migrations')" \
-  2>/dev/null | tr -d '[:space:]' || echo "0")
-NOTIFY_TRACKED=$(docker exec erp-postgres-prod psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc \
-  "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='notify' AND table_name='_prisma_migrations'" \
-  2>/dev/null | tr -d '[:space:]' || echo "0")
-
-if [ "$NOTIFY_HAS_TABLES" != "0" ] && [ "$NOTIFY_TRACKED" = "0" ]; then
-  echo "Untracked notify schema detected — baselining all existing migrations..."
-  for migration in $(docker exec erp-notification-prod sh -c "ls /app/apps/notification-service/prisma/migrations/ | grep -E '^[0-9]'"); do
-    echo "  Marking applied: $migration"
-    docker exec erp-notification-prod sh -c "npx prisma@5.22.0 migrate resolve --applied $migration --schema /app/apps/notification-service/prisma/schema.prisma"
-  done
-  echo "✓ Notification service baselined"
-fi
-
 docker exec erp-notification-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
 
-# Subscription service — no-op until models are added; schema isolation already set.
-docker exec erp-subscription-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" 2>/dev/null || true
+# Subscription service — run only if service is part of prod compose.
+if docker ps --format '{{.Names}}' | grep -q '^erp-subscription-prod$'; then
+  docker exec erp-subscription-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma"
+fi
 
-# Marketing service — no-op until models are added; schema isolation already set.
-docker exec erp-marketing-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" 2>/dev/null || true
+# Marketing service — run only if service is part of prod compose.
+if docker ps --format '{{.Names}}' | grep -q '^erp-marketing-prod$'; then
+  docker exec erp-marketing-prod sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma"
+fi
 
 echo "✓ Migrations complete"
 

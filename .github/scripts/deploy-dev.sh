@@ -204,7 +204,7 @@ echo "✓ Migrations complete"
 # ── 7. Seed (idempotent — skip gracefully if seed binary missing) ─
 echo "Running database seed..."
 docker exec \
-  -e SUPER_ADMIN_EMAIL=superadmin@datrix.com \
+  -e SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL} \
   -e SUPER_ADMIN_PASSWORD="$SUPER_ADMIN_PASSWORD" \
   erp-auth-dev node /app/apps/auth-service/prisma/seed.js \
   && echo "✓ Seed complete" \
