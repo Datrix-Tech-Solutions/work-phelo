@@ -142,11 +142,13 @@ export class UsersController {
   }
 
   @Post(':id/resend-invite')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.INVITE_USER)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resend invite email — SuperAdmin only' })
+  @ApiOperation({ summary: 'Resend invite email for a user in current tenant' })
   @ApiParam({ name: 'id', description: 'User UUID' })
   @ApiResponse({ status: 200, description: 'Invitation resent successfully' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   async resendInvite(@Req() req: any, @Param('id') userId: string) {
     return this.usersService.resendInvite(req.user.tenantId, userId);
   }

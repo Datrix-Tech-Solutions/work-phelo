@@ -311,51 +311,107 @@ export class EmailService {
     const accentColor = isApproved ? '#16a34a' : '#dc2626';
     const bgColor = isApproved ? '#f0fdf4' : '#fef2f2';
     const borderColor = isApproved ? '#86efac' : '#fca5a5';
+    const heroLabel = isApproved
+      ? 'Leave Request Approved'
+      : 'Leave Request Not Approved';
 
     return this.send(
       to,
       `Your ${leaveTypeName} request has been ${status.toLowerCase()}`,
-      `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
-        <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
-          <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
-          <h2 style="color: #111827; margin: 0 0 24px 0;">Leave Request Update</h2>
-          <p style="color: #374151;">Hi ${firstName},</p>
-          <div style="background: ${bgColor}; border: 1px solid ${borderColor}; border-radius: 6px; padding: 16px; margin: 20px 0;">
-            <p style="color: ${accentColor}; margin: 0; font-weight: 600; font-size: 16px;">
-              Your leave request has been <strong>${isApproved ? 'Approved' : 'Rejected'}</strong>.
-            </p>
-          </div>
-          <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
-            <tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">Leave Type</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #111827; font-weight: 600;">${leaveTypeName}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">From</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(startDate)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">To</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(endDate)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">Duration</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${totalDays} working day${totalDays !== 1 ? 's' : ''}</td>
-            </tr>
-            ${
-              note
-                ? `<tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">Note</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #374151;">${note}</td>
-            </tr>`
-                : ''
-            }
-          </table>
-          <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">© 2026 WorkPhelo. All rights reserved.</p>
-        </div>
-      </div>
-      `,
+      `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Leave Request ${status}</title>
+</head>
+<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, sans-serif;">
+
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; margin:40px auto; border-radius:8px; overflow:hidden;">
+
+    <tr>
+      <td style="padding:20px 30px;">
+        <h2 style="margin:0; font-weight:bold;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h2>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#eef1f4; padding:40px 30px;">
+        <table width="100%">
+          <tr>
+            <td style="font-size:28px; font-weight:600; color:#555;">${heroLabel}</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
+
+        <p>Hi ${firstName},</p>
+
+        <p style="background:${bgColor}; border:1px solid ${borderColor}; border-radius:6px; padding:16px; color:${accentColor}; font-weight:600; font-size:16px; margin:20px 0;">
+          Your leave request has been <strong>${isApproved ? 'Approved' : 'Rejected'}</strong>.
+        </p>
+
+        <p><strong>Request details:</strong></p>
+
+        <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
+          <tr>
+            <td style="padding:8px 0; width:160px; font-weight:500;">Leave type:</td>
+            <td style="padding:8px 0;">${leaveTypeName}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0; font-weight:500;">Start date:</td>
+            <td style="padding:8px 0;">${fmt(startDate)}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0; font-weight:500;">End date:</td>
+            <td style="padding:8px 0;">${fmt(endDate)}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0; font-weight:500;">Working days:</td>
+            <td style="padding:8px 0;">${totalDays} day${totalDays !== 1 ? 's' : ''}</td>
+          </tr>
+        </table>
+
+        ${
+          note
+            ? `
+        <p><strong>Note from your reviewer:</strong></p>
+        <p style="background:#f9f9f9; padding:16px; border-left:4px solid #ff6a00; margin:15px 0; color:#444; line-height:1.5;">
+          ${note}
+        </p>`
+            : ''
+        }
+
+        <p style="color:#777; font-size:14px;">
+          ${
+            isApproved
+              ? 'You can view your full leave history and remaining balances at any time by logging in.'
+              : 'Your leave balance has not been affected by this decision. If you have questions, please speak with your manager or HR administrator.'
+          }
+        </p>
+
+        <p style="margin-top:30px;">${isApproved ? 'Enjoy your time off!' : 'Thank you,'}</p>
+
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 30px; border-top:1px solid #eee;">
+        <h3 style="margin:0;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h3>
+        <p style="color:#888; font-size:12px; margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+      </td>
+    </tr>
+
+  </table>
+
+</body>
+</html>`,
     );
   }
 
@@ -378,36 +434,86 @@ export class EmailService {
     return this.send(
       to,
       `Leave request cancelled — ${employeeFirstName} ${employeeLastName}`,
-      `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
-        <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
-          <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
-          <h2 style="color: #111827; margin: 0 0 24px 0;">Leave Request Cancelled</h2>
-          <p style="color: #374151;">
-            <strong>${employeeFirstName} ${employeeLastName}</strong> has cancelled their leave request. No action is required.
-          </p>
-          <table style="width: 100%; border-collapse: collapse; margin: 24px 0;">
-            <tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px; border-radius: 4px 0 0 0;">Leave Type</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #111827; font-weight: 600;">${leaveTypeName}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">From</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(startDate)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px;">To</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${fmt(endDate)}</td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 12px; background: #f3f4f6; color: #6b7280; font-size: 13px; border-radius: 0 0 0 4px;">Duration</td>
-              <td style="padding: 10px 12px; background: #f9fafb; color: #111827;">${totalDays} working day${totalDays !== 1 ? 's' : ''}</td>
-            </tr>
-          </table>
-          <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">© 2026 WorkPhelo. All rights reserved.</p>
-        </div>
-      </div>
-      `,
+      `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Leave Request Cancelled</title>
+</head>
+<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, sans-serif;">
+
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; margin:40px auto; border-radius:8px; overflow:hidden;">
+
+    <tr>
+      <td style="padding:20px 30px;">
+        <h2 style="margin:0; font-weight:bold;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h2>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#eef1f4; padding:40px 30px;">
+        <table width="100%">
+          <tr>
+            <td style="font-size:28px; font-weight:600; color:#555;">Leave Request Cancelled</td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
+
+        <p><strong>${employeeFirstName} ${employeeLastName}</strong> has cancelled their leave request. No action is required.</p>
+
+        <p><strong>Cancelled request details:</strong></p>
+
+        <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
+          <tr>
+            <td style="padding:8px 0; width:160px; font-weight:500;">Employee:</td>
+            <td style="padding:8px 0;">${employeeFirstName} ${employeeLastName}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0; font-weight:500;">Leave type:</td>
+            <td style="padding:8px 0;">${leaveTypeName}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0; font-weight:500;">Start date:</td>
+            <td style="padding:8px 0;">${fmt(startDate)}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0; font-weight:500;">End date:</td>
+            <td style="padding:8px 0;">${fmt(endDate)}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0; font-weight:500;">Working days:</td>
+            <td style="padding:8px 0;">${totalDays} day${totalDays !== 1 ? 's' : ''}</td>
+          </tr>
+        </table>
+
+        <p style="color:#777; font-size:14px;">
+          The employee's leave balance has been restored and no further action is needed on your part.
+        </p>
+
+        <p style="margin-top:30px;">Thank you,</p>
+
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 30px; border-top:1px solid #eee;">
+        <h3 style="margin:0;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h3>
+        <p style="color:#888; font-size:12px; margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+      </td>
+    </tr>
+
+  </table>
+
+</body>
+</html>`,
     );
   }
 

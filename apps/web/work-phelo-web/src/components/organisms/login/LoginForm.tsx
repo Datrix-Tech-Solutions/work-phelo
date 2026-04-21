@@ -9,8 +9,8 @@ import { LoginPayload } from '@/types/auth';
 import { useLogin, useSuperAdminLogin } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/useToast';
 import { Button } from '@/components/atoms/Button';
-import { GoogleButton } from '@/components/atoms/GoogleButton';
-import { MicrosoftButton } from '@/components/atoms/MicrosoftButton';
+// import { GoogleButton } from '@/components/atoms/GoogleButton';
+// import { MicrosoftButton } from '@/components/atoms/MicrosoftButton';
 import { FormField } from '@/components/molecules/shared/FormField';
 
 interface LoginFormProps {
@@ -21,7 +21,7 @@ interface LoginFormProps {
 }
 
 export function LoginForm({
-  showSocialLogin = false,
+  // showSocialLogin = false,
   tenantSlug,
   forgotPasswordHref = '/forgot-password',
   redirectTo = '/dashboard',
@@ -102,7 +102,7 @@ export function LoginForm({
         </Button>
       </form>
 
-      {showSocialLogin && (
+      {/* {showSocialLogin && (
         <>
           <div className="flex items-center gap-3 my-5">
             <div className="flex-1 h-px bg-gray-200" />
@@ -114,7 +114,7 @@ export function LoginForm({
             <MicrosoftButton className="flex-1" />
           </div>
         </>
-      )}
+      )} */}
     </div>
   );
 }

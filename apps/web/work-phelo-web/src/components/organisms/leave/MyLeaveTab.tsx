@@ -133,11 +133,6 @@ export function MyLeaveTab({ tenantSlug }: Props) {
           totalPages={myTotalPages}
           onPageChange={setMyPage}
           onRowClick={(row) => setDetailRequest(row)}
-          rowActions={(row) =>
-            row.status === 'PENDING'
-              ? [{ label: 'View Details', onClick: () => setDetailRequest(row) }]
-              : [{ label: 'View Details', onClick: () => setDetailRequest(row) }]
-          }
         />
       </div>
 

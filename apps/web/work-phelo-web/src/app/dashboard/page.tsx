@@ -3,14 +3,18 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useTenants } from '@/hooks/useTenants';
+import { useTenants, useDeleteTenant } from '@/hooks/useTenants';
 import { useRouter } from 'next/navigation';
 import { WelcomeBanner } from '@/components/molecules/shared/WelcomeBanner';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
 import { AddCompanyForm } from '@/components/organisms/superadmin/AddCompanyForm';
 import { useAuthStore } from '@/store/auth.store';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { Company } from '@/types/tenant';
 import { Building2, CalendarPlus, ShieldCheck, ShieldX } from 'lucide-react';
 
@@ -37,11 +41,26 @@ const COLUMNS: Column<Company>[] = [
 
 export default function AdminDashboardPage() {
   const router = useRouter();
+  const toast = useToast();
   const user = useAuthStore((s) => s.user);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Company | null>(null);
+
+  const { mutate: deleteTenant, isPending: isDeleting } = useDeleteTenant();
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    deleteTenant(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success(`${deleteTarget.name} deleted`);
+        setDeleteTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to delete company')),
+    });
+  };
 
   /* ── Fetch companies ── */
   const { data: apiData, isLoading } = useTenants();
@@ -172,7 +191,7 @@ export default function AdminDashboardPage() {
             actionButton={{ label: 'New Company', onClick: () => setPanelOpen(true) }}
             rowActions={(row) => [
               { label: 'View', onClick: () => router.push(`/dashboard/${row.id}`) },
-              { label: 'Deactivate', onClick: () => console.log('deact', row.id), danger: true },
+              { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
             ]}
             emptyMessage="No companies onboarded"
             currentPage={page}
@@ -184,6 +203,28 @@ export default function AdminDashboardPage() {
 
       {/* Add Company side panel */}
       <AddCompanyForm isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Company"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isDeleting}
+              loadingText="Deleting..."
+              onClick={handleDelete}
+            >
+              Delete Company
+            </Button>
+          </div>
+        }
+      />
     </>
   );
 }
