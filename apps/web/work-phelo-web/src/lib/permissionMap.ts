@@ -143,7 +143,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.READ_ALL_LEAVES]: ['leave:VIEW'],
   [Permission.READ_TEAM_LEAVES]: ['leave:VIEW'],
   [Permission.READ_OWN_LEAVE]: ['leave:VIEW'],
-  [Permission.MANAGE_LEAVE_TYPES]: ['leave:CREATE', 'leave:EDIT'],
+  [Permission.MANAGE_LEAVE_TYPES]: ['leave:EDIT'],
 
   // Time Management
   [Permission.CLOCK_IN_OUT]: ['attendance:CREATE'],
@@ -165,7 +165,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.MANAGE_PAYROLL_SETTINGS]: ['payroll:EDIT'],
 
   // Appraisal
-  [Permission.CONFIGURE_APPRAISAL]: ['appraisals:EDIT'],
+  [Permission.CONFIGURE_APPRAISAL]: ['appraisals:CREATE'],
   [Permission.CREATE_APPRAISAL]: ['appraisals:CREATE'],
   [Permission.READ_APPRAISALS]: ['appraisals:VIEW'],
   [Permission.READ_TEAM_APPRAISALS]: ['appraisals:VIEW'],

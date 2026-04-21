@@ -67,9 +67,7 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.READ_ALL_LEAVES]: [{ resource: 'leave', actions: ['VIEW'] }],
   [Permission.READ_TEAM_LEAVES]: [{ resource: 'leave', actions: ['VIEW'] }],
   [Permission.READ_OWN_LEAVE]: [{ resource: 'leave', actions: ['VIEW'] }],
-  [Permission.MANAGE_LEAVE_TYPES]: [
-    { resource: 'leave', actions: ['CREATE', 'EDIT'] },
-  ],
+  [Permission.MANAGE_LEAVE_TYPES]: [{ resource: 'leave', actions: ['EDIT'] }],
 
   // ── Time Management ───────────────────────────────────────────────────────
   [Permission.CLOCK_IN_OUT]: [{ resource: 'attendance', actions: ['CREATE'] }],
@@ -108,7 +106,7 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
 
   // ── Appraisals ────────────────────────────────────────────────────────────
   [Permission.CONFIGURE_APPRAISAL]: [
-    { resource: 'appraisals', actions: ['EDIT'] },
+    { resource: 'appraisals', actions: ['CREATE'] },
   ],
   [Permission.CREATE_APPRAISAL]: [
     { resource: 'appraisals', actions: ['CREATE'] },

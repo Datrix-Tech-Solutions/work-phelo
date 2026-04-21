@@ -142,7 +142,6 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'leave', action: PermissionAction.VIEW },
     ],
     [AppPermission.MANAGE_LEAVE_TYPES]: [
-      { resource: 'leave', action: PermissionAction.CREATE },
       { resource: 'leave', action: PermissionAction.EDIT },
     ],
     [AppPermission.CLOCK_IN_OUT]: [
@@ -193,7 +192,7 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'payroll', action: PermissionAction.EDIT },
     ],
     [AppPermission.CONFIGURE_APPRAISAL]: [
-      { resource: 'appraisals', action: PermissionAction.EDIT },
+      { resource: 'appraisals', action: PermissionAction.CREATE },
     ],
     [AppPermission.CREATE_APPRAISAL]: [
       { resource: 'appraisals', action: PermissionAction.CREATE },
