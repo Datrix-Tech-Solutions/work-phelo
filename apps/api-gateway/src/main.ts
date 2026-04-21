@@ -1,16 +1,15 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
+import { ValidationPipe } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const compression = require('compression');
+import { setupSwagger } from './swagger.config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.use(helmet());
-  app.use(compression());
+  app.use(cookieParser());
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -21,15 +20,21 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+      'http://localhost:3000',
+    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  app.setGlobalPrefix('api');
+  setupSwagger(app);
 
   const port = process.env.PORT || 4000;
   await app.listen(port);
   console.log(`API Gateway running on port ${port}`);
+  console.log(`Auth Service:  ${process.env.AUTH_SERVICE_URL}`);
+  console.log(`HR Service:    ${process.env.HR_SERVICE_URL}`);
 }
 
-bootstrap();
+void bootstrap();

@@ -1,0 +1,59 @@
+'use client';
+
+import { use } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuthStore } from '@/store/auth.store';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
+import { LeaveTabs } from '@/components/molecules/leave/LeaveTabs';
+import { MyLeaveTab } from '@/components/organisms/leave/MyLeaveTab';
+import { LeaveRequestsTab } from '@/components/organisms/leave/LeaveRequestsTab';
+
+const VALID_TABS = ['my', 'requests'] as const;
+type Tab = (typeof VALID_TABS)[number];
+
+export default function LeavePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
+  const { tenantSlug } = use(params);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const user = useAuthStore((s) => s.user);
+  // isManager comes from the employee profile (department head), not from permissions.
+  // Admins (TENANT_ADMIN) bypass permission checks and see requests only — no HR profile.
+  const hasHRProfile = user?.role === 'EMPLOYEE';
+  const isAdmin = user?.role === 'TENANT_ADMIN';
+  const canApproveLeave = usePermission(Permission.APPROVE_TEAM_LEAVE);
+  // Department head OR explicitly granted approve-leave permission
+  const canSeeRequests = user?.isManager === true || canApproveLeave || isAdmin;
+
+  // Employees and managers land on their own leave first.
+  // Admins have no personal HR profile so they land on requests.
+  const defaultTab: Tab = hasHRProfile ? 'my' : 'requests';
+  const tabParam = searchParams.get('tab') as Tab | null;
+  const activeTab: Tab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : defaultTab;
+
+  const handleTabChange = (tab: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+  return (
+    <div className="p-8 flex flex-col gap-6 h-full">
+      <div className="shrink-0">
+        <h1 className="text-xl font-bold text-gray-900">Leave</h1>
+        <p className="text-sm text-gray-400 mt-0.5">Manage your leave requests and balances</p>
+      </div>
+
+      <LeaveTabs
+        activeTab={activeTab}
+        isManager={canSeeRequests}
+        isEmployee={hasHRProfile}
+        onTabChange={handleTabChange}
+      />
+
+      {activeTab === 'my' && hasHRProfile && <MyLeaveTab tenantSlug={tenantSlug} />}
+      {activeTab === 'requests' && canSeeRequests && <LeaveRequestsTab tenantSlug={tenantSlug} />}
+    </div>
+  );
+}

@@ -1,13 +1,59 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["notify"]
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  PUSH
+
+  @@schema("notify")
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+
+  @@schema("notify")
+}
+
+enum NotificationType {
+  EMAIL_VERIFICATION
+  INVITE_USER
+  PASSWORD_RESET_LINK
+  PASSWORD_RESET_OTP
+  SMS_OTP
+  PUSH_GENERAL
+  EMPLOYEE_TERMINATION
+  LEAVE_REQUESTED
+  LEAVE_REVIEWED
+  LEAVE_CANCELLED
+
+  @@schema("notify")
+}
+
+model NotificationLog {
+  id        String             @id @default(uuid())
+  tenantId  String?
+  userId    String?
+  type      NotificationType
+  channel   NotificationChannel
+  recipient String
+  subject   String?
+  status    NotificationStatus @default(PENDING)
+  error     String?
+  metadata  Json?
+  sentAt    DateTime?
+  createdAt DateTime           @default(now())
+
+  @@schema("notify")
 }

@@ -1,17 +1,18 @@
 services:
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: erp-rabbitmq
+  postgres:
+    image: postgres:16-alpine
+    container_name: erp-postgres-dev
+    restart: unless-stopped
     ports:
-      - '5672:5672'
-      - '15672:15672'
+      - '127.0.0.1:5432:5432'
     environment:
-      RABBITMQ_DEFAULT_USER: erp
-      RABBITMQ_DEFAULT_PASS: erppassword
+      POSTGRES_USER: erp
+      POSTGRES_PASSWORD: erppassword
+      POSTGRES_DB: workphelo
     volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD', 'rabbitmq-diagnostics', 'ping']
+      test: ['CMD-SHELL', 'pg_isready -U erp -d workphelo']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -19,8 +20,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: erp-redis
-    ports:
-      - '6379:6379'
+    restart: unless-stopped
     volumes:
       - redis_data:/data
     healthcheck:
@@ -29,6 +29,88 @@ services:
       timeout: 5s
       retries: 5
 
+  api-gateway:
+    image: ghcr.io/datrix-tech-solutions/work-phelo/api-gateway:dev
+    container_name: erp-gateway-dev
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:4010:4000'
+    env_file:
+      - ../apps/api-gateway/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  auth-service:
+    image: ghcr.io/datrix-tech-solutions/work-phelo/auth-service:dev
+    container_name: erp-auth-dev
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:4001:4001'
+    env_file:
+      - ../apps/auth-service/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  hr-service:
+    image: ghcr.io/datrix-tech-solutions/work-phelo/hr-service:dev
+    container_name: erp-hr-dev
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:4002:4002'
+    env_file:
+      - ../apps/hr-service/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  notification-service:
+    image: ghcr.io/datrix-tech-solutions/work-phelo/notification-service:dev
+    container_name: erp-notification-dev
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:4004:4004'
+    env_file:
+      - ../apps/notification-service/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  subscription-service:
+    image: ghcr.io/datrix-tech-solutions/work-phelo/subscription-service:dev
+    container_name: erp-subscription-dev
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:4005:4005'
+    env_file:
+      - ../apps/subscription-service/.env
+  marketing-service:
+    image: ghcr.io/datrix-tech-solutions/work-phelo/marketing-service:dev
+    container_name: erp-marketing-dev
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:4006:4006'
+    env_file:
+      - ../apps/marketing-service/.env
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  nextjs:
+    image: ghcr.io/datrix-tech-solutions/work-phelo/nextjs-web:dev
+    container_name: erp-nextjs-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://dev.workphelo.datrixtechsolutions.com/api/v1
+    ports:
+      - "127.0.0.1:3000:3000"
+
 volumes:
-  rabbitmq_data:
+  postgres_data:
   redis_data:

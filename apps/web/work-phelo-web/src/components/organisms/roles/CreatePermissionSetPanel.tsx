@@ -1,0 +1,132 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+import { useForm } from 'react-hook-form';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Button } from '@/components/atoms/Button';
+import { RoleFormFields, RoleFormValues } from '@/components/molecules/roles/RoleFormFields';
+import {
+  PermissionMatrix,
+  FeaturePermissions,
+} from '@/components/molecules/roles/PermissionMatrix';
+import { FEATURE_PERMISSION_MAPPING } from '@/lib/permissionMap';
+import { usePermissionResources } from '@/hooks/useRoles';
+import type { PermissionSetResourceDto, PermissionAction, PermissionSet } from '@/types/roles';
+import { reverseTransformFeaturePermissions } from '@/lib/permissionMap';
+
+export interface PermissionSetSubmitValues {
+  name: string;
+  description?: string;
+  resources: PermissionSetResourceDto[];
+}
+
+interface CreatePermissionSetPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (values: PermissionSetSubmitValues) => void;
+  isSubmitting?: boolean;
+  /** Pass an existing set to open in edit mode */
+  editTarget?: PermissionSet | null;
+}
+
+function PanelInner({
+  onClose,
+  onSubmit,
+  isSubmitting,
+  editTarget,
+}: Omit<CreatePermissionSetPanelProps, 'isOpen'>) {
+  const { data: resources = [] } = usePermissionResources();
+
+  const resourceIdMap = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of resources) m.set(r.name, r.id);
+    return m;
+  }, [resources]);
+
+  const initialPermissions = useMemo<FeaturePermissions>(() => {
+    if (!editTarget) return {};
+    const backendPerms: Record<string, string[]> = {};
+    for (const r of editTarget.resources) {
+      const name = r.resource.name;
+      if (!backendPerms[name]) backendPerms[name] = [];
+      backendPerms[name].push(r.action);
+    }
+    return reverseTransformFeaturePermissions(backendPerms);
+  }, [editTarget]);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<RoleFormValues>({
+    defaultValues: {
+      name: editTarget?.name ?? '',
+      description: editTarget?.description ?? '',
+    },
+  });
+
+  const [featurePermissions, setFeaturePermissions] =
+    useState<FeaturePermissions>(initialPermissions);
+
+  const onValid = (values: RoleFormValues) => {
+    const seen = new Set<string>();
+    const resourceDtos: PermissionSetResourceDto[] = [];
+
+    for (const [featureKey, uiActions] of Object.entries(featurePermissions)) {
+      if (!uiActions.length) continue;
+      const mapping = FEATURE_PERMISSION_MAPPING[featureKey];
+      if (!mapping) continue;
+      for (const uiAction of uiActions) {
+        for (const { resource, action } of mapping[uiAction] ?? []) {
+          const resourceId = resourceIdMap.get(resource);
+          if (!resourceId) continue;
+          const key = `${resourceId}:${action}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          resourceDtos.push({ resourceId, action: action as PermissionAction });
+        }
+      }
+    }
+
+    onSubmit({
+      name: values.name,
+      description: values.description || undefined,
+      resources: resourceDtos,
+    });
+  };
+
+  const isEdit = !!editTarget;
+
+  return (
+    <SidePanel
+      isOpen
+      onClose={onClose}
+      title={isEdit ? 'Edit Permission Set' : 'Create Permission Set'}
+      description="Define a reusable bundle of permissions that can be assigned to users."
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button isLoading={isSubmitting} loadingText="Saving..." onClick={handleSubmit(onValid)}>
+            {isEdit ? 'Save Changes' : 'Create Set'}
+          </Button>
+        </div>
+      }
+    >
+      <RoleFormFields register={register} errors={errors} />
+      <PermissionMatrix value={featurePermissions} onChange={setFeaturePermissions} />
+    </SidePanel>
+  );
+}
+
+export function CreatePermissionSetPanel({ isOpen, ...props }: CreatePermissionSetPanelProps) {
+  if (!isOpen) {
+    return (
+      <SidePanel isOpen={false} onClose={props.onClose} title="">
+        {null}
+      </SidePanel>
+    );
+  }
+  return <PanelInner key={props.editTarget?.id ?? 'new'} {...props} />;
+}

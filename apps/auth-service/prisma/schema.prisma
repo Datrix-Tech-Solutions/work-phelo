@@ -1,66 +1,364 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["auth"]
 }
 
-model Tenant {
-  id         String       @id @default(uuid())
-  name       String
-  slug       String       @unique
-  subdomain  String?      @unique
-  logo       String?
-  status     TenantStatus @default(PENDING)
-  country    String       @default("GH")
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  users      User[]
+// ── Enums ──────────────────────────────────────────────────────────────────
 
-  @@map("tenants")
-}
+enum UserRole {
+  SUPER_ADMIN
+  TENANT_ADMIN
+  EMPLOYEE
 
-model User {
-  id           String    @id @default(uuid())
-  tenantId     String
-  email        String    @unique
-  passwordHash String
-  roleType     RoleType  @default(EMPLOYEE)
-  isActive     Boolean   @default(true)
-  mfaEnabled   Boolean   @default(false)
-  mfaSecret    String?
-  lastLogin    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  tenant       Tenant    @relation(fields: [tenantId], references: [id])
-  refreshTokens RefreshToken[]
-
-  @@index([tenantId])
-  @@map("users")
-}
-
-model RefreshToken {
-  id        String   @id @default(uuid())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("refresh_tokens")
+  @@schema("auth")
 }
 
 enum TenantStatus {
   PENDING
   ACTIVE
   SUSPENDED
-  REJECTED
+  CANCELLED
+
+  @@schema("auth")
 }
 
-enum RoleType {
-  SUPER_ADMIN
-  TENANT_ADMIN
-  EMPLOYEE
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  PENDING_VERIFICATION
+
+  @@schema("auth")
+}
+
+enum OtpType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  MFA_SMS
+
+  @@schema("auth")
+}
+
+enum SocialProvider {
+  GOOGLE
+  MICROSOFT
+
+  @@schema("auth")
+}
+
+enum MfaMethod {
+  TOTP
+  SMS
+
+  @@schema("auth")
+}
+
+enum PermissionAction {
+  VIEW
+  CREATE
+  EDIT
+  DELETE
+  APPROVE
+  RUN
+  EXPORT
+  ASSIGN
+
+  @@schema("auth")
+}
+
+// ── Tenant ─────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id             String       @id @default(uuid())
+  name           String
+  slug           String       @unique
+  email          String       @unique
+  phone          String?
+  address        String?
+  country        String       @default("GH")
+  status         TenantStatus @default(PENDING)
+  moduleConfig   Json         @default("{\"hr\": false, \"accounting\": false, \"marketing\": false}")
+  featureConfig  Json         @default("{\"hr\": {\"leave\": false, \"time\": false, \"payroll\": false, \"appraisals\": false, \"projects\": false, \"assets\": false}, \"marketing\": {\"leads\": false, \"pipeline\": false, \"contacts\": false}}")
+  logoUrl        String?
+  website        String?
+  industry       String?
+  size           String?
+  subscriptionId String?
+  trialEndsAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  users           User[]
+  companyRoles    CompanyRole[]
+  permissionSets  PermissionSet[]
+  userPermissions UserPermission[]
+
+  @@schema("auth")
+}
+
+// ── Resource ───────────────────────────────────────────────────────────────
+// Platform-wide resource definitions. Seeded once, never per-tenant.
+// resource.tenantId = null means it is a platform resource available to all tenants.
+
+model Resource {
+  id          String   @id @default(uuid())
+  name        String   @unique  // e.g. "employees", "leave", "payroll"
+  module      String            // e.g. "HR", "AUTH", "FINANCE"
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  userPermissions       UserPermission[]
+  permissionSetResources PermissionSetResource[]
+
+  @@schema("auth")
+}
+
+// ── UserPermission ─────────────────────────────────────────────────────────
+// Direct per-user permission grants. Never hard-deleted.
+// Revoke = soft update: is_active=false, revoked_by, revoked_at.
+
+model UserPermission {
+  id         String           @id @default(uuid())
+  tenantId   String                               // leading filter — always scope by this first
+  userId     String
+  resourceId String
+  action     PermissionAction
+  grantedBy  String                               // userId of who granted
+  grantedAt  DateTime         @default(now())
+  expiresAt  DateTime?                            // null = never expires
+  revokedBy  String?                              // userId of who revoked
+  revokedAt  DateTime?
+  isActive   Boolean          @default(true)      // false = soft-revoked
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User     @relation("UserPermissions", fields: [userId], references: [id], onDelete: Cascade)
+  resource Resource @relation(fields: [resourceId], references: [id])
+  granter  User     @relation("GrantedPermissions", fields: [grantedBy], references: [id])
+
+  @@unique([userId, resourceId, action])
+  @@schema("auth")
+}
+
+// ── PermissionSet ──────────────────────────────────────────────────────────
+// A named bundle of resource+action permissions. Per-tenant.
+// e.g. "HR Manager Set" = VIEW employees + APPROVE leave + VIEW attendance
+
+model PermissionSet {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)   // system sets cannot be deleted
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant    Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  resources PermissionSetResource[]
+  users     UserPermissionSet[]
+
+  @@unique([tenantId, name])
+  @@schema("auth")
+}
+
+// ── PermissionSetResource ──────────────────────────────────────────────────
+// Which resource+action combinations belong to a permission set.
+
+model PermissionSetResource {
+  id              String           @id @default(uuid())
+  permissionSetId String
+  resourceId      String
+  action          PermissionAction
+
+  permissionSet PermissionSet @relation(fields: [permissionSetId], references: [id], onDelete: Cascade)
+  resource      Resource      @relation(fields: [resourceId], references: [id])
+
+  @@unique([permissionSetId, resourceId, action])
+  @@schema("auth")
+}
+
+// ── UserPermissionSet ──────────────────────────────────────────────────────
+// Which users are assigned to which permission sets.
+
+model UserPermissionSet {
+  id              String   @id @default(uuid())
+  userId          String
+  permissionSetId String
+  grantedBy       String
+  grantedAt       DateTime @default(now())
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissionSet PermissionSet @relation(fields: [permissionSetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, permissionSetId])
+  @@schema("auth")
+}
+
+// ── CompanyRole ────────────────────────────────────────────────────────────
+
+model CompanyRole {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  permissions Json     @default("{\"hr\": \"none\", \"accounting\": \"none\", \"marketing\": \"none\"}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users   User[]
+
+  @@unique([tenantId, name])
+  @@schema("auth")
+}
+
+// ── User ───────────────────────────────────────────────────────────────────
+
+model User {
+  id                  String      @id @default(uuid())
+  tenantId            String
+  email               String
+  password            String?
+  firstName           String
+  lastName            String
+  phone               String?
+  role                UserRole    @default(EMPLOYEE)
+  companyRoleId       String?
+  status              UserStatus  @default(PENDING_VERIFICATION)
+  avatarUrl           String?
+  isMfaEnabled        Boolean     @default(false)
+  mfaMethod           MfaMethod?
+  mfaSecret           String?
+  forcePasswordReset  Boolean     @default(false)
+  failedLoginAttempts Int         @default(0)
+  lockedUntil         DateTime?
+  inviteToken         String?     @unique
+  inviteExpiresAt     DateTime?
+  emailVerifiedAt     DateTime?
+  lastLoginAt         DateTime?
+  passwordChangedAt   DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  companyRole         CompanyRole?        @relation(fields: [companyRoleId], references: [id])
+  refreshTokens       RefreshToken[]
+  otpCodes            OtpCode[]
+  socialAccounts      SocialAccount[]
+  userPermissions     UserPermission[]    @relation("UserPermissions")
+  grantedPermissions  UserPermission[]    @relation("GrantedPermissions")
+  permissionSets      UserPermissionSet[]
+
+  @@unique([tenantId, email])
+  @@schema("auth")
+}
+
+// ── RefreshToken ───────────────────────────────────────────────────────────
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  token       String   @unique
+  expiresAt   DateTime
+  ipAddress   String?
+  userAgent   String?
+  deviceName  String?
+  deviceId    String?
+  isRevoked   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("auth")
+}
+
+// ── OtpCode ────────────────────────────────────────────────────────────────
+
+model OtpCode {
+  id          String    @id @default(uuid())
+  userId      String
+  type        OtpType
+  code        String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  attempts    Int       @default(0)
+  lockedUntil DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@schema("auth")
+}
+
+// ── SocialAccount ──────────────────────────────────────────────────────────
+
+model SocialAccount {
+  id         String         @id @default(uuid())
+  userId     String
+  provider   SocialProvider
+  providerId String
+  email      String?
+  createdAt  DateTime       @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@schema("auth")
+}
+
+// ── AuditLog ───────────────────────────────────────────────────────────────
+// Immutable — no updates or deletes ever. Append-only.
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REVOKE
+  LOGIN
+  LOGOUT
+  EXPORT
+  ASSIGN
+  RUN
+
+  @@schema("auth")
+}
+
+enum AuditStatus {
+  SUCCESS
+  FAILURE
+
+  @@schema("auth")
+}
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  tenantId      String
+  userId        String?
+  userEmail     String?
+  userRole      String?
+  action        AuditAction
+  resource      String
+  resourceId    String?
+  changes       Json?
+  ipAddress     String?
+  userAgent     String?
+  status        AuditStatus @default(SUCCESS)
+  failureReason String?
+  createdAt     DateTime    @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, resource])
+  @@index([tenantId, userId])
+  @@schema("auth")
 }

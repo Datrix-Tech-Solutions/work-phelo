@@ -12,12 +12,23 @@ build/
 .env.local
 .env.*.local
 
+# Local session/cookie artifacts
+*.cookies
+
 # Turbo cache
 .turbo/
 
 # Logs
 *.log
 npm-debug.log*
+*.pid
+*.pid.lock
+
+# Local caches and temp files
+.eslintcache
+*.tsbuildinfo
+*.tmp
+*.swp
 
 # OS
 .DS_Store
@@ -32,3 +43,22 @@ prisma/migrations/
 
 # Test coverage
 coverage/
+apps/*/test/
+**/*.spec.ts
+**/*.e2e-spec.ts
+prisma/generated/
+packages/*/src/*.js
+packages/*/src/*.js.map
+packages/*/src/*.d.ts
+packages/*/src/*.d.ts.map
+
+# Prisma generated clients
+**/prisma/generated/
+CLAUDE.md
+HOME
+
+# Local UI specs / design references
+roles-ui-spec/
+
+# Local docs drafts
+docs/

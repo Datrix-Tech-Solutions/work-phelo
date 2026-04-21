@@ -1,0 +1,627 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["hr"]
+}
+
+// ── Enums ──────────────────────────────────────────────────────────────────
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERN
+
+  @@schema("hr")
+}
+
+enum EmploymentStatus {
+  ACTIVE
+  PROBATION
+  SUSPENDED
+  OFFBOARDED
+
+  @@schema("hr")
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+
+  @@schema("hr")
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  DIVORCED
+  WIDOWED
+
+  @@schema("hr")
+}
+
+enum LeaveRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+
+  @@schema("hr")
+}
+
+enum TimeCorrectionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+
+  @@schema("hr")
+}
+
+enum PayrollStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PAID
+
+  @@schema("hr")
+}
+
+enum AppraisalStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@schema("hr")
+}
+
+enum ReviewStatus {
+  PENDING
+  SUBMITTED
+
+  @@schema("hr")
+}
+
+enum ShiftType {
+  MORNING
+  AFTERNOON
+  NIGHT
+  FLEXIBLE
+
+  @@schema("hr")
+}
+
+enum DocumentType {
+  CONTRACT
+  ID_CARD
+  PASSPORT
+  CERTIFICATE
+  OFFER_LETTER
+  NDA
+  OTHER
+
+  @@schema("hr")
+}
+
+enum AllowanceType {
+  TRANSPORT
+  HOUSING
+  MEDICAL
+  OTHER
+
+  @@schema("hr")
+}
+
+// ── Branch ───────────────────────────────────────────────────────────────
+
+model Branch {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  code        String?
+  address     String?
+  city        String?
+  region      String?
+  country     String?
+  phone       String?
+  email       String?
+  managerId   String?
+  isActive    Boolean  @default(true)
+  isHeadOffice Boolean @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employees   Employee[]
+
+  @@unique([tenantId, name])
+  @@schema("hr")
+}
+
+// ── Department ────────────────────────────────────────────────────────────
+
+model Department {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  managerId   String?
+  parentId    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent      Department?  @relation("DepartmentHierarchy", fields: [parentId], references: [id])
+  children    Department[] @relation("DepartmentHierarchy")
+  employees   Employee[]
+
+  @@unique([tenantId, name])
+  @@schema("hr")
+}
+
+// ── Employee ──────────────────────────────────────────────────────────────
+
+model Employee {
+  id                String           @id @default(uuid())
+  tenantId          String
+  userId            String?          @unique
+  employeeNumber    String
+  firstName         String
+  lastName          String
+  email             String
+  phone             String?
+  gender            Gender?
+  dateOfBirth       DateTime?
+  maritalStatus     MaritalStatus?
+  nationality       String?
+  address           String?
+  city              String?
+  region            String?
+  emergencyName     String?
+  emergencyPhone    String?
+  emergencyRelation String?
+  departmentId      String?
+  branchId          String?
+  managerId         String?
+  jobTitle          String
+  employmentType    EmploymentType   @default(FULL_TIME)
+  employmentStatus      EmploymentStatus @default(PROBATION)
+  statusChangedAt       DateTime?
+  statusChangedById     String?
+  statusChangedByEmail  String?
+  hireDate          DateTime
+  probationEndsAt   DateTime?
+  contractEndDate   DateTime?
+  offboardedAt      DateTime?
+  offboardReason    String?
+  bankName          String?
+  bankAccountNumber String?
+  bankBranch        String?
+  nationalId        String?
+  ssnit             String?
+  tinNumber         String?
+  basicSalary       Decimal          @db.Decimal(15, 2)
+  avatarUrl         String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  department        Department?       @relation(fields: [departmentId], references: [id])
+  branch            Branch?           @relation(fields: [branchId], references: [id])
+  leaveBalances     LeaveBalance[]
+  leaveRequests     LeaveRequest[]
+  clockRecords      ClockRecord[]
+  timesheets        Timesheet[]
+  timeCorrections   TimeCorrection[]
+  schedules         ShiftSchedule[]
+  payrollItems      PayrollItem[]
+  appraisals        Appraisal[]       @relation("AppraisalEmployee")
+  managedAppraisals Appraisal[]       @relation("AppraisalManager")
+  documents         EmployeeDocument[]
+  allowances        EmployeeAllowance[]
+  offboarding       OffboardingRecord?
+
+  @@unique([tenantId, employeeNumber])
+  @@unique([tenantId, email])
+  @@schema("hr")
+}
+
+// ── Offboarding Record ────────────────────────────────────────────────────────
+
+enum OffboardReason {
+  RESIGNATION
+  TERMINATION
+  CONTRACT_ENDED
+  RETIREMENT
+  REDUNDANCY
+  OTHER
+
+  @@schema("hr")
+}
+
+model OffboardingRecord {
+  id            String          @id @default(uuid())
+  tenantId      String
+  employeeId    String          @unique
+  reason        OffboardReason
+  otherReason   String?
+  lastWorkingDate DateTime
+  exitNotes     String?
+  isDraft       Boolean         @default(true)
+  completedAt   DateTime?
+  completedById String?
+  completedByEmail String?
+
+  // Clearance checklist — each item records who ticked it and when
+  assetReturnDone       Boolean   @default(false)
+  assetReturnDoneById   String?
+  assetReturnDoneByEmail String?
+  assetReturnDoneAt     DateTime?
+
+  hrClearanceDone       Boolean   @default(false)
+  hrClearanceDoneById   String?
+  hrClearanceDoneByEmail String?
+  hrClearanceDoneAt     DateTime?
+
+  financeClearanceDone  Boolean   @default(false)
+  financeClearanceDoneById String?
+  financeClearanceDoneByEmail String?
+  financeClearanceDoneAt DateTime?
+
+  managerApprovalDone   Boolean   @default(false)
+  managerApprovalDoneById String?
+  managerApprovalDoneByEmail String?
+  managerApprovalDoneAt DateTime?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@schema("hr")
+}
+
+// ── Employee Document ─────────────────────────────────────────────────────
+
+model EmployeeDocument {
+  id           String       @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  type         DocumentType
+  name         String
+  url          String
+  uploadedBy   String
+  expiresAt    DateTime?
+  createdAt    DateTime     @default(now())
+
+  employee     Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@schema("hr")
+}
+
+// ── Allowance ─────────────────────────────────────────────────────────────
+
+model EmployeeAllowance {
+  id           String        @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  type         AllowanceType
+  name         String
+  amount       Decimal       @db.Decimal(15, 2)
+  isRecurring  Boolean       @default(true)
+  effectiveFrom DateTime
+  effectiveTo  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  employee     Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@schema("hr")
+}
+
+// ── Leave ─────────────────────────────────────────────────────────────────
+
+model LeaveType {
+  id               String           @id @default(uuid())
+  tenantId         String
+  name             String
+  daysAllowed      Int
+  isCarryOver      Boolean          @default(false)
+  maxCarryOverDays Int?
+  requiresApproval Boolean          @default(true)
+  isPaid           Boolean          @default(true)
+  isActive         Boolean          @default(true)
+  isDefault        Boolean          @default(false)
+  applicableTo     EmploymentType[] @default([])
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  balances         LeaveBalance[]
+  requests         LeaveRequest[]
+
+  @@unique([tenantId, name])
+  @@schema("hr")
+}
+
+model LeaveBalance {
+  id           String    @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  leaveTypeId  String
+  year         Int
+  totalDays    Int
+  usedDays     Int       @default(0)
+  pendingDays  Int       @default(0)
+  remainingDays Int
+
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@schema("hr")
+}
+
+model LeaveRequest {
+  id           String             @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  leaveTypeId  String
+  startDate    DateTime
+  endDate      DateTime
+  totalDays    Int
+  reason       String?
+  status       LeaveRequestStatus @default(PENDING)
+  approvedBy   String?
+  approvedAt   DateTime?
+  rejectedBy   String?
+  rejectedAt   DateTime?
+  rejectionNote String?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  employee     Employee           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType          @relation(fields: [leaveTypeId], references: [id])
+
+  @@schema("hr")
+}
+
+// ── Time Management ───────────────────────────────────────────────────────
+
+model ClockRecord {
+  id          String    @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  clockIn     DateTime
+  clockOut    DateTime?
+  date        DateTime
+  hoursWorked Decimal?  @db.Decimal(5, 2)
+  ipAddress   String?
+  location    String?
+  note        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@schema("hr")
+}
+
+model Timesheet {
+  id           String   @id @default(uuid())
+  tenantId     String
+  employeeId   String
+  weekStart    DateTime
+  weekEnd      DateTime
+  totalHours   Decimal  @db.Decimal(6, 2)
+  regularHours Decimal  @db.Decimal(6, 2)
+  overtimeHours Decimal @db.Decimal(6, 2) @default(0)
+  isApproved   Boolean  @default(false)
+  approvedBy   String?
+  approvedAt   DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, weekStart])
+  @@schema("hr")
+}
+
+model TimeCorrection {
+  id            String               @id @default(uuid())
+  tenantId      String
+  employeeId    String
+  date          DateTime
+  originalIn    DateTime?
+  originalOut   DateTime?
+  requestedIn   DateTime?
+  requestedOut  DateTime?
+  reason        String
+  status        TimeCorrectionStatus @default(PENDING)
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  reviewNote    String?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  employee      Employee             @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@schema("hr")
+}
+
+model ShiftSchedule {
+  id          String    @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  shiftType   ShiftType
+  startTime   String
+  endTime     String
+  dayOfWeek   Int[]
+  effectiveFrom DateTime
+  effectiveTo DateTime?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@schema("hr")
+}
+
+// ── Payroll ───────────────────────────────────────────────────────────────
+
+model PayrollRun {
+  id           String        @id @default(uuid())
+  tenantId     String
+  month        Int
+  year         Int
+  status       PayrollStatus @default(DRAFT)
+  totalGross   Decimal       @db.Decimal(15, 2)
+  totalNet     Decimal       @db.Decimal(15, 2)
+  totalSSNIT   Decimal       @db.Decimal(15, 2)
+  totalPAYE    Decimal       @db.Decimal(15, 2)
+  runBy        String
+  approvedBy   String?
+  approvedAt   DateTime?
+  paidAt       DateTime?
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  items        PayrollItem[]
+
+  @@unique([tenantId, month, year])
+  @@schema("hr")
+}
+
+model PayrollItem {
+  id              String     @id @default(uuid())
+  tenantId        String
+  payrollRunId    String
+  employeeId      String
+  basicSalary     Decimal    @db.Decimal(15, 2)
+  totalAllowances Decimal    @db.Decimal(15, 2) @default(0)
+  overtimePay     Decimal    @db.Decimal(15, 2) @default(0)
+  bonus           Decimal    @db.Decimal(15, 2) @default(0)
+  thirteenthMonth Decimal    @db.Decimal(15, 2) @default(0)
+  grossSalary     Decimal    @db.Decimal(15, 2)
+  employeeSSNIT   Decimal    @db.Decimal(15, 2)
+  employerSSNIT   Decimal    @db.Decimal(15, 2)
+  payeTax         Decimal    @db.Decimal(15, 2)
+  totalDeductions Decimal    @db.Decimal(15, 2)
+  netSalary       Decimal    @db.Decimal(15, 2)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  payrollRun      PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee        Employee   @relation(fields: [employeeId], references: [id])
+
+  @@unique([payrollRunId, employeeId])
+  @@schema("hr")
+}
+
+// ── Appraisal ─────────────────────────────────────────────────────────────
+
+model AppraisalCycle {
+  id          String    @id @default(uuid())
+  tenantId    String
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean   @default(true)
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  appraisals  Appraisal[]
+
+  @@schema("hr")
+}
+
+model Appraisal {
+  id          String          @id @default(uuid())
+  tenantId    String
+  cycleId     String
+  employeeId  String
+  managerId   String?
+  status      AppraisalStatus @default(DRAFT)
+
+  selfScore   Int?
+  selfComment String?
+  selfStatus  ReviewStatus    @default(PENDING)
+  selfSubmittedAt DateTime?
+
+  managerScore   Int?
+  managerComment String?
+  managerStatus  ReviewStatus @default(PENDING)
+  managerSubmittedAt DateTime?
+
+  finalScore  Int?
+  finalComment String?
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  cycle       AppraisalCycle  @relation(fields: [cycleId], references: [id])
+  employee    Employee        @relation("AppraisalEmployee", fields: [employeeId], references: [id])
+  manager     Employee?       @relation("AppraisalManager", fields: [managerId], references: [id])
+
+  @@unique([cycleId, employeeId])
+  @@schema("hr")
+}
+
+model Announcement {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  body        String
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@schema("hr")
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  tenantId   String
+  userId     String
+  type       String
+  message    String
+  link       String?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, isRead])
+  @@index([tenantId, userId])
+  @@schema("hr")
+}
+
+model PublicHoliday {
+  id        String   @id @default(uuid())
+  tenantId  String
+  name      String
+  date      DateTime
+  createdAt DateTime @default(now())
+
+  @@unique([tenantId, date])
+  @@schema("hr")
+}
+
+model TenantConfig {
+  id         String   @id @default(uuid())
+  tenantId   String   @unique
+  adminEmail String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@schema("hr")
+}

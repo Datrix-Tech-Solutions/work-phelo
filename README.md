@@ -1,159 +1,211 @@
-# Turborepo starter
+# WorkPhelo ERP
 
-This Turborepo starter is maintained by the Turborepo core team.
+## Live Dev Environment
 
-## Using this example
+| Service      | URL                                   |
+| ------------ | ------------------------------------- |
+| Web App      | http://157.245.220.205                |
+| Auth Swagger | http://157.245.220.205/auth-docs/docs |
+| HR Swagger   | http://157.245.220.205/hr-docs/docs   |
+| API Base URL | http://157.245.220.205/api/v1         |
 
-Run the following command:
+## Architecture
 
-```sh
-npx create-turbo@latest
+WorkPhelo is a **NestJS microservices monorepo** managed with Turborepo.
+
+```
+work-phelo/
+├── apps/
+│   ├── api-gateway/
+│   ├── auth-service/
+│   ├── hr-service/
+│   ├── notification-service/
+│   ├── subscription-service/
+│   ├── marketing-service/
+│   └── web/
+│       └── work-phelo-web/
+├── packages/
+│   ├── types/
+│   ├── schemas/
+│   ├── utils/
+│   └── config/
+└── infrastructure/
+    └── docker-compose.dev.yml
 ```
 
-## What's inside?
+## Tech Stack
 
-This Turborepo includes the following packages/apps:
+**Backend**
 
-### Apps and Packages
+- NestJS microservices
+- PostgreSQL 16 (multi-schema)
+- RabbitMQ (async messaging)
+- Redis (caching, sessions)
+- Prisma ORM
+- JWT authentication (httpOnly cookies)
+- Resend (transactional email)
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+**Frontend**
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+- Next.js 16 (App Router)
+- TypeScript
+- Tailwind CSS
+- Zustand (state management)
+- React Query (server state)
+- Atomic design system
 
-### Utilities
+**Infrastructure**
 
-This Turborepo has some additional tools already setup for you:
+- Docker + Docker Compose
+- GitHub Actions CI/CD
+- DigitalOcean (Ubuntu 24)
+- Nginx (reverse proxy)
+- GitHub Container Registry (GHCR)
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+---
 
-### Build
+## Getting Started
 
-To build all apps and packages, run the following command:
+### Prerequisites
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+- Node.js 20+
+- Docker Desktop
+- Git
 
-```sh
-cd my-turborepo
-turbo build
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Datrix-Tech-Solutions/work-phelo.git
+
+cd work-phelo
 ```
 
-Without global `turbo`, use your package manager:
+### 2. Install dependencies
 
-```sh
-cd my-turborepo
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
+```bash
+npm install
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 3. Set up environment variables
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+Each service has its own `.env` file. Copy the examples:
 
-```sh
-turbo build --filter=docs
+```bash
+cp apps/auth-service/.env.example apps/auth-service/.env
+
+cp apps/hr-service/.env.example apps/hr-service/.env
+
+cp apps/notification-service/.env.example apps/notification-service/.env
+
+cp apps/web/work-phelo-web/.env.example apps/web/work-phelo-web/.env.local
 ```
 
-Without global `turbo`:
+### 4. Start infrastructure
 
-```sh
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+```bash
+docker compose -f infrastructure/docker-compose.dev.yml up -d postgres rabbitmq redis
 ```
 
-### Develop
+### 5. Run migrations and seed
 
-To develop all apps and packages, run the following command:
+```bash
+# Auth service
+cd apps/auth-service
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+npx prisma migrate dev
 
-```sh
-cd my-turborepo
-turbo dev
+npx prisma db seed
+cd ../..
+
+# HR service
+cd apps/hr-service
+
+npx prisma migrate dev
+
+cd ../..
 ```
 
-Without global `turbo`, use your package manager:
+### 6. Start services
 
-```sh
-cd my-turborepo
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
+```bash
+# Start all backend services
+npm run dev
+
+# Or start a specific service
+npx turbo dev --filter=auth-service
+
+npx turbo dev --filter=hr-service
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+### 7. Start the frontend
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+```bash
+cd apps/web/work-phelo-web
 
-```sh
-turbo dev --filter=web
+npm install
+
+npm run dev
+# → http://localhost:3000
 ```
 
-Without global `turbo`:
+---
 
-```sh
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+## API Overview
+
+All requests go through the API Gateway at `/api/v1/`.
+
+See full API docs at the Swagger URLs above.
+
+---
+
+## CI/CD Pipeline
+
+Every push to `dev` triggers:
+
+1. **Quality Gates** — type checks + build validation for all backend services
+
+2. **Detect Changes** — only changed services are rebuilt
+
+3. **Build & Push** — Docker images pushed to GHCR
+
+4. **Next.js Build** — Docker image for frontend built and pushed
+
+5. **Deploy** — SSH into DigitalOcean, pull images, restart containers, run migrations, seed DB
+
+Branch strategy:
+
+- `dev` → development environment (auto-deploys)
+
+- `main` → production (merge from dev)
+
+---
+
+## Project Structure — Frontend
+
+The frontend follows **atomic design** principles:
+
+```
+src/
+├── app/
+│   ├── (auth)/login/
+│   ├── [tenantSlug]/login/
+│   └── platform/dashboard/
+├── components/
+│   ├── atoms/
+│   ├── molecules/
+│   ├── organisms/
+│   └── templates/
+├── lib/
+│   ├── api.ts
+│   └── utils.ts
+├── providers/
+├── store/
+├── hooks/
+└── types/
 ```
 
-### Remote Caching
+---
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+## Contributing
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
-
-```sh
-cd my-turborepo
-turbo login
-```
-
-Without global `turbo`, use your package manager:
-
-```sh
-cd my-turborepo
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
-```
-
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
-
-```sh
-turbo link
-```
-
-Without global `turbo`:
-
-```sh
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before making any changes.

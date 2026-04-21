@@ -1,0 +1,115 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: erp-postgres-prod
+    restart: always
+    networks:
+      - prod-network
+    ports:
+      - '127.0.0.1:5433:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis-prod
+    restart: always
+    networks:
+      - prod-network
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api-gateway:
+    image: ${IMAGE_PREFIX}/api-gateway:${IMAGE_TAG}
+    container_name: erp-gateway-prod
+    restart: always
+    networks:
+      - prod-network
+    ports:
+      - '127.0.0.1:4110:4000'
+    env_file:
+      - ../apps/api-gateway/.env.prod
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  auth-service:
+    image: ${IMAGE_PREFIX}/auth-service:${IMAGE_TAG}
+    container_name: erp-auth-prod
+    restart: always
+    networks:
+      - prod-network
+    ports:
+      - '127.0.0.1:4101:4001'
+    env_file:
+      - ../apps/auth-service/.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  hr-service:
+    image: ${IMAGE_PREFIX}/hr-service:${IMAGE_TAG}
+    container_name: erp-hr-prod
+    restart: always
+    networks:
+      - prod-network
+    ports:
+      - '127.0.0.1:4102:4002'
+    env_file:
+      - ../apps/hr-service/.env.prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  notification-service:
+    image: ${IMAGE_PREFIX}/notification-service:${IMAGE_TAG}
+    container_name: erp-notification-prod
+    restart: always
+    networks:
+      - prod-network
+    ports:
+      - '127.0.0.1:4104:4004'
+    env_file:
+      - ../apps/notification-service/.env.prod
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  nextjs:
+    image: ${IMAGE_PREFIX}/nextjs-web:${IMAGE_TAG}
+    container_name: erp-nextjs-prod
+    restart: always
+    networks:
+      - prod-network
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=https://workphelo.datrixtechsolutions.com/api/v1
+    ports:
+      - '127.0.0.1:3001:3000'
+
+networks:
+  prod-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:

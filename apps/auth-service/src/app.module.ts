@@ -1,17 +1,44 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
-import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
-import { TenantsModule } from './tenants/tenants.module';
+import { APP_PIPE } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
+import { AuthModule } from './auth/auth.module';
+import { TenantsModule } from './tenants/tenants.module';
+import { UsersModule } from './users/users.module';
+import { PermissionsModule } from './permissions/permissions.module';
+import { AuditModule } from './audit/audit.module';
+import { CompanyRolesModule } from './company-roles/company-roles.module';
+import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      { name: 'short', ttl: 1000, limit: 10 },
+      { name: 'medium', ttl: 60000, limit: 100 },
+    ]),
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     AuthModule,
-    UsersModule,
     TenantsModule,
+    UsersModule,
+    PermissionsModule,
+    AuditModule,
+    CompanyRolesModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    RabbitMQSetupService,
+    {
+      provide: APP_PIPE,
+      useValue: new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    },
   ],
 })
 export class AppModule {}
