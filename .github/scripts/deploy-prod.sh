@@ -30,6 +30,7 @@ set -euo pipefail
 
 DEPLOY_PATH="/var/www/apps/workphelo.datrixtechsolutions.com/work-phelo"
 COMPOSE_FILE="infrastructure/docker-compose.prod.yml"
+COMPOSE_ENV_FILE="$DEPLOY_PATH/.env"
 
 POLL_INTERVAL=5
 POLL_TIMEOUT=120
@@ -52,10 +53,11 @@ mkdir -p \
 echo "✓ Directory structure ready"
 
 # ── 2. Write compose-level .env ────────────────────────────────
-# docker compose reads .env from the working directory ($DEPLOY_PATH).
 # These variables are interpolated in docker-compose.prod.yml itself
 # (redis config + image tags) — NOT passed into containers.
-cat > .env <<EOF
+# We pass this file to docker compose explicitly because the compose file
+# lives under infrastructure/, and relying on implicit .env lookup is brittle.
+cat > "$COMPOSE_ENV_FILE" <<EOF
 IMAGE_PREFIX=${IMAGE_PREFIX:-ghcr.io/datrix-tech-solutions/work-phelo}
 IMAGE_TAG=${BUILD_SHA}
 REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -141,14 +143,18 @@ echo "✓ Env files composed"
 echo "$GHCR_TOKEN" | docker login ghcr.io -u datrix-tech-solutions --password-stdin
 echo "✓ Authenticated with GHCR"
 
+docker_compose() {
+  docker compose --env-file "$COMPOSE_ENV_FILE" -f "$COMPOSE_FILE" "$@"
+}
+
 # ── 5. Pull updated images ─────────────────────────────────────
-docker compose -f "$COMPOSE_FILE" pull
+docker_compose pull
 echo "✓ Images pulled"
 
 # ── 6. Start / recreate services ──────────────────────────────
 # --no-build: always use registry images, never locally built ones.
 # --remove-orphans: clean up containers for removed services.
-docker compose -f "$COMPOSE_FILE" up -d --remove-orphans --no-build
+docker_compose up -d --remove-orphans --no-build
 echo "✓ Services recreated"
 
 # ── 7. Polling health checks ───────────────────────────────────
@@ -159,7 +165,7 @@ wait_healthy() {
   local elapsed=0
   local container_name status health
 
-  container_name=$(docker compose -f "$COMPOSE_FILE" ps -q "$service" 2>/dev/null | head -1)
+  container_name=$(docker_compose ps -q "$service" 2>/dev/null | head -1)
   if [[ -z "$container_name" ]]; then
     echo "  ✗ $service — container not found"
     FAILED_SERVICES="$FAILED_SERVICES $service"
@@ -258,7 +264,7 @@ wait_healthy nextjs
 # ── 11. Full status printout ───────────────────────────────────
 echo ""
 echo "── Container Status ──────────────────"
-docker compose -f "$COMPOSE_FILE" ps
+docker_compose ps
 
 # ── 12. Clean up dangling images ──────────────────────────────
 docker image prune -f --filter "until=24h"
@@ -267,7 +273,7 @@ docker image prune -f --filter "until=24h"
 if [[ -n "$FAILED_SERVICES" ]]; then
   echo ""
   echo "✗ Deployment failed — unhealthy services:$FAILED_SERVICES"
-  echo "Run: docker compose -f $COMPOSE_FILE logs <service>"
+  echo "Run: docker compose --env-file $COMPOSE_ENV_FILE -f $COMPOSE_FILE logs <service>"
   exit 1
 fi
 
