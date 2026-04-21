@@ -29,6 +29,25 @@ services:
       timeout: 5s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: erp-rabbitmq-dev
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:5672:5672'
+      - '127.0.0.1:15672:15672'
+    environment:
+      RABBITMQ_DEFAULT_USER: erp
+      RABBITMQ_DEFAULT_PASS: erppassword
+      RABBITMQ_DEFAULT_VHOST: workphelo
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api-gateway:
     image: ghcr.io/datrix-tech-solutions/work-phelo/api-gateway:dev
     container_name: erp-gateway-dev
@@ -114,3 +133,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  rabbitmq_data:
