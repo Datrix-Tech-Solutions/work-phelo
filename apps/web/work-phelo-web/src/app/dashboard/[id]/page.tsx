@@ -3,8 +3,13 @@
 'use client';
 
 import { use, useMemo, useState } from 'react';
-import { useTenant, useTenantUsers, useTenantAudit } from '@/hooks/useTenants';
-import { useUpdateModules, useUpdateFeatures } from '@/hooks/useModuleConfig';
+import {
+  useTenant,
+  useTenantUsers,
+  useTenantAudit,
+  useUpdateModules,
+  useUpdateFeatures,
+} from '@/hooks';
 import Link from 'next/link';
 import { CompanyHeader } from '@/components/organisms/shared/CompanyHeader';
 import { CompanyInfoCard } from '@/components/organisms/shared/CompanyInfoCard';
