@@ -43,19 +43,27 @@ interface DataTableProps<T extends { id: string | number }> {
 
 function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
-  const [openUpward, setOpenUpward] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const handleToggle = () => {
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setOpenUpward(window.innerHeight - rect.bottom < 120);
+      const menuHeight = actions.length * 36 + 8;
+      const openUpward = window.innerHeight - rect.bottom < menuHeight;
+      setMenuStyle({
+        position: 'fixed',
+        right: window.innerWidth - rect.right,
+        ...(openUpward ? { bottom: window.innerHeight - rect.top } : { top: rect.bottom + 4 }),
+        minWidth: 140,
+        zIndex: 9999,
+      });
     }
     setOpen((v) => !v);
   };
 
   return (
-    <div className="relative">
+    <div>
       <button
         ref={buttonRef}
         onClick={handleToggle}
@@ -66,12 +74,10 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-[9998]" onClick={() => setOpen(false)} />
           <div
-            className={cn(
-              'absolute right-0 z-20 min-w-35 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden',
-              openUpward ? 'bottom-8' : 'top-8',
-            )}
+            style={menuStyle}
+            className="bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden"
           >
             {actions.map((action) => (
               <button
