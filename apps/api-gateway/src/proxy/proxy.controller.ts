@@ -3,28 +3,11 @@ import { Request, Response } from 'express';
 import * as http from 'http';
 import * as https from 'https';
 import * as jwt from 'jsonwebtoken';
-
-const requiredServiceEnvVars = [
-  'AUTH_SERVICE_URL',
-  'HR_SERVICE_URL',
-  'NOTIFICATION_SERVICE_URL',
-  'SUBSCRIPTION_SERVICE_URL',
-  'MARKETING_SERVICE_URL',
-];
-const missingVars = requiredServiceEnvVars.filter((v) => !process.env[v]);
-if (missingVars.length > 0) {
-  throw new Error(
-    `Missing required environment variables: ${missingVars.join(', ')}`,
-  );
-}
-
-const SERVICES: Record<string, string> = {
-  auth: process.env.AUTH_SERVICE_URL as string,
-  hr: process.env.HR_SERVICE_URL as string,
-  notification: process.env.NOTIFICATION_SERVICE_URL as string,
-  subscription: process.env.SUBSCRIPTION_SERVICE_URL as string,
-  marketing: process.env.MARKETING_SERVICE_URL as string,
-};
+import {
+  GatewayServiceName,
+  getConfiguredGatewayServices,
+  getGatewayServiceUrl,
+} from '../config/runtime-env';
 
 const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/login$/,
@@ -45,18 +28,22 @@ const PUBLIC_PATTERNS = [
 @Controller()
 export class ProxyController {
   private readonly logger = new Logger(ProxyController.name);
+  private readonly services = getConfiguredGatewayServices();
 
   @All('api/v1/*')
   async proxy(@Req() req: Request, @Res() res: Response) {
     // pathParts: ['api', 'v1', 'auth', 'login', ...]
     const pathParts = req.path.split('/').filter(Boolean);
-    const service = pathParts[2]; // index 2 — after 'api' and 'v1'
-    const serviceUrl = SERVICES[service];
+    const service = pathParts[2] as GatewayServiceName | undefined; // index 2 — after 'api' and 'v1'
+    const serviceUrl = service ? getGatewayServiceUrl(service) : undefined;
 
     if (!serviceUrl) {
-      return res.status(404).json({
-        message: `Service '${service}' not found`,
-        statusCode: 404,
+      const availableServices = Object.keys(this.services);
+
+      return res.status(503).json({
+        message: `Service '${service ?? 'unknown'}' is not configured for this environment`,
+        availableServices,
+        statusCode: 503,
       });
     }
 

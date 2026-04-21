@@ -1,8 +1,9 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: erp-postgres-dev
     restart: unless-stopped
+    networks:
+      - app-network
     ports:
       - '127.0.0.1:5432:5432'
     environment:
@@ -15,24 +16,28 @@ services:
       test: ['CMD-SHELL', 'pg_isready -U erp -d workphelo']
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
-    container_name: erp-redis
     restart: unless-stopped
+    networks:
+      - app-network
     volumes:
       - redis_data:/data
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
-    container_name: erp-rabbitmq-dev
     restart: unless-stopped
+    networks:
+      - app-network
     ports:
       - '127.0.0.1:5672:5672'
       - '127.0.0.1:15672:15672'
@@ -46,91 +51,220 @@ services:
       test: ['CMD', 'rabbitmq-diagnostics', 'ping']
       interval: 10s
       timeout: 5s
-      retries: 5
-
-  api-gateway:
-    image: ghcr.io/datrix-tech-solutions/work-phelo/api-gateway:dev
-    container_name: erp-gateway-dev
-    restart: unless-stopped
-    ports:
-      - '127.0.0.1:4010:4000'
-    env_file:
-      - ../apps/api-gateway/.env
-    depends_on:
-      redis:
-        condition: service_healthy
+      retries: 10
+      start_period: 15s
 
   auth-service:
-    image: ghcr.io/datrix-tech-solutions/work-phelo/auth-service:dev
-    container_name: erp-auth-dev
+    image: ${AUTH_SERVICE_IMAGE}
     restart: unless-stopped
+    networks:
+      - app-network
     ports:
       - '127.0.0.1:4001:4001'
     env_file:
-      - ../apps/auth-service/.env
+      - ../apps/auth-service/.env.dev
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4001/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   hr-service:
-    image: ghcr.io/datrix-tech-solutions/work-phelo/hr-service:dev
-    container_name: erp-hr-dev
+    image: ${HR_SERVICE_IMAGE}
     restart: unless-stopped
+    networks:
+      - app-network
     ports:
       - '127.0.0.1:4002:4002'
     env_file:
-      - ../apps/hr-service/.env
+      - ../apps/hr-service/.env.dev
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4002/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   notification-service:
-    image: ghcr.io/datrix-tech-solutions/work-phelo/notification-service:dev
-    container_name: erp-notification-dev
+    image: ${NOTIFICATION_SERVICE_IMAGE}
     restart: unless-stopped
+    networks:
+      - app-network
     ports:
       - '127.0.0.1:4004:4004'
     env_file:
-      - ../apps/notification-service/.env
+      - ../apps/notification-service/.env.dev
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4004/api/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   subscription-service:
-    image: ghcr.io/datrix-tech-solutions/work-phelo/subscription-service:dev
-    container_name: erp-subscription-dev
+    image: ${SUBSCRIPTION_SERVICE_IMAGE}
     restart: unless-stopped
+    networks:
+      - app-network
     ports:
       - '127.0.0.1:4005:4005'
     env_file:
-      - ../apps/subscription-service/.env
+      - ../apps/subscription-service/.env.dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4005/api/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
   marketing-service:
-    image: ghcr.io/datrix-tech-solutions/work-phelo/marketing-service:dev
-    container_name: erp-marketing-dev
+    image: ${MARKETING_SERVICE_IMAGE}
     restart: unless-stopped
+    networks:
+      - app-network
     ports:
       - '127.0.0.1:4006:4006'
     env_file:
-      - ../apps/marketing-service/.env
+      - ../apps/marketing-service/.env.dev
     depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4006/api/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  api-gateway:
+    image: ${API_GATEWAY_IMAGE}
+    restart: unless-stopped
+    networks:
+      - app-network
+    ports:
+      - '127.0.0.1:4010:4000'
+    env_file:
+      - ../apps/api-gateway/.env.dev
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      hr-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      subscription-service:
+        condition: service_healthy
+      marketing-service:
+        condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   nextjs:
-    image: ghcr.io/datrix-tech-solutions/work-phelo/nextjs-web:dev
-    container_name: erp-nextjs-dev
+    image: ${NEXTJS_IMAGE}
     restart: unless-stopped
+    networks:
+      - app-network
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://dev.workphelo.datrixtechsolutions.com/api/v1
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://dev.workphelo.datrixtechsolutions.com/api/v1
     ports:
-      - "127.0.0.1:3000:3000"
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+networks:
+  app-network:
+    name: workphelo-dev-network
+    driver: bridge
 
 volumes:
   postgres_data:
+    name: workphelo-dev-postgres-data
   redis_data:
+    name: workphelo-dev-redis-data
   rabbitmq_data:
+    name: workphelo-dev-rabbitmq-data
