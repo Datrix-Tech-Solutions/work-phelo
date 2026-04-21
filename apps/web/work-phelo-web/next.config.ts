@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
         hostname: 'dev.workphelo.datrixtechsolutions.com',
       },
       {
+        protocol: 'https',
+        hostname: 'workphelo.datrixtechsolutions.com',
+      },
+      {
         protocol: 'http',
         hostname: 'localhost',
       },

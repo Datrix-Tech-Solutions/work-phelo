@@ -13,7 +13,9 @@ Handles all authentication, user management, tenant management, and RBAC.
 ### Base URL
 All requests go through the API Gateway at /api/v1/auth/...
 
-**Example:** POST http://157.245.220.205/api/v1/auth/login
+**Example (dev):** POST https://dev.workphelo.datrixtechsolutions.com/api/v1/auth/login
+
+**Example (prod):** POST https://workphelo.datrixtechsolutions.com/api/v1/auth/login
 
 ### Sprint 1 — Key Flows
 
@@ -61,8 +63,12 @@ Use seeded local test accounts or your own tenant credentials. Avoid publishing 
     )
     .setVersion('1.0')
     .addServer(
-      'http://157.245.220.205/api/v1/auth',
-      'Local Dev (via API Gateway)',
+      'https://dev.workphelo.datrixtechsolutions.com/api/v1/auth',
+      'Dev (via API Gateway)',
+    )
+    .addServer(
+      'https://workphelo.datrixtechsolutions.com/api/v1/auth',
+      'Production (via API Gateway)',
     )
     .addTag('Auth', 'Login, logout, token refresh, MFA, social auth')
     .addTag('Tenants', 'Tenant registration and management')

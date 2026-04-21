@@ -12,6 +12,7 @@ import { PermissionsModule } from './permissions/permissions.module';
 import { AuditModule } from './audit/audit.module';
 import { CompanyRolesModule } from './company-roles/company-roles.module';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
     PermissionsModule,
     AuditModule,
     CompanyRolesModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

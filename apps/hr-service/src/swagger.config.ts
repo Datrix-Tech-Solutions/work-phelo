@@ -13,7 +13,9 @@ Handles all HR operations: employees, departments, leave, time tracking, payroll
 ### Base URL
 All requests go through the API Gateway at /api/v1/hr/...
 
-**Example:** GET http://157.245.220.205/api/v1/hr/dashboard/summary
+**Example (dev):** GET https://dev.workphelo.datrixtechsolutions.com/api/v1/hr/dashboard/summary
+
+**Example (prod):** GET https://workphelo.datrixtechsolutions.com/api/v1/hr/dashboard/summary
 
 ### How to Authenticate in Swagger
 1. Login via POST /auth/login using your tenant credentials
@@ -86,7 +88,14 @@ All endpoints require a valid JWT token via:
     `,
     )
     .setVersion('1.0')
-    .addServer('http://localhost:8080/api/v1/hr', 'Local Dev (via API Gateway)')
+    .addServer(
+      'https://dev.workphelo.datrixtechsolutions.com/api/v1/hr',
+      'Dev (via API Gateway)',
+    )
+    .addServer(
+      'https://workphelo.datrixtechsolutions.com/api/v1/hr',
+      'Production (via API Gateway)',
+    )
     .addTag('Departments', 'Department management')
     .addTag('Employees', 'Employee profiles and documents')
     .addTag('Leave', 'Leave types, balances, requests and approvals')

@@ -3,11 +3,16 @@ name: Deploy to Dev
 on:
   push:
     branches: [dev]
+  pull_request_target:
+    branches: [dev]
+    types: [closed]
 
 # ── 1. Concurrency control ─────────────────────────────────────────────────────
-# Only one dev deployment runs at a time; a newer push cancels the in-flight one.
+# Collapse duplicate runs for the same target SHA (for example push + PR-merge
+# events for the same merge commit) while still allowing newer SHAs to replace
+# older in-flight dev deploys.
 concurrency:
-  group: deploy-dev
+  group: deploy-dev-${{ github.event.pull_request.merge_commit_sha || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -16,15 +21,24 @@ env:
   IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
   COMPOSE_FILE: infrastructure/docker-compose.dev.yml
   DEPLOY_PATH: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo
+  WEB_PUBLIC_API_URL: https://dev.workphelo.datrixtechsolutions.com/api/v1
+  BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+  BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+  CHECKOUT_REF: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
 jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -46,6 +60,9 @@ jobs:
     name: Detect Changed Services
     runs-on: ubuntu-latest
     needs: quality-gates
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
 
     # ── 6. Per-service boolean outputs ──────────────────────────────────────────
     # Each output is 'true'/'false' so the build matrix can skip unchanged services
@@ -64,7 +81,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Detect changed services
         id: filter
@@ -142,6 +160,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
 
       # ── 6. Use per-service boolean output — no inline jq ──────────────────
       - name: Check if service changed
@@ -181,12 +201,13 @@ jobs:
           push: true
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:dev
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ env.BUILD_SHA }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
           build-args: |
-            BUILD_SHA=${{ github.sha }}
-            BUILD_REF=${{ github.ref_name }}
+            BUILD_SHA=${{ env.BUILD_SHA }}
+            BUILD_REF=${{ env.BUILD_REF }}
+            NEXT_PUBLIC_API_URL=${{ env.WEB_PUBLIC_API_URL }}
 
 
   deploy:
@@ -212,20 +233,52 @@ jobs:
       name: dev
       url: https://dev.workphelo.datrixtechsolutions.com
 
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GHCR_USERNAME: ${{ github.actor }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+      AUTH_FRONTEND_BASE_URL: ${{ vars.AUTH_FRONTEND_BASE_URL }}
+      AUTH_COOKIE_SECURE: ${{ vars.AUTH_COOKIE_SECURE }}
+      AUTH_COOKIE_SAME_SITE: ${{ vars.AUTH_COOKIE_SAME_SITE }}
+      AUTH_GOOGLE_CLIENT_ID: ${{ vars.AUTH_GOOGLE_CLIENT_ID }}
+      AUTH_GOOGLE_CALLBACK_URL: ${{ vars.AUTH_GOOGLE_CALLBACK_URL }}
+      AUTH_MICROSOFT_CLIENT_ID: ${{ vars.AUTH_MICROSOFT_CLIENT_ID }}
+      AUTH_MICROSOFT_CALLBACK_URL: ${{ vars.AUTH_MICROSOFT_CALLBACK_URL }}
+      AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
+      AUTH_MICROSOFT_CLIENT_SECRET: ${{ secrets.AUTH_MICROSOFT_CLIENT_SECRET }}
+      NOTIFY_RESEND_FROM_EMAIL: ${{ vars.NOTIFY_RESEND_FROM_EMAIL }}
+      NOTIFY_TERMII_SENDER_ID: ${{ vars.NOTIFY_TERMII_SENDER_ID }}
+      NOTIFY_RESEND_API_KEY: ${{ secrets.NOTIFY_RESEND_API_KEY }}
+      NOTIFY_TERMII_API_KEY: ${{ secrets.NOTIFY_TERMII_API_KEY }}
+      SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
+      SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
+      BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+      BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+      IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
+      CHANGED_SERVICES: ${{ needs.detect-changes.outputs.changed }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+
+      - name: Validate deployment inputs
+        run: bash .github/scripts/validate-deploy-env.sh dev
 
       # Upload the compose file — the server needs nothing else from the repo.
       # Source code is already baked into the images; git is not used on the server.
-      - name: Upload Docker Compose file to server
+      - name: Upload deployment assets to server
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ vars.DEV_SERVER_HOST }}
           username: ${{ vars.DEV_SERVER_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           port: 22
-          source: infrastructure/docker-compose.dev.yml
+          source: .github/scripts/deploy-common.sh,infrastructure/docker-compose.dev.yml
           target: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo/
           strip_components: 0
 
@@ -234,37 +287,6 @@ jobs:
       # so it is version-controlled and reviewable independently of this workflow.
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ── Shared across multiple services ── secrets (contain credentials)
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          # ── Shared across multiple services ── variables (non-sensitive config)
-          ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
-          # ── auth-service ── variables (public URLs and behaviour flags)
-          AUTH_FRONTEND_BASE_URL: ${{ vars.AUTH_FRONTEND_BASE_URL }}
-          AUTH_COOKIE_SECURE: ${{ vars.AUTH_COOKIE_SECURE }}
-          AUTH_COOKIE_SAME_SITE: ${{ vars.AUTH_COOKIE_SAME_SITE }}
-          AUTH_GOOGLE_CLIENT_ID: ${{ vars.AUTH_GOOGLE_CLIENT_ID }}
-          AUTH_GOOGLE_CALLBACK_URL: ${{ vars.AUTH_GOOGLE_CALLBACK_URL }}
-          AUTH_MICROSOFT_CLIENT_ID: ${{ vars.AUTH_MICROSOFT_CLIENT_ID }}
-          AUTH_MICROSOFT_CALLBACK_URL: ${{ vars.AUTH_MICROSOFT_CALLBACK_URL }}
-          # ── auth-service ── secrets (OAuth client secrets)
-          AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
-          AUTH_MICROSOFT_CLIENT_SECRET: ${{ secrets.AUTH_MICROSOFT_CLIENT_SECRET }}
-          # ── notification-service ── variables (non-sensitive config)
-          NOTIFY_RESEND_FROM_EMAIL: ${{ vars.NOTIFY_RESEND_FROM_EMAIL }}
-          NOTIFY_TERMII_SENDER_ID: ${{ vars.NOTIFY_TERMII_SENDER_ID }}
-          # ── notification-service ── secrets (API keys)
-          NOTIFY_RESEND_API_KEY: ${{ secrets.NOTIFY_RESEND_API_KEY }}
-          NOTIFY_TERMII_API_KEY: ${{ secrets.NOTIFY_TERMII_API_KEY }}
-          # ── seed ──────────────────────────────────────────────────────────
-          SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
-          SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
-          # ── build metadata ────────────────────────────────────────────────
-          BUILD_SHA: ${{ github.sha }}
-          BUILD_REF: ${{ github.ref_name }}
         with:
           host: ${{ vars.DEV_SERVER_HOST }}
           username: ${{ vars.DEV_SERVER_USER }}
@@ -272,4 +294,4 @@ jobs:
           port: 22
           command_timeout: 60m
           script_path: .github/scripts/deploy-dev.sh
-          envs: GHCR_TOKEN,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,BUILD_SHA,BUILD_REF
+          envs: GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,BUILD_SHA,BUILD_REF,IMAGE_PREFIX,CHANGED_SERVICES
