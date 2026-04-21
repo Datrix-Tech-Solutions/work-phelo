@@ -1,39 +1,24 @@
 services:
   redis:
     image: redis:7-alpine
-    container_name: erp-redis-prod
     restart: always
-    networks:
-      - prod-network
     command: redis-server --requirepass ${REDIS_PASSWORD}
+    networks:
+      - app-network
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      test: ['CMD', 'redis-cli', '-a', "${REDIS_PASSWORD}", 'ping']
       interval: 10s
       timeout: 5s
-      retries: 5
-
-  api-gateway:
-    image: ${IMAGE_PREFIX}/api-gateway:${IMAGE_TAG}
-    container_name: erp-gateway-prod
-    restart: always
-    networks:
-      - prod-network
-    ports:
-      - '127.0.0.1:4110:4000'
-    env_file:
-      - ../apps/api-gateway/.env.prod
-    depends_on:
-      redis:
-        condition: service_healthy
+      retries: 10
+      start_period: 10s
 
   auth-service:
-    image: ${IMAGE_PREFIX}/auth-service:${IMAGE_TAG}
-    container_name: erp-auth-prod
+    image: ${AUTH_SERVICE_IMAGE}
     restart: always
     networks:
-      - prod-network
+      - app-network
     ports:
       - '127.0.0.1:4101:4001'
     env_file:
@@ -41,13 +26,24 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4001/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   hr-service:
-    image: ${IMAGE_PREFIX}/hr-service:${IMAGE_TAG}
-    container_name: erp-hr-prod
+    image: ${HR_SERVICE_IMAGE}
     restart: always
     networks:
-      - prod-network
+      - app-network
     ports:
       - '127.0.0.1:4102:4002'
     env_file:
@@ -55,13 +51,24 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4002/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
   notification-service:
-    image: ${IMAGE_PREFIX}/notification-service:${IMAGE_TAG}
-    container_name: erp-notification-prod
+    image: ${NOTIFICATION_SERVICE_IMAGE}
     restart: always
     networks:
-      - prod-network
+      - app-network
     ports:
       - '127.0.0.1:4104:4004'
     env_file:
@@ -69,22 +76,81 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4004/api/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
-  nextjs:
-    image: ${IMAGE_PREFIX}/nextjs-web:${IMAGE_TAG}
-    container_name: erp-nextjs-prod
+  api-gateway:
+    image: ${API_GATEWAY_IMAGE}
     restart: always
     networks:
-      - prod-network
+      - app-network
+    ports:
+      - '127.0.0.1:4110:4000'
+    env_file:
+      - ../apps/api-gateway/.env.prod
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      hr-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4000/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  nextjs:
+    image: ${NEXTJS_IMAGE}
+    restart: always
+    networks:
+      - app-network
     environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://workphelo.datrixtechsolutions.com/api/v1
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: https://workphelo.datrixtechsolutions.com/api/v1
     ports:
       - '127.0.0.1:3001:3000'
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
 networks:
-  prod-network:
+  app-network:
+    name: workphelo-prod-network
     driver: bridge
 
 volumes:
   redis_data:
+    name: workphelo-prod-redis-data

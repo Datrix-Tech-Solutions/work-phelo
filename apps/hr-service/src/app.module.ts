@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_PIPE } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
@@ -17,7 +18,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
+import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -35,11 +38,14 @@ import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
     AnnouncementsModule,
     NotificationsModule,
     SchedulingModule,
+    HealthModule,
+    ScheduleModule.forRoot(),
   ],
   providers: [
     RabbitMQSetupService,
     ModuleGuard,
     FeatureGuard,
+    PermissionsGuard,
     {
       provide: APP_PIPE,
       useValue: new ValidationPipe({

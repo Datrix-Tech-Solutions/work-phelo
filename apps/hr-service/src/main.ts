@@ -6,9 +6,11 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
 import { GlobalExceptionFilter } from './common/prisma-exception.filter';
+import { assertHrRuntimeEnv } from './config/runtime-env';
 
 async function bootstrap() {
-  if (!process.env.RABBITMQ_URL) throw new Error('RABBITMQ_URL is required');
+  assertHrRuntimeEnv();
+  const rabbitMqUrl = process.env.RABBITMQ_URL as string;
 
   const app = await NestFactory.create(AppModule);
 
@@ -38,7 +40,7 @@ async function bootstrap() {
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
-      urls: [process.env.RABBITMQ_URL],
+      urls: [rabbitMqUrl],
       queue: 'hr_queue',
       queueOptions: {
         durable: true,
