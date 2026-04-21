@@ -11,6 +11,7 @@ export enum Permission {
   UPDATE_USER = 'update:user',
   DEACTIVATE_USER = 'deactivate:user',
   FORCE_RESET_USER = 'force_reset:user',
+  VIEW_PERMISSION_SETS = 'view:permission_sets',
   GRANT_PERMISSION = 'grant:permission',
 
   // ── Company Roles ─────────────────────────────────────────────────────────
@@ -111,6 +112,7 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.UPDATE_USER,
     Permission.DEACTIVATE_USER,
     Permission.FORCE_RESET_USER,
+    Permission.VIEW_PERMISSION_SETS,
     Permission.GRANT_PERMISSION,
     Permission.MANAGE_COMPANY_ROLES,
     Permission.READ_COMPANY_ROLES,
