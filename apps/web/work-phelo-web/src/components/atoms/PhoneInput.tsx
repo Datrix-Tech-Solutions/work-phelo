@@ -15,7 +15,8 @@ const COUNTRY_CODES = [
 
 const ALL_CODES = COUNTRY_CODES.map((c) => c.code);
 
-function parsePhone(raw: string): { code: string; number: string } {
+function parsePhone(raw: string | null | undefined): { code: string; number: string } {
+  if (!raw) return { code: '+233', number: '' };
   const matched = ALL_CODES.find((c) => raw.startsWith(c));
   return matched
     ? { code: matched, number: raw.slice(matched.length).replace(/\D/g, '') }
@@ -26,7 +27,7 @@ interface PhoneInputProps {
   label?: string;
   error?: string;
   placeholder?: string;
-  value?: string;
+  value?: string | null;
   onChange?: (value: string) => void;
   defaultCountryCode?: string;
   className?: string;
@@ -45,8 +46,8 @@ export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
     },
     ref,
   ) => {
-    const isControlled = value !== undefined;
-    const parsed = isControlled ? parsePhone(value!) : { code: defaultCountryCode, number: '' };
+    const isControlled = value != null;
+    const parsed = isControlled ? parsePhone(value) : { code: defaultCountryCode, number: '' };
 
     const [internalCode, setInternalCode] = useState(defaultCountryCode);
     const [internalNumber, setInternalNumber] = useState('');

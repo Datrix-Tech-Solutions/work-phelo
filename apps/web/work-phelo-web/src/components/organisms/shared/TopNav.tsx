@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import {
   Bell,
-  Home,
   LayoutGrid,
   LogOutIcon,
   Menu,
@@ -40,32 +39,26 @@ interface TopNavProps {
 function ProfileDropdown({
   userInitials,
   userColor,
-  isSuperAdmin,
   onProfileClick,
   onLogoutClick,
 }: {
   userInitials: string;
   userColor?: string;
-  isSuperAdmin: boolean;
   onProfileClick: () => void;
   onLogoutClick: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
   const items = [
-    ...(!isSuperAdmin
-      ? [
-          {
-            label: 'Profile',
-            icon: <UserIcon className="w-5 h-5" />,
-            danger: false,
-            onClick: () => {
-              setOpen(false);
-              onProfileClick();
-            },
-          },
-        ]
-      : []),
+    {
+      label: 'Profile',
+      icon: <UserIcon className="w-5 h-5" />,
+      danger: false,
+      onClick: () => {
+        setOpen(false);
+        onProfileClick();
+      },
+    },
     {
       label: 'Settings',
       icon: <Settings className="w-5 h-5" />,
@@ -200,18 +193,13 @@ export function TopNav({
               }
             }}
           >
-            {user?.role === 'SUPER_ADMIN' ? (
-              <Home className="w-5 h-5" />
-            ) : (
-              <LayoutGrid className="w-5 h-5" />
-            )}
+            <LayoutGrid className="w-5 h-5" />
           </button>
 
           {/* Profile avatar */}
           <ProfileDropdown
             userInitials={userInitials}
             userColor={userColor}
-            isSuperAdmin={user?.role === 'SUPER_ADMIN'}
             onProfileClick={handleProfileClick}
             onLogoutClick={() => setLogoutOpen(true)}
           />

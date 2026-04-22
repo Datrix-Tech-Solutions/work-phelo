@@ -1,6 +1,9 @@
 'use client';
 
+import { use, useEffect } from 'react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { PayrollTabs } from '@/components/molecules/payroll/PayrollTabs';
@@ -9,7 +12,17 @@ import { ManagePayrollTab } from '@/components/organisms/payroll/ManagePayrollTa
 
 type Tab = 'payslip' | 'manage';
 
-export default function PayrollPage() {
+export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
+  const { tenantSlug } = use(params);
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    if (user !== null && !user.featureConfig?.hr?.payroll) {
+      router.replace(`/${tenantSlug}/hr`);
+    }
+  }, [user, tenantSlug, router]);
+
   const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
   const [tab, setTab] = useState<Tab>(canManagePayroll ? 'manage' : 'payslip');
 

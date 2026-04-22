@@ -11,6 +11,7 @@ export enum Permission {
   UPDATE_USER = 'update:user',
   DEACTIVATE_USER = 'deactivate:user',
   FORCE_RESET_USER = 'force_reset:user',
+  VIEW_PERMISSION_SETS = 'view:permission_sets',
   GRANT_PERMISSION = 'grant:permission',
 
   // ── Company Roles ─────────────────────────────────────────────────────────
@@ -108,6 +109,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.UPDATE_USER]: ['users:EDIT'],
   [Permission.DEACTIVATE_USER]: ['users:DELETE'],
   [Permission.FORCE_RESET_USER]: ['users:EDIT'],
+  [Permission.VIEW_PERMISSION_SETS]: ['permission-sets:VIEW'],
   [Permission.GRANT_PERMISSION]: ['permission-sets:ASSIGN'],
 
   // Company Roles
@@ -141,7 +143,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.READ_ALL_LEAVES]: ['leave:VIEW'],
   [Permission.READ_TEAM_LEAVES]: ['leave:VIEW'],
   [Permission.READ_OWN_LEAVE]: ['leave:VIEW'],
-  [Permission.MANAGE_LEAVE_TYPES]: ['leave:CREATE', 'leave:EDIT'],
+  [Permission.MANAGE_LEAVE_TYPES]: ['leave:EDIT'],
 
   // Time Management
   [Permission.CLOCK_IN_OUT]: ['attendance:CREATE'],
@@ -163,7 +165,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.MANAGE_PAYROLL_SETTINGS]: ['payroll:EDIT'],
 
   // Appraisal
-  [Permission.CONFIGURE_APPRAISAL]: ['appraisals:EDIT'],
+  [Permission.CONFIGURE_APPRAISAL]: ['appraisals:CREATE'],
   [Permission.CREATE_APPRAISAL]: ['appraisals:CREATE'],
   [Permission.READ_APPRAISALS]: ['appraisals:VIEW'],
   [Permission.READ_TEAM_APPRAISALS]: ['appraisals:VIEW'],
@@ -208,7 +210,7 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     DELETE: [{ resource: 'departments', action: 'DELETE' }],
   },
 
-  // resource: 'branches' (not yet seeded — wire up when branch resource is added)
+  // resource: 'branches' (seeded)
   branches: {
     CREATE: [{ resource: 'branches', action: 'CREATE' }],
     VIEW: [{ resource: 'branches', action: 'VIEW' }],
@@ -265,7 +267,7 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     DELETE: [{ resource: 'schedules', action: 'DELETE' }],
   },
 
-  // resource: 'projects' (not yet seeded) — DELETE col maps to ASSIGN
+  // resource: 'projects' — DELETE col maps to ASSIGN
   projects: {
     CREATE: [{ resource: 'projects', action: 'CREATE' }],
     VIEW: [{ resource: 'projects', action: 'VIEW' }],
@@ -281,7 +283,7 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     DELETE: [{ resource: 'payroll', action: 'APPROVE' }], // approve payroll run
   },
 
-  // resource: 'assets' (not yet seeded) — DELETE col maps to ASSIGN
+  // resource: 'assets' — DELETE col maps to ASSIGN
   assets: {
     CREATE: [{ resource: 'assets', action: 'CREATE' }],
     VIEW: [{ resource: 'assets', action: 'VIEW' }],
