@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -17,6 +18,16 @@ import {
 } from './dto/offboard-employee.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
+import {
+  assertHrAccess,
+  getActorEmployee,
+  getManagedEmployeeIds,
+  hasPermissionRule,
+  isCompanyAdminUser,
+  isCustomCompanyRoleUser,
+  isEmployeeSelfServiceUser,
+  isManagerUser,
+} from '../auth/access-scope';
 
 @Injectable()
 export class EmployeesService {
@@ -141,10 +152,35 @@ export class EmployeesService {
     return employee;
   }
 
-  async findAll(tenantId: string, query: QueryEmployeesDto) {
+  async findAll(
+    tenantId: string,
+    query: QueryEmployeesDto,
+    actor?: RequestUser,
+  ) {
     const { take, skip, page } = getPaginationParams(query);
 
     const where: any = { tenantId };
+
+    if (actor && !isCompanyAdminUser(actor)) {
+      if (isManagerUser(actor)) {
+        const managedEmployeeIds = await getManagedEmployeeIds(
+          this.prisma,
+          tenantId,
+          actor.id,
+        );
+
+        if (managedEmployeeIds.size === 0) {
+          return { employees: [], meta: buildMeta(page, take, 0) };
+        }
+
+        where.id = { in: Array.from(managedEmployeeIds) };
+      } else if (isEmployeeSelfServiceUser(actor)) {
+        assertHrAccess(false);
+      } else {
+        assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
+      }
+    }
+
     if (query.status) where.employmentStatus = query.status;
     if (query.type) where.employmentType = query.type;
     if (query.departmentId) where.departmentId = query.departmentId;
@@ -186,7 +222,7 @@ export class EmployeesService {
     return { employees, meta: buildMeta(page, take, total) };
   }
 
-  async findById(tenantId: string, id: string) {
+  async findById(tenantId: string, id: string, actor?: RequestUser) {
     const employee = await this.prisma.employee.findFirst({
       where: { id, tenantId },
       include: {
@@ -199,6 +235,43 @@ export class EmployeesService {
       },
     });
     if (!employee) throw new NotFoundException('Employee not found');
+
+    if (!actor) {
+      return employee;
+    }
+
+    if (isCompanyAdminUser(actor)) {
+      return employee;
+    }
+
+    if (isManagerUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      const managedEmployeeIds = await getManagedEmployeeIds(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      assertHrAccess(
+        employee.id === actorEmployee.id || managedEmployeeIds.has(employee.id),
+      );
+      return employee;
+    }
+
+    if (isEmployeeSelfServiceUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      assertHrAccess(employee.id === actorEmployee.id);
+      return employee;
+    }
+
+    assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
     return employee;
   }
 
@@ -218,9 +291,73 @@ export class EmployeesService {
     tenantId: string,
     id: string,
     dto: UpdateEmployeeDto,
-    actor?: { id: string; email: string },
+    actor: RequestUser,
   ) {
-    const existing = await this.findById(tenantId, id);
+    const existing = await this.prisma.employee.findFirst({
+      where: { id, tenantId },
+    });
+    if (!existing) throw new NotFoundException('Employee not found');
+
+    const fullUpdateAllowed =
+      isCompanyAdminUser(actor) ||
+      (isCustomCompanyRoleUser(actor) &&
+        hasPermissionRule(actor, 'employees:EDIT'));
+
+    let updateData: UpdateEmployeeDto = { ...dto };
+
+    if (!fullUpdateAllowed) {
+      assertHrAccess(isEmployeeSelfServiceUser(actor));
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      assertHrAccess(actorEmployee.id === existing.id);
+
+      const {
+        firstName,
+        lastName,
+        phone,
+        dateOfBirth,
+        gender,
+        maritalStatus,
+        nationality,
+        nationalId,
+        address,
+        city,
+        region,
+        emergencyName,
+        emergencyPhone,
+        emergencyRelation,
+        bankName,
+        bankAccountNumber,
+        bankBranch,
+        ssnit,
+        tinNumber,
+      } = dto;
+
+      updateData = {
+        firstName,
+        lastName,
+        phone,
+        dateOfBirth,
+        gender,
+        maritalStatus,
+        nationality,
+        nationalId,
+        address,
+        city,
+        region,
+        emergencyName,
+        emergencyPhone,
+        emergencyRelation,
+        bankName,
+        bankAccountNumber,
+        bankBranch,
+        ssnit,
+        tinNumber,
+      };
+    }
 
     const {
       employmentStatus,
@@ -228,7 +365,7 @@ export class EmployeesService {
       probationEndsAt,
       contractEndDate,
       ...rest
-    } = dto;
+    } = updateData;
 
     if (rest.branchId) {
       const branch = await this.prisma.branch.findFirst({
@@ -260,12 +397,11 @@ export class EmployeesService {
       data: {
         ...rest,
         ...(employmentStatus && { employmentStatus }),
-        ...(statusChanged &&
-          actor && {
-            statusChangedAt: new Date(),
-            statusChangedById: actor.id,
-            statusChangedByEmail: actor.email,
-          }),
+        ...(statusChanged && {
+          statusChangedAt: new Date(),
+          statusChangedById: actor.id,
+          statusChangedByEmail: actor.email,
+        }),
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
         probationEndsAt: probationEndsAt
           ? new Date(probationEndsAt)
@@ -331,11 +467,15 @@ export class EmployeesService {
     });
   }
 
-  async getOffboardingRecord(tenantId: string, employeeId: string) {
-    const record = await this.prisma.offboardingRecord.findFirst({
+  async getOffboardingRecord(
+    tenantId: string,
+    employeeId: string,
+    actor: RequestUser,
+  ) {
+    await this.findById(tenantId, employeeId, actor);
+    return this.prisma.offboardingRecord.findFirst({
       where: { employeeId, tenantId },
     });
-    return record;
   }
 
   async updateOffboardChecklist(

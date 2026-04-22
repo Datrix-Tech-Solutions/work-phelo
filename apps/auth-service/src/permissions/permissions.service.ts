@@ -124,7 +124,17 @@ export class PermissionsService {
   // Row is NEVER hard-deleted.
 
   async revoke(revokedBy: string, tenantId: string, dto: RevokePermissionDto) {
-    const permission = await this.prisma.userPermission.findFirst({
+    const user = await this.prisma.user.findFirst({
+      where: { id: dto.userId, tenantId },
+    });
+    if (!user) throw new NotFoundException('User not found in your tenant');
+
+    const resource = await this.prisma.resource.findUnique({
+      where: { id: dto.resourceId },
+    });
+    if (!resource) throw new NotFoundException('Resource not found');
+
+    const existing = await this.prisma.userPermission.findFirst({
       where: {
         tenantId,
         userId: dto.userId,
@@ -133,19 +143,29 @@ export class PermissionsService {
       },
     });
 
-    if (!permission) {
-      throw new NotFoundException(
-        'Permission not found — user may not have this permission',
-      );
-    }
-
-    if (!permission.isActive) {
+    if (existing && !existing.isActive) {
       throw new BadRequestException('Permission is already revoked');
     }
 
-    const updated = await this.prisma.userPermission.update({
-      where: { id: permission.id },
-      data: {
+    const updated = await this.prisma.userPermission.upsert({
+      where: {
+        userId_resourceId_action: {
+          userId: dto.userId,
+          resourceId: dto.resourceId,
+          action: dto.action as any,
+        },
+      },
+      update: {
+        isActive: false,
+        revokedBy,
+        revokedAt: new Date(),
+      },
+      create: {
+        tenantId,
+        userId: dto.userId,
+        resourceId: dto.resourceId,
+        action: dto.action as any,
+        grantedBy: revokedBy,
         isActive: false,
         revokedBy,
         revokedAt: new Date(),
@@ -350,15 +370,24 @@ export class PermissionsService {
     if (!user) throw new NotFoundException('User not found');
 
     // Direct permissions (active and not expired)
-    const directPerms = await this.prisma.userPermission.findMany({
+    // Direct permissions (all records, to distinguish active vs explicitly denied)
+    const allDirectPerms = await this.prisma.userPermission.findMany({
       where: {
         tenantId,
         userId,
-        isActive: true,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
       include: { resource: true },
     });
+
+    // Active direct permissions (must not be expired)
+    const directPerms = allDirectPerms.filter(
+      (p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()),
+    );
+
+    // Explicit denies (isActive is false, regardless of expiration)
+    const explicitDenies = allDirectPerms
+      .filter((p) => !p.isActive)
+      .map((p) => `${p.resource.name}:${p.action}`);
 
     // Permission set permissions
     const setAssignments = await this.prisma.userPermissionSet.findMany({
@@ -411,7 +440,7 @@ export class PermissionsService {
         ...directFormatted.map((p) => `${p.resourceName}:${p.action}`),
         ...setPerms.map((p) => `${p.resourceName}:${p.action}`),
       ]
-        .filter((v, i, a) => a.indexOf(v) === i)
+        .filter((v, i, a) => a.indexOf(v) === i && !explicitDenies.includes(v))
         .sort(),
     };
   }

@@ -31,13 +31,18 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
     return Object.keys(e).length === 0;
   };
 
+  const toIsoDateTime = (selectedDate: string, selectedTime?: string) => {
+    if (!selectedDate || !selectedTime) return undefined;
+    return new Date(`${selectedDate}T${selectedTime}:00`).toISOString();
+  };
+
   const handleSubmit = () => {
     if (!validate()) return;
     mutate(
       {
         date,
-        requestedIn: clockIn || undefined,
-        requestedOut: clockOut || undefined,
+        requestedIn: toIsoDateTime(date, clockIn),
+        requestedOut: toIsoDateTime(date, clockOut),
         reason: reason.trim(),
       },
       {
@@ -141,7 +146,7 @@ export function CorrectionRequestPanel({ isOpen, onClose }: CorrectionRequestPan
         <div className="p-3 bg-blue-50 border border-blue-100 rounded-input">
           <p className="text-xs text-blue-700 leading-relaxed">
             Correction requests are reviewed by HR. Approved corrections will update your attendance
-            record. You&apos;ll be notified once reviewed.
+            record. Use the expected clock-in and clock-out times for the selected date.
           </p>
         </div>
       </div>

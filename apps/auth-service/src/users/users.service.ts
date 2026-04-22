@@ -15,6 +15,7 @@ import { generateSecureToken } from '../common/otp.helper';
 import * as bcrypt from 'bcrypt';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { AuditService } from '../audit/audit.service';
+import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
 
 @Injectable()
 export class UsersService {
@@ -59,11 +60,35 @@ export class UsersService {
           where: { id: existingAdmin.id },
           data: { role: 'EMPLOYEE' },
         });
+        await syncUserSystemPermissionSet(
+          this.prisma,
+          {
+            tenantId,
+            userId: existingAdmin.id,
+            role: 'EMPLOYEE',
+            grantedBy: existingAdmin.id,
+          },
+          this.logger,
+        );
       }
     }
 
     const inviteToken = generateSecureToken();
     const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+
+    const userRole = ((dto.role as any) || 'EMPLOYEE') as string;
+    let companyRoleName: string | null = null;
+
+    if (dto.companyRoleId) {
+      const companyRole = await this.prisma.companyRole.findFirst({
+        where: { id: dto.companyRoleId, tenantId, isActive: true },
+        select: { name: true },
+      });
+      if (!companyRole) {
+        throw new NotFoundException('Company role not found in this tenant');
+      }
+      companyRoleName = companyRole.name;
+    }
 
     const user = await this.prisma.user.create({
       data: {
@@ -72,13 +97,26 @@ export class UsersService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
-        role: (dto.role as any) || 'EMPLOYEE',
+        role: userRole as any,
+        companyRoleId: dto.companyRoleId,
         status: 'PENDING_VERIFICATION',
         forcePasswordReset: true,
         inviteToken,
         inviteExpiresAt,
       },
     });
+
+    await syncUserSystemPermissionSet(
+      this.prisma,
+      {
+        tenantId,
+        userId: user.id,
+        role: userRole,
+        companyRoleName,
+        grantedBy: user.id,
+      },
+      this.logger,
+    );
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
@@ -189,6 +227,12 @@ export class UsersService {
         ),
       );
 
+    const permissions = await this.resolveEffectivePermissions(
+      updated.id,
+      updated.tenantId,
+      updated.role,
+    );
+
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {
       sub: updated.id,
@@ -198,6 +242,7 @@ export class UsersService {
       tenantSlug: updated.tenant.slug,
       tenantName: updated.tenant.name,
       firstName: updated.firstName,
+      permissions,
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
@@ -228,6 +273,47 @@ export class UsersService {
         tenantName: updated.tenant.name,
       },
     };
+  }
+
+  private async resolveEffectivePermissions(
+    userId: string,
+    tenantId: string,
+    role: string,
+  ): Promise<string[]> {
+    if (role !== 'EMPLOYEE') return [];
+
+    const [allDirectPerms, setAssignments] = await Promise.all([
+      this.prisma.userPermission.findMany({
+        where: { tenantId, userId },
+        include: { resource: true },
+      }),
+      this.prisma.userPermissionSet.findMany({
+        where: { userId },
+        include: {
+          permissionSet: {
+            include: { resources: { include: { resource: true } } },
+          },
+        },
+      }),
+    ]);
+
+    const direct = allDirectPerms
+      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
+      .map((p) => `${p.resource.name}:${p.action}`);
+
+    const explicitlyRevoked = new Set(
+      allDirectPerms
+        .filter((p) => !p.isActive)
+        .map((p) => `${p.resource.name}:${p.action}`),
+    );
+
+    const fromSets = setAssignments.flatMap((a) =>
+      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
+    );
+
+    return [...new Set([...direct, ...fromSets])].filter(
+      (perm) => !explicitlyRevoked.has(perm),
+    );
   }
 
   async resendInvite(tenantId: string, userId: string) {

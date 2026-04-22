@@ -1,9 +1,4 @@
-import { PrismaClient } from '../prisma/generated/client';
-
-const prisma = new PrismaClient();
-
 export const RESOURCES = [
-  // ── AUTH module ────────────────────────────────────────────────
   {
     name: 'users',
     module: 'AUTH',
@@ -22,7 +17,6 @@ export const RESOURCES = [
   },
   { name: 'audit-logs', module: 'AUTH', description: 'Audit trail' },
 
-  // ── HR module ──────────────────────────────────────────────────
   { name: 'employees', module: 'HR', description: 'Employee profiles' },
   { name: 'departments', module: 'HR', description: 'Department management' },
   { name: 'branches', module: 'HR', description: 'Branch locations' },
@@ -35,18 +29,11 @@ export const RESOURCES = [
     description: 'Time correction requests',
   },
   { name: 'schedules', module: 'HR', description: 'Shift schedules' },
-  {
-    name: 'projects',
-    module: 'HR',
-    description: 'Project and task management',
-  },
   { name: 'payroll', module: 'HR', description: 'Payroll runs and payslips' },
   { name: 'appraisals', module: 'HR', description: 'Performance appraisals' },
-  { name: 'assets', module: 'HR', description: 'Company asset management' },
   { name: 'documents', module: 'HR', description: 'Employee documents' },
   { name: 'allowances', module: 'HR', description: 'Employee allowances' },
 
-  // ── FINANCE module ─────────────────────────────────────────────
   {
     name: 'payroll-reports',
     module: 'FINANCE',
@@ -58,7 +45,6 @@ export const RESOURCES = [
     description: 'Expense reports',
   },
 
-  // ── PLATFORM module ────────────────────────────────────────────
   {
     name: 'platform-settings',
     module: 'PLATFORM',
@@ -69,27 +55,4 @@ export const RESOURCES = [
     module: 'PLATFORM',
     description: 'Subscription management',
   },
-];
-
-export async function seedResources() {
-  console.log('  Seeding resources...');
-  const results: Record<string, string> = {};
-
-  for (const resource of RESOURCES) {
-    const r = await prisma.resource.upsert({
-      where: { name: resource.name },
-      update: { module: resource.module, description: resource.description },
-      create: resource,
-    });
-    results[resource.name] = r.id;
-  }
-
-  console.log(`  ${Object.keys(results).length} resources seeded`);
-  return results;
-}
-
-if (require.main === module) {
-  seedResources()
-    .catch(console.error)
-    .finally(() => prisma.$disconnect());
-}
+] as const;

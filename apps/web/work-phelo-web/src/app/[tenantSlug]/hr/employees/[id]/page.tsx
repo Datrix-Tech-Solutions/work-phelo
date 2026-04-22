@@ -45,7 +45,7 @@ export default function EmployeeDetailPage({
   const [assignPermOpen, setAssignPermOpen] = useState(false);
 
   // Data fetching
-  const { data: employee, isLoading } = useEmployee(id);
+  const { data: employee, isLoading, error } = useEmployee(id);
   const { data: departments = [] } = useDepartments();
   const { data: branches = [] } = useBranches();
   const { data: allHrResult } = useEmployees();
@@ -93,7 +93,14 @@ export default function EmployeeDetailPage({
   }
 
   if (!employee) {
-    return <div className="p-8 text-center">Employee not found.</div>;
+    const status = (error as any)?.response?.status;
+    return (
+      <div className="p-8 text-center">
+        {status === 403
+          ? "You don't have permission to access this. Contact your administrator."
+          : 'Employee not found.'}
+      </div>
+    );
   }
 
   const name = `${employee.firstName} ${employee.lastName}`;

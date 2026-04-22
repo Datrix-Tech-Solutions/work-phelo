@@ -9,43 +9,51 @@ async function hash(pw: string) {
 }
 
 const MANAGER_SET: Record<string, string[]> = {
+  users: ['VIEW'],
+  'company-roles': ['VIEW'],
   employees: ['VIEW'],
   departments: ['VIEW'],
-  leave: ['VIEW', 'APPROVE'],
-  attendance: ['VIEW'],
+  branches: ['VIEW'],
+  leave: ['VIEW', 'CREATE', 'APPROVE'],
+  attendance: ['VIEW', 'CREATE'],
+  'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
   timesheets: ['VIEW', 'APPROVE'],
-  'time-corrections': ['VIEW', 'APPROVE'],
   schedules: ['VIEW', 'CREATE', 'EDIT'],
-  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  projects: ['VIEW'],
+  payroll: ['VIEW'],
+  assets: ['VIEW'],
+  appraisals: ['VIEW', 'EDIT'],
   documents: ['VIEW'],
 };
 
 const EMPLOYEE_SET: Record<string, string[]> = {
-  employees: ['VIEW'],
+  employees: ['VIEW', 'EDIT'],
   leave: ['VIEW', 'CREATE'],
-  attendance: ['VIEW'],
+  attendance: ['CREATE'],
   'time-corrections': ['CREATE'],
-  appraisals: ['VIEW'],
+  projects: ['VIEW'],
   payroll: ['VIEW'],
+  appraisals: ['VIEW', 'EDIT'],
 };
 
 const COMPANY_ADMIN_SET: Record<string, string[]> = {
-  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
-  departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'EXPORT'],
-  attendance: ['VIEW', 'EXPORT'],
-  timesheets: ['VIEW', 'APPROVE'],
-  'time-corrections': ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  payroll: ['VIEW', 'CREATE', 'RUN', 'APPROVE', 'EXPORT'],
-  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
-  documents: ['VIEW', 'CREATE', 'DELETE'],
-  allowances: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   'company-roles': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
   'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  'audit-logs': ['VIEW', 'EXPORT'],
-  'payroll-reports': ['VIEW', 'EXPORT'],
+  'audit-logs': ['VIEW'],
+  employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
+  departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  branches: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  attendance: ['VIEW', 'CREATE'],
+  'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
+  timesheets: ['VIEW', 'APPROVE'],
+  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  projects: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
+  assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  documents: ['VIEW', 'CREATE', 'EDIT'],
 };
 
 async function seedTenantPermissionSets(
@@ -61,15 +69,6 @@ async function seedTenantPermissionSets(
   const createdSets: Record<string, string> = {};
 
   for (const set of sets) {
-    const existing = await prisma.permissionSet.findUnique({
-      where: { tenantId_name: { tenantId, name: set.name } },
-    });
-
-    if (existing) {
-      createdSets[set.name] = existing.id;
-      continue;
-    }
-
     const permSetResources: { resourceId: string; action: any }[] = [];
     for (const [resourceName, actions] of Object.entries(set.perms)) {
       const resourceId = resources[resourceName];
@@ -77,6 +76,28 @@ async function seedTenantPermissionSets(
       for (const action of actions) {
         permSetResources.push({ resourceId, action });
       }
+    }
+
+    const existing = await prisma.permissionSet.findUnique({
+      where: { tenantId_name: { tenantId, name: set.name } },
+    });
+
+    if (existing) {
+      // Re-sync resources in case the set was created empty or perms changed
+      await prisma.permissionSetResource.deleteMany({
+        where: { permissionSetId: existing.id },
+      });
+      if (permSetResources.length > 0) {
+        await prisma.permissionSetResource.createMany({
+          data: permSetResources.map((r) => ({
+            permissionSetId: existing.id,
+            resourceId: r.resourceId,
+            action: r.action,
+          })),
+        });
+      }
+      createdSets[set.name] = existing.id;
+      continue;
     }
 
     const created = await prisma.permissionSet.create({
@@ -413,6 +434,45 @@ async function seedDemo(resources: Record<string, string>) {
       inviteExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
   });
+
+  // Assign Employee Set to all remaining acme employees that don't have it yet
+  if (acmeSets['Employee Set']) {
+    const acmeEmployeesWithoutSet = [acmeEmp2.id];
+    // accountant, newuser, mfa.user, invited — fetch their IDs
+    const extraAcmeEmps = await prisma.user.findMany({
+      where: {
+        tenantId: acmeTenant.id,
+        email: {
+          in: [
+            'accountant@acmeghana.com',
+            'newuser@acmeghana.com',
+            'mfa.user@acmeghana.com',
+            'invited@acmeghana.com',
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    for (const emp of [
+      ...acmeEmployeesWithoutSet.map((id) => ({ id })),
+      ...extraAcmeEmps,
+    ]) {
+      await prisma.userPermissionSet.upsert({
+        where: {
+          userId_permissionSetId: {
+            userId: emp.id,
+            permissionSetId: acmeSets['Employee Set'],
+          },
+        },
+        update: {},
+        create: {
+          userId: emp.id,
+          permissionSetId: acmeSets['Employee Set'],
+          grantedBy: acmeAdmin.id,
+        },
+      });
+    }
+  }
 
   console.log('  admin@acmeghana.com / Admin123! (TENANT_ADMIN)');
   console.log('  hr.manager@acmeghana.com / Manager123!');

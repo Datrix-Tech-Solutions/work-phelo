@@ -22,17 +22,21 @@ import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
 
 @ApiTags('Departments')
 @Controller('departments')
-@UseGuards(JwtAuthGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
 @RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class DepartmentsController {
   constructor(private readonly departmentsService: DepartmentsService) {}
 
   @Post()
+  @RequirePermissions(Permission.CREATE_DEPARTMENT)
   @ApiOperation({ summary: 'Create a new department' })
   @ApiBody({
     schema: {
@@ -49,6 +53,7 @@ export class DepartmentsController {
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_DEPARTMENTS)
   @ApiOperation({ summary: 'List all departments for the current tenant' })
   @ApiResponse({
     status: 200,
@@ -59,6 +64,7 @@ export class DepartmentsController {
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.READ_DEPARTMENTS)
   @ApiOperation({ summary: 'Get a department by ID' })
   @ApiParam({ name: 'id', description: 'Department UUID' })
   @ApiResponse({
@@ -71,6 +77,7 @@ export class DepartmentsController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permission.UPDATE_DEPARTMENT)
   @ApiOperation({ summary: 'Update a department' })
   @ApiParam({ name: 'id', description: 'Department UUID' })
   @ApiBody({ type: UpdateDepartmentDto })
@@ -85,6 +92,7 @@ export class DepartmentsController {
   }
 
   @Delete(':id')
+  @RequirePermissions(Permission.DELETE_DEPARTMENT)
   @ApiOperation({ summary: 'Delete a department' })
   @ApiParam({ name: 'id', description: 'Department UUID' })
   @ApiResponse({ status: 200, description: 'Department deleted successfully' })
