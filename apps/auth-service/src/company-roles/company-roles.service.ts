@@ -9,12 +9,53 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCompanyRoleDto } from './dto/create-company-role.dto';
 import { UpdateCompanyRoleDto } from './dto/update-company-role.dto';
+import { seedSystemPermissionSets } from '../permissions/system-permission-sets';
 
 @Injectable()
 export class CompanyRolesService {
   private readonly logger = new Logger(CompanyRolesService.name);
+  private static readonly SYSTEM_ROLE_SET_NAMES = [
+    'Company Admin Set',
+    'Manager Set',
+    'Employee Set',
+  ] as const;
 
   constructor(private readonly prisma: PrismaService) {}
+
+  private async removeOtherSystemRoleSets(
+    tenantId: string,
+    userId: string,
+    keepSetName: (typeof CompanyRolesService.SYSTEM_ROLE_SET_NAMES)[number],
+  ) {
+    const setsToRemove = await this.prisma.permissionSet.findMany({
+      where: {
+        tenantId,
+        isSystem: true,
+        isActive: true,
+        name: {
+          in: CompanyRolesService.SYSTEM_ROLE_SET_NAMES.filter(
+            (name) => name !== keepSetName,
+          ),
+        },
+      },
+      select: { id: true, name: true },
+    });
+
+    if (setsToRemove.length === 0) return;
+
+    await this.prisma.userPermissionSet.deleteMany({
+      where: {
+        userId,
+        permissionSetId: { in: setsToRemove.map((set) => set.id) },
+      },
+    });
+
+    this.logger.log(
+      `Removed competing system role set(s) from user ${userId}: ${setsToRemove
+        .map((set) => set.name)
+        .join(', ')}`,
+    );
+  }
 
   async seedDefaultRoles(tenantId: string) {
     const defaultRoles = ['Company Admin', 'Manager', 'Employee'];
@@ -229,10 +270,16 @@ export class CompanyRolesService {
 
     const setName = `${newRole.name} Set`;
 
-    // Always sync the PermissionSet before assigning — this guarantees it exists
-    // and is up-to-date, even if the role was created before this logic existed.
     const rolePerms = newRole.permissions as Record<string, string[]> | null;
-    if (rolePerms && Object.keys(rolePerms).length > 0) {
+    if (
+      newRole.isSystem &&
+      CompanyRolesService.SYSTEM_ROLE_SET_NAMES.includes(
+        setName as (typeof CompanyRolesService.SYSTEM_ROLE_SET_NAMES)[number],
+      )
+    ) {
+      await seedSystemPermissionSets(this.prisma, tenantId, this.logger);
+    } else if (rolePerms && Object.keys(rolePerms).length > 0) {
+      // Custom roles keep their permission set in sync with the stored role JSON.
       this.logger.log(
         `Syncing permission set "${setName}" for role "${newRole.name}"`,
       );
@@ -250,6 +297,19 @@ export class CompanyRolesService {
     );
 
     if (permSet) {
+      if (
+        newRole.isSystem &&
+        CompanyRolesService.SYSTEM_ROLE_SET_NAMES.includes(
+          setName as (typeof CompanyRolesService.SYSTEM_ROLE_SET_NAMES)[number],
+        )
+      ) {
+        await this.removeOtherSystemRoleSets(
+          tenantId,
+          userId,
+          setName as (typeof CompanyRolesService.SYSTEM_ROLE_SET_NAMES)[number],
+        );
+      }
+
       await this.prisma.userPermissionSet.upsert({
         where: {
           userId_permissionSetId: { userId, permissionSetId: permSet.id },
