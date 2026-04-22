@@ -15,7 +15,10 @@ import { generateSecureToken } from '../common/otp.helper';
 import * as bcrypt from 'bcrypt';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { AuditService } from '../audit/audit.service';
-import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
+import {
+  syncUserSystemCompanyRole,
+  syncUserSystemPermissionSet,
+} from '../permissions/system-permission-sets';
 
 @Injectable()
 export class UsersService {
@@ -70,6 +73,11 @@ export class UsersService {
           },
           this.logger,
         );
+        await syncUserSystemCompanyRole(this.prisma, {
+          tenantId,
+          userId: existingAdmin.id,
+          role: 'EMPLOYEE',
+        });
       }
     }
 
@@ -117,6 +125,12 @@ export class UsersService {
       },
       this.logger,
     );
+    await syncUserSystemCompanyRole(this.prisma, {
+      tenantId,
+      userId: user.id,
+      role: userRole,
+      companyRoleName,
+    });
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 

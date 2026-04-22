@@ -4,7 +4,10 @@ import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
 import { generateSecureToken } from '../common/otp.helper';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
-import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
+import {
+  syncUserSystemCompanyRole,
+  syncUserSystemPermissionSet,
+} from '../permissions/system-permission-sets';
 
 @Injectable()
 export class TenantAdminService {
@@ -79,6 +82,11 @@ export class TenantAdminService {
       },
       this.logger,
     );
+    await syncUserSystemCompanyRole(this.prisma, {
+      tenantId: id,
+      userId: user.id,
+      role: user.role,
+    });
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
     void this.rabbitmq

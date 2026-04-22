@@ -19,6 +19,47 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
+  private async resolveEffectivePermissions(
+    userId: string,
+    tenantId: string,
+    role: string,
+  ): Promise<string[]> {
+    if (role !== 'EMPLOYEE') return [];
+
+    const [allDirectPerms, setAssignments] = await Promise.all([
+      this.prisma.userPermission.findMany({
+        where: { tenantId, userId },
+        include: { resource: true },
+      }),
+      this.prisma.userPermissionSet.findMany({
+        where: { userId },
+        include: {
+          permissionSet: {
+            include: { resources: { include: { resource: true } } },
+          },
+        },
+      }),
+    ]);
+
+    const direct = allDirectPerms
+      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
+      .map((p) => `${p.resource.name}:${p.action}`);
+
+    const explicitlyRevoked = new Set(
+      allDirectPerms
+        .filter((p) => !p.isActive)
+        .map((p) => `${p.resource.name}:${p.action}`),
+    );
+
+    const fromSets = setAssignments.flatMap((a) =>
+      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
+    );
+
+    return [...new Set([...direct, ...fromSets])].filter(
+      (perm) => !explicitlyRevoked.has(perm),
+    );
+  }
+
   async validate(payload: any): Promise<RequestUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
@@ -29,6 +70,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
+    const permissions = await this.resolveEffectivePermissions(
+      user.id,
+      user.tenantId,
+      user.role,
+    );
+
     return {
       id: user.id,
       email: user.email,
@@ -38,15 +85,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       tenantName: user.tenant.name,
       firstName: user.firstName,
       companyRoleId: user.companyRoleId ?? null,
-      companyRoleName:
-        payload.companyRoleName ?? user.companyRole?.name ?? null,
+      companyRoleName: user.companyRole?.name ?? null,
       moduleConfig: (user.tenant.moduleConfig as Record<string, boolean>) ?? {},
       featureConfig:
         (user.tenant.featureConfig as Record<
           string,
           Record<string, boolean>
         >) ?? {},
-      permissions: payload.permissions ?? [],
+      permissions,
     };
   }
 }
