@@ -8,6 +8,8 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
 import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 export default function HRLayout({
   children,
@@ -25,6 +27,8 @@ export default function HRLayout({
   const [activeTab, setActiveTab] = useState('portal');
 
   const { hasAnyManagementAccess } = useHrManagementAccess();
+  const canReadDepartments = usePermission(Permission.READ_DEPARTMENTS);
+  const canReadBranches = usePermission(Permission.READ_BRANCHES);
 
   // Feature toggles from the user's tenant config
   const hrFeatures = user?.featureConfig?.hr ?? {};
@@ -39,6 +43,11 @@ export default function HRLayout({
     items: group.items.map((item) => ({
       ...item,
       href: `/${tenantSlug}/hr${item.href ? `/${item.href}` : ''}`,
+      enabled:
+        (item.key === 'departments' && !canReadDepartments) ||
+        (item.key === 'branches' && !canReadBranches)
+          ? false
+          : item.enabled,
       active: coreKeys.has(item.key)
         ? true
         : item.key in hrFeatures
