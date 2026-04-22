@@ -33,6 +33,7 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
 
 @ApiTags('Leave')
 @Controller('leave')
@@ -138,6 +139,7 @@ export class LeaveController {
   }
 
   @Get('balances/me')
+  @RequirePermissions(Permission.READ_OWN_LEAVE)
   @ApiOperation({ summary: 'Get leave balances for the logged-in employee' })
   @ApiResponse({ status: 200, description: 'My leave balances retrieved' })
   getMyBalances(@Req() req: any) {
@@ -149,11 +151,16 @@ export class LeaveController {
   @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Leave balances retrieved' })
   getBalances(@Param('employeeId') employeeId: string, @Req() req: any) {
-    return this.leaveService.getLeaveBalances(req.user.tenantId, employeeId);
+    return this.leaveService.getLeaveBalances(
+      req.user.tenantId,
+      employeeId,
+      req.user as RequestUser,
+    );
   }
 
   @Post('balances/backfill')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.MANAGE_LEAVE_TYPES)
   @ApiOperation({
     summary:
       'Backfill leave balances for all employees in the tenant — Admin only',
@@ -164,6 +171,7 @@ export class LeaveController {
   }
 
   @Post('balances/:employeeId/initialize')
+  @RequirePermissions(Permission.MANAGE_LEAVE_TYPES)
   @ApiOperation({ summary: 'Initialize leave balances for an employee' })
   @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
   @ApiResponse({ status: 201, description: 'Leave balances initialized' })
@@ -203,25 +211,34 @@ export class LeaveController {
   })
   @ApiResponse({ status: 200, description: 'Leave requests retrieved' })
   getRequests(@Query('status') status: string, @Req() req: any) {
-    return this.leaveService.getRequests(req.user.tenantId, {
-      status,
-      managerId: req.user.role !== 'TENANT_ADMIN' ? req.user.id : undefined,
-    });
+    return this.leaveService.getRequests(
+      req.user.tenantId,
+      req.user as RequestUser,
+      { status },
+    );
   }
 
   @Get('requests/all')
+  @RequirePermissions(Permission.READ_ALL_LEAVES)
   @ApiOperation({ summary: 'Get all leave requests — Admin only' })
   @ApiQuery({ name: 'status', required: false })
   @ApiResponse({ status: 200, description: 'All leave requests retrieved' })
   getAllRequests(@Query('status') status: string, @Req() req: any) {
-    return this.leaveService.getRequests(req.user.tenantId, { status });
+    return this.leaveService.getRequests(
+      req.user.tenantId,
+      req.user as RequestUser,
+      { status, scope: 'all' },
+    );
   }
 
   @Get('requests/pending-count')
   @ApiOperation({ summary: 'Get pending leave request count' })
   @ApiResponse({ status: 200, description: 'Count returned' })
   getPendingCount(@Req() req: any) {
-    return this.leaveService.getPendingCount(req.user.tenantId);
+    return this.leaveService.getPendingCount(
+      req.user.tenantId,
+      req.user as RequestUser,
+    );
   }
 
   @Get('requests/my')
@@ -232,9 +249,11 @@ export class LeaveController {
       req.user.tenantId,
       req.user.id,
     );
-    return this.leaveService.getRequests(req.user.tenantId, {
-      employeeId: employee?.id,
-    });
+    return this.leaveService.getRequests(
+      req.user.tenantId,
+      req.user as RequestUser,
+      { employeeId: employee?.id },
+    );
   }
 
   @Patch('requests/:id/review')
@@ -251,12 +270,13 @@ export class LeaveController {
     return this.leaveService.reviewRequest(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user as RequestUser,
       dto,
     );
   }
 
   @Patch('requests/:id/cancel')
+  @RequirePermissions(Permission.REQUEST_LEAVE)
   @ApiOperation({ summary: 'Cancel a leave request' })
   @ApiParam({ name: 'id', description: 'Leave request UUID' })
   @ApiResponse({ status: 200, description: 'Leave request cancelled' })

@@ -33,6 +33,7 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
 
 @ApiTags('Time')
 @Controller('time')
@@ -70,6 +71,7 @@ export class TimeController {
   }
 
   @Get('today')
+  @RequirePermissions(Permission.CLOCK_IN_OUT)
   @ApiOperation({
     summary: "Get today's clock status for the logged-in employee",
   })
@@ -79,6 +81,7 @@ export class TimeController {
   }
 
   @Get('my-history')
+  @RequirePermissions(Permission.CLOCK_IN_OUT)
   @ApiOperation({ summary: "Get current employee's own attendance history" })
   @ApiResponse({ status: 200, description: 'My attendance records' })
   getMyAttendance(@Req() req: any) {
@@ -103,14 +106,16 @@ export class TimeController {
     @Query('mine') mine: string,
     @Req() req: any,
   ) {
-    if (mine === 'true') {
-      return this.timeService.getMyAttendance(req.user.tenantId, req.user.id);
-    }
-    return this.timeService.getAttendance(req.user.tenantId, {
-      employeeId,
-      from,
-      to,
-    });
+    return this.timeService.getAttendance(
+      req.user.tenantId,
+      req.user as RequestUser,
+      {
+        employeeId,
+        from,
+        to,
+        mine: mine === 'true',
+      },
+    );
   }
 
   @Post('corrections')
@@ -136,7 +141,11 @@ export class TimeController {
   })
   @ApiResponse({ status: 200, description: 'Corrections retrieved' })
   getCorrections(@Query('status') status: string, @Req() req: any) {
-    return this.timeService.getTimeCorrections(req.user.tenantId, { status });
+    return this.timeService.getTimeCorrections(
+      req.user.tenantId,
+      req.user as RequestUser,
+      { status },
+    );
   }
 
   @Patch('corrections/:id/review')
@@ -153,7 +162,7 @@ export class TimeController {
     return this.timeService.reviewTimeCorrection(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user as RequestUser,
       dto,
     );
   }
@@ -162,24 +171,33 @@ export class TimeController {
   @ApiOperation({ summary: 'Get all employees currently clocked in' })
   @ApiResponse({ status: 200, description: 'Live attendance list' })
   getLiveAttendance(@Req() req: any) {
-    return this.timeService.getLiveAttendance(req.user.tenantId);
+    return this.timeService.getLiveAttendance(
+      req.user.tenantId,
+      req.user as RequestUser,
+    );
   }
 
   @Get('stats/today')
   @ApiOperation({ summary: "Get today's attendance stats" })
   @ApiResponse({ status: 200, description: 'Attendance stats' })
   getAttendanceStats(@Req() req: any) {
-    return this.timeService.getAttendanceStats(req.user.tenantId);
+    return this.timeService.getAttendanceStats(
+      req.user.tenantId,
+      req.user as RequestUser,
+    );
   }
 
   @Post('schedules')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Create a shift schedule for an employee' })
   @ApiBody({ type: CreateScheduleDto })
   @ApiResponse({ status: 201, description: 'Schedule created' })
   createSchedule(@Body() dto: CreateScheduleDto, @Req() req: any) {
-    return this.timeService.createSchedule(req.user.tenantId, req.user.id, dto);
+    return this.timeService.createSchedule(
+      req.user.tenantId,
+      req.user as RequestUser,
+      dto,
+    );
   }
 
   @Get('schedules')
@@ -187,6 +205,10 @@ export class TimeController {
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiResponse({ status: 200, description: 'Schedules retrieved' })
   getSchedules(@Query('employeeId') employeeId: string, @Req() req: any) {
-    return this.timeService.getSchedules(req.user.tenantId, employeeId);
+    return this.timeService.getSchedules(
+      req.user.tenantId,
+      req.user as RequestUser,
+      employeeId,
+    );
   }
 }

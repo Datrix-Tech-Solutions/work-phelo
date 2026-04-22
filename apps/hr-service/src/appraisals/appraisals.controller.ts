@@ -29,6 +29,7 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
 
 @ApiTags('Appraisals')
 @Controller('appraisals')
@@ -78,10 +79,15 @@ export class AppraisalsController {
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
   @ApiResponse({ status: 200, description: 'Appraisals retrieved' })
   getAppraisals(@Param('cycleId') cycleId: string, @Req() req: any) {
-    return this.appraisalsService.getAppraisals(req.user.tenantId, cycleId);
+    return this.appraisalsService.getAppraisals(
+      req.user.tenantId,
+      req.user as RequestUser,
+      cycleId,
+    );
   }
 
   @Get('my')
+  @RequirePermissions(Permission.READ_OWN_REVIEW)
   @ApiOperation({ summary: "Get the logged-in employee's own appraisals" })
   @ApiResponse({ status: 200, description: 'My appraisals retrieved' })
   getMyAppraisals(@Req() req: any) {
@@ -124,7 +130,7 @@ export class AppraisalsController {
     return this.appraisalsService.submitManagerReview(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user as RequestUser,
       dto,
     );
   }

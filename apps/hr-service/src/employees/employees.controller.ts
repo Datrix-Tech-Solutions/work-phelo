@@ -34,6 +34,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
 
 @ApiTags('Employees')
 @Controller('employees')
@@ -111,11 +112,14 @@ export class EmployeesController {
   @ApiResponse({ status: 200, description: 'Employee retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Employee not found' })
   findOne(@Param('id') id: string, @Req() req: any) {
-    return this.employeesService.findById(req.user.tenantId, id);
+    return this.employeesService.findById(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Patch(':id')
-  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
   @ApiOperation({ summary: 'Update an employee profile' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: UpdateEmployeeDto })
@@ -126,10 +130,12 @@ export class EmployeesController {
     @Body() dto: UpdateEmployeeDto,
     @Req() req: any,
   ) {
-    return this.employeesService.update(req.user.tenantId, id, dto, {
-      id: req.user.id,
-      email: req.user.email,
-    });
+    return this.employeesService.update(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user as RequestUser,
+    );
   }
 
   @Post(':id/offboard')
@@ -151,14 +157,20 @@ export class EmployeesController {
   }
 
   @Get(':id/offboard')
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
   @ApiOperation({ summary: 'Get existing offboarding record for an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Offboarding record retrieved' })
   getOffboardingRecord(@Param('id') id: string, @Req() req: any) {
-    return this.employeesService.getOffboardingRecord(req.user.tenantId, id);
+    return this.employeesService.getOffboardingRecord(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Patch(':id/offboard/checklist')
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
   @ApiOperation({ summary: 'Tick or untick a clearance checklist item' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: UpdateChecklistDto })
@@ -178,6 +190,7 @@ export class EmployeesController {
 
   @Post(':id/offboard/complete')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
   @ApiOperation({
     summary:
       'Complete offboarding — sets employee to Offboarded and revokes access',
@@ -193,7 +206,7 @@ export class EmployeesController {
 
   @Post(':id/resend-invite')
   @HttpCode(HttpStatus.OK)
-  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
+  @RequirePermissions(Permission.CREATE_EMPLOYEE)
   @ApiOperation({
     summary: 'Resend invite email to employee — invalidates previous link',
   })
@@ -206,7 +219,7 @@ export class EmployeesController {
 
   @Post(':id/allowances')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
+  @RequirePermissions(Permission.CREATE_EMPLOYEE)
   @ApiOperation({ summary: 'Add an allowance to an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({

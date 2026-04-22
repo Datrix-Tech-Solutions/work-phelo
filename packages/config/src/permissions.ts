@@ -104,14 +104,12 @@ export const SYSTEM_ROLE_ACCESS: Record<string, string[]> = {
 // Default company role permissions — seeded for every new tenant
 export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
   'Company Admin': [
-    Permission.READ_TENANT,
-    Permission.UPDATE_TENANT,
-    Permission.VIEW_AUDIT_LOGS,
     Permission.INVITE_USER,
     Permission.READ_USERS,
     Permission.UPDATE_USER,
     Permission.DEACTIVATE_USER,
     Permission.FORCE_RESET_USER,
+    Permission.VIEW_PERMISSION_SETS,
     Permission.GRANT_PERMISSION,
     Permission.MANAGE_COMPANY_ROLES,
     Permission.READ_COMPANY_ROLES,
@@ -156,7 +154,6 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
   ],
 
   Manager: [
-    Permission.READ_USERS,
     Permission.READ_COMPANY_ROLES,
     Permission.READ_EMPLOYEES,
     Permission.READ_TEAM_EMPLOYEES,
