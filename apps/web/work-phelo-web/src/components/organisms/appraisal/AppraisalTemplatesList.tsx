@@ -57,57 +57,74 @@ export function AppraisalTemplatesList({ tenantSlug }: Props) {
     {
       key: 'name',
       label: 'Template Name',
-      width: '2fr',
       render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
     },
     {
       key: 'sections',
       label: 'Sections',
-      width: '100px',
-      render: (row) => (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
-          {row.sections.length} section{row.sections.length !== 1 ? 's' : ''}
-        </span>
-      ),
+      width: '2fr',
+      render: (row) => {
+        const titles = row.kpis.map((k) => k.title).join(', ');
+        return (
+          <span className="text-gray-600 text-sm truncate block max-w-xs" title={titles}>
+            {titles || '—'}
+          </span>
+        );
+      },
     },
     {
       key: 'isActive',
       label: 'Status',
-      width: '100px',
+      width: '110px',
       render: (row) => (
         <span
-          className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${row.isActive ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+          className={`inline-flex items-center gap-1.5 text-sm font-medium ${row.isActive ? 'text-green-600' : 'text-gray-500'}`}
         >
+          <span
+            className={`w-2 h-2 rounded-full shrink-0 ${row.isActive ? 'bg-green-500' : 'bg-gray-400'}`}
+          />
           {row.isActive ? 'Active' : 'Inactive'}
         </span>
       ),
     },
     {
       key: 'createdAt',
-      label: 'Created',
-      width: '120px',
+      label: 'Date Created',
+      width: '130px',
       render: (row) => (
-        <span className="text-sm text-gray-500">
+        <span className="text-gray-700">
           {new Date(row.createdAt).toLocaleDateString('en-GB', {
             day: '2-digit',
-            month: 'short',
+            month: '2-digit',
             year: 'numeric',
           })}
         </span>
       ),
     },
-  ];
-
-  const rowActions = (row: AppraisalTemplate) => [
-    { label: 'Preview', onClick: () => setPreviewTarget(row) },
     {
-      label: 'Edit',
-      onClick: () => {
-        setEditTemplate(row);
-        setPanelOpen(true);
-      },
+      key: 'actions',
+      label: '',
+      width: '120px',
+      render: (row) => (
+        <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => {
+              setEditTemplate(row);
+              setPanelOpen(true);
+            }}
+            className="text-sm font-semibold text-gray-800 hover:text-brand transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => setDeleteTarget(row)}
+            className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      ),
     },
-    { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
   ];
 
   return (
@@ -126,7 +143,6 @@ export function AppraisalTemplatesList({ tenantSlug }: Props) {
             setPanelOpen(true);
           },
         }}
-        rowActions={rowActions}
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
@@ -147,12 +163,9 @@ export function AppraisalTemplatesList({ tenantSlug }: Props) {
           isOpen={!!previewTarget}
           onClose={() => setPreviewTarget(null)}
           templateName={previewTarget.name}
-          sections={previewTarget.sections.map((s) => ({
-            name: s.name,
-            type: s.type,
-            ratingScaleRange: s.ratingScaleRange,
-            isRequired: s.isRequired,
-          }))}
+          selfAssessmentWeight={previewTarget.selfAssessmentWeight}
+          managerAssessmentWeight={previewTarget.managerAssessmentWeight}
+          kpis={previewTarget.kpis}
         />
       )}
 

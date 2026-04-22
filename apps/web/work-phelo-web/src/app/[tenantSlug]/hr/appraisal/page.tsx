@@ -18,7 +18,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
-    if (user !== null && !user.featureConfig?.hr?.appraisals) {
+    if (user !== null && !user.featureConfig?.hr?.appraisal) {
       router.replace(`/${tenantSlug}/hr`);
     }
   }, [user, tenantSlug, router]);

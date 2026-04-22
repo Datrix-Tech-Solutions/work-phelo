@@ -44,18 +44,24 @@ interface DataTableProps<T extends { id: string | number }> {
 function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
   const [openUpward, setOpenUpward] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, bottom: 0, right: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   const handleToggle = () => {
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
       setOpenUpward(window.innerHeight - rect.bottom < 120);
+      setMenuPos({
+        top: rect.bottom + 4,
+        bottom: window.innerHeight - rect.top + 4,
+        right: window.innerWidth - rect.right,
+      });
     }
     setOpen((v) => !v);
   };
 
   return (
-    <div className="relative">
+    <div>
       <button
         ref={buttonRef}
         onClick={handleToggle}
@@ -66,12 +72,15 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
           <div
-            className={cn(
-              'absolute right-0 z-20 min-w-35 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden',
-              openUpward ? 'bottom-8' : 'top-8',
-            )}
+            style={{
+              position: 'fixed',
+              right: menuPos.right,
+              ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
+              minWidth: 140,
+            }}
+            className="z-50 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden"
           >
             {actions.map((action) => (
               <button

@@ -41,8 +41,6 @@ function AssignRoleForm({
   const assignedRoles = roles.filter((role) =>
     assignedSets.some((set) => set.name === `${role.name} Set`),
   );
-  const currentRole = roles.find((role) => role.name === currentRoleName) ?? null;
-
   const availableOptions = roles
     .filter((role) => !assignedRoles.some((assignedRole) => assignedRole.id === role.id))
     .map((r) => ({
