@@ -29,7 +29,7 @@ export function EmployeeActionsBar({
     <div className="flex items-center justify-end gap-3">
       {onAssignRole && !isOffboarded && !isPendingInvite && (
         <Button variant="outline" size="sm" onClick={onAssignRole} className="gap-2">
-          Assign Role
+          Manage Roles
           <ShieldCheck className="w-4 h-4" />
         </Button>
       )}
@@ -47,7 +47,7 @@ export function EmployeeActionsBar({
       ) : !isOffboarded ? (
         <>
           <Button variant="outline" size="sm" onClick={onAssignPermission} className="gap-2">
-            Assign Permissions
+            Grant Direct Permissions
             <ShieldCog className="w-4 h-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={onAssignAsset}>

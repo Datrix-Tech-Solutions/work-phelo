@@ -12,11 +12,12 @@ interface AssignRolePanelProps {
   onClose: () => void;
   employeeName: string;
   userId: string;
-  // All permission sets currently assigned to this user
+  currentRoleName: string | null;
   assignedSets: { id: string; name: string }[];
   roles: CompanyRole[];
   onAssign: (companyRoleId: string, userId: string) => void;
-  onRemove: (companyRoleId: string, userId: string) => void;
+  onRemoveRole: (companyRoleId: string, userId: string) => void;
+  onRemovePermissionSet: (permissionSetId: string) => void;
   isAssigning: boolean;
   isRemoving: boolean;
 }
@@ -25,22 +26,25 @@ function AssignRoleForm({
   onClose,
   employeeName,
   userId,
+  currentRoleName,
   assignedSets,
   roles,
   onAssign,
-  onRemove,
+  onRemoveRole,
+  onRemovePermissionSet,
   isAssigning,
   isRemoving,
 }: Omit<AssignRolePanelProps, 'isOpen'>) {
   const [selectedRoleId, setSelectedRoleId] = useState('');
   const [error, setError] = useState('');
 
-  // Roles that are currently active (have a matching " Set" in assignedSets)
-  const assignedRoles = roles.filter((r) => assignedSets.some((s) => s.name === `${r.name} Set`));
+  const assignedRoles = roles.filter((role) =>
+    assignedSets.some((set) => set.name === `${role.name} Set`),
+  );
+  const currentRole = roles.find((role) => role.name === currentRoleName) ?? null;
 
-  // Only show roles not already assigned in the picker
   const availableOptions = roles
-    .filter((r) => !assignedRoles.some((ar) => ar.id === r.id))
+    .filter((role) => !assignedRoles.some((assignedRole) => assignedRole.id === role.id))
     .map((r) => ({
       value: r.id,
       label: r.name,
@@ -64,7 +68,7 @@ function AssignRoleForm({
       isOpen
       onClose={onClose}
       title="Manage Roles"
-      description={`Assign or remove roles for ${employeeName}. Roles stack — each adds its permissions.`}
+      description={`Assign and remove roles for ${employeeName}. Default system roles replace one another, while custom roles can stack as extra access.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
@@ -82,36 +86,50 @@ function AssignRoleForm({
         {assignedRoles.length === 0 ? (
           <p className="text-sm text-gray-400 py-2">No roles assigned yet.</p>
         ) : (
-          assignedRoles.map((role) => (
-            <div
-              key={role.id}
-              className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
-            >
-              <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
-                <ShieldCheck className="w-4 h-4 text-brand" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900">{role.name}</p>
-                {role.description && (
-                  <p className="text-xs text-gray-400 truncate">{role.description}</p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => onRemove(role.id, userId)}
-                disabled={isRemoving}
-                className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+          assignedRoles.map((role) => {
+            const isCurrentRole = role.name === currentRoleName;
+            const matchingSet = assignedSets.find((set) => set.name === `${role.name} Set`);
+
+            return (
+              <div
+                key={role.id}
+                className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3"
               >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ))
+                <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
+                  <ShieldCheck className="w-4 h-4 text-brand" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{role.name}</p>
+                  <p className="text-xs text-gray-400 truncate">
+                    {isCurrentRole ? 'Current base role' : 'Stacked custom role access'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isCurrentRole) {
+                      onRemoveRole(role.id, userId);
+                      return;
+                    }
+
+                    if (matchingSet) {
+                      onRemovePermissionSet(matchingSet.id);
+                    }
+                  }}
+                  disabled={isRemoving}
+                  className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })
         )}
       </div>
 
       {/* Add a new role */}
       <div className="flex flex-col gap-3">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Add Role</p>
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Assign Role</p>
 
         {availableOptions.length === 0 ? (
           <p className="text-sm text-gray-400">All available roles have been assigned.</p>

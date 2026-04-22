@@ -170,8 +170,8 @@ function AssignPermissionPanelInner({
     <SidePanel
       isOpen
       onClose={onClose}
-      title="Manage Permissions"
-      description={`View, grant, and revoke direct permissions for ${employeeName}.`}
+      title="Grant Direct Permissions"
+      description={`Use one-off direct permission overrides for ${employeeName}. These are exceptions on top of the base role and any assigned permission sets.`}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
@@ -240,6 +240,11 @@ function AssignPermissionPanelInner({
 
       {/* Divider */}
       <div className="border-t border-gray-100" />
+
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        Changes appear in this panel immediately. The affected user may need to refresh or sign in
+        again before their live session reflects the new access.
+      </div>
 
       {/* ── Grant new permission ──────────────────────────────── */}
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">

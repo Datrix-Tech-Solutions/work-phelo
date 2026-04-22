@@ -12,11 +12,14 @@ import {
 import { useDepartments } from '@/hooks/useDepartments';
 import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import {
   useCompanyRoles,
   useUserPermissions,
   useAssignRole,
   useUnassignRole,
+  useRemovePermissionSet,
 } from '@/hooks/useRoles';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
@@ -56,6 +59,10 @@ export default function EmployeeDetailPage({
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
   const { mutate: assignRole, isPending: isAssigningRole } = useAssignRole();
   const { mutate: unassignRole, isPending: isRemovingRole } = useUnassignRole();
+  const { mutate: removePermissionSet, isPending: isRemovingPermissionSet } =
+    useRemovePermissionSet();
+  const canAssignRole = usePermission(Permission.ASSIGN_ROLE);
+  const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
 
   // Roles data
   const { data: rolesRaw = [] } = useCompanyRoles();
@@ -67,6 +74,9 @@ export default function EmployeeDetailPage({
 
   const currentRoleName = userPerms?.companyRole ?? null;
   const assignedSets = userPerms?.permissionSets ?? [];
+  const displayedRoleNames = roles
+    .filter((role) => assignedSets.some((set) => set.name === `${role.name} Set`))
+    .map((role) => role.name);
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -117,8 +127,10 @@ export default function EmployeeDetailPage({
         resendInvite={handleResendInvite}
         isResending={isResending}
         onAssignAsset={() => setAssignAssetOpen(true)}
-        onAssignRole={employee.userId ? () => setAssignRoleOpen(true) : undefined}
-        onAssignPermission={employee.userId ? () => setAssignPermOpen(true) : undefined}
+        onAssignRole={employee.userId && canAssignRole ? () => setAssignRoleOpen(true) : undefined}
+        onAssignPermission={
+          employee.userId && canGrantPermission ? () => setAssignPermOpen(true) : undefined
+        }
         onOffboard={() => setOffboardOpen(true)}
         onEdit={() => setEditOpen(true)}
       />
@@ -128,10 +140,13 @@ export default function EmployeeDetailPage({
         {/* Left Sidebar */}
         <EmployeeProfileCard
           employee={employee}
-          roles={[
-            ...(currentRoleName ? [currentRoleName] : []),
-            ...assignedSets.filter((s) => s.name !== `${currentRoleName} Set`).map((s) => s.name),
-          ]}
+          roles={
+            displayedRoleNames.length > 0
+              ? displayedRoleNames
+              : currentRoleName
+                ? [currentRoleName]
+                : []
+          }
         />
 
         {/* Right Sections */}
@@ -181,10 +196,11 @@ export default function EmployeeDetailPage({
           onClose={() => setAssignRoleOpen(false)}
           employeeName={name}
           userId={employee.userId}
+          currentRoleName={currentRoleName}
           assignedSets={assignedSets}
           roles={roles}
           isAssigning={isAssigningRole}
-          isRemoving={isRemovingRole}
+          isRemoving={isRemovingRole || isRemovingPermissionSet}
           onAssign={(roleId, userId) => {
             assignRole(
               { roleId, userId },
@@ -194,7 +210,7 @@ export default function EmployeeDetailPage({
               },
             );
           }}
-          onRemove={(roleId, userId) => {
+          onRemoveRole={(roleId, userId) => {
             unassignRole(
               { roleId, userId },
               {
@@ -203,6 +219,15 @@ export default function EmployeeDetailPage({
               },
             );
           }}
+          onRemovePermissionSet={(permissionSetId) =>
+            removePermissionSet(
+              { userId: employee.userId!, permissionSetId },
+              {
+                onSuccess: () => toast.success(`Role access removed from ${name}`),
+                onError: () => toast.error('Failed to remove permission set'),
+              },
+            )
+          }
         />
       )}
 
