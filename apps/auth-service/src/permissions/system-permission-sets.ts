@@ -32,6 +32,7 @@ type SyncUserSystemPermissionSetParams = {
 const MANAGER_SET: PermissionResourceMap = {
   'company-roles': [PermissionAction.VIEW],
   employees: [PermissionAction.VIEW],
+  resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
   departments: [PermissionAction.VIEW],
   branches: [PermissionAction.VIEW],
   leave: [
@@ -58,6 +59,7 @@ const MANAGER_SET: PermissionResourceMap = {
 
 const EMPLOYEE_SET: PermissionResourceMap = {
   employees: [PermissionAction.VIEW, PermissionAction.EDIT],
+  resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
   leave: [PermissionAction.VIEW, PermissionAction.CREATE],
   attendance: [PermissionAction.CREATE],
   'time-corrections': [PermissionAction.CREATE],
@@ -93,6 +95,8 @@ const COMPANY_ADMIN_SET: PermissionResourceMap = {
     PermissionAction.DELETE,
     PermissionAction.EXPORT,
   ],
+  resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
+  'hr-settings': [PermissionAction.VIEW, PermissionAction.EDIT],
   departments: [
     PermissionAction.VIEW,
     PermissionAction.CREATE,

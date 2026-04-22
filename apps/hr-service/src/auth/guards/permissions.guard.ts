@@ -33,11 +33,23 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.OFFBOARD_EMPLOYEE]: [
     { resource: 'employees', actions: ['DELETE'] },
   ],
+  [Permission.SUBMIT_RESIGNATION]: [
+    { resource: 'resignations', actions: ['CREATE'] },
+  ],
+  [Permission.WITHDRAW_RESIGNATION]: [
+    { resource: 'resignations', actions: ['DELETE'] },
+  ],
   [Permission.MANAGE_DOCUMENTS]: [
     { resource: 'documents', actions: ['CREATE', 'EDIT'] },
   ],
   [Permission.EXPORT_EMPLOYEES]: [
     { resource: 'employees', actions: ['EXPORT'] },
+  ],
+  [Permission.READ_HR_SETTINGS]: [
+    { resource: 'hr-settings', actions: ['VIEW'] },
+  ],
+  [Permission.MANAGE_HR_SETTINGS]: [
+    { resource: 'hr-settings', actions: ['EDIT'] },
   ],
 
   // ── Departments ───────────────────────────────────────────────────────────

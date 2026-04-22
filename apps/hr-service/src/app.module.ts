@@ -19,6 +19,7 @@ import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 import { HealthModule } from './health/health.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { HealthModule } from './health/health.module';
     NotificationsModule,
     SchedulingModule,
     HealthModule,
+    SettingsModule,
   ],
   providers: [
     RabbitMQSetupService,

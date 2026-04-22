@@ -9,6 +9,7 @@ import {
   PasswordResetOtpEvent,
   SmsOtpEvent,
   EmployeeTerminationEvent,
+  ResignationSubmittedEvent,
   LeaveRequestedEvent,
   LeaveReviewedEvent,
   LeaveCancelledEvent,
@@ -94,6 +95,20 @@ export class NotificationHandler {
       await this.notificationService.sendTerminationNotice(data);
     } catch (err) {
       this.logger.error('[notify.employee_termination] Handler failed', err);
+    }
+  }
+
+  @EventPattern('notify.resignation_submitted')
+  async handleResignationSubmitted(
+    @Payload() data: WithMeta<ResignationSubmittedEvent>,
+  ) {
+    this.logger.log(
+      `[notify.resignation_submitted] Received | employee=${data.employeeFirstName} ${data.employeeLastName} | adminEmail=${data.adminEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendResignationSubmittedNotification(data);
+    } catch (err) {
+      this.logger.error('[notify.resignation_submitted] Handler failed', err);
     }
   }
 

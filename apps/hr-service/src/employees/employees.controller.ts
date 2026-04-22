@@ -12,6 +12,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -27,6 +28,10 @@ import {
   InitiateOffboardDto,
   UpdateChecklistDto,
 } from './dto/offboard-employee.dto';
+import {
+  DismissResignationDto,
+  SubmitResignationDto,
+} from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
@@ -138,6 +143,98 @@ export class EmployeesController {
       req.user.tenantId,
       id,
       dto,
+      req.user as RequestUser,
+    );
+  }
+
+  @Post(':id/resignation')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.SUBMIT_RESIGNATION)
+  @ApiOperation({
+    summary: 'Submit a resignation for the current employee profile',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiBody({ type: SubmitResignationDto })
+  @ApiResponse({ status: 201, description: 'Resignation submitted' })
+  submitResignation(
+    @Param('id') id: string,
+    @Body() dto: SubmitResignationDto,
+    @Req() req: any,
+  ) {
+    return this.employeesService.submitResignation(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user as RequestUser,
+    );
+  }
+
+  @Get(':id/resignation')
+  @ApiOperation({
+    summary: 'Get resignation record for an employee',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Resignation record retrieved' })
+  getResignation(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.getResignationRecord(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
+  }
+
+  @Delete(':id/resignation')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.WITHDRAW_RESIGNATION)
+  @ApiOperation({
+    summary: 'Withdraw a pending resignation before offboarding begins',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Resignation withdrawn' })
+  withdrawResignation(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.withdrawResignation(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
+  }
+
+  @Patch(':id/resignation/dismiss')
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
+  @ApiOperation({
+    summary: 'Dismiss a resignation without initiating offboarding',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiBody({ type: DismissResignationDto })
+  @ApiResponse({ status: 200, description: 'Resignation dismissed' })
+  dismissResignation(
+    @Param('id') id: string,
+    @Body() dto: DismissResignationDto,
+    @Req() req: any,
+  ) {
+    return this.employeesService.dismissResignation(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user as RequestUser,
+    );
+  }
+
+  @Post(':id/resignation/initiate-offboarding')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
+  @ApiOperation({
+    summary: 'Initiate offboarding from a pending resignation',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({
+    status: 201,
+    description: 'Offboarding initiated from resignation',
+  })
+  initiateOffboardingFromResignation(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.initiateOffboardFromResignation(
+      req.user.tenantId,
+      id,
       req.user as RequestUser,
     );
   }
