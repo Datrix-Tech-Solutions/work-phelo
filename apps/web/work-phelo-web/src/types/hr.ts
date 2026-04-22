@@ -496,11 +496,21 @@ export interface AppraisalTemplate {
   id: string;
   tenantSlug: string;
   name: string;
-  description?: string;
-  sections: AppraisalSection[];
+  selfAssessmentWeight: number;
+  managerAssessmentWeight: number;
+  kpis: AppraisalTemplateKpi[];
   isActive: boolean;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface AppraisalTemplateKpi {
+  id: string;
+  templateId: string;
+  title: string;
+  weight: number;
+  maxScore: number;
+  description?: string;
 }
 
 export interface AppraisalSection {
@@ -517,9 +527,14 @@ export interface AppraisalCycle {
   id: string;
   tenantId: string;
   title: string;
+  frequency?: Frequency;
   description?: string;
   startDate: string;
   endDate: string;
+  selfAssessmentDeadline?: string;
+  managerReviewDeadline?: string;
+  templateId?: string;
+  departmentIds?: string[];
   isActive: boolean;
   createdBy: string;
   createdAt: string;
@@ -625,15 +640,21 @@ export interface FinalizedAppraisal {
 export interface CreateAppraisalTemplateDto {
   tenantSlug: string;
   name: string;
-  description?: string;
-  sections: Omit<AppraisalSection, 'id' | 'templateId'>[];
+  selfAssessmentWeight: number;
+  managerAssessmentWeight: number;
+  kpis: Omit<AppraisalTemplateKpi, 'id' | 'templateId'>[];
 }
 
 export interface CreateAppraisalCycleDto {
   title: string;
+  frequency: Frequency;
   description?: string;
   startDate: string;
   endDate: string;
+  selfAssessmentDeadline: string;
+  managerReviewDeadline: string;
+  templateId?: string;
+  departmentIds?: string[];
 }
 
 export interface CreateAppraisalKpiDto {

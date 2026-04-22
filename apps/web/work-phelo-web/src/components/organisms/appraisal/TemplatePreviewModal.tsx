@@ -1,81 +1,41 @@
 'use client';
 
 import { Modal } from '@/components/organisms/shared/Modal';
-import { cn } from '@/lib/utils';
-import { SectionType } from '@/types/hr';
-
-interface PreviewSection {
-  name: string;
-  type: SectionType | '';
-  ratingScaleRange?: number;
-  isRequired: boolean;
-}
+import { AppraisalTemplateKpi } from '@/types/hr';
 
 interface TemplatePreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   templateName: string;
-  sections: PreviewSection[];
+  selfAssessmentWeight: number;
+  managerAssessmentWeight: number;
+  kpis: Pick<AppraisalTemplateKpi, 'title' | 'weight' | 'maxScore' | 'description'>[];
 }
 
-function RatingInput({ range }: { range: number }) {
+function KpiPreview({
+  kpi,
+  index,
+}: {
+  kpi: Pick<AppraisalTemplateKpi, 'title' | 'weight' | 'maxScore' | 'description'>;
+  index: number;
+}) {
   return (
-    <div className="flex gap-2 flex-wrap">
-      {Array.from({ length: range }, (_, i) => i + 1).map((n) => (
-        <div
-          key={n}
-          className="w-10 h-10 rounded-lg border border-gray-200 flex items-center justify-center text-sm font-medium text-gray-500 cursor-pointer hover:border-brand hover:text-brand transition-colors"
-        >
-          {n}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function SectionPreview({ section, index }: { section: PreviewSection; index: number }) {
-  return (
-    <div className="flex flex-col gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50">
+    <div className="flex flex-col gap-2 p-4 rounded-xl border border-gray-100 bg-gray-50">
       <div className="flex items-center gap-2">
         <span className="w-5 h-5 rounded-full bg-brand text-white text-[10px] font-bold flex items-center justify-center shrink-0">
           {index + 1}
         </span>
-        <p className="text-sm font-semibold text-gray-900">
-          {section.name || 'Untitled Section'}
-          {section.isRequired && <span className="text-red-500 ml-1">*</span>}
-        </p>
+        <p className="text-sm font-semibold text-gray-900">{kpi.title || 'Untitled KPI'}</p>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs text-gray-500 bg-white border border-gray-200 rounded-full px-2 py-0.5">
+            {kpi.weight}%
+          </span>
+          <span className="text-xs text-gray-500 bg-white border border-gray-200 rounded-full px-2 py-0.5">
+            Max: {kpi.maxScore}
+          </span>
+        </div>
       </div>
-
-      {section.type === 'RatingScale' && (
-        <div className="flex flex-col gap-1.5">
-          <p className="text-xs text-gray-500">Rate from 1 to {section.ratingScaleRange ?? 5}</p>
-          <RatingInput range={section.ratingScaleRange ?? 5} />
-        </div>
-      )}
-
-      {section.type === 'FreeText' && (
-        <textarea
-          disabled
-          placeholder="Employee writes their response here..."
-          rows={3}
-          className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-400 bg-white resize-none"
-        />
-      )}
-
-      {section.type === 'YesNo' && (
-        <div className="flex gap-3">
-          {['Yes', 'No'].map((opt) => (
-            <div
-              key={opt}
-              className="px-6 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-500 cursor-pointer hover:border-brand hover:text-brand transition-colors"
-            >
-              {opt}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!section.type && <p className="text-xs text-gray-400 italic">No section type selected</p>}
+      {kpi.description && <p className="text-xs text-gray-500 pl-7">{kpi.description}</p>}
     </div>
   );
 }
@@ -84,14 +44,16 @@ export function TemplatePreviewModal({
   isOpen,
   onClose,
   templateName,
-  sections,
+  selfAssessmentWeight,
+  managerAssessmentWeight,
+  kpis,
 }: TemplatePreviewModalProps) {
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Template Preview"
-      description="This is exactly what employees and managers will see during the appraisal."
+      description="KPIs and weighting configured for this template."
       width="max-w-xl"
     >
       <div className="mt-4 flex flex-col gap-3">
@@ -102,10 +64,28 @@ export function TemplatePreviewModal({
           </p>
         </div>
 
-        {sections.length === 0 ? (
-          <p className={cn('text-sm text-gray-400 text-center py-6')}>No sections added yet</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="px-4 py-3 rounded-xl border border-gray-100 bg-gray-50">
+            <p className="text-xs text-gray-500">Self Assessment</p>
+            <p className="text-lg font-bold text-gray-800 mt-0.5">{selfAssessmentWeight}%</p>
+          </div>
+          <div className="px-4 py-3 rounded-xl border border-gray-100 bg-gray-50">
+            <p className="text-xs text-gray-500">Manager Assessment</p>
+            <p className="text-lg font-bold text-gray-800 mt-0.5">{managerAssessmentWeight}%</p>
+          </div>
+        </div>
+
+        {kpis.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">No KPIs added yet</p>
         ) : (
-          sections.map((section, i) => <SectionPreview key={i} section={section} index={i} />)
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+              Key Performance Indicators
+            </p>
+            {kpis.map((kpi, i) => (
+              <KpiPreview key={i} kpi={kpi} index={i} />
+            ))}
+          </div>
         )}
       </div>
     </Modal>
