@@ -3,7 +3,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMyProfile, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useMyProfile, useUpdateEmployee, useResignationRecord } from '@/hooks/hr/useEmployees';
 import { useUserPermissions } from '@/hooks/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -36,6 +36,7 @@ export default function MyProfilePage() {
 
   const { data: employee, isLoading } = useMyProfile();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { data: resignationRecord } = useResignationRecord(employee?.id ?? '');
 
   const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
   const userPerms = userPermsRaw as
@@ -83,9 +84,13 @@ export default function MyProfilePage() {
             variant="outline"
             size="sm"
             onClick={() => setResignOpen(true)}
-            className="gap-2 text-amber-600 border-amber-200 hover:bg-amber-50"
+            className={
+              resignationRecord?.status === 'PENDING'
+                ? 'text-amber-600 border-amber-400 bg-amber-50 hover:bg-amber-100'
+                : 'text-amber-600 border-amber-200 hover:bg-amber-50'
+            }
           >
-            Resign
+            {resignationRecord?.status === 'PENDING' ? 'Pending Resignation' : 'Resign'}
           </Button>
           <Button onClick={() => setEditOpen(true)}>Edit Profile</Button>
         </div>

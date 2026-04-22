@@ -30,6 +30,9 @@ export enum Permission {
   MANAGE_DOCUMENTS = 'manage:documents',
   EXPORT_EMPLOYEES = 'export:employees',
 
+  // ── Branches ──────────────────────────────────────────────────────────────
+  READ_BRANCHES = 'read:branches',
+
   // ── Departments ───────────────────────────────────────────────────────────
   CREATE_DEPARTMENT = 'create:department',
   READ_DEPARTMENTS = 'read:departments',
@@ -127,6 +130,9 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.OFFBOARD_EMPLOYEE]: ['employees:DELETE'],
   [Permission.MANAGE_DOCUMENTS]: ['documents:CREATE', 'documents:EDIT'],
   [Permission.EXPORT_EMPLOYEES]: ['employees:EXPORT'],
+
+  // Branches
+  [Permission.READ_BRANCHES]: ['branches:VIEW'],
 
   // Departments
   [Permission.CREATE_DEPARTMENT]: ['departments:CREATE'],

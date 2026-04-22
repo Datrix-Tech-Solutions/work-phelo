@@ -12,6 +12,8 @@ import {
   OffboardingRecord,
   InitiateOffboardDto,
   UpdateChecklistDto,
+  ResignationPayload,
+  ResignationRecord,
 } from '@/types/hr';
 
 export function useEmployees(query?: EmployeeQuery) {
@@ -140,6 +142,61 @@ export function useCompleteOffboard(employeeId: string) {
         queryKey: ['employees', employeeId, 'offboarding'],
       });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+}
+
+export function useResignationRecord(employeeId: string) {
+  return useQuery({
+    queryKey: ['employees', employeeId, 'resignation'],
+    queryFn: async () => {
+      const res = await api.get<ResignationRecord | null>(
+        `/hr/employees/${employeeId}/resignation`,
+      );
+      return res.data;
+    },
+    enabled: !!employeeId,
+  });
+}
+
+export function useResignEmployee(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: ResignationPayload) => {
+      const res = await api.post(`/hr/employees/${employeeId}/resignation`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'resignation'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+    },
+  });
+}
+
+export function useWithdrawResignation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.delete(`/hr/employees/${employeeId}/resignation`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'resignation'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+    },
+  });
+}
+
+export function useDismissResignation(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.patch(`/hr/employees/${employeeId}/resignation/dismiss`, {});
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'resignation'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
     },
   });
 }

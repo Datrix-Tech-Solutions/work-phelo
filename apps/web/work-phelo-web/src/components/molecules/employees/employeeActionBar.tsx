@@ -11,6 +11,8 @@ interface EmployeeActionsBarProps {
   onAssignRole?: () => void;
   onAssignPermission?: () => void;
   onOffboard: () => void;
+  onResign: () => void;
+  hasPendingResignation?: boolean;
   onEdit: () => void;
 }
 
@@ -23,6 +25,8 @@ export function EmployeeActionsBar({
   onAssignRole,
   onAssignPermission,
   onOffboard,
+  onResign,
+  hasPendingResignation,
   onEdit,
 }: EmployeeActionsBarProps) {
   return (
@@ -53,6 +57,16 @@ export function EmployeeActionsBar({
           <Button variant="outline" size="sm" onClick={onAssignAsset}>
             Assign Asset
           </Button>
+          {hasPendingResignation && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onResign}
+              className="text-amber-600 border-amber-400 bg-amber-50 hover:bg-amber-100"
+            >
+              Pending Resignation
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

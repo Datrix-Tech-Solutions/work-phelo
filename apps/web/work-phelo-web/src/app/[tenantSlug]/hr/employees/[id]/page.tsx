@@ -9,6 +9,7 @@ import {
   useEmployees,
   useResendEmployeeInvite,
   useUpdateEmployee,
+  useResignationRecord,
 } from '@/hooks/hr/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useBranches } from '@/hooks/useBranches';
@@ -23,6 +24,7 @@ import {
   useRemovePermissionSet,
 } from '@/hooks/useRoles';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
+import { ResignationPanel } from '@/components/organisms/employee/resignationPanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
 import { AssignRolePanel } from '@/components/organisms/roles/AssignRolePanel';
@@ -47,9 +49,11 @@ export default function EmployeeDetailPage({
   const [assignAssetOpen, setAssignAssetOpen] = useState(false);
   const [assignRoleOpen, setAssignRoleOpen] = useState(false);
   const [assignPermOpen, setAssignPermOpen] = useState(false);
+  const [resignOpen, setResignOpen] = useState(false);
 
   // Data fetching
   const { data: employee, isLoading, error } = useEmployee(id);
+  const { data: resignationRecord } = useResignationRecord(id);
   const { data: departments = [] } = useDepartments();
   const { data: branches = [] } = useBranches();
   const { data: allHrResult } = useEmployees();
@@ -133,6 +137,8 @@ export default function EmployeeDetailPage({
           employee.userId && canGrantPermission ? () => setAssignPermOpen(true) : undefined
         }
         onOffboard={() => setOffboardOpen(true)}
+        onResign={() => setResignOpen(true)}
+        hasPendingResignation={resignationRecord?.status === 'PENDING'}
         onEdit={() => setEditOpen(true)}
       />
 
@@ -164,6 +170,14 @@ export default function EmployeeDetailPage({
       </div>
 
       {/* Side Panels */}
+      <ResignationPanel
+        isOpen={resignOpen}
+        onClose={() => setResignOpen(false)}
+        employee={employee}
+        isHrView
+        onAccept={() => setOffboardOpen(true)}
+      />
+
       <OffboardEmployeePanel
         isOpen={offboardOpen}
         onClose={() => setOffboardOpen(false)}

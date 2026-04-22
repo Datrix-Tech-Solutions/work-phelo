@@ -407,6 +407,38 @@ export interface InitiateOffboardDto {
   exitNotes?: string;
 }
 
+export type ResignationReason =
+  | 'PERSONAL_REASONS'
+  | 'BETTER_OPPORTUNITY'
+  | 'RELOCATION'
+  | 'FURTHER_EDUCATION'
+  | 'HEALTH_REASONS'
+  | 'OTHER';
+
+export type ResignationStatus = 'PENDING' | 'DISMISSED' | 'WITHDRAWN' | 'OFFBOARDING_INITIATED';
+
+export interface ResignationRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  lastWorkingDate: string;
+  reason?: ResignationReason;
+  additionalNotes?: string;
+  status: ResignationStatus;
+  submittedAt: string;
+  withdrawnAt?: string;
+  dismissedAt?: string;
+  offboardingInitiatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResignationPayload {
+  lastWorkingDate: string;
+  reason?: ResignationReason;
+  additionalNotes?: string;
+}
+
 export interface UpdateChecklistDto {
   item: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'managerApproval';
   done: boolean;
