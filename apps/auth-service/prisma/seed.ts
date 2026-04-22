@@ -1,6 +1,10 @@
 import { PrismaClient } from '../prisma/generated/client';
 import * as bcrypt from 'bcrypt';
 import { seedResources } from './seed-resources';
+import {
+  backfillSystemPermissionState,
+  seedSystemPermissionSets,
+} from '../src/permissions/system-permission-sets';
 
 const prisma = new PrismaClient();
 
@@ -8,94 +12,9 @@ async function hash(pw: string) {
   return bcrypt.hash(pw, 12);
 }
 
-const MANAGER_SET: Record<string, string[]> = {
-  employees: ['VIEW'],
-  departments: ['VIEW'],
-  leave: ['VIEW', 'APPROVE'],
-  attendance: ['VIEW'],
-  timesheets: ['VIEW', 'APPROVE'],
-  'time-corrections': ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT'],
-  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
-  documents: ['VIEW'],
-};
-
-const EMPLOYEE_SET: Record<string, string[]> = {
-  employees: ['VIEW'],
-  leave: ['VIEW', 'CREATE'],
-  attendance: ['VIEW'],
-  'time-corrections': ['CREATE'],
-  appraisals: ['VIEW'],
-  payroll: ['VIEW'],
-};
-
-const COMPANY_ADMIN_SET: Record<string, string[]> = {
-  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
-  departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'EXPORT'],
-  attendance: ['VIEW', 'EXPORT'],
-  timesheets: ['VIEW', 'APPROVE'],
-  'time-corrections': ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  payroll: ['VIEW', 'CREATE', 'RUN', 'APPROVE', 'EXPORT'],
-  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
-  documents: ['VIEW', 'CREATE', 'DELETE'],
-  allowances: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  'company-roles': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  'audit-logs': ['VIEW', 'EXPORT'],
-  'payroll-reports': ['VIEW', 'EXPORT'],
-};
-
-async function seedTenantPermissionSets(
-  tenantId: string,
-  resources: Record<string, string>,
-) {
-  const sets = [
-    { name: 'Company Admin Set', perms: COMPANY_ADMIN_SET, isSystem: true },
-    { name: 'Manager Set', perms: MANAGER_SET, isSystem: true },
-    { name: 'Employee Set', perms: EMPLOYEE_SET, isSystem: true },
-  ];
-
-  const createdSets: Record<string, string> = {};
-
-  for (const set of sets) {
-    const existing = await prisma.permissionSet.findUnique({
-      where: { tenantId_name: { tenantId, name: set.name } },
-    });
-
-    if (existing) {
-      createdSets[set.name] = existing.id;
-      continue;
-    }
-
-    const permSetResources: { resourceId: string; action: any }[] = [];
-    for (const [resourceName, actions] of Object.entries(set.perms)) {
-      const resourceId = resources[resourceName];
-      if (!resourceId) continue;
-      for (const action of actions) {
-        permSetResources.push({ resourceId, action });
-      }
-    }
-
-    const created = await prisma.permissionSet.create({
-      data: {
-        tenantId,
-        name: set.name,
-        isSystem: set.isSystem,
-        resources: { create: permSetResources },
-      },
-    });
-    createdSets[set.name] = created.id;
-  }
-
-  return createdSets;
-}
-
 // ── Platform seed — runs in all environments ───────────────────────────────
 
-async function seedPlatform(resources: Record<string, string>) {
+async function seedPlatform() {
   console.log('\nCreating Datrix internal tenant...');
   const datrixTenant = await prisma.tenant.upsert({
     where: { slug: 'datrix-internal' },
@@ -152,12 +71,12 @@ async function seedPlatform(resources: Record<string, string>) {
 
   console.log(`  SuperAdmin: ${superAdminEmail}`);
 
-  await seedTenantPermissionSets(datrixTenant.id, resources);
+  await seedSystemPermissionSets(prisma, datrixTenant.id);
 }
 
 // ── Demo seed — dev and staging only ──────────────────────────────────────
 
-async function seedDemo(resources: Record<string, string>) {
+async function seedDemo() {
   // ── ACME GHANA ─────────────────────────────────────────────────────────────
   console.log('\nCreating Acme Ghana Ltd...');
   const acmeTenant = await prisma.tenant.upsert({
@@ -205,7 +124,7 @@ async function seedDemo(resources: Record<string, string>) {
     create: { tenantId: acmeTenant.id, name: 'Employee', isSystem: true },
   });
 
-  const acmeSets = await seedTenantPermissionSets(acmeTenant.id, resources);
+  const acmeSets = await seedSystemPermissionSets(prisma, acmeTenant.id);
 
   const acmeAdmin = await prisma.user.upsert({
     where: {
@@ -414,6 +333,45 @@ async function seedDemo(resources: Record<string, string>) {
     },
   });
 
+  // Assign Employee Set to all remaining acme employees that don't have it yet
+  if (acmeSets['Employee Set']) {
+    const acmeEmployeesWithoutSet = [acmeEmp2.id];
+    // accountant, newuser, mfa.user, invited — fetch their IDs
+    const extraAcmeEmps = await prisma.user.findMany({
+      where: {
+        tenantId: acmeTenant.id,
+        email: {
+          in: [
+            'accountant@acmeghana.com',
+            'newuser@acmeghana.com',
+            'mfa.user@acmeghana.com',
+            'invited@acmeghana.com',
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    for (const emp of [
+      ...acmeEmployeesWithoutSet.map((id) => ({ id })),
+      ...extraAcmeEmps,
+    ]) {
+      await prisma.userPermissionSet.upsert({
+        where: {
+          userId_permissionSetId: {
+            userId: emp.id,
+            permissionSetId: acmeSets['Employee Set'],
+          },
+        },
+        update: {},
+        create: {
+          userId: emp.id,
+          permissionSetId: acmeSets['Employee Set'],
+          grantedBy: acmeAdmin.id,
+        },
+      });
+    }
+  }
+
   console.log('  admin@acmeghana.com / Admin123! (TENANT_ADMIN)');
   console.log('  hr.manager@acmeghana.com / Manager123!');
   console.log('  kofi.boateng@acmeghana.com / Employee123!');
@@ -473,10 +431,7 @@ async function seedDemo(resources: Record<string, string>) {
     create: { tenantId: stellarTenant.id, name: 'Employee', isSystem: true },
   });
 
-  const stellarSets = await seedTenantPermissionSets(
-    stellarTenant.id,
-    resources,
-  );
+  const stellarSets = await seedSystemPermissionSets(prisma, stellarTenant.id);
 
   const stellarAdmin = await prisma.user.upsert({
     where: {
@@ -688,14 +643,19 @@ async function main() {
   console.log('Seeding platform resources...');
   const resources = await seedResources();
 
-  await seedPlatform(resources);
+  await seedPlatform();
 
   if (!isProd) {
     console.log('\nSeeding demo tenants (non-production)...');
-    await seedDemo(resources);
+    await seedDemo();
   } else {
     console.log('\nProduction environment — skipping demo tenants.');
   }
+
+  console.log(
+    '\nBackfilling system permission sets for existing tenants/users...',
+  );
+  await backfillSystemPermissionState(prisma, console);
 
   console.log('\n' + '='.repeat(65));
   console.log(' SEED COMPLETE');

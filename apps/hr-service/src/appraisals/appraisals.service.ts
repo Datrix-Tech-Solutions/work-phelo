@@ -3,9 +3,18 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
 import { SubmitReviewDto } from './dto/submit-review.dto';
+import {
+  assertHrAccess,
+  getManagedEmployeeIds,
+  hasPermissionRule,
+  isCompanyAdminUser,
+  isCustomCompanyRoleUser,
+  isManagerUser,
+} from '../auth/access-scope';
 
 @Injectable()
 export class AppraisalsService {
@@ -65,9 +74,22 @@ export class AppraisalsService {
     };
   }
 
-  async getAppraisals(tenantId: string, cycleId: string) {
+  async getAppraisals(tenantId: string, actor: RequestUser, cycleId: string) {
+    const where: any = { tenantId, cycleId };
+
+    if (isManagerUser(actor)) {
+      where.employeeId = {
+        in: [...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id))],
+      };
+    } else if (!isCompanyAdminUser(actor)) {
+      assertHrAccess(
+        isCustomCompanyRoleUser(actor) &&
+          hasPermissionRule(actor, 'appraisals:VIEW'),
+      );
+    }
+
     return this.prisma.appraisal.findMany({
-      where: { tenantId, cycleId },
+      where,
       include: {
         employee: {
           select: {
@@ -132,16 +154,33 @@ export class AppraisalsService {
   async submitManagerReview(
     tenantId: string,
     appraisalId: string,
-    managerId: string,
+    reviewer: RequestUser,
     dto: SubmitReviewDto,
   ) {
     const appraisal = await this.prisma.appraisal.findFirst({
       where: { id: appraisalId, tenantId },
+      include: { employee: { select: { id: true } } },
     });
 
     if (!appraisal) throw new NotFoundException('Appraisal not found');
     if (appraisal.managerStatus === 'SUBMITTED') {
       throw new BadRequestException('Manager review already submitted');
+    }
+
+    if (!isCompanyAdminUser(reviewer)) {
+      if (isManagerUser(reviewer)) {
+        const managedEmployeeIds = await getManagedEmployeeIds(
+          this.prisma,
+          tenantId,
+          reviewer.id,
+        );
+        assertHrAccess(managedEmployeeIds.has(appraisal.employee.id));
+      } else {
+        assertHrAccess(
+          isCustomCompanyRoleUser(reviewer) &&
+            hasPermissionRule(reviewer, 'appraisals:EDIT'),
+        );
+      }
     }
 
     const finalScore = appraisal.selfScore
@@ -151,7 +190,7 @@ export class AppraisalsService {
     return this.prisma.appraisal.update({
       where: { id: appraisalId },
       data: {
-        managerId,
+        managerId: reviewer.id,
         managerScore: dto.score,
         managerComment: dto.comment,
         managerStatus: 'SUBMITTED',

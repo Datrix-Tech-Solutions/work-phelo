@@ -41,12 +41,60 @@ export class AuthService {
   ) {}
 
   // ── Token Generation ────────────────────────────────────────────────────
-  private generateTokens(user: any, tenant: any) {
+  private async generateTokens(user: any, tenant: any) {
+    let permissions: string[] = [];
+    let companyRoleName: string | null = user.companyRole?.name ?? null;
+
+    if (!companyRoleName && user.companyRoleId) {
+      const companyRole = await this.prisma.companyRole.findUnique({
+        where: { id: user.companyRoleId },
+        select: { name: true },
+      });
+      companyRoleName = companyRole?.name ?? null;
+    }
+
+    if (user.role === 'EMPLOYEE') {
+      const [allDirectPerms, setAssignments] = await Promise.all([
+        this.prisma.userPermission.findMany({
+          where: {
+            tenantId: tenant.id,
+            userId: user.id,
+          },
+          include: { resource: true },
+        }),
+        this.prisma.userPermissionSet.findMany({
+          where: { userId: user.id },
+          include: {
+            permissionSet: {
+              include: { resources: { include: { resource: true } } },
+            },
+          },
+        }),
+      ]);
+
+      const direct = allDirectPerms
+        .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
+        .map((p) => `${p.resource.name}:${p.action}`);
+
+      const explicitlyRevoked = allDirectPerms
+        .filter((p) => !p.isActive)
+        .map((p) => `${p.resource.name}:${p.action}`);
+
+      const fromSets = setAssignments.flatMap((a) =>
+        a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
+      );
+
+      const combined = new Set([...direct, ...fromSets]);
+      explicitlyRevoked.forEach((revoked) => combined.delete(revoked));
+      permissions = [...combined];
+    }
+
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
       companyRoleId: user.companyRoleId,
+      companyRoleName,
       tenantId: tenant.id,
       tenantSlug: tenant.slug,
       tenantName: tenant.name,
@@ -58,6 +106,7 @@ export class AuthService {
       },
       featureConfig:
         (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
+      permissions,
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
@@ -195,7 +244,10 @@ export class AuthService {
       };
     }
 
-    const { accessToken, refreshToken } = this.generateTokens(user, tenant);
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user,
+      tenant,
+    );
     await this.storeRefreshToken(user.id, refreshToken, ipAddress, userAgent);
     await this.prisma.user.update({
       where: { id: user.id },
@@ -227,6 +279,7 @@ export class AuthService {
         tenantSlug: tenant.slug,
         tenantName: tenant.name,
         companyRoleId: user.companyRoleId ?? null,
+        companyRoleName: null,
         moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {
           hr: false,
           accounting: false,
@@ -260,7 +313,7 @@ export class AuthService {
 
     if (user.failedLoginAttempts > 0) await this.clearFailedAttempts(user.id);
 
-    const { accessToken, refreshToken } = this.generateTokens(
+    const { accessToken, refreshToken } = await this.generateTokens(
       user,
       user.tenant,
     );
@@ -291,6 +344,7 @@ export class AuthService {
         lastName: user.lastName,
         role: user.role,
         tenantId: user.tenantId,
+        companyRoleName: null,
       },
     };
   }
@@ -400,7 +454,7 @@ export class AuthService {
       data: { isRevoked: true },
     });
 
-    const { accessToken, refreshToken } = this.generateTokens(
+    const { accessToken, refreshToken } = await this.generateTokens(
       storedToken.user,
       storedToken.user.tenant,
     );
@@ -663,7 +717,7 @@ export class AuthService {
       },
     });
 
-    const { accessToken, refreshToken } = this.generateTokens(
+    const { accessToken, refreshToken } = await this.generateTokens(
       user,
       user.tenant,
     );
@@ -680,6 +734,7 @@ export class AuthService {
         role: user.role,
         tenantId: user.tenantId,
         tenantSlug: user.tenant.slug,
+        companyRoleName: null,
       },
     };
   }
@@ -825,7 +880,7 @@ export class AuthService {
     });
 
     if (existing) {
-      const { accessToken, refreshToken } = this.generateTokens(
+      const { accessToken, refreshToken } = await this.generateTokens(
         existing.user,
         existing.user.tenant,
       );
@@ -858,7 +913,10 @@ export class AuthService {
       });
     }
 
-    const { accessToken, refreshToken } = this.generateTokens(user, tenant);
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user,
+      tenant,
+    );
     await this.storeRefreshToken(user.id, refreshToken);
     return { accessToken, refreshToken };
   }

@@ -23,18 +23,26 @@ import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
+import { FeatureGuard } from '../auth/guards/feature.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { RequireFeature } from '../auth/decorators/feature.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
 
 @ApiTags('Appraisals')
 @Controller('appraisals')
-@UseGuards(JwtAuthGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('hr')
+@RequireFeature('hr', 'appraisals')
 @ApiBearerAuth('access-token')
 export class AppraisalsController {
   constructor(private readonly appraisalsService: AppraisalsService) {}
 
   @Post('cycles')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
   @ApiOperation({ summary: 'Create a new appraisal cycle' })
   @ApiBody({ type: CreateAppraisalCycleDto })
   @ApiResponse({ status: 201, description: 'Appraisal cycle created' })
@@ -54,6 +62,7 @@ export class AppraisalsController {
   }
 
   @Post('cycles/:id/start')
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
   @ApiOperation({
     summary:
       'Start an appraisal cycle — generates appraisal records for all employees',
@@ -70,10 +79,15 @@ export class AppraisalsController {
   @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
   @ApiResponse({ status: 200, description: 'Appraisals retrieved' })
   getAppraisals(@Param('cycleId') cycleId: string, @Req() req: any) {
-    return this.appraisalsService.getAppraisals(req.user.tenantId, cycleId);
+    return this.appraisalsService.getAppraisals(
+      req.user.tenantId,
+      req.user as RequestUser,
+      cycleId,
+    );
   }
 
   @Get('my')
+  @RequirePermissions(Permission.READ_OWN_REVIEW)
   @ApiOperation({ summary: "Get the logged-in employee's own appraisals" })
   @ApiResponse({ status: 200, description: 'My appraisals retrieved' })
   getMyAppraisals(@Req() req: any) {
@@ -84,6 +98,7 @@ export class AppraisalsController {
   }
 
   @Patch(':id/self-assessment')
+  @RequirePermissions(Permission.SUBMIT_SELF_ASSESSMENT)
   @ApiOperation({ summary: 'Submit self-assessment for an appraisal' })
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
   @ApiBody({ type: SubmitReviewDto })
@@ -102,6 +117,7 @@ export class AppraisalsController {
   }
 
   @Patch(':id/manager-review')
+  @RequirePermissions(Permission.SUBMIT_MANAGER_REVIEW)
   @ApiOperation({ summary: 'Submit manager review for an appraisal' })
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
   @ApiBody({ type: SubmitReviewDto })
@@ -114,7 +130,7 @@ export class AppraisalsController {
     return this.appraisalsService.submitManagerReview(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user as RequestUser,
       dto,
     );
   }
