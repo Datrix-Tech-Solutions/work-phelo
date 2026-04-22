@@ -42,6 +42,16 @@ export function useUpdateAppraisalCycle() {
   });
 }
 
+export function useDeleteAppraisalCycle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/hr/appraisals/cycles/${id}`).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appraisal-cycles'] });
+    },
+  });
+}
+
 export function useStartAppraisalCycle() {
   const queryClient = useQueryClient();
   return useMutation({
