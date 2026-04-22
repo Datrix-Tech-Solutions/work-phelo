@@ -228,6 +228,71 @@ export class EmailService {
     );
   }
 
+  async sendResignationSubmittedNotification(
+    to: string,
+    employeeFirstName: string,
+    employeeLastName: string,
+    lastWorkingDate: string,
+    reason?: string,
+    additionalNotes?: string,
+    detailLink?: string,
+  ): Promise<boolean> {
+    const formattedDate = new Date(lastWorkingDate).toLocaleDateString(
+      'en-GB',
+      {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      },
+    );
+
+    return this.send(
+      to,
+      `Resignation submitted by ${employeeFirstName} ${employeeLastName}`,
+      `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9fafb; border-radius: 8px;">
+        <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
+          <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
+          <h2 style="color: #111827; margin: 0 0 24px 0;">New Resignation Submitted</h2>
+          <p style="color: #374151;">
+            <strong>${employeeFirstName} ${employeeLastName}</strong> has submitted a resignation.
+          </p>
+          <p style="color: #374151;">
+            Proposed last working date: <strong>${formattedDate}</strong>
+          </p>
+          ${
+            reason
+              ? `<p style="color: #374151;">Reason: <strong>${reason}</strong></p>`
+              : ''
+          }
+          ${
+            additionalNotes
+              ? `<p style="color: #374151;">Additional notes:<br />${additionalNotes}</p>`
+              : ''
+          }
+          ${
+            detailLink
+              ? `<p style="margin-top: 24px;">
+                  <a href="${detailLink}" style="
+                    background:#1a3557;
+                    color:#ffffff;
+                    padding:12px 20px;
+                    text-decoration:none;
+                    border-radius:6px;
+                    display:inline-block;
+                    font-weight:500;
+                  ">
+                    View resignation details
+                  </a>
+                </p>`
+              : ''
+          }
+        </div>
+      </div>
+      `,
+    );
+  }
+
   async sendLeaveRequestedNotification(
     to: string,
     employeeFirstName: string,

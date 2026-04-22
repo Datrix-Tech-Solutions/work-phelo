@@ -226,6 +226,7 @@ model Employee {
   documents         EmployeeDocument[]
   allowances        EmployeeAllowance[]
   offboarding       OffboardingRecord?
+  resignation       ResignationRecord?
 
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, email])
@@ -241,6 +242,49 @@ enum OffboardReason {
   RETIREMENT
   REDUNDANCY
   OTHER
+
+  @@schema("hr")
+}
+
+enum ResignationReason {
+  PERSONAL_REASONS
+  BETTER_OPPORTUNITY
+  RELOCATION
+  FURTHER_EDUCATION
+  HEALTH_REASONS
+  OTHER
+
+  @@schema("hr")
+}
+
+enum ResignationStatus {
+  PENDING
+  DISMISSED
+  WITHDRAWN
+  OFFBOARDING_INITIATED
+
+  @@schema("hr")
+}
+
+model ResignationRecord {
+  id                     String             @id @default(uuid())
+  tenantId               String
+  employeeId             String             @unique
+  lastWorkingDate        DateTime
+  reason                 ResignationReason?
+  additionalNotes        String?
+  status                 ResignationStatus  @default(PENDING)
+  submittedAt            DateTime           @default(now())
+  withdrawnAt            DateTime?
+  dismissedAt            DateTime?
+  dismissedById          String?
+  dismissedByEmail       String?
+  offboardingInitiatedAt DateTime?
+  offboardingRecordId    String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@schema("hr")
 }
@@ -617,11 +661,13 @@ model PublicHoliday {
 }
 
 model TenantConfig {
-  id         String   @id @default(uuid())
-  tenantId   String   @unique
-  adminEmail String
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                         String   @id @default(uuid())
+  tenantId                   String   @unique
+  adminEmail                 String
+  adminUserId                String?
+  resignationNoticePeriodDays Int     @default(30)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
 
   @@schema("hr")
 }

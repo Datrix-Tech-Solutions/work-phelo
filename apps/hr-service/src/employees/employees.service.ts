@@ -16,6 +16,10 @@ import {
   UpdateChecklistDto,
   OffboardReason,
 } from './dto/offboard-employee.dto';
+import {
+  DismissResignationDto,
+  SubmitResignationDto,
+} from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 import {
@@ -28,6 +32,7 @@ import {
   isEmployeeSelfServiceUser,
   isManagerUser,
 } from '../auth/access-scope';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class EmployeesService {
@@ -37,6 +42,7 @@ export class EmployeesService {
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly leaveService: LeaveService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(tenantId: string, dto: CreateEmployeeDto) {
@@ -232,6 +238,7 @@ export class EmployeesService {
         documents: true,
         leaveBalances: { include: { leaveType: true } },
         offboarding: true,
+        resignation: true,
       },
     });
     if (!employee) throw new NotFoundException('Employee not found');
@@ -278,7 +285,7 @@ export class EmployeesService {
   async findByUserId(tenantId: string, userId: string) {
     const employee = await this.prisma.employee.findFirst({
       where: { userId, tenantId },
-      include: { department: true, allowances: true },
+      include: { department: true, allowances: true, resignation: true },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
     const managedDeptCount = await this.prisma.department.count({
@@ -412,6 +419,302 @@ export class EmployeesService {
       },
       include: { department: true, branch: true },
     });
+  }
+
+  private async getTenantResignationConfig(tenantId: string) {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        adminEmail: true,
+        adminUserId: true,
+        resignationNoticePeriodDays: true,
+      },
+    });
+
+    return {
+      adminEmail: config?.adminEmail || null,
+      adminUserId: config?.adminUserId || null,
+      resignationNoticePeriodDays: config?.resignationNoticePeriodDays ?? 30,
+    };
+  }
+
+  private buildResignationDetailLink(tenantSlug: string, employeeId: string) {
+    return `/${tenantSlug}/hr/employees/${employeeId}?tab=resignation`;
+  }
+
+  async submitResignation(
+    tenantId: string,
+    employeeId: string,
+    dto: SubmitResignationDto,
+    actor: RequestUser,
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    assertHrAccess(actorEmployee.id === employeeId);
+
+    const employee = await this.findById(tenantId, employeeId, actor);
+    if (
+      employee.employmentStatus !== 'ACTIVE' &&
+      employee.employmentStatus !== 'PROBATION'
+    ) {
+      throw new BadRequestException(
+        'Only employees with Active or Probation status can submit a resignation.',
+      );
+    }
+
+    const existing = await this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+
+    if (existing?.status === 'PENDING') {
+      throw new BadRequestException(
+        'You have already submitted a resignation that is being processed.',
+      );
+    }
+
+    if (existing?.status === 'OFFBOARDING_INITIATED') {
+      throw new BadRequestException(
+        'Your offboarding process has already started, so the resignation can no longer be changed.',
+      );
+    }
+
+    const config = await this.getTenantResignationConfig(tenantId);
+    const submittedAt = new Date();
+    const lastWorkingDate = new Date(dto.lastWorkingDate);
+    const minimumDate = new Date(submittedAt);
+    minimumDate.setHours(0, 0, 0, 0);
+    minimumDate.setDate(
+      minimumDate.getDate() + config.resignationNoticePeriodDays,
+    );
+
+    if (Number.isNaN(lastWorkingDate.getTime())) {
+      throw new BadRequestException('Last working date is invalid.');
+    }
+
+    if (lastWorkingDate < minimumDate) {
+      throw new BadRequestException(
+        `Last working date must be at least ${config.resignationNoticePeriodDays} day(s) from today.`,
+      );
+    }
+
+    const resignation = await this.prisma.resignationRecord.upsert({
+      where: { employeeId },
+      create: {
+        tenantId,
+        employeeId,
+        lastWorkingDate,
+        reason: dto.reason,
+        additionalNotes: dto.additionalNotes?.trim() || null,
+        status: 'PENDING',
+        submittedAt,
+      },
+      update: {
+        lastWorkingDate,
+        reason: dto.reason,
+        additionalNotes: dto.additionalNotes?.trim() || null,
+        status: 'PENDING',
+        submittedAt,
+        withdrawnAt: null,
+        dismissedAt: null,
+        dismissedById: null,
+        dismissedByEmail: null,
+        offboardingInitiatedAt: null,
+        offboardingRecordId: null,
+      },
+    });
+
+    const detailLink = this.buildResignationDetailLink(
+      actor.tenantSlug,
+      employeeId,
+    );
+    const reasonLabel = dto.reason
+      ? dto.reason
+          .split('_')
+          .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+          .join(' ')
+      : undefined;
+
+    if (config.adminUserId) {
+      await this.notificationsService.create({
+        tenantId,
+        userId: config.adminUserId,
+        type: 'RESIGNATION_SUBMITTED',
+        message: `${employee.firstName} ${employee.lastName} submitted a resignation effective ${lastWorkingDate.toLocaleDateString(
+          'en-GB',
+        )}${reasonLabel ? ` (${reasonLabel})` : ''}.`,
+        link: detailLink,
+      });
+    }
+
+    if (config.adminEmail) {
+      void this.rabbitmq
+        .notificationResignationSubmitted({
+          tenantId,
+          adminEmail: config.adminEmail,
+          employeeId,
+          employeeFirstName: employee.firstName,
+          employeeLastName: employee.lastName,
+          lastWorkingDate: lastWorkingDate.toISOString(),
+          reason: reasonLabel,
+          additionalNotes: dto.additionalNotes?.trim() || undefined,
+          detailLink,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit resignation notification for ${employee.email}`,
+            err,
+          ),
+        );
+    }
+
+    return {
+      message:
+        'Your resignation has been submitted. Your HR administrator will be in touch regarding your offboarding process.',
+      resignation,
+    };
+  }
+
+  async getResignationRecord(
+    tenantId: string,
+    employeeId: string,
+    actor: RequestUser,
+  ) {
+    await this.findById(tenantId, employeeId, actor);
+
+    return this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+  }
+
+  async withdrawResignation(
+    tenantId: string,
+    employeeId: string,
+    actor: RequestUser,
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    assertHrAccess(actorEmployee.id === employeeId);
+
+    const resignation = await this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+
+    if (!resignation || resignation.tenantId !== tenantId) {
+      throw new NotFoundException('No resignation found for this employee.');
+    }
+
+    if (resignation.status === 'OFFBOARDING_INITIATED') {
+      throw new BadRequestException(
+        'You can no longer withdraw this resignation because offboarding has already been initiated.',
+      );
+    }
+
+    if (resignation.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Only a pending resignation can be withdrawn.',
+      );
+    }
+
+    return {
+      message: 'Resignation withdrawn successfully.',
+      resignation: await this.prisma.resignationRecord.update({
+        where: { employeeId },
+        data: {
+          status: 'WITHDRAWN',
+          withdrawnAt: new Date(),
+        },
+      }),
+    };
+  }
+
+  async dismissResignation(
+    tenantId: string,
+    employeeId: string,
+    _dto: DismissResignationDto,
+    actor: RequestUser,
+  ) {
+    await this.findById(tenantId, employeeId, actor);
+
+    const resignation = await this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+
+    if (!resignation || resignation.tenantId !== tenantId) {
+      throw new NotFoundException('No resignation found for this employee.');
+    }
+
+    if (resignation.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Only a pending resignation can be dismissed.',
+      );
+    }
+
+    return {
+      message: 'Resignation dismissed successfully.',
+      resignation: await this.prisma.resignationRecord.update({
+        where: { employeeId },
+        data: {
+          status: 'DISMISSED',
+          dismissedAt: new Date(),
+          dismissedById: actor.id,
+          dismissedByEmail: actor.email,
+        },
+      }),
+    };
+  }
+
+  async initiateOffboardFromResignation(
+    tenantId: string,
+    employeeId: string,
+    actor: RequestUser,
+  ) {
+    await this.findById(tenantId, employeeId, actor);
+
+    const resignation = await this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+
+    if (!resignation || resignation.tenantId !== tenantId) {
+      throw new NotFoundException('No resignation found for this employee.');
+    }
+
+    if (resignation.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Only a pending resignation can be used to initiate offboarding.',
+      );
+    }
+
+    const offboarding = await this.initiateOffboard(
+      tenantId,
+      employeeId,
+      {
+        reason: OffboardReason.RESIGNATION,
+        lastWorkingDate: resignation.lastWorkingDate.toISOString(),
+        exitNotes: resignation.additionalNotes ?? undefined,
+      },
+      { id: actor.id, email: actor.email },
+    );
+
+    const updatedResignation = await this.prisma.resignationRecord.update({
+      where: { employeeId },
+      data: {
+        status: 'OFFBOARDING_INITIATED',
+        offboardingInitiatedAt: new Date(),
+        offboardingRecordId: offboarding.id,
+      },
+    });
+
+    return {
+      message: 'Offboarding initiated from resignation successfully.',
+      resignation: updatedResignation,
+      offboarding,
+    };
   }
 
   // ── Offboarding ───────────────────────────────────────────────────────────

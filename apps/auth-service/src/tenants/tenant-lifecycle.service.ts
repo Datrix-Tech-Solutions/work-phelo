@@ -94,12 +94,24 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.OFFBOARD_EMPLOYEE]: [
       { resource: 'employees', action: PermissionAction.DELETE },
     ],
+    [AppPermission.SUBMIT_RESIGNATION]: [
+      { resource: 'resignations', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.WITHDRAW_RESIGNATION]: [
+      { resource: 'resignations', action: PermissionAction.DELETE },
+    ],
     [AppPermission.MANAGE_DOCUMENTS]: [
       { resource: 'documents', action: PermissionAction.CREATE },
       { resource: 'documents', action: PermissionAction.EDIT },
     ],
     [AppPermission.EXPORT_EMPLOYEES]: [
       { resource: 'employees', action: PermissionAction.EXPORT },
+    ],
+    [AppPermission.READ_HR_SETTINGS]: [
+      { resource: 'hr-settings', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.MANAGE_HR_SETTINGS]: [
+      { resource: 'hr-settings', action: PermissionAction.EDIT },
     ],
     [AppPermission.CREATE_DEPARTMENT]: [
       { resource: 'departments', action: PermissionAction.CREATE },
@@ -437,6 +449,11 @@ export class TenantLifecycleService {
       data: { status: 'ACTIVE', emailVerifiedAt: new Date() },
     });
 
+    const tenantAdmin = await this.prisma.user.findFirst({
+      where: { tenantId: id, role: 'TENANT_ADMIN' },
+      select: { id: true },
+    });
+
     await this.audit.log({
       tenantId: id,
       action: 'APPROVE',
@@ -450,7 +467,11 @@ export class TenantLifecycleService {
     });
 
     void this.rabbitmq
-      .hrTenantApproved({ tenantId: id, adminEmail: updated.email })
+      .hrTenantApproved({
+        tenantId: id,
+        adminEmail: updated.email,
+        adminUserId: tenantAdmin?.id,
+      })
       .catch((err) =>
         this.logger.error(`Failed to emit hr.tenant_approved for ${id}`, err),
       );

@@ -218,6 +218,7 @@ export class UsersService {
         .hrTenantApproved({
           tenantId: updated.tenantId,
           adminEmail: updated.tenant.email,
+          adminUserId: updated.id,
         })
         .catch((err) =>
           this.logger.error(

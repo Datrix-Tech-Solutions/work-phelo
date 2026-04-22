@@ -8,6 +8,7 @@ import {
   EmployeeOffboardedEvent,
   ResendEmployeeInviteEvent,
   EmployeeTerminationEvent,
+  ResignationSubmittedEvent,
   LeaveRequestedEvent,
   LeaveReviewedEvent,
   LeaveCancelledEvent,
@@ -105,6 +106,18 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_EMPLOYEE_TERMINATION,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationResignationSubmitted(
+    data: ResignationSubmittedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_RESIGNATION_SUBMITTED,
       data,
       correlationId,
     );
