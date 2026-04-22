@@ -25,6 +25,7 @@ import { ForceResetPasswordDto } from './dto/force-reset-password.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
+import { RequestUser } from '@work-phelo/types';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
@@ -40,9 +41,74 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
+  private async resolveEffectivePermissions(
+    userId: string,
+    tenantId: string,
+    role: string,
+  ): Promise<string[]> {
+    if (role !== 'EMPLOYEE') return [];
+
+    const [allDirectPerms, setAssignments] = await Promise.all([
+      this.prisma.userPermission.findMany({
+        where: { tenantId, userId },
+        include: { resource: true },
+      }),
+      this.prisma.userPermissionSet.findMany({
+        where: { userId },
+        include: {
+          permissionSet: {
+            include: { resources: { include: { resource: true } } },
+          },
+        },
+      }),
+    ]);
+
+    const direct = allDirectPerms
+      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
+      .map((p) => `${p.resource.name}:${p.action}`);
+
+    const explicitlyRevoked = new Set(
+      allDirectPerms
+        .filter((p) => !p.isActive)
+        .map((p) => `${p.resource.name}:${p.action}`),
+    );
+
+    const fromSets = setAssignments.flatMap((a) =>
+      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
+    );
+
+    return [...new Set([...direct, ...fromSets])].filter(
+      (perm) => !explicitlyRevoked.has(perm),
+    );
+  }
+
+  signAccessToken(user: RequestUser): string {
+    return this.jwtService.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        companyRoleId: user.companyRoleId,
+        companyRoleName: user.companyRoleName,
+        tenantId: user.tenantId,
+        tenantSlug: user.tenantSlug,
+        tenantName: user.tenantName,
+        firstName: user.firstName,
+        moduleConfig: user.moduleConfig,
+        featureConfig: user.featureConfig,
+        permissions: user.permissions ?? [],
+      },
+      { expiresIn: '15m' },
+    );
+  }
+
   // ── Token Generation ────────────────────────────────────────────────────
   private async generateTokens(user: any, tenant: any) {
-    let permissions: string[] = [];
+    const permissions = await this.resolveEffectivePermissions(
+      user.id,
+      tenant.id,
+      user.role,
+    );
     let companyRoleName: string | null = user.companyRole?.name ?? null;
 
     if (!companyRoleName && user.companyRoleId) {
@@ -51,42 +117,6 @@ export class AuthService {
         select: { name: true },
       });
       companyRoleName = companyRole?.name ?? null;
-    }
-
-    if (user.role === 'EMPLOYEE') {
-      const [allDirectPerms, setAssignments] = await Promise.all([
-        this.prisma.userPermission.findMany({
-          where: {
-            tenantId: tenant.id,
-            userId: user.id,
-          },
-          include: { resource: true },
-        }),
-        this.prisma.userPermissionSet.findMany({
-          where: { userId: user.id },
-          include: {
-            permissionSet: {
-              include: { resources: { include: { resource: true } } },
-            },
-          },
-        }),
-      ]);
-
-      const direct = allDirectPerms
-        .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-        .map((p) => `${p.resource.name}:${p.action}`);
-
-      const explicitlyRevoked = allDirectPerms
-        .filter((p) => !p.isActive)
-        .map((p) => `${p.resource.name}:${p.action}`);
-
-      const fromSets = setAssignments.flatMap((a) =>
-        a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-      );
-
-      const combined = new Set([...direct, ...fromSets]);
-      explicitlyRevoked.forEach((revoked) => combined.delete(revoked));
-      permissions = [...combined];
     }
 
     const payload = {
