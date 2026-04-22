@@ -17,9 +17,11 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AnnouncementsService } from './announcements.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { isCompanyAdminUser } from '../auth/access-scope';
 
 @ApiTags('Announcements')
 @Controller('announcements')
@@ -43,6 +45,11 @@ export class AnnouncementsController {
   })
   @ApiResponse({ status: 201, description: 'Announcement created' })
   create(@Body() dto: { title: string; body: string }, @Req() req: any) {
+    if (!isCompanyAdminUser(req.user)) {
+      throw new ForbiddenException(
+        "You don't have permission to access this. Contact your administrator.",
+      );
+    }
     return this.announcementsService.create(
       req.user.tenantId,
       req.user.id,
@@ -62,6 +69,11 @@ export class AnnouncementsController {
   @ApiParam({ name: 'id', description: 'Announcement UUID' })
   @ApiResponse({ status: 200, description: 'Announcement deleted' })
   remove(@Param('id') id: string, @Req() req: any) {
+    if (!isCompanyAdminUser(req.user)) {
+      throw new ForbiddenException(
+        "You don't have permission to access this. Contact your administrator.",
+      );
+    }
     return this.announcementsService.remove(req.user.tenantId, id);
   }
 }

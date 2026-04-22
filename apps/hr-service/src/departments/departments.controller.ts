@@ -53,6 +53,7 @@ export class DepartmentsController {
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_DEPARTMENTS)
   @ApiOperation({ summary: 'List all departments for the current tenant' })
   @ApiResponse({
     status: 200,
@@ -63,6 +64,7 @@ export class DepartmentsController {
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.READ_DEPARTMENTS)
   @ApiOperation({ summary: 'Get a department by ID' })
   @ApiParam({ name: 'id', description: 'Department UUID' })
   @ApiResponse({

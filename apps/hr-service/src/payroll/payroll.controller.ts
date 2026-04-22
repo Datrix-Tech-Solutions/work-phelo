@@ -28,6 +28,7 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
 
 @ApiTags('Payroll')
 @Controller('payroll')
@@ -65,7 +66,10 @@ export class PayrollController {
   @ApiOperation({ summary: 'List all payroll runs for the tenant' })
   @ApiResponse({ status: 200, description: 'Payroll runs retrieved' })
   getPayrollRuns(@Req() req: any) {
-    return this.payrollService.getPayrollRuns(req.user.tenantId);
+    return this.payrollService.getPayrollRuns(
+      req.user.tenantId,
+      req.user as RequestUser,
+    );
   }
 
   @Get('my-payslips')
@@ -77,12 +81,17 @@ export class PayrollController {
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.READ_PAYROLL)
   @ApiOperation({ summary: 'Get a specific payroll run with all payslips' })
   @ApiParam({ name: 'id', description: 'Payroll run UUID' })
   @ApiResponse({ status: 200, description: 'Payroll run retrieved' })
   @ApiResponse({ status: 404, description: 'Payroll run not found' })
   getPayrollRun(@Param('id') id: string, @Req() req: any) {
-    return this.payrollService.getPayrollRunById(req.user.tenantId, id);
+    return this.payrollService.getPayrollRunById(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Patch(':id/approve')
