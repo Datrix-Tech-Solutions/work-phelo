@@ -115,6 +115,10 @@ export function EditEmployeePanel({
               for (const field of dateFields) {
                 if (!data[field]) data[field] = undefined;
               }
+              const relationFields = ['departmentId', 'branchId', 'managerId'] as const;
+              for (const field of relationFields) {
+                if (!data[field]) data[field] = undefined;
+              }
               onSave(data);
             })}
           >

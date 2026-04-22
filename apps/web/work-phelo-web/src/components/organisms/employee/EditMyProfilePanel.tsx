@@ -67,7 +67,17 @@ export function EditMyProfilePanel({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button isLoading={isUpdating} loadingText="Saving…" onClick={form.handleSubmit(onSave)}>
+          <Button
+            isLoading={isUpdating}
+            loadingText="Saving…"
+            onClick={form.handleSubmit((data) => {
+              const dateFields = ['dateOfBirth'] as const;
+              for (const field of dateFields) {
+                if (!data[field]) data[field] = undefined;
+              }
+              onSave(data);
+            })}
+          >
             Save Changes
           </Button>
         </div>
