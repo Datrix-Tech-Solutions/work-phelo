@@ -1,11 +1,9 @@
 import { useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { Button } from '@/components/atoms/Button';
 import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
-import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
-import { api } from '@/lib/api';
+import { useAppraisalCycles } from '@/hooks/useAppraisals';
+import { cn } from '@/lib/utils';
 
 interface Props {
   search: string;
@@ -14,23 +12,37 @@ interface Props {
   onPageChange: (page: number) => void;
 }
 
+type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired';
+
+const CYCLE_STATUS_STYLES: Record<CycleStatus, { dot: string; text: string }> = {
+  'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
+  Completed: { dot: 'bg-green-500', text: 'text-green-600' },
+  Upcoming: { dot: 'bg-gray-400', text: 'text-gray-500' },
+  Expired: { dot: 'bg-red-400', text: 'text-red-500' },
+};
+
+function deriveCycleStatus(
+  startDate: string,
+  endDate: string,
+  completionRate?: number,
+): CycleStatus {
+  if ((completionRate ?? 0) >= 100) return 'Completed';
+  const today = new Date().toISOString().slice(0, 10);
+  if (startDate > today) return 'Upcoming';
+  if (endDate < today) return 'Expired';
+  return 'In Progress';
+}
+
 export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Props) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
 
-  const { data: hrData, isLoading } = useQuery({
-    queryKey: ['appraisal-cycles-summary', search, page],
-    queryFn: () =>
-      api
-        .get('/hr/appraisals/cycles', {
-          params: { page, search: search || undefined, includeSummary: true },
-        })
-        .then((r) => r.data),
-  });
+  const { data: hrData, isLoading } = useAppraisalCycles({ page, search: search || undefined });
 
   type HRCycleRow = {
     id: string;
     title: string;
+    frequency: string;
     startDate: string;
     endDate: string;
     totalEmployees?: number;
@@ -39,12 +51,9 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
     isActive?: boolean;
   };
 
-  const hrCycles = useMemo<HRCycleRow[]>(() => {
-    const list = Array.isArray(hrData) ? hrData : (hrData?.data ?? hrData?.cycles ?? []);
-    return list as HRCycleRow[];
-  }, [hrData]);
+  const hrCycles = useMemo<HRCycleRow[]>(() => (hrData ?? []) as HRCycleRow[], [hrData]);
 
-  const totalPages = hrData?.totalPages ?? 1;
+  const totalPages = 1;
 
   const columns: Column<HRCycleRow>[] = [
     {
@@ -53,8 +62,13 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
       render: (r) => <span className="font-medium text-gray-900">{r.title}</span>,
     },
     {
-      key: 'period',
-      label: 'Period',
+      key: 'frequency',
+      label: 'Frequency',
+      render: (r) => <span className="font-medium text-gray-900">{r.frequency ?? '—'}</span>,
+    },
+    {
+      key: 'date range',
+      label: 'Date range',
       render: (r) => (
         <span className="text-xs text-gray-600">
           {formatDate(r.startDate)} – {formatDate(r.endDate)}
@@ -87,20 +101,16 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
     {
       key: 'status',
       label: 'Status',
-      render: (r) => <StatusBadge status={r.isActive ? 'ACTIVE' : 'INACTIVE'} />,
-    },
-    {
-      key: 'viewResults',
-      label: '',
-      render: (r) =>
-        !r.isActive && r.completionRate === 100 ? (
-          <Button
-            size="sm"
-            onClick={() => router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.id}/results`)}
-          >
-            View Results
-          </Button>
-        ) : null,
+      render: (r) => {
+        const status = deriveCycleStatus(r.startDate, r.endDate, r.completionRate);
+        const s = CYCLE_STATUS_STYLES[status];
+        return (
+          <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text)}>
+            <span className={cn('w-2 h-2 rounded-full shrink-0', s.dot)} />
+            {status}
+          </span>
+        );
+      },
     },
   ];
 
@@ -113,6 +123,7 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
       onSearch={onSearch}
       currentPage={page}
       totalPages={totalPages}
+      onRowClick={(row) => router.push(`/${tenantSlug}/hr/appraisal/cycles/${row.id}`)}
       onPageChange={onPageChange}
       emptyMessage="No appraisal cycles created yet"
     />

@@ -21,28 +21,28 @@ interface Props {
   tenantSlug: string;
 }
 
-type CycleStatus = 'In Progress' | 'Completed' | 'Cancelled' | 'Active';
+type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired';
 
 function deriveCycleStatus(cycle: AppraisalCycle): CycleStatus {
+  if ((cycle.completionRate ?? 0) >= 100) return 'Completed';
   const today = new Date().toISOString().slice(0, 10);
-  if (!cycle.isActive) return 'Cancelled';
-  if (cycle.endDate < today) return 'Completed';
-  if (cycle.startDate <= today) return 'In Progress';
-  return 'Active';
+  if (cycle.startDate > today) return 'Upcoming';
+  if (cycle.endDate < today) return 'Expired';
+  return 'In Progress';
 }
 
-const STATUS_STYLES: Record<CycleStatus, { dot: string; text: string; bg: string }> = {
-  'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600', bg: '' },
-  Completed: { dot: 'bg-green-500', text: 'text-green-600', bg: '' },
-  Cancelled: { dot: 'bg-red-500', text: 'text-red-500', bg: 'bg-red-50 rounded-full px-2 py-0.5' },
-  Active: { dot: 'bg-green-500', text: 'text-green-600', bg: '' },
+const STATUS_STYLES: Record<CycleStatus, { dot: string; text: string }> = {
+  'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
+  Completed: { dot: 'bg-green-500', text: 'text-green-600' },
+  Upcoming: { dot: 'bg-gray-400', text: 'text-gray-500' },
+  Expired: { dot: 'bg-red-400', text: 'text-red-500' },
 };
 
 function CycleStatusBadge({ cycle }: { cycle: AppraisalCycle }) {
   const status = deriveCycleStatus(cycle);
   const s = STATUS_STYLES[status];
   return (
-    <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text, s.bg)}>
+    <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text)}>
       <span className={cn('w-2 h-2 rounded-full shrink-0', s.dot)} />
       {status}
     </span>

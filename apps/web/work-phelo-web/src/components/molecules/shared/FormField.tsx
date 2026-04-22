@@ -9,6 +9,7 @@ interface FormFieldProps {
   type?: string;
   placeholder?: string;
   readOnly?: boolean;
+  rows?: number;
 }
 
 export function FormField({
@@ -18,6 +19,7 @@ export function FormField({
   type = 'text',
   placeholder,
   readOnly,
+  rows,
 }: FormFieldProps) {
   if (type === 'password') {
     return (
@@ -34,10 +36,11 @@ export function FormField({
   return (
     <Input
       label={label}
-      type={type}
+      type={type as 'textarea'}
       placeholder={placeholder}
       readOnly={readOnly}
       error={error?.message}
+      rows={rows}
       {...registration}
     />
   );

@@ -539,6 +539,7 @@ export interface AppraisalCycle {
   createdBy: string;
   createdAt: string;
   updatedAt?: string;
+  completionRate?: number;
   _count?: { appraisals: number };
 }
 
@@ -696,6 +697,8 @@ export interface CycleResultItem {
   department: string;
   jobTitle: string;
   managerName: string;
+  selfScore?: number;
+  managerScore?: number;
   overallScore: number;
   finalRating: FinalRating;
   reviewCompletedAt: string;
