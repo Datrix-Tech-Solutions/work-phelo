@@ -45,19 +45,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
       .map((p) => `${p.resource.name}:${p.action}`);
 
-    const explicitlyRevoked = new Set(
-      allDirectPerms
-        .filter((p) => !p.isActive)
-        .map((p) => `${p.resource.name}:${p.action}`),
-    );
-
     const fromSets = setAssignments.flatMap((a) =>
       a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
     );
 
-    return [...new Set([...direct, ...fromSets])].filter(
-      (perm) => !explicitlyRevoked.has(perm),
-    );
+    // Revoked direct permissions remain as audit history, but they do not act
+    // as hard denies against permissions granted via roles or permission sets.
+    return [...new Set([...direct, ...fromSets])];
   }
 
   async validate(payload: any): Promise<RequestUser> {

@@ -384,11 +384,6 @@ export class PermissionsService {
       (p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()),
     );
 
-    // Explicit denies (isActive is false, regardless of expiration)
-    const explicitDenies = allDirectPerms
-      .filter((p) => !p.isActive)
-      .map((p) => `${p.resource.name}:${p.action}`);
-
     // Permission set permissions
     const setAssignments = await this.prisma.userPermissionSet.findMany({
       where: { userId },
@@ -440,7 +435,7 @@ export class PermissionsService {
         ...directFormatted.map((p) => `${p.resourceName}:${p.action}`),
         ...setPerms.map((p) => `${p.resourceName}:${p.action}`),
       ]
-        .filter((v, i, a) => a.indexOf(v) === i && !explicitDenies.includes(v))
+        .filter((v, i, a) => a.indexOf(v) === i)
         .sort(),
     };
   }
