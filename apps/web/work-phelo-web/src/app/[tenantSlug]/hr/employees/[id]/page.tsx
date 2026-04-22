@@ -3,6 +3,7 @@
 'use client';
 
 import { use, useState } from 'react';
+import axios from 'axios';
 import {
   useEmployee,
   useEmployees,
@@ -93,7 +94,7 @@ export default function EmployeeDetailPage({
   }
 
   if (!employee) {
-    const status = (error as any)?.response?.status;
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     return (
       <div className="p-8 text-center">
         {status === 403
