@@ -94,7 +94,11 @@ export class EmployeesController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiResponse({ status: 200, description: 'Employees retrieved successfully' })
   findAll(@Query() query: QueryEmployeesDto, @Req() req: any) {
-    return this.employeesService.findAll(req.user.tenantId, query);
+    return this.employeesService.findAll(
+      req.user.tenantId,
+      query,
+      req.user as RequestUser,
+    );
   }
 
   @Get('me')

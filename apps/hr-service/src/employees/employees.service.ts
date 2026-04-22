@@ -152,10 +152,35 @@ export class EmployeesService {
     return employee;
   }
 
-  async findAll(tenantId: string, query: QueryEmployeesDto) {
+  async findAll(
+    tenantId: string,
+    query: QueryEmployeesDto,
+    actor?: RequestUser,
+  ) {
     const { take, skip, page } = getPaginationParams(query);
 
     const where: any = { tenantId };
+
+    if (actor && !isCompanyAdminUser(actor)) {
+      if (isManagerUser(actor)) {
+        const managedEmployeeIds = await getManagedEmployeeIds(
+          this.prisma,
+          tenantId,
+          actor.id,
+        );
+
+        if (managedEmployeeIds.size === 0) {
+          return { employees: [], meta: buildMeta(page, take, 0) };
+        }
+
+        where.id = { in: Array.from(managedEmployeeIds) };
+      } else if (isEmployeeSelfServiceUser(actor)) {
+        assertHrAccess(false);
+      } else {
+        assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
+      }
+    }
+
     if (query.status) where.employmentStatus = query.status;
     if (query.type) where.employmentType = query.type;
     if (query.departmentId) where.departmentId = query.departmentId;
