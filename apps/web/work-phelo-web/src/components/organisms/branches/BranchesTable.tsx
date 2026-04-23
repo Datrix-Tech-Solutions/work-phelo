@@ -23,9 +23,9 @@ function branchLocation(b: Branch) {
 
 export function BranchesTable() {
   const toast = useToast();
-  const canCreate = usePermission(Permission.CREATE_DEPARTMENT);
-  const canUpdate = usePermission(Permission.UPDATE_DEPARTMENT);
-  const canDelete = usePermission(Permission.DELETE_DEPARTMENT);
+  const canCreate = usePermission(Permission.CREATE_BRANCH);
+  const canUpdate = usePermission(Permission.UPDATE_BRANCH);
+  const canDelete = usePermission(Permission.DELETE_BRANCH);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);

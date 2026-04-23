@@ -99,7 +99,7 @@ export default function HRLayout({
   const navAccess: Record<string, boolean> = {
     dashboard: true,
     departments: canReadDepartments,
-    branches: canReadBranches || canReadDepartments,
+    branches: canReadBranches,
     employees: canReadEmployees || canReadOwnProfile,
     leave: canAccessLeave,
     appraisal: canAccessAppraisal,

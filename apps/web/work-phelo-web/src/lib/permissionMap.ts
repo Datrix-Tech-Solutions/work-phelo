@@ -36,6 +36,9 @@ export enum Permission {
 
   // ── Branches ──────────────────────────────────────────────────────────────
   READ_BRANCHES = 'read:branches',
+  CREATE_BRANCH = 'create:branch',
+  UPDATE_BRANCH = 'update:branch',
+  DELETE_BRANCH = 'delete:branch',
 
   // ── Departments ───────────────────────────────────────────────────────────
   CREATE_DEPARTMENT = 'create:department',
@@ -141,12 +144,15 @@ export const PERMISSION_MAP: Record<string, string[]> = {
 
   // Branches
   [Permission.READ_BRANCHES]: ['branches:VIEW'],
+  [Permission.CREATE_BRANCH]: ['branches:CREATE'],
+  [Permission.UPDATE_BRANCH]: ['branches:EDIT'],
+  [Permission.DELETE_BRANCH]: ['branches:DELETE'],
 
   // Departments
-  [Permission.CREATE_DEPARTMENT]: ['departments:CREATE', 'branches:CREATE'],
-  [Permission.READ_DEPARTMENTS]: ['departments:VIEW', 'branches:VIEW'],
-  [Permission.UPDATE_DEPARTMENT]: ['departments:EDIT', 'branches:EDIT'],
-  [Permission.DELETE_DEPARTMENT]: ['departments:DELETE', 'branches:DELETE'],
+  [Permission.CREATE_DEPARTMENT]: ['departments:CREATE'],
+  [Permission.READ_DEPARTMENTS]: ['departments:VIEW'],
+  [Permission.UPDATE_DEPARTMENT]: ['departments:EDIT'],
+  [Permission.DELETE_DEPARTMENT]: ['departments:DELETE'],
   [Permission.MANAGE_ROLES]: ['company-roles:EDIT'],
   [Permission.ASSIGN_ROLE]: ['company-roles:ASSIGN'],
 
