@@ -95,6 +95,8 @@ export interface EmailVerificationEvent {
   tenantName: string;
 }
 
+export type InviteUserKind = 'EMPLOYEE' | 'TENANT_ADMIN';
+
 export interface InviteUserEvent {
   userId?: string;
   tenantId?: string;
@@ -103,6 +105,7 @@ export interface InviteUserEvent {
   inviteToken?: string;
   acceptInviteUrl: string;
   tenantName: string;
+  inviteKind?: InviteUserKind;
 }
 
 export interface PasswordResetLinkEvent {

@@ -67,7 +67,7 @@ export class EmailService {
     );
   }
 
-  async sendInviteEmail(
+  async sendEmployeeInviteEmail(
     to: string,
     firstName: string,
     tenantName: string,
@@ -132,7 +132,7 @@ export class EmailService {
         </p>
 
         <p style="color:#777;">
-          This link expires in 48 hours. If it expires before you use it, contact your HR administrator and they will send you a new one.
+          This invitation link will expire. If it expires before you use it, contact your HR administrator and they will send you a new one.
         </p>
 
         <hr style="border:none; border-top:1px solid #eee; margin:24px 0;" />
@@ -163,6 +163,103 @@ export class EmailService {
 
   </table>
 
+</body>
+</html>`,
+    );
+  }
+
+  async sendTenantAdminWelcomeEmail(
+    to: string,
+    firstName: string,
+    tenantName: string,
+    acceptInviteUrl: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Welcome to ${tenantName} on ${this.appName}`,
+      `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Welcome to WorkPhelo</title>
+</head>
+<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, sans-serif;">
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; margin:40px auto; border-radius:8px; overflow:hidden;">
+    <tr>
+      <td style="padding:20px 30px;">
+        <h2 style="margin:0; font-weight:bold;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h2>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="background:#eef1f4; padding:40px 30px;">
+        <table width="100%">
+          <tr>
+            <td style="font-size:28px; font-weight:600; color:#555;">
+              Welcome to your company workspace
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
+        <p>Hi ${firstName},</p>
+
+        <p>
+          Welcome to <strong>${tenantName}</strong> on WorkPhelo. Your company workspace is ready and your Company Admin account has been created.
+        </p>
+
+        <p>
+          To activate your account, set your password using the button below. Once signed in, you will be able to complete your company setup and manage your team.
+        </p>
+
+        <p style="margin:30px 0;">
+          <a href="${acceptInviteUrl}" style="
+            background:#1a3557;
+            color:#ffffff;
+            padding:12px 20px;
+            text-decoration:none;
+            border-radius:6px;
+            display:inline-block;
+            font-weight:500;
+          ">
+            Activate Company Admin Account →
+          </a>
+        </p>
+
+        <p style="color:#777;">
+          This invitation link will expire. If it expires before you use it, contact the platform owner or request a fresh invite.
+        </p>
+
+        <hr style="border:none; border-top:1px solid #eee; margin:24px 0;" />
+
+        <p style="color:#555;">As Company Admin, you will be able to:</p>
+        <ul style="color:#555; padding-left:20px; line-height:1.8;">
+          <li>Finish setting up your company workspace</li>
+          <li>Invite employees and assign access</li>
+          <li>Configure HR settings, departments, and roles</li>
+          <li>Manage your company operations in WorkPhelo</li>
+        </ul>
+
+        <p style="margin-top:24px;">We’re excited to have you on board.</p>
+      </td>
+    </tr>
+
+    <tr>
+      <td style="padding:20px 30px; border-top:1px solid #eee;">
+        <h3 style="margin:0;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h3>
+        <p style="color:#888; font-size:12px; margin-top:5px;">
+          © 2026 WorkPhelo All rights reserved
+        </p>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`,
     );

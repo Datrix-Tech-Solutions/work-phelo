@@ -143,6 +143,7 @@ export class UsersService {
         inviteToken,
         acceptInviteUrl,
         tenantName: tenant.name,
+        inviteKind: userRole === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : 'EMPLOYEE',
       })
       .catch((err) =>
         this.logger.error(`Failed to send invite for ${user.email}`, err),
@@ -360,6 +361,7 @@ export class UsersService {
         firstName: user.firstName,
         tenantName: user.tenant.name,
         acceptInviteUrl,
+        inviteKind: user.role === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : 'EMPLOYEE',
       })
       .catch((err) =>
         this.logger.error(`Failed to resend invite for ${user.email}`, err),
