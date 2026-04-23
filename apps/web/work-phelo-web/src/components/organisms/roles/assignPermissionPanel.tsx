@@ -6,8 +6,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { cn, inputClass } from '@/lib/utils';
-import { HR_FEATURES, ACTIONS } from '@/components/molecules/roles/PermissionMatrix';
-import { FEATURE_PERMISSION_MAPPING } from '@/lib/permissionMap';
+import { PERMISSION_ACTION_LABELS, RESOURCE_ACTIONS } from '@/lib/permissionMap';
 import {
   usePermissionResources,
   useGrantPermission,
@@ -24,8 +23,6 @@ interface AssignPermissionPanelProps {
   employeeName: string;
   userId: string;
 }
-
-const featureOptions = HR_FEATURES.map((f) => ({ value: f.key, label: f.label }));
 
 // Backend serialises directPermissions with a flat resourceName field (not nested resource object)
 type DirectPerm = {
@@ -66,10 +63,10 @@ function AssignPermissionPanelInner({
   userId,
 }: Omit<AssignPermissionPanelProps, 'isOpen'>) {
   const toast = useToast();
-  const [selectedFeature, setSelectedFeature] = useState('');
-  const [selectedActions, setSelectedActions] = useState<Set<string>>(new Set());
+  const [selectedResourceId, setSelectedResourceId] = useState('');
+  const [selectedActions, setSelectedActions] = useState<Set<PermissionAction>>(new Set());
   const [expiresAt, setExpiresAt] = useState('');
-  const [featureError, setFeatureError] = useState('');
+  const [resourceError, setResourceError] = useState('');
 
   const { data: resources = [] } = usePermissionResources();
   const { data: userPerms, isLoading: isLoadingPerms } = useUserPermissions(userId);
@@ -78,17 +75,23 @@ function AssignPermissionPanelInner({
 
   const directPermissions = (userPerms?.directPermissions ?? []) as unknown as DirectPerm[];
 
-  const resourceIdMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const r of resources) m.set(r.name, r.id);
-    return m;
+  const resourceOptions = useMemo(() => {
+    return resources
+      .filter((resource) => resource.isActive && (RESOURCE_ACTIONS[resource.name] ?? []).length > 0)
+      .sort((a, b) => a.module.localeCompare(b.module) || a.name.localeCompare(b.name))
+      .map((resource) => ({
+        value: resource.id,
+        label: formatResourceName(resource.name),
+        sublabel: `${resource.module}${resource.description ? ` - ${resource.description}` : ''}`,
+      }));
   }, [resources]);
 
-  const selectedFeatureDef = HR_FEATURES.find((f) => f.key === selectedFeature);
-  const featureLabel = selectedFeatureDef?.label ?? '';
-  const featureDeleteLabel = selectedFeatureDef?.deleteLabel ?? 'Delete';
+  const selectedResource = resources.find((resource) => resource.id === selectedResourceId);
+  const availableActions = (
+    selectedResource ? (RESOURCE_ACTIONS[selectedResource.name] ?? []) : []
+  ) as PermissionAction[];
 
-  const toggleAction = (action: string) => {
+  const toggleAction = (action: PermissionAction) => {
     setSelectedActions((prev) => {
       const next = new Set(prev);
       if (next.has(action)) next.delete(action);
@@ -97,10 +100,10 @@ function AssignPermissionPanelInner({
     });
   };
 
-  const handleFeatureChange = (value: string) => {
-    setSelectedFeature(value);
+  const handleResourceChange = (value: string) => {
+    setSelectedResourceId(value);
     setSelectedActions(new Set());
-    setFeatureError('');
+    setResourceError('');
   };
 
   const handleRevoke = (perm: DirectPerm) => {
@@ -115,50 +118,30 @@ function AssignPermissionPanelInner({
   };
 
   const handleSave = async () => {
-    if (!selectedFeature) {
-      setFeatureError('Please select a feature');
+    if (!selectedResourceId || !selectedResource) {
+      setResourceError('Please select a resource');
       return;
     }
     if (selectedActions.size === 0) {
-      setFeatureError('Please select at least one permission');
-      return;
-    }
-
-    const mapping = FEATURE_PERMISSION_MAPPING[selectedFeature] ?? {};
-    const grants: { resourceId: string; action: PermissionAction }[] = [];
-    const seen = new Set<string>();
-
-    for (const uiAction of selectedActions) {
-      for (const { resource, action } of mapping[uiAction] ?? []) {
-        const resourceId = resourceIdMap.get(resource);
-        if (!resourceId) continue;
-        const key = `${resourceId}:${action}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        grants.push({ resourceId, action: action as PermissionAction });
-      }
-    }
-
-    if (grants.length === 0) {
-      toast.error('No matching backend resources found for this feature');
+      setResourceError('Please select at least one action');
       return;
     }
 
     try {
       await Promise.all(
-        grants.map((g) =>
+        Array.from(selectedActions).map((action) =>
           grantPermission({
             userId,
-            resourceId: g.resourceId,
-            action: g.action,
+            resourceId: selectedResourceId,
+            action,
             expiresAt: expiresAt || undefined,
           }),
         ),
       );
       toast.success(
-        `${grants.length} permission${grants.length !== 1 ? 's' : ''} granted to ${employeeName}`,
+        `${selectedActions.size} ${formatResourceName(selectedResource.name)} permission${selectedActions.size !== 1 ? 's' : ''} granted to ${employeeName}`,
       );
-      setSelectedFeature('');
+      setSelectedResourceId('');
       setSelectedActions(new Set());
       setExpiresAt('');
     } catch (err) {
@@ -252,44 +235,41 @@ function AssignPermissionPanelInner({
       </p>
 
       <SearchSelect
-        label="Feature"
-        placeholder="Select a feature..."
-        options={featureOptions}
-        value={selectedFeature}
-        onChange={handleFeatureChange}
-        error={featureError}
+        label="Resource"
+        placeholder="Select a resource..."
+        options={resourceOptions}
+        value={selectedResourceId}
+        onChange={handleResourceChange}
+        error={resourceError}
       />
 
-      {selectedFeature && (
+      {selectedResource && (
         <div className="flex flex-col gap-2.5">
-          <p className="text-sm font-semibold text-gray-800">{featureLabel}</p>
+          <p className="text-sm font-semibold text-gray-800">
+            {formatResourceName(selectedResource.name)}
+          </p>
           <div className="flex flex-col gap-2">
-            {ACTIONS.map((action) => {
-              const label = action.key === 'DELETE' ? featureDeleteLabel : action.label;
-              return (
-                <label
-                  key={action.key}
-                  className="flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+            {availableActions.map((action) => (
+              <label
+                key={action}
+                className="flex items-center gap-3 rounded-xl border border-gray-200 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedActions.has(action)}
+                  onChange={() => toggleAction(action)}
+                  className="w-4 h-4 accent-brand cursor-pointer rounded"
+                />
+                <span
+                  className={cn(
+                    'text-sm',
+                    selectedActions.has(action) ? 'font-semibold text-gray-900' : 'text-gray-600',
+                  )}
                 >
-                  <input
-                    type="checkbox"
-                    checked={selectedActions.has(action.key)}
-                    onChange={() => toggleAction(action.key)}
-                    className="w-4 h-4 accent-brand cursor-pointer rounded"
-                  />
-                  <span
-                    className={cn(
-                      'text-sm',
-                      selectedActions.has(action.key)
-                        ? 'font-semibold text-gray-900'
-                        : 'text-gray-600',
-                    )}
-                  >
-                    {label}
-                  </span>
-                </label>
-              );
-            })}
+                  {PERMISSION_ACTION_LABELS[action] ?? action}
+                </span>
+              </label>
+            ))}
           </div>
         </div>
       )}

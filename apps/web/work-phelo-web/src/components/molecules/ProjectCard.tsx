@@ -40,9 +40,9 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
 
 interface ProjectCardProps {
   project: Project;
-  onAddTasks: () => void;
-  onAssignEmployees: () => void;
-  onDelete: () => void;
+  onAddTasks?: () => void;
+  onAssignEmployees?: () => void;
+  onDelete?: () => void;
 }
 
 export function ProjectCard({
@@ -51,6 +51,8 @@ export function ProjectCard({
   onAssignEmployees,
   onDelete,
 }: ProjectCardProps) {
+  const hasActions = !!(onAddTasks || onAssignEmployees || onDelete);
+
   return (
     <div className="bg-white border border-gray-200 rounded-card flex flex-col h-full hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
       {/* Header */}
@@ -112,38 +114,48 @@ export function ProjectCard({
         </div>
       </div>
 
-      <div className="mx-4 h-px bg-gray-100" />
+      {hasActions && (
+        <>
+          <div className="mx-4 h-px bg-gray-100" />
 
-      {/* Actions */}
-      <div className="flex gap-2 p-4 pt-3">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddTasks();
-          }}
-          className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-        >
-          Add Tasks
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onAssignEmployees();
-          }}
-          className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-        >
-          Assign
-        </button>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-        >
-          Delete
-        </button>
-      </div>
+          {/* Actions */}
+          <div className="flex gap-2 p-4 pt-3">
+            {onAddTasks && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddTasks();
+                }}
+                className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+              >
+                Add Tasks
+              </button>
+            )}
+            {onAssignEmployees && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAssignEmployees();
+                }}
+                className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+              >
+                Assign
+              </button>
+            )}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

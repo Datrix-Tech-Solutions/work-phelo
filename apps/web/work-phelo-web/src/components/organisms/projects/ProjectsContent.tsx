@@ -9,6 +9,8 @@ import { ProjectCard } from '@/components/molecules/ProjectCard';
 import { CreateProjectPanel } from '@/components/organisms/projects/CreateProjectPanel';
 import { useEmployees } from '@/hooks/hr/useEmployees';
 import { Project, CreateProjectDto } from '@/types/hr';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 // TODO: replace with useProjects() hook when endpoint is ready
 const DUMMY_PROJECTS: Project[] = [
@@ -32,6 +34,10 @@ interface Props {
 
 export function ProjectsContent({ tenantSlug }: Props) {
   void tenantSlug;
+  const canCreateProject = usePermission(Permission.CREATE_PROJECT);
+  const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
+  const canAssignProject = usePermission(Permission.ASSIGN_PROJECT);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
@@ -79,7 +85,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
             {filtered.length} project{filtered.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>
+        {canCreateProject && <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>}
       </div>
 
       {/* Metric cards */}
@@ -156,20 +162,24 @@ export function ProjectsContent({ tenantSlug }: Props) {
             <ProjectCard
               key={project.id}
               project={project}
-              onAddTasks={() => console.log('Add tasks', project.id)}
-              onAssignEmployees={() => console.log('Assign employees', project.id)}
-              onDelete={() => console.log('Delete', project.id)}
+              onAddTasks={canUpdateProject ? () => console.log('Add tasks', project.id) : undefined}
+              onAssignEmployees={
+                canAssignProject ? () => console.log('Assign employees', project.id) : undefined
+              }
+              onDelete={canUpdateProject ? () => console.log('Delete', project.id) : undefined}
             />
           ))}
         </div>
       )}
 
-      <CreateProjectPanel
-        isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        employees={employees}
-        onSubmit={handleCreate}
-      />
+      {canCreateProject && (
+        <CreateProjectPanel
+          isOpen={panelOpen}
+          onClose={() => setPanelOpen(false)}
+          employees={employees}
+          onSubmit={handleCreate}
+        />
+      )}
     </>
   );
 }

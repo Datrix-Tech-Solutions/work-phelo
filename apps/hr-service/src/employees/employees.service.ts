@@ -181,6 +181,9 @@ export class EmployeesService {
         }
 
         where.id = { in: Array.from(managedEmployeeIds) };
+      } else if (isEmployeeSelfServiceUser(actor)) {
+        // Self-service employees can view the lightweight company directory,
+        // but detailed profile access is still enforced in findById().
       } else {
         assertHrAccess(canReadEmployees);
       }

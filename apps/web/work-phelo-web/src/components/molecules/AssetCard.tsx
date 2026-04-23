@@ -45,13 +45,14 @@ function AssetCard({
   onDelete,
 }: {
   asset: Asset;
-  onEdit: () => void;
-  onAssign: () => void;
-  onUnassign: () => void;
-  onTransfer: () => void;
-  onDelete: () => void;
+  onEdit?: () => void;
+  onAssign?: () => void;
+  onUnassign?: () => void;
+  onTransfer?: () => void;
+  onDelete?: () => void;
 }) {
   const isAssigned = asset.status === 'ASSIGNED';
+  const hasActions = !!(onEdit || onAssign || onUnassign || onTransfer || onDelete);
 
   const formattedPurchaseDate = asset.purchaseDate
     ? new Date(asset.purchaseDate).toLocaleDateString('en-GB', {
@@ -109,66 +110,79 @@ function AssetCard({
         </div>
       </div>
 
-      {/* Divider */}
-      <div className="mx-4 h-px bg-gray-100" />
+      {hasActions && (
+        <>
+          {/* Divider */}
+          <div className="mx-4 h-px bg-gray-100" />
 
-      {/* Action buttons */}
-      <div className="flex gap-2 p-4 pt-3">
-        {/* Edit — always present */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-          className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-        >
-          Edit
-        </button>
+          {/* Action buttons */}
+          <div className="flex gap-2 p-4 pt-3">
+            {onEdit && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+                className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+              >
+                Edit
+              </button>
+            )}
 
-        {isAssigned ? (
-          <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnassign();
-              }}
-              className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors"
-            >
-              Unassign
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onTransfer();
-              }}
-              className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"
-            >
-              Transfer
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onAssign();
-              }}
-              className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-            >
-              Assign
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-            >
-              Delete
-            </button>
-          </>
-        )}
-      </div>
+            {isAssigned ? (
+              <>
+                {onUnassign && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onUnassign();
+                    }}
+                    className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors"
+                  >
+                    Unassign
+                  </button>
+                )}
+                {onTransfer && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onTransfer();
+                    }}
+                    className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors"
+                  >
+                    Transfer
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                {onAssign && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onAssign();
+                    }}
+                    className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
+                  >
+                    Assign
+                  </button>
+                )}
+                {onDelete && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete();
+                    }}
+                    className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+                  >
+                    Delete
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
