@@ -157,13 +157,14 @@ export function usePermissionResources() {
 
 // ── Permission Sets ───────────────────────────────────────
 
-export function usePermissionSets() {
+export function usePermissionSets(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ['permissions', 'sets'],
     queryFn: async () => {
       const res = await api.get<PermissionSet[]>('/auth/permissions/sets');
       return res.data;
     },
+    enabled: options?.enabled !== false,
   });
 }
 

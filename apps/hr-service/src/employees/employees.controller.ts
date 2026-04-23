@@ -12,6 +12,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -27,14 +28,22 @@ import {
   InitiateOffboardDto,
   UpdateChecklistDto,
 } from './dto/offboard-employee.dto';
+import {
+  DismissResignationDto,
+  SubmitResignationDto,
+} from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
 
 @ApiTags('Employees')
 @Controller('employees')
-@UseGuards(JwtAuthGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
 @RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class EmployeesController {
@@ -42,6 +51,7 @@ export class EmployeesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.CREATE_EMPLOYEE)
   @ApiOperation({ summary: 'Create a new employee profile' })
   @ApiBody({
     schema: {
@@ -74,6 +84,7 @@ export class EmployeesController {
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({
     summary: 'List all employees — supports filtering and search',
   })
@@ -88,10 +99,15 @@ export class EmployeesController {
   @ApiQuery({ name: 'limit', required: false })
   @ApiResponse({ status: 200, description: 'Employees retrieved successfully' })
   findAll(@Query() query: QueryEmployeesDto, @Req() req: any) {
-    return this.employeesService.findAll(req.user.tenantId, query);
+    return this.employeesService.findAll(
+      req.user.tenantId,
+      query,
+      req.user as RequestUser,
+    );
   }
 
   @Get('me')
+  @RequirePermissions(Permission.READ_OWN_PROFILE)
   @ApiOperation({ summary: 'Get the employee profile of the logged-in user' })
   @ApiResponse({ status: 200, description: 'Employee profile retrieved' })
   @ApiResponse({ status: 404, description: 'Employee profile not found' })
@@ -105,7 +121,11 @@ export class EmployeesController {
   @ApiResponse({ status: 200, description: 'Employee retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Employee not found' })
   findOne(@Param('id') id: string, @Req() req: any) {
-    return this.employeesService.findById(req.user.tenantId, id);
+    return this.employeesService.findById(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Patch(':id')
@@ -119,14 +139,109 @@ export class EmployeesController {
     @Body() dto: UpdateEmployeeDto,
     @Req() req: any,
   ) {
-    return this.employeesService.update(req.user.tenantId, id, dto, {
-      id: req.user.id,
-      email: req.user.email,
-    });
+    return this.employeesService.update(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user as RequestUser,
+    );
+  }
+
+  @Post(':id/resignation')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.SUBMIT_RESIGNATION)
+  @ApiOperation({
+    summary: 'Submit a resignation for the current employee profile',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiBody({ type: SubmitResignationDto })
+  @ApiResponse({ status: 201, description: 'Resignation submitted' })
+  submitResignation(
+    @Param('id') id: string,
+    @Body() dto: SubmitResignationDto,
+    @Req() req: any,
+  ) {
+    return this.employeesService.submitResignation(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user as RequestUser,
+    );
+  }
+
+  @Get(':id/resignation')
+  @ApiOperation({
+    summary: 'Get resignation record for an employee',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Resignation record retrieved' })
+  getResignation(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.getResignationRecord(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
+  }
+
+  @Delete(':id/resignation')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.WITHDRAW_RESIGNATION)
+  @ApiOperation({
+    summary: 'Withdraw a pending resignation before offboarding begins',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Resignation withdrawn' })
+  withdrawResignation(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.withdrawResignation(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
+  }
+
+  @Patch(':id/resignation/dismiss')
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
+  @ApiOperation({
+    summary: 'Dismiss a resignation without initiating offboarding',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiBody({ type: DismissResignationDto })
+  @ApiResponse({ status: 200, description: 'Resignation dismissed' })
+  dismissResignation(
+    @Param('id') id: string,
+    @Body() dto: DismissResignationDto,
+    @Req() req: any,
+  ) {
+    return this.employeesService.dismissResignation(
+      req.user.tenantId,
+      id,
+      dto,
+      req.user as RequestUser,
+    );
+  }
+
+  @Post(':id/resignation/initiate-offboarding')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
+  @ApiOperation({
+    summary: 'Initiate offboarding from a pending resignation',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({
+    status: 201,
+    description: 'Offboarding initiated from resignation',
+  })
+  initiateOffboardingFromResignation(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.initiateOffboardFromResignation(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Post(':id/offboard')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
   @ApiOperation({ summary: 'Initiate offboarding — creates a draft record' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: InitiateOffboardDto })
@@ -143,14 +258,20 @@ export class EmployeesController {
   }
 
   @Get(':id/offboard')
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
   @ApiOperation({ summary: 'Get existing offboarding record for an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Offboarding record retrieved' })
   getOffboardingRecord(@Param('id') id: string, @Req() req: any) {
-    return this.employeesService.getOffboardingRecord(req.user.tenantId, id);
+    return this.employeesService.getOffboardingRecord(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Patch(':id/offboard/checklist')
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
   @ApiOperation({ summary: 'Tick or untick a clearance checklist item' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: UpdateChecklistDto })
@@ -170,6 +291,7 @@ export class EmployeesController {
 
   @Post(':id/offboard/complete')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.OFFBOARD_EMPLOYEE)
   @ApiOperation({
     summary:
       'Complete offboarding — sets employee to Offboarded and revokes access',
@@ -185,6 +307,7 @@ export class EmployeesController {
 
   @Post(':id/resend-invite')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.CREATE_EMPLOYEE)
   @ApiOperation({
     summary: 'Resend invite email to employee — invalidates previous link',
   })
@@ -197,6 +320,7 @@ export class EmployeesController {
 
   @Post(':id/allowances')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.CREATE_EMPLOYEE)
   @ApiOperation({ summary: 'Add an allowance to an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({
@@ -215,6 +339,7 @@ export class EmployeesController {
 
   @Post(':id/documents')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.MANAGE_DOCUMENTS)
   @ApiOperation({ summary: 'Upload a document for an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({

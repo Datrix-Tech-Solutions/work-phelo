@@ -1,6 +1,7 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -17,8 +18,6 @@ import {
   useMyTodaySession,
   useClockIn,
   useClockOut,
-  useStartBreak,
-  useEndBreak,
   useMyAttendanceHistory,
   useAttendanceRecords,
   useCorrectionRequests,
@@ -31,8 +30,15 @@ import { RecordsSection } from '@/components/organisms/time-clock/RecordSection'
 import { CorrectionsSection } from '@/components/organisms/time-clock/CorrectionSection';
 
 export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
-  use(params);
+  const { tenantSlug } = use(params);
+  const router = useRouter();
   const user = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    if (user !== null && !user.featureConfig?.hr?.timeclock) {
+      router.replace(`/${tenantSlug}/hr`);
+    }
+  }, [user, tenantSlug, router]);
   const toast = useToast();
 
   const isAdmin = user?.role === 'TENANT_ADMIN';
@@ -51,8 +57,6 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const { data: session, isLoading: sessionLoading } = useMyTodaySession();
   const { mutate: clockIn, isPending: isClockingIn } = useClockIn();
   const { mutate: clockOut, isPending: isClockingOut } = useClockOut();
-  const { mutate: startBreak, isPending: isStartingBreak } = useStartBreak();
-  const { mutate: endBreak, isPending: isEndingBreak } = useEndBreak();
 
   // History
   const [historyPage, setHistoryPage] = useState(1);
@@ -132,20 +136,9 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
               onError: (err) => toast.error(extractError(err, 'Failed to clock out')),
             })
           }
-          onStartBreak={() =>
-            startBreak(undefined, {
-              onError: (err) => toast.error(extractError(err, 'Failed to start break')),
-            })
-          }
-          onEndBreak={() =>
-            endBreak(undefined, {
-              onError: (err) => toast.error(extractError(err, 'Failed to end break')),
-            })
-          }
           onReportMissed={() => setCorrectionOpen(true)}
           isClockingIn={isClockingIn}
           isClockingOut={isClockingOut}
-          isBreaking={isStartingBreak || isEndingBreak}
           historyData={historyData}
           historyLoading={historyLoading}
           historyPage={historyPage}

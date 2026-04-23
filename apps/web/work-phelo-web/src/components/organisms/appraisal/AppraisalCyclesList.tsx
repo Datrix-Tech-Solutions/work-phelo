@@ -4,17 +4,49 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
-import { Badge } from '@/components/atoms/Badge';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateCyclePanel } from '@/components/organisms/appraisal/CreateCyclePanel';
-import { useAppraisalCycles, useStartAppraisalCycle } from '@/hooks/useAppraisals';
+import {
+  useAppraisalCycles,
+  useDeleteAppraisalCycle,
+  useStartAppraisalCycle,
+} from '@/hooks/useAppraisals';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
 import { AppraisalCycle } from '@/types/hr';
+import { cn } from '@/lib/utils';
 
 interface Props {
   tenantSlug: string;
+}
+
+type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired';
+
+function deriveCycleStatus(cycle: AppraisalCycle): CycleStatus {
+  if ((cycle.completionRate ?? 0) >= 100) return 'Completed';
+  const today = new Date().toISOString().slice(0, 10);
+  if (cycle.startDate > today) return 'Upcoming';
+  if (cycle.endDate < today) return 'Expired';
+  return 'In Progress';
+}
+
+const STATUS_STYLES: Record<CycleStatus, { dot: string; text: string }> = {
+  'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
+  Completed: { dot: 'bg-green-500', text: 'text-green-600' },
+  Upcoming: { dot: 'bg-gray-400', text: 'text-gray-500' },
+  Expired: { dot: 'bg-red-400', text: 'text-red-500' },
+};
+
+function CycleStatusBadge({ cycle }: { cycle: AppraisalCycle }) {
+  const status = deriveCycleStatus(cycle);
+  const s = STATUS_STYLES[status];
+  return (
+    <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text)}>
+      <span className={cn('w-2 h-2 rounded-full shrink-0', s.dot)} />
+      {status}
+    </span>
+  );
 }
 
 export function AppraisalCyclesList({ tenantSlug }: Props) {
@@ -24,65 +56,75 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   const [search, setSearch] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
   const [editCycle, setEditCycle] = useState<AppraisalCycle | undefined>();
+  const [deleteTarget, setDeleteTarget] = useState<AppraisalCycle | null>(null);
   const [startTarget, setStartTarget] = useState<AppraisalCycle | null>(null);
 
   const { data, isLoading } = useAppraisalCycles({ page, search: search || undefined });
   const cycles: AppraisalCycle[] = data ?? [];
-  const totalPages: number = 1;
 
   const { mutate: startCycle, isPending: isStarting } = useStartAppraisalCycle();
+  const { mutate: deleteCycle, isPending: isDeleting } = useDeleteAppraisalCycle();
 
   const columns: Column<AppraisalCycle>[] = [
     {
       key: 'title',
       label: 'Cycle Name',
-      width: '2fr',
       render: (row) => (
         <Link
           href={`/${tenantSlug}/hr/hrmanagement/appraisal/cycles/${row.id}`}
           className="font-medium text-gray-900 hover:text-brand hover:underline transition-colors"
+          onClick={(e) => e.stopPropagation()}
         >
           {row.title}
         </Link>
       ),
     },
     {
-      key: 'period',
-      label: 'Period',
-      width: '200px',
-      render: (row) => (
-        <span className="text-gray-600 text-xs">
-          {formatDate(row.startDate)} – {formatDate(row.endDate)}
-        </span>
-      ),
+      key: 'frequency',
+      label: 'Frequency',
+      render: (row) => <span className="text-gray-700">{row.frequency ?? '—'}</span>,
     },
     {
-      key: 'isActive',
+      key: 'startDate',
+      label: 'Start Date',
+      render: (row) => <span className="text-gray-700">{formatDate(row.startDate)}</span>,
+    },
+    {
+      key: 'endDate',
+      label: 'End Date',
+      render: (row) => <span className="text-gray-700">{formatDate(row.endDate)}</span>,
+    },
+    {
+      key: 'status',
       label: 'Status',
+      width: '140px',
+      render: (row) => <CycleStatusBadge cycle={row} />,
+    },
+    {
+      key: 'actions',
+      label: '',
       width: '120px',
       render: (row) => (
-        <Badge
-          variant={row.isActive ? 'success' : 'neutral'}
-          label={row.isActive ? 'Active' : 'Inactive'}
-        />
+        <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={() => {
+              setEditCycle(row);
+              setPanelOpen(true);
+            }}
+            className="text-sm font-semibold text-gray-800 hover:text-brand transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => setDeleteTarget(row)}
+            className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
       ),
     },
   ];
-
-  const rowActions = (row: AppraisalCycle) => {
-    const actions = [];
-    if (!row.isActive) {
-      actions.push({
-        label: 'Edit',
-        onClick: () => {
-          setEditCycle(row);
-          setPanelOpen(true);
-        },
-      });
-      actions.push({ label: 'Start Cycle', onClick: () => setStartTarget(row) });
-    }
-    return actions;
-  };
 
   return (
     <>
@@ -100,9 +142,8 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
             setPanelOpen(true);
           },
         }}
-        rowActions={rowActions}
         currentPage={page}
-        totalPages={totalPages}
+        totalPages={1}
         onPageChange={setPage}
       />
 
@@ -113,6 +154,37 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
           setEditCycle(undefined);
         }}
         editCycle={editCycle}
+      />
+
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Cycle"
+        description={`Are you sure you want to delete "${deleteTarget?.title}"? This cannot be undone.`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isDeleting}
+              loadingText="Deleting..."
+              onClick={() =>
+                deleteTarget &&
+                deleteCycle(deleteTarget.id, {
+                  onSuccess: () => {
+                    toast.success('Cycle deleted');
+                    setDeleteTarget(null);
+                  },
+                  onError: (err) => toast.error(extractError(err, 'Failed to delete cycle')),
+                })
+              }
+            >
+              Delete
+            </Button>
+          </>
+        }
       />
 
       <Modal

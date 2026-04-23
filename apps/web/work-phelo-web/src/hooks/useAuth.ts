@@ -4,9 +4,11 @@ import { useAuthStore } from '@/store/auth.store';
 import { User, LoginPayload } from '@/types/auth';
 
 async function fetchMeWithManagerFlag(setPermissions: (p: string[]) => void): Promise<User> {
-  const res = await api.get<{ user: User }>('/auth/me');
+  const res = await api.get<{ user: User; permissions: string[] }>('/auth/me');
   const authUser = res.data.user;
   if (authUser.role === 'EMPLOYEE') {
+    setPermissions(res.data.permissions ?? []);
+
     await Promise.all([
       api
         .get<{ isManager: boolean; lastName?: string }>('/hr/employees/me')
@@ -14,15 +16,6 @@ async function fetchMeWithManagerFlag(setPermissions: (p: string[]) => void): Pr
           authUser.isManager = r.data.isManager ?? false;
           // /auth/me doesn't return lastName — pull it from the HR profile
           if (r.data.lastName) authUser.lastName = r.data.lastName;
-        })
-        .catch(() => {}),
-      api
-        .get<{ effectivePermissions: string[]; companyRole?: string | null }>(
-          `/auth/permissions/users/${authUser.id}`,
-        )
-        .then((r) => {
-          setPermissions(r.data.effectivePermissions ?? []);
-          authUser.companyRoleName = r.data.companyRole ?? null;
         })
         .catch(() => {}),
     ]);
@@ -54,30 +47,8 @@ export function useLogin() {
       const res = await api.post<{ user: User }>('/auth/login', payload);
       return res.data;
     },
-    onSuccess: async (data) => {
-      const user = { ...data.user };
-
-      if (user.role === 'EMPLOYEE') {
-        await Promise.all([
-          api
-            .get<{ isManager: boolean; lastName?: string }>('/hr/employees/me')
-            .then((r) => {
-              user.isManager = r.data.isManager ?? false;
-              if (r.data.lastName) user.lastName = r.data.lastName;
-            })
-            .catch(() => {}),
-          api
-            .get<{ effectivePermissions: string[]; companyRole?: string | null }>(
-              `/auth/permissions/users/${user.id}`,
-            )
-            .then((r) => {
-              setPermissions(r.data.effectivePermissions ?? []);
-              user.companyRoleName = r.data.companyRole ?? null;
-            })
-            .catch(() => {}),
-        ]);
-      }
-
+    onSuccess: async () => {
+      const user = await fetchMeWithManagerFlag(setPermissions);
       setUser(user);
       queryClient.invalidateQueries({ queryKey: ['me'] });
     },

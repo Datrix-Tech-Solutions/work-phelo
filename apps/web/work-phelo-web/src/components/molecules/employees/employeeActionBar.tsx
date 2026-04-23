@@ -11,6 +11,8 @@ interface EmployeeActionsBarProps {
   onAssignRole?: () => void;
   onAssignPermission?: () => void;
   onOffboard: () => void;
+  onResign: () => void;
+  hasPendingResignation?: boolean;
   onEdit: () => void;
 }
 
@@ -23,13 +25,15 @@ export function EmployeeActionsBar({
   onAssignRole,
   onAssignPermission,
   onOffboard,
+  onResign,
+  hasPendingResignation,
   onEdit,
 }: EmployeeActionsBarProps) {
   return (
     <div className="flex items-center justify-end gap-3">
       {onAssignRole && !isOffboarded && !isPendingInvite && (
         <Button variant="outline" size="sm" onClick={onAssignRole} className="gap-2">
-          Assign Role
+          Manage Roles
           <ShieldCheck className="w-4 h-4" />
         </Button>
       )}
@@ -47,12 +51,22 @@ export function EmployeeActionsBar({
       ) : !isOffboarded ? (
         <>
           <Button variant="outline" size="sm" onClick={onAssignPermission} className="gap-2">
-            Assign Permissions
+            Grant Direct Permissions
             <ShieldCog className="w-4 h-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={onAssignAsset}>
             Assign Asset
           </Button>
+          {hasPendingResignation && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onResign}
+              className="text-amber-600 border-amber-400 bg-amber-50 hover:bg-amber-100"
+            >
+              Pending Resignation
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

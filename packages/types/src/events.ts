@@ -37,6 +37,7 @@ export const EventPatterns = {
 
   // HR → Notification
   NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
+  NOTIFY_RESIGNATION_SUBMITTED: 'notify.resignation_submitted',
   NOTIFY_LEAVE_REQUESTED: 'notify.leave_requested',
   NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
   NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
@@ -49,6 +50,7 @@ export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
 export interface TenantApprovedEvent {
   tenantId: string;
   adminEmail: string;
+  adminUserId?: string;
 }
 
 export interface EmployeeActivatedEvent {
@@ -139,6 +141,18 @@ export interface EmployeeTerminationEvent {
   lastName: string;
   reason: string;
   lastWorkingDate: string;
+}
+
+export interface ResignationSubmittedEvent {
+  tenantId: string;
+  adminEmail: string;
+  employeeId: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  lastWorkingDate: string;
+  reason?: string;
+  additionalNotes?: string;
+  detailLink?: string;
 }
 
 export interface LeaveRequestedEvent {

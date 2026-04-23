@@ -11,6 +11,7 @@ export enum Permission {
   UPDATE_USER = 'update:user',
   DEACTIVATE_USER = 'deactivate:user',
   FORCE_RESET_USER = 'force_reset:user',
+  VIEW_PERMISSION_SETS = 'view:permission_sets',
   GRANT_PERMISSION = 'grant:permission',
 
   // ── Company Roles ─────────────────────────────────────────────────────────
@@ -26,8 +27,12 @@ export enum Permission {
   UPDATE_OWN_PROFILE = 'update:own_profile',
   DELETE_EMPLOYEE = 'delete:employee',
   OFFBOARD_EMPLOYEE = 'offboard:employee',
+  SUBMIT_RESIGNATION = 'submit:resignation',
+  WITHDRAW_RESIGNATION = 'withdraw:resignation',
   MANAGE_DOCUMENTS = 'manage:documents',
   EXPORT_EMPLOYEES = 'export:employees',
+  READ_HR_SETTINGS = 'read:hr_settings',
+  MANAGE_HR_SETTINGS = 'manage:hr_settings',
 
   // ── Departments ───────────────────────────────────────────────────────────
   CREATE_DEPARTMENT = 'create:department',
@@ -103,14 +108,12 @@ export const SYSTEM_ROLE_ACCESS: Record<string, string[]> = {
 // Default company role permissions — seeded for every new tenant
 export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
   'Company Admin': [
-    Permission.READ_TENANT,
-    Permission.UPDATE_TENANT,
-    Permission.VIEW_AUDIT_LOGS,
     Permission.INVITE_USER,
     Permission.READ_USERS,
     Permission.UPDATE_USER,
     Permission.DEACTIVATE_USER,
     Permission.FORCE_RESET_USER,
+    Permission.VIEW_PERMISSION_SETS,
     Permission.GRANT_PERMISSION,
     Permission.MANAGE_COMPANY_ROLES,
     Permission.READ_COMPANY_ROLES,
@@ -121,8 +124,12 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.UPDATE_OWN_PROFILE,
     Permission.DELETE_EMPLOYEE,
     Permission.OFFBOARD_EMPLOYEE,
+    Permission.SUBMIT_RESIGNATION,
+    Permission.WITHDRAW_RESIGNATION,
     Permission.MANAGE_DOCUMENTS,
     Permission.EXPORT_EMPLOYEES,
+    Permission.READ_HR_SETTINGS,
+    Permission.MANAGE_HR_SETTINGS,
     Permission.CREATE_DEPARTMENT,
     Permission.READ_DEPARTMENTS,
     Permission.UPDATE_DEPARTMENT,
@@ -152,22 +159,16 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.SUBMIT_MANAGER_REVIEW,
     Permission.READ_OWN_REVIEW,
-    Permission.CREATE_PROJECT,
-    Permission.READ_PROJECTS,
-    Permission.UPDATE_PROJECT,
-    Permission.ASSIGN_PROJECT,
-    Permission.MANAGE_ASSETS,
-    Permission.READ_ASSETS,
-    Permission.ASSIGN_ASSET,
   ],
 
   Manager: [
-    Permission.READ_USERS,
     Permission.READ_COMPANY_ROLES,
     Permission.READ_EMPLOYEES,
     Permission.READ_TEAM_EMPLOYEES,
     Permission.READ_OWN_PROFILE,
     Permission.UPDATE_OWN_PROFILE,
+    Permission.SUBMIT_RESIGNATION,
+    Permission.WITHDRAW_RESIGNATION,
     Permission.READ_DEPARTMENTS,
     Permission.REQUEST_LEAVE,
     Permission.APPROVE_TEAM_LEAVE,
@@ -184,13 +185,13 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.SUBMIT_MANAGER_REVIEW,
     Permission.READ_OWN_REVIEW,
-    Permission.READ_PROJECTS,
-    Permission.READ_ASSETS,
   ],
 
   Employee: [
     Permission.READ_OWN_PROFILE,
     Permission.UPDATE_OWN_PROFILE,
+    Permission.SUBMIT_RESIGNATION,
+    Permission.WITHDRAW_RESIGNATION,
     Permission.REQUEST_LEAVE,
     Permission.READ_OWN_LEAVE,
     Permission.CLOCK_IN_OUT,
@@ -198,6 +199,5 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.READ_OWN_PAYSLIP,
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.READ_OWN_REVIEW,
-    Permission.READ_PROJECTS,
   ],
 };

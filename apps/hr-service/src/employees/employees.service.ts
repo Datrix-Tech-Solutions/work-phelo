@@ -5,6 +5,7 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -15,8 +16,23 @@ import {
   UpdateChecklistDto,
   OffboardReason,
 } from './dto/offboard-employee.dto';
+import {
+  DismissResignationDto,
+  SubmitResignationDto,
+} from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
+import {
+  assertHrAccess,
+  getActorEmployee,
+  getManagedEmployeeIds,
+  hasPermissionRule,
+  isCompanyAdminUser,
+  isCustomCompanyRoleUser,
+  isEmployeeSelfServiceUser,
+  isManagerUser,
+} from '../auth/access-scope';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class EmployeesService {
@@ -26,6 +42,7 @@ export class EmployeesService {
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly leaveService: LeaveService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async create(tenantId: string, dto: CreateEmployeeDto) {
@@ -141,10 +158,35 @@ export class EmployeesService {
     return employee;
   }
 
-  async findAll(tenantId: string, query: QueryEmployeesDto) {
+  async findAll(
+    tenantId: string,
+    query: QueryEmployeesDto,
+    actor?: RequestUser,
+  ) {
     const { take, skip, page } = getPaginationParams(query);
 
     const where: any = { tenantId };
+
+    if (actor && !isCompanyAdminUser(actor)) {
+      if (isManagerUser(actor)) {
+        const managedEmployeeIds = await getManagedEmployeeIds(
+          this.prisma,
+          tenantId,
+          actor.id,
+        );
+
+        if (managedEmployeeIds.size === 0) {
+          return { employees: [], meta: buildMeta(page, take, 0) };
+        }
+
+        where.id = { in: Array.from(managedEmployeeIds) };
+      } else if (isEmployeeSelfServiceUser(actor)) {
+        assertHrAccess(false);
+      } else {
+        assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
+      }
+    }
+
     if (query.status) where.employmentStatus = query.status;
     if (query.type) where.employmentType = query.type;
     if (query.departmentId) where.departmentId = query.departmentId;
@@ -186,7 +228,7 @@ export class EmployeesService {
     return { employees, meta: buildMeta(page, take, total) };
   }
 
-  async findById(tenantId: string, id: string) {
+  async findById(tenantId: string, id: string, actor?: RequestUser) {
     const employee = await this.prisma.employee.findFirst({
       where: { id, tenantId },
       include: {
@@ -196,16 +238,54 @@ export class EmployeesService {
         documents: true,
         leaveBalances: { include: { leaveType: true } },
         offboarding: true,
+        resignation: true,
       },
     });
     if (!employee) throw new NotFoundException('Employee not found');
+
+    if (!actor) {
+      return employee;
+    }
+
+    if (isCompanyAdminUser(actor)) {
+      return employee;
+    }
+
+    if (isManagerUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      const managedEmployeeIds = await getManagedEmployeeIds(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      assertHrAccess(
+        employee.id === actorEmployee.id || managedEmployeeIds.has(employee.id),
+      );
+      return employee;
+    }
+
+    if (isEmployeeSelfServiceUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      assertHrAccess(employee.id === actorEmployee.id);
+      return employee;
+    }
+
+    assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
     return employee;
   }
 
   async findByUserId(tenantId: string, userId: string) {
     const employee = await this.prisma.employee.findFirst({
       where: { userId, tenantId },
-      include: { department: true, allowances: true },
+      include: { department: true, allowances: true, resignation: true },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
     const managedDeptCount = await this.prisma.department.count({
@@ -218,9 +298,73 @@ export class EmployeesService {
     tenantId: string,
     id: string,
     dto: UpdateEmployeeDto,
-    actor?: { id: string; email: string },
+    actor: RequestUser,
   ) {
-    const existing = await this.findById(tenantId, id);
+    const existing = await this.prisma.employee.findFirst({
+      where: { id, tenantId },
+    });
+    if (!existing) throw new NotFoundException('Employee not found');
+
+    const fullUpdateAllowed =
+      isCompanyAdminUser(actor) ||
+      (isCustomCompanyRoleUser(actor) &&
+        hasPermissionRule(actor, 'employees:EDIT'));
+
+    let updateData: UpdateEmployeeDto = { ...dto };
+
+    if (!fullUpdateAllowed) {
+      assertHrAccess(isEmployeeSelfServiceUser(actor));
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      assertHrAccess(actorEmployee.id === existing.id);
+
+      const {
+        firstName,
+        lastName,
+        phone,
+        dateOfBirth,
+        gender,
+        maritalStatus,
+        nationality,
+        nationalId,
+        address,
+        city,
+        region,
+        emergencyName,
+        emergencyPhone,
+        emergencyRelation,
+        bankName,
+        bankAccountNumber,
+        bankBranch,
+        ssnit,
+        tinNumber,
+      } = dto;
+
+      updateData = {
+        firstName,
+        lastName,
+        phone,
+        dateOfBirth,
+        gender,
+        maritalStatus,
+        nationality,
+        nationalId,
+        address,
+        city,
+        region,
+        emergencyName,
+        emergencyPhone,
+        emergencyRelation,
+        bankName,
+        bankAccountNumber,
+        bankBranch,
+        ssnit,
+        tinNumber,
+      };
+    }
 
     const {
       employmentStatus,
@@ -228,7 +372,7 @@ export class EmployeesService {
       probationEndsAt,
       contractEndDate,
       ...rest
-    } = dto;
+    } = updateData;
 
     if (rest.branchId) {
       const branch = await this.prisma.branch.findFirst({
@@ -260,12 +404,11 @@ export class EmployeesService {
       data: {
         ...rest,
         ...(employmentStatus && { employmentStatus }),
-        ...(statusChanged &&
-          actor && {
-            statusChangedAt: new Date(),
-            statusChangedById: actor.id,
-            statusChangedByEmail: actor.email,
-          }),
+        ...(statusChanged && {
+          statusChangedAt: new Date(),
+          statusChangedById: actor.id,
+          statusChangedByEmail: actor.email,
+        }),
         dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : undefined,
         probationEndsAt: probationEndsAt
           ? new Date(probationEndsAt)
@@ -276,6 +419,302 @@ export class EmployeesService {
       },
       include: { department: true, branch: true },
     });
+  }
+
+  private async getTenantResignationConfig(tenantId: string) {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        adminEmail: true,
+        adminUserId: true,
+        resignationNoticePeriodDays: true,
+      },
+    });
+
+    return {
+      adminEmail: config?.adminEmail || null,
+      adminUserId: config?.adminUserId || null,
+      resignationNoticePeriodDays: config?.resignationNoticePeriodDays ?? 30,
+    };
+  }
+
+  private buildResignationDetailLink(tenantSlug: string, employeeId: string) {
+    return `/${tenantSlug}/hr/employees/${employeeId}?tab=resignation`;
+  }
+
+  async submitResignation(
+    tenantId: string,
+    employeeId: string,
+    dto: SubmitResignationDto,
+    actor: RequestUser,
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    assertHrAccess(actorEmployee.id === employeeId);
+
+    const employee = await this.findById(tenantId, employeeId, actor);
+    if (
+      employee.employmentStatus !== 'ACTIVE' &&
+      employee.employmentStatus !== 'PROBATION'
+    ) {
+      throw new BadRequestException(
+        'Only employees with Active or Probation status can submit a resignation.',
+      );
+    }
+
+    const existing = await this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+
+    if (existing?.status === 'PENDING') {
+      throw new BadRequestException(
+        'You have already submitted a resignation that is being processed.',
+      );
+    }
+
+    if (existing?.status === 'OFFBOARDING_INITIATED') {
+      throw new BadRequestException(
+        'Your offboarding process has already started, so the resignation can no longer be changed.',
+      );
+    }
+
+    const config = await this.getTenantResignationConfig(tenantId);
+    const submittedAt = new Date();
+    const lastWorkingDate = new Date(dto.lastWorkingDate);
+    const minimumDate = new Date(submittedAt);
+    minimumDate.setHours(0, 0, 0, 0);
+    minimumDate.setDate(
+      minimumDate.getDate() + config.resignationNoticePeriodDays,
+    );
+
+    if (Number.isNaN(lastWorkingDate.getTime())) {
+      throw new BadRequestException('Last working date is invalid.');
+    }
+
+    if (lastWorkingDate < minimumDate) {
+      throw new BadRequestException(
+        `Last working date must be at least ${config.resignationNoticePeriodDays} day(s) from today.`,
+      );
+    }
+
+    const resignation = await this.prisma.resignationRecord.upsert({
+      where: { employeeId },
+      create: {
+        tenantId,
+        employeeId,
+        lastWorkingDate,
+        reason: dto.reason,
+        additionalNotes: dto.additionalNotes?.trim() || null,
+        status: 'PENDING',
+        submittedAt,
+      },
+      update: {
+        lastWorkingDate,
+        reason: dto.reason,
+        additionalNotes: dto.additionalNotes?.trim() || null,
+        status: 'PENDING',
+        submittedAt,
+        withdrawnAt: null,
+        dismissedAt: null,
+        dismissedById: null,
+        dismissedByEmail: null,
+        offboardingInitiatedAt: null,
+        offboardingRecordId: null,
+      },
+    });
+
+    const detailLink = this.buildResignationDetailLink(
+      actor.tenantSlug,
+      employeeId,
+    );
+    const reasonLabel = dto.reason
+      ? dto.reason
+          .split('_')
+          .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+          .join(' ')
+      : undefined;
+
+    if (config.adminUserId) {
+      await this.notificationsService.create({
+        tenantId,
+        userId: config.adminUserId,
+        type: 'RESIGNATION_SUBMITTED',
+        message: `${employee.firstName} ${employee.lastName} submitted a resignation effective ${lastWorkingDate.toLocaleDateString(
+          'en-GB',
+        )}${reasonLabel ? ` (${reasonLabel})` : ''}.`,
+        link: detailLink,
+      });
+    }
+
+    if (config.adminEmail) {
+      void this.rabbitmq
+        .notificationResignationSubmitted({
+          tenantId,
+          adminEmail: config.adminEmail,
+          employeeId,
+          employeeFirstName: employee.firstName,
+          employeeLastName: employee.lastName,
+          lastWorkingDate: lastWorkingDate.toISOString(),
+          reason: reasonLabel,
+          additionalNotes: dto.additionalNotes?.trim() || undefined,
+          detailLink,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit resignation notification for ${employee.email}`,
+            err,
+          ),
+        );
+    }
+
+    return {
+      message:
+        'Your resignation has been submitted. Your HR administrator will be in touch regarding your offboarding process.',
+      resignation,
+    };
+  }
+
+  async getResignationRecord(
+    tenantId: string,
+    employeeId: string,
+    actor: RequestUser,
+  ) {
+    await this.findById(tenantId, employeeId, actor);
+
+    return this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+  }
+
+  async withdrawResignation(
+    tenantId: string,
+    employeeId: string,
+    actor: RequestUser,
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    assertHrAccess(actorEmployee.id === employeeId);
+
+    const resignation = await this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+
+    if (!resignation || resignation.tenantId !== tenantId) {
+      throw new NotFoundException('No resignation found for this employee.');
+    }
+
+    if (resignation.status === 'OFFBOARDING_INITIATED') {
+      throw new BadRequestException(
+        'You can no longer withdraw this resignation because offboarding has already been initiated.',
+      );
+    }
+
+    if (resignation.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Only a pending resignation can be withdrawn.',
+      );
+    }
+
+    return {
+      message: 'Resignation withdrawn successfully.',
+      resignation: await this.prisma.resignationRecord.update({
+        where: { employeeId },
+        data: {
+          status: 'WITHDRAWN',
+          withdrawnAt: new Date(),
+        },
+      }),
+    };
+  }
+
+  async dismissResignation(
+    tenantId: string,
+    employeeId: string,
+    _dto: DismissResignationDto,
+    actor: RequestUser,
+  ) {
+    await this.findById(tenantId, employeeId, actor);
+
+    const resignation = await this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+
+    if (!resignation || resignation.tenantId !== tenantId) {
+      throw new NotFoundException('No resignation found for this employee.');
+    }
+
+    if (resignation.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Only a pending resignation can be dismissed.',
+      );
+    }
+
+    return {
+      message: 'Resignation dismissed successfully.',
+      resignation: await this.prisma.resignationRecord.update({
+        where: { employeeId },
+        data: {
+          status: 'DISMISSED',
+          dismissedAt: new Date(),
+          dismissedById: actor.id,
+          dismissedByEmail: actor.email,
+        },
+      }),
+    };
+  }
+
+  async initiateOffboardFromResignation(
+    tenantId: string,
+    employeeId: string,
+    actor: RequestUser,
+  ) {
+    await this.findById(tenantId, employeeId, actor);
+
+    const resignation = await this.prisma.resignationRecord.findUnique({
+      where: { employeeId },
+    });
+
+    if (!resignation || resignation.tenantId !== tenantId) {
+      throw new NotFoundException('No resignation found for this employee.');
+    }
+
+    if (resignation.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Only a pending resignation can be used to initiate offboarding.',
+      );
+    }
+
+    const offboarding = await this.initiateOffboard(
+      tenantId,
+      employeeId,
+      {
+        reason: OffboardReason.RESIGNATION,
+        lastWorkingDate: resignation.lastWorkingDate.toISOString(),
+        exitNotes: resignation.additionalNotes ?? undefined,
+      },
+      { id: actor.id, email: actor.email },
+    );
+
+    const updatedResignation = await this.prisma.resignationRecord.update({
+      where: { employeeId },
+      data: {
+        status: 'OFFBOARDING_INITIATED',
+        offboardingInitiatedAt: new Date(),
+        offboardingRecordId: offboarding.id,
+      },
+    });
+
+    return {
+      message: 'Offboarding initiated from resignation successfully.',
+      resignation: updatedResignation,
+      offboarding,
+    };
   }
 
   // ── Offboarding ───────────────────────────────────────────────────────────
@@ -331,11 +770,15 @@ export class EmployeesService {
     });
   }
 
-  async getOffboardingRecord(tenantId: string, employeeId: string) {
-    const record = await this.prisma.offboardingRecord.findFirst({
+  async getOffboardingRecord(
+    tenantId: string,
+    employeeId: string,
+    actor: RequestUser,
+  ) {
+    await this.findById(tenantId, employeeId, actor);
+    return this.prisma.offboardingRecord.findFirst({
       where: { employeeId, tenantId },
     });
-    return record;
   }
 
   async updateOffboardChecklist(

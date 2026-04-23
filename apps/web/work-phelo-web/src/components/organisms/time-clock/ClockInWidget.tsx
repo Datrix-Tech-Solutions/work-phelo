@@ -10,12 +10,9 @@ interface ClockInWidgetProps {
   isLoading: boolean;
   onClockIn: () => void;
   onClockOut: () => void;
-  onStartBreak: () => void;
-  onEndBreak: () => void;
   onReportMissed: () => void;
   isClockingIn: boolean;
   isClockingOut: boolean;
-  isBreaking: boolean;
 }
 
 function formatBannerDate(d: Date) {
@@ -52,12 +49,9 @@ export function ClockInWidget({
   isLoading,
   onClockIn,
   onClockOut,
-  onStartBreak,
-  onEndBreak,
   onReportMissed,
   isClockingIn,
   isClockingOut,
-  isBreaking,
 }: ClockInWidgetProps) {
   const [now, setNow] = useState(() => new Date());
 
@@ -123,37 +117,21 @@ export function ClockInWidget({
             )}
 
             {!isLoading && isClockedIn && (
-              <>
-                <BannerButton
-                  onClick={onStartBreak}
-                  disabled={isBreaking || isClockingOut}
-                  label={isBreaking ? 'Starting…' : 'Break'}
-                  variant="ghost"
-                />
-                <BannerButton
-                  onClick={onClockOut}
-                  disabled={isClockingOut || isBreaking}
-                  label={isClockingOut ? 'Clocking out…' : 'Clock out'}
-                  variant="white"
-                />
-              </>
+              <BannerButton
+                onClick={onClockOut}
+                disabled={isClockingOut}
+                label={isClockingOut ? 'Clocking out…' : 'Clock out'}
+                variant="white"
+              />
             )}
 
             {!isLoading && isOnBreak && (
-              <>
-                <BannerButton
-                  onClick={onEndBreak}
-                  disabled={isBreaking || isClockingOut}
-                  label={isBreaking ? 'Ending…' : 'End break'}
-                  variant="ghost"
-                />
-                <BannerButton
-                  onClick={onClockOut}
-                  disabled={isClockingOut || isBreaking}
-                  label={isClockingOut ? 'Clocking out…' : 'Clock out'}
-                  variant="white"
-                />
-              </>
+              <BannerButton
+                onClick={onClockOut}
+                disabled={isClockingOut}
+                label={isClockingOut ? 'Clocking out…' : 'Clock out'}
+                variant="white"
+              />
             )}
           </div>
         </div>

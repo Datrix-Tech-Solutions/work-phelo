@@ -3,7 +3,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMyProfile, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useMyProfile, useUpdateEmployee, useResignationRecord } from '@/hooks/hr/useEmployees';
 import { useUserPermissions } from '@/hooks/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -14,6 +14,7 @@ import { Button } from '@/components/atoms/Button';
 import { EditMyProfilePanel } from '@/components/organisms/employee/EditMyProfilePanel';
 import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
 import type { UpdateEmployeePayload } from '@/types/hr';
+import { ResignationPanel } from '@/components/organisms/employee/resignationPanel';
 
 function formatDate(iso?: string | null) {
   if (!iso) return undefined;
@@ -30,10 +31,12 @@ function formatEnum(val?: string | null) {
 }
 export default function MyProfilePage() {
   const [editOpen, setEditOpen] = useState(false);
+  const [resignOpen, setResignOpen] = useState(false);
   const toast = useToast();
 
   const { data: employee, isLoading } = useMyProfile();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { data: resignationRecord } = useResignationRecord(employee?.id ?? '');
 
   const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
   const userPerms = userPermsRaw as
@@ -76,7 +79,21 @@ export default function MyProfilePage() {
           <h1 className="text-xl font-bold text-gray-900">My Profile</h1>
           <p className="text-sm text-gray-400 mt-0.5">View and update your personal details</p>
         </div>
-        <Button onClick={() => setEditOpen(true)}>Edit Profile</Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setResignOpen(true)}
+            className={
+              resignationRecord?.status === 'PENDING'
+                ? 'text-amber-600 border-amber-400 bg-amber-50 hover:bg-amber-100'
+                : 'text-amber-600 border-amber-200 hover:bg-amber-50'
+            }
+          >
+            {resignationRecord?.status === 'PENDING' ? 'Pending Resignation' : 'Resign'}
+          </Button>
+          <Button onClick={() => setEditOpen(true)}>Edit Profile</Button>
+        </div>
       </div>
 
       {/* Content */}
@@ -138,6 +155,11 @@ export default function MyProfilePage() {
         employee={employee}
         onSave={handleSave}
         isUpdating={isUpdating}
+      />
+      <ResignationPanel
+        isOpen={resignOpen}
+        onClose={() => setResignOpen(false)}
+        employee={employee}
       />
     </div>
   );

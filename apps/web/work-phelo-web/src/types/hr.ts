@@ -407,6 +407,38 @@ export interface InitiateOffboardDto {
   exitNotes?: string;
 }
 
+export type ResignationReason =
+  | 'PERSONAL_REASONS'
+  | 'BETTER_OPPORTUNITY'
+  | 'RELOCATION'
+  | 'FURTHER_EDUCATION'
+  | 'HEALTH_REASONS'
+  | 'OTHER';
+
+export type ResignationStatus = 'PENDING' | 'DISMISSED' | 'WITHDRAWN' | 'OFFBOARDING_INITIATED';
+
+export interface ResignationRecord {
+  id: string;
+  tenantId: string;
+  employeeId: string;
+  lastWorkingDate: string;
+  reason?: ResignationReason;
+  additionalNotes?: string;
+  status: ResignationStatus;
+  submittedAt: string;
+  withdrawnAt?: string;
+  dismissedAt?: string;
+  offboardingInitiatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ResignationPayload {
+  lastWorkingDate: string;
+  reason?: ResignationReason;
+  additionalNotes?: string;
+}
+
 export interface UpdateChecklistDto {
   item: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'managerApproval';
   done: boolean;
@@ -496,11 +528,21 @@ export interface AppraisalTemplate {
   id: string;
   tenantSlug: string;
   name: string;
-  description?: string;
-  sections: AppraisalSection[];
+  selfAssessmentWeight: number;
+  managerAssessmentWeight: number;
+  kpis: AppraisalTemplateKpi[];
   isActive: boolean;
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface AppraisalTemplateKpi {
+  id: string;
+  templateId: string;
+  title: string;
+  weight: number;
+  maxScore: number;
+  description?: string;
 }
 
 export interface AppraisalSection {
@@ -517,13 +559,19 @@ export interface AppraisalCycle {
   id: string;
   tenantId: string;
   title: string;
+  frequency?: Frequency;
   description?: string;
   startDate: string;
   endDate: string;
+  selfAssessmentDeadline?: string;
+  managerReviewDeadline?: string;
+  templateId?: string;
+  departmentIds?: string[];
   isActive: boolean;
   createdBy: string;
   createdAt: string;
   updatedAt?: string;
+  completionRate?: number;
   _count?: { appraisals: number };
 }
 
@@ -625,15 +673,21 @@ export interface FinalizedAppraisal {
 export interface CreateAppraisalTemplateDto {
   tenantSlug: string;
   name: string;
-  description?: string;
-  sections: Omit<AppraisalSection, 'id' | 'templateId'>[];
+  selfAssessmentWeight: number;
+  managerAssessmentWeight: number;
+  kpis: Omit<AppraisalTemplateKpi, 'id' | 'templateId'>[];
 }
 
 export interface CreateAppraisalCycleDto {
   title: string;
+  frequency: Frequency;
   description?: string;
   startDate: string;
   endDate: string;
+  selfAssessmentDeadline: string;
+  managerReviewDeadline: string;
+  templateId?: string;
+  departmentIds?: string[];
 }
 
 export interface CreateAppraisalKpiDto {
@@ -675,6 +729,8 @@ export interface CycleResultItem {
   department: string;
   jobTitle: string;
   managerName: string;
+  selfScore?: number;
+  managerScore?: number;
   overallScore: number;
   finalRating: FinalRating;
   reviewCompletedAt: string;

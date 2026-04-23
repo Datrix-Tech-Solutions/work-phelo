@@ -8,11 +8,22 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
+import {
+  assertHrAccess,
+  getActorEmployee,
+  getManagedEmployeeIds,
+  hasPermissionRule,
+  isCompanyAdminUser,
+  isCustomCompanyRoleUser,
+  isEmployeeSelfServiceUser,
+  isManagerUser,
+} from '../auth/access-scope';
 
 const DEFAULT_LEAVE_TYPES = [
   {
@@ -234,9 +245,28 @@ export class LeaveService {
     return count;
   }
 
-  async getPendingCount(tenantId: string, employeeId?: string) {
+  async getPendingCount(tenantId: string, actor: RequestUser) {
     const where: any = { tenantId, status: 'PENDING' };
-    if (employeeId) where.employeeId = employeeId;
+
+    if (isCompanyAdminUser(actor)) {
+      const count = await this.prisma.leaveRequest.count({ where });
+      return { count };
+    }
+
+    if (isManagerUser(actor)) {
+      where.employeeId = {
+        in: [...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id))],
+      };
+      const count = await this.prisma.leaveRequest.count({ where });
+      return { count };
+    }
+
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    where.employeeId = actorEmployee.id;
     const count = await this.prisma.leaveRequest.count({ where });
     return { count };
   }
@@ -301,7 +331,34 @@ export class LeaveService {
     }
   }
 
-  async getLeaveBalances(tenantId: string, employeeId: string) {
+  async getLeaveBalances(
+    tenantId: string,
+    employeeId: string,
+    actor?: RequestUser,
+  ) {
+    if (actor && !isCompanyAdminUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+
+      if (isManagerUser(actor)) {
+        const managedEmployeeIds = await getManagedEmployeeIds(
+          this.prisma,
+          tenantId,
+          actor.id,
+        );
+        assertHrAccess(
+          employeeId === actorEmployee.id || managedEmployeeIds.has(employeeId),
+        );
+      } else if (isEmployeeSelfServiceUser(actor)) {
+        assertHrAccess(employeeId === actorEmployee.id);
+      } else {
+        assertHrAccess(hasPermissionRule(actor, 'leave:VIEW'));
+      }
+    }
+
     const year = new Date().getFullYear();
     let balances = await this.prisma.leaveBalance.findMany({
       where: { tenantId, employeeId, year },
@@ -459,25 +516,43 @@ export class LeaveService {
 
   async getRequests(
     tenantId: string,
+    actor: RequestUser,
     filters: {
       employeeId?: string;
       status?: string;
-      managerId?: string;
+      scope?: 'all';
     },
   ) {
     const where: any = { tenantId };
     if (filters.employeeId) where.employeeId = filters.employeeId;
     if (filters.status) where.status = filters.status;
 
-    // If managerId — only show requests from employees in manager's department
-    if (filters.managerId) {
-      const managerEmployee = await this.prisma.employee.findFirst({
-        where: { userId: filters.managerId, tenantId },
-        include: { department: true },
-      });
-      if (managerEmployee?.departmentId) {
-        where.employee = { departmentId: managerEmployee.departmentId };
-      }
+    if (filters.scope === 'all') {
+      assertHrAccess(
+        isCompanyAdminUser(actor) || hasPermissionRule(actor, 'leave:VIEW'),
+      );
+    } else if (isCompanyAdminUser(actor)) {
+      // company-wide access
+    } else if (isManagerUser(actor)) {
+      where.employeeId = {
+        in: [...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id))],
+      };
+    } else if (isEmployeeSelfServiceUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      where.employeeId = actorEmployee.id;
+    } else if (isCustomCompanyRoleUser(actor)) {
+      assertHrAccess(hasPermissionRule(actor, 'leave:VIEW'));
+    } else {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
+      where.employeeId = actorEmployee.id;
     }
 
     return this.prisma.leaveRequest.findMany({
@@ -500,11 +575,12 @@ export class LeaveService {
   async reviewRequest(
     tenantId: string,
     requestId: string,
-    reviewerId: string,
+    reviewer: RequestUser,
     dto: ReviewLeaveRequestDto,
   ) {
     const request = await this.prisma.leaveRequest.findFirst({
       where: { id: requestId, tenantId },
+      include: { employee: { select: { id: true } } },
     });
 
     if (!request) throw new NotFoundException('Leave request not found');
@@ -512,14 +588,27 @@ export class LeaveService {
       throw new BadRequestException('This request has already been reviewed');
     }
 
+    if (!isCompanyAdminUser(reviewer)) {
+      if (isManagerUser(reviewer)) {
+        const managedEmployeeIds = await getManagedEmployeeIds(
+          this.prisma,
+          tenantId,
+          reviewer.id,
+        );
+        assertHrAccess(managedEmployeeIds.has(request.employee.id));
+      } else {
+        assertHrAccess(hasPermissionRule(reviewer, 'leave:APPROVE'));
+      }
+    }
+
     const updated = await this.prisma.leaveRequest.update({
       where: { id: requestId },
       data: {
         status: dto.action,
         ...(dto.action === 'APPROVED'
-          ? { approvedBy: reviewerId, approvedAt: new Date() }
+          ? { approvedBy: reviewer.id, approvedAt: new Date() }
           : {
-              rejectedBy: reviewerId,
+              rejectedBy: reviewer.id,
               rejectedAt: new Date(),
               rejectionNote: dto.note,
             }),

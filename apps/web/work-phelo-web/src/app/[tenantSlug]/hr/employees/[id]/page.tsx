@@ -3,22 +3,28 @@
 'use client';
 
 import { use, useState } from 'react';
+import axios from 'axios';
 import {
   useEmployee,
   useEmployees,
   useResendEmployeeInvite,
   useUpdateEmployee,
+  useResignationRecord,
 } from '@/hooks/hr/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import {
   useCompanyRoles,
   useUserPermissions,
   useAssignRole,
   useUnassignRole,
+  useRemovePermissionSet,
 } from '@/hooks/useRoles';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
+import { ResignationPanel } from '@/components/organisms/employee/resignationPanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
 import { AssignRolePanel } from '@/components/organisms/roles/AssignRolePanel';
@@ -43,9 +49,11 @@ export default function EmployeeDetailPage({
   const [assignAssetOpen, setAssignAssetOpen] = useState(false);
   const [assignRoleOpen, setAssignRoleOpen] = useState(false);
   const [assignPermOpen, setAssignPermOpen] = useState(false);
+  const [resignOpen, setResignOpen] = useState(false);
 
   // Data fetching
-  const { data: employee, isLoading } = useEmployee(id);
+  const { data: employee, isLoading, error } = useEmployee(id);
+  const { data: resignationRecord } = useResignationRecord(id);
   const { data: departments = [] } = useDepartments();
   const { data: branches = [] } = useBranches();
   const { data: allHrResult } = useEmployees();
@@ -56,6 +64,10 @@ export default function EmployeeDetailPage({
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
   const { mutate: assignRole, isPending: isAssigningRole } = useAssignRole();
   const { mutate: unassignRole, isPending: isRemovingRole } = useUnassignRole();
+  const { mutate: removePermissionSet, isPending: isRemovingPermissionSet } =
+    useRemovePermissionSet();
+  const canAssignRole = usePermission(Permission.ASSIGN_ROLE);
+  const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
 
   // Roles data
   const { data: rolesRaw = [] } = useCompanyRoles();
@@ -67,6 +79,9 @@ export default function EmployeeDetailPage({
 
   const currentRoleName = userPerms?.companyRole ?? null;
   const assignedSets = userPerms?.permissionSets ?? [];
+  const displayedRoleNames = roles
+    .filter((role) => assignedSets.some((set) => set.name === `${role.name} Set`))
+    .map((role) => role.name);
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -93,7 +108,14 @@ export default function EmployeeDetailPage({
   }
 
   if (!employee) {
-    return <div className="p-8 text-center">Employee not found.</div>;
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+    return (
+      <div className="p-8 text-center">
+        {status === 403
+          ? "You don't have permission to access this. Contact your administrator."
+          : 'Employee not found.'}
+      </div>
+    );
   }
 
   const name = `${employee.firstName} ${employee.lastName}`;
@@ -110,9 +132,13 @@ export default function EmployeeDetailPage({
         resendInvite={handleResendInvite}
         isResending={isResending}
         onAssignAsset={() => setAssignAssetOpen(true)}
-        onAssignRole={employee.userId ? () => setAssignRoleOpen(true) : undefined}
-        onAssignPermission={employee.userId ? () => setAssignPermOpen(true) : undefined}
+        onAssignRole={employee.userId && canAssignRole ? () => setAssignRoleOpen(true) : undefined}
+        onAssignPermission={
+          employee.userId && canGrantPermission ? () => setAssignPermOpen(true) : undefined
+        }
         onOffboard={() => setOffboardOpen(true)}
+        onResign={() => setResignOpen(true)}
+        hasPendingResignation={resignationRecord?.status === 'PENDING'}
         onEdit={() => setEditOpen(true)}
       />
 
@@ -121,10 +147,13 @@ export default function EmployeeDetailPage({
         {/* Left Sidebar */}
         <EmployeeProfileCard
           employee={employee}
-          roles={[
-            ...(currentRoleName ? [currentRoleName] : []),
-            ...assignedSets.filter((s) => s.name !== `${currentRoleName} Set`).map((s) => s.name),
-          ]}
+          roles={
+            displayedRoleNames.length > 0
+              ? displayedRoleNames
+              : currentRoleName
+                ? [currentRoleName]
+                : []
+          }
         />
 
         {/* Right Sections */}
@@ -141,6 +170,14 @@ export default function EmployeeDetailPage({
       </div>
 
       {/* Side Panels */}
+      <ResignationPanel
+        isOpen={resignOpen}
+        onClose={() => setResignOpen(false)}
+        employee={employee}
+        isHrView
+        onAccept={() => setOffboardOpen(true)}
+      />
+
       <OffboardEmployeePanel
         isOpen={offboardOpen}
         onClose={() => setOffboardOpen(false)}
@@ -174,10 +211,11 @@ export default function EmployeeDetailPage({
           onClose={() => setAssignRoleOpen(false)}
           employeeName={name}
           userId={employee.userId}
+          currentRoleName={currentRoleName}
           assignedSets={assignedSets}
           roles={roles}
           isAssigning={isAssigningRole}
-          isRemoving={isRemovingRole}
+          isRemoving={isRemovingRole || isRemovingPermissionSet}
           onAssign={(roleId, userId) => {
             assignRole(
               { roleId, userId },
@@ -187,7 +225,7 @@ export default function EmployeeDetailPage({
               },
             );
           }}
-          onRemove={(roleId, userId) => {
+          onRemoveRole={(roleId, userId) => {
             unassignRole(
               { roleId, userId },
               {
@@ -196,6 +234,15 @@ export default function EmployeeDetailPage({
               },
             );
           }}
+          onRemovePermissionSet={(permissionSetId) =>
+            removePermissionSet(
+              { userId: employee.userId!, permissionSetId },
+              {
+                onSuccess: () => toast.success(`Role access removed from ${name}`),
+                onError: () => toast.error('Failed to remove permission set'),
+              },
+            )
+          }
         />
       )}
 

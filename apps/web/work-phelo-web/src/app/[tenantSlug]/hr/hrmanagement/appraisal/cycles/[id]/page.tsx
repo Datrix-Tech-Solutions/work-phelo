@@ -4,10 +4,8 @@
 
 import { use } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/atoms/Badge';
-import { api } from '@/lib/api';
-import { AppraisalCycle } from '@/types/hr';
+import { useAppraisalCycles } from '@/hooks/useAppraisals';
 import { formatDate } from '@/lib/formatters';
 import { Icons } from '@/components/atoms/icons';
 
@@ -29,14 +27,7 @@ export default function CycleDetailPage({
 }) {
   const { tenantSlug, id } = use(params);
 
-  const { data: cycles = [], isLoading } = useQuery<AppraisalCycle[]>({
-    queryKey: ['appraisal-cycles', tenantSlug],
-    queryFn: () =>
-      api.get(`/hr/appraisals/cycles`).then((r) => {
-        const res = r.data;
-        return Array.isArray(res) ? res : (res?.data ?? res?.cycles ?? []);
-      }),
-  });
+  const { data: cycles = [], isLoading } = useAppraisalCycles();
 
   const cycle = cycles.find((c) => c.id === id);
 

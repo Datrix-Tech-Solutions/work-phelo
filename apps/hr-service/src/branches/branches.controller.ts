@@ -22,16 +22,20 @@ import { UpdateBranchDto } from './dto/update-branch.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
 
 @ApiTags('Branches')
 @Controller('branches')
-@UseGuards(JwtAuthGuard, ModuleGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, PermissionsGuard)
 @RequireModule('hr')
 @ApiBearerAuth('access-token')
 export class BranchesController {
   constructor(private readonly branchesService: BranchesService) {}
 
   @Post()
+  @RequirePermissions(Permission.CREATE_DEPARTMENT)
   @ApiOperation({ summary: 'Create a new branch' })
   @ApiResponse({ status: 201, description: 'Branch created successfully' })
   @ApiResponse({ status: 409, description: 'Branch name already exists' })
@@ -40,6 +44,7 @@ export class BranchesController {
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_DEPARTMENTS)
   @ApiOperation({ summary: 'List all branches for the current tenant' })
   @ApiResponse({ status: 200, description: 'Branches retrieved successfully' })
   findAll(@Req() req: any) {
@@ -47,6 +52,7 @@ export class BranchesController {
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.READ_DEPARTMENTS)
   @ApiOperation({ summary: 'Get a branch by ID' })
   @ApiParam({ name: 'id', description: 'Branch UUID' })
   @ApiResponse({ status: 200, description: 'Branch retrieved successfully' })
@@ -56,6 +62,7 @@ export class BranchesController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permission.UPDATE_DEPARTMENT)
   @ApiOperation({ summary: 'Update a branch' })
   @ApiParam({ name: 'id', description: 'Branch UUID' })
   @ApiResponse({ status: 200, description: 'Branch updated successfully' })
@@ -69,6 +76,7 @@ export class BranchesController {
   }
 
   @Delete(':id')
+  @RequirePermissions(Permission.DELETE_DEPARTMENT)
   @ApiOperation({ summary: 'Delete a branch' })
   @ApiParam({ name: 'id', description: 'Branch UUID' })
   @ApiResponse({ status: 200, description: 'Branch deleted successfully' })

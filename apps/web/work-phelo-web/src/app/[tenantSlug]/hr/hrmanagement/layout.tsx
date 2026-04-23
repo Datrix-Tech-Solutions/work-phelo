@@ -2,9 +2,12 @@
 
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useParams } from 'next/navigation';
+import { usePathname, useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
+import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 
 interface TabItem {
   label: string;
@@ -50,25 +53,39 @@ function ManagementTabs({ groups }: { groups: TabGroup[] }) {
 
 export default function HRManagementLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
   const base = `/${params.tenantSlug}/hr/hrmanagement`;
+  const { canManageLeaveTypes, canConfigureAppraisal, canAccessRoles, hasAnyManagementAccess } =
+    useHrManagementAccess();
+
+  useEffect(() => {
+    if (user !== null && !hasAnyManagementAccess) {
+      router.replace(`/${params.tenantSlug}/hr`);
+    }
+  }, [hasAnyManagementAccess, params.tenantSlug, router, user]);
 
   const groups: TabGroup[] = [
     {
-      tabs: [
-        { label: 'Leave Types', href: `${base}/leave-types` },
-        { label: 'Public Holidays', href: `${base}/public-holidays` },
-      ],
+      tabs: canManageLeaveTypes
+        ? [
+            { label: 'Leave Types', href: `${base}/leave-types` },
+            { label: 'Public Holidays', href: `${base}/public-holidays` },
+          ]
+        : [],
     },
     {
-      tabs: [
-        { label: 'Appraisal Templates', href: `${base}/appraisal/templates` },
-        { label: 'Appraisal Cycles', href: `${base}/appraisal/cycles` },
-      ],
+      tabs: canConfigureAppraisal
+        ? [
+            { label: 'Appraisal Templates', href: `${base}/appraisal/templates` },
+            { label: 'Appraisal Cycles', href: `${base}/appraisal/cycles` },
+          ]
+        : [],
     },
     {
-      tabs: [{ label: 'Roles & Permissions', href: `${base}/roles` }],
+      tabs: canAccessRoles ? [{ label: 'Roles & Permissions', href: `${base}/roles` }] : [],
     },
-  ];
+  ].filter((group) => group.tabs.length > 0);
 
   return (
     <div className="h-full flex flex-col">

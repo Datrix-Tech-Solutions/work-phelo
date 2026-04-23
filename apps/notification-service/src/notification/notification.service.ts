@@ -192,6 +192,50 @@ export class NotificationService {
     });
   }
 
+  async sendResignationSubmittedNotification(data: {
+    tenantId: string;
+    adminEmail: string;
+    employeeId: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    lastWorkingDate: string;
+    reason?: string;
+    additionalNotes?: string;
+    detailLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.adminEmail,
+        NotificationType.RESIGNATION_SUBMITTED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate RESIGNATION_SUBMITTED suppressed for ${data.adminEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendResignationSubmittedNotification(
+      data.adminEmail,
+      data.employeeFirstName,
+      data.employeeLastName,
+      data.lastWorkingDate,
+      data.reason,
+      data.additionalNotes,
+      data.detailLink,
+    );
+
+    await this.log({
+      userId: data.employeeId,
+      tenantId: data.tenantId,
+      type: 'RESIGNATION_SUBMITTED',
+      channel: 'EMAIL',
+      recipient: data.adminEmail,
+      subject: `Resignation submitted by ${data.employeeFirstName} ${data.employeeLastName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendLeaveRequestedNotification(data: {
     tenantId: string;
     employeeId: string;

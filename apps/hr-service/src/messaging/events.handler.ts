@@ -19,7 +19,7 @@ export class EventsHandler {
 
   @EventPattern('hr.tenant_approved')
   async handleTenantApproved(@Payload() data: WithMeta<TenantApprovedEvent>) {
-    const { tenantId, adminEmail, _meta } = data;
+    const { tenantId, adminEmail, adminUserId, _meta } = data;
     this.logger.log(
       `[hr.tenant_approved] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
     );
@@ -35,8 +35,8 @@ export class EventsHandler {
       this.prisma.tenantConfig
         .upsert({
           where: { tenantId },
-          create: { tenantId, adminEmail },
-          update: { adminEmail },
+          create: { tenantId, adminEmail, adminUserId },
+          update: { adminEmail, adminUserId },
         })
         .then(() =>
           this.logger.log(
