@@ -23,7 +23,9 @@ function branchLocation(b: Branch) {
 
 export function BranchesTable() {
   const toast = useToast();
-  const canManage = usePermission(Permission.CREATE_DEPARTMENT);
+  const canCreate = usePermission(Permission.CREATE_BRANCH);
+  const canUpdate = usePermission(Permission.UPDATE_BRANCH);
+  const canDelete = usePermission(Permission.DELETE_BRANCH);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -145,17 +147,29 @@ export function BranchesTable() {
           setSearch(q);
           setPage(1);
         }}
-        {...(canManage && {
+        {...(canCreate && {
           actionButton: { label: 'New Branch', onClick: () => setCreateOpen(true) },
         })}
         rowActions={
-          !canManage
-            ? undefined
-            : (row) => [
-                { label: 'Edit Branch', onClick: () => setEditTarget(row) },
-                { label: 'Add Members', onClick: () => setMembersTarget(row) },
-                { label: 'Delete Branch', danger: true, onClick: () => setDeleteTarget(row) },
+          canUpdate || canDelete
+            ? (row) => [
+                ...(canUpdate
+                  ? [
+                      { label: 'Edit Branch', onClick: () => setEditTarget(row) },
+                      { label: 'Add Members', onClick: () => setMembersTarget(row) },
+                    ]
+                  : []),
+                ...(canDelete
+                  ? [
+                      {
+                        label: 'Delete Branch',
+                        danger: true,
+                        onClick: () => setDeleteTarget(row),
+                      },
+                    ]
+                  : []),
               ]
+            : undefined
         }
         emptyMessage="No branches found"
         currentPage={page}
@@ -163,46 +177,54 @@ export function BranchesTable() {
         onPageChange={setPage}
       />
 
-      {canManage && (
+      {(canCreate || canUpdate || canDelete) && (
         <>
-          <BranchFormPanel
-            isOpen={createOpen}
-            onClose={() => setCreateOpen(false)}
-            employees={employees}
-          />
-          <BranchFormPanel
-            isOpen={!!editTarget}
-            onClose={() => setEditTarget(null)}
-            branch={editTarget}
-            employees={employees}
-          />
-          <BranchMembersPanel
-            isOpen={!!membersTarget}
-            onClose={() => setMembersTarget(null)}
-            branch={membersTarget}
-            employees={employees}
-          />
-          <Modal
-            isOpen={!!deleteTarget}
-            onClose={() => setDeleteTarget(null)}
-            title="Delete Branch"
-            description={`Delete "${deleteTarget?.name}"? This cannot be undone. Employees assigned to this branch will be unassigned.`}
-            footer={
-              <div className="flex justify-end gap-3">
-                <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="danger"
-                  isLoading={isDeleting}
-                  loadingText="Deleting…"
-                  onClick={confirmDelete}
-                >
-                  Delete Branch
-                </Button>
-              </div>
-            }
-          />
+          {canCreate && (
+            <BranchFormPanel
+              isOpen={createOpen}
+              onClose={() => setCreateOpen(false)}
+              employees={employees}
+            />
+          )}
+          {canUpdate && (
+            <>
+              <BranchFormPanel
+                isOpen={!!editTarget}
+                onClose={() => setEditTarget(null)}
+                branch={editTarget}
+                employees={employees}
+              />
+              <BranchMembersPanel
+                isOpen={!!membersTarget}
+                onClose={() => setMembersTarget(null)}
+                branch={membersTarget}
+                employees={employees}
+              />
+            </>
+          )}
+          {canDelete && (
+            <Modal
+              isOpen={!!deleteTarget}
+              onClose={() => setDeleteTarget(null)}
+              title="Delete Branch"
+              description={`Delete "${deleteTarget?.name}"? This cannot be undone. Employees assigned to this branch will be unassigned.`}
+              footer={
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    isLoading={isDeleting}
+                    loadingText="Deleting…"
+                    onClick={confirmDelete}
+                  >
+                    Delete Branch
+                  </Button>
+                </div>
+              }
+            />
+          )}
         </>
       )}
     </>

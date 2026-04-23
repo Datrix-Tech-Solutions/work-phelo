@@ -5,6 +5,8 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEmployees } from '@/hooks/hr/useEmployees';
 import { ShiftPanel, Shift } from './ShiftPanel';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 /* ── Week helpers ────────────────────────────────────────── */
 
@@ -54,6 +56,9 @@ interface Props {
 
 export function SchedulingContent({ tenantSlug }: Props) {
   void tenantSlug;
+  const canManageAllSchedules = usePermission(Permission.MANAGE_SCHEDULES);
+  const canManageTeamSchedules = usePermission(Permission.MANAGE_TEAM_SCHEDULES);
+  const canManageSchedules = canManageAllSchedules || canManageTeamSchedules;
 
   /* ── Week state ── */
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()));
@@ -90,6 +95,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
 
   /* ── Handlers ── */
   const openAdd = (isoDay: number) => {
+    if (!canManageSchedules) return;
     const date = toISODate(addDays(weekStart, isoDay - 1));
     setSelectedDay(isoDay);
     setSelectedDate(date);
@@ -98,11 +104,13 @@ export function SchedulingContent({ tenantSlug }: Props) {
   };
 
   const openEdit = (shift: Shift) => {
+    if (!canManageSchedules) return;
     setEditingShift(shift);
     setPanelOpen(true);
   };
 
   const handleSave = (data: Omit<Shift, 'id'>) => {
+    if (!canManageSchedules) return;
     if (editingShift) {
       setShifts((prev) => prev.map((s) => (s.id === editingShift.id ? { ...s, ...data } : s)));
     } else {
@@ -203,13 +211,14 @@ export function SchedulingContent({ tenantSlug }: Props) {
                     </button>
                   ))}
 
-                  {/* Add shift button */}
-                  <button
-                    onClick={() => openAdd(isoDay)}
-                    className="w-full border border-dashed border-gray-300 rounded-lg py-2.5 text-xs text-gray-400 hover:border-brand hover:text-brand hover:bg-brand/5 transition-all"
-                  >
-                    + Add Shift
-                  </button>
+                  {canManageSchedules && (
+                    <button
+                      onClick={() => openAdd(isoDay)}
+                      className="w-full border border-dashed border-gray-300 rounded-lg py-2.5 text-xs text-gray-400 hover:border-brand hover:text-brand hover:bg-brand/5 transition-all"
+                    >
+                      + Add Shift
+                    </button>
+                  )}
                 </div>
               );
             })}

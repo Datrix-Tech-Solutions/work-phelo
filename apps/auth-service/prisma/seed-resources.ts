@@ -24,6 +24,11 @@ export const RESOURCES = [
 
   // ── HR module ──────────────────────────────────────────────────
   { name: 'employees', module: 'HR', description: 'Employee profiles' },
+  {
+    name: 'employee-profile',
+    module: 'HR',
+    description: 'Employee self-service profile access',
+  },
   { name: 'resignations', module: 'HR', description: 'Employee resignations' },
   { name: 'departments', module: 'HR', description: 'Department management' },
   { name: 'branches', module: 'HR', description: 'Branch locations' },

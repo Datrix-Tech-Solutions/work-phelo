@@ -22,7 +22,9 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const { tenantSlug } = use(params);
   const toast = useToast();
 
-  const canManage = usePermission(Permission.CREATE_DEPARTMENT);
+  const canCreate = usePermission(Permission.CREATE_DEPARTMENT);
+  const canUpdate = usePermission(Permission.UPDATE_DEPARTMENT);
+  const canDelete = usePermission(Permission.DELETE_DEPARTMENT);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Department | null>(null);
@@ -70,7 +72,9 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
         departments={departments}
         employees={employees}
         isLoading={isLoading}
-        isEmployee={!canManage}
+        canCreate={canCreate}
+        canUpdate={canUpdate}
+        canDelete={canDelete}
         onCreate={() => setCreateOpen(true)}
         onEdit={(dept) => setEditTarget(dept)}
         onAddMembers={(dept) => setMembersTarget(dept)}
@@ -78,50 +82,58 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
       />
 
       {/* Side Panels */}
-      <CreateDepartmentPanel
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
-        tenantSlug={tenantSlug}
-        employees={employees}
-        onSuccess={(name) => setSuccessName(name)}
-      />
+      {canCreate && (
+        <CreateDepartmentPanel
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
+          tenantSlug={tenantSlug}
+          employees={employees}
+          onSuccess={(name) => setSuccessName(name)}
+        />
+      )}
 
-      <EditDepartmentPanel
-        isOpen={!!editTarget}
-        onClose={() => setEditTarget(null)}
-        editTarget={editTarget}
-      />
+      {canUpdate && (
+        <EditDepartmentPanel
+          isOpen={!!editTarget}
+          onClose={() => setEditTarget(null)}
+          editTarget={editTarget}
+        />
+      )}
 
-      <AddMembersPanel
-        isOpen={!!membersTarget}
-        onClose={() => setMembersTarget(null)}
-        department={membersTarget}
-        employees={employees}
-        onAddMembers={handleAddMembers}
-      />
+      {canUpdate && (
+        <AddMembersPanel
+          isOpen={!!membersTarget}
+          onClose={() => setMembersTarget(null)}
+          department={membersTarget}
+          employees={employees}
+          onAddMembers={handleAddMembers}
+        />
+      )}
 
       {/* Delete confirmation */}
-      <Modal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete Department"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              isLoading={isDeleting}
-              loadingText="Deleting..."
-              onClick={handleDeleteConfirm}
-            >
-              Delete Department
-            </Button>
-          </div>
-        }
-      />
+      {canDelete && (
+        <Modal
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          title="Delete Department"
+          description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                isLoading={isDeleting}
+                loadingText="Deleting..."
+                onClick={handleDeleteConfirm}
+              >
+                Delete Department
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       <SuccessModal
         isOpen={!!successName}

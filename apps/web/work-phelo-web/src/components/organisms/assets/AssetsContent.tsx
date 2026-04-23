@@ -9,6 +9,8 @@ import { AddAssetPanel } from '@/components/organisms/assets/AddAssetPanel';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/components/atoms/assetIcons';
 import { Asset } from '@/types/asset';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 const TYPE_LABELS: Record<AssetType, string> = {
   LAPTOP: 'Laptop',
@@ -44,6 +46,9 @@ interface Props {
 
 export function AssetsContent({ tenantSlug }: Props) {
   const router = useRouter();
+  const canCreateAsset = usePermission(Permission.MANAGE_ASSETS);
+  const canUpdateAsset = usePermission(Permission.MANAGE_ASSETS);
+  const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -79,7 +84,7 @@ export function AssetsContent({ tenantSlug }: Props) {
             {filtered.length} asset{filtered.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button onClick={() => setPanelOpen(true)}>+ Add Asset</Button>
+        {canCreateAsset && <Button onClick={() => setPanelOpen(true)}>+ Add Asset</Button>}
       </div>
 
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
@@ -162,26 +167,28 @@ export function AssetsContent({ tenantSlug }: Props) {
             >
               <AssetCard
                 asset={asset}
-                onEdit={() => {}}
-                onAssign={() => {}}
-                onUnassign={() => {}}
-                onTransfer={() => {}}
-                onDelete={() => {}}
+                onEdit={canUpdateAsset ? () => {} : undefined}
+                onAssign={canAssignAsset ? () => {} : undefined}
+                onUnassign={canAssignAsset ? () => {} : undefined}
+                onTransfer={canAssignAsset ? () => {} : undefined}
+                onDelete={canUpdateAsset ? () => {} : undefined}
               />
             </div>
           ))}
         </div>
       )}
 
-      <AddAssetPanel
-        isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        onSubmit={(data) => {
-          // TODO: POST /hr/assets
-          console.log('Create asset:', data);
-          setPanelOpen(false);
-        }}
-      />
+      {canCreateAsset && (
+        <AddAssetPanel
+          isOpen={panelOpen}
+          onClose={() => setPanelOpen(false)}
+          onSubmit={(data) => {
+            // TODO: POST /hr/assets
+            console.log('Create asset:', data);
+            setPanelOpen(false);
+          }}
+        />
+      )}
     </>
   );
 }

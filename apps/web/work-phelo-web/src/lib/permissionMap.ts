@@ -27,11 +27,18 @@ export enum Permission {
   UPDATE_OWN_PROFILE = 'update:own_profile',
   DELETE_EMPLOYEE = 'delete:employee',
   OFFBOARD_EMPLOYEE = 'offboard:employee',
+  SUBMIT_RESIGNATION = 'submit:resignation',
+  WITHDRAW_RESIGNATION = 'withdraw:resignation',
   MANAGE_DOCUMENTS = 'manage:documents',
   EXPORT_EMPLOYEES = 'export:employees',
+  READ_HR_SETTINGS = 'read:hr_settings',
+  MANAGE_HR_SETTINGS = 'manage:hr_settings',
 
   // ── Branches ──────────────────────────────────────────────────────────────
   READ_BRANCHES = 'read:branches',
+  CREATE_BRANCH = 'create:branch',
+  UPDATE_BRANCH = 'update:branch',
+  DELETE_BRANCH = 'delete:branch',
 
   // ── Departments ───────────────────────────────────────────────────────────
   CREATE_DEPARTMENT = 'create:department',
@@ -123,16 +130,23 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.CREATE_EMPLOYEE]: ['employees:CREATE'],
   [Permission.READ_EMPLOYEES]: ['employees:VIEW'],
   [Permission.READ_TEAM_EMPLOYEES]: ['employees:VIEW'],
-  [Permission.READ_OWN_PROFILE]: ['employees:VIEW'],
+  [Permission.READ_OWN_PROFILE]: ['employee-profile:VIEW'],
   [Permission.UPDATE_EMPLOYEE]: ['employees:EDIT'],
-  [Permission.UPDATE_OWN_PROFILE]: ['employees:EDIT'],
+  [Permission.UPDATE_OWN_PROFILE]: ['employee-profile:EDIT'],
   [Permission.DELETE_EMPLOYEE]: ['employees:DELETE'],
   [Permission.OFFBOARD_EMPLOYEE]: ['employees:DELETE'],
+  [Permission.SUBMIT_RESIGNATION]: ['resignations:CREATE'],
+  [Permission.WITHDRAW_RESIGNATION]: ['resignations:DELETE'],
   [Permission.MANAGE_DOCUMENTS]: ['documents:CREATE', 'documents:EDIT'],
   [Permission.EXPORT_EMPLOYEES]: ['employees:EXPORT'],
+  [Permission.READ_HR_SETTINGS]: ['hr-settings:VIEW'],
+  [Permission.MANAGE_HR_SETTINGS]: ['hr-settings:EDIT'],
 
   // Branches
   [Permission.READ_BRANCHES]: ['branches:VIEW'],
+  [Permission.CREATE_BRANCH]: ['branches:CREATE'],
+  [Permission.UPDATE_BRANCH]: ['branches:EDIT'],
+  [Permission.DELETE_BRANCH]: ['branches:DELETE'],
 
   // Departments
   [Permission.CREATE_DEPARTMENT]: ['departments:CREATE'],
@@ -197,6 +211,71 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.READ_CAMPAIGNS]: ['campaigns:VIEW'],
   [Permission.VIEW_ANALYTICS]: ['analytics:VIEW'],
 };
+
+export const PERMISSION_ACTION_LABELS: Record<string, string> = {
+  VIEW: 'View',
+  CREATE: 'Create',
+  EDIT: 'Edit',
+  DELETE: 'Delete',
+  APPROVE: 'Approve',
+  RUN: 'Run',
+  EXPORT: 'Export',
+  ASSIGN: 'Assign',
+};
+
+export const RESOURCE_ACTIONS: Record<string, string[]> = {
+  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  tenants: ['VIEW', 'EDIT'],
+  'company-roles': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
+  'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
+  'audit-logs': ['VIEW'],
+  employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
+  'employee-profile': ['VIEW', 'EDIT'],
+  resignations: ['CREATE', 'DELETE'],
+  departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  branches: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  'hr-settings': ['VIEW', 'EDIT'],
+  leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  attendance: ['VIEW', 'CREATE'],
+  'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
+  timesheets: ['VIEW', 'APPROVE'],
+  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  projects: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
+  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  documents: ['VIEW', 'CREATE', 'EDIT'],
+  allowances: ['VIEW', 'CREATE', 'EDIT'],
+  'payroll-reports': ['VIEW', 'EXPORT'],
+  'expense-reports': ['VIEW', 'EXPORT'],
+  'platform-settings': ['VIEW', 'EDIT'],
+  subscriptions: ['VIEW', 'EDIT'],
+};
+
+// All seeded resource actions stay in RESOURCE_ACTIONS so hidden or future
+// resources can still round-trip safely when editing existing roles/sets.
+// Only this allowlist controls what the HR permission UI should expose today.
+export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
+  'company-roles',
+  'employees',
+  'employee-profile',
+  'resignations',
+  'departments',
+  'branches',
+  'documents',
+  'leave',
+  'attendance',
+  'time-corrections',
+  'timesheets',
+  'schedules',
+  'payroll',
+  'appraisals',
+  'hr-settings',
+]);
+
+export function isPermissionUiVisibleResource(resourceName: string): boolean {
+  return PERMISSION_UI_VISIBLE_RESOURCES.has(resourceName);
+}
 
 // ── Role permission matrix integration ────────────────────────────────────────
 //
@@ -327,7 +406,14 @@ export function reverseTransformFeaturePermissions(
 ): Record<string, string[]> {
   const result: Record<string, string[]> = {};
 
+  for (const [resource, actions] of Object.entries(backendPermissions)) {
+    const allowedActions = RESOURCE_ACTIONS[resource];
+    if (!allowedActions) continue;
+    result[resource] = actions.filter((action) => allowedActions.includes(action));
+  }
+
   for (const [featureKey, actionMapping] of Object.entries(FEATURE_PERMISSION_MAPPING)) {
+    if (result[featureKey]) continue;
     for (const [uiAction, backendPerms] of Object.entries(actionMapping)) {
       const hasAny = backendPerms.some(({ resource, action }) =>
         (backendPermissions[resource] ?? []).includes(action),
@@ -352,9 +438,16 @@ export function transformFeaturePermissions(
 ): Record<string, string[]> {
   const result: Record<string, string[]> = {};
 
-  for (const [featureKey, uiActions] of Object.entries(featurePermissions)) {
+  for (const [key, uiActions] of Object.entries(featurePermissions)) {
     if (!uiActions.length) continue;
-    const mapping = FEATURE_PERMISSION_MAPPING[featureKey];
+
+    const allowedResourceActions = RESOURCE_ACTIONS[key];
+    if (allowedResourceActions) {
+      result[key] = uiActions.filter((action) => allowedResourceActions.includes(action));
+      continue;
+    }
+
+    const mapping = FEATURE_PERMISSION_MAPPING[key];
     if (!mapping) continue;
 
     for (const uiAction of uiActions) {

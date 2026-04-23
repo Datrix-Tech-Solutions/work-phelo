@@ -28,7 +28,6 @@ import {
   getManagedEmployeeIds,
   hasPermissionRule,
   isCompanyAdminUser,
-  isCustomCompanyRoleUser,
   isEmployeeSelfServiceUser,
   isManagerUser,
 } from '../auth/access-scope';
@@ -168,6 +167,8 @@ export class EmployeesService {
     const where: any = { tenantId };
 
     if (actor && !isCompanyAdminUser(actor)) {
+      const canReadEmployees = hasPermissionRule(actor, 'employees:VIEW');
+
       if (isManagerUser(actor)) {
         const managedEmployeeIds = await getManagedEmployeeIds(
           this.prisma,
@@ -181,9 +182,10 @@ export class EmployeesService {
 
         where.id = { in: Array.from(managedEmployeeIds) };
       } else if (isEmployeeSelfServiceUser(actor)) {
-        assertHrAccess(false);
+        // Self-service employees can view the lightweight company directory,
+        // but detailed profile access is still enforced in findById().
       } else {
-        assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
+        assertHrAccess(canReadEmployees);
       }
     }
 
@@ -269,6 +271,10 @@ export class EmployeesService {
     }
 
     if (isEmployeeSelfServiceUser(actor)) {
+      if (hasPermissionRule(actor, 'employees:VIEW')) {
+        return employee;
+      }
+
       const actorEmployee = await getActorEmployee(
         this.prisma,
         tenantId,
@@ -306,9 +312,7 @@ export class EmployeesService {
     if (!existing) throw new NotFoundException('Employee not found');
 
     const fullUpdateAllowed =
-      isCompanyAdminUser(actor) ||
-      (isCustomCompanyRoleUser(actor) &&
-        hasPermissionRule(actor, 'employees:EDIT'));
+      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'employees:EDIT');
 
     let updateData: UpdateEmployeeDto = { ...dto };
 
