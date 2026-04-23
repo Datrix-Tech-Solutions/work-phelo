@@ -6,7 +6,11 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { cn, inputClass } from '@/lib/utils';
-import { PERMISSION_ACTION_LABELS, RESOURCE_ACTIONS } from '@/lib/permissionMap';
+import {
+  PERMISSION_ACTION_LABELS,
+  RESOURCE_ACTIONS,
+  isPermissionUiVisibleResource,
+} from '@/lib/permissionMap';
 import {
   usePermissionResources,
   useGrantPermission,
@@ -77,7 +81,12 @@ function AssignPermissionPanelInner({
 
   const resourceOptions = useMemo(() => {
     return resources
-      .filter((resource) => resource.isActive && (RESOURCE_ACTIONS[resource.name] ?? []).length > 0)
+      .filter(
+        (resource) =>
+          resource.isActive &&
+          isPermissionUiVisibleResource(resource.name) &&
+          (RESOURCE_ACTIONS[resource.name] ?? []).length > 0,
+      )
       .sort((a, b) => a.module.localeCompare(b.module) || a.name.localeCompare(b.name))
       .map((resource) => ({
         value: resource.id,

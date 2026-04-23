@@ -3,7 +3,11 @@
 import { useState } from 'react';
 import { ChevronDown, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { PERMISSION_ACTION_LABELS, RESOURCE_ACTIONS } from '@/lib/permissionMap';
+import {
+  PERMISSION_ACTION_LABELS,
+  RESOURCE_ACTIONS,
+  isPermissionUiVisibleResource,
+} from '@/lib/permissionMap';
 import { useAuthStore } from '@/store/auth.store';
 
 export type FeaturePermissions = Record<string, string[]>;
@@ -85,6 +89,12 @@ function formatResourceName(name: string) {
 export function PermissionMatrix({ value, onChange, readOnly = false }: PermissionMatrixProps) {
   const [expanded, setExpanded] = useState(true);
   const hrFeatures = useAuthStore((s) => s.user?.featureConfig?.hr ?? EMPTY_HR_FEATURES);
+  const visibleResourceGroups = RESOURCE_GROUPS.map((group) => ({
+    ...group,
+    resources: group.resources.filter((resourceName) =>
+      isPermissionUiVisibleResource(resourceName),
+    ),
+  })).filter((group) => group.resources.length > 0);
 
   const isLocked = (resourceName: string) => {
     const featureKey = RESOURCE_FEATURE_KEYS[resourceName];
@@ -122,7 +132,7 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: Permissi
 
         {expanded && (
           <div className="divide-y divide-gray-100">
-            {RESOURCE_GROUPS.map((group) => (
+            {visibleResourceGroups.map((group) => (
               <div key={group.label} className="px-4 py-3.5">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
                   {group.label}

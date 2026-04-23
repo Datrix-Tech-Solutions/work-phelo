@@ -218,11 +218,11 @@ export const PERMISSION_ACTION_LABELS: Record<string, string> = {
 };
 
 export const RESOURCE_ACTIONS: Record<string, string[]> = {
-  // users: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  // tenants: ['VIEW', 'EDIT'],
+  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  tenants: ['VIEW', 'EDIT'],
   'company-roles': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  // 'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  // 'audit-logs': ['VIEW'],
+  'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
+  'audit-logs': ['VIEW'],
   employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
   'employee-profile': ['VIEW', 'EDIT'],
   resignations: ['CREATE', 'DELETE'],
@@ -245,6 +245,31 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   'platform-settings': ['VIEW', 'EDIT'],
   subscriptions: ['VIEW', 'EDIT'],
 };
+
+// All seeded resource actions stay in RESOURCE_ACTIONS so hidden or future
+// resources can still round-trip safely when editing existing roles/sets.
+// Only this allowlist controls what the HR permission UI should expose today.
+export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
+  'company-roles',
+  'employees',
+  'employee-profile',
+  'resignations',
+  'departments',
+  'branches',
+  'documents',
+  'leave',
+  'attendance',
+  'time-corrections',
+  'timesheets',
+  'schedules',
+  'payroll',
+  'appraisals',
+  'hr-settings',
+]);
+
+export function isPermissionUiVisibleResource(resourceName: string): boolean {
+  return PERMISSION_UI_VISIBLE_RESOURCES.has(resourceName);
+}
 
 // ── Role permission matrix integration ────────────────────────────────────────
 //
