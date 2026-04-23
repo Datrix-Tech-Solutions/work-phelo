@@ -22,10 +22,12 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.READ_TEAM_EMPLOYEES]: [
     { resource: 'employees', actions: ['VIEW'] },
   ],
-  [Permission.READ_OWN_PROFILE]: [{ resource: 'employees', actions: ['VIEW'] }],
+  [Permission.READ_OWN_PROFILE]: [
+    { resource: 'employee-profile', actions: ['VIEW'] },
+  ],
   [Permission.UPDATE_EMPLOYEE]: [{ resource: 'employees', actions: ['EDIT'] }],
   [Permission.UPDATE_OWN_PROFILE]: [
-    { resource: 'employees', actions: ['EDIT'] },
+    { resource: 'employee-profile', actions: ['EDIT'] },
   ],
   [Permission.DELETE_EMPLOYEE]: [
     { resource: 'employees', actions: ['DELETE'] },

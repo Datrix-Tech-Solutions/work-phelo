@@ -80,13 +80,13 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'employees', action: PermissionAction.VIEW },
     ],
     [AppPermission.READ_OWN_PROFILE]: [
-      { resource: 'employees', action: PermissionAction.VIEW },
+      { resource: 'employee-profile', action: PermissionAction.VIEW },
     ],
     [AppPermission.UPDATE_EMPLOYEE]: [
       { resource: 'employees', action: PermissionAction.EDIT },
     ],
     [AppPermission.UPDATE_OWN_PROFILE]: [
-      { resource: 'employees', action: PermissionAction.EDIT },
+      { resource: 'employee-profile', action: PermissionAction.EDIT },
     ],
     [AppPermission.DELETE_EMPLOYEE]: [
       { resource: 'employees', action: PermissionAction.DELETE },

@@ -23,7 +23,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const { tenantSlug } = use(params);
   const router = useRouter();
   const canInvite = usePermission(Permission.CREATE_EMPLOYEE);
-  const canViewDetail = usePermission(Permission.UPDATE_EMPLOYEE);
+  const canViewDetail = usePermission(Permission.READ_EMPLOYEES);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');

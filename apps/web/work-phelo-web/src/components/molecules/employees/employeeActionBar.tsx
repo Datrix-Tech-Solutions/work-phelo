@@ -7,13 +7,13 @@ interface EmployeeActionsBarProps {
   isOffboarded: boolean;
   resendInvite: () => void;
   isResending?: boolean;
-  onAssignAsset: () => void;
+  onAssignAsset?: () => void;
   onAssignRole?: () => void;
   onAssignPermission?: () => void;
-  onOffboard: () => void;
+  onOffboard?: () => void;
   onResign: () => void;
   hasPendingResignation?: boolean;
-  onEdit: () => void;
+  onEdit?: () => void;
 }
 
 export function EmployeeActionsBar({
@@ -54,9 +54,11 @@ export function EmployeeActionsBar({
             Grant Direct Permissions
             <ShieldCog className="w-4 h-4" />
           </Button>
-          <Button variant="outline" size="sm" onClick={onAssignAsset}>
-            Assign Asset
-          </Button>
+          {onAssignAsset && (
+            <Button variant="outline" size="sm" onClick={onAssignAsset}>
+              Assign Asset
+            </Button>
+          )}
           {hasPendingResignation && (
             <Button
               variant="outline"
@@ -67,22 +69,26 @@ export function EmployeeActionsBar({
               Pending Resignation
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOffboard}
-            className="gap-2 text-red-600 border-red-200 hover:bg-red-50"
-          >
-            Off-Board
-            <Icons.UserMinus className="w-5 h-5" />
-          </Button>
+          {onOffboard && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOffboard}
+              className="gap-2 text-red-600 border-red-200 hover:bg-red-50"
+            >
+              Off-Board
+              <Icons.UserMinus className="w-5 h-5" />
+            </Button>
+          )}
         </>
       ) : null}
 
-      <Button variant="outline" size="sm" onClick={onEdit} className="gap-2">
-        Edit
-        <Icons.UserPen className="w-5 h-5" />
-      </Button>
+      {onEdit && (
+        <Button variant="outline" size="sm" onClick={onEdit} className="gap-2">
+          Edit
+          <Icons.UserPen className="w-5 h-5" />
+        </Button>
+      )}
     </div>
   );
 }

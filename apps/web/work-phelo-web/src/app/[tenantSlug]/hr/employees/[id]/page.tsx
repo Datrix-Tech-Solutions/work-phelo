@@ -68,6 +68,9 @@ export default function EmployeeDetailPage({
     useRemovePermissionSet();
   const canAssignRole = usePermission(Permission.ASSIGN_ROLE);
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
+  const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
+  const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
 
   // Roles data
   const { data: rolesRaw = [] } = useCompanyRoles();
@@ -131,15 +134,15 @@ export default function EmployeeDetailPage({
         isOffboarded={employee.employmentStatus === 'OFFBOARDED'}
         resendInvite={handleResendInvite}
         isResending={isResending}
-        onAssignAsset={() => setAssignAssetOpen(true)}
+        onAssignAsset={canAssignAsset ? () => setAssignAssetOpen(true) : undefined}
         onAssignRole={employee.userId && canAssignRole ? () => setAssignRoleOpen(true) : undefined}
         onAssignPermission={
           employee.userId && canGrantPermission ? () => setAssignPermOpen(true) : undefined
         }
-        onOffboard={() => setOffboardOpen(true)}
+        onOffboard={canOffboardEmployee ? () => setOffboardOpen(true) : undefined}
         onResign={() => setResignOpen(true)}
         hasPendingResignation={resignationRecord?.status === 'PENDING'}
-        onEdit={() => setEditOpen(true)}
+        onEdit={canEditEmployee ? () => setEditOpen(true) : undefined}
       />
 
       {/* Main Content */}

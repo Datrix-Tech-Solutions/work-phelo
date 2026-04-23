@@ -12,6 +12,7 @@ const MANAGER_SET: Record<string, string[]> = {
   users: ['VIEW'],
   'company-roles': ['VIEW'],
   employees: ['VIEW'],
+  'employee-profile': ['VIEW', 'EDIT'],
   departments: ['VIEW'],
   branches: ['VIEW'],
   leave: ['VIEW', 'CREATE', 'APPROVE'],
@@ -27,7 +28,7 @@ const MANAGER_SET: Record<string, string[]> = {
 };
 
 const EMPLOYEE_SET: Record<string, string[]> = {
-  employees: ['VIEW', 'EDIT'],
+  'employee-profile': ['VIEW', 'EDIT'],
   leave: ['VIEW', 'CREATE'],
   attendance: ['CREATE'],
   'time-corrections': ['CREATE'],
@@ -42,6 +43,7 @@ const COMPANY_ADMIN_SET: Record<string, string[]> = {
   'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
   'audit-logs': ['VIEW'],
   employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
+  'employee-profile': ['VIEW', 'EDIT'],
   departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   branches: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
