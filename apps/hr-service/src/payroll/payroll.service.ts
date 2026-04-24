@@ -16,7 +16,6 @@ import {
   assertHrAccess,
   hasPermissionRule,
   isCompanyAdminUser,
-  isCustomCompanyRoleUser,
 } from '../auth/access-scope';
 
 @Injectable()
@@ -313,10 +312,7 @@ export class PayrollService {
 
   async getPayrollRuns(tenantId: string, actor: RequestUser) {
     if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(
-        isCustomCompanyRoleUser(actor) &&
-          hasPermissionRule(actor, 'payroll:VIEW'),
-      );
+      assertHrAccess(hasPermissionRule(actor, 'payroll:VIEW'));
     }
 
     return this.prisma.payrollRun.findMany({
@@ -327,10 +323,7 @@ export class PayrollService {
 
   async getPayrollRunById(tenantId: string, id: string, actor: RequestUser) {
     if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(
-        isCustomCompanyRoleUser(actor) &&
-          hasPermissionRule(actor, 'payroll:VIEW'),
-      );
+      assertHrAccess(hasPermissionRule(actor, 'payroll:VIEW'));
     }
 
     const run = await this.prisma.payrollRun.findFirst({

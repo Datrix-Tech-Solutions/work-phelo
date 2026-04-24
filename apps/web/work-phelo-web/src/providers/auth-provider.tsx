@@ -24,12 +24,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (authUser.role === 'EMPLOYEE') {
           setPermissions(res.data.permissions ?? []);
 
-          // Also fetch isManager from the HR profile (department head flag).
+          // /auth/me does not currently return lastName for employee users.
           try {
-            const empRes = await api.get<{ isManager: boolean }>('/hr/employees/me');
-            authUser.isManager = empRes.data.isManager ?? false;
+            const empRes = await api.get<{ lastName?: string }>('/hr/employees/me');
+            if (empRes.data.lastName) authUser.lastName = empRes.data.lastName;
           } catch {
-            // Not critical — leave isManager undefined; UI falls back to role check
+            // Not critical — keep the auth payload as-is.
           }
         }
 

@@ -42,9 +42,9 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const toast = useToast();
 
   const isAdmin = user?.role === 'TENANT_ADMIN';
-  const canManageTime = usePermission(Permission.APPROVE_TEAM_TIME);
-  // Department head OR explicitly granted approve-time permission
-  const isManager = user?.isManager === true || canManageTime || isAdmin;
+  const canManageTime = usePermission(Permission.APPROVE_TIME_CORRECTION);
+  const canViewAttendance = usePermission(Permission.READ_ATTENDANCE);
+  const canManageRecords = canManageTime || canViewAttendance || isAdmin;
 
   const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>('my');
   const [correctionOpen, setCorrectionOpen] = useState(false);
@@ -90,7 +90,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
     useCorrectionRequests(correctionStatusFilter);
 
   const { data: pendingCorrections = [] } = useCorrectionRequests('PENDING');
-  const pendingCount = isManager ? pendingCorrections.length : 0;
+  const pendingCount = canManageRecords ? pendingCorrections.length : 0;
 
   const { mutate: reviewCorrection, isPending: isReviewing } = useReviewCorrectionRequest();
 
@@ -114,7 +114,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
     <div className="p-8 flex flex-col gap-6 h-full">
       <TimeClockTabs
         activeTab={activeTab}
-        isManager={isManager}
+        canManageRecords={canManageRecords}
         isEmployee={!isAdmin}
         pendingCount={pendingCount}
         onTabChange={setActiveTab}
@@ -146,9 +146,9 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
         />
       )}
 
-      {activeTab === 'live' && isManager && <LiveAttendanceTable />}
+      {activeTab === 'live' && canManageRecords && <LiveAttendanceTable />}
 
-      {activeTab === 'records' && isManager && (
+      {activeTab === 'records' && canManageRecords && (
         <RecordsSection
           recordsData={recordsData}
           recordsLoading={recordsLoading}
@@ -168,7 +168,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
         />
       )}
 
-      {activeTab === 'corrections' && isManager && (
+      {activeTab === 'corrections' && canManageRecords && (
         <CorrectionsSection
           corrections={corrections}
           correctionsLoading={correctionsLoading}

@@ -48,7 +48,7 @@ async function bootstrap() {
           'x-message-ttl': 3600000,
         },
       },
-      noAck: true,
+      noAck: false,
       prefetchCount: 10,
     },
   });

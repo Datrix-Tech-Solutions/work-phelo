@@ -14,14 +14,9 @@ export enum Permission {
   VIEW_PERMISSION_SETS = 'view:permission_sets',
   GRANT_PERMISSION = 'grant:permission',
 
-  // ── Company Roles ─────────────────────────────────────────────────────────
-  MANAGE_COMPANY_ROLES = 'manage:company_roles',
-  READ_COMPANY_ROLES = 'read:company_roles',
-
   // ── Employees ─────────────────────────────────────────────────────────────
   CREATE_EMPLOYEE = 'create:employee',
   READ_EMPLOYEES = 'read:employees',
-  READ_TEAM_EMPLOYEES = 'read:team_employees',
   READ_OWN_PROFILE = 'read:own_profile',
   UPDATE_EMPLOYEE = 'update:employee',
   UPDATE_OWN_PROFILE = 'update:own_profile',
@@ -51,23 +46,18 @@ export enum Permission {
   // ── Leave ─────────────────────────────────────────────────────────────────
   REQUEST_LEAVE = 'request:leave',
   APPROVE_LEAVE = 'approve:leave',
-  APPROVE_TEAM_LEAVE = 'approve:team_leave',
   READ_ALL_LEAVES = 'read:all_leaves',
-  READ_TEAM_LEAVES = 'read:team_leaves',
   READ_OWN_LEAVE = 'read:own_leave',
   MANAGE_LEAVE_TYPES = 'manage:leave_types',
 
   // ── Time Management ───────────────────────────────────────────────────────
   CLOCK_IN_OUT = 'clock:in_out',
   READ_ATTENDANCE = 'read:attendance',
-  READ_TEAM_ATTENDANCE = 'read:team_attendance',
   SUBMIT_TIME_CORRECTION = 'submit:time_correction',
   APPROVE_TIME_CORRECTION = 'approve:time_correction',
-  APPROVE_TEAM_TIME = 'approve:team_time',
   READ_TIMESHEETS = 'read:timesheets',
   APPROVE_TIMESHEET = 'approve:timesheet',
   MANAGE_SCHEDULES = 'manage:schedules',
-  MANAGE_TEAM_SCHEDULES = 'manage:team_schedules',
 
   // ── Payroll ───────────────────────────────────────────────────────────────
   READ_PAYROLL = 'read:payroll',
@@ -80,7 +70,6 @@ export enum Permission {
   CONFIGURE_APPRAISAL = 'configure:appraisal',
   CREATE_APPRAISAL = 'create:appraisal',
   READ_APPRAISALS = 'read:appraisals',
-  READ_TEAM_APPRAISALS = 'read:team_appraisals',
   SUBMIT_SELF_ASSESSMENT = 'submit:self_assessment',
   SUBMIT_MANAGER_REVIEW = 'submit:manager_review',
   READ_OWN_REVIEW = 'read:own_review',
@@ -122,14 +111,9 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.VIEW_PERMISSION_SETS]: ['permission-sets:VIEW'],
   [Permission.GRANT_PERMISSION]: ['permission-sets:ASSIGN'],
 
-  // Company Roles
-  [Permission.MANAGE_COMPANY_ROLES]: ['company-roles:CREATE', 'company-roles:EDIT'],
-  [Permission.READ_COMPANY_ROLES]: ['company-roles:VIEW'],
-
   // Employees
   [Permission.CREATE_EMPLOYEE]: ['employees:CREATE'],
   [Permission.READ_EMPLOYEES]: ['employees:VIEW'],
-  [Permission.READ_TEAM_EMPLOYEES]: ['employees:VIEW'],
   [Permission.READ_OWN_PROFILE]: ['employee-profile:VIEW'],
   [Permission.UPDATE_EMPLOYEE]: ['employees:EDIT'],
   [Permission.UPDATE_OWN_PROFILE]: ['employee-profile:EDIT'],
@@ -153,29 +137,24 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.READ_DEPARTMENTS]: ['departments:VIEW'],
   [Permission.UPDATE_DEPARTMENT]: ['departments:EDIT'],
   [Permission.DELETE_DEPARTMENT]: ['departments:DELETE'],
-  [Permission.MANAGE_ROLES]: ['company-roles:EDIT'],
-  [Permission.ASSIGN_ROLE]: ['company-roles:ASSIGN'],
+  [Permission.MANAGE_ROLES]: ['permission-sets:EDIT'],
+  [Permission.ASSIGN_ROLE]: ['permission-sets:ASSIGN'],
 
   // Leave
   [Permission.REQUEST_LEAVE]: ['leave:CREATE'],
   [Permission.APPROVE_LEAVE]: ['leave:APPROVE'],
-  [Permission.APPROVE_TEAM_LEAVE]: ['leave:APPROVE'],
   [Permission.READ_ALL_LEAVES]: ['leave:VIEW'],
-  [Permission.READ_TEAM_LEAVES]: ['leave:VIEW'],
   [Permission.READ_OWN_LEAVE]: ['leave:VIEW'],
   [Permission.MANAGE_LEAVE_TYPES]: ['leave:EDIT'],
 
   // Time Management
   [Permission.CLOCK_IN_OUT]: ['attendance:CREATE'],
   [Permission.READ_ATTENDANCE]: ['attendance:VIEW'],
-  [Permission.READ_TEAM_ATTENDANCE]: ['attendance:VIEW'],
   [Permission.SUBMIT_TIME_CORRECTION]: ['time-corrections:CREATE'],
   [Permission.APPROVE_TIME_CORRECTION]: ['time-corrections:APPROVE'],
-  [Permission.APPROVE_TEAM_TIME]: ['time-corrections:APPROVE'],
   [Permission.READ_TIMESHEETS]: ['timesheets:VIEW'],
   [Permission.APPROVE_TIMESHEET]: ['timesheets:APPROVE'],
   [Permission.MANAGE_SCHEDULES]: ['schedules:CREATE', 'schedules:EDIT'],
-  [Permission.MANAGE_TEAM_SCHEDULES]: ['schedules:CREATE', 'schedules:EDIT'],
 
   // Payroll
   [Permission.READ_PAYROLL]: ['payroll:VIEW'],
@@ -188,7 +167,6 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.CONFIGURE_APPRAISAL]: ['appraisals:CREATE'],
   [Permission.CREATE_APPRAISAL]: ['appraisals:CREATE'],
   [Permission.READ_APPRAISALS]: ['appraisals:VIEW'],
-  [Permission.READ_TEAM_APPRAISALS]: ['appraisals:VIEW'],
   [Permission.SUBMIT_SELF_ASSESSMENT]: ['appraisals:EDIT'],
   [Permission.SUBMIT_MANAGER_REVIEW]: ['appraisals:EDIT'],
   [Permission.READ_OWN_REVIEW]: ['appraisals:VIEW'],
@@ -226,7 +204,6 @@ export const PERMISSION_ACTION_LABELS: Record<string, string> = {
 export const RESOURCE_ACTIONS: Record<string, string[]> = {
   users: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   tenants: ['VIEW', 'EDIT'],
-  'company-roles': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
   'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
   'audit-logs': ['VIEW'],
   employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
@@ -256,7 +233,6 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
 // resources can still round-trip safely when editing existing roles/sets.
 // Only this allowlist controls what the HR permission UI should expose today.
 export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
-  'company-roles',
   'employees',
   'employee-profile',
   'resignations',
@@ -376,22 +352,15 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     DELETE: [{ resource: 'assets', action: 'ASSIGN' }], // assign asset to employee
   },
 
-  // resources: 'company-roles', 'permission-sets', 'audit-logs'
+  // resources: 'permission-sets', 'audit-logs'
   management: {
-    CREATE: [
-      { resource: 'company-roles', action: 'CREATE' },
-      { resource: 'permission-sets', action: 'CREATE' },
-    ],
+    CREATE: [{ resource: 'permission-sets', action: 'CREATE' }],
     VIEW: [
-      { resource: 'company-roles', action: 'VIEW' },
       { resource: 'permission-sets', action: 'VIEW' },
       { resource: 'audit-logs', action: 'VIEW' },
     ],
-    EDIT: [
-      { resource: 'company-roles', action: 'EDIT' },
-      { resource: 'permission-sets', action: 'EDIT' },
-    ],
-    DELETE: [{ resource: 'company-roles', action: 'DELETE' }],
+    EDIT: [{ resource: 'permission-sets', action: 'EDIT' }],
+    DELETE: [{ resource: 'permission-sets', action: 'DELETE' }],
   },
 };
 

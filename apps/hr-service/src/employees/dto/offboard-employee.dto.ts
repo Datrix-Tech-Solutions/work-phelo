@@ -38,10 +38,19 @@ export class InitiateOffboardDto {
 
 export class UpdateChecklistDto {
   @ApiProperty({
-    enum: ['assetReturn', 'hrClearance', 'financeClearance', 'managerApproval'],
+    enum: [
+      'assetReturn',
+      'hrClearance',
+      'financeClearance',
+      'reportingClearance',
+    ],
   })
   @IsString()
-  item!: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'managerApproval';
+  item!:
+    | 'assetReturn'
+    | 'hrClearance'
+    | 'financeClearance'
+    | 'reportingClearance';
 
   @ApiProperty()
   @IsBoolean()

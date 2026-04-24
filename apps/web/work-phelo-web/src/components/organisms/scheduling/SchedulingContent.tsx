@@ -56,9 +56,7 @@ interface Props {
 
 export function SchedulingContent({ tenantSlug }: Props) {
   void tenantSlug;
-  const canManageAllSchedules = usePermission(Permission.MANAGE_SCHEDULES);
-  const canManageTeamSchedules = usePermission(Permission.MANAGE_TEAM_SCHEDULES);
-  const canManageSchedules = canManageAllSchedules || canManageTeamSchedules;
+  const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
 
   /* ── Week state ── */
   const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()));

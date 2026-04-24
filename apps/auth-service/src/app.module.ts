@@ -10,7 +10,6 @@ import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { AuditModule } from './audit/audit.module';
-import { CompanyRolesModule } from './company-roles/company-roles.module';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 import { HealthModule } from './health/health.module';
 
@@ -27,7 +26,6 @@ import { HealthModule } from './health/health.module';
     UsersModule,
     PermissionsModule,
     AuditModule,
-    CompanyRolesModule,
     HealthModule,
   ],
   providers: [

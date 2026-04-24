@@ -19,9 +19,6 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'employees', actions: ['CREATE'] },
   ],
   [Permission.READ_EMPLOYEES]: [{ resource: 'employees', actions: ['VIEW'] }],
-  [Permission.READ_TEAM_EMPLOYEES]: [
-    { resource: 'employees', actions: ['VIEW'] },
-  ],
   [Permission.READ_OWN_PROFILE]: [
     { resource: 'employee-profile', actions: ['VIEW'] },
   ],
@@ -75,27 +72,17 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   // ── Leave ─────────────────────────────────────────────────────────────────
   [Permission.REQUEST_LEAVE]: [{ resource: 'leave', actions: ['CREATE'] }],
   [Permission.APPROVE_LEAVE]: [{ resource: 'leave', actions: ['APPROVE'] }],
-  [Permission.APPROVE_TEAM_LEAVE]: [
-    { resource: 'leave', actions: ['APPROVE'] },
-  ],
   [Permission.READ_ALL_LEAVES]: [{ resource: 'leave', actions: ['VIEW'] }],
-  [Permission.READ_TEAM_LEAVES]: [{ resource: 'leave', actions: ['VIEW'] }],
   [Permission.READ_OWN_LEAVE]: [{ resource: 'leave', actions: ['VIEW'] }],
   [Permission.MANAGE_LEAVE_TYPES]: [{ resource: 'leave', actions: ['EDIT'] }],
 
   // ── Time Management ───────────────────────────────────────────────────────
   [Permission.CLOCK_IN_OUT]: [{ resource: 'attendance', actions: ['CREATE'] }],
   [Permission.READ_ATTENDANCE]: [{ resource: 'attendance', actions: ['VIEW'] }],
-  [Permission.READ_TEAM_ATTENDANCE]: [
-    { resource: 'attendance', actions: ['VIEW'] },
-  ],
   [Permission.SUBMIT_TIME_CORRECTION]: [
     { resource: 'time-corrections', actions: ['CREATE'] },
   ],
   [Permission.APPROVE_TIME_CORRECTION]: [
-    { resource: 'time-corrections', actions: ['APPROVE'] },
-  ],
-  [Permission.APPROVE_TEAM_TIME]: [
     { resource: 'time-corrections', actions: ['APPROVE'] },
   ],
   [Permission.READ_TIMESHEETS]: [{ resource: 'timesheets', actions: ['VIEW'] }],
@@ -103,9 +90,6 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'timesheets', actions: ['APPROVE'] },
   ],
   [Permission.MANAGE_SCHEDULES]: [
-    { resource: 'schedules', actions: ['CREATE', 'EDIT'] },
-  ],
-  [Permission.MANAGE_TEAM_SCHEDULES]: [
     { resource: 'schedules', actions: ['CREATE', 'EDIT'] },
   ],
 
@@ -126,9 +110,6 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'appraisals', actions: ['CREATE'] },
   ],
   [Permission.READ_APPRAISALS]: [{ resource: 'appraisals', actions: ['VIEW'] }],
-  [Permission.READ_TEAM_APPRAISALS]: [
-    { resource: 'appraisals', actions: ['VIEW'] },
-  ],
   [Permission.SUBMIT_SELF_ASSESSMENT]: [
     { resource: 'appraisals', actions: ['EDIT'] },
   ],

@@ -69,9 +69,6 @@ export class ProxyController {
         req.headers['x-tenant-slug'] = payload.tenantSlug;
         req.headers['x-tenant-name'] = payload.tenantName ?? '';
         req.headers['x-user-first-name'] = payload.firstName ?? '';
-        if (payload.companyRoleId) {
-          req.headers['x-company-role-id'] = payload.companyRoleId;
-        }
       } catch {
         return res
           .status(401)
@@ -81,7 +78,6 @@ export class ProxyController {
 
     // Strip 'api', 'v1', and service name — forward the rest downstream
     // /api/v1/auth/login     → /auth/login    (auth-service)
-    // /api/v1/auth/company-roles  → /company-roles (auth-service)
     // /api/v1/hr/departments      → /departments   (hr-service)
     const remainingParts = pathParts.slice(3); // remove 'api', 'v1', service
     const downstreamPath = '/' + remainingParts.join('/');

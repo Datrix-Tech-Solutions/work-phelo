@@ -365,7 +365,6 @@ export class PermissionsService {
   async getUserPermissions(tenantId: string, userId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      include: { companyRole: true },
     });
     if (!user) throw new NotFoundException('User not found');
 
@@ -420,7 +419,6 @@ export class PermissionsService {
     return {
       userId,
       systemRole: user.role,
-      companyRole: user.companyRole?.name || null,
       directPermissions: directFormatted,
       permissionSets: setAssignments.map((a) => ({
         id: a.permissionSet.id,

@@ -6,11 +6,6 @@ export const RESOURCES = [
   },
   { name: 'tenants', module: 'AUTH', description: 'Company tenants' },
   {
-    name: 'company-roles',
-    module: 'AUTH',
-    description: 'Company role definitions',
-  },
-  {
     name: 'permission-sets',
     module: 'AUTH',
     description: 'Permission set bundles',

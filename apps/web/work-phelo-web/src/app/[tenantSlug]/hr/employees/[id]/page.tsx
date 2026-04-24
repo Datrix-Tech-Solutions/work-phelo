@@ -16,18 +16,11 @@ import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
-import {
-  useCompanyRoles,
-  useUserPermissions,
-  useAssignRole,
-  useUnassignRole,
-  useRemovePermissionSet,
-} from '@/hooks/useRoles';
+import { useUserPermissions, useRemovePermissionSet } from '@/hooks/useRoles';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { ResignationPanel } from '@/components/organisms/employee/resignationPanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
-import { AssignRolePanel } from '@/components/organisms/roles/AssignRolePanel';
 import { AssignPermissionPanel } from '@/components/organisms/roles/assignPermissionPanel';
 import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
 import { EmployeeActionsBar } from '@/components/molecules/employees/employeeActionBar';
@@ -47,7 +40,6 @@ export default function EmployeeDetailPage({
   const [offboardOpen, setOffboardOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [assignAssetOpen, setAssignAssetOpen] = useState(false);
-  const [assignRoleOpen, setAssignRoleOpen] = useState(false);
   const [assignPermOpen, setAssignPermOpen] = useState(false);
   const [resignOpen, setResignOpen] = useState(false);
 
@@ -62,29 +54,15 @@ export default function EmployeeDetailPage({
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
-  const { mutate: assignRole, isPending: isAssigningRole } = useAssignRole();
-  const { mutate: unassignRole, isPending: isRemovingRole } = useUnassignRole();
   const { mutate: removePermissionSet, isPending: isRemovingPermissionSet } =
     useRemovePermissionSet();
-  const canAssignRole = usePermission(Permission.ASSIGN_ROLE);
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
   const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
   const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
 
-  // Roles data
-  const { data: rolesRaw = [] } = useCompanyRoles();
-  const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
-
-  // /auth/permissions/users/:id is the authoritative source — always returns companyRole name
-  // regardless of whether GET /auth/users includes the companyRole relation.
   const { data: userPerms } = useUserPermissions(employee?.userId ?? '');
-
-  const currentRoleName = userPerms?.companyRole ?? null;
   const assignedSets = userPerms?.permissionSets ?? [];
-  const displayedRoleNames = roles
-    .filter((role) => assignedSets.some((set) => set.name === `${role.name} Set`))
-    .map((role) => role.name);
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -135,7 +113,6 @@ export default function EmployeeDetailPage({
         resendInvite={handleResendInvite}
         isResending={isResending}
         onAssignAsset={canAssignAsset ? () => setAssignAssetOpen(true) : undefined}
-        onAssignRole={employee.userId && canAssignRole ? () => setAssignRoleOpen(true) : undefined}
         onAssignPermission={
           employee.userId && canGrantPermission ? () => setAssignPermOpen(true) : undefined
         }
@@ -148,16 +125,7 @@ export default function EmployeeDetailPage({
       {/* Main Content */}
       <div className="flex gap-6 items-start">
         {/* Left Sidebar */}
-        <EmployeeProfileCard
-          employee={employee}
-          roles={
-            displayedRoleNames.length > 0
-              ? displayedRoleNames
-              : currentRoleName
-                ? [currentRoleName]
-                : []
-          }
-        />
+        <EmployeeProfileCard employee={employee} roles={assignedSets.map((s) => s.name)} />
 
         {/* Right Sections */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
@@ -165,7 +133,6 @@ export default function EmployeeDetailPage({
             employee={employee}
             departments={departments}
             allHrEmployees={allHrEmployees}
-            currentRoleName={currentRoleName}
           />
           <AccountDetailsSection employee={employee} />
           <AssetsSection assets={employee.assets || []} />
@@ -207,47 +174,6 @@ export default function EmployeeDetailPage({
         availableAssets={[]}
         onAssign={() => {}}
       />
-
-      {employee.userId && (
-        <AssignRolePanel
-          isOpen={assignRoleOpen}
-          onClose={() => setAssignRoleOpen(false)}
-          employeeName={name}
-          userId={employee.userId}
-          currentRoleName={currentRoleName}
-          assignedSets={assignedSets}
-          roles={roles}
-          isAssigning={isAssigningRole}
-          isRemoving={isRemovingRole || isRemovingPermissionSet}
-          onAssign={(roleId, userId) => {
-            assignRole(
-              { roleId, userId },
-              {
-                onSuccess: () => toast.success(`Role added to ${name}`),
-                onError: () => toast.error('Failed to assign role'),
-              },
-            );
-          }}
-          onRemoveRole={(roleId, userId) => {
-            unassignRole(
-              { roleId, userId },
-              {
-                onSuccess: () => toast.success(`Role removed from ${name}`),
-                onError: () => toast.error('Failed to remove role'),
-              },
-            );
-          }}
-          onRemovePermissionSet={(permissionSetId) =>
-            removePermissionSet(
-              { userId: employee.userId!, permissionSetId },
-              {
-                onSuccess: () => toast.success(`Role access removed from ${name}`),
-                onError: () => toast.error('Failed to remove permission set'),
-              },
-            )
-          }
-        />
-      )}
 
       {employee.userId && (
         <AssignPermissionPanel

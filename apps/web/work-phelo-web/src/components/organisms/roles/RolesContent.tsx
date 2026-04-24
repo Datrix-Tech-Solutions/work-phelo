@@ -8,45 +8,47 @@ import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
-  CreateRolePanel,
-  CreateRoleSubmitValues,
-} from '@/components/organisms/roles/CreateRolePanel';
-import { RolePermissionsPanel } from '@/components/organisms/roles/RolePermissionsPanel';
-import { RoleMembersPanel } from '@/components/organisms/roles/RoleMembersPanel';
-import { FeaturePermissions } from '@/components/molecules/roles/PermissionMatrix';
-import { useCompanyRoles, useCreateRole, useUpdateRole, useDeleteRole } from '@/hooks/useRoles';
+  CreatePermissionSetPanel,
+  PermissionSetSubmitValues,
+} from '@/components/organisms/roles/CreatePermissionSetPanel';
+import {
+  usePermissionSets,
+  useCreatePermissionSet,
+  useUpdatePermissionSet,
+} from '@/hooks/useRoles';
 import { useToast } from '@/hooks/useToast';
-import { transformFeaturePermissions } from '@/lib/permissionMap';
-import type { CompanyRole } from '@/types/roles';
+import type { PermissionSet } from '@/types/roles';
+import { api } from '@/lib/api';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function RolesContent() {
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [panelOpen, setPanelOpen] = useState(false);
-  const [permissionsTarget, setPermissionsTarget] = useState<CompanyRole | null>(null);
-  const [membersTarget, setMembersTarget] = useState<CompanyRole | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<CompanyRole | null>(null);
+  const [editTarget, setEditTarget] = useState<PermissionSet | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PermissionSet | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data: rolesRaw = [], isLoading } = useCompanyRoles();
-  const roles: CompanyRole[] = Array.isArray(rolesRaw) ? rolesRaw : [];
+  const { data: setsRaw = [], isLoading } = usePermissionSets();
+  const sets: PermissionSet[] = Array.isArray(setsRaw) ? setsRaw : [];
 
-  const { mutate: createRole, isPending: isCreating } = useCreateRole();
-  const { mutate: updateRole, isPending: isSavingPermissions } = useUpdateRole();
-  const { mutate: deleteRole, isPending: isDeleting } = useDeleteRole();
+  const { mutate: createSet, isPending: isCreating } = useCreatePermissionSet();
+  const { mutate: updateSet, isPending: isSaving } = useUpdatePermissionSet();
 
   const PAGE_SIZE = 10;
-  const filtered = roles.filter((r) =>
-    search ? r.name.toLowerCase().includes(search.toLowerCase()) : true,
+  const filtered = sets.filter((s) =>
+    search ? s.name.toLowerCase().includes(search.toLowerCase()) : true,
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const columns: Column<CompanyRole>[] = [
+  const columns: Column<PermissionSet>[] = [
     {
       key: 'name',
-      label: 'Role Name',
+      label: 'Permission Set',
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
@@ -62,8 +64,8 @@ export function RolesContent() {
       width: '120px',
       render: (row) => (
         <Badge
-          variant={row.isSystem ? 'info' : 'neutral'}
-          label={row.isSystem ? 'System' : 'Custom'}
+          variant={(row as any).isSystem ? 'info' : 'neutral'}
+          label={(row as any).isSystem ? 'System' : 'Custom'}
         />
       ),
     },
@@ -89,68 +91,53 @@ export function RolesContent() {
     },
   ];
 
-  const handleCreateRole = (values: CreateRoleSubmitValues) => {
-    createRole(
-      {
-        name: values.name,
-        description: values.description || undefined,
-        permissions: transformFeaturePermissions(values.featurePermissions),
-      },
+  const handleCreate = (values: PermissionSetSubmitValues) => {
+    createSet(
+      { name: values.name, description: values.description, resources: values.resources as any },
       {
         onSuccess: () => {
-          toast.success('Role created');
+          toast.success('Permission set created');
           setPanelOpen(false);
         },
-        onError: (err) => toast.error(extractError(err, 'Failed to create role')),
+        onError: (err) => toast.error(extractError(err, 'Failed to create permission set')),
       },
     );
   };
 
-  const handleSavePermissions = (roleId: string, featurePermissions: FeaturePermissions) => {
-    updateRole(
-      { id: roleId, permissions: transformFeaturePermissions(featurePermissions) },
-      {
-        onSuccess: () => {
-          toast.success('Permissions saved');
-          setPermissionsTarget(null);
-        },
-        onError: (err) => toast.error(extractError(err, 'Failed to save permissions')),
-      },
-    );
-  };
-
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
-    deleteRole(deleteTarget.id, {
-      onSuccess: () => {
-        toast.success('Role deleted');
-        setDeleteTarget(null);
-      },
-      onError: (err) => toast.error(extractError(err, 'Failed to delete role')),
-    });
+    setIsDeleting(true);
+    try {
+      await api.delete(`/auth/permissions/sets/${deleteTarget.id}`);
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
+      toast.success('Permission set deleted');
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to delete permission set'));
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
     <>
       <div className="flex flex-col gap-6 h-full">
-        {/* Header */}
         <div className="flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Roles & Permissions</h2>
+            <h2 className="text-lg font-bold text-gray-900">Permission Sets</h2>
             <p className="text-sm text-gray-400 mt-0.5">
-              Manage roles and control what each role can access
+              Manage permission sets and control what each set can access
             </p>
           </div>
-          <Button onClick={() => setPanelOpen(true)}>+ New Role</Button>
+          <Button onClick={() => setPanelOpen(true)}>+ New Permission Set</Button>
         </div>
 
-        {/* Table */}
         <DataTable
           columns={columns}
           data={paged}
           isLoading={isLoading}
-          emptyMessage="No roles found"
-          searchPlaceholder="Search roles..."
+          emptyMessage="No permission sets found"
+          searchPlaceholder="Search permission sets..."
           searchValue={search}
           onSearch={(q) => {
             setSearch(q);
@@ -160,41 +147,54 @@ export function RolesContent() {
           totalPages={totalPages}
           onPageChange={setPage}
           rowActions={(row) => [
-            { label: 'View Members', onClick: () => setMembersTarget(row) },
-            { label: 'Permissions', onClick: () => setPermissionsTarget(row) },
-            ...(!row.isSystem
-              ? [{ label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) }]
-              : []),
+            ...((row as any).isSystem
+              ? []
+              : [
+                  { label: 'Edit', onClick: () => setEditTarget(row) },
+                  { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
+                ]),
           ]}
         />
       </div>
 
-      <CreateRolePanel
+      <CreatePermissionSetPanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
-        onSubmit={handleCreateRole}
+        onSubmit={handleCreate}
         isSubmitting={isCreating}
       />
 
-      <RoleMembersPanel
-        isOpen={!!membersTarget}
-        onClose={() => setMembersTarget(null)}
-        role={membersTarget}
-      />
-
-      <RolePermissionsPanel
-        key={permissionsTarget?.id}
-        isOpen={!!permissionsTarget}
-        onClose={() => setPermissionsTarget(null)}
-        role={permissionsTarget}
-        onSave={handleSavePermissions}
-        isSaving={isSavingPermissions}
-      />
+      {editTarget && (
+        <CreatePermissionSetPanel
+          key={editTarget.id}
+          isOpen={!!editTarget}
+          onClose={() => setEditTarget(null)}
+          editTarget={editTarget}
+          onSubmit={(values) => {
+            updateSet(
+              {
+                id: editTarget.id,
+                name: values.name,
+                description: values.description,
+                resources: values.resources as any,
+              },
+              {
+                onSuccess: () => {
+                  toast.success('Permission set updated');
+                  setEditTarget(null);
+                },
+                onError: (err) => toast.error(extractError(err, 'Failed to update permission set')),
+              },
+            );
+          }}
+          isSubmitting={isSaving}
+        />
+      )}
 
       <Modal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        title="Delete Role"
+        title="Delete Permission Set"
         description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
         footer={
           <div className="flex justify-end gap-3">
@@ -207,7 +207,7 @@ export function RolesContent() {
               loadingText="Deleting..."
               onClick={handleDeleteConfirm}
             >
-              Delete Role
+              Delete
             </Button>
           </div>
         }
