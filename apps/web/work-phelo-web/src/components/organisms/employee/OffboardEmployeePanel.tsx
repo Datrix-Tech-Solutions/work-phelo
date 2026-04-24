@@ -26,10 +26,10 @@ const CHECKLIST_ITEMS: { field: ChecklistItem; label: string }[] = [
   { field: 'assetReturn', label: 'Assets returned' },
   { field: 'hrClearance', label: 'HR clearance' },
   { field: 'financeClearance', label: 'Finance clearance' },
-  { field: 'managerApproval', label: 'Manager approval' },
+  { field: 'reportingClearance', label: 'Reporting clearance' },
 ];
 
-type ChecklistItem = 'assetReturn' | 'hrClearance' | 'financeClearance' | 'managerApproval';
+type ChecklistItem = 'assetReturn' | 'hrClearance' | 'financeClearance' | 'reportingClearance';
 
 const REASONS: { value: OffboardReason; label: string }[] = [
   { value: 'RESIGNATION', label: 'Resignation' },
@@ -184,7 +184,7 @@ function ChecklistForm({
     assetReturn: record.assetReturnDone ?? false,
     hrClearance: record.hrClearanceDone ?? false,
     financeClearance: record.financeClearanceDone ?? false,
-    managerApproval: record.managerApprovalDone ?? false,
+    reportingClearance: record.managerApprovalDone ?? false,
   };
 
   const handleToggle = (item: ChecklistItem, done: boolean) => {

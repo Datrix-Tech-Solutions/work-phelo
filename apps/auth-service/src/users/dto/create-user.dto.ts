@@ -32,8 +32,4 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(UserSystemRole)
   role?: UserSystemRole;
-
-  @IsOptional()
-  @IsString()
-  companyRoleId?: string;
 }

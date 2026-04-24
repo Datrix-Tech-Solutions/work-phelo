@@ -302,6 +302,7 @@ export class EmailService {
     endDate: string,
     totalDays: number,
     reason?: string,
+    detailLink?: string,
   ): Promise<boolean> {
     const fmt = (d: string) =>
       new Date(d).toLocaleDateString('en-GB', {
@@ -344,7 +345,8 @@ export class EmailService {
     <tr>
       <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
 
-        <p><strong>${employeeFirstName} ${employeeLastName}</strong> has submitted a leave request that requires your approval.</p>
+        <p><strong>${employeeFirstName} ${employeeLastName}</strong> has submitted a leave request.</p>
+        <p>Company Admin review is required before this request can be approved or rejected.</p>
 
         <p><strong>Request details:</strong></p>
 
@@ -381,8 +383,27 @@ export class EmailService {
             : ''
         }
 
+        ${
+          detailLink
+            ? `
+        <p style="margin:24px 0;">
+          <a href="${detailLink}" style="
+            background:#1a3557;
+            color:#ffffff;
+            padding:12px 20px;
+            text-decoration:none;
+            border-radius:6px;
+            display:inline-block;
+            font-weight:500;
+          ">
+            Open leave request
+          </a>
+        </p>`
+            : ''
+        }
+
         <p style="color:#777; font-size:14px;">
-          Please log in to WorkPhelo to approve or reject this request.
+          Open WorkPhelo to view the request details and follow up as needed.
         </p>
 
         <p style="margin-top:30px;">Thank you,</p>

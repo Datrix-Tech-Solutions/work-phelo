@@ -39,13 +39,7 @@ export default function MyProfilePage() {
   const { data: resignationRecord } = useResignationRecord(employee?.id ?? '');
 
   const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
-  const userPerms = userPermsRaw as
-    | {
-        companyRole?: string | null;
-        permissionSets?: { id: string; name: string }[];
-      }
-    | undefined;
-  const currentRoleName = userPerms?.companyRole ?? null;
+  const userPerms = userPermsRaw as { permissionSets?: { id: string; name: string }[] } | undefined;
   const assignedSets: { id: string; name: string }[] = userPerms?.permissionSets ?? [];
 
   const handleSave = (data: UpdateEmployeePayload) => {
@@ -99,13 +93,7 @@ export default function MyProfilePage() {
       {/* Content */}
       <div className="flex gap-6 items-start">
         {/* Left — avatar card */}
-        <EmployeeProfileCard
-          employee={employee}
-          roles={[
-            ...(currentRoleName ? [currentRoleName] : []),
-            ...assignedSets.filter((s) => s.name !== `${currentRoleName} Set`).map((s) => s.name),
-          ]}
-        />
+        <EmployeeProfileCard employee={employee} roles={assignedSets.map((s) => s.name)} />
 
         {/* Right — detail sections */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">

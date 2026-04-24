@@ -7,16 +7,11 @@ type LoggerLike = {
 };
 
 type PermissionResourceMap = Record<string, PermissionAction[]>;
-type SystemCompanyRoleName = 'Company Admin' | 'Manager' | 'Employee';
 
-type SystemPermissionSetName =
-  | 'Company Admin Set'
-  | 'Manager Set'
-  | 'Employee Set';
+type SystemPermissionSetName = 'Company Admin Set' | 'Employee Set';
 
 type SystemPermissionSetDefinition = {
   name: SystemPermissionSetName;
-  roleName: 'Company Admin' | 'Manager' | 'Employee';
   permissions: PermissionResourceMap;
 };
 
@@ -24,38 +19,8 @@ type SyncUserSystemPermissionSetParams = {
   tenantId: string;
   userId: string;
   role: string;
-  companyRoleName?: string | null;
   grantedBy: string;
   seededSetIds?: Record<SystemPermissionSetName, string>;
-};
-
-const MANAGER_SET: PermissionResourceMap = {
-  'company-roles': [PermissionAction.VIEW],
-  employees: [PermissionAction.VIEW],
-  'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
-  resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
-  departments: [PermissionAction.VIEW],
-  branches: [PermissionAction.VIEW],
-  leave: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.APPROVE,
-  ],
-  attendance: [PermissionAction.VIEW, PermissionAction.CREATE],
-  'time-corrections': [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.APPROVE,
-  ],
-  timesheets: [PermissionAction.VIEW, PermissionAction.APPROVE],
-  schedules: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-  ],
-  payroll: [PermissionAction.VIEW],
-  appraisals: [PermissionAction.VIEW, PermissionAction.EDIT],
-  documents: [PermissionAction.VIEW],
 };
 
 const EMPLOYEE_SET: PermissionResourceMap = {
@@ -74,13 +39,6 @@ const COMPANY_ADMIN_SET: PermissionResourceMap = {
     PermissionAction.CREATE,
     PermissionAction.EDIT,
     PermissionAction.DELETE,
-  ],
-  'company-roles': [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.DELETE,
-    PermissionAction.ASSIGN,
   ],
   'permission-sets': [
     PermissionAction.VIEW,
@@ -151,13 +109,8 @@ const COMPANY_ADMIN_SET: PermissionResourceMap = {
 
 const SYSTEM_PERMISSION_SET_DEFINITIONS: readonly SystemPermissionSetDefinition[] =
   [
-    {
-      name: 'Company Admin Set',
-      roleName: 'Company Admin',
-      permissions: COMPANY_ADMIN_SET,
-    },
-    { name: 'Manager Set', roleName: 'Manager', permissions: MANAGER_SET },
-    { name: 'Employee Set', roleName: 'Employee', permissions: EMPLOYEE_SET },
+    { name: 'Company Admin Set', permissions: COMPANY_ADMIN_SET },
+    { name: 'Employee Set', permissions: EMPLOYEE_SET },
   ] as const;
 
 type AuthPrisma = Pick<
@@ -166,7 +119,6 @@ type AuthPrisma = Pick<
   | 'tenant'
   | 'permissionSet'
   | 'permissionSetResource'
-  | 'companyRole'
   | 'user'
   | 'userPermissionSet'
 >;
@@ -274,93 +226,12 @@ export async function seedSystemPermissionSets(
   return seeded as Record<SystemPermissionSetName, string>;
 }
 
-export async function ensureDefaultCompanyRoles(
-  prisma: AuthPrisma,
-  tenantId: string,
-): Promise<Record<SystemCompanyRoleName, string>> {
-  const roles = ['Company Admin', 'Manager', 'Employee'] as const;
-  const seeded: Partial<Record<SystemCompanyRoleName, string>> = {};
-
-  for (const roleName of roles) {
-    const role = await prisma.companyRole.upsert({
-      where: { tenantId_name: { tenantId, name: roleName } },
-      update: { isSystem: true, isActive: true },
-      create: { tenantId, name: roleName, isSystem: true, isActive: true },
-      select: { id: true, name: true },
-    });
-    seeded[role.name as SystemCompanyRoleName] = role.id;
-  }
-
-  return seeded as Record<SystemCompanyRoleName, string>;
-}
-
 export function resolveSystemPermissionSetName(
   role: string,
-  companyRoleName?: string | null,
 ): SystemPermissionSetName | null {
   if (role === 'SUPER_ADMIN') return null;
   if (role === 'TENANT_ADMIN') return 'Company Admin Set';
-
-  if (companyRoleName === 'Company Admin') return 'Company Admin Set';
-  if (companyRoleName === 'Manager') return 'Manager Set';
-
   return 'Employee Set';
-}
-
-function permissionSetNameToCompanyRoleName(
-  setName?: string | null,
-): SystemCompanyRoleName | null {
-  if (setName === 'Company Admin Set') return 'Company Admin';
-  if (setName === 'Manager Set') return 'Manager';
-  if (setName === 'Employee Set') return 'Employee';
-  return null;
-}
-
-function resolveSystemCompanyRoleName(
-  role: string,
-  companyRoleName?: string | null,
-  assignedSystemSetName?: string | null,
-): SystemCompanyRoleName | null {
-  if (role === 'SUPER_ADMIN') return null;
-  if (role === 'TENANT_ADMIN') return 'Company Admin';
-
-  if (companyRoleName === 'Company Admin') return 'Company Admin';
-  if (companyRoleName === 'Manager') return 'Manager';
-  if (companyRoleName === 'Employee') return 'Employee';
-
-  const derivedFromSet = permissionSetNameToCompanyRoleName(
-    assignedSystemSetName,
-  );
-  if (derivedFromSet) return derivedFromSet;
-
-  return 'Employee';
-}
-
-export async function syncUserSystemCompanyRole(
-  prisma: AuthPrisma,
-  params: {
-    tenantId: string;
-    userId: string;
-    role: string;
-    companyRoleName?: string | null;
-    assignedSystemSetName?: string | null;
-  },
-): Promise<SystemCompanyRoleName | null> {
-  const targetRoleName = resolveSystemCompanyRoleName(
-    params.role,
-    params.companyRoleName,
-    params.assignedSystemSetName,
-  );
-
-  if (!targetRoleName) return null;
-
-  const roleIds = await ensureDefaultCompanyRoles(prisma, params.tenantId);
-  await prisma.user.update({
-    where: { id: params.userId },
-    data: { companyRoleId: roleIds[targetRoleName] },
-  });
-
-  return targetRoleName;
 }
 
 export async function syncUserSystemPermissionSet(
@@ -369,10 +240,7 @@ export async function syncUserSystemPermissionSet(
   logger?: LoggerLike,
 ): Promise<SystemPermissionSetName | null> {
   const log = getLogger(logger);
-  const targetSetName = resolveSystemPermissionSetName(
-    params.role,
-    params.companyRoleName,
-  );
+  const targetSetName = resolveSystemPermissionSetName(params.role);
 
   if (!targetSetName) return null;
 
@@ -421,7 +289,6 @@ export async function backfillSystemPermissionState(
   let usersProcessed = 0;
 
   for (const tenant of tenants) {
-    await ensureDefaultCompanyRoles(prisma, tenant.id);
     const seededSetIds = await seedSystemPermissionSets(
       prisma,
       tenant.id,
@@ -429,17 +296,7 @@ export async function backfillSystemPermissionState(
     );
     const users = await prisma.user.findMany({
       where: { tenantId: tenant.id },
-      select: {
-        id: true,
-        role: true,
-        companyRoleId: true,
-        companyRole: { select: { name: true } },
-        permissionSets: {
-          where: { permissionSet: { isSystem: true } },
-          select: { permissionSet: { select: { name: true } } },
-          take: 1,
-        },
-      },
+      select: { id: true, role: true },
     });
 
     for (const user of users) {
@@ -449,21 +306,11 @@ export async function backfillSystemPermissionState(
           tenantId: tenant.id,
           userId: user.id,
           role: user.role,
-          companyRoleName: user.companyRole?.name ?? null,
           grantedBy: 'system-backfill',
           seededSetIds,
         },
         logger,
       );
-
-      await syncUserSystemCompanyRole(prisma, {
-        tenantId: tenant.id,
-        userId: user.id,
-        role: user.role,
-        companyRoleName: user.companyRole?.name ?? null,
-        assignedSystemSetName:
-          user.permissionSets[0]?.permissionSet.name ?? null,
-      });
       usersProcessed += 1;
     }
   }

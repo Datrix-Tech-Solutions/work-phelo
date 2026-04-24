@@ -149,7 +149,7 @@ export class TimeController {
   }
 
   @Patch('corrections/:id/review')
-  @RequirePermissions(Permission.APPROVE_TEAM_TIME)
+  @RequirePermissions(Permission.APPROVE_TIME_CORRECTION)
   @ApiOperation({ summary: 'Approve or reject a time correction' })
   @ApiParam({ name: 'id', description: 'Time correction UUID' })
   @ApiBody({ type: ReviewCorrectionDto })

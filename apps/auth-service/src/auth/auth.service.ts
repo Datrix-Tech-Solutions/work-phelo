@@ -26,6 +26,7 @@ import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { RequestUser } from '@work-phelo/types';
+import { generateSecureToken } from '../common/otp.helper';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
@@ -82,8 +83,6 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         role: user.role,
-        companyRoleId: user.companyRoleId,
-        companyRoleName: user.companyRoleName,
         tenantId: user.tenantId,
         tenantSlug: user.tenantSlug,
         tenantName: user.tenantName,
@@ -103,22 +102,10 @@ export class AuthService {
       tenant.id,
       user.role,
     );
-    let companyRoleName: string | null = user.companyRole?.name ?? null;
-
-    if (!companyRoleName && user.companyRoleId) {
-      const companyRole = await this.prisma.companyRole.findUnique({
-        where: { id: user.companyRoleId },
-        select: { name: true },
-      });
-      companyRoleName = companyRole?.name ?? null;
-    }
-
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
-      companyRoleId: user.companyRoleId,
-      companyRoleName,
       tenantId: tenant.id,
       tenantSlug: tenant.slug,
       tenantName: tenant.name,
@@ -302,8 +289,6 @@ export class AuthService {
         tenantId: user.tenantId,
         tenantSlug: tenant.slug,
         tenantName: tenant.name,
-        companyRoleId: user.companyRoleId ?? null,
-        companyRoleName: null,
         moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {
           hr: false,
           accounting: false,
@@ -368,7 +353,6 @@ export class AuthService {
         lastName: user.lastName,
         role: user.role,
         tenantId: user.tenantId,
-        companyRoleName: null,
       },
     };
   }
@@ -549,17 +533,16 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    await this.prisma.otpCode.create({
-      data: {
-        userId: user.id,
-        type: 'PASSWORD_RESET',
-        code,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
-      },
-    });
-
     if (dto.method === 'sms' && user.phone) {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await this.prisma.otpCode.create({
+        data: {
+          userId: user.id,
+          type: 'PASSWORD_RESET',
+          code,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        },
+      });
       void this.rabbitmq
         .notificationPasswordResetOtp({
           phone: user.phone,
@@ -573,13 +556,21 @@ export class AuthService {
           ),
         );
     } else {
-      const resetLink = WorkspaceUrl.resetPassword(tenant.slug, code);
+      const resetToken = generateSecureToken();
+      await this.prisma.otpCode.create({
+        data: {
+          userId: user.id,
+          type: 'PASSWORD_RESET',
+          code: resetToken,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        },
+      });
+      const resetLink = WorkspaceUrl.resetPassword(tenant.slug, resetToken);
       void this.rabbitmq
         .notificationPasswordResetLink({
           email: user.email,
           firstName: user.firstName,
           resetLink,
-          otpCode: code,
           tenantName: tenant.name,
         })
         .catch((err) =>
@@ -596,23 +587,39 @@ export class AuthService {
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    const code = dto.token || dto.otpCode;
-    if (!code)
+    const credential = dto.token || dto.otpCode;
+    if (!credential)
       throw new BadRequestException('Reset token or OTP code is required');
 
-    // Find OTP record directly by code — no email required when token is known
-    let record = await this.prisma.otpCode.findFirst({
-      where: {
-        type: 'PASSWORD_RESET',
-        code,
-        usedAt: null,
-      },
-      orderBy: { createdAt: 'desc' },
-      include: { user: { include: { tenant: true } } },
-    });
+    let record;
+    if (dto.token) {
+      if (!dto.tenantSlug) {
+        throw new BadRequestException(
+          'Tenant workspace slug is required for reset links.',
+        );
+      }
 
-    // If email provided, scope to tenant for extra validation
-    if (dto.email && dto.tenantSlug) {
+      record = await this.prisma.otpCode.findFirst({
+        where: {
+          type: 'PASSWORD_RESET',
+          code: dto.token,
+          usedAt: null,
+          user: {
+            tenant: {
+              slug: dto.tenantSlug,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { user: { include: { tenant: true } } },
+      });
+    } else {
+      if (!dto.tenantSlug || !dto.email) {
+        throw new BadRequestException(
+          'Tenant workspace slug and email are required when using a reset code.',
+        );
+      }
+
       const tenant = await this.prisma.tenant.findUnique({
         where: { slug: dto.tenantSlug },
       });
@@ -628,6 +635,7 @@ export class AuthService {
         where: {
           userId: user.id,
           type: 'PASSWORD_RESET',
+          code: dto.otpCode,
           usedAt: null,
         },
         orderBy: { createdAt: 'desc' },
@@ -654,7 +662,7 @@ export class AuthService {
     }
 
     // Check code correctness
-    if (record.code !== code) {
+    if (record.code !== credential) {
       const newAttempts = record.attempts + 1;
       const updateData: any = { attempts: newAttempts };
 
@@ -758,7 +766,6 @@ export class AuthService {
         role: user.role,
         tenantId: user.tenantId,
         tenantSlug: user.tenant.slug,
-        companyRoleName: null,
       },
     };
   }

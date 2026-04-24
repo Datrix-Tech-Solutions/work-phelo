@@ -13,8 +13,6 @@ export interface JwtPayload {
   tenantSlug: string;
   tenantName?: string;
   firstName?: string;
-  companyRoleId?: string | null;
-  companyRoleName?: string | null;
   moduleConfig?: Record<string, boolean>;
   featureConfig?: Record<string, Record<string, boolean>>;
   permissions?: string[];
@@ -31,8 +29,6 @@ export interface RequestUser {
   tenantSlug: string;
   tenantName: string;
   firstName: string;
-  companyRoleId: string | null;
-  companyRoleName: string | null;
   moduleConfig: Record<string, boolean>;
   featureConfig: Record<string, Record<string, boolean>>;
   permissions: string[];

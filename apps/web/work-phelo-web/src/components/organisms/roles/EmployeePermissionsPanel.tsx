@@ -17,7 +17,7 @@ interface EmployeePermissionsPanelProps {
   availableSets: PermissionSet[];
   /** Permission sets already assigned to this user */
   assignedSets: { id: string; name: string }[];
-  /** The base role's set name — shown but cannot be removed here */
+  /** The baseline system set name — shown but cannot be removed here */
   baseSetName?: string | null;
   onAssign: (permissionSetId: string) => void;
   onRemove: (permissionSetId: string) => void;
@@ -56,8 +56,8 @@ export function EmployeePermissionsPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
-      title="Additional Permissions"
-      description={`Stack extra permission sets on top of ${employeeName}'s base role.`}
+      title="Permission Sets"
+      description={`Assign reusable permission sets to ${employeeName} and remove them when access is no longer needed.`}
     >
       {/* Currently assigned */}
       <div className="flex flex-col gap-2">
@@ -82,7 +82,7 @@ export function EmployeePermissionsPanel({
                       <p className="text-sm font-medium text-gray-900">{set.name}</p>
                       {isBase && (
                         <p className="text-xs text-gray-400">
-                          From base role — cannot be removed here
+                          Baseline system access — cannot be removed here
                         </p>
                       )}
                     </div>

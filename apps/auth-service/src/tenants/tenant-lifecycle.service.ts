@@ -62,21 +62,10 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'permission-sets', action: PermissionAction.DELETE },
       { resource: 'permission-sets', action: PermissionAction.ASSIGN },
     ],
-    [AppPermission.MANAGE_COMPANY_ROLES]: [
-      { resource: 'company-roles', action: PermissionAction.CREATE },
-      { resource: 'company-roles', action: PermissionAction.EDIT },
-      { resource: 'company-roles', action: PermissionAction.DELETE },
-    ],
-    [AppPermission.READ_COMPANY_ROLES]: [
-      { resource: 'company-roles', action: PermissionAction.VIEW },
-    ],
     [AppPermission.CREATE_EMPLOYEE]: [
       { resource: 'employees', action: PermissionAction.CREATE },
     ],
     [AppPermission.READ_EMPLOYEES]: [
-      { resource: 'employees', action: PermissionAction.VIEW },
-    ],
-    [AppPermission.READ_TEAM_EMPLOYEES]: [
       { resource: 'employees', action: PermissionAction.VIEW },
     ],
     [AppPermission.READ_OWN_PROFILE]: [
@@ -130,10 +119,10 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'branches', action: PermissionAction.DELETE },
     ],
     [AppPermission.MANAGE_ROLES]: [
-      { resource: 'company-roles', action: PermissionAction.EDIT },
+      { resource: 'permission-sets', action: PermissionAction.EDIT },
     ],
     [AppPermission.ASSIGN_ROLE]: [
-      { resource: 'company-roles', action: PermissionAction.ASSIGN },
+      { resource: 'permission-sets', action: PermissionAction.ASSIGN },
     ],
     [AppPermission.REQUEST_LEAVE]: [
       { resource: 'leave', action: PermissionAction.CREATE },
@@ -141,13 +130,7 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.APPROVE_LEAVE]: [
       { resource: 'leave', action: PermissionAction.APPROVE },
     ],
-    [AppPermission.APPROVE_TEAM_LEAVE]: [
-      { resource: 'leave', action: PermissionAction.APPROVE },
-    ],
     [AppPermission.READ_ALL_LEAVES]: [
-      { resource: 'leave', action: PermissionAction.VIEW },
-    ],
-    [AppPermission.READ_TEAM_LEAVES]: [
       { resource: 'leave', action: PermissionAction.VIEW },
     ],
     [AppPermission.READ_OWN_LEAVE]: [
@@ -162,16 +145,10 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.READ_ATTENDANCE]: [
       { resource: 'attendance', action: PermissionAction.VIEW },
     ],
-    [AppPermission.READ_TEAM_ATTENDANCE]: [
-      { resource: 'attendance', action: PermissionAction.VIEW },
-    ],
     [AppPermission.SUBMIT_TIME_CORRECTION]: [
       { resource: 'time-corrections', action: PermissionAction.CREATE },
     ],
     [AppPermission.APPROVE_TIME_CORRECTION]: [
-      { resource: 'time-corrections', action: PermissionAction.APPROVE },
-    ],
-    [AppPermission.APPROVE_TEAM_TIME]: [
       { resource: 'time-corrections', action: PermissionAction.APPROVE },
     ],
     [AppPermission.READ_TIMESHEETS]: [
@@ -181,10 +158,6 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'timesheets', action: PermissionAction.APPROVE },
     ],
     [AppPermission.MANAGE_SCHEDULES]: [
-      { resource: 'schedules', action: PermissionAction.CREATE },
-      { resource: 'schedules', action: PermissionAction.EDIT },
-    ],
-    [AppPermission.MANAGE_TEAM_SCHEDULES]: [
       { resource: 'schedules', action: PermissionAction.CREATE },
       { resource: 'schedules', action: PermissionAction.EDIT },
     ],
@@ -210,9 +183,6 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'appraisals', action: PermissionAction.CREATE },
     ],
     [AppPermission.READ_APPRAISALS]: [
-      { resource: 'appraisals', action: PermissionAction.VIEW },
-    ],
-    [AppPermission.READ_TEAM_APPRAISALS]: [
       { resource: 'appraisals', action: PermissionAction.VIEW },
     ],
     [AppPermission.SUBMIT_SELF_ASSESSMENT]: [
@@ -267,7 +237,6 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
 
 const SYSTEM_PERMISSION_SETS = [
   { name: 'Company Admin Set', roleName: 'Company Admin', isSystem: true },
-  { name: 'Manager Set', roleName: 'Manager', isSystem: true },
   { name: 'Employee Set', roleName: 'Employee', isSystem: true },
 ] as const;
 
@@ -439,6 +408,17 @@ export class TenantLifecycleService {
     const tenant = await this.prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
+    const tenantAdmin = await this.prisma.user.findFirst({
+      where: { tenantId: id, role: 'TENANT_ADMIN' },
+      select: { id: true },
+    });
+
+    await this.rabbitmq.hrProvisionTenantWorkspace({
+      tenantId: id,
+      adminEmail: tenant.email,
+      adminUserId: tenantAdmin?.id,
+    });
+
     const updated = await this.prisma.tenant.update({
       where: { id },
       data: { status: 'ACTIVE' },
@@ -447,11 +427,6 @@ export class TenantLifecycleService {
     await this.prisma.user.updateMany({
       where: { tenantId: id, role: 'TENANT_ADMIN' },
       data: { status: 'ACTIVE', emailVerifiedAt: new Date() },
-    });
-
-    const tenantAdmin = await this.prisma.user.findFirst({
-      where: { tenantId: id, role: 'TENANT_ADMIN' },
-      select: { id: true },
     });
 
     await this.audit.log({
@@ -465,16 +440,6 @@ export class TenantLifecycleService {
       },
       status: 'SUCCESS',
     });
-
-    void this.rabbitmq
-      .hrTenantApproved({
-        tenantId: id,
-        adminEmail: updated.email,
-        adminUserId: tenantAdmin?.id,
-      })
-      .catch((err) =>
-        this.logger.error(`Failed to emit hr.tenant_approved for ${id}`, err),
-      );
 
     return { message: 'Tenant approved successfully', tenant: updated };
   }
@@ -580,7 +545,7 @@ export class TenantLifecycleService {
   }
 
   // ── Permission Set Seeding ──────────────────────────────────────────────────
-  // Creates the three system permission sets (Company Admin Set, Manager Set,
+  // Creates the built-in system permission sets (Company Admin Set and
   // Employee Set) for a newly registered tenant. Idempotent — skips any set
   // that already exists. Returns a map of set names → set IDs.
 

@@ -32,24 +32,21 @@ export interface PermissionSet {
   tenantId: string;
   name: string;
   description?: string;
+  isSystem: boolean;
   isActive: boolean;
   createdAt: string;
   resources: PermissionSetResource[];
   _count?: { users: number };
 }
 
-// ── Company Role ──────────────────────────────────────────
-export interface CompanyRole {
+export interface PermissionSetMember {
   id: string;
-  tenantId: string;
-  name: string;
-  description?: string;
-  isSystem: boolean;
-  isActive: boolean;
-  /** Feature-action map — keys are feature names, values are arrays of PermissionAction strings */
-  permissions: Record<string, string[]>;
-  createdAt: string;
-  _count?: { users: number };
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE';
+  status: string;
+  grantedAt: string;
 }
 
 // ── User Direct Permission ────────────────────────────────
@@ -80,7 +77,6 @@ export interface EffectivePermissionSet {
 export interface UserEffectivePermissions {
   userId: string;
   systemRole: string;
-  companyRole: string | null;
   directPermissions: (UserPermission & { source: 'direct' })[];
   permissionSets: EffectivePermissionSet[];
   /** Deduplicated merged list — "resource:action" strings */
@@ -88,18 +84,6 @@ export interface UserEffectivePermissions {
 }
 
 // ── DTOs ─────────────────────────────────────────────────
-export interface CreateCompanyRoleDto {
-  name: string;
-  description?: string;
-  permissions?: Record<string, string[]>;
-}
-
-export interface UpdateCompanyRoleDto {
-  name?: string;
-  description?: string;
-  permissions?: Record<string, string[]>;
-}
-
 export interface AssignPermissionSetDto {
   userId: string;
   permissionSetId: string;

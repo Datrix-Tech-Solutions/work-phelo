@@ -199,7 +199,11 @@ export class LeaveController {
   @ApiResponse({ status: 201, description: 'Leave request submitted' })
   @ApiResponse({ status: 400, description: 'Insufficient leave balance' })
   createRequest(@Body() dto: CreateLeaveRequestDto, @Req() req: any) {
-    return this.leaveService.createRequest(req.user.tenantId, req.user.id, dto);
+    return this.leaveService.createRequest(
+      req.user.tenantId,
+      req.user as RequestUser,
+      dto,
+    );
   }
 
   @Get('requests')
@@ -257,7 +261,7 @@ export class LeaveController {
   }
 
   @Patch('requests/:id/review')
-  @RequirePermissions(Permission.APPROVE_TEAM_LEAVE)
+  @RequirePermissions(Permission.APPROVE_LEAVE)
   @ApiOperation({ summary: 'Approve or reject a leave request' })
   @ApiParam({ name: 'id', description: 'Leave request UUID' })
   @ApiBody({ type: ReviewLeaveRequestDto })
