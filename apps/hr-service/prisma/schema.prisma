@@ -445,6 +445,7 @@ model ClockRecord {
   clockOut    DateTime?
   date        DateTime
   hoursWorked Decimal?  @db.Decimal(5, 2)
+  isLate      Boolean   @default(false)
   ipAddress   String?
   location    String?
   note        String?
@@ -661,13 +662,14 @@ model PublicHoliday {
 }
 
 model TenantConfig {
-  id                         String   @id @default(uuid())
-  tenantId                   String   @unique
-  adminEmail                 String
-  adminUserId                String?
-  resignationNoticePeriodDays Int     @default(30)
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  id                          String   @id @default(uuid())
+  tenantId                    String   @unique
+  adminEmail                  String
+  adminUserId                 String?
+  resignationNoticePeriodDays Int      @default(30)
+  lateArrivalThresholdMinutes Int      @default(0)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
 
   @@schema("hr")
 }

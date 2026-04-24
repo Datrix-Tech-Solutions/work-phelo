@@ -27,6 +27,7 @@ export class TimeService {
     clockIn: Date;
     clockOut: Date | null;
     hoursWorked: any;
+    isLate: boolean;
   }) {
     const status = record.clockOut ? 'CLOCKED_OUT' : 'CLOCKED_IN';
     const totalMinutes = record.clockOut
@@ -40,8 +41,43 @@ export class TimeService {
       breakStart: null,
       totalMinutes,
       breakMinutes: 0,
-      isLate: false,
+      isLate: record.isLate,
     };
+  }
+
+  private async resolveIsLate(
+    tenantId: string,
+    employeeId: string,
+    clockInTime: Date,
+  ): Promise<boolean> {
+    const today = new Date(clockInTime);
+    today.setHours(0, 0, 0, 0);
+    const dayOfWeek = clockInTime.getDay();
+
+    const [schedule, config] = await Promise.all([
+      this.prisma.shiftSchedule.findFirst({
+        where: {
+          tenantId,
+          employeeId,
+          dayOfWeek: { has: dayOfWeek },
+          effectiveFrom: { lte: today },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: today } }],
+        },
+      }),
+      this.prisma.tenantConfig.findUnique({
+        where: { tenantId },
+        select: { lateArrivalThresholdMinutes: true },
+      }),
+    ]);
+
+    if (!schedule) return false;
+
+    const [h, m] = schedule.startTime.split(':').map(Number);
+    const shiftStart = new Date(today);
+    shiftStart.setHours(h, m, 0, 0);
+    const threshold = config?.lateArrivalThresholdMinutes ?? 0;
+    const allowedUntil = new Date(shiftStart.getTime() + threshold * 60_000);
+    return clockInTime > allowedUntil;
   }
 
   private async getEmployeeByUserId(tenantId: string, userId: string) {
@@ -71,12 +107,16 @@ export class TimeService {
 
     if (existing) throw new BadRequestException('Already clocked in for today');
 
+    const clockInTime = new Date();
+    const isLate = await this.resolveIsLate(tenantId, employee.id, clockInTime);
+
     const record = await this.prisma.clockRecord.create({
       data: {
         tenantId,
         employeeId: employee.id,
-        clockIn: new Date(),
+        clockIn: clockInTime,
         date: today,
+        isLate,
         ipAddress,
         location: dto.location,
         note: dto.note,
@@ -429,7 +469,7 @@ export class TimeService {
       clockIn: r.clockIn.toISOString(),
       breakStart: undefined,
       status: 'CLOCKED_IN',
-      isLate: false,
+      isLate: r.isLate,
     }));
   }
 
@@ -459,6 +499,7 @@ export class TimeService {
     ]);
     const clockedIn = todayRecords.filter((r) => !r.clockOut).length;
     const absent = Math.max(0, total - todayRecords.length);
-    return { clockedIn, absent, late: 0, onBreak: 0, total };
+    const late = todayRecords.filter((r) => r.isLate).length;
+    return { clockedIn, absent, late, onBreak: 0, total };
   }
 }
