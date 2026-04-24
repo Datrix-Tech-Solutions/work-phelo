@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { User, LoginPayload } from '@/types/auth';
 
-async function fetchMeWithManagerFlag(setPermissions: (p: string[]) => void): Promise<User> {
+async function fetchMeWithProfileDetails(setPermissions: (p: string[]) => void): Promise<User> {
   const res = await api.get<{ user: User; permissions: string[] }>('/auth/me');
   const authUser = res.data.user;
   if (authUser.role === 'EMPLOYEE') {
@@ -11,10 +11,8 @@ async function fetchMeWithManagerFlag(setPermissions: (p: string[]) => void): Pr
 
     await Promise.all([
       api
-        .get<{ isManager: boolean; lastName?: string }>('/hr/employees/me')
+        .get<{ lastName?: string }>('/hr/employees/me')
         .then((r) => {
-          authUser.isManager = r.data.isManager ?? false;
-          // /auth/me doesn't return lastName — pull it from the HR profile
           if (r.data.lastName) authUser.lastName = r.data.lastName;
         })
         .catch(() => {}),
@@ -29,7 +27,7 @@ export function useMe() {
   return useQuery({
     queryKey: ['me'],
     queryFn: async () => {
-      const user = await fetchMeWithManagerFlag(setPermissions);
+      const user = await fetchMeWithProfileDetails(setPermissions);
       setUser(user);
       return user;
     },
@@ -48,7 +46,7 @@ export function useLogin() {
       return res.data;
     },
     onSuccess: async () => {
-      const user = await fetchMeWithManagerFlag(setPermissions);
+      const user = await fetchMeWithProfileDetails(setPermissions);
       setUser(user);
       queryClient.invalidateQueries({ queryKey: ['me'] });
     },

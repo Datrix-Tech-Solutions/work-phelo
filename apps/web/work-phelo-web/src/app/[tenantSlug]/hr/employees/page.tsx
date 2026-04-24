@@ -24,6 +24,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const router = useRouter();
   const canInvite = usePermission(Permission.CREATE_EMPLOYEE);
   const canViewDetail = usePermission(Permission.READ_EMPLOYEES);
+  const canViewAllStatuses = usePermission(Permission.READ_EMPLOYEES);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -48,7 +49,11 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
     departmentId: deptFilter || undefined,
     limit: 100,
   });
-  const employees = empResult?.data ?? [];
+  const RESTRICTED_STATUSES = ['SUSPENDED', 'OFFBOARDED'];
+  const allEmployees = empResult?.data ?? [];
+  const employees = canViewAllStatuses
+    ? allEmployees
+    : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus));
 
   const { data: departments = [] } = useDepartments();
   const { data: branches = [] } = useBranches();
@@ -94,8 +99,12 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           options={[
             { value: 'ACTIVE', label: 'Active' },
             { value: 'PROBATION', label: 'Probation' },
-            { value: 'SUSPENDED', label: 'Suspended' },
-            { value: 'OFFBOARDED', label: 'Offboarded' },
+            ...(canViewAllStatuses
+              ? [
+                  { value: 'SUSPENDED', label: 'Suspended' },
+                  { value: 'OFFBOARDED', label: 'Offboarded' },
+                ]
+              : []),
           ]}
         />
         <FilterSelect

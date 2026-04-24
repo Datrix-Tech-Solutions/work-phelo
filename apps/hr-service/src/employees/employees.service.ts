@@ -25,11 +25,9 @@ import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 import {
   assertHrAccess,
   getActorEmployee,
-  getManagedEmployeeIds,
   hasPermissionRule,
   isCompanyAdminUser,
   isEmployeeSelfServiceUser,
-  isManagerUser,
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -43,6 +41,20 @@ export class EmployeesService {
     private readonly leaveService: LeaveService,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  private isDuplicateAuthUserError(error: unknown) {
+    const remote =
+      error && typeof error === 'object'
+        ? (error as { message?: unknown; statusCode?: unknown })
+        : undefined;
+    const message =
+      typeof remote?.message === 'string' ? remote.message : String(error);
+
+    return (
+      remote?.statusCode === 409 ||
+      message.includes('A user with this email already exists')
+    );
+  }
 
   async create(tenantId: string, dto: CreateEmployeeDto) {
     // Enforce minimum one department before adding employees
@@ -77,68 +89,80 @@ export class EmployeesService {
 
     const count = await this.prisma.employee.count({ where: { tenantId } });
     const employeeNumber = `EMP-${String(count + 1).padStart(4, '0')}`;
-
-    const employee = await this.prisma.employee.create({
-      data: {
+    let provisionedUser;
+    try {
+      provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite({
         tenantId,
-        employeeNumber,
-        ...(dto.userId ? { userId: dto.userId } : {}),
+        email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
-        email: dto.email,
         phone: dto.phone,
-        gender: dto.gender,
-        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-        maritalStatus: dto.maritalStatus,
-        nationality: dto.nationality,
-        address: dto.address,
-        city: dto.city,
-        region: dto.region,
-        emergencyName: dto.emergencyName,
-        emergencyPhone: dto.emergencyPhone,
-        emergencyRelation: dto.emergencyRelation,
-        jobTitle: dto.jobTitle,
-        employmentType: dto.employmentType,
-        hireDate: new Date(dto.hireDate),
-        probationEndsAt: dto.probationEndsAt
-          ? new Date(dto.probationEndsAt)
-          : undefined,
-        contractEndDate: dto.contractEndDate
-          ? new Date(dto.contractEndDate)
-          : undefined,
-        basicSalary: dto.basicSalary ?? 0,
-        nationalId: dto.nationalId,
-        bankName: dto.bankName,
-        bankAccountNumber: dto.bankAccountNumber,
-        bankBranch: dto.bankBranch,
-        ssnit: dto.ssnit,
-        tinNumber: dto.tinNumber,
-        ...(dto.departmentId && { departmentId: dto.departmentId }),
-        ...(dto.branchId && { branchId: dto.branchId }),
-        ...(dto.managerId && { managerId: dto.managerId }),
-      },
-      include: { department: true, branch: true },
-    });
+      });
+    } catch (error) {
+      if (this.isDuplicateAuthUserError(error)) {
+        throw new ConflictException('A user with this email already exists.');
+      }
+      throw error;
+    }
 
-    // Fire-and-forget — HR returns immediately, auth handles invite async
-    this.logger.log(`Emitting auth.invite_employee for ${employee.email}`);
-    void this.rabbitmq
-      .authInviteEmployee({
-        tenantId,
-        employeeId: employee.id,
-        email: employee.email,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-      })
-      .then(() =>
-        this.logger.log(`auth.invite_employee emitted for ${employee.email}`),
-      )
-      .catch((err) =>
+    let employee;
+    try {
+      employee = await this.prisma.employee.create({
+        data: {
+          tenantId,
+          employeeNumber,
+          userId: provisionedUser.userId,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          email: dto.email,
+          phone: dto.phone,
+          gender: dto.gender,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+          maritalStatus: dto.maritalStatus,
+          nationality: dto.nationality,
+          address: dto.address,
+          city: dto.city,
+          region: dto.region,
+          emergencyName: dto.emergencyName,
+          emergencyPhone: dto.emergencyPhone,
+          emergencyRelation: dto.emergencyRelation,
+          jobTitle: dto.jobTitle,
+          employmentType: dto.employmentType,
+          hireDate: new Date(dto.hireDate),
+          probationEndsAt: dto.probationEndsAt
+            ? new Date(dto.probationEndsAt)
+            : undefined,
+          contractEndDate: dto.contractEndDate
+            ? new Date(dto.contractEndDate)
+            : undefined,
+          basicSalary: dto.basicSalary ?? 0,
+          nationalId: dto.nationalId,
+          bankName: dto.bankName,
+          bankAccountNumber: dto.bankAccountNumber,
+          bankBranch: dto.bankBranch,
+          ssnit: dto.ssnit,
+          tinNumber: dto.tinNumber,
+          ...(dto.departmentId && { departmentId: dto.departmentId }),
+          ...(dto.branchId && { branchId: dto.branchId }),
+          ...(dto.managerId && { managerId: dto.managerId }),
+        },
+        include: { department: true, branch: true },
+      });
+    } catch (err) {
+      try {
+        await this.rabbitmq.authDeletePendingEmployeeInvite({
+          tenantId,
+          userId: provisionedUser.userId,
+          email: dto.email,
+        });
+      } catch (rollbackErr) {
         this.logger.error(
-          `Failed to emit auth.invite_employee for ${employee.email}`,
-          err,
-        ),
-      );
+          `Failed to roll back auth invite for ${dto.email} after HR employee creation failed`,
+          rollbackErr,
+        );
+      }
+      throw err;
+    }
 
     // Initialise leave balances immediately so the employee can request leave
     // as soon as their account is active. Uses upsert — safe to call multiple times.
@@ -169,19 +193,7 @@ export class EmployeesService {
     if (actor && !isCompanyAdminUser(actor)) {
       const canReadEmployees = hasPermissionRule(actor, 'employees:VIEW');
 
-      if (isManagerUser(actor)) {
-        const managedEmployeeIds = await getManagedEmployeeIds(
-          this.prisma,
-          tenantId,
-          actor.id,
-        );
-
-        if (managedEmployeeIds.size === 0) {
-          return { employees: [], meta: buildMeta(page, take, 0) };
-        }
-
-        where.id = { in: Array.from(managedEmployeeIds) };
-      } else if (isEmployeeSelfServiceUser(actor)) {
+      if (isEmployeeSelfServiceUser(actor)) {
         // Self-service employees can view the lightweight company directory,
         // but detailed profile access is still enforced in findById().
       } else {
@@ -253,23 +265,6 @@ export class EmployeesService {
       return employee;
     }
 
-    if (isManagerUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      const managedEmployeeIds = await getManagedEmployeeIds(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      assertHrAccess(
-        employee.id === actorEmployee.id || managedEmployeeIds.has(employee.id),
-      );
-      return employee;
-    }
-
     if (isEmployeeSelfServiceUser(actor)) {
       if (hasPermissionRule(actor, 'employees:VIEW')) {
         return employee;
@@ -294,10 +289,7 @@ export class EmployeesService {
       include: { department: true, allowances: true, resignation: true },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
-    const managedDeptCount = await this.prisma.department.count({
-      where: { managerId: employee.id, tenantId },
-    });
-    return { ...employee, isManager: managedDeptCount > 0 };
+    return employee;
   }
 
   async update(
@@ -833,7 +825,7 @@ export class EmployeesService {
         doneByEmail: 'financeClearanceDoneByEmail',
         doneAt: 'financeClearanceDoneAt',
       },
-      managerApproval: {
+      reportingClearance: {
         done: 'managerApprovalDone',
         doneById: 'managerApprovalDoneById',
         doneByEmail: 'managerApprovalDoneByEmail',
@@ -880,7 +872,7 @@ export class EmployeesService {
 
     if (!allClear) {
       throw new BadRequestException(
-        'All four clearance checklist items must be completed before offboarding can be finalised',
+        'All clearance checklist items must be completed before offboarding can be finalised',
       );
     }
 

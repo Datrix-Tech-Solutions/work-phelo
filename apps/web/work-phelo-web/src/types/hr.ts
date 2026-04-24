@@ -335,9 +335,10 @@ export interface CreateProjectDto {
 // ── Dashboard ─────────────────────────────────────────────
 export interface UpcomingBirthday {
   id: string;
-  firstName: string;
-  lastName: string;
+  name: string;
+  department: string;
   dateOfBirth: string;
+  upcomingBirthday: string;
   avatarUrl?: string;
 }
 
@@ -440,7 +441,7 @@ export interface ResignationPayload {
 }
 
 export interface UpdateChecklistDto {
-  item: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'managerApproval';
+  item: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'reportingClearance';
   done: boolean;
 }
 
@@ -456,7 +457,7 @@ export interface PaginatedResponse<T> {
 export type Frequency = 'Annual' | 'Semi-annual' | 'Quarterly' | 'Ad-hoc';
 export type AppraisalStatus = 'Upcoming' | 'InProgress' | 'Completed' | 'Cancelled';
 export type SectionType = 'RatingScale' | 'FreeText' | 'YesNo';
-export type ResponseRole = 'Self' | 'Manager';
+export type ResponseRole = 'Self' | 'Reviewer';
 export type FinalizedStatus = 'Pending' | 'Approved' | 'Cancelled';
 export type EmployeeAppraisalStatus =
   | 'NotStarted'

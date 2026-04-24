@@ -22,11 +22,15 @@ export const EventPatterns = {
   // Auth → HR
   HR_TENANT_APPROVED: 'hr.tenant_approved',
   HR_EMPLOYEE_ACTIVATED: 'hr.employee_activated',
+  HR_PROVISION_TENANT_WORKSPACE: 'hr.provision_tenant_workspace',
+  HR_LINK_EMPLOYEE_IDENTITY: 'hr.link_employee_identity',
 
   // HR → Auth
   AUTH_INVITE_EMPLOYEE: 'auth.invite_employee',
   AUTH_EMPLOYEE_OFFBOARDED: 'hr.employee_offboarded',
   AUTH_RESEND_EMPLOYEE_INVITE: 'auth.resend_employee_invite',
+  AUTH_PROVISION_EMPLOYEE_INVITE: 'auth.provision_employee_invite',
+  AUTH_DELETE_PENDING_EMPLOYEE_INVITE: 'auth.delete_pending_employee_invite',
 
   // Auth → Notification
   NOTIFICATION_EMAIL_VERIFICATION: 'notification.email_verification',
@@ -59,6 +63,27 @@ export interface EmployeeActivatedEvent {
   userId: string;
 }
 
+export interface ProvisionTenantWorkspaceCommand {
+  tenantId: string;
+  adminEmail: string;
+  adminUserId?: string;
+}
+
+export interface ProvisionTenantWorkspaceResult {
+  provisioned: boolean;
+}
+
+export interface LinkEmployeeIdentityCommand {
+  tenantId: string;
+  email: string;
+  userId: string;
+}
+
+export interface LinkEmployeeIdentityResult {
+  linked: boolean;
+  employeeId: string;
+}
+
 // ── HR → Auth Events ───────────────────────────────────────────────────────
 
 export interface InviteEmployeeEvent {
@@ -82,6 +107,31 @@ export interface ResendEmployeeInviteEvent {
   email: string;
   firstName: string;
   lastName?: string;
+}
+
+export interface ProvisionEmployeeInviteCommand {
+  tenantId: string;
+  employeeId?: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+}
+
+export interface ProvisionEmployeeInviteResult {
+  userId: string;
+  email: string;
+  inviteSent: boolean;
+}
+
+export interface DeletePendingEmployeeInviteCommand {
+  tenantId: string;
+  userId?: string;
+  email: string;
+}
+
+export interface DeletePendingEmployeeInviteResult {
+  deleted: boolean;
 }
 
 // ── Auth/HR → Notification Events ─────────────────────────────────────────
@@ -170,6 +220,7 @@ export interface LeaveRequestedEvent {
   endDate: string;
   totalDays: number;
   reason?: string;
+  detailLink?: string;
 }
 
 export interface LeaveReviewedEvent {

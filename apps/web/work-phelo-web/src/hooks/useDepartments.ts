@@ -50,6 +50,7 @@ export function useUpdateDepartment() {
       name?: string;
       description?: string;
       managerId?: string | null;
+      isActive?: boolean;
     }) => {
       const res = await api.patch<Department>(`/hr/departments/${id}`, payload);
       return res.data;

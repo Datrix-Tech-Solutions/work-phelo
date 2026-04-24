@@ -9,11 +9,8 @@ import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 import {
   assertHrAccess,
-  getManagedEmployeeIds,
   hasPermissionRule,
   isCompanyAdminUser,
-  isCustomCompanyRoleUser,
-  isManagerUser,
 } from '../auth/access-scope';
 
 @Injectable()
@@ -63,7 +60,7 @@ export class AppraisalsService {
           tenantId,
           cycleId,
           employeeId: emp.id,
-          managerId: null,
+          managerId: emp.managerId,
           status: 'IN_PROGRESS',
         },
       });
@@ -77,15 +74,8 @@ export class AppraisalsService {
   async getAppraisals(tenantId: string, actor: RequestUser, cycleId: string) {
     const where: any = { tenantId, cycleId };
 
-    if (isManagerUser(actor)) {
-      where.employeeId = {
-        in: [...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id))],
-      };
-    } else if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(
-        isCustomCompanyRoleUser(actor) &&
-          hasPermissionRule(actor, 'appraisals:VIEW'),
-      );
+    if (!isCompanyAdminUser(actor)) {
+      assertHrAccess(hasPermissionRule(actor, 'appraisals:VIEW'));
     }
 
     return this.prisma.appraisal.findMany({
@@ -167,21 +157,10 @@ export class AppraisalsService {
       throw new BadRequestException('Manager review already submitted');
     }
 
-    if (!isCompanyAdminUser(reviewer)) {
-      if (isManagerUser(reviewer)) {
-        const managedEmployeeIds = await getManagedEmployeeIds(
-          this.prisma,
-          tenantId,
-          reviewer.id,
-        );
-        assertHrAccess(managedEmployeeIds.has(appraisal.employee.id));
-      } else {
-        assertHrAccess(
-          isCustomCompanyRoleUser(reviewer) &&
-            hasPermissionRule(reviewer, 'appraisals:EDIT'),
-        );
-      }
-    }
+    assertHrAccess(
+      isCompanyAdminUser(reviewer) ||
+        hasPermissionRule(reviewer, 'appraisals:EDIT'),
+    );
 
     const finalScore = appraisal.selfScore
       ? Math.round((dto.score + appraisal.selfScore) / 2)

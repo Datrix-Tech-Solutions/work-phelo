@@ -13,12 +13,9 @@ import { CreateScheduleDto } from './dto/create-schedule.dto';
 import {
   assertHrAccess,
   getActorEmployee,
-  getManagedEmployeeIds,
   hasPermissionRule,
   isCompanyAdminUser,
-  isCustomCompanyRoleUser,
   isEmployeeSelfServiceUser,
-  isManagerUser,
 } from '../auth/access-scope';
 
 @Injectable()
@@ -153,28 +150,30 @@ export class TimeService {
       employeeId?: string;
       from?: string;
       to?: string;
+      departmentId?: string;
+      status?: string;
+      search?: string;
+      page?: number;
       mine?: boolean;
     },
   ) {
     const where: any = { tenantId };
-    const actorEmployee = await getActorEmployee(
-      this.prisma,
-      tenantId,
-      actor.id,
-    );
 
     if (filters.mine) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
       where.employeeId = actorEmployee.id;
     } else if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
-    } else if (isManagerUser(actor)) {
-      const managedEmployeeIds = [
-        ...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id)),
-      ];
-      where.employeeId = filters.employeeId
-        ? { in: managedEmployeeIds.filter((id) => id === filters.employeeId) }
-        : { in: managedEmployeeIds };
     } else if (isEmployeeSelfServiceUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
       where.employeeId = actorEmployee.id;
     } else {
       assertHrAccess(hasPermissionRule(actor, 'attendance:VIEW'));
@@ -187,21 +186,59 @@ export class TimeService {
       if (filters.to) where.date.lte = new Date(filters.to);
     }
 
-    return this.prisma.clockRecord.findMany({
-      where,
-      include: {
-        employee: {
-          select: {
-            firstName: true,
-            lastName: true,
-            employeeNumber: true,
-            jobTitle: true,
-            department: { select: { name: true } },
+    const employeeWhere: any = {};
+    if (filters.departmentId) employeeWhere.departmentId = filters.departmentId;
+
+    const trimmedSearch = filters.search?.trim();
+    if (trimmedSearch) {
+      employeeWhere.OR = [
+        { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
+        { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
+        { employeeNumber: { contains: trimmedSearch, mode: 'insensitive' } },
+      ];
+    }
+
+    if (Object.keys(employeeWhere).length > 0) {
+      where.employee = { is: employeeWhere };
+    }
+
+    if (filters.status === 'CLOCKED_IN') {
+      where.clockOut = null;
+    } else if (filters.status === 'CLOCKED_OUT') {
+      where.clockOut = { not: null };
+    }
+
+    const page = Math.max(filters.page ?? 1, 1);
+    const pageSize = 20;
+    const skip = (page - 1) * pageSize;
+
+    const [total, data] = await this.prisma.$transaction([
+      this.prisma.clockRecord.count({ where }),
+      this.prisma.clockRecord.findMany({
+        where,
+        include: {
+          employee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              employeeNumber: true,
+              jobTitle: true,
+              department: { select: { name: true } },
+            },
           },
         },
-      },
-      orderBy: { date: 'desc' },
-    });
+        orderBy: [{ date: 'desc' }, { clockIn: 'desc' }],
+        skip,
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      data,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      total,
+      page,
+    };
   }
 
   async submitTimeCorrection(
@@ -231,22 +268,15 @@ export class TimeService {
     },
   ) {
     const where: any = { tenantId };
-    const actorEmployee = await getActorEmployee(
-      this.prisma,
-      tenantId,
-      actor.id,
-    );
 
     if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
-    } else if (isManagerUser(actor)) {
-      const managedEmployeeIds = [
-        ...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id)),
-      ];
-      where.employeeId = filters.employeeId
-        ? { in: managedEmployeeIds.filter((id) => id === filters.employeeId) }
-        : { in: managedEmployeeIds };
     } else if (isEmployeeSelfServiceUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
       where.employeeId = actorEmployee.id;
     } else {
       assertHrAccess(hasPermissionRule(actor, 'time-corrections:VIEW'));
@@ -259,7 +289,13 @@ export class TimeService {
       where,
       include: {
         employee: {
-          select: { firstName: true, lastName: true, employeeNumber: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            jobTitle: true,
+            department: { select: { name: true } },
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -282,18 +318,10 @@ export class TimeService {
       );
     }
 
-    if (!isCompanyAdminUser(reviewer)) {
-      if (isManagerUser(reviewer)) {
-        const managedEmployeeIds = await getManagedEmployeeIds(
-          this.prisma,
-          tenantId,
-          reviewer.id,
-        );
-        assertHrAccess(managedEmployeeIds.has(correction.employeeId));
-      } else {
-        assertHrAccess(hasPermissionRule(reviewer, 'time-corrections:APPROVE'));
-      }
-    }
+    assertHrAccess(
+      isCompanyAdminUser(reviewer) ||
+        hasPermissionRule(reviewer, 'time-corrections:APPROVE'),
+    );
 
     return this.prisma.timeCorrection.update({
       where: { id },
@@ -312,25 +340,13 @@ export class TimeService {
     dto: CreateScheduleDto,
   ) {
     const canManageSchedules =
-      isCompanyAdminUser(actor) ||
-      isManagerUser(actor) ||
-      (isCustomCompanyRoleUser(actor) &&
-        hasPermissionRule(actor, 'schedules:CREATE'));
+      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'schedules:CREATE');
     assertHrAccess(canManageSchedules);
 
     const employee = await this.prisma.employee.findFirst({
       where: { id: dto.employeeId, tenantId },
     });
     if (!employee) throw new NotFoundException('Employee not found');
-
-    if (isManagerUser(actor)) {
-      const managedEmployeeIds = await getManagedEmployeeIds(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      assertHrAccess(managedEmployeeIds.has(dto.employeeId));
-    }
 
     return this.prisma.shiftSchedule.create({
       data: {
@@ -354,17 +370,7 @@ export class TimeService {
   ) {
     let where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
 
-    if (isManagerUser(actor)) {
-      const managedEmployeeIds = [
-        ...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id)),
-      ];
-      where = {
-        tenantId,
-        employeeId: employeeId
-          ? { in: managedEmployeeIds.filter((id) => id === employeeId) }
-          : { in: managedEmployeeIds },
-      };
-    } else if (isEmployeeSelfServiceUser(actor)) {
+    if (isEmployeeSelfServiceUser(actor)) {
       const actorEmployee = await getActorEmployee(
         this.prisma,
         tenantId,
@@ -390,16 +396,7 @@ export class TimeService {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    let employeeFilter: Record<string, unknown> | undefined;
-    if (isManagerUser(actor)) {
-      employeeFilter = {
-        employeeId: {
-          in: [
-            ...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id)),
-          ],
-        },
-      };
-    } else if (!isCompanyAdminUser(actor)) {
+    if (!isCompanyAdminUser(actor)) {
       assertHrAccess(hasPermissionRule(actor, 'attendance:VIEW'));
     }
 
@@ -408,7 +405,6 @@ export class TimeService {
         tenantId,
         date: { gte: todayStart, lte: todayEnd },
         clockOut: null,
-        ...(employeeFilter ?? {}),
       },
       include: {
         employee: {
@@ -443,12 +439,7 @@ export class TimeService {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    let employeeScope: string[] | undefined;
-    if (isManagerUser(actor)) {
-      employeeScope = [
-        ...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id)),
-      ];
-    } else if (!isCompanyAdminUser(actor)) {
+    if (!isCompanyAdminUser(actor)) {
       assertHrAccess(hasPermissionRule(actor, 'attendance:VIEW'));
     }
 
@@ -456,14 +447,12 @@ export class TimeService {
       this.prisma.employee.count({
         where: {
           tenantId,
-          ...(employeeScope ? { id: { in: employeeScope } } : {}),
           employmentStatus: { in: ['ACTIVE', 'PROBATION', 'SUSPENDED'] },
         },
       }),
       this.prisma.clockRecord.findMany({
         where: {
           tenantId,
-          ...(employeeScope ? { employeeId: { in: employeeScope } } : {}),
           date: { gte: todayStart, lte: todayEnd },
         },
       }),

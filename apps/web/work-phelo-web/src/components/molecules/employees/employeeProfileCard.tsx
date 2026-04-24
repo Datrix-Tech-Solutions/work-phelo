@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { ShieldCheck } from 'lucide-react';
 import { DetailField } from '../shared/DetailField';
+import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import type { Employee } from '@/types/hr';
 
 interface EmployeeProfileCardProps {
@@ -11,6 +12,7 @@ interface EmployeeProfileCardProps {
 export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCardProps) {
   const name = `${employee.firstName} ${employee.lastName}`;
   const initials = `${employee.firstName[0] ?? ''}${employee.lastName[0] ?? ''}`.toUpperCase();
+  const isPendingInvite = !employee.userId;
 
   return (
     <div className="w-72 shrink-0 bg-white border border-gray-200 rounded-card p-6 flex flex-col items-start gap-4">
@@ -34,6 +36,12 @@ export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCar
         {employee?.jobTitle && <p className="text-sm text-gray-400 mt-0.5">{employee.jobTitle}</p>}
       </div>
 
+      {/* Status badges */}
+      <div className="flex flex-wrap gap-2">
+        <StatusBadge status={employee.employmentStatus} />
+        <StatusBadge status={isPendingInvite ? 'PENDING' : 'ACTIVE'} />
+      </div>
+
       <div className="w-full border-t border-gray-100" />
 
       {/* Contact Info */}
@@ -45,11 +53,10 @@ export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCar
         )}
       </div>
 
-      {/* Roles — only rendered when at least one is assigned */}
+      {/* Roles */}
       {roles.length > 0 && (
         <>
           <div className="w-full border-t border-gray-100" />
-
           <div className="w-full flex flex-col gap-2.5">
             <p className="text-xs text-gray-400 font-medium tracking-wider">Roles</p>
             {roles.map((role) => (

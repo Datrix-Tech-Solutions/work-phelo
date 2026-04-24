@@ -25,6 +25,23 @@ interface RawAttendanceRecord {
   };
 }
 
+interface RawCorrectionRequest {
+  id: string;
+  employeeId: string;
+  date: string | Date;
+  requestedIn?: string | Date | null;
+  requestedOut?: string | Date | null;
+  reason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reviewNote?: string | null;
+  reviewedAt?: string | Date | null;
+  createdAt: string | Date;
+  employee?: {
+    firstName: string;
+    lastName: string;
+  };
+}
+
 function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
   const clockOut = r.clockOut ? new Date(r.clockOut) : null;
   const clockIn = new Date(r.clockIn);
@@ -47,6 +64,27 @@ function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
     breakMinutes: 0,
     status: clockOut ? 'CLOCKED_OUT' : 'CLOCKED_IN',
     isLate: false,
+  };
+}
+
+function toIsoString(value?: string | Date | null) {
+  if (!value) return undefined;
+  return new Date(value).toISOString();
+}
+
+function transformCorrectionRequest(r: RawCorrectionRequest): CorrectionRequest {
+  return {
+    id: r.id,
+    employeeId: r.employeeId,
+    employeeName: r.employee ? `${r.employee.firstName} ${r.employee.lastName}` : undefined,
+    date: typeof r.date === 'string' ? r.date : r.date.toISOString(),
+    requestedClockIn: toIsoString(r.requestedIn),
+    requestedClockOut: toIsoString(r.requestedOut),
+    reason: r.reason,
+    status: r.status,
+    reviewNote: r.reviewNote ?? undefined,
+    reviewedAt: toIsoString(r.reviewedAt),
+    createdAt: new Date(r.createdAt).toISOString(),
   };
 }
 
@@ -138,6 +176,9 @@ export function useMyAttendanceHistory(page: number = 1) {
     },
   });
 }
+export function useAttendanceHistory(page: number = 1) {
+  return useAttendanceRecords({ page });
+}
 
 export function useSubmitCorrectionRequest() {
   const queryClient = useQueryClient();
@@ -159,7 +200,6 @@ export function useSubmitCorrectionRequest() {
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
-// Live attendance — not yet available in the backend
 export function useLiveAttendance() {
   return useQuery<LiveAttendanceEntry[]>({
     queryKey: ['timeclock', 'live'],
@@ -171,7 +211,6 @@ export function useLiveAttendance() {
   });
 }
 
-// Attendance stats — not yet available in the backend
 export function useAttendanceStats() {
   return useQuery<AttendanceStats>({
     queryKey: ['timeclock', 'stats'],
@@ -194,13 +233,19 @@ export function useAttendanceRecords(params: {
     queryFn: async () => {
       const res = await api.get('/hr/time/attendance', {
         params: {
+          page: params.page,
           employeeId: params.employeeId || undefined,
           from: params.fromDate || undefined,
           to: params.toDate || undefined,
+          departmentId: params.departmentId || undefined,
+          status: params.status || undefined,
+          search: params.search || undefined,
         },
       });
-      const raw = res.data as TimeEntry[] | { data: TimeEntry[]; totalPages: number };
-      const records: TimeEntry[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      const raw = res.data as
+        | RawAttendanceRecord[]
+        | { data: RawAttendanceRecord[]; totalPages: number };
+      const records: RawAttendanceRecord[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
       const totalPages = Array.isArray(raw) ? 1 : (raw?.totalPages ?? 1);
       return { data: records.map(transformAttendanceRecord), totalPages };
     },
@@ -214,7 +259,9 @@ export function useCorrectionRequests(status?: string) {
       const res = await api.get('/hr/time/corrections', {
         params: status ? { status } : undefined,
       });
-      return Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      const raw = res.data as RawCorrectionRequest[] | { data: RawCorrectionRequest[] };
+      const requests = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      return requests.map(transformCorrectionRequest);
     },
   });
 }

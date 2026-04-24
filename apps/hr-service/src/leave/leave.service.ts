@@ -17,12 +17,9 @@ import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
 import {
   assertHrAccess,
   getActorEmployee,
-  getManagedEmployeeIds,
   hasPermissionRule,
   isCompanyAdminUser,
-  isCustomCompanyRoleUser,
   isEmployeeSelfServiceUser,
-  isManagerUser,
 } from '../auth/access-scope';
 
 const DEFAULT_LEAVE_TYPES = [
@@ -253,10 +250,7 @@ export class LeaveService {
       return { count };
     }
 
-    if (isManagerUser(actor)) {
-      where.employeeId = {
-        in: [...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id))],
-      };
+    if (hasPermissionRule(actor, 'leave:VIEW')) {
       const count = await this.prisma.leaveRequest.count({ where });
       return { count };
     }
@@ -343,16 +337,7 @@ export class LeaveService {
         actor.id,
       );
 
-      if (isManagerUser(actor)) {
-        const managedEmployeeIds = await getManagedEmployeeIds(
-          this.prisma,
-          tenantId,
-          actor.id,
-        );
-        assertHrAccess(
-          employeeId === actorEmployee.id || managedEmployeeIds.has(employeeId),
-        );
-      } else if (isEmployeeSelfServiceUser(actor)) {
+      if (isEmployeeSelfServiceUser(actor)) {
         assertHrAccess(employeeId === actorEmployee.id);
       } else {
         assertHrAccess(hasPermissionRule(actor, 'leave:VIEW'));
@@ -406,11 +391,11 @@ export class LeaveService {
   // ── Leave Requests ────────────────────────────────────────────────────────
   async createRequest(
     tenantId: string,
-    userId: string,
+    actor: RequestUser,
     dto: CreateLeaveRequestDto,
   ) {
     const empRecord = await this.prisma.employee.findFirst({
-      where: { userId, tenantId },
+      where: { userId: actor.id, tenantId },
     });
     if (!empRecord) throw new NotFoundException('Employee profile not found');
     const employeeId = empRecord.id;
@@ -500,8 +485,15 @@ export class LeaveService {
       },
     });
 
-    // Notify the employee's manager (fire-and-forget)
-    void this.notifyManagerOfLeaveRequest(
+    const detailLink = this.buildLeaveRequestDetailLink(
+      actor.tenantSlug,
+      request.id,
+    );
+    const notificationRecipients =
+      await this.resolveLeaveNotificationRecipients(tenantId, empRecord);
+
+    // Notify the employee's manager and Company Admin (fire-and-forget)
+    void this.notifyStakeholdersOfLeaveRequest(
       tenantId,
       empRecord,
       leaveType.name,
@@ -509,9 +501,20 @@ export class LeaveService {
       dto.endDate,
       totalDays,
       dto.reason,
+      detailLink,
+      notificationRecipients,
     );
 
-    return request;
+    return {
+      request,
+      message: notificationRecipients.managerEmail
+        ? 'Leave request submitted. Your manager and Company Admin will be notified.'
+        : 'Leave request submitted. You do not have a manager assigned, so only your Company Admin will be notified.',
+      notificationSummary: {
+        managerNotified: !!notificationRecipients.managerEmail,
+        adminNotified: !!notificationRecipients.adminEmail,
+      },
+    };
   }
 
   async getRequests(
@@ -533,20 +536,7 @@ export class LeaveService {
       );
     } else if (isCompanyAdminUser(actor)) {
       // company-wide access
-    } else if (isManagerUser(actor)) {
-      where.employeeId = {
-        in: [...(await getManagedEmployeeIds(this.prisma, tenantId, actor.id))],
-      };
     } else if (isEmployeeSelfServiceUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      where.employeeId = actorEmployee.id;
-    } else if (isCustomCompanyRoleUser(actor)) {
-      assertHrAccess(hasPermissionRule(actor, 'leave:VIEW'));
-    } else {
       const actorEmployee = await getActorEmployee(
         this.prisma,
         tenantId,
@@ -588,18 +578,10 @@ export class LeaveService {
       throw new BadRequestException('This request has already been reviewed');
     }
 
-    if (!isCompanyAdminUser(reviewer)) {
-      if (isManagerUser(reviewer)) {
-        const managedEmployeeIds = await getManagedEmployeeIds(
-          this.prisma,
-          tenantId,
-          reviewer.id,
-        );
-        assertHrAccess(managedEmployeeIds.has(request.employee.id));
-      } else {
-        assertHrAccess(hasPermissionRule(reviewer, 'leave:APPROVE'));
-      }
-    }
+    assertHrAccess(
+      isCompanyAdminUser(reviewer) ||
+        hasPermissionRule(reviewer, 'leave:APPROVE'),
+    );
 
     const updated = await this.prisma.leaveRequest.update({
       where: { id: requestId },
@@ -669,7 +651,57 @@ export class LeaveService {
 
   // ── Private notification helpers ─────────────────────────────────────────
 
-  private async notifyManagerOfLeaveRequest(
+  private buildLeaveRequestDetailLink(tenantSlug: string, requestId: string) {
+    const baseUrl =
+      process.env.FRONTEND_BASE_URL ||
+      process.env.APP_URL ||
+      'http://localhost:3000';
+    return `${baseUrl}/${tenantSlug}/hr/leave?tab=requests&requestId=${encodeURIComponent(
+      requestId,
+    )}`;
+  }
+
+  private async resolveLeaveNotificationRecipients(
+    tenantId: string,
+    employee: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      managerId: string | null;
+      departmentId: string | null;
+    },
+  ) {
+    let managerEmail: string | null = null;
+
+    // Prefer the employee's direct manager metadata if present.
+    if (employee.managerId) {
+      const manager = await this.prisma.employee.findUnique({
+        where: { id: employee.managerId },
+        select: { email: true },
+      });
+      managerEmail = manager?.email ?? null;
+    }
+
+    // Fall back to the department's assigned manager metadata.
+    if (!managerEmail && employee.departmentId) {
+      const dept = await this.prisma.department.findUnique({
+        where: { id: employee.departmentId },
+        select: { managerId: true },
+      });
+      if (dept?.managerId) {
+        const deptManager = await this.prisma.employee.findUnique({
+          where: { id: dept.managerId },
+          select: { email: true },
+        });
+        managerEmail = deptManager?.email ?? null;
+      }
+    }
+
+    const adminEmail = await this.getTenantAdminEmail(tenantId);
+    return { managerEmail, adminEmail };
+  }
+
+  private async notifyStakeholdersOfLeaveRequest(
     tenantId: string,
     employee: {
       id: string;
@@ -683,58 +715,59 @@ export class LeaveService {
     endDate: string,
     totalDays: number,
     reason?: string,
+    detailLink?: string,
+    recipientsInput?: {
+      managerEmail: string | null;
+      adminEmail: string | null;
+    },
   ) {
     try {
-      let managerEmail: string | null = null;
-
-      // Prefer the employee's direct manager
-      if (employee.managerId) {
-        const manager = await this.prisma.employee.findUnique({
-          where: { id: employee.managerId },
-          select: { email: true },
+      const { managerEmail, adminEmail } =
+        recipientsInput ??
+        (await this.resolveLeaveNotificationRecipients(tenantId, employee));
+      const recipientMap = new Map<
+        string,
+        { email: string; includeDetailLink: boolean }
+      >();
+      for (const recipient of [
+        managerEmail ? { email: managerEmail, includeDetailLink: false } : null,
+        adminEmail ? { email: adminEmail, includeDetailLink: true } : null,
+      ]) {
+        if (!recipient?.email) continue;
+        const existing = recipientMap.get(recipient.email);
+        recipientMap.set(recipient.email, {
+          email: recipient.email,
+          includeDetailLink:
+            (existing?.includeDetailLink ?? false) ||
+            recipient.includeDetailLink,
         });
-        managerEmail = manager?.email ?? null;
       }
+      const recipients = [...recipientMap.values()];
 
-      // Fall back to the department manager
-      if (!managerEmail && employee.departmentId) {
-        const dept = await this.prisma.department.findUnique({
-          where: { id: employee.departmentId },
-          select: { managerId: true },
-        });
-        if (dept?.managerId) {
-          const deptManager = await this.prisma.employee.findUnique({
-            where: { id: dept.managerId },
-            select: { email: true },
-          });
-          managerEmail = deptManager?.email ?? null;
-        }
-      }
-
-      // Fall back to the tenant admin email
-      if (!managerEmail) {
-        managerEmail = await this.getTenantAdminEmail(tenantId);
-      }
-
-      if (!managerEmail) {
+      if (recipients.length === 0) {
         this.logger.warn(
           `No manager or tenant admin found for tenant ${tenantId} — leave request notification skipped`,
         );
         return;
       }
 
-      await this.rabbitmq.notificationLeaveRequested({
-        tenantId,
-        employeeId: employee.id,
-        employeeFirstName: employee.firstName,
-        employeeLastName: employee.lastName,
-        managerEmail,
-        leaveTypeName,
-        startDate,
-        endDate,
-        totalDays,
-        reason,
-      });
+      await Promise.all(
+        recipients.map((recipient) =>
+          this.rabbitmq.notificationLeaveRequested({
+            tenantId,
+            employeeId: employee.id,
+            employeeFirstName: employee.firstName,
+            employeeLastName: employee.lastName,
+            managerEmail: recipient.email,
+            leaveTypeName,
+            startDate,
+            endDate,
+            totalDays,
+            reason,
+            detailLink: recipient.includeDetailLink ? detailLink : undefined,
+          }),
+        ),
+      );
     } catch (err) {
       this.logger.error(
         `Failed to emit leave requested notification for employee ${employee.id}`,

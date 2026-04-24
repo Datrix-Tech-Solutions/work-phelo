@@ -93,6 +93,14 @@ export class TimeController {
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'from', required: false })
   @ApiQuery({ name: 'to', required: false })
+  @ApiQuery({ name: 'departmentId', required: false })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['CLOCKED_IN', 'CLOCKED_OUT'],
+  })
+  @ApiQuery({ name: 'search', required: false })
+  @ApiQuery({ name: 'page', required: false })
   @ApiQuery({
     name: 'mine',
     required: false,
@@ -103,6 +111,10 @@ export class TimeController {
     @Query('employeeId') employeeId: string,
     @Query('from') from: string,
     @Query('to') to: string,
+    @Query('departmentId') departmentId: string,
+    @Query('status') status: string,
+    @Query('search') search: string,
+    @Query('page') page: string,
     @Query('mine') mine: string,
     @Req() req: any,
   ) {
@@ -113,6 +125,10 @@ export class TimeController {
         employeeId,
         from,
         to,
+        departmentId,
+        status,
+        search,
+        page: page ? Number(page) : undefined,
         mine: mine === 'true',
       },
     );
@@ -149,7 +165,7 @@ export class TimeController {
   }
 
   @Patch('corrections/:id/review')
-  @RequirePermissions(Permission.APPROVE_TEAM_TIME)
+  @RequirePermissions(Permission.APPROVE_TIME_CORRECTION)
   @ApiOperation({ summary: 'Approve or reject a time correction' })
   @ApiParam({ name: 'id', description: 'Time correction UUID' })
   @ApiBody({ type: ReviewCorrectionDto })

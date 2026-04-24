@@ -50,6 +50,15 @@ interface RawLeaveRequest {
   updatedAt?: string;
 }
 
+interface RawCreateLeaveRequestResponse {
+  request: RawLeaveRequest;
+  message?: string;
+  notificationSummary?: {
+    managerNotified: boolean;
+    adminNotified: boolean;
+  };
+}
+
 // ─── Response transformers ────────────────────────────────────────────────────
 
 function transformBalance(b: RawBalance): LeaveBalance {
@@ -171,8 +180,12 @@ export function useCreateLeaveRequest() {
 
   return useMutation({
     mutationFn: async (payload: CreateLeaveRequestDto) => {
-      const res = await api.post<RawLeaveRequest>('/hr/leave/requests', payload);
-      return transformRequest(res.data);
+      const res = await api.post<RawCreateLeaveRequestResponse>('/hr/leave/requests', payload);
+      return {
+        request: transformRequest(res.data.request),
+        message: res.data.message,
+        notificationSummary: res.data.notificationSummary,
+      };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });

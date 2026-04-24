@@ -32,23 +32,19 @@ export default function HRLayout({
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
-  const canReadTeamLeaves = usePermission(Permission.READ_TEAM_LEAVES);
   const canReadAllLeaves = usePermission(Permission.READ_ALL_LEAVES);
   const canRequestLeave = usePermission(Permission.REQUEST_LEAVE);
-  const canApproveTeamLeave = usePermission(Permission.APPROVE_TEAM_LEAVE);
+  const canApproveLeave = usePermission(Permission.APPROVE_LEAVE);
   const canReadOwnReview = usePermission(Permission.READ_OWN_REVIEW);
-  const canReadTeamAppraisals = usePermission(Permission.READ_TEAM_APPRAISALS);
   const canReadAppraisals = usePermission(Permission.READ_APPRAISALS);
   const canSubmitSelfAssessment = usePermission(Permission.SUBMIT_SELF_ASSESSMENT);
   const canSubmitManagerReview = usePermission(Permission.SUBMIT_MANAGER_REVIEW);
   const canConfigureAppraisal = usePermission(Permission.CONFIGURE_APPRAISAL);
   const canClockInOut = usePermission(Permission.CLOCK_IN_OUT);
   const canReadAttendance = usePermission(Permission.READ_ATTENDANCE);
-  const canReadTeamAttendance = usePermission(Permission.READ_TEAM_ATTENDANCE);
   const canSubmitTimeCorrection = usePermission(Permission.SUBMIT_TIME_CORRECTION);
-  const canApproveTeamTime = usePermission(Permission.APPROVE_TEAM_TIME);
+  const canApproveTimeCorrection = usePermission(Permission.APPROVE_TIME_CORRECTION);
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
-  const canManageTeamSchedules = usePermission(Permission.MANAGE_TEAM_SCHEDULES);
   const canReadProjects = usePermission(Permission.READ_PROJECTS);
   const canCreateProject = usePermission(Permission.CREATE_PROJECT);
   const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
@@ -61,26 +57,16 @@ export default function HRLayout({
   const canReadAssets = usePermission(Permission.READ_ASSETS);
   const canManageAssets = usePermission(Permission.MANAGE_ASSETS);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
-  const canAccessLeave =
-    canReadOwnLeave ||
-    canReadTeamLeaves ||
-    canReadAllLeaves ||
-    canRequestLeave ||
-    canApproveTeamLeave;
+  const canAccessLeave = canReadOwnLeave || canReadAllLeaves || canRequestLeave || canApproveLeave;
   const canAccessAppraisal =
     canReadOwnReview ||
-    canReadTeamAppraisals ||
     canReadAppraisals ||
     canSubmitSelfAssessment ||
     canSubmitManagerReview ||
     canConfigureAppraisal;
   const canAccessTimeClock =
-    canClockInOut ||
-    canReadAttendance ||
-    canReadTeamAttendance ||
-    canSubmitTimeCorrection ||
-    canApproveTeamTime;
-  const canAccessScheduling = canManageSchedules || canManageTeamSchedules;
+    canClockInOut || canReadAttendance || canSubmitTimeCorrection || canApproveTimeCorrection;
+  const canAccessScheduling = canManageSchedules;
   const canAccessProjects =
     canReadProjects || canCreateProject || canUpdateProject || canAssignProject;
   const canAccessPayroll =

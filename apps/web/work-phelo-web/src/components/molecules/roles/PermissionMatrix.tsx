@@ -33,7 +33,7 @@ type ResourceGroup = {
 const RESOURCE_GROUPS: ResourceGroup[] = [
   {
     label: 'Access Management',
-    resources: ['users', 'company-roles', 'permission-sets', 'audit-logs'],
+    resources: ['users', 'permission-sets', 'audit-logs'],
   },
   {
     label: 'People',

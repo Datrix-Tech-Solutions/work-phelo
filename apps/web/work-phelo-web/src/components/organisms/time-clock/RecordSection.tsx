@@ -80,10 +80,8 @@ export function RecordsSection({
           placeholder="All statuses"
           options={[
             { value: '', label: 'All statuses' },
-            { value: 'CLOCKED_IN', label: 'Active' },
+            { value: 'CLOCKED_IN', label: 'Clocked In' },
             { value: 'CLOCKED_OUT', label: 'Clocked Out' },
-            { value: 'ON_BREAK', label: 'On Break' },
-            { value: 'ABSENT', label: 'Absent' },
           ]}
           value={filterStatus}
           onChange={onFilterStatusChange}

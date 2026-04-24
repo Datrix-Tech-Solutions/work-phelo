@@ -54,7 +54,7 @@ Access tokens expire in **15 minutes**. Use \`POST /auth/refresh\` to rotate tok
 | EMPLOYEE | Regular user — access controlled by company role |
 
 ### Company Roles
-Each tenant has 3 default company roles seeded automatically: **Company Admin**, **Manager**, **Employee**.
+Each tenant has 2 default company roles seeded automatically: **Company Admin** and **Employee**.
 Tenant Admins can create custom roles with specific permissions.
 
 ### Demo Credentials

@@ -33,7 +33,6 @@ const USER_BASE = {
   firstName: 'Kofi',
   lastName: 'Boateng',
   role: 'EMPLOYEE',
-  companyRoleId: 'role-uuid',
   tenantId: 'tenant-uuid',
   status: 'ACTIVE',
   isMfaEnabled: false,

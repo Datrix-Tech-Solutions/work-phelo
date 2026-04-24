@@ -198,12 +198,14 @@ export class PermissionsService {
     }
 
     if (dto.resources.length > 0) {
-      const resourceIds = dto.resources.map((r) => r.resourceId);
+      const uniqueResourceIds = [
+        ...new Set(dto.resources.map((r) => r.resourceId)),
+      ];
       const found = await this.prisma.resource.findMany({
-        where: { id: { in: resourceIds } },
+        where: { id: { in: uniqueResourceIds } },
         select: { id: true },
       });
-      if (found.length !== resourceIds.length) {
+      if (found.length !== uniqueResourceIds.length) {
         throw new NotFoundException('One or more resources not found');
       }
     }
@@ -235,12 +237,14 @@ export class PermissionsService {
     if (!set) throw new NotFoundException('Permission set not found');
 
     if (dto.resources.length > 0) {
-      const resourceIds = dto.resources.map((r) => r.resourceId);
+      const uniqueResourceIds = [
+        ...new Set(dto.resources.map((r) => r.resourceId)),
+      ];
       const found = await this.prisma.resource.findMany({
-        where: { id: { in: resourceIds } },
+        where: { id: { in: uniqueResourceIds } },
         select: { id: true },
       });
-      if (found.length !== resourceIds.length) {
+      if (found.length !== uniqueResourceIds.length) {
         throw new NotFoundException('One or more resources not found');
       }
     }
@@ -274,12 +278,14 @@ export class PermissionsService {
     resources: { resourceId: string; action: string }[],
   ) {
     if (resources.length > 0) {
-      const resourceIds = resources.map((r) => r.resourceId);
+      const uniqueResourceIds = [
+        ...new Set(resources.map((r) => r.resourceId)),
+      ];
       const found = await this.prisma.resource.findMany({
-        where: { id: { in: resourceIds } },
+        where: { id: { in: uniqueResourceIds } },
         select: { id: true },
       });
-      if (found.length !== resourceIds.length) {
+      if (found.length !== uniqueResourceIds.length) {
         throw new NotFoundException('One or more resources not found');
       }
     }
@@ -309,6 +315,41 @@ export class PermissionsService {
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async getPermissionSetMembers(tenantId: string, permissionSetId: string) {
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { id: permissionSetId, tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!set) throw new NotFoundException('Permission set not found');
+
+    const assignments = await this.prisma.userPermissionSet.findMany({
+      where: { permissionSetId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: [{ user: { firstName: 'asc' } }, { user: { lastName: 'asc' } }],
+    });
+
+    return assignments.map((assignment) => ({
+      id: assignment.user.id,
+      firstName: assignment.user.firstName,
+      lastName: assignment.user.lastName,
+      email: assignment.user.email,
+      role: assignment.user.role,
+      status: assignment.user.status,
+      grantedAt: assignment.grantedAt,
+    }));
   }
 
   async assignPermissionSet(
@@ -342,6 +383,18 @@ export class PermissionsService {
     });
   }
 
+  async deletePermissionSet(tenantId: string, id: string) {
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { id, tenantId },
+    });
+    if (!set) throw new NotFoundException('Permission set not found');
+    if (set.isSystem) {
+      throw new ForbiddenException('System permission sets cannot be deleted');
+    }
+    await this.prisma.permissionSet.delete({ where: { id } });
+    return { message: 'Permission set deleted' };
+  }
+
   async removePermissionSet(
     tenantId: string,
     userId: string,
@@ -365,7 +418,6 @@ export class PermissionsService {
   async getUserPermissions(tenantId: string, userId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      include: { companyRole: true },
     });
     if (!user) throw new NotFoundException('User not found');
 
@@ -420,7 +472,6 @@ export class PermissionsService {
     return {
       userId,
       systemRole: user.role,
-      companyRole: user.companyRole?.name || null,
       directPermissions: directFormatted,
       permissionSets: setAssignments.map((a) => ({
         id: a.permissionSet.id,

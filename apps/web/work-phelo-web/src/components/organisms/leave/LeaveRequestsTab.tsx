@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { Badge } from '@/components/atoms/Badge';
@@ -22,10 +23,12 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger
 
 interface Props {
   tenantSlug: string;
+  canReview: boolean;
 }
 
-export function LeaveRequestsTab({ tenantSlug }: Props) {
-  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [filterLeaveType, setFilterLeaveType] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
@@ -46,6 +49,12 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   const totalEmployees = employeesData?.total ?? null;
 
   const { data: reqList = [], isLoading: reqLoading } = useLeaveRequests();
+  const requestIdFromQuery = searchParams.get('requestId');
+
+  const selectedRequest = useMemo(
+    () => reqList.find((r) => r.id === requestIdFromQuery) ?? null,
+    [requestIdFromQuery, reqList],
+  );
 
   const totalRequests = reqList.length || null;
   const pendingCount = useMemo(
@@ -65,6 +74,19 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   const PAGE_SIZE = 10;
   const reqTotalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
   const pagedRequests = filteredRequests.slice((reqPage - 1) * PAGE_SIZE, reqPage * PAGE_SIZE);
+
+  const handleRequestOpen = (request: LeaveRequest) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', 'requests');
+    params.set('requestId', request.id);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+  const handleRequestClose = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('requestId');
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
 
   const columns: Column<LeaveRequest>[] = [
     {
@@ -197,15 +219,16 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
           currentPage={reqPage}
           totalPages={reqTotalPages}
           onPageChange={setReqPage}
-          onRowClick={(row) => setSelectedRequest(row)}
+          onRowClick={(row) => handleRequestOpen(row)}
         />
       </div>
 
       <LeaveRequestDetailPanel
         isOpen={!!selectedRequest}
-        onClose={() => setSelectedRequest(null)}
+        onClose={handleRequestClose}
         tenantSlug={tenantSlug}
         request={selectedRequest}
+        canReview={canReview}
       />
     </>
   );

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -135,6 +136,19 @@ export class PermissionsController {
     return this.permissionsService.getPermissionSets(req.user.tenantId);
   }
 
+  @Get('sets/:id/members')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
+  @ApiOperation({ summary: 'List users assigned to a permission set' })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiResponse({ status: 200, description: 'Permission set members retrieved' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  getPermissionSetMembers(@Param('id') id: string, @Req() req: any) {
+    return this.permissionsService.getPermissionSetMembers(
+      req.user.tenantId,
+      id,
+    );
+  }
+
   @Post('sets')
   @RequirePermissions(Permission.GRANT_PERMISSION)
   @HttpCode(HttpStatus.CREATED)
@@ -196,6 +210,17 @@ export class PermissionsController {
       id,
       dto,
     );
+  }
+
+  @Delete('sets/:id')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @ApiOperation({ summary: 'Delete a custom permission set' })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiResponse({ status: 200, description: 'Permission set deleted' })
+  @ApiResponse({ status: 403, description: 'System sets cannot be deleted' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  deleteSet(@Param('id') id: string, @Req() req: any) {
+    return this.permissionsService.deletePermissionSet(req.user.tenantId, id);
   }
 
   @Post('sets/assign')

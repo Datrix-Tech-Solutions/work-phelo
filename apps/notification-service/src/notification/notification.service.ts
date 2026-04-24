@@ -258,6 +258,7 @@ export class NotificationService {
     endDate: string;
     totalDays: number;
     reason?: string;
+    detailLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -279,6 +280,7 @@ export class NotificationService {
       data.endDate,
       data.totalDays,
       data.reason,
+      data.detailLink,
     );
     await this.log({
       userId: data.employeeId,

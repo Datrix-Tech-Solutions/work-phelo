@@ -30,10 +30,6 @@ export class UpdateUserDto {
   role?: UserSystemRole;
 
   @IsOptional()
-  @IsString()
-  companyRoleId?: string;
-
-  @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;
 

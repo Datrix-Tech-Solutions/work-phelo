@@ -22,12 +22,10 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
       router.replace(`/${tenantSlug}/hr`);
     }
   }, [user, tenantSlug, router]);
-  // isManager comes from the employee profile (department head), not from permissions.
   const isHR = user?.role === 'TENANT_ADMIN';
   const hasHRProfile = user?.role === 'EMPLOYEE';
   const canReviewTeam = usePermission(Permission.SUBMIT_MANAGER_REVIEW);
-  // Department head OR explicitly granted manager-review permission
-  const canSeeTeamReview = user?.isManager === true || canReviewTeam || isHR;
+  const canSeeTeamReview = canReviewTeam || isHR;
 
   // Admin (TENANT_ADMIN) has no personal appraisal record — default to team review.
   // Use getState() so the initializer reads the correct role on first render
@@ -48,7 +46,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
       <AppraisalTabs
         activeTab={activeTab}
         isEmployee={hasHRProfile}
-        isManager={canSeeTeamReview}
+        canReviewTeam={canSeeTeamReview}
         isHR={isHR}
         onTabChange={setActiveTab}
       />

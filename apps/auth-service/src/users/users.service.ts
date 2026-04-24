@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
@@ -15,10 +16,7 @@ import { generateSecureToken } from '../common/otp.helper';
 import * as bcrypt from 'bcrypt';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { AuditService } from '../audit/audit.service';
-import {
-  syncUserSystemCompanyRole,
-  syncUserSystemPermissionSet,
-} from '../permissions/system-permission-sets';
+import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
 
 @Injectable()
 export class UsersService {
@@ -52,8 +50,10 @@ export class UsersService {
     if (existing)
       throw new ConflictException('A user with this email already exists.');
 
+    const userRole = dto.role ?? UserSystemRole.EMPLOYEE;
+
     // One Company Admin per tenant
-    if (dto.role === UserSystemRole.TENANT_ADMIN || !dto.role) {
+    if (userRole === UserSystemRole.TENANT_ADMIN) {
       const existingAdmin = await this.prisma.user.findFirst({
         where: { tenantId, role: 'TENANT_ADMIN' },
       });
@@ -73,30 +73,11 @@ export class UsersService {
           },
           this.logger,
         );
-        await syncUserSystemCompanyRole(this.prisma, {
-          tenantId,
-          userId: existingAdmin.id,
-          role: 'EMPLOYEE',
-        });
       }
     }
 
     const inviteToken = generateSecureToken();
     const inviteExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
-
-    const userRole = ((dto.role as any) || 'EMPLOYEE') as string;
-    let companyRoleName: string | null = null;
-
-    if (dto.companyRoleId) {
-      const companyRole = await this.prisma.companyRole.findFirst({
-        where: { id: dto.companyRoleId, tenantId, isActive: true },
-        select: { name: true },
-      });
-      if (!companyRole) {
-        throw new NotFoundException('Company role not found in this tenant');
-      }
-      companyRoleName = companyRole.name;
-    }
 
     const user = await this.prisma.user.create({
       data: {
@@ -105,8 +86,7 @@ export class UsersService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
-        role: userRole as any,
-        companyRoleId: dto.companyRoleId,
+        role: userRole,
         status: 'PENDING_VERIFICATION',
         forcePasswordReset: true,
         inviteToken,
@@ -120,17 +100,10 @@ export class UsersService {
         tenantId,
         userId: user.id,
         role: userRole,
-        companyRoleName,
         grantedBy: user.id,
       },
       this.logger,
     );
-    await syncUserSystemCompanyRole(this.prisma, {
-      tenantId,
-      userId: user.id,
-      role: userRole,
-      companyRoleName,
-    });
 
     const acceptInviteUrl = WorkspaceUrl.acceptInvite(tenant.slug, inviteToken);
 
@@ -170,6 +143,59 @@ export class UsersService {
     return { user: safeUser, message: 'Invitation sent successfully' };
   }
 
+  async provisionEmployeeInvite(
+    tenantId: string,
+    dto: {
+      email: string;
+      firstName: string;
+      lastName: string;
+      phone?: string;
+    },
+  ) {
+    const result = await this.invite(tenantId, {
+      ...dto,
+      role: UserSystemRole.EMPLOYEE,
+    });
+
+    return {
+      userId: result.user.id,
+      email: result.user.email,
+      inviteSent: true,
+    };
+  }
+
+  async deletePendingEmployeeInvite(
+    tenantId: string,
+    dto: { userId?: string; email: string },
+  ) {
+    const user = dto.userId
+      ? await this.prisma.user.findFirst({
+          where: { id: dto.userId, tenantId },
+        })
+      : await this.prisma.user.findUnique({
+          where: { tenantId_email: { tenantId, email: dto.email } },
+        });
+
+    if (!user) {
+      return { deleted: false };
+    }
+
+    if (user.role !== 'EMPLOYEE') {
+      throw new BadRequestException(
+        'Only pending employee invites can be rolled back.',
+      );
+    }
+
+    if (user.status !== 'PENDING_VERIFICATION' || !user.inviteToken) {
+      throw new BadRequestException(
+        'The employee invite can no longer be rolled back.',
+      );
+    }
+
+    await this.prisma.user.delete({ where: { id: user.id } });
+    return { deleted: true };
+  }
+
   async acceptInvite(dto: AcceptInviteDto) {
     const user = await this.prisma.user.findUnique({
       where: { inviteToken: dto.inviteToken },
@@ -186,6 +212,20 @@ export class UsersService {
       throw new ForbiddenException(
         'This invitation has expired. Please contact your platform administrator to resend the invitation.',
       );
+    }
+
+    if (user.role === 'TENANT_ADMIN') {
+      await this.rabbitmq.hrProvisionTenantWorkspace({
+        tenantId: user.tenantId,
+        adminEmail: user.tenant.email,
+        adminUserId: user.id,
+      });
+    } else {
+      await this.rabbitmq.hrLinkEmployeeIdentity({
+        tenantId: user.tenantId,
+        email: user.email,
+        userId: user.id,
+      });
     }
 
     const hashed = await bcrypt.hash(dto.password, 12);
@@ -209,39 +249,7 @@ export class UsersService {
         where: { id: updated.tenantId },
         data: { status: 'ACTIVE' },
       });
-
-      // Seed default leave types for the newly activated tenant.
-      // hr.tenant_approved is only emitted from approveTenant() (a separate
-      // super-admin action that is not part of the normal invite flow), so we
-      // emit it here to guarantee seeding regardless of whether the super admin
-      // calls that endpoint.
-      void this.rabbitmq
-        .hrTenantApproved({
-          tenantId: updated.tenantId,
-          adminEmail: updated.tenant.email,
-          adminUserId: updated.id,
-        })
-        .catch((err) =>
-          this.logger.error(
-            `Failed to emit hr.tenant_approved for ${updated.tenantId}`,
-            err,
-          ),
-        );
     }
-
-    // Link the auth userId back to the HR employee record
-    void this.rabbitmq
-      .hrEmployeeActivated({
-        tenantId: updated.tenantId,
-        email: updated.email,
-        userId: updated.id,
-      })
-      .catch((err) =>
-        this.logger.error(
-          `Failed to emit hr.employee_activated for ${updated.email}`,
-          err,
-        ),
-      );
 
     const permissions = await this.resolveEffectivePermissions(
       updated.id,
@@ -395,8 +403,6 @@ export class UsersService {
         updatedAt: true,
         tenantId: true,
         forcePasswordReset: true,
-        companyRoleId: true,
-        companyRole: { select: { id: true, name: true, description: true } },
       },
     });
   }

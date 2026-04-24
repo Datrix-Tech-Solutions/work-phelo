@@ -30,6 +30,7 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const [editTarget, setEditTarget] = useState<Department | null>(null);
   const [membersTarget, setMembersTarget] = useState<Department | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
+  const [toggleActiveTarget, setToggleActiveTarget] = useState<Department | null>(null);
   const [successName, setSuccessName] = useState<string | null>(null);
 
   // Data fetching
@@ -41,6 +42,7 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
   const { mutateAsync: updateDepartmentAsync } = useUpdateDepartment();
   const { mutate: deleteDepartment, isPending: isDeleting } = useDeleteDepartment();
+  const { mutate: updateDepartment, isPending: isTogglingActive } = useUpdateDepartment();
 
   const handleAddMembers = async (departmentId: string, employeeIds: string[]) => {
     await Promise.all(
@@ -52,6 +54,24 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
         }
         await updateEmployeeAsync({ id: empId, departmentId });
       }),
+    );
+  };
+
+  const handleToggleActiveConfirm = () => {
+    if (!toggleActiveTarget) return;
+    updateDepartment(
+      { id: toggleActiveTarget.id, isActive: !toggleActiveTarget.isActive },
+      {
+        onSuccess: () => {
+          toast.success(
+            toggleActiveTarget.isActive
+              ? `"${toggleActiveTarget.name}" deactivated`
+              : `"${toggleActiveTarget.name}" activated`,
+          );
+          setToggleActiveTarget(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to update department')),
+      },
     );
   };
 
@@ -79,6 +99,7 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
         onEdit={(dept) => setEditTarget(dept)}
         onAddMembers={(dept) => setMembersTarget(dept)}
         onDelete={(dept) => setDeleteTarget(dept)}
+        onToggleActive={(dept) => setToggleActiveTarget(dept)}
       />
 
       {/* Side Panels */}
@@ -107,6 +128,35 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
           department={membersTarget}
           employees={employees}
           onAddMembers={handleAddMembers}
+        />
+      )}
+
+      {/* Deactivate / Activate confirmation */}
+      {canUpdate && (
+        <Modal
+          isOpen={!!toggleActiveTarget}
+          onClose={() => setToggleActiveTarget(null)}
+          title={toggleActiveTarget?.isActive ? 'Deactivate Department' : 'Activate Department'}
+          description={
+            toggleActiveTarget?.isActive
+              ? `Are you sure you want to deactivate "${toggleActiveTarget?.name}"? Members will remain assigned but the department will be marked inactive.`
+              : `Are you sure you want to activate "${toggleActiveTarget?.name}"?`
+          }
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setToggleActiveTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant={toggleActiveTarget?.isActive ? 'danger' : 'primary'}
+                isLoading={isTogglingActive}
+                loadingText={toggleActiveTarget?.isActive ? 'Deactivating...' : 'Activating...'}
+                onClick={handleToggleActiveConfirm}
+              >
+                {toggleActiveTarget?.isActive ? 'Deactivate' : 'Activate'}
+              </Button>
+            </div>
+          }
         />
       )}
 
