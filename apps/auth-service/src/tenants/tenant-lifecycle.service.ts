@@ -322,6 +322,7 @@ export class TenantLifecycleService {
         firstName: user.firstName,
         tenantName: tenant.name,
         acceptInviteUrl,
+        inviteKind: 'TENANT_ADMIN',
       })
       .catch((err) =>
         this.logger.error(`Failed to emit invite for ${user.email}`, err),

@@ -46,7 +46,7 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
     Parameters<ReturnType<typeof useCreateBranch>['mutate']>[0] | null
   >(null);
 
-  const { data: branches } = useBranches();
+  const { data: branches = [] } = useBranches();
 
   const form = useForm<BranchForm>({
     defaultValues: {
@@ -99,6 +99,10 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
   const { mutate: createBranch, isPending: isCreating } = useCreateBranch();
   const { mutate: updateBranch, isPending: isUpdating } = useUpdateBranch();
   const isPending = isCreating || isUpdating;
+  const existingHeadOffice = branches.find(
+    (existingBranch) => existingBranch.isHeadOffice && existingBranch.id !== branch?.id,
+  );
+  const headOfficeLocked = isEditMode && !!existingHeadOffice && !branch?.isHeadOffice;
 
   const handleClose = () => {
     form.reset();
@@ -330,15 +334,22 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
             type="checkbox"
             id="isHeadOffice"
             {...form.register('isHeadOffice')}
+            disabled={headOfficeLocked}
             className="w-4 h-4 rounded accent-brand"
           />
           <label
             htmlFor="isHeadOffice"
-            className="text-sm font-medium text-gray-700 cursor-pointer"
+            className={`text-sm font-medium ${headOfficeLocked ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 cursor-pointer'}`}
           >
             This is the Head Office
           </label>
         </div>
+        {headOfficeLocked && (
+          <p className="text-sm text-amber-600">
+            {existingHeadOffice.name} is already marked as the head office. Remove that setting
+            there before assigning another one.
+          </p>
+        )}
       </SidePanel>
     </>
   );

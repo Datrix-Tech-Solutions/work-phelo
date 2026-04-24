@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotificationType } from '../../prisma/generated/client';
+import { InviteUserKind } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../channels/email.service';
 import { SmsService } from '../channels/sms.service';
@@ -65,25 +66,35 @@ export class NotificationService {
     inviteToken?: string;
     acceptInviteUrl: string;
     tenantName: string;
+    inviteKind?: InviteUserKind;
   }) {
     if (await this.isDuplicate(data.email, NotificationType.INVITE_USER)) {
       this.logger.warn(`Duplicate INVITE_USER suppressed for ${data.email}`);
       return;
     }
-    // Use workspace-aware URL built by auth service
-    const success = await this.email.sendInviteEmail(
-      data.email,
-      data.firstName,
-      data.tenantName,
-      data.acceptInviteUrl,
-    );
+    const isTenantAdminInvite = data.inviteKind === 'TENANT_ADMIN';
+    const success = isTenantAdminInvite
+      ? await this.email.sendTenantAdminWelcomeEmail(
+          data.email,
+          data.firstName,
+          data.tenantName,
+          data.acceptInviteUrl,
+        )
+      : await this.email.sendEmployeeInviteEmail(
+          data.email,
+          data.firstName,
+          data.tenantName,
+          data.acceptInviteUrl,
+        );
     await this.log({
       userId: data.userId ?? 'system',
       tenantId: data.tenantId ?? 'system',
       type: 'INVITE_USER',
       channel: 'EMAIL',
       recipient: data.email,
-      subject: `Invitation to ${data.tenantName}`,
+      subject: isTenantAdminInvite
+        ? `Welcome to ${data.tenantName}`
+        : `Invitation to ${data.tenantName}`,
       status: success ? 'SENT' : 'FAILED',
     });
   }
