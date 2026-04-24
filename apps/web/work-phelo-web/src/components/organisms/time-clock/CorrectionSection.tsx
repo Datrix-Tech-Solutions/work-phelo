@@ -1,5 +1,5 @@
 import { Badge } from '@/components/atoms/Badge';
-import { formatDate } from '@/lib/formatters';
+import { formatDate, formatTime } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { Column, DataTable } from '../shared/DataTable';
 import type { CorrectionRequest } from '@/types/timeclock';
@@ -31,12 +31,12 @@ export function CorrectionsSection({
     {
       key: 'requestedClockIn',
       label: 'Requested In',
-      render: (r) => <span>{r.requestedClockIn || '—'}</span>,
+      render: (r) => <span>{r.requestedClockIn ? formatTime(r.requestedClockIn) : '—'}</span>,
     },
     {
       key: 'requestedClockOut',
       label: 'Requested Out',
-      render: (r) => <span>{r.requestedClockOut || '—'}</span>,
+      render: (r) => <span>{r.requestedClockOut ? formatTime(r.requestedClockOut) : '—'}</span>,
     },
     {
       key: 'reason',

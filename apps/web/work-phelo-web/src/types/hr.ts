@@ -335,9 +335,10 @@ export interface CreateProjectDto {
 // ── Dashboard ─────────────────────────────────────────────
 export interface UpcomingBirthday {
   id: string;
-  firstName: string;
-  lastName: string;
+  name: string;
+  department: string;
   dateOfBirth: string;
+  upcomingBirthday: string;
   avatarUrl?: string;
 }
 

@@ -150,21 +150,30 @@ export class TimeService {
       employeeId?: string;
       from?: string;
       to?: string;
+      departmentId?: string;
+      status?: string;
+      search?: string;
+      page?: number;
       mine?: boolean;
     },
   ) {
     const where: any = { tenantId };
-    const actorEmployee = await getActorEmployee(
-      this.prisma,
-      tenantId,
-      actor.id,
-    );
 
     if (filters.mine) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
       where.employeeId = actorEmployee.id;
     } else if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
     } else if (isEmployeeSelfServiceUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
       where.employeeId = actorEmployee.id;
     } else {
       assertHrAccess(hasPermissionRule(actor, 'attendance:VIEW'));
@@ -177,21 +186,59 @@ export class TimeService {
       if (filters.to) where.date.lte = new Date(filters.to);
     }
 
-    return this.prisma.clockRecord.findMany({
-      where,
-      include: {
-        employee: {
-          select: {
-            firstName: true,
-            lastName: true,
-            employeeNumber: true,
-            jobTitle: true,
-            department: { select: { name: true } },
+    const employeeWhere: any = {};
+    if (filters.departmentId) employeeWhere.departmentId = filters.departmentId;
+
+    const trimmedSearch = filters.search?.trim();
+    if (trimmedSearch) {
+      employeeWhere.OR = [
+        { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
+        { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
+        { employeeNumber: { contains: trimmedSearch, mode: 'insensitive' } },
+      ];
+    }
+
+    if (Object.keys(employeeWhere).length > 0) {
+      where.employee = { is: employeeWhere };
+    }
+
+    if (filters.status === 'CLOCKED_IN') {
+      where.clockOut = null;
+    } else if (filters.status === 'CLOCKED_OUT') {
+      where.clockOut = { not: null };
+    }
+
+    const page = Math.max(filters.page ?? 1, 1);
+    const pageSize = 20;
+    const skip = (page - 1) * pageSize;
+
+    const [total, data] = await this.prisma.$transaction([
+      this.prisma.clockRecord.count({ where }),
+      this.prisma.clockRecord.findMany({
+        where,
+        include: {
+          employee: {
+            select: {
+              firstName: true,
+              lastName: true,
+              employeeNumber: true,
+              jobTitle: true,
+              department: { select: { name: true } },
+            },
           },
         },
-      },
-      orderBy: { date: 'desc' },
-    });
+        orderBy: [{ date: 'desc' }, { clockIn: 'desc' }],
+        skip,
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      data,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      total,
+      page,
+    };
   }
 
   async submitTimeCorrection(
@@ -221,15 +268,15 @@ export class TimeService {
     },
   ) {
     const where: any = { tenantId };
-    const actorEmployee = await getActorEmployee(
-      this.prisma,
-      tenantId,
-      actor.id,
-    );
 
     if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
     } else if (isEmployeeSelfServiceUser(actor)) {
+      const actorEmployee = await getActorEmployee(
+        this.prisma,
+        tenantId,
+        actor.id,
+      );
       where.employeeId = actorEmployee.id;
     } else {
       assertHrAccess(hasPermissionRule(actor, 'time-corrections:VIEW'));
@@ -242,7 +289,13 @@ export class TimeService {
       where,
       include: {
         employee: {
-          select: { firstName: true, lastName: true, employeeNumber: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+            jobTitle: true,
+            department: { select: { name: true } },
+          },
         },
       },
       orderBy: { createdAt: 'desc' },
