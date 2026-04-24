@@ -81,8 +81,12 @@ export function InviteEmployeePanel({
   };
 
   const onSubmit = (d: InviteForm) => {
+    const normalized = { ...d };
+    if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
+    if (normalized.contractEndDate?.length === 7) normalized.contractEndDate += '-01';
+
     const payload = Object.fromEntries(
-      Object.entries(d).filter(([, v]) => v !== '' && v !== undefined && v !== null),
+      Object.entries(normalized).filter(([, v]) => v !== '' && v !== undefined && v !== null),
     ) as unknown as CreateEmployeePayload;
 
     createEmployee(payload, {

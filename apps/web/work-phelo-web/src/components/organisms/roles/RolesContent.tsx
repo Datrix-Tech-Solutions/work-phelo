@@ -77,8 +77,8 @@ export function RolesContent() {
       width: '120px',
       render: (row) => (
         <Badge
-          variant={(row as any).isSystem ? 'info' : 'neutral'}
-          label={(row as any).isSystem ? 'System' : 'Custom'}
+          variant={row.isSystem ? 'info' : 'neutral'}
+          label={row.isSystem ? 'System' : 'Custom'}
         />
       ),
     },
@@ -106,7 +106,7 @@ export function RolesContent() {
 
   const handleCreate = (values: PermissionSetSubmitValues) => {
     createSet(
-      { name: values.name, description: values.description, resources: values.resources as any },
+      { name: values.name, description: values.description, resources: values.resources },
       {
         onSuccess: () => {
           toast.success('Permission set created');
@@ -160,7 +160,7 @@ export function RolesContent() {
           totalPages={totalPages}
           onPageChange={setPage}
           rowActions={(row) => [
-            ...((row as any).isSystem
+            ...(row.isSystem
               ? []
               : [
                   { label: 'Manage Members', onClick: () => setMembersTarget(row) },
@@ -190,7 +190,7 @@ export function RolesContent() {
                 id: editTarget.id,
                 name: values.name,
                 description: values.description,
-                resources: values.resources as any,
+                resources: values.resources,
               },
               {
                 onSuccess: () => {

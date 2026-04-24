@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
@@ -29,7 +29,6 @@ interface Props {
 export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
   const [search, setSearch] = useState('');
   const [filterLeaveType, setFilterLeaveType] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
@@ -52,13 +51,10 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
   const { data: reqList = [], isLoading: reqLoading } = useLeaveRequests();
   const requestIdFromQuery = searchParams.get('requestId');
 
-  useEffect(() => {
-    if (!requestIdFromQuery || reqList.length === 0) return;
-    const matchedRequest = reqList.find((request) => request.id === requestIdFromQuery);
-    if (matchedRequest) {
-      setSelectedRequest(matchedRequest);
-    }
-  }, [requestIdFromQuery, reqList]);
+  const selectedRequest = useMemo(
+    () => reqList.find((r) => r.id === requestIdFromQuery) ?? null,
+    [requestIdFromQuery, reqList],
+  );
 
   const totalRequests = reqList.length || null;
   const pendingCount = useMemo(
@@ -84,14 +80,12 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
     params.set('tab', 'requests');
     params.set('requestId', request.id);
     router.replace(`?${params.toString()}`, { scroll: false });
-    setSelectedRequest(request);
   };
 
   const handleRequestClose = () => {
     const params = new URLSearchParams(searchParams.toString());
     params.delete('requestId');
     router.replace(`?${params.toString()}`, { scroll: false });
-    setSelectedRequest(null);
   };
 
   const columns: Column<LeaveRequest>[] = [

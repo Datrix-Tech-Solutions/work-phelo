@@ -14,6 +14,7 @@ interface DepartmentsTableProps {
   onEdit: (dept: Department) => void;
   onAddMembers: (dept: Department) => void;
   onDelete: (dept: Department) => void;
+  onToggleActive: (dept: Department) => void;
 }
 
 export function DepartmentsTable({
@@ -27,6 +28,7 @@ export function DepartmentsTable({
   onEdit,
   onAddMembers,
   onDelete,
+  onToggleActive,
 }: DepartmentsTableProps) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -102,6 +104,10 @@ export function DepartmentsTable({
                 ? [
                     { label: 'Edit Department', onClick: () => onEdit(row) },
                     { label: 'Add Members', onClick: () => onAddMembers(row) },
+                    {
+                      label: row.isActive ? 'Deactivate' : 'Activate',
+                      onClick: () => onToggleActive(row),
+                    },
                   ]
                 : []),
               ...(canDelete

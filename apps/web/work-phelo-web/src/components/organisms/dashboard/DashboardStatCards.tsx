@@ -21,7 +21,9 @@ interface DashboardStatCardsProps {
   annualBalance: AnnualBalance | null;
   upcomingLeave: UpcomingLeave | null;
   clockedIn: boolean;
+  isDone: boolean;
   clockInTime?: string;
+  hoursWorked?: string;
   isClockLoading: boolean;
   onRequestLeave: () => void;
   onClockIn: () => void;
@@ -32,7 +34,9 @@ export function DashboardStatCards({
   annualBalance,
   upcomingLeave,
   clockedIn,
+  isDone,
   clockInTime,
+  hoursWorked,
   isClockLoading,
   onRequestLeave,
   onClockIn,
@@ -65,7 +69,9 @@ export function DashboardStatCards({
 
       <AttendanceMetricCard
         clockedIn={clockedIn}
+        isDone={isDone}
         clockInTime={clockInTime}
+        hoursWorked={hoursWorked}
         onClockIn={onClockIn}
         onClockOut={onClockOut}
         isLoading={isClockLoading}
