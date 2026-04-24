@@ -116,7 +116,10 @@ export class UsersService {
         inviteToken,
         acceptInviteUrl,
         tenantName: tenant.name,
-        inviteKind: userRole === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : 'EMPLOYEE',
+        inviteKind:
+          userRole === UserSystemRole.TENANT_ADMIN
+            ? 'TENANT_ADMIN'
+            : 'EMPLOYEE',
       })
       .catch((err) =>
         this.logger.error(`Failed to send invite for ${user.email}`, err),
