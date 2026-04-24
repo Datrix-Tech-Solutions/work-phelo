@@ -32,10 +32,21 @@ export interface PermissionSet {
   tenantId: string;
   name: string;
   description?: string;
+  isSystem: boolean;
   isActive: boolean;
   createdAt: string;
   resources: PermissionSetResource[];
   _count?: { users: number };
+}
+
+export interface PermissionSetMember {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE';
+  status: string;
+  grantedAt: string;
 }
 
 // ── User Direct Permission ────────────────────────────────

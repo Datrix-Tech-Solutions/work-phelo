@@ -16,11 +16,17 @@ import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
-import { useUserPermissions, useRemovePermissionSet } from '@/hooks/useRoles';
+import {
+  useAssignPermissionSet,
+  usePermissionSets,
+  useRemovePermissionSet,
+  useUserPermissions,
+} from '@/hooks/useRoles';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { ResignationPanel } from '@/components/organisms/employee/resignationPanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
+import { EmployeePermissionsPanel } from '@/components/organisms/roles/EmployeePermissionsPanel';
 import { AssignPermissionPanel } from '@/components/organisms/roles/assignPermissionPanel';
 import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
 import { EmployeeActionsBar } from '@/components/molecules/employees/employeeActionBar';
@@ -40,6 +46,7 @@ export default function EmployeeDetailPage({
   const [offboardOpen, setOffboardOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [assignAssetOpen, setAssignAssetOpen] = useState(false);
+  const [permissionSetsOpen, setPermissionSetsOpen] = useState(false);
   const [assignPermOpen, setAssignPermOpen] = useState(false);
   const [resignOpen, setResignOpen] = useState(false);
 
@@ -49,20 +56,26 @@ export default function EmployeeDetailPage({
   const { data: departments = [] } = useDepartments();
   const { data: branches = [] } = useBranches();
   const { data: allHrResult } = useEmployees();
+  const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
+  const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
+  const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
+  const { data: permissionSets = [] } = usePermissionSets({
+    enabled: canGrantPermission,
+  });
   const allHrEmployees = allHrResult?.data ?? [];
 
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { mutate: assignPermissionSet, isPending: isAssigningPermissionSet } =
+    useAssignPermissionSet();
   const { mutate: removePermissionSet, isPending: isRemovingPermissionSet } =
     useRemovePermissionSet();
-  const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
-  const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
-  const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
-  const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
 
   const { data: userPerms } = useUserPermissions(employee?.userId ?? '');
   const assignedSets = userPerms?.permissionSets ?? [];
+  const customPermissionSets = permissionSets.filter((set) => !set.isSystem);
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -80,6 +93,28 @@ export default function EmployeeDetailPage({
           setEditOpen(false);
         },
         onError: () => toast.error('Failed to update employee'),
+      },
+    );
+  };
+
+  const handleAssignPermissionSet = (permissionSetId: string) => {
+    if (!employee?.userId) return;
+    assignPermissionSet(
+      { userId: employee.userId, permissionSetId },
+      {
+        onSuccess: () => toast.success('Permission set assigned successfully'),
+        onError: () => toast.error('Failed to assign permission set'),
+      },
+    );
+  };
+
+  const handleRemovePermissionSet = (permissionSetId: string) => {
+    if (!employee?.userId) return;
+    removePermissionSet(
+      { userId: employee.userId, permissionSetId },
+      {
+        onSuccess: () => toast.success('Permission set removed successfully'),
+        onError: () => toast.error('Failed to remove permission set'),
       },
     );
   };
@@ -113,6 +148,9 @@ export default function EmployeeDetailPage({
         resendInvite={handleResendInvite}
         isResending={isResending}
         onAssignAsset={canAssignAsset ? () => setAssignAssetOpen(true) : undefined}
+        onAssignRole={
+          employee.userId && canGrantPermission ? () => setPermissionSetsOpen(true) : undefined
+        }
         onAssignPermission={
           employee.userId && canGrantPermission ? () => setAssignPermOpen(true) : undefined
         }
@@ -174,6 +212,22 @@ export default function EmployeeDetailPage({
         availableAssets={[]}
         onAssign={() => {}}
       />
+
+      {employee.userId && (
+        <EmployeePermissionsPanel
+          isOpen={permissionSetsOpen}
+          onClose={() => setPermissionSetsOpen(false)}
+          employeeName={name}
+          userId={employee.userId}
+          availableSets={customPermissionSets}
+          assignedSets={assignedSets.map((set) => ({ id: set.id, name: set.name }))}
+          baseSetName="Employee Set"
+          onAssign={handleAssignPermissionSet}
+          onRemove={handleRemovePermissionSet}
+          isAssigning={isAssigningPermissionSet}
+          isRemoving={isRemovingPermissionSet}
+        />
+      )}
 
       {employee.userId && (
         <AssignPermissionPanel

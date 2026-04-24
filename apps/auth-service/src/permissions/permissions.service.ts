@@ -317,6 +317,41 @@ export class PermissionsService {
     });
   }
 
+  async getPermissionSetMembers(tenantId: string, permissionSetId: string) {
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { id: permissionSetId, tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!set) throw new NotFoundException('Permission set not found');
+
+    const assignments = await this.prisma.userPermissionSet.findMany({
+      where: { permissionSetId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: [{ user: { firstName: 'asc' } }, { user: { lastName: 'asc' } }],
+    });
+
+    return assignments.map((assignment) => ({
+      id: assignment.user.id,
+      firstName: assignment.user.firstName,
+      lastName: assignment.user.lastName,
+      email: assignment.user.email,
+      role: assignment.user.role,
+      status: assignment.user.status,
+      grantedAt: assignment.grantedAt,
+    }));
+  }
+
   async assignPermissionSet(
     grantedBy: string,
     tenantId: string,

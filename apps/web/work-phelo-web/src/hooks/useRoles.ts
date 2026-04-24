@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
   PermissionSet,
+  PermissionSetMember,
   Resource,
   UserEffectivePermissions,
   UserPermission,
@@ -24,6 +25,8 @@ export function useAssignPermissionSet() {
     onSuccess: (_, { userId }) => {
       queryClient.invalidateQueries({ queryKey: ['permissions', 'users', userId] });
       queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'], exact: false });
     },
   });
 }
@@ -38,6 +41,8 @@ export function useRemovePermissionSet() {
     onSuccess: (_, { userId }) => {
       queryClient.invalidateQueries({ queryKey: ['permissions', 'users', userId] });
       queryClient.invalidateQueries({ queryKey: ['current-tenant-users'] });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'] });
+      queryClient.invalidateQueries({ queryKey: ['permissions', 'sets'], exact: false });
     },
   });
 }
@@ -65,6 +70,19 @@ export function usePermissionSets(options?: { enabled?: boolean }) {
       return res.data;
     },
     enabled: options?.enabled !== false,
+  });
+}
+
+export function usePermissionSetMembers(permissionSetId: string, options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: ['permissions', 'sets', permissionSetId, 'members'],
+    queryFn: async () => {
+      const res = await api.get<PermissionSetMember[]>(
+        `/auth/permissions/sets/${permissionSetId}/members`,
+      );
+      return res.data;
+    },
+    enabled: !!permissionSetId && options?.enabled !== false,
   });
 }
 

@@ -13,13 +13,18 @@ import {
 } from '@/components/organisms/roles/CreatePermissionSetPanel';
 import {
   usePermissionSets,
+  usePermissionSetMembers,
+  useAssignPermissionSet,
+  useRemovePermissionSet,
   useCreatePermissionSet,
   useUpdatePermissionSet,
 } from '@/hooks/useRoles';
+import { useCurrentTenantUsers } from '@/hooks/useTenants';
 import { useToast } from '@/hooks/useToast';
 import type { PermissionSet } from '@/types/roles';
 import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
+import { PermissionSetMembersPanel } from '@/components/organisms/roles/PermissionSetMembersPanel';
 
 export function RolesContent() {
   const toast = useToast();
@@ -27,14 +32,22 @@ export function RolesContent() {
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<PermissionSet | null>(null);
+  const [membersTarget, setMembersTarget] = useState<PermissionSet | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PermissionSet | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const { data: setsRaw = [], isLoading } = usePermissionSets();
+  const { data: currentTenantUsers = [] } = useCurrentTenantUsers();
+  const { data: members = [], isLoading: isLoadingMembers } = usePermissionSetMembers(
+    membersTarget?.id ?? '',
+    { enabled: !!membersTarget },
+  );
   const sets: PermissionSet[] = Array.isArray(setsRaw) ? setsRaw : [];
 
+  const { mutate: assignPermissionSet, isPending: isAssigningMember } = useAssignPermissionSet();
+  const { mutate: removePermissionSet, isPending: isRemovingMember } = useRemovePermissionSet();
   const { mutate: createSet, isPending: isCreating } = useCreatePermissionSet();
   const { mutate: updateSet, isPending: isSaving } = useUpdatePermissionSet();
 
@@ -150,6 +163,7 @@ export function RolesContent() {
             ...((row as any).isSystem
               ? []
               : [
+                  { label: 'Manage Members', onClick: () => setMembersTarget(row) },
                   { label: 'Edit', onClick: () => setEditTarget(row) },
                   { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
                 ]),
@@ -188,6 +202,37 @@ export function RolesContent() {
             );
           }}
           isSubmitting={isSaving}
+        />
+      )}
+
+      {membersTarget && (
+        <PermissionSetMembersPanel
+          isOpen={!!membersTarget}
+          onClose={() => setMembersTarget(null)}
+          permissionSet={membersTarget}
+          members={members}
+          users={currentTenantUsers}
+          isLoadingMembers={isLoadingMembers}
+          isAssigning={isAssigningMember}
+          isRemoving={isRemovingMember}
+          onAssign={(userId) => {
+            assignPermissionSet(
+              { userId, permissionSetId: membersTarget.id },
+              {
+                onSuccess: () => toast.success('Member added to permission set'),
+                onError: (err) => toast.error(extractError(err, 'Failed to add member')),
+              },
+            );
+          }}
+          onRemove={(userId) => {
+            removePermissionSet(
+              { userId, permissionSetId: membersTarget.id },
+              {
+                onSuccess: () => toast.success('Member removed from permission set'),
+                onError: (err) => toast.error(extractError(err, 'Failed to remove member')),
+              },
+            );
+          }}
         />
       )}
 
