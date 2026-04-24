@@ -28,7 +28,7 @@ export function useUpcomingBirthdays() {
     queryKey: ['dashboard-birthdays'],
     queryFn: () =>
       api
-        .get<UpcomingBirthday[] | { data: UpcomingBirthday[] }>('/hr/dashboard/upcoming-birthdays')
+        .get<{ birthdays: UpcomingBirthday[] }>('/hr/dashboard/upcoming-birthdays')
         .then((r) => r.data),
   });
 }

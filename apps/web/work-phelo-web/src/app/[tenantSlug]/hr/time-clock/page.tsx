@@ -19,7 +19,7 @@ import {
   useClockIn,
   useClockOut,
   useMyAttendanceHistory,
-  useAttendanceHistory,
+  useAttendanceRecords,
   useCorrectionRequests,
   useReviewCorrectionRequest,
 } from '@/hooks/useTimeClock';
@@ -70,7 +70,14 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const [filterStatus, setFilterStatus] = useState('');
   const [recordsSearch, setRecordsSearch] = useState('');
 
-  const { data: recordsData, isLoading: recordsLoading } = useAttendanceHistory(recordsPage);
+  const { data: recordsData, isLoading: recordsLoading } = useAttendanceRecords({
+    page: recordsPage,
+    fromDate: filterFrom,
+    toDate: filterTo,
+    departmentId: filterDept,
+    status: filterStatus,
+    search: recordsSearch,
+  });
 
   const { data: departmentsRaw } = useDepartments();
   const departments = Array.isArray(departmentsRaw) ? departmentsRaw : [];

@@ -20,7 +20,6 @@ import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
-import { UpcomingBirthday } from '@/types/hr';
 import { formatTime } from '@/lib/formatters';
 
 /* ── Avatar colour picker ── */
@@ -103,16 +102,20 @@ export default function EmployeeDashboardPage({
     .slice(0, 5);
 
   /* ── Derived: birthdays ── */
-  const rawBirthdays = Array.isArray(birthdaysRaw)
-    ? birthdaysRaw
-    : ((birthdaysRaw as unknown as { data?: UpcomingBirthday[] })?.data ?? []);
+  const rawBirthdays = birthdaysRaw?.birthdays ?? [];
   const birthdays = (Array.isArray(rawBirthdays) ? rawBirthdays : []).map((b) => {
-    const name = `${b.firstName} ${b.lastName}`;
+    const name = b.name;
+    const initials = name
+      .split(' ')
+      .map((part) => part[0] ?? '')
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
     return {
       id: b.id,
       name,
       date: new Date(b.dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
-      initials: `${b.firstName[0]}${b.lastName[0]}`.toUpperCase(),
+      initials,
       color: avatarColor(name),
     };
   });
