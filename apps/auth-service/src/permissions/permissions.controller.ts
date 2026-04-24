@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   UseGuards,
@@ -196,6 +197,17 @@ export class PermissionsController {
       id,
       dto,
     );
+  }
+
+  @Delete('sets/:id')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @ApiOperation({ summary: 'Delete a custom permission set' })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiResponse({ status: 200, description: 'Permission set deleted' })
+  @ApiResponse({ status: 403, description: 'System sets cannot be deleted' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  deleteSet(@Param('id') id: string, @Req() req: any) {
+    return this.permissionsService.deletePermissionSet(req.user.tenantId, id);
   }
 
   @Post('sets/assign')

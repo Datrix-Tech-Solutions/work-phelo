@@ -342,6 +342,18 @@ export class PermissionsService {
     });
   }
 
+  async deletePermissionSet(tenantId: string, id: string) {
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { id, tenantId },
+    });
+    if (!set) throw new NotFoundException('Permission set not found');
+    if (set.isSystem) {
+      throw new ForbiddenException('System permission sets cannot be deleted');
+    }
+    await this.prisma.permissionSet.delete({ where: { id } });
+    return { message: 'Permission set deleted' };
+  }
+
   async removePermissionSet(
     tenantId: string,
     userId: string,
