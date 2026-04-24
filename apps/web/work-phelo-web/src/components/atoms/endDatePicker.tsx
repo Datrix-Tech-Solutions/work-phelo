@@ -43,10 +43,14 @@ export function MonthPicker({
   const currentYear = today.getFullYear();
   const currentMonth = today.getMonth();
 
-  // Use current year or the year from value
-  const [viewYear, setViewYear] = useState(value ? parseInt(value.split('-')[0]) : currentYear);
+  // Normalise to YYYY-MM — backend may return a full date string (YYYY-MM-DD or ISO)
+  const normalizedValue = value ? value.substring(0, 7) : undefined;
 
-  const selectedDate = value ? new Date(value + '-01') : null;
+  const [viewYear, setViewYear] = useState(
+    normalizedValue ? parseInt(normalizedValue.split('-')[0]) : currentYear,
+  );
+
+  const selectedDate = normalizedValue ? new Date(normalizedValue + '-01') : null;
 
   // Generate months for the current viewed year
   const months = Array.from({ length: 12 }, (_, i) => {
@@ -70,9 +74,10 @@ export function MonthPicker({
   const goToPrevYear = () => setViewYear((y) => y - 1);
   const goToNextYear = () => setViewYear((y) => y + 1);
 
-  const displayText = selectedDate
-    ? `${MONTH_NAMES[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`
-    : placeholder;
+  const displayText =
+    selectedDate && !isNaN(selectedDate.getTime())
+      ? `${MONTH_NAMES[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`
+      : placeholder;
 
   return (
     <div className={cn('relative', className)}>
@@ -121,7 +126,7 @@ export function MonthPicker({
                 className={cn(
                   'py-3 px-4 text-sm rounded-xl transition-all',
                   m.isPast && 'opacity-40 cursor-not-allowed',
-                  value === m.value
+                  normalizedValue === m.value
                     ? 'bg-brand text-white font-medium'
                     : !m.isPast && 'hover:bg-gray-100 text-gray-700',
                 )}

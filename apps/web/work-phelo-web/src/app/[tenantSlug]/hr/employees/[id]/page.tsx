@@ -32,8 +32,9 @@ import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps
 import { EmployeeActionsBar } from '@/components/molecules/employees/employeeActionBar';
 import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
 import { EmploymentDetailsSection } from '@/components/molecules/employees/employeeDetailsSection';
-import { AccountDetailsSection } from '@/components/molecules/employees/accountDetailSection';
 import { AssetsSection } from '@/components/molecules/employees/assetSection';
+import { BankingComplianceSection } from '@/components/molecules/employees/bankingComplianceSection';
+import { EmergencyContactSection } from '@/components/molecules/employees/emergencyContactSection';
 import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
 
 export default function EmployeeDetailPage({
@@ -172,7 +173,8 @@ export default function EmployeeDetailPage({
             departments={departments}
             allHrEmployees={allHrEmployees}
           />
-          <AccountDetailsSection employee={employee} />
+          <BankingComplianceSection employee={employee} />
+          <EmergencyContactSection employee={employee} />
           <AssetsSection assets={employee.assets || []} />
         </div>
       </div>

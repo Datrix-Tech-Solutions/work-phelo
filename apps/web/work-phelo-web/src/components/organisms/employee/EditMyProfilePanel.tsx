@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Employee, UpdateEmployeePayload, Gender, MaritalStatus } from '@/types/hr';
+import { PhoneInput } from '@/components/atoms/PhoneInput';
 
 interface EditMyProfilePanelProps {
   isOpen: boolean;
@@ -99,10 +100,18 @@ export function EditMyProfilePanel({
           error={form.formState.errors.lastName}
           placeholder="eg; Boateng"
         />
-        <FormField
-          label="Phone"
-          registration={form.register('phone')}
-          placeholder="+233 24 000 0000"
+        <Controller
+          control={form.control}
+          name="phone"
+          render={({ field, fieldState }) => (
+            <PhoneInput
+              label="Phone"
+              value={field.value}
+              onChange={field.onChange}
+              error={fieldState.error?.message}
+              placeholder="30 000 0000"
+            />
+          )}
         />
         <DatePicker
           label="Date of Birth"
@@ -164,11 +173,20 @@ export function EditMyProfilePanel({
           registration={form.register('emergencyName')}
           placeholder="eg; Abena Boateng"
         />
-        <FormField
-          label="Phone"
-          registration={form.register('emergencyPhone')}
-          placeholder="+233 24 000 0000"
+        <Controller
+          control={form.control}
+          name="emergencyPhone"
+          render={({ field, fieldState }) => (
+            <PhoneInput
+              label="Phone"
+              value={field.value}
+              onChange={field.onChange}
+              error={fieldState.error?.message}
+              placeholder="30 000 0000"
+            />
+          )}
         />
+
         <FormField
           label="Relationship"
           registration={form.register('emergencyRelation')}

@@ -3,12 +3,13 @@
 import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { useCreateBranch, useUpdateBranch } from '@/hooks';
+import { useCreateBranch, useUpdateBranch, useBranches } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import type { Branch, Employee } from '@/types/hr';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
@@ -40,6 +41,12 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
 
   const toast = useToast();
   const [successBranch, setSuccessBranch] = useState<string | null>(null);
+  const [headOfficeConfirmOpen, setHeadOfficeConfirmOpen] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<
+    Parameters<ReturnType<typeof useCreateBranch>['mutate']>[0] | null
+  >(null);
+
+  const { data: branches } = useBranches();
 
   const form = useForm<BranchForm>({
     defaultValues: {
@@ -123,6 +130,12 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
         },
       );
     } else {
+      const existingHeadOffice = branches?.find((b) => b.isHeadOffice);
+      if (data.isHeadOffice && existingHeadOffice) {
+        setPendingPayload(payload);
+        setHeadOfficeConfirmOpen(true);
+        return;
+      }
       createBranch(payload, {
         onSuccess: () => {
           setSuccessBranch(data.name);
@@ -133,6 +146,38 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
     }
   });
 
+  const handleConfirmChangeHeadOffice = () => {
+    if (!pendingPayload) return;
+    const existingHeadOffice = branches?.find((b) => b.isHeadOffice);
+    const doCreate = () => {
+      createBranch(pendingPayload, {
+        onSuccess: () => {
+          setHeadOfficeConfirmOpen(false);
+          setPendingPayload(null);
+          setSuccessBranch((pendingPayload as { name: string }).name);
+          handleClose();
+        },
+        onError: (err) => {
+          toast.error(extractError(err, 'Failed to create branch'));
+          setHeadOfficeConfirmOpen(false);
+          setPendingPayload(null);
+        },
+      });
+    };
+
+    if (existingHeadOffice) {
+      updateBranch(
+        { id: existingHeadOffice.id, isHeadOffice: false },
+        {
+          onSuccess: doCreate,
+          onError: (err) => toast.error(extractError(err, 'Failed to update existing head office')),
+        },
+      );
+    } else {
+      doCreate();
+    }
+  };
+
   const managerOptions = [
     { value: '', label: 'No manager assigned' },
     ...employees.map((e) => ({
@@ -142,8 +187,34 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
     })),
   ];
 
+  const existingHeadOfficeName = branches?.find((b) => b.isHeadOffice)?.name;
+
   return (
     <>
+      <Modal
+        isOpen={headOfficeConfirmOpen}
+        onClose={() => setHeadOfficeConfirmOpen(false)}
+        title="Head Office Already Assigned"
+        description={`"${existingHeadOfficeName}" is currently your head office. Would you like to reassign it to this new branch, or keep the current one?`}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setHeadOfficeConfirmOpen(false)}
+              disabled={isCreating}
+            >
+              Keep Current
+            </Button>
+            <Button
+              isLoading={isCreating}
+              loadingText="Creating…"
+              onClick={handleConfirmChangeHeadOffice}
+            >
+              Change Head Office
+            </Button>
+          </>
+        }
+      />
       <SuccessModal
         isOpen={!!successBranch}
         onClose={() => setSuccessBranch(null)}

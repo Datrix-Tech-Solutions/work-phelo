@@ -72,23 +72,25 @@ export function LiveAttendanceTable() {
   ];
 
   return (
-    <div className="flex flex-col gap-6 flex-1 min-h-0">
+    <div className="flex flex-col gap-5 flex-1 min-h-0">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 shrink-0">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 shrink-0">
         {STAT_CARDS.map((card) => (
           <div
             key={card.label}
-            className={cn('rounded-card border px-5 py-5 flex flex-col gap-1', card.bg)}
+            className={cn('rounded-card border px-4 py-3 flex flex-col gap-1', card.bg)}
           >
             <p className="text-xs font-medium text-gray-500">{card.label}</p>
-            <p className={cn('text-4xl font-bold tabular-nums', card.color)}>{card.value}</p>
-            {stats && <p className="text-xs text-gray-400 mt-0.5">of {stats.total} employees</p>}
+            <div className="flex items-baseline gap-1.5">
+              <p className={cn('text-2xl font-bold tabular-nums', card.color)}>{card.value}</p>
+              {stats && <span className="text-xs text-gray-400">/ {stats.total}</span>}
+            </div>
           </div>
         ))}
       </div>
 
       {/* List header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
           <h3 className="text-sm font-semibold text-gray-900">Live Attendance</h3>

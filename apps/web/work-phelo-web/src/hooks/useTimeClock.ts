@@ -138,6 +138,21 @@ export function useMyAttendanceHistory(page: number = 1) {
     },
   });
 }
+export function useAttendanceHistory(page: number = 1) {
+  return useQuery<{ data: TimeEntry[]; totalPages: number }>({
+    queryKey: ['timeclock', 'history', page],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/hr/time/attendance', { params: { mine: 'false' } });
+        const raw = res.data;
+        const records: RawAttendanceRecord[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+        return { data: records.map(transformAttendanceRecord), totalPages: 1 };
+      } catch {
+        return { data: [], totalPages: 1 };
+      }
+    },
+  });
+}
 
 export function useSubmitCorrectionRequest() {
   const queryClient = useQueryClient();
@@ -194,13 +209,19 @@ export function useAttendanceRecords(params: {
     queryFn: async () => {
       const res = await api.get('/hr/time/attendance', {
         params: {
+          page: params.page,
           employeeId: params.employeeId || undefined,
           from: params.fromDate || undefined,
           to: params.toDate || undefined,
+          departmentId: params.departmentId || undefined,
+          status: params.status || undefined,
+          search: params.search || undefined,
         },
       });
-      const raw = res.data as TimeEntry[] | { data: TimeEntry[]; totalPages: number };
-      const records: TimeEntry[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
+      const raw = res.data as
+        | RawAttendanceRecord[]
+        | { data: RawAttendanceRecord[]; totalPages: number };
+      const records: RawAttendanceRecord[] = Array.isArray(raw) ? raw : (raw?.data ?? []);
       const totalPages = Array.isArray(raw) ? 1 : (raw?.totalPages ?? 1);
       return { data: records.map(transformAttendanceRecord), totalPages };
     },
