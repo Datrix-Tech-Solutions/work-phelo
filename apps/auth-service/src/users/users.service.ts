@@ -50,7 +50,7 @@ export class UsersService {
     if (existing)
       throw new ConflictException('A user with this email already exists.');
 
-    const userRole = ((dto.role as any) || 'EMPLOYEE') as string;
+    const userRole = dto.role ?? UserSystemRole.EMPLOYEE;
 
     // One Company Admin per tenant
     if (userRole === UserSystemRole.TENANT_ADMIN) {
@@ -86,7 +86,7 @@ export class UsersService {
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
-        role: userRole as any,
+        role: userRole,
         status: 'PENDING_VERIFICATION',
         forcePasswordReset: true,
         inviteToken,

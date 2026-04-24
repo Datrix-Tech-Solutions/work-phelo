@@ -1,5 +1,6 @@
 import { Controller, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
+import type { Channel, ConsumeMessage } from 'amqplib';
 import { NotificationService } from './notification.service';
 import {
   WithMeta,
@@ -22,7 +23,9 @@ export class NotificationHandler {
   constructor(private readonly notificationService: NotificationService) {}
 
   private ack(context: RmqContext) {
-    context.getChannelRef().ack(context.getMessage());
+    const channel = context.getChannelRef() as Channel;
+    const message = context.getMessage() as ConsumeMessage;
+    channel.ack(message);
   }
 
   private formatError(error: unknown) {

@@ -543,13 +543,6 @@ export class LeaveService {
         actor.id,
       );
       where.employeeId = actorEmployee.id;
-    } else if (isEmployeeSelfServiceUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      where.employeeId = actorEmployee.id;
     }
 
     return this.prisma.leaveRequest.findMany({
