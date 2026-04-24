@@ -198,12 +198,14 @@ export class PermissionsService {
     }
 
     if (dto.resources.length > 0) {
-      const resourceIds = dto.resources.map((r) => r.resourceId);
+      const uniqueResourceIds = [
+        ...new Set(dto.resources.map((r) => r.resourceId)),
+      ];
       const found = await this.prisma.resource.findMany({
-        where: { id: { in: resourceIds } },
+        where: { id: { in: uniqueResourceIds } },
         select: { id: true },
       });
-      if (found.length !== resourceIds.length) {
+      if (found.length !== uniqueResourceIds.length) {
         throw new NotFoundException('One or more resources not found');
       }
     }
@@ -235,12 +237,14 @@ export class PermissionsService {
     if (!set) throw new NotFoundException('Permission set not found');
 
     if (dto.resources.length > 0) {
-      const resourceIds = dto.resources.map((r) => r.resourceId);
+      const uniqueResourceIds = [
+        ...new Set(dto.resources.map((r) => r.resourceId)),
+      ];
       const found = await this.prisma.resource.findMany({
-        where: { id: { in: resourceIds } },
+        where: { id: { in: uniqueResourceIds } },
         select: { id: true },
       });
-      if (found.length !== resourceIds.length) {
+      if (found.length !== uniqueResourceIds.length) {
         throw new NotFoundException('One or more resources not found');
       }
     }
@@ -274,12 +278,14 @@ export class PermissionsService {
     resources: { resourceId: string; action: string }[],
   ) {
     if (resources.length > 0) {
-      const resourceIds = resources.map((r) => r.resourceId);
+      const uniqueResourceIds = [
+        ...new Set(resources.map((r) => r.resourceId)),
+      ];
       const found = await this.prisma.resource.findMany({
-        where: { id: { in: resourceIds } },
+        where: { id: { in: uniqueResourceIds } },
         select: { id: true },
       });
-      if (found.length !== resourceIds.length) {
+      if (found.length !== uniqueResourceIds.length) {
         throw new NotFoundException('One or more resources not found');
       }
     }
