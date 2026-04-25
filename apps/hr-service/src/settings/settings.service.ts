@@ -39,6 +39,43 @@ export class SettingsService {
     };
   }
 
+  async getAttendanceSettings(tenantId: string) {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { lateArrivalThresholdMinutes: true },
+    });
+    return {
+      lateArrivalThresholdMinutes: config?.lateArrivalThresholdMinutes ?? 0,
+    };
+  }
+
+  async updateAttendanceSettings(
+    tenantId: string,
+    lateArrivalThresholdMinutes: number,
+    adminUserId?: string | null,
+    adminEmail?: string | null,
+  ) {
+    const config = await this.prisma.tenantConfig.upsert({
+      where: { tenantId },
+      create: {
+        tenantId,
+        adminEmail: adminEmail ?? '',
+        adminUserId: adminUserId ?? null,
+        lateArrivalThresholdMinutes,
+      },
+      update: {
+        lateArrivalThresholdMinutes,
+        ...(adminUserId ? { adminUserId } : {}),
+        ...(adminEmail ? { adminEmail } : {}),
+      },
+      select: { lateArrivalThresholdMinutes: true },
+    });
+    return {
+      message: 'Attendance settings updated successfully',
+      lateArrivalThresholdMinutes: config.lateArrivalThresholdMinutes,
+    };
+  }
+
   async updateResignationSettings(
     tenantId: string,
     resignationNoticePeriodDays: number,

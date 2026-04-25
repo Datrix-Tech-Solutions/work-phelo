@@ -12,6 +12,7 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { UpdateResignationSettingsDto } from './dto/update-resignation-settings.dto';
+import { UpdateAttendanceSettingsDto } from './dto/update-attendance-settings.dto';
 import { SettingsService } from './settings.service';
 
 @ApiTags('Settings')
@@ -48,6 +49,31 @@ export class SettingsController {
     return this.settingsService.updateResignationSettings(
       req.user.tenantId,
       dto.resignationNoticePeriodDays,
+      req.user.role === 'TENANT_ADMIN' ? req.user.id : null,
+      req.user.role === 'TENANT_ADMIN' ? req.user.email : null,
+    );
+  }
+
+  @Get('attendance')
+  @ApiOperation({ summary: 'Get attendance settings for the current tenant' })
+  @ApiResponse({ status: 200, description: 'Attendance settings retrieved' })
+  getAttendanceSettings(@Req() req: any) {
+    return this.settingsService.getAttendanceSettings(req.user.tenantId);
+  }
+
+  @Patch('attendance')
+  @RequirePermissions(Permission.MANAGE_HR_SETTINGS)
+  @ApiOperation({
+    summary: 'Update attendance settings for the current tenant',
+  })
+  @ApiResponse({ status: 200, description: 'Attendance settings updated' })
+  updateAttendanceSettings(
+    @Body() dto: UpdateAttendanceSettingsDto,
+    @Req() req: any,
+  ) {
+    return this.settingsService.updateAttendanceSettings(
+      req.user.tenantId,
+      dto.lateArrivalThresholdMinutes,
       req.user.role === 'TENANT_ADMIN' ? req.user.id : null,
       req.user.role === 'TENANT_ADMIN' ? req.user.email : null,
     );
