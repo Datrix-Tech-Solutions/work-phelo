@@ -57,6 +57,7 @@ export enum Permission {
   APPROVE_TIME_CORRECTION = 'approve:time_correction',
   READ_TIMESHEETS = 'read:timesheets',
   APPROVE_TIMESHEET = 'approve:timesheet',
+  READ_SCHEDULES = 'read:schedules',
   MANAGE_SCHEDULES = 'manage:schedules',
 
   // ── Payroll ───────────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.APPROVE_TIME_CORRECTION]: ['time-corrections:APPROVE'],
   [Permission.READ_TIMESHEETS]: ['timesheets:VIEW'],
   [Permission.APPROVE_TIMESHEET]: ['timesheets:APPROVE'],
+  [Permission.READ_SCHEDULES]: ['schedules:VIEW'],
   [Permission.MANAGE_SCHEDULES]: ['schedules:CREATE', 'schedules:EDIT'],
 
   // Payroll
