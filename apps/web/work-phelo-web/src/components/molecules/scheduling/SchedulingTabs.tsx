@@ -2,15 +2,22 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 
 interface Props {
   activeTab: string;
+  hasEmployeeProfile: boolean;
+  canManageSchedules: boolean;
   onTabChange: (tab: string) => void;
 }
 
-const TABS = [
-  { key: 'my-schedule', label: 'My Schedule' },
-  { key: 'shift-scheduler', label: 'Shift Scheduler' },
-  { key: 'swap-requests', label: 'Swap Requests' },
-];
+export function SchedulingTabs({
+  activeTab,
+  hasEmployeeProfile,
+  canManageSchedules,
+  onTabChange,
+}: Props) {
+  const tabs = [
+    ...(hasEmployeeProfile ? [{ key: 'my-schedule', label: 'My Schedule' }] : []),
+    ...(canManageSchedules ? [{ key: 'shift-scheduler', label: 'Shift Scheduler' }] : []),
+    ...(canManageSchedules ? [{ key: 'swap-requests', label: 'Swap Requests' }] : []),
+  ];
 
-export function SchedulingTabs({ activeTab, onTabChange }: Props) {
-  return <TabBar tabs={TABS} activeTab={activeTab} onTabChange={onTabChange} />;
+  return <TabBar tabs={tabs} activeTab={activeTab} onTabChange={onTabChange} />;
 }

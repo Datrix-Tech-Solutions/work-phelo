@@ -1,40 +1,19 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, SearchIcon, Plus } from 'lucide-react';
+import { ChevronRight, SearchIcon, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEmployees } from '@/hooks/hr/useEmployees';
 import { useDepartments } from '@/hooks/useDepartments';
 import { ShiftPanel, Shift } from './ShiftPanel';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
-
-/* ── Week helpers ────────────────────────────────────────── */
-
-function getMondayOf(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addDays(date: Date, n: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
-}
-
-function toISODate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function formatWeekRange(monday: Date): string {
-  const friday = addDays(monday, 4);
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-  return `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${friday.toLocaleDateString('en-US', opts)}`;
-}
+import {
+  WeekSelector,
+  getMondayOf,
+  addDays,
+  toISODate,
+} from '@/components/molecules/scheduling/WeekSelector';
 
 function formatTime(time: string): string {
   if (!time) return '';
@@ -241,26 +220,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
           </div>
         </div>
 
-        {/* Week selector */}
-        <div className="flex items-center gap-2 border border-gray-200 rounded-card bg-white px-4 py-2.5 shadow-sm shrink-0">
-          <button
-            onClick={prevWeek}
-            className="text-gray-400 hover:text-gray-700 transition-colors p-0.5"
-            aria-label="Previous week"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-semibold text-gray-800 min-w-45 text-center">
-            {formatWeekRange(weekStart)}
-          </span>
-          <button
-            onClick={nextWeek}
-            className="text-gray-400 hover:text-gray-700 transition-colors p-0.5"
-            aria-label="Next week"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+        <WeekSelector weekStart={weekStart} onPrev={prevWeek} onNext={nextWeek} />
       </div>
 
       {/* ── Grid ── */}
