@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -306,6 +307,47 @@ export class AppraisalsService {
         }),
       },
     });
+  }
+
+  async seedCycleFromTemplate(tenantId: string, cycleId: string) {
+    const cycle = await this.prisma.appraisalCycle.findFirst({
+      where: { id: cycleId, tenantId },
+      include: { kpis: true },
+    });
+    if (!cycle) throw new NotFoundException('Appraisal cycle not found');
+    if (!cycle.templateId)
+      throw new BadRequestException('Cycle has no linked template');
+    if (cycle.kpis.length > 0)
+      throw new ConflictException(
+        'Cycle already has KPIs. Remove existing KPIs before re-seeding.',
+      );
+
+    const template = await this.prisma.appraisalTemplate.findFirst({
+      where: { id: cycle.templateId, tenantId },
+      include: { kpis: true },
+    });
+    if (!template) throw new NotFoundException('Linked template not found');
+    if (!template.kpis.length)
+      throw new BadRequestException('Template has no KPIs to seed from');
+
+    const seeded = await this.prisma.$transaction(
+      template.kpis.map((kpi) =>
+        this.prisma.appraisalKpi.create({
+          data: {
+            tenantId,
+            cycleId,
+            title: kpi.title,
+            description: kpi.description,
+            weight: kpi.weight,
+            maxScore: kpi.maxScore,
+            selfWeight: template.selfAssessmentWeight,
+            managerWeight: template.managerAssessmentWeight,
+          },
+        }),
+      ),
+    );
+
+    return { seeded: seeded.length, kpis: seeded };
   }
 
   // ── Templates ──────────────────────────────────────────────────────────────

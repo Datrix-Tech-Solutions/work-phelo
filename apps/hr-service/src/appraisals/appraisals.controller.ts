@@ -186,6 +186,30 @@ export class AppraisalsController {
     );
   }
 
+  @Post('cycles/:cycleId/seed-from-template')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({
+    summary:
+      'Seed cycle KPIs from its linked template — copies template KPIs and weights into the cycle',
+  })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiResponse({ status: 200, description: 'KPIs seeded from template' })
+  @ApiResponse({
+    status: 400,
+    description: 'Cycle has no linked template, or template has no KPIs',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Cycle already has KPIs — remove them first',
+  })
+  seedCycleFromTemplate(@Param('cycleId') cycleId: string, @Req() req: any) {
+    return this.appraisalsService.seedCycleFromTemplate(
+      req.user.tenantId,
+      cycleId,
+    );
+  }
+
   // ── Templates ───────────────────────────────────────────────────────────────
 
   @Get('templates')
