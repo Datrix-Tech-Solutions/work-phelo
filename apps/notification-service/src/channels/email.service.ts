@@ -792,4 +792,96 @@ export class EmailService {
       `,
     );
   }
+
+  async sendTimeCorrectionNotification(
+    to: string,
+    recipientFirstName: string,
+    employeeFullName: string,
+    attendanceDate: string,
+    requestedIn: string | null,
+    requestedOut: string | null,
+    reason: string,
+    detailLink?: string,
+  ): Promise<boolean> {
+    const formatTime = (iso: string | null) =>
+      iso
+        ? new Date(iso).toLocaleTimeString('en-GB', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+          })
+        : '—';
+
+    return this.send(
+      to,
+      `Time correction request pending your approval — ${employeeFullName}`,
+      `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Time Correction Request</title>
+</head>
+<body style="margin:0; padding:0; background:#f4f4f4; font-family:Arial, sans-serif;">
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; margin:40px auto; border-radius:8px; overflow:hidden;">
+    <tr>
+      <td style="padding:20px 30px;">
+        <h2 style="margin:0; font-weight:bold;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h2>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#eef1f4; padding:40px 30px;">
+        <p style="font-size:28px; font-weight:600; color:#555; margin:0;">Time Correction Request</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
+        <p>Hi ${recipientFirstName},</p>
+        <p><strong>${employeeFullName}</strong> has submitted a time correction request that requires your approval.</p>
+        <p><strong>Correction details:</strong></p>
+        <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:14px;">
+          <tr style="background:#f9fafb;">
+            <td style="padding:10px 12px; border:1px solid #e5e7eb; font-weight:600; width:40%;">Date</td>
+            <td style="padding:10px 12px; border:1px solid #e5e7eb;">${attendanceDate}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 12px; border:1px solid #e5e7eb; font-weight:600;">Requested Clock-In</td>
+            <td style="padding:10px 12px; border:1px solid #e5e7eb;">${formatTime(requestedIn)}</td>
+          </tr>
+          <tr style="background:#f9fafb;">
+            <td style="padding:10px 12px; border:1px solid #e5e7eb; font-weight:600;">Requested Clock-Out</td>
+            <td style="padding:10px 12px; border:1px solid #e5e7eb;">${formatTime(requestedOut)}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 12px; border:1px solid #e5e7eb; font-weight:600;">Reason</td>
+            <td style="padding:10px 12px; border:1px solid #e5e7eb;">${reason}</td>
+          </tr>
+        </table>
+        ${
+          detailLink
+            ? `
+        <p style="margin:24px 0;">
+          <a href="${detailLink}" style="background:#1a3557; color:#ffffff; padding:12px 20px; text-decoration:none; border-radius:6px; display:inline-block; font-weight:500;">
+            Review Correction →
+          </a>
+        </p>`
+            : ''
+        }
+        <p style="color:#777; font-size:13px;">Please log in to WorkPhelo to approve or reject this request.</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:20px 30px; border-top:1px solid #eee;">
+        <h3 style="margin:0;">
+          <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+        </h3>
+        <p style="color:#888; font-size:12px; margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+    );
+  }
 }

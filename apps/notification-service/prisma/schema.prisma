@@ -38,6 +38,7 @@ enum NotificationType {
   LEAVE_REQUESTED
   LEAVE_REVIEWED
   LEAVE_CANCELLED
+  TIME_CORRECTION_SUBMITTED
 
   @@schema("notify")
 }

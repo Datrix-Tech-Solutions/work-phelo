@@ -573,19 +573,74 @@ model PayrollItem {
 
 // ── Appraisal ─────────────────────────────────────────────────────────────
 
-model AppraisalCycle {
-  id          String    @id @default(uuid())
-  tenantId    String
+model AppraisalTemplate {
+  id                      String   @id @default(uuid())
+  tenantId                String
+  name                    String
+  selfAssessmentWeight    Int      @default(50)
+  managerAssessmentWeight Int      @default(50)
+  isActive                Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  kpis   AppraisalTemplateKpi[]
+  cycles AppraisalCycle[]
+
+  @@schema("hr")
+}
+
+model AppraisalTemplateKpi {
+  id          String            @id @default(uuid())
+  templateId  String
   title       String
+  weight      Int
+  maxScore    Int               @default(5)
   description String?
-  startDate   DateTime
-  endDate     DateTime
-  isActive    Boolean   @default(true)
-  createdBy   String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime          @default(now())
+
+  template    AppraisalTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@schema("hr")
+}
+
+model AppraisalCycle {
+  id                      String    @id @default(uuid())
+  tenantId                String
+  title                   String
+  description             String?
+  startDate               DateTime
+  endDate                 DateTime
+  selfAssessmentDeadline  DateTime?
+  managerReviewDeadline   DateTime?
+  frequency               String?
+  departmentIds           String[]  @default([])
+  templateId              String?
+  isActive                Boolean   @default(true)
+  createdBy               String
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   appraisals  Appraisal[]
+  kpis        AppraisalKpi[]
+  template    AppraisalTemplate? @relation(fields: [templateId], references: [id])
+
+  @@schema("hr")
+}
+
+model AppraisalKpi {
+  id            String         @id @default(uuid())
+  tenantId      String
+  cycleId       String
+  title         String
+  description   String?
+  weight        Int
+  maxScore      Int            @default(5)
+  selfWeight    Int            @default(50)
+  managerWeight Int            @default(50)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  cycle         AppraisalCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
 
   @@schema("hr")
 }

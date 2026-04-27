@@ -5,14 +5,18 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import {
   Controller,
   Get,
   Post,
   Patch,
+  Put,
+  Delete,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
   HttpCode,
@@ -20,7 +24,10 @@ import {
 } from '@nestjs/common';
 import { AppraisalsService } from './appraisals.service';
 import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
+import { UpdateAppraisalCycleDto } from './dto/update-cycle.dto';
 import { SubmitReviewDto } from './dto/submit-review.dto';
+import { CreateAppraisalTemplateDto } from './dto/create-template.dto';
+import { CreateAppraisalKpiDto } from './dto/create-kpi.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -39,6 +46,8 @@ import { RequestUser } from '@work-phelo/types';
 @ApiBearerAuth('access-token')
 export class AppraisalsController {
   constructor(private readonly appraisalsService: AppraisalsService) {}
+
+  // ── Cycles ──────────────────────────────────────────────────────────────────
 
   @Post('cycles')
   @HttpCode(HttpStatus.CREATED)
@@ -61,17 +70,48 @@ export class AppraisalsController {
     return this.appraisalsService.getCycles(req.user.tenantId);
   }
 
-  @Post('cycles/:id/start')
+  @Get('cycles/:cycleId')
+  @ApiOperation({ summary: 'Get a single appraisal cycle' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiResponse({ status: 200, description: 'Appraisal cycle retrieved' })
+  getCycle(@Param('cycleId') cycleId: string, @Req() req: any) {
+    return this.appraisalsService.getCycle(req.user.tenantId, cycleId);
+  }
+
+  @Patch('cycles/:cycleId')
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Update an appraisal cycle' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiBody({ type: UpdateAppraisalCycleDto })
+  @ApiResponse({ status: 200, description: 'Appraisal cycle updated' })
+  updateCycle(
+    @Param('cycleId') cycleId: string,
+    @Body() dto: UpdateAppraisalCycleDto,
+    @Req() req: any,
+  ) {
+    return this.appraisalsService.updateCycle(req.user.tenantId, cycleId, dto);
+  }
+
+  @Delete('cycles/:cycleId')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Delete an appraisal cycle' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiResponse({ status: 200, description: 'Appraisal cycle deleted' })
+  deleteCycle(@Param('cycleId') cycleId: string, @Req() req: any) {
+    return this.appraisalsService.deleteCycle(req.user.tenantId, cycleId);
+  }
+
+  @Post('cycles/:cycleId/start')
   @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
   @ApiOperation({
     summary:
       'Start an appraisal cycle — generates appraisal records for all employees',
   })
-  @ApiParam({ name: 'id', description: 'Appraisal cycle UUID' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
   @ApiResponse({ status: 200, description: 'Appraisal cycle started' })
-  @ApiResponse({ status: 404, description: 'Cycle not found' })
-  startCycle(@Param('id') id: string, @Req() req: any) {
-    return this.appraisalsService.startCycle(req.user.tenantId, id);
+  startCycle(@Param('cycleId') cycleId: string, @Req() req: any) {
+    return this.appraisalsService.startCycle(req.user.tenantId, cycleId);
   }
 
   @Get('cycles/:cycleId/appraisals')
@@ -86,6 +126,125 @@ export class AppraisalsController {
     );
   }
 
+  @Get('cycles/:cycleId/results')
+  @ApiOperation({
+    summary: 'Get cycle results summary with rating distribution',
+  })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiResponse({ status: 200, description: 'Cycle results retrieved' })
+  getCycleResults(@Param('cycleId') cycleId: string, @Req() req: any) {
+    return this.appraisalsService.getCycleResults(req.user.tenantId, cycleId);
+  }
+
+  // ── KPIs ────────────────────────────────────────────────────────────────────
+
+  @Get('cycles/:cycleId/kpis')
+  @ApiOperation({ summary: 'Get KPIs for a cycle' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiResponse({ status: 200, description: 'KPIs retrieved' })
+  getCycleKpis(@Param('cycleId') cycleId: string, @Req() req: any) {
+    return this.appraisalsService.getCycleKpis(req.user.tenantId, cycleId);
+  }
+
+  @Post('cycles/:cycleId/kpis')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a KPI for a cycle' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiBody({ type: CreateAppraisalKpiDto })
+  @ApiResponse({ status: 201, description: 'KPI created' })
+  createCycleKpi(
+    @Param('cycleId') cycleId: string,
+    @Body() dto: CreateAppraisalKpiDto,
+    @Req() req: any,
+  ) {
+    return this.appraisalsService.createCycleKpi(
+      req.user.tenantId,
+      cycleId,
+      req.user as RequestUser,
+      dto,
+    );
+  }
+
+  @Put('cycles/:cycleId/kpis/:kpiId')
+  @ApiOperation({ summary: 'Update a KPI for a cycle' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiParam({ name: 'kpiId', description: 'KPI UUID' })
+  @ApiBody({ type: CreateAppraisalKpiDto })
+  @ApiResponse({ status: 200, description: 'KPI updated' })
+  updateCycleKpi(
+    @Param('cycleId') cycleId: string,
+    @Param('kpiId') kpiId: string,
+    @Body() dto: Partial<CreateAppraisalKpiDto>,
+    @Req() req: any,
+  ) {
+    return this.appraisalsService.updateCycleKpi(
+      req.user.tenantId,
+      cycleId,
+      kpiId,
+      req.user as RequestUser,
+      dto,
+    );
+  }
+
+  // ── Templates ───────────────────────────────────────────────────────────────
+
+  @Get('templates')
+  @ApiOperation({ summary: 'List appraisal templates' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiResponse({ status: 200, description: 'Templates retrieved' })
+  getTemplates(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.appraisalsService.getTemplates(
+      req.user.tenantId,
+      page ? Number(page) : 1,
+      search,
+    );
+  }
+
+  @Post('templates')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Create an appraisal template' })
+  @ApiBody({ type: CreateAppraisalTemplateDto })
+  @ApiResponse({ status: 201, description: 'Template created' })
+  createTemplate(@Body() dto: CreateAppraisalTemplateDto, @Req() req: any) {
+    return this.appraisalsService.createTemplate(req.user.tenantId, dto);
+  }
+
+  @Put('templates/:templateId')
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Update an appraisal template' })
+  @ApiParam({ name: 'templateId', description: 'Template UUID' })
+  @ApiBody({ type: CreateAppraisalTemplateDto })
+  @ApiResponse({ status: 200, description: 'Template updated' })
+  updateTemplate(
+    @Param('templateId') templateId: string,
+    @Body() dto: Partial<CreateAppraisalTemplateDto>,
+    @Req() req: any,
+  ) {
+    return this.appraisalsService.updateTemplate(
+      req.user.tenantId,
+      templateId,
+      dto,
+    );
+  }
+
+  @Delete('templates/:templateId')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Delete an appraisal template' })
+  @ApiParam({ name: 'templateId', description: 'Template UUID' })
+  @ApiResponse({ status: 200, description: 'Template deleted' })
+  deleteTemplate(@Param('templateId') templateId: string, @Req() req: any) {
+    return this.appraisalsService.deleteTemplate(req.user.tenantId, templateId);
+  }
+
+  // ── Employee appraisals ─────────────────────────────────────────────────────
+
   @Get('my')
   @RequirePermissions(Permission.READ_OWN_REVIEW)
   @ApiOperation({ summary: "Get the logged-in employee's own appraisals" })
@@ -95,6 +254,24 @@ export class AppraisalsController {
       req.user.tenantId,
       req.user.id,
     );
+  }
+
+  @Get('team')
+  @ApiOperation({ summary: "Get manager's team appraisals for review" })
+  @ApiResponse({ status: 200, description: 'Team appraisals retrieved' })
+  getTeamAppraisals(@Req() req: any) {
+    return this.appraisalsService.getTeamAppraisals(
+      req.user.tenantId,
+      req.user.id,
+    );
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get a single appraisal record' })
+  @ApiParam({ name: 'id', description: 'Appraisal UUID' })
+  @ApiResponse({ status: 200, description: 'Appraisal retrieved' })
+  getAppraisal(@Param('id') id: string, @Req() req: any) {
+    return this.appraisalsService.getAppraisal(req.user.tenantId, id);
   }
 
   @Patch(':id/self-assessment')

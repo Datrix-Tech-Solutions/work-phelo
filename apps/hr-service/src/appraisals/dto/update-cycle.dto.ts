@@ -1,29 +1,29 @@
 import { IsString, IsDateString, IsOptional, IsArray } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class CreateAppraisalCycleDto {
-  @ApiProperty({
-    description: 'Cycle title',
-    example: 'Midyear Performance Review',
-  })
+export class UpdateAppraisalCycleDto {
+  @ApiPropertyOptional({ description: 'Cycle title' })
+  @IsOptional()
   @IsString()
-  title!: string;
+  title?: string;
 
-  @ApiPropertyOptional({
-    description: 'Optional cycle description',
-    example: 'Review employee goals and performance for H1',
-  })
+  @ApiPropertyOptional({ description: 'Optional description' })
   @IsOptional()
   @IsString()
   description?: string;
 
-  @ApiProperty({ description: 'Cycle start date', example: '2026-07-01' })
+  @ApiPropertyOptional({
+    description: 'Cycle start date',
+    example: '2026-07-01',
+  })
+  @IsOptional()
   @IsDateString()
-  startDate!: string;
+  startDate?: string;
 
-  @ApiProperty({ description: 'Cycle end date', example: '2026-07-31' })
+  @ApiPropertyOptional({ description: 'Cycle end date', example: '2026-07-31' })
+  @IsOptional()
   @IsDateString()
-  endDate!: string;
+  endDate?: string;
 
   @ApiPropertyOptional({
     description: 'Self-assessment deadline',
