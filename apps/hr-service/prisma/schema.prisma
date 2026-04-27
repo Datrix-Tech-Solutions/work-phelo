@@ -640,7 +640,8 @@ model AppraisalKpi {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  cycle         AppraisalCycle @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  cycle         AppraisalCycle     @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  scores        AppraisalKpiScore[]
 
   @@schema("hr")
 }
@@ -669,11 +670,29 @@ model Appraisal {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  cycle       AppraisalCycle  @relation(fields: [cycleId], references: [id])
-  employee    Employee        @relation("AppraisalEmployee", fields: [employeeId], references: [id])
-  manager     Employee?       @relation("AppraisalManager", fields: [managerId], references: [id])
+  cycle       AppraisalCycle     @relation(fields: [cycleId], references: [id])
+  employee    Employee           @relation("AppraisalEmployee", fields: [employeeId], references: [id])
+  manager     Employee?          @relation("AppraisalManager", fields: [managerId], references: [id])
+  kpiScores   AppraisalKpiScore[]
 
   @@unique([cycleId, employeeId])
+  @@schema("hr")
+}
+
+model AppraisalKpiScore {
+  id          String       @id @default(uuid())
+  tenantId    String
+  appraisalId String
+  kpiId       String
+  reviewType  String
+  score       Int
+  comment     String?
+  createdAt   DateTime     @default(now())
+
+  appraisal   Appraisal    @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+  kpi         AppraisalKpi @relation(fields: [kpiId], references: [id], onDelete: Cascade)
+
+  @@unique([appraisalId, kpiId, reviewType])
   @@schema("hr")
 }
 

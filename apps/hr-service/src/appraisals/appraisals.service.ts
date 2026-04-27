@@ -3,14 +3,16 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  Logger,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
 import { UpdateAppraisalCycleDto } from './dto/update-cycle.dto';
-import { SubmitReviewDto } from './dto/submit-review.dto';
+import { SubmitReviewDto, KpiScoreDto } from './dto/submit-review.dto';
 import { CreateAppraisalTemplateDto } from './dto/create-template.dto';
 import { CreateAppraisalKpiDto } from './dto/create-kpi.dto';
+import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import {
   assertHrAccess,
   hasPermissionRule,
@@ -45,9 +47,41 @@ function deriveOverallStatus(appraisal: {
   return 'NotStarted';
 }
 
+function calcWeightedScore(
+  kpiScores: { score: number; kpi: { weight: number; maxScore: number } }[],
+): number {
+  if (!kpiScores.length) return 0;
+  const totalWeight = kpiScores.reduce((s, k) => s + k.kpi.weight, 0);
+  if (!totalWeight) return 0;
+  const weighted = kpiScores.reduce(
+    (s, k) => s + (k.score / k.kpi.maxScore) * 5 * (k.kpi.weight / totalWeight),
+    0,
+  );
+  return Math.round(weighted);
+}
+
+function calcFinalScore(
+  selfScore: number | null,
+  managerScore: number,
+  selfWeight: number,
+  managerWeight: number,
+): number {
+  if (selfScore === null) return managerScore;
+  const total = selfWeight + managerWeight;
+  if (!total) return managerScore;
+  return Math.round(
+    (selfScore * selfWeight + managerScore * managerWeight) / total,
+  );
+}
+
 @Injectable()
 export class AppraisalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AppraisalsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly publisher: RabbitMQPublisher,
+  ) {}
 
   // ── Cycles ─────────────────────────────────────────────────────────────────
 
@@ -620,28 +654,76 @@ export class AppraisalsService {
   ) {
     const appraisal = await this.prisma.appraisal.findFirst({
       where: { id: appraisalId, tenantId },
-      include: { employee: true },
+      include: {
+        employee: {
+          select: {
+            userId: true,
+            managerId: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        cycle: { select: { title: true } },
+      },
     });
 
     if (!appraisal) throw new NotFoundException('Appraisal not found');
-    if (appraisal.employee.userId !== userId) {
+    if (appraisal.employee.userId !== userId)
       throw new BadRequestException(
         'You can only submit your own self-assessment',
       );
-    }
-    if (appraisal.selfStatus === 'SUBMITTED') {
+    if (appraisal.selfStatus === 'SUBMITTED')
       throw new BadRequestException('Self-assessment already submitted');
+    if (!dto.score && (!dto.kpiScores || !dto.kpiScores.length))
+      throw new BadRequestException('Provide either a score or kpiScores');
+
+    let selfScore = dto.score ?? 0;
+
+    if (dto.kpiScores?.length) {
+      await this.saveKpiScores(tenantId, appraisalId, dto.kpiScores, 'SELF');
+      const kpisWithDetails = await this.loadKpiScoresWithKpi(
+        appraisalId,
+        'SELF',
+      );
+      selfScore = calcWeightedScore(kpisWithDetails);
     }
 
-    return this.prisma.appraisal.update({
+    const updated = await this.prisma.appraisal.update({
       where: { id: appraisalId },
       data: {
-        selfScore: dto.score,
+        selfScore,
         selfComment: dto.comment,
         selfStatus: 'SUBMITTED',
         selfSubmittedAt: new Date(),
       },
     });
+
+    if (appraisal.managerId) {
+      const manager = await this.prisma.employee.findFirst({
+        where: { id: appraisal.managerId, tenantId },
+        select: { email: true, firstName: true },
+      });
+      if (manager?.email) {
+        this.publisher
+          .notificationAppraisalSelfSubmitted({
+            tenantId,
+            appraisalId,
+            cycleTitle: appraisal.cycle.title,
+            employeeFirstName: appraisal.employee.firstName,
+            employeeLastName: appraisal.employee.lastName,
+            managerEmail: manager.email,
+            managerFirstName: manager.firstName,
+          })
+          .catch((err) =>
+            this.logger.error(
+              `[appraisal] Failed to publish self-submitted event for ${appraisalId}`,
+              err,
+            ),
+          );
+      }
+    }
+
+    return updated;
   }
 
   async submitManagerReview(
@@ -652,28 +734,66 @@ export class AppraisalsService {
   ) {
     const appraisal = await this.prisma.appraisal.findFirst({
       where: { id: appraisalId, tenantId },
-      include: { employee: { select: { id: true } } },
+      include: {
+        employee: {
+          select: { email: true, firstName: true, lastName: true },
+        },
+        cycle: {
+          select: {
+            title: true,
+            template: {
+              select: {
+                selfAssessmentWeight: true,
+                managerAssessmentWeight: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!appraisal) throw new NotFoundException('Appraisal not found');
-    if (appraisal.managerStatus === 'SUBMITTED') {
+    if (appraisal.selfStatus !== 'SUBMITTED')
+      throw new BadRequestException(
+        'Employee has not submitted their self-assessment yet',
+      );
+    if (appraisal.managerStatus === 'SUBMITTED')
       throw new BadRequestException('Manager review already submitted');
-    }
+    if (!dto.score && (!dto.kpiScores || !dto.kpiScores.length))
+      throw new BadRequestException('Provide either a score or kpiScores');
 
     assertHrAccess(
       isCompanyAdminUser(reviewer) ||
         hasPermissionRule(reviewer, 'appraisals:EDIT'),
     );
 
-    const finalScore = appraisal.selfScore
-      ? Math.round((dto.score + appraisal.selfScore) / 2)
-      : dto.score;
+    let managerScore = dto.score ?? 0;
 
-    return this.prisma.appraisal.update({
+    if (dto.kpiScores?.length) {
+      await this.saveKpiScores(tenantId, appraisalId, dto.kpiScores, 'MANAGER');
+      const kpisWithDetails = await this.loadKpiScoresWithKpi(
+        appraisalId,
+        'MANAGER',
+      );
+      managerScore = calcWeightedScore(kpisWithDetails);
+    }
+
+    const selfWeight = appraisal.cycle.template?.selfAssessmentWeight ?? 50;
+    const managerWeight =
+      appraisal.cycle.template?.managerAssessmentWeight ?? 50;
+    const finalScore = calcFinalScore(
+      appraisal.selfScore,
+      managerScore,
+      selfWeight,
+      managerWeight,
+    );
+    const finalRating = scoreToRating(finalScore);
+
+    const updated = await this.prisma.appraisal.update({
       where: { id: appraisalId },
       data: {
         managerId: reviewer.id,
-        managerScore: dto.score,
+        managerScore,
         managerComment: dto.comment,
         managerStatus: 'SUBMITTED',
         managerSubmittedAt: new Date(),
@@ -681,6 +801,64 @@ export class AppraisalsService {
         status: 'COMPLETED',
         completedAt: new Date(),
       },
+    });
+
+    if (appraisal.employee.email) {
+      this.publisher
+        .notificationAppraisalManagerReviewed({
+          tenantId,
+          appraisalId,
+          cycleTitle: appraisal.cycle.title,
+          employeeEmail: appraisal.employee.email,
+          employeeFirstName: appraisal.employee.firstName,
+          finalScore,
+          finalRating,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `[appraisal] Failed to publish manager-reviewed event for ${appraisalId}`,
+            err,
+          ),
+        );
+    }
+
+    return updated;
+  }
+
+  private async saveKpiScores(
+    tenantId: string,
+    appraisalId: string,
+    kpiScores: KpiScoreDto[],
+    reviewType: 'SELF' | 'MANAGER',
+  ) {
+    await this.prisma.$transaction(
+      kpiScores.map((ks) =>
+        this.prisma.appraisalKpiScore.upsert({
+          where: {
+            appraisalId_kpiId_reviewType: {
+              appraisalId,
+              kpiId: ks.kpiId,
+              reviewType,
+            },
+          },
+          update: { score: ks.score, comment: ks.comment },
+          create: {
+            tenantId,
+            appraisalId,
+            kpiId: ks.kpiId,
+            reviewType,
+            score: ks.score,
+            comment: ks.comment,
+          },
+        }),
+      ),
+    );
+  }
+
+  private async loadKpiScoresWithKpi(appraisalId: string, reviewType: string) {
+    return this.prisma.appraisalKpiScore.findMany({
+      where: { appraisalId, reviewType },
+      include: { kpi: { select: { weight: true, maxScore: true } } },
     });
   }
 }

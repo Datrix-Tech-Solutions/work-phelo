@@ -15,6 +15,8 @@ import {
   LeaveReviewedEvent,
   LeaveCancelledEvent,
   TimeCorrectionSubmittedEvent,
+  AppraisalSelfSubmittedEvent,
+  AppraisalManagerReviewedEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -296,6 +298,61 @@ export class NotificationHandler {
         'notify.time_correction_submitted',
         err,
         `correctionId=${data.correctionId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.appraisal_self_submitted')
+  async handleAppraisalSelfSubmitted(
+    @Payload() data: WithMeta<AppraisalSelfSubmittedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.appraisal_self_submitted] Received | employee=${data.employeeFirstName} ${data.employeeLastName} | managerEmail=${data.managerEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    if (!data.managerEmail) {
+      this.logger.warn(
+        `[notify.appraisal_self_submitted] No manager email for appraisal ${data.appraisalId} — acking without sending`,
+      );
+      this.ack(context);
+      return;
+    }
+    try {
+      await this.notificationService.sendAppraisalSelfSubmittedNotification({
+        ...data,
+        managerEmail: data.managerEmail,
+        managerFirstName: data.managerFirstName ?? 'Manager',
+      });
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.appraisal_self_submitted',
+        err,
+        `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.appraisal_manager_reviewed')
+  async handleAppraisalManagerReviewed(
+    @Payload() data: WithMeta<AppraisalManagerReviewedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.appraisal_manager_reviewed] Received | employeeEmail=${data.employeeEmail} | finalScore=${data.finalScore} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendAppraisalManagerReviewedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.appraisal_manager_reviewed',
+        err,
+        `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }
