@@ -16,6 +16,7 @@ import {
   LeaveRequestedEvent,
   LeaveReviewedEvent,
   LeaveCancelledEvent,
+  TimeCorrectionSubmittedEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -269,6 +270,18 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_LEAVE_CANCELLED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationTimeCorrectionSubmitted(
+    data: TimeCorrectionSubmittedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_TIME_CORRECTION_SUBMITTED,
       data,
       correlationId,
     );

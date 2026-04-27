@@ -652,13 +652,8 @@ export class LeaveService {
   // ── Private notification helpers ─────────────────────────────────────────
 
   private buildLeaveRequestDetailLink(tenantSlug: string, requestId: string) {
-    const baseUrl =
-      process.env.FRONTEND_BASE_URL ||
-      process.env.APP_URL ||
-      'http://localhost:3000';
-    return `${baseUrl}/${tenantSlug}/hr/leave?tab=requests&requestId=${encodeURIComponent(
-      requestId,
-    )}`;
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/leave?tab=requests&requestId=${encodeURIComponent(requestId)}`;
   }
 
   private async resolveLeaveNotificationRecipients(

@@ -14,6 +14,7 @@ import {
   LeaveRequestedEvent,
   LeaveReviewedEvent,
   LeaveCancelledEvent,
+  TimeCorrectionSubmittedEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -265,6 +266,36 @@ export class NotificationHandler {
         'notify.leave_cancelled',
         err,
         `managerEmail=${data.managerEmail} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.time_correction_submitted')
+  async handleTimeCorrectionSubmitted(
+    @Payload() data: WithMeta<TimeCorrectionSubmittedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.time_correction_submitted] Received | employee=${data.employeeFirstName} ${data.employeeLastName} | adminEmail=${data.adminEmail} | managerEmail=${data.managerEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    if (!data.adminEmail && !data.managerEmail) {
+      this.logger.warn(
+        `[notify.time_correction_submitted] No recipients available for correction ${data.correctionId} — acking without sending`,
+      );
+      this.ack(context);
+      return;
+    }
+    try {
+      await this.notificationService.sendTimeCorrectionSubmittedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.time_correction_submitted',
+        err,
+        `correctionId=${data.correctionId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }

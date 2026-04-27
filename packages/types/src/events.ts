@@ -45,6 +45,7 @@ export const EventPatterns = {
   NOTIFY_LEAVE_REQUESTED: 'notify.leave_requested',
   NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
   NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
+  NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -247,4 +248,21 @@ export interface LeaveCancelledEvent {
   startDate: string;
   endDate: string;
   totalDays: number;
+}
+
+export interface TimeCorrectionSubmittedEvent {
+  tenantId: string;
+  correctionId: string;
+  employeeId: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  attendanceDate: string;
+  requestedIn: string | null;
+  requestedOut: string | null;
+  reason: string;
+  /** Company Admin email from TenantConfig — null if not configured */
+  adminEmail: string | null;
+  /** Manager's email — null if employee has no assigned manager */
+  managerEmail: string | null;
+  detailLink?: string;
 }

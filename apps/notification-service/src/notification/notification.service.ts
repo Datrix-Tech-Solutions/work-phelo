@@ -379,6 +379,75 @@ export class NotificationService {
     });
   }
 
+  async sendTimeCorrectionSubmittedNotification(data: {
+    tenantId: string;
+    correctionId: string;
+    employeeId: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    attendanceDate: string;
+    requestedIn: string | null;
+    requestedOut: string | null;
+    reason: string;
+    adminEmail: string | null;
+    managerEmail: string | null;
+    detailLink?: string;
+  }) {
+    const employeeFullName = `${data.employeeFirstName} ${data.employeeLastName}`;
+    const recipients: { email: string; firstName: string }[] = [];
+
+    if (data.adminEmail) {
+      recipients.push({ email: data.adminEmail, firstName: 'Admin' });
+    } else {
+      this.logger.warn(
+        `[TIME_CORRECTION_SUBMITTED] No admin email for tenant ${data.tenantId} — skipping admin email`,
+      );
+    }
+
+    if (data.managerEmail && data.managerEmail !== data.adminEmail) {
+      recipients.push({ email: data.managerEmail, firstName: 'Manager' });
+    } else if (!data.managerEmail) {
+      this.logger.warn(
+        `[TIME_CORRECTION_SUBMITTED] No manager email for employee ${data.employeeId} — skipping manager email`,
+      );
+    }
+
+    for (const recipient of recipients) {
+      if (
+        await this.isDuplicate(
+          recipient.email,
+          NotificationType.TIME_CORRECTION_SUBMITTED,
+        )
+      ) {
+        this.logger.warn(
+          `Duplicate TIME_CORRECTION_SUBMITTED suppressed for ${recipient.email}`,
+        );
+        continue;
+      }
+
+      const success = await this.email.sendTimeCorrectionNotification(
+        recipient.email,
+        recipient.firstName,
+        employeeFullName,
+        data.attendanceDate,
+        data.requestedIn,
+        data.requestedOut,
+        data.reason,
+        data.detailLink,
+      );
+
+      await this.log({
+        userId: data.employeeId,
+        tenantId: data.tenantId,
+        type: 'TIME_CORRECTION_SUBMITTED',
+        channel: 'EMAIL',
+        recipient: recipient.email,
+        subject: `Time correction request pending your approval — ${employeeFullName}`,
+        status: success ? 'SENT' : 'FAILED',
+      });
+    }
+  }
+
   async sendSmsOtp(data: {
     userId?: string;
     tenantId?: string;

@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
@@ -17,10 +18,16 @@ import {
   isCompanyAdminUser,
   isEmployeeSelfServiceUser,
 } from '../auth/access-scope';
+import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 
 @Injectable()
 export class TimeService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TimeService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly publisher: RabbitMQPublisher,
+  ) {}
 
   private transformRecord(record: {
     id: string;
@@ -286,8 +293,15 @@ export class TimeService {
     userId: string,
     dto: TimeCorrectionDto,
   ) {
-    const employee = await this.getEmployeeByUserId(tenantId, userId);
-    return this.prisma.timeCorrection.create({
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId, tenantId },
+    });
+    if (!employee)
+      throw new NotFoundException(
+        'Employee profile not found. Please contact your administrator.',
+      );
+
+    const correction = await this.prisma.timeCorrection.create({
       data: {
         tenantId,
         employeeId: employee.id,
@@ -297,6 +311,83 @@ export class TimeService {
         reason: dto.reason,
       },
     });
+
+    const [config, manager] = await Promise.all([
+      this.prisma.tenantConfig.findUnique({
+        where: { tenantId },
+        select: { adminEmail: true, adminUserId: true },
+      }),
+      employee.managerId
+        ? this.prisma.employee.findFirst({
+            where: { id: employee.managerId, tenantId },
+            select: { email: true, userId: true },
+          })
+        : null,
+    ]);
+
+    const adminEmail = config?.adminEmail || null;
+    const adminUserId = config?.adminUserId || null;
+    const managerEmail = manager?.email ?? null;
+    const managerUserId = manager?.userId ?? null;
+
+    const employeeFullName = `${employee.firstName} ${employee.lastName}`;
+    const attendanceDate = correction.date.toISOString().split('T')[0];
+
+    if (!adminEmail) {
+      this.logger.warn(
+        `[time-correction] No admin email configured for tenant ${tenantId} — skipping admin notification`,
+      );
+    }
+    if (!managerEmail) {
+      this.logger.warn(
+        `[time-correction] Employee ${employee.id} has no manager or manager has no email — skipping manager notification`,
+      );
+    }
+
+    if (adminEmail || managerEmail) {
+      this.publisher
+        .notificationTimeCorrectionSubmitted({
+          tenantId,
+          correctionId: correction.id,
+          employeeId: employee.id,
+          employeeFirstName: employee.firstName,
+          employeeLastName: employee.lastName,
+          attendanceDate,
+          requestedIn: correction.requestedIn?.toISOString() ?? null,
+          requestedOut: correction.requestedOut?.toISOString() ?? null,
+          reason: correction.reason,
+          adminEmail,
+          managerEmail,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `[time-correction] Failed to publish notification event for correction ${correction.id}`,
+            err,
+          ),
+        );
+    }
+
+    const inAppMessage = `${employeeFullName} submitted a time correction request for ${attendanceDate}`;
+    const inAppLink = `/hr/time/corrections/${correction.id}`;
+
+    const inAppRecipients: string[] = [];
+    if (adminUserId) inAppRecipients.push(adminUserId);
+    if (managerUserId && managerUserId !== adminUserId)
+      inAppRecipients.push(managerUserId);
+
+    if (inAppRecipients.length > 0) {
+      await this.prisma.notification.createMany({
+        data: inAppRecipients.map((uid) => ({
+          tenantId,
+          userId: uid,
+          type: 'TIME_CORRECTION_SUBMITTED',
+          message: inAppMessage,
+          link: inAppLink,
+        })),
+      });
+    }
+
+    return correction;
   }
 
   async getTimeCorrections(
