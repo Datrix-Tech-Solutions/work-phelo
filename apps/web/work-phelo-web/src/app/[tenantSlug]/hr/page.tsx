@@ -69,11 +69,23 @@ export default function EmployeeDashboardPage({
       b.leaveTypeName?.toLowerCase().includes('annual'),
     ) ?? null;
 
-  /* ── Derived: upcoming leave ── */
-  const upcomingLeave = dashboard?.leave?.upcomingLeave ?? null;
-
   /* ── Derived: my leave requests ── */
   const myLeave = Array.isArray(myLeaveRaw) ? myLeaveRaw : [];
+
+  /* ── Derived: upcoming leave ── */
+  const today = new Date().toISOString().slice(0, 10);
+  const nextLeave =
+    myLeave
+      .filter((r) => (r.status === 'APPROVED' || r.status === 'PENDING') && r.endDate >= today)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null;
+  const upcomingLeave = nextLeave
+    ? {
+        leaveType: nextLeave.leaveTypeName,
+        startDate: nextLeave.startDate,
+        endDate: nextLeave.endDate,
+        status: nextLeave.status,
+      }
+    : null;
 
   /* ── Derived: my payslips ── */
   const myPayslips = Array.isArray(myPayslipsRaw) ? myPayslipsRaw : [];

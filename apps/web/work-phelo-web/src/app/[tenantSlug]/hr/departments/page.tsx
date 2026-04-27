@@ -88,6 +88,9 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
+      <div>
+        <h1 className="text-xl font-bold text-gray-900">Department Directory</h1>
+      </div>
       <DepartmentsTable
         departments={departments}
         employees={employees}

@@ -35,7 +35,6 @@ export function EmploymentDetailsSection({ employee, allHrEmployees, currentRole
           <DetailField label="Probation End Date" value={formatDate(employee.probationEndsAt)} />
         )}
         <DetailField label="Employment Type" value={formatType(employee?.employmentType)} />
-        <DetailField label="System Role" value={currentRoleName} />
         {employee?.dateOfBirth && (
           <DetailField label="Date of Birth" value={formatDate(employee.dateOfBirth)} />
         )}

@@ -46,7 +46,9 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const canViewAttendance = usePermission(Permission.READ_ATTENDANCE);
   const canManageRecords = canManageTime || canViewAttendance || isAdmin;
 
-  const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>('my');
+  const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>(() =>
+    useAuthStore.getState().user?.role === 'TENANT_ADMIN' ? 'live' : 'my',
+  );
   const [correctionOpen, setCorrectionOpen] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<{
     req: { id: string; employeeName?: string; date: string };
@@ -112,6 +114,9 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
+      <div className="shrink-0">
+        <h1 className="text-xl font-bold text-gray-900">Time Management</h1>
+      </div>
       <TimeClockTabs
         activeTab={activeTab}
         canManageRecords={canManageRecords}
