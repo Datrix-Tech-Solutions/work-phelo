@@ -179,8 +179,13 @@ export class AppraisalsService {
     });
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
 
+    const employeeWhere: any = { tenantId, employmentStatus: 'ACTIVE' };
+    if (cycle.departmentIds.length > 0) {
+      employeeWhere.departmentId = { in: cycle.departmentIds };
+    }
+
     const employees = await this.prisma.employee.findMany({
-      where: { tenantId, employmentStatus: 'ACTIVE' },
+      where: employeeWhere,
     });
 
     for (const emp of employees) {
@@ -522,6 +527,11 @@ export class AppraisalsService {
             managerReviewDeadline: true,
           },
         },
+        kpiScores: {
+          include: {
+            kpi: { select: { title: true, weight: true, maxScore: true } },
+          },
+        },
       },
     });
 
@@ -529,16 +539,23 @@ export class AppraisalsService {
 
     const overallStatus = deriveOverallStatus(appraisal);
 
+    const toKpiScoreShape = (reviewType: string) =>
+      appraisal.kpiScores
+        .filter((ks) => ks.reviewType === reviewType)
+        .map((ks) => ({
+          kpiId: ks.kpiId,
+          title: ks.kpi.title,
+          weight: ks.kpi.weight,
+          maxScore: ks.kpi.maxScore,
+          score: ks.score,
+          comment: ks.comment ?? undefined,
+        }));
+
     const selfResponse =
       appraisal.selfStatus === 'SUBMITTED'
         ? {
             status: 'Submitted',
-            kpiScores: [] as {
-              kpiId: string;
-              score: number;
-              comment?: string;
-            }[],
-            sectionResponses: [],
+            kpiScores: toKpiScoreShape('SELF'),
             submittedAt: appraisal.selfSubmittedAt?.toISOString(),
             score: appraisal.selfScore,
             comment: appraisal.selfComment,
@@ -549,12 +566,7 @@ export class AppraisalsService {
       appraisal.managerStatus === 'SUBMITTED'
         ? {
             status: 'Submitted',
-            kpiScores: [] as {
-              kpiId: string;
-              score: number;
-              comment?: string;
-            }[],
-            sectionResponses: [],
+            kpiScores: toKpiScoreShape('MANAGER'),
             submittedAt: appraisal.managerSubmittedAt?.toISOString(),
             score: appraisal.managerScore,
             comment: appraisal.managerComment,
@@ -576,7 +588,6 @@ export class AppraisalsService {
       overallStatus,
       selfResponse,
       managerResponse,
-      sections: [],
       finalizedAppraisal,
     };
   }
