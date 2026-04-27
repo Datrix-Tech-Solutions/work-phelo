@@ -82,7 +82,8 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
   "DATABASE_URL=$(db_url_for_schema hr)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
-  "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}"
+  "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
+  "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}"
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.prod" \
   "PORT=4004" \

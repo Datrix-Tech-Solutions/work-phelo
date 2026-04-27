@@ -3,6 +3,7 @@ export const hrRequiredEnvVars = [
   'RABBITMQ_URL',
   'JWT_SECRET',
   'ALLOWED_ORIGINS',
+  'FRONTEND_BASE_URL',
 ] as const;
 
 export function assertHrRuntimeEnv(): void {
