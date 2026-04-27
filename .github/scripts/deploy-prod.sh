@@ -81,6 +81,7 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema hr)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
+  "REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379" \
   "JWT_SECRET=${JWT_SECRET}" \
   "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
   "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}"
