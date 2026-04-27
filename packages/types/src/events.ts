@@ -48,6 +48,7 @@ export const EventPatterns = {
   NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
   NOTIFY_APPRAISAL_SELF_SUBMITTED: 'notify.appraisal_self_submitted',
   NOTIFY_APPRAISAL_MANAGER_REVIEWED: 'notify.appraisal_manager_reviewed',
+  NOTIFY_SCHEDULE_PUBLISHED: 'notify.schedule_published',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -288,4 +289,19 @@ export interface TimeCorrectionSubmittedEvent {
   /** Manager's email — null if employee has no assigned manager */
   managerEmail: string | null;
   detailLink?: string;
+}
+
+export interface SchedulePublishedEvent {
+  tenantId: string;
+  employeeId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  /** ISO date — the effectiveFrom date of the new schedule */
+  effectiveFrom: string;
+  shiftType: string;
+  startTime: string;
+  endTime: string;
+  /** Link to the employee's schedule screen */
+  scheduleLink: string;
 }

@@ -11,6 +11,7 @@ import { ClockInDto } from './dto/clock-in.dto';
 import { TimeCorrectionDto } from './dto/time-correction.dto';
 import { ReviewCorrectionDto } from './dto/review-correction.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
+import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import {
   assertHrAccess,
   getActorEmployee,
@@ -465,6 +466,11 @@ export class TimeService {
     });
   }
 
+  private buildScheduleLink(tenantSlug: string): string {
+    const base = process.env.FRONTEND_BASE_URL as string;
+    return `${base}/${tenantSlug}/hr/scheduling?tab=my-schedule`;
+  }
+
   async createSchedule(
     tenantId: string,
     actor: RequestUser,
@@ -476,10 +482,17 @@ export class TimeService {
 
     const employee = await this.prisma.employee.findFirst({
       where: { id: dto.employeeId, tenantId },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
     });
     if (!employee) throw new NotFoundException('Employee not found');
 
-    return this.prisma.shiftSchedule.create({
+    const schedule = await this.prisma.shiftSchedule.create({
       data: {
         tenantId,
         createdBy: actor.id,
@@ -492,6 +505,215 @@ export class TimeService {
         effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : undefined,
       },
     });
+
+    const scheduleLink = this.buildScheduleLink(actor.tenantSlug);
+    const formattedDate = new Date(
+      dto.effectiveFrom + 'T00:00:00',
+    ).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    // In-app notification to the employee
+    if (employee.userId) {
+      await this.prisma.notification.create({
+        data: {
+          tenantId,
+          userId: employee.userId,
+          type: 'SCHEDULE_PUBLISHED',
+          message: `A new shift schedule has been published for you, effective ${formattedDate}. Check your schedule.`,
+          link: scheduleLink,
+        },
+      });
+    }
+
+    // Email notification via RabbitMQ (fire-and-forget)
+    void this.publisher
+      .notificationSchedulePublished({
+        tenantId,
+        employeeId: employee.id,
+        employeeEmail: employee.email,
+        employeeFirstName: employee.firstName,
+        employeeLastName: employee.lastName,
+        effectiveFrom: dto.effectiveFrom,
+        shiftType: dto.shiftType,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        scheduleLink,
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to emit schedule_published notification for employee ${employee.id}`,
+          err,
+        ),
+      );
+
+    return schedule;
+  }
+
+  async updateSchedule(
+    tenantId: string,
+    scheduleId: string,
+    actor: RequestUser,
+    dto: UpdateScheduleDto,
+  ) {
+    const canManageSchedules =
+      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'schedules:CREATE');
+    assertHrAccess(canManageSchedules);
+
+    const schedule = await this.prisma.shiftSchedule.findFirst({
+      where: { id: scheduleId, tenantId },
+      include: {
+        employee: {
+          select: { id: true, userId: true, firstName: true, lastName: true },
+        },
+      },
+    });
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    const updated = await this.prisma.shiftSchedule.update({
+      where: { id: scheduleId },
+      data: {
+        ...(dto.shiftType && { shiftType: dto.shiftType }),
+        ...(dto.startTime && { startTime: dto.startTime }),
+        ...(dto.endTime && { endTime: dto.endTime }),
+        ...(dto.effectiveTo !== undefined && {
+          effectiveTo: dto.effectiveTo ? new Date(dto.effectiveTo) : null,
+        }),
+      },
+    });
+
+    const formattedDate = schedule.effectiveFrom.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    if (schedule.employee.userId) {
+      await this.prisma.notification.create({
+        data: {
+          tenantId,
+          userId: schedule.employee.userId,
+          type: 'SCHEDULE_UPDATED',
+          message: `Your shift on ${formattedDate} has been updated. Please check your schedule.`,
+          link: this.buildScheduleLink(actor.tenantSlug),
+        },
+      });
+    }
+
+    return updated;
+  }
+
+  async deleteSchedule(
+    tenantId: string,
+    scheduleId: string,
+    actor: RequestUser,
+  ) {
+    const canManageSchedules =
+      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'schedules:CREATE');
+    assertHrAccess(canManageSchedules);
+
+    const schedule = await this.prisma.shiftSchedule.findFirst({
+      where: { id: scheduleId, tenantId },
+      include: {
+        employee: {
+          select: { id: true, userId: true, firstName: true, lastName: true },
+        },
+      },
+    });
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    await this.prisma.shiftSchedule.delete({ where: { id: scheduleId } });
+
+    const formattedDate = schedule.effectiveFrom.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+
+    if (schedule.employee.userId) {
+      await this.prisma.notification.create({
+        data: {
+          tenantId,
+          userId: schedule.employee.userId,
+          type: 'SCHEDULE_REMOVED',
+          message: `Your shift on ${formattedDate} has been removed from the schedule.`,
+          link: this.buildScheduleLink(actor.tenantSlug),
+        },
+      });
+    }
+
+    return { message: 'Schedule deleted successfully' };
+  }
+
+  async getMySchedule(
+    tenantId: string,
+    actor: RequestUser,
+    filters: { from?: string; to?: string },
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+
+    const fromDate = filters.from
+      ? new Date(filters.from + 'T00:00:00')
+      : undefined;
+    const toDate = filters.to ? new Date(filters.to + 'T23:59:59') : undefined;
+
+    const [schedules, leaveRequests, publicHolidays] = await Promise.all([
+      this.prisma.shiftSchedule.findMany({
+        where: {
+          tenantId,
+          employeeId: actorEmployee.id,
+          ...(fromDate && {
+            effectiveFrom: { lte: toDate ?? new Date('2099-12-31') },
+          }),
+          OR: [
+            { effectiveTo: null },
+            { effectiveTo: { gte: fromDate ?? new Date('2000-01-01') } },
+          ],
+        },
+        orderBy: { effectiveFrom: 'asc' },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          tenantId,
+          employeeId: actorEmployee.id,
+          status: 'APPROVED',
+          ...(fromDate && { endDate: { gte: fromDate } }),
+          ...(toDate && { startDate: { lte: toDate } }),
+        },
+        include: { leaveType: { select: { name: true } } },
+        orderBy: { startDate: 'asc' },
+      }),
+      this.prisma.publicHoliday.findMany({
+        where: {
+          tenantId,
+          ...(fromDate && { date: { gte: fromDate } }),
+          ...(toDate && { date: { lte: toDate } }),
+        },
+        orderBy: { date: 'asc' },
+      }),
+    ]);
+
+    return {
+      schedules,
+      leaveBlocks: leaveRequests.map((r) => ({
+        id: r.id,
+        startDate: r.startDate.toISOString().slice(0, 10),
+        endDate: r.endDate.toISOString().slice(0, 10),
+        totalDays: r.totalDays,
+        leaveType: r.leaveType.name,
+      })),
+      publicHolidays: publicHolidays.map((h) => ({
+        id: h.id,
+        name: h.name,
+        date: h.date.toISOString().slice(0, 10),
+      })),
+    };
   }
 
   async getSchedules(

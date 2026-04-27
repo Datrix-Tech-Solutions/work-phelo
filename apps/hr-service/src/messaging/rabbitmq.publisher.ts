@@ -19,6 +19,7 @@ import {
   TimeCorrectionSubmittedEvent,
   AppraisalSelfSubmittedEvent,
   AppraisalManagerReviewedEvent,
+  SchedulePublishedEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -308,6 +309,18 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_APPRAISAL_MANAGER_REVIEWED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationSchedulePublished(
+    data: SchedulePublishedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_SCHEDULE_PUBLISHED,
       data,
       correlationId,
     );

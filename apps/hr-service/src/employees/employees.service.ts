@@ -5,6 +5,8 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
@@ -30,6 +32,13 @@ import {
   isEmployeeSelfServiceUser,
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  RESIGNATION_QUEUE,
+  RESIGNATION_NOTIFY_JOB,
+  ResignationNotifyPayload,
+} from './resignation-notification.processor';
+
+const RESIGNATION_NOTIFY_DELAY_MS = 30 * 60 * 1000;
 
 @Injectable()
 export class EmployeesService {
@@ -40,6 +49,8 @@ export class EmployeesService {
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly leaveService: LeaveService,
     private readonly notificationsService: NotificationsService,
+    @InjectQueue(RESIGNATION_QUEUE)
+    private readonly resignationQueue: Queue<ResignationNotifyPayload>,
   ) {}
 
   private isDuplicateAuthUserError(error: unknown) {
@@ -533,42 +544,28 @@ export class EmployeesService {
           .join(' ')
       : undefined;
 
-    if (config.adminUserId) {
-      await this.notificationsService.create({
+    // Delay notifications by 30 minutes — gives the employee a withdrawal window.
+    // The processor re-checks status before firing; if withdrawn, it skips silently.
+    await this.resignationQueue.add(
+      RESIGNATION_NOTIFY_JOB,
+      {
         tenantId,
-        userId: config.adminUserId,
-        type: 'RESIGNATION_SUBMITTED',
-        message: `${employee.firstName} ${employee.lastName} submitted a resignation effective ${lastWorkingDate.toLocaleDateString(
-          'en-GB',
-        )}${reasonLabel ? ` (${reasonLabel})` : ''}.`,
-        link: detailLink,
-      });
-    }
-
-    if (config.adminEmail) {
-      void this.rabbitmq
-        .notificationResignationSubmitted({
-          tenantId,
-          adminEmail: config.adminEmail,
-          employeeId,
-          employeeFirstName: employee.firstName,
-          employeeLastName: employee.lastName,
-          lastWorkingDate: lastWorkingDate.toISOString(),
-          reason: reasonLabel,
-          additionalNotes: dto.additionalNotes?.trim() || undefined,
-          detailLink,
-        })
-        .catch((err) =>
-          this.logger.error(
-            `Failed to emit resignation notification for ${employee.email}`,
-            err,
-          ),
-        );
-    }
+        employeeId,
+        employeeFirstName: employee.firstName,
+        employeeLastName: employee.lastName,
+        lastWorkingDate: lastWorkingDate.toISOString(),
+        reason: reasonLabel,
+        additionalNotes: dto.additionalNotes?.trim() || undefined,
+        detailLink,
+        adminEmail: config.adminEmail,
+        adminUserId: config.adminUserId,
+      },
+      { delay: RESIGNATION_NOTIFY_DELAY_MS },
+    );
 
     return {
       message:
-        'Your resignation has been submitted. Your HR administrator will be in touch regarding your offboarding process.',
+        'Your resignation has been submitted. You have 30 minutes to withdraw it if you change your mind. Your HR administrator will be notified after that.',
       resignation,
     };
   }

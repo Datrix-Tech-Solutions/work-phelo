@@ -17,6 +17,7 @@ import {
   TimeCorrectionSubmittedEvent,
   AppraisalSelfSubmittedEvent,
   AppraisalManagerReviewedEvent,
+  SchedulePublishedEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -353,6 +354,27 @@ export class NotificationHandler {
         'notify.appraisal_manager_reviewed',
         err,
         `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.schedule_published')
+  async handleSchedulePublished(
+    @Payload() data: WithMeta<SchedulePublishedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.schedule_published] Received | employeeEmail=${data.employeeEmail} | effectiveFrom=${data.effectiveFrom} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendSchedulePublishedNotification(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.schedule_published',
+        err,
+        `employeeId=${data.employeeId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }
