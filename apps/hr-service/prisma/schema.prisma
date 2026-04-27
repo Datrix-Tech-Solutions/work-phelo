@@ -614,6 +614,8 @@ model AppraisalCycle {
   managerReviewDeadline   DateTime?
   frequency               String?
   departmentIds           String[]  @default([])
+  employmentTypes         String[]  @default([])
+  employeeIds             String[]  @default([])
   templateId              String?
   isActive                Boolean   @default(true)
   createdBy               String

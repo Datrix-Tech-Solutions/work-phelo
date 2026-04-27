@@ -106,6 +106,8 @@ export class AppraisalsService {
           : undefined,
         frequency: dto.frequency,
         departmentIds: dto.departmentIds ?? [],
+        employmentTypes: dto.employmentTypes ?? [],
+        employeeIds: dto.employeeIds ?? [],
         templateId: dto.templateId,
       },
       include: { _count: { select: { appraisals: true } } },
@@ -158,6 +160,8 @@ export class AppraisalsService {
         }),
         ...(dto.frequency !== undefined && { frequency: dto.frequency }),
         ...(dto.departmentIds && { departmentIds: dto.departmentIds }),
+        ...(dto.employmentTypes && { employmentTypes: dto.employmentTypes }),
+        ...(dto.employeeIds && { employeeIds: dto.employeeIds }),
         ...(dto.templateId !== undefined && { templateId: dto.templateId }),
       },
       include: { _count: { select: { appraisals: true } } },
@@ -180,8 +184,17 @@ export class AppraisalsService {
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
 
     const employeeWhere: any = { tenantId, employmentStatus: 'ACTIVE' };
-    if (cycle.departmentIds.length > 0) {
-      employeeWhere.departmentId = { in: cycle.departmentIds };
+
+    if (cycle.employeeIds.length > 0) {
+      // explicit list takes priority — ignore department and employment type filters
+      employeeWhere.id = { in: cycle.employeeIds };
+    } else {
+      if (cycle.departmentIds.length > 0) {
+        employeeWhere.departmentId = { in: cycle.departmentIds };
+      }
+      if (cycle.employmentTypes.length > 0) {
+        employeeWhere.employmentType = { in: cycle.employmentTypes };
+      }
     }
 
     const employees = await this.prisma.employee.findMany({
