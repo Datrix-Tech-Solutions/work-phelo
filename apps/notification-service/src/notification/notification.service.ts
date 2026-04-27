@@ -527,6 +527,50 @@ export class NotificationService {
     });
   }
 
+  async sendSchedulePublishedNotification(data: {
+    tenantId: string;
+    employeeId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    effectiveFrom: string;
+    shiftType: string;
+    startTime: string;
+    endTime: string;
+    scheduleLink: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SCHEDULE_PUBLISHED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SCHEDULE_PUBLISHED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendSchedulePublishedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.effectiveFrom,
+      data.shiftType,
+      data.startTime,
+      data.endTime,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SCHEDULE_PUBLISHED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: 'Your shift schedule has been published',
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendSmsOtp(data: {
     userId?: string;
     tenantId?: string;

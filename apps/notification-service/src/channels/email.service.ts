@@ -923,6 +923,63 @@ export class EmailService {
     );
   }
 
+  async sendSchedulePublishedNotification(
+    to: string,
+    employeeFirstName: string,
+    effectiveFrom: string,
+    shiftType: string,
+    startTime: string,
+    endTime: string,
+    scheduleLink: string,
+  ): Promise<boolean> {
+    const formattedDate = new Date(
+      effectiveFrom + 'T00:00:00',
+    ).toLocaleDateString('en-GB', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    const shiftLabel = shiftType.charAt(0) + shiftType.slice(1).toLowerCase();
+    return this.send(
+      to,
+      'Your shift schedule has been published',
+      `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><title>Schedule Published</title></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px auto;border-radius:8px;overflow:hidden;">
+    <tr><td style="padding:20px 30px;">
+      <h2 style="margin:0;font-weight:bold;">
+        <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+      </h2>
+    </td></tr>
+    <tr><td style="background:#eef1f4;padding:40px 30px;">
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">Your Schedule Has Been Published</p>
+    </td></tr>
+    <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
+      <p>Hi ${employeeFirstName},</p>
+      <p>A new shift schedule has been published for you. Here are the details:</p>
+      <table width="100%" cellpadding="8" cellspacing="0" style="border:1px solid #eee;border-radius:6px;margin:16px 0;">
+        <tr><td style="font-weight:600;color:#333;width:140px;">Effective From</td><td style="color:#555;">${formattedDate}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="font-weight:600;color:#333;">Shift Type</td><td style="color:#555;">${shiftLabel}</td></tr>
+        <tr><td style="font-weight:600;color:#333;">Hours</td><td style="color:#555;">${startTime} – ${endTime}</td></tr>
+      </table>
+      <p>
+        <a href="${scheduleLink}" style="display:inline-block;padding:12px 24px;background:#0d1b3e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">View My Schedule</a>
+      </p>
+      <p style="margin-top:30px;">Thank you,</p>
+    </td></tr>
+    <tr><td style="padding:20px 30px;border-top:1px solid #eee;">
+      <h3 style="margin:0;"><span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span></h3>
+      <p style="color:#888;font-size:12px;margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+    );
+  }
+
   async sendAppraisalManagerReviewedNotification(
     to: string,
     employeeFirstName: string,

@@ -12,6 +12,7 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -25,6 +26,7 @@ import { ClockInDto } from './dto/clock-in.dto';
 import { TimeCorrectionDto } from './dto/time-correction.dto';
 import { ReviewCorrectionDto } from './dto/review-correction.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
+import { UpdateScheduleDto } from './dto/update-schedule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -225,6 +227,68 @@ export class TimeController {
       req.user.tenantId,
       req.user as RequestUser,
       employeeId,
+    );
+  }
+
+  @Patch('schedules/:id')
+  @ApiOperation({ summary: 'Update a shift schedule' })
+  @ApiParam({ name: 'id', description: 'Shift schedule UUID' })
+  @ApiBody({ type: UpdateScheduleDto })
+  @ApiResponse({ status: 200, description: 'Schedule updated' })
+  @ApiResponse({ status: 404, description: 'Schedule not found' })
+  updateSchedule(
+    @Param('id') id: string,
+    @Body() dto: UpdateScheduleDto,
+    @Req() req: any,
+  ) {
+    return this.timeService.updateSchedule(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+      dto,
+    );
+  }
+
+  @Delete('schedules/:id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a shift schedule' })
+  @ApiParam({ name: 'id', description: 'Shift schedule UUID' })
+  @ApiResponse({ status: 200, description: 'Schedule deleted' })
+  @ApiResponse({ status: 404, description: 'Schedule not found' })
+  deleteSchedule(@Param('id') id: string, @Req() req: any) {
+    return this.timeService.deleteSchedule(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
+  }
+
+  @Get('my-schedule')
+  @RequirePermissions(Permission.CLOCK_IN_OUT)
+  @ApiOperation({
+    summary:
+      "Get employee's own schedule with leave blocks and public holidays",
+  })
+  @ApiQuery({
+    name: 'from',
+    required: false,
+    description: 'ISO date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'to',
+    required: false,
+    description: 'ISO date (YYYY-MM-DD)',
+  })
+  @ApiResponse({ status: 200, description: 'Schedule retrieved' })
+  getMySchedule(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Req() req: any,
+  ) {
+    return this.timeService.getMySchedule(
+      req.user.tenantId,
+      req.user as RequestUser,
+      { from, to },
     );
   }
 }
