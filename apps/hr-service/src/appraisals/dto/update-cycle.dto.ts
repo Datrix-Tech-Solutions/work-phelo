@@ -1,4 +1,10 @@
-import { IsString, IsDateString, IsOptional, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsDateString,
+  IsOptional,
+  IsArray,
+  IsIn,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateAppraisalCycleDto {
@@ -54,6 +60,27 @@ export class UpdateAppraisalCycleDto {
   @IsArray()
   @IsString({ each: true })
   departmentIds?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Employment types to include — FULL_TIME, PART_TIME, CONTRACT, INTERN.',
+    type: [String],
+    enum: ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'], { each: true })
+  employmentTypes?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Explicit employee IDs to include. When set, departmentIds and employmentTypes are ignored.',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  employeeIds?: string[];
 
   @ApiPropertyOptional({ description: 'Appraisal template ID' })
   @IsOptional()

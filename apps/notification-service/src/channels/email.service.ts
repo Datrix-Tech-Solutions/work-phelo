@@ -884,4 +884,91 @@ export class EmailService {
 </html>`,
     );
   }
+
+  async sendAppraisalSelfSubmittedNotification(
+    to: string,
+    managerFirstName: string,
+    employeeFullName: string,
+    cycleTitle: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Self-assessment submitted by ${employeeFullName}`,
+      `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><title>Self-Assessment Submitted</title></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px auto;border-radius:8px;overflow:hidden;">
+    <tr><td style="padding:20px 30px;">
+      <h2 style="margin:0;font-weight:bold;">
+        <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+      </h2>
+    </td></tr>
+    <tr><td style="background:#eef1f4;padding:40px 30px;">
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">Self-Assessment Ready for Review</p>
+    </td></tr>
+    <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
+      <p>Hi ${managerFirstName},</p>
+      <p><strong>${employeeFullName}</strong> has submitted their self-assessment for the <strong>${cycleTitle}</strong> appraisal cycle and it is now ready for your manager review.</p>
+      <p>Please log in to WorkPhelo to complete your review.</p>
+      <p style="margin-top:30px;">Thank you,</p>
+    </td></tr>
+    <tr><td style="padding:20px 30px;border-top:1px solid #eee;">
+      <h3 style="margin:0;"><span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span></h3>
+      <p style="color:#888;font-size:12px;margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+    );
+  }
+
+  async sendAppraisalManagerReviewedNotification(
+    to: string,
+    employeeFirstName: string,
+    cycleTitle: string,
+    finalScore: number,
+    finalRating: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Your appraisal review is complete — ${cycleTitle}`,
+      `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><title>Appraisal Complete</title></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px auto;border-radius:8px;overflow:hidden;">
+    <tr><td style="padding:20px 30px;">
+      <h2 style="margin:0;font-weight:bold;">
+        <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+      </h2>
+    </td></tr>
+    <tr><td style="background:#eef1f4;padding:40px 30px;">
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">Appraisal Review Complete</p>
+    </td></tr>
+    <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
+      <p>Hi ${employeeFirstName},</p>
+      <p>Your manager has completed the review for the <strong>${cycleTitle}</strong> appraisal cycle.</p>
+      <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
+        <tr style="background:#f9fafb;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Final Score</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${finalScore} / 5</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Rating</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${finalRating}</td>
+        </tr>
+      </table>
+      <p>Log in to WorkPhelo to view your full appraisal details.</p>
+      <p style="margin-top:30px;">Thank you,</p>
+    </td></tr>
+    <tr><td style="padding:20px 30px;border-top:1px solid #eee;">
+      <h3 style="margin:0;"><span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span></h3>
+      <p style="color:#888;font-size:12px;margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+    );
+  }
 }

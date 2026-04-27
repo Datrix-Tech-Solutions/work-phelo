@@ -448,6 +448,85 @@ export class NotificationService {
     }
   }
 
+  async sendAppraisalSelfSubmittedNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleTitle: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    managerEmail: string;
+    managerFirstName: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.managerEmail,
+        NotificationType.APPRAISAL_SELF_SUBMITTED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_SELF_SUBMITTED suppressed for ${data.managerEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalSelfSubmittedNotification(
+      data.managerEmail,
+      data.managerFirstName,
+      `${data.employeeFirstName} ${data.employeeLastName}`,
+      data.cycleTitle,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_SELF_SUBMITTED',
+      channel: 'EMAIL',
+      recipient: data.managerEmail,
+      subject: `Self-assessment submitted by ${data.employeeFirstName} ${data.employeeLastName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendAppraisalManagerReviewedNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleTitle: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    finalScore: number;
+    finalRating: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.APPRAISAL_MANAGER_REVIEWED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_MANAGER_REVIEWED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalManagerReviewedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.cycleTitle,
+      data.finalScore,
+      data.finalRating,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_MANAGER_REVIEWED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your appraisal review is complete — ${data.cycleTitle}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendSmsOtp(data: {
     userId?: string;
     tenantId?: string;
@@ -471,7 +550,7 @@ export class NotificationService {
   }
 
   private async log(entry: {
-    userId: string;
+    userId: string | undefined;
     tenantId: string;
     type: any;
     channel: any;

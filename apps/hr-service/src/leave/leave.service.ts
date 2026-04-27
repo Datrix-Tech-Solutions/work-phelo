@@ -536,6 +536,8 @@ export class LeaveService {
       );
     } else if (isCompanyAdminUser(actor)) {
       // company-wide access
+    } else if (hasPermissionRule(actor, 'leave:APPROVE')) {
+      // company-wide access — can approve means can see all requests
     } else if (isEmployeeSelfServiceUser(actor)) {
       const actorEmployee = await getActorEmployee(
         this.prisma,

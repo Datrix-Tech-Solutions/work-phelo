@@ -46,6 +46,8 @@ export const EventPatterns = {
   NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
   NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
   NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
+  NOTIFY_APPRAISAL_SELF_SUBMITTED: 'notify.appraisal_self_submitted',
+  NOTIFY_APPRAISAL_MANAGER_REVIEWED: 'notify.appraisal_manager_reviewed',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -248,6 +250,27 @@ export interface LeaveCancelledEvent {
   startDate: string;
   endDate: string;
   totalDays: number;
+}
+
+export interface AppraisalSelfSubmittedEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleTitle: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  /** Manager's email — null if employee has no manager */
+  managerEmail: string | null;
+  managerFirstName: string | null;
+}
+
+export interface AppraisalManagerReviewedEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleTitle: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  finalScore: number;
+  finalRating: string;
 }
 
 export interface TimeCorrectionSubmittedEvent {

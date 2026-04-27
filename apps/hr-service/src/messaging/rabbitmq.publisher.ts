@@ -17,6 +17,8 @@ import {
   LeaveReviewedEvent,
   LeaveCancelledEvent,
   TimeCorrectionSubmittedEvent,
+  AppraisalSelfSubmittedEvent,
+  AppraisalManagerReviewedEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -282,6 +284,30 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_TIME_CORRECTION_SUBMITTED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationAppraisalSelfSubmitted(
+    data: AppraisalSelfSubmittedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_APPRAISAL_SELF_SUBMITTED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationAppraisalManagerReviewed(
+    data: AppraisalManagerReviewedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_APPRAISAL_MANAGER_REVIEWED,
       data,
       correlationId,
     );
