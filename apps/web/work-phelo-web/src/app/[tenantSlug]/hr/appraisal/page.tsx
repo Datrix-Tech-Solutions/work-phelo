@@ -43,6 +43,9 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
+      <div className="shrink-0">
+        <h1 className="text-xl font-bold text-gray-900">Appraisal Management</h1>
+      </div>
       <AppraisalTabs
         activeTab={activeTab}
         isEmployee={hasHRProfile}

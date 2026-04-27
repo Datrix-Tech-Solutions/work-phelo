@@ -21,6 +21,7 @@ export interface Shift {
 
 interface ShiftPanelProps {
   isOpen: boolean;
+  isLoading?: boolean;
   onClose: () => void;
   employeeOptions: SearchSelectOption[];
   /** Pre-selected employee when opening from a row cell */
@@ -43,6 +44,7 @@ const SHIFT_TYPE_OPTIONS: SearchSelectOption[] = [
 
 interface FormProps {
   isEditing: boolean;
+  isLoading?: boolean;
   employeeName: string;
   employeeOptions: SearchSelectOption[];
   initial: {
@@ -57,7 +59,7 @@ interface FormProps {
   onClose: () => void;
 }
 
-function ShiftForm({ isEditing, employeeName, initial, onSave, onClose }: FormProps) {
+function ShiftForm({ isEditing, isLoading, employeeName, initial, onSave, onClose }: FormProps) {
   const [shiftType, setShiftType] = useState<ShiftType>(initial.shiftType);
   const [startTime, setStartTime] = useState(initial.startTime);
   const [endTime, setEndTime] = useState(initial.endTime);
@@ -89,7 +91,6 @@ function ShiftForm({ isEditing, employeeName, initial, onSave, onClose }: FormPr
       },
       endDate,
     );
-    onClose();
   };
 
   const inputClass =
@@ -105,13 +106,20 @@ function ShiftForm({ isEditing, employeeName, initial, onSave, onClose }: FormPr
       description={isEditing ? 'Edit shift details' : 'Add a new shift'}
       footer={
         <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" type="button" onClick={onClose}>
+          <Button
+            variant="secondary"
+            className="flex-1"
+            type="button"
+            disabled={isLoading}
+            onClick={onClose}
+          >
             Cancel
           </Button>
           <Button
             variant="secondary"
             className="flex-1"
             type="button"
+            disabled={isLoading}
             onClick={() => handleSubmit(true)}
           >
             Save to Draft
@@ -119,6 +127,8 @@ function ShiftForm({ isEditing, employeeName, initial, onSave, onClose }: FormPr
           <Button
             className="flex-1 bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
             type="button"
+            isLoading={isLoading}
+            loadingText="Saving..."
             onClick={() => handleSubmit(false)}
           >
             Save
@@ -195,6 +205,7 @@ function ShiftForm({ isEditing, employeeName, initial, onSave, onClose }: FormPr
 
 export function ShiftPanel({
   isOpen,
+  isLoading,
   onClose,
   employeeOptions,
   employeeId = '',
@@ -218,6 +229,7 @@ export function ShiftPanel({
     <ShiftForm
       key={shift?.id ?? `new-${employeeId}-${date}`}
       isEditing={!!shift}
+      isLoading={isLoading}
       employeeName={employeeName}
       employeeOptions={employeeOptions}
       initial={{

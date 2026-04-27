@@ -27,6 +27,14 @@ export function formatWeekRange(monday: Date): string {
   return `${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${friday.toLocaleDateString('en-US', opts)}`;
 }
 
+export const WEEKDAYS = [
+  { label: 'MON', isoDay: 1 },
+  { label: 'TUE', isoDay: 2 },
+  { label: 'WED', isoDay: 3 },
+  { label: 'THU', isoDay: 4 },
+  { label: 'FRI', isoDay: 5 },
+] as const;
+
 /* ── Component ── */
 
 interface WeekSelectorProps {

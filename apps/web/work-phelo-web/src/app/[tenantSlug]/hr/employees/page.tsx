@@ -67,14 +67,11 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   );
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-8 flex flex-col gap-3 h-full">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Employees</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            {isLoading ? '—' : `${employees.length} employee${employees.length !== 1 ? 's' : ''}`}
-          </p>
+          <h1 className="text-xl font-bold text-gray-900">Employee Directory</h1>
         </div>
         {canInvite && <Button onClick={handleInviteClick}>+ Invite Employee</Button>}
       </div>

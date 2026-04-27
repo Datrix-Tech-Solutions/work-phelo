@@ -47,8 +47,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
       <div className="shrink-0">
-        <h1 className="text-xl font-bold text-gray-900">Leave</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Manage your leave requests and balances</p>
+        <h1 className="text-xl font-bold text-gray-900">Leave Management</h1>
       </div>
 
       <LeaveTabs
