@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsArray,
   IsIn,
+  IsNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -13,6 +14,7 @@ export class CreateAppraisalCycleDto {
     example: 'Midyear Performance Review',
   })
   @IsString()
+  @IsNotEmpty()
   title!: string;
 
   @ApiPropertyOptional({
@@ -31,26 +33,28 @@ export class CreateAppraisalCycleDto {
   @IsDateString()
   endDate!: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Self-assessment deadline',
     example: '2026-07-15',
   })
-  @IsOptional()
   @IsDateString()
   selfAssessmentDeadline?: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'Manager review deadline',
     example: '2026-07-25',
   })
-  @IsOptional()
   @IsDateString()
   managerReviewDeadline?: string;
 
-  @ApiPropertyOptional({ description: 'Frequency', example: 'Annual' })
-  @IsOptional()
+  @ApiProperty({
+    description: 'Cycle frequency',
+    example: 'ANNUAL',
+    enum: ['ANNUAL', 'SEMI_ANNUAL', 'QUARTERLY', 'AD_HOC'],
+  })
   @IsString()
-  frequency?: string;
+  @IsIn(['ANNUAL', 'SEMI_ANNUAL', 'QUARTERLY', 'AD_HOC'])
+  frequency!: string;
 
   @ApiPropertyOptional({
     description: 'Department IDs to restrict cycle',
@@ -82,8 +86,7 @@ export class CreateAppraisalCycleDto {
   @IsString({ each: true })
   employeeIds?: string[];
 
-  @ApiPropertyOptional({ description: 'Appraisal template ID' })
-  @IsOptional()
+  @ApiProperty({ description: 'Appraisal template ID' })
   @IsString()
-  templateId?: string;
+  templateId!: string;
 }

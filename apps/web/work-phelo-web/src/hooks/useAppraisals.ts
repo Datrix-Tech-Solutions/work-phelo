@@ -278,7 +278,7 @@ export function useMyAppraisals() {
             (cycle?.title as string) ??
             (cycle?.name as string) ??
             '',
-          cycleStatus: (appraisal.cycleStatus as string) ?? 'InProgress',
+          cycleStatus: (appraisal.cycleStatus as string) ?? 'UPCOMING',
           overallStatus: (appraisal.overallStatus as string) ?? 'NotStarted',
         };
       });

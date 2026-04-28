@@ -307,6 +307,11 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
   const isPending = isCreating || isUpdating;
 
   const onSubmit = (values: FormValues) => {
+    if (!values.selfAssessmentDeadline || !values.managerReviewDeadline) {
+      toast.error('Self-assessment and manager review deadlines are required');
+      return;
+    }
+
     const payload: Partial<CreateAppraisalCycleDto> = {
       title: values.title,
       description: values.description || undefined,

@@ -17,6 +17,8 @@ import {
   TimeCorrectionSubmittedEvent,
   AppraisalSelfSubmittedEvent,
   AppraisalManagerReviewedEvent,
+  AppraisalSelfReminderEvent,
+  AppraisalManagerReminderEvent,
   SchedulePublishedEvent,
 } from '@work-phelo/types';
 
@@ -352,6 +354,52 @@ export class NotificationHandler {
       this.settleFailure(
         context,
         'notify.appraisal_manager_reviewed',
+        err,
+        `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.appraisal_self_reminder')
+  async handleAppraisalSelfReminder(
+    @Payload() data: WithMeta<AppraisalSelfReminderEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.appraisal_self_reminder] Received | employeeEmail=${data.employeeEmail} | daysRemaining=${data.daysRemaining} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendAppraisalSelfReminderNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.appraisal_self_reminder',
+        err,
+        `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.appraisal_manager_reminder')
+  async handleAppraisalManagerReminder(
+    @Payload() data: WithMeta<AppraisalManagerReminderEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.appraisal_manager_reminder] Received | managerEmail=${data.managerEmail} | daysRemaining=${data.daysRemaining} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendAppraisalManagerReminderNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.appraisal_manager_reminder',
         err,
         `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
       );

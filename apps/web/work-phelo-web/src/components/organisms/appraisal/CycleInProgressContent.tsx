@@ -9,6 +9,7 @@ import { CycleProgressSection } from '@/components/molecules/appraisal/CycleProg
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/useAppraisals';
 import { cn } from '@/lib/utils';
+import type { AppraisalCycle } from '@/types/hr';
 
 type AppraisalItem = {
   id: string;
@@ -19,17 +20,12 @@ type AppraisalItem = {
   status?: string;
 };
 
-type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired';
+type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Cancelled';
 
-function deriveCycleStatus(
-  startDate: string,
-  endDate: string,
-  completionRate: number,
-): CycleStatus {
-  if (completionRate >= 100) return 'Completed';
-  const today = new Date().toISOString().slice(0, 10);
-  if (startDate > today) return 'Upcoming';
-  if (endDate < today) return 'Expired';
+function deriveCycleStatus(cycle: AppraisalCycle, completionRate: number): CycleStatus {
+  if (cycle.status === 'COMPLETED' || completionRate >= 100) return 'Completed';
+  if (cycle.status === 'CANCELLED') return 'Cancelled';
+  if (cycle.status === 'UPCOMING') return 'Upcoming';
   return 'In Progress';
 }
 
@@ -37,14 +33,14 @@ const STATUS_DOT: Record<CycleStatus, string> = {
   'In Progress': 'bg-blue-500',
   Completed: 'bg-green-500',
   Upcoming: 'bg-gray-400',
-  Expired: 'bg-red-400',
+  Cancelled: 'bg-red-400',
 };
 
 const STATUS_TEXT: Record<CycleStatus, string> = {
   'In Progress': 'text-blue-600',
   Completed: 'text-green-600',
   Upcoming: 'text-gray-500',
-  Expired: 'text-red-500',
+  Cancelled: 'text-red-500',
 };
 
 function StatusPill({ status }: { status: CycleStatus }) {
@@ -97,9 +93,7 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
   const fullyCompleted = appraisals.filter((a) => a.status === 'COMPLETED').length;
   const overallPct = total > 0 ? Math.round((fullyCompleted / total) * 100) : 0;
 
-  const cycleStatus: CycleStatus = cycle
-    ? deriveCycleStatus(cycle.startDate, cycle.endDate, overallPct)
-    : 'Upcoming';
+  const cycleStatus: CycleStatus = cycle ? deriveCycleStatus(cycle, overallPct) : 'Upcoming';
 
   type PendingRow = AppraisalItem & { id: string };
   const pendingRows = appraisals as PendingRow[];
