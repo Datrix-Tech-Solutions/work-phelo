@@ -2,21 +2,107 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
   AppraisalCycle,
+  AppraisalKpi,
   AppraisalTemplate,
   CreateAppraisalCycleDto,
+  CreateAppraisalKpiDto,
   CreateAppraisalTemplateDto,
+  CycleResultsSummary,
 } from '@/types/hr';
 
-// ── Templates ─────────────────────────────────────────────────────────────────
+type ListParams = { page?: number; search?: string };
+type KpiScoreInput = { kpiId: string; score: number; comment?: string };
+type ReviewSubmissionInput = {
+  id: string;
+  score?: number;
+  comment?: string;
+  kpiScores?: KpiScoreInput[];
+};
+type MyAppraisalRecord = Record<string, unknown> & {
+  id: unknown;
+  cycleId: unknown;
+  cycleName?: unknown;
+  cycleStatus?: string;
+  overallStatus?: string;
+  overallScore?: number | null;
+  cycle?: unknown;
+};
+type TeamAppraisalRecord = Record<string, unknown> & {
+  id: unknown;
+  employeeId: unknown;
+  cycleId: unknown;
+  employeeName?: unknown;
+  cycleName?: unknown;
+  selfSubmittedAt?: unknown;
+  managerReviewDeadline?: unknown;
+  overallStatus?: string;
+};
 
-export function useAppraisalTemplates(params?: { page?: number; search?: string }) {
+function unpackListResponse<T>(data: unknown): T[] {
+  if (Array.isArray(data)) return data as T[];
+
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    if (Array.isArray(record.data)) return record.data as T[];
+    if (Array.isArray(record.cycles)) return record.cycles as T[];
+    if (Array.isArray(record.templates)) return record.templates as T[];
+    if (Array.isArray(record.notifications)) return record.notifications as T[];
+  }
+
+  return [];
+}
+
+function normalizeCycle(cycle: Record<string, unknown>): AppraisalCycle {
+  return {
+    ...cycle,
+    title: String(cycle.title ?? cycle.name ?? ''),
+    name: String(cycle.name ?? cycle.title ?? ''),
+  } as AppraisalCycle & { name: string };
+}
+
+function normalizeTemplate(template: Record<string, unknown>): AppraisalTemplate {
+  return {
+    ...template,
+    kpis: Array.isArray(template.kpis) ? template.kpis : [],
+  } as AppraisalTemplate;
+}
+
+function stripTemplatePayload(
+  dto: Partial<CreateAppraisalTemplateDto>,
+): Partial<CreateAppraisalTemplateDto> {
+  const payload = { ...dto } as Partial<CreateAppraisalTemplateDto> & {
+    tenantSlug?: string;
+  };
+  delete payload.tenantSlug;
+  return payload;
+}
+
+function buildReviewPayload(input: Omit<ReviewSubmissionInput, 'id'>) {
+  const payload: {
+    score?: number;
+    comment?: string;
+    kpiScores?: KpiScoreInput[];
+  } = {};
+
+  if (typeof input.score === 'number') payload.score = input.score;
+  if (typeof input.comment === 'string' && input.comment.length > 0) {
+    payload.comment = input.comment;
+  } else if (input.comment === '') {
+    payload.comment = '';
+  }
+  if (input.kpiScores?.length) payload.kpiScores = input.kpiScores;
+
+  return payload;
+}
+
+export function useAppraisalTemplates(params?: ListParams) {
   return useQuery<AppraisalTemplate[]>({
     queryKey: params ? ['appraisal-templates', params] : ['appraisal-templates'],
     queryFn: async () => {
       const res = await api.get('/hr/appraisals/templates', {
         params: params ? { page: params.page, search: params.search || undefined } : undefined,
       });
-      return Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
+      return unpackListResponse<Record<string, unknown>>(res.data).map(normalizeTemplate);
     },
   });
 }
@@ -25,7 +111,7 @@ export function useCreateAppraisalTemplate() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: Partial<CreateAppraisalTemplateDto>) =>
-      api.post('/hr/appraisals/templates', dto).then((r) => r.data),
+      api.post('/hr/appraisals/templates', stripTemplatePayload(dto)).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appraisal-templates'] });
     },
@@ -36,7 +122,7 @@ export function useUpdateAppraisalTemplate() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...dto }: { id: string } & Partial<CreateAppraisalTemplateDto>) =>
-      api.put(`/hr/appraisals/templates/${id}`, dto).then((r) => r.data),
+      api.put(`/hr/appraisals/templates/${id}`, stripTemplatePayload(dto)).then((r) => r.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appraisal-templates'] });
     },
@@ -53,20 +139,14 @@ export function useDeleteAppraisalTemplate() {
   });
 }
 
-// ── Cycles ────────────────────────────────────────────────────────────────────
-
-export function useAppraisalCycles(params?: { page?: number; search?: string }) {
+export function useAppraisalCycles(params?: ListParams) {
   return useQuery<AppraisalCycle[]>({
     queryKey: params ? ['appraisal-cycles', params] : ['appraisal-cycles'],
     queryFn: async () => {
       const res = await api.get('/hr/appraisals/cycles', {
         params: params ? { page: params.page, search: params.search || undefined } : undefined,
       });
-      const list = Array.isArray(res.data) ? res.data : (res.data?.data ?? res.data?.cycles ?? []);
-      return list.map((c: Record<string, unknown>) => ({
-        ...c,
-        name: (c.name as string) ?? (c.title as string) ?? '',
-      })) as AppraisalCycle[];
+      return unpackListResponse<Record<string, unknown>>(res.data).map(normalizeCycle);
     },
   });
 }
@@ -123,10 +203,35 @@ export function useCycleAppraisals(cycleId: string) {
 }
 
 export function useCycleKpis(cycleId: string) {
-  return useQuery({
+  return useQuery<AppraisalKpi[]>({
     queryKey: ['cycle-kpis', cycleId],
-    queryFn: () => api.get(`/hr/appraisals/cycles/${cycleId}/kpis`).then((r) => r.data),
+    queryFn: async () => {
+      const res = await api.get(`/hr/appraisals/cycles/${cycleId}/kpis`);
+      return unpackListResponse<AppraisalKpi>(res.data);
+    },
     enabled: !!cycleId,
+  });
+}
+
+export function useCreateCycleKpi(cycleId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: Partial<CreateAppraisalKpiDto>) =>
+      api.post(`/hr/appraisals/cycles/${cycleId}/kpis`, dto).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cycle-kpis', cycleId] });
+    },
+  });
+}
+
+export function useUpdateCycleKpi(cycleId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...dto }: { id: string } & Partial<CreateAppraisalKpiDto>) =>
+      api.put(`/hr/appraisals/cycles/${cycleId}/kpis/${id}`, dto).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cycle-kpis', cycleId] });
+    },
   });
 }
 
@@ -137,7 +242,16 @@ export function useSeedCycleFromTemplate() {
       api.post(`/hr/appraisals/cycles/${cycleId}/seed-from-template`).then((r) => r.data),
     onSuccess: (_, cycleId) => {
       queryClient.invalidateQueries({ queryKey: ['cycle-kpis', cycleId] });
+      queryClient.invalidateQueries({ queryKey: ['appraisal-cycles'] });
     },
+  });
+}
+
+export function useCycleResults(cycleId: string) {
+  return useQuery<CycleResultsSummary>({
+    queryKey: ['cycle-results', cycleId],
+    queryFn: () => api.get(`/hr/appraisals/cycles/${cycleId}/results`).then((r) => r.data),
+    enabled: !!cycleId,
   });
 }
 
@@ -149,44 +263,46 @@ export function useAppraisal(id: string) {
   });
 }
 
-// ── Employee appraisals ───────────────────────────────────────────────────────
-
 export function useMyAppraisals() {
-  return useQuery({
+  return useQuery<MyAppraisalRecord[]>({
     queryKey: ['my-appraisals'],
     queryFn: async () => {
       const res = await api.get('/hr/appraisals/my');
-      const list = Array.isArray(res.data) ? res.data : (res.data?.data ?? []);
-      // Normalise cycle title → name for nested cycle objects
-      return list.map((a: Record<string, unknown>) => {
-        const cycle = a.cycle as Record<string, unknown> | undefined;
+      const list = unpackListResponse<MyAppraisalRecord>(res.data);
+      return list.map((appraisal) => {
+        const cycle = appraisal.cycle as Record<string, unknown> | undefined;
         return {
-          ...a,
+          ...appraisal,
           cycleName:
-            (a.cycleName as string) ?? (cycle?.title as string) ?? (cycle?.name as string) ?? '',
-          cycleStatus: (a.cycleStatus as string) ?? 'Upcoming',
-          overallStatus: (a.overallStatus as string) ?? 'NotStarted',
+            (appraisal.cycleName as string) ??
+            (cycle?.title as string) ??
+            (cycle?.name as string) ??
+            '',
+          cycleStatus: (appraisal.cycleStatus as string) ?? 'InProgress',
+          overallStatus: (appraisal.overallStatus as string) ?? 'NotStarted',
         };
       });
     },
   });
 }
 
-type KpiScoreInput = { kpiId: string; score: number; comment?: string };
+export function useTeamAppraisals() {
+  return useQuery<TeamAppraisalRecord[]>({
+    queryKey: ['team-appraisals'],
+    queryFn: async () => {
+      const res = await api.get('/hr/appraisals/team');
+      return unpackListResponse<TeamAppraisalRecord>(res.data);
+    },
+  });
+}
 
 export function useSubmitSelfAssessment() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      kpiScores,
-      comment,
-    }: {
-      id: string;
-      kpiScores: KpiScoreInput[];
-      comment?: string;
-    }) =>
-      api.patch(`/hr/appraisals/${id}/self-assessment`, { kpiScores, comment }).then((r) => r.data),
+    mutationFn: ({ id, ...payload }: ReviewSubmissionInput) =>
+      api
+        .patch(`/hr/appraisals/${id}/self-assessment`, buildReviewPayload(payload))
+        .then((r) => r.data),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['my-appraisals'] });
       queryClient.invalidateQueries({ queryKey: ['appraisal', id] });
@@ -197,16 +313,10 @@ export function useSubmitSelfAssessment() {
 export function useSubmitManagerReview() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({
-      id,
-      kpiScores,
-      comment,
-    }: {
-      id: string;
-      kpiScores: KpiScoreInput[];
-      comment?: string;
-    }) =>
-      api.patch(`/hr/appraisals/${id}/manager-review`, { kpiScores, comment }).then((r) => r.data),
+    mutationFn: ({ id, ...payload }: ReviewSubmissionInput) =>
+      api
+        .patch(`/hr/appraisals/${id}/manager-review`, buildReviewPayload(payload))
+        .then((r) => r.data),
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['team-appraisals'] });
       queryClient.invalidateQueries({ queryKey: ['cycle-appraisals'] });
