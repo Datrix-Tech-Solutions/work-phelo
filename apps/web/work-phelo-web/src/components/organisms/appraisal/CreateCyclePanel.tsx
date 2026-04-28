@@ -15,12 +15,12 @@ import { cn } from '@/lib/utils';
 import type { AppraisalCycle, CreateAppraisalCycleDto, Frequency } from '@/types/hr';
 import { Icons } from '@/components/atoms/icons';
 
-const FREQUENCY_OPTIONS = [
-  { value: 'Annual', label: 'Annual' },
-  { value: 'Semi-annual', label: 'Semi-annual' },
-  { value: 'Quarterly', label: 'Quarterly' },
-  { value: 'Ad-hoc', label: 'Ad-hoc' },
-];
+// const FREQUENCY_OPTIONS = [
+//   { value: 'Annual', label: 'Annual' },
+//   { value: 'Semi-annual', label: 'Semi-annual' },
+//   { value: 'Quarterly', label: 'Quarterly' },
+//   { value: 'Ad-hoc', label: 'Ad-hoc' },
+// ];
 
 const EMPLOYMENT_TYPE_OPTIONS = [
   { value: 'FULL_TIME', label: 'Full Time' },
@@ -456,7 +456,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         render={({ field }) => (
           <SearchSelect
             label="Appraisal Template"
-            placeholder="Select template (optional)"
+            placeholder="Select template"
             options={templateOptions}
             value={field.value}
             onChange={field.onChange}

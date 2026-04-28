@@ -1,22 +1,31 @@
 'use client';
 
-import { use } from 'react';
-import { useAppraisalCycles } from '@/hooks/useAppraisals';
+import { use, useMemo } from 'react';
+import { useCycleAppraisals } from '@/hooks/useAppraisals';
 import { CycleInProgressContent } from '@/components/organisms/appraisal/CycleInProgressContent';
-import { CycleCompletedContent } from '@/components/organisms/appraisal/CycleCompletedContent';
+import { CycleResultsContent } from '@/components/organisms/appraisal/CycleResultsContent';
 
 function CycleDetailRouter({ tenantSlug, cycleId }: { tenantSlug: string; cycleId: string }) {
-  const { data: cycles = [], isLoading } = useAppraisalCycles();
-  const cycle = cycles.find((c) => c.id === cycleId);
+  const { data: raw, isLoading } = useCycleAppraisals(cycleId);
+
+  const appraisals: { selfStatus?: string; managerStatus?: string }[] = useMemo(() => {
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).data))
+      return (raw as { data: { selfStatus?: string; managerStatus?: string }[] }).data;
+    return [];
+  }, [raw]);
 
   if (isLoading) {
     return <div className="p-8 text-sm text-gray-400">Loading…</div>;
   }
 
-  const isCompleted = (cycle?.completionRate ?? 0) >= 100;
+  const total = appraisals.length;
+  const selfCompleted = appraisals.filter((a) => a.selfStatus === 'SUBMITTED').length;
+  const managerCompleted = appraisals.filter((a) => a.managerStatus === 'SUBMITTED').length;
+  const rate = total > 0 ? Math.round(((selfCompleted + managerCompleted) / (total * 2)) * 100) : 0;
 
-  if (isCompleted) {
-    return <CycleCompletedContent tenantSlug={tenantSlug} cycleId={cycleId} />;
+  if (rate >= 100) {
+    return <CycleResultsContent tenantSlug={tenantSlug} cycleId={cycleId} />;
   }
 
   return <CycleInProgressContent tenantSlug={tenantSlug} cycleId={cycleId} />;

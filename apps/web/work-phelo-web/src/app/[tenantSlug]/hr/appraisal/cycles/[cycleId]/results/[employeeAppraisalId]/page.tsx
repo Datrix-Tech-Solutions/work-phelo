@@ -133,10 +133,21 @@ export default function EmployeeAppraisalResultPage({
           <p className="text-sm text-gray-500">Results</p>
         </div>
         <div className="flex flex-col items-end shrink-0">
-          <span className="text-xs text-gray-400">Overall Self-Assessment Score</span>
-          <span className="text-2xl font-bold text-gray-900">
-            {scoreToPercent(appraisal.selfResponse?.score)}
-          </span>
+          {appraisal.finalizedAppraisal ? (
+            <>
+              <span className="text-xs text-gray-400">Overall Assessment Score</span>
+              <span className="text-2xl font-bold text-gray-900">
+                {scoreToPercent(appraisal.finalizedAppraisal.overallScore)}
+              </span>
+            </>
+          ) : (
+            <>
+              <span className="text-xs text-gray-400">Overall Self-Assessment Score</span>
+              <span className="text-2xl font-bold text-gray-900">
+                {scoreToPercent(appraisal.selfResponse?.score)}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
