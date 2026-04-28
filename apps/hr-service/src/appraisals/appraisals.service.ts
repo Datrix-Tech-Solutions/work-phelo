@@ -1594,6 +1594,50 @@ export class AppraisalsService {
     kpiScores: KpiScoreDto[],
     reviewType: 'SELF' | 'MANAGER',
   ) {
+    const uniqueKpiIds = [...new Set(kpiScores.map((ks) => ks.kpiId))];
+    if (uniqueKpiIds.length !== kpiScores.length) {
+      throw new BadRequestException(
+        'Duplicate KPI scores are not allowed in a single submission',
+      );
+    }
+
+    const appraisal = await this.prisma.appraisal.findFirst({
+      where: { id: appraisalId, tenantId },
+      select: { cycleId: true },
+    });
+    if (!appraisal) throw new NotFoundException('Appraisal not found');
+
+    const allowedKpis = await this.prisma.appraisalKpi.findMany({
+      where: {
+        tenantId,
+        cycleId: appraisal.cycleId,
+        id: { in: uniqueKpiIds },
+      },
+      select: { id: true, title: true, maxScore: true },
+    });
+
+    if (allowedKpis.length !== uniqueKpiIds.length) {
+      throw new BadRequestException(
+        'One or more submitted KPIs are invalid for this appraisal',
+      );
+    }
+
+    const kpiById = new Map(allowedKpis.map((kpi) => [kpi.id, kpi]));
+    for (const submitted of kpiScores) {
+      const kpi = kpiById.get(submitted.kpiId);
+      if (!kpi) {
+        throw new BadRequestException(
+          'One or more submitted KPIs are invalid for this appraisal',
+        );
+      }
+
+      if (submitted.score > kpi.maxScore) {
+        throw new BadRequestException(
+          `Score for "${kpi.title}" cannot exceed its maximum of ${kpi.maxScore}`,
+        );
+      }
+    }
+
     await this.prisma.$transaction(
       kpiScores.map((ks) =>
         this.prisma.appraisalKpiScore.upsert({
