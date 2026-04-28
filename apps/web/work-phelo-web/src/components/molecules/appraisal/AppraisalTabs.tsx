@@ -4,15 +4,21 @@ interface Props {
   activeTab: 'my' | 'team' | 'hr';
   isEmployee: boolean;
   canReviewTeam: boolean;
-  isHR: boolean;
+  canViewAppraisals: boolean;
   onTabChange: (tab: 'my' | 'team' | 'hr') => void;
 }
 
-export function AppraisalTabs({ activeTab, isEmployee, canReviewTeam, isHR, onTabChange }: Props) {
+export function AppraisalTabs({
+  activeTab,
+  isEmployee,
+  canReviewTeam,
+  canViewAppraisals,
+  onTabChange,
+}: Props) {
   const tabs = [
     ...(isEmployee ? [{ key: 'my', label: 'My Appraisal' }] : []),
     ...(canReviewTeam ? [{ key: 'team', label: 'Team Review' }] : []),
-    ...(isHR ? [{ key: 'hr', label: 'Appraisals' }] : []),
+    ...(canViewAppraisals ? [{ key: 'hr', label: 'Appraisals' }] : []),
   ];
 
   return (
