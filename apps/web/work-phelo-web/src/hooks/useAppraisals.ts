@@ -25,6 +25,7 @@ type MyAppraisalRecord = Record<string, unknown> & {
   cycleStatus?: string;
   overallStatus?: string;
   overallScore?: number | null;
+  cycle?: unknown;
 };
 type TeamAppraisalRecord = Record<string, unknown> & {
   id: unknown;
@@ -68,8 +69,11 @@ function normalizeTemplate(template: Record<string, unknown>): AppraisalTemplate
 
 function stripTemplatePayload(
   dto: Partial<CreateAppraisalTemplateDto>,
-): Omit<Partial<CreateAppraisalTemplateDto>, 'tenantSlug'> {
-  const { tenantSlug: _tenantSlug, ...payload } = dto;
+): Partial<CreateAppraisalTemplateDto> {
+  const payload = { ...dto } as Partial<CreateAppraisalTemplateDto> & {
+    tenantSlug?: string;
+  };
+  delete payload.tenantSlug;
   return payload;
 }
 
@@ -90,8 +94,6 @@ function buildReviewPayload(input: Omit<ReviewSubmissionInput, 'id'>) {
 
   return payload;
 }
-
-// ── Templates ────────────────────────────────────────────────────────────────
 
 export function useAppraisalTemplates(params?: ListParams) {
   return useQuery<AppraisalTemplate[]>({
@@ -136,8 +138,6 @@ export function useDeleteAppraisalTemplate() {
     },
   });
 }
-
-// ── Cycles ───────────────────────────────────────────────────────────────────
 
 export function useAppraisalCycles(params?: ListParams) {
   return useQuery<AppraisalCycle[]>({
@@ -254,8 +254,6 @@ export function useCycleResults(cycleId: string) {
     enabled: !!cycleId,
   });
 }
-
-// ── Individual Appraisals ────────────────────────────────────────────────────
 
 export function useAppraisal(id: string) {
   return useQuery({

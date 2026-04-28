@@ -568,6 +568,8 @@ export interface AppraisalCycle {
   managerReviewDeadline?: string;
   templateId?: string;
   departmentIds?: string[];
+  employmentTypes?: string[];
+  employeeIds?: string[];
   isActive: boolean;
   createdBy: string;
   createdAt: string;
@@ -672,7 +674,6 @@ export interface FinalizedAppraisal {
 }
 
 export interface CreateAppraisalTemplateDto {
-  tenantSlug: string;
   name: string;
   selfAssessmentWeight: number;
   managerAssessmentWeight: number;
@@ -681,14 +682,16 @@ export interface CreateAppraisalTemplateDto {
 
 export interface CreateAppraisalCycleDto {
   title: string;
-  frequency: Frequency;
+  frequency?: Frequency;
   description?: string;
   startDate: string;
   endDate: string;
-  selfAssessmentDeadline: string;
-  managerReviewDeadline: string;
+  selfAssessmentDeadline?: string;
+  managerReviewDeadline?: string;
   templateId?: string;
   departmentIds?: string[];
+  employmentTypes?: string[];
+  employeeIds?: string[];
 }
 
 export interface CreateAppraisalKpiDto {
