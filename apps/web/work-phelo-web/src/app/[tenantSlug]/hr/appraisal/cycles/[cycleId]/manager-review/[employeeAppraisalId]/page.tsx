@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 
 function scoreToPercent(score: number | null | undefined): string {
   if (score == null) return '—';
-  return `${Math.round((score / 5) * 100)}%`;
+  return `${Math.round(score)}%`;
 }
 
 export default function ManagerReviewPage({

@@ -307,25 +307,20 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
   const isPending = isCreating || isUpdating;
 
   const onSubmit = (values: FormValues) => {
-    if (
-      !values.frequency ||
-      !values.selfAssessmentDeadline ||
-      !values.managerReviewDeadline ||
-      !values.templateId
-    ) {
-      toast.error('Please complete all required cycle fields');
+    if (!values.selfAssessmentDeadline || !values.managerReviewDeadline) {
+      toast.error('Self-assessment and manager review deadlines are required');
       return;
     }
 
     const payload: Partial<CreateAppraisalCycleDto> = {
       title: values.title,
       description: values.description || undefined,
-      frequency: values.frequency as Frequency,
+      frequency: (values.frequency as Frequency) || undefined,
       startDate: values.startDate,
       endDate: values.endDate,
-      selfAssessmentDeadline: values.selfAssessmentDeadline,
-      managerReviewDeadline: values.managerReviewDeadline,
-      templateId: values.templateId,
+      selfAssessmentDeadline: values.selfAssessmentDeadline || undefined,
+      managerReviewDeadline: values.managerReviewDeadline || undefined,
+      templateId: values.templateId || undefined,
       departmentIds: values.departmentIds.length > 0 ? values.departmentIds : undefined,
       employmentTypes: values.employmentTypes.length > 0 ? values.employmentTypes : undefined,
     };
@@ -379,7 +374,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
       />
 
       {/* Frequency */}
-      {/* <Controller
+      <Controller
         name="frequency"
         control={control}
         render={({ field }) => (
@@ -392,7 +387,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
             error={errors.frequency?.message}
           />
         )}
-      /> */}
+      />
 
       {/* Start + End Date */}
       <div className="grid grid-cols-2 gap-4">
@@ -466,7 +461,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         render={({ field }) => (
           <SearchSelect
             label="Appraisal Template"
-            placeholder="Select template (optional)"
+            placeholder="Select template"
             options={templateOptions}
             value={field.value}
             onChange={field.onChange}

@@ -16,7 +16,13 @@ const STATUS_CONFIG: Record<MyAppraisalStatus, { dot: string; text: string }> = 
 };
 
 function deriveStatus(overallStatus: string, deadline: string): MyAppraisalStatus {
-  if (overallStatus === 'Finalized') return 'Completed';
+  if (
+    overallStatus === 'Completed' ||
+    overallStatus === 'SelfSubmitted' ||
+    overallStatus === 'ManagerSubmitted' ||
+    overallStatus === 'Finalized'
+  )
+    return 'Completed';
   if (deadline) {
     const today = new Date().toISOString().slice(0, 10);
     if (deadline.slice(0, 10) < today) return 'Overdue';
@@ -56,7 +62,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
         cycleName?: unknown;
         cycleStatus?: string;
         overallStatus?: string;
-        overallScore?: number | null;
+        finalScore?: number | null;
       }) => {
         const cycleId = String(r.cycleId ?? '');
         const cycle = cycles.find((c) => c.id === cycleId);
@@ -64,9 +70,9 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
           id: String(r.id),
           cycleId,
           cycleName: String(r.cycleName ?? cycle?.title ?? ''),
-          cycleStatus: r.cycleStatus ?? 'UPCOMING',
+          cycleStatus: r.cycleStatus ?? 'Upcoming',
           overallStatus: r.overallStatus ?? 'NotStarted',
-          overallScore: r.overallScore != null ? Number(r.overallScore) : undefined,
+          overallScore: r.finalScore != null ? Math.round(Number(r.finalScore)) : undefined,
           selfAssessmentDeadline: cycle?.selfAssessmentDeadline ?? '',
         };
       },
@@ -108,12 +114,14 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
     {
       key: 'overallScore',
       label: 'Overall Score',
-      render: (r) =>
-        r.overallScore != null ? (
-          <span className="font-medium text-gray-900">{r.overallScore}%</span>
-        ) : (
-          <span className="text-gray-400">-</span>
-        ),
+      render: (r) => {
+        const managerReviewed =
+          r.overallStatus === 'Finalized' || r.overallStatus === 'ManagerSubmitted';
+        if (managerReviewed && r.overallScore != null) {
+          return <span className="font-medium text-gray-900">{r.overallScore}%</span>;
+        }
+        return <span className="text-gray-400">—</span>;
+      },
     },
     {
       key: 'status',
