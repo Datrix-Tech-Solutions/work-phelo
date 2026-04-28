@@ -8,12 +8,26 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useCreateAppraisalCycle, useUpdateAppraisalCycle } from '@/hooks/useAppraisals';
+import { useCreateAppraisalCycle, useUpdateAppraisalCycle, useAppraisalTemplates } from '@/hooks';
 import { useDepartments } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
-import { AppraisalCycle, CreateAppraisalCycleDto, Frequency } from '@/types/hr';
+import type { AppraisalCycle, CreateAppraisalCycleDto, Frequency } from '@/types/hr';
 import { Icons } from '@/components/atoms/icons';
+
+const FREQUENCY_OPTIONS = [
+  { value: 'Annual', label: 'Annual' },
+  { value: 'Semi-annual', label: 'Semi-annual' },
+  { value: 'Quarterly', label: 'Quarterly' },
+  { value: 'Ad-hoc', label: 'Ad-hoc' },
+];
+
+const EMPLOYMENT_TYPE_OPTIONS = [
+  { value: 'FULL_TIME', label: 'Full Time' },
+  { value: 'PART_TIME', label: 'Part Time' },
+  { value: 'CONTRACT', label: 'Contract' },
+  { value: 'INTERN', label: 'Intern' },
+];
 
 interface CreateCyclePanelProps {
   isOpen: boolean;
@@ -23,6 +37,7 @@ interface CreateCyclePanelProps {
 
 type FormValues = {
   title: string;
+  description: string;
   frequency: Frequency | '';
   startDate: string;
   endDate: string;
@@ -30,17 +45,11 @@ type FormValues = {
   managerReviewDeadline: string;
   templateId: string;
   departmentIds: string[];
+  employmentTypes: string[];
 };
 
-const FREQUENCY_OPTIONS = [
-  { value: 'Annual', label: 'Annual' },
-  { value: 'Semi-annual', label: 'Semi-annual' },
-  { value: 'Quarterly', label: 'Quarterly' },
-  { value: 'Ad-hoc', label: 'Ad-hoc' },
-];
-
-/* ── Applies-To multi-select ── */
-function AppliesToSelect({
+/* ── Applies-To multi-select (departments) ── */
+function DepartmentSelect({
   value,
   onChange,
 }: {
@@ -48,39 +57,28 @@ function AppliesToSelect({
   onChange: (ids: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const { data: departments = [] } = useDepartments();
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const allSelected = value.length === 0;
-
-  const toggleAll = () => onChange([]);
-
-  const toggleDept = (id: string) => {
-    if (value.includes(id)) {
-      onChange(value.filter((v) => v !== id));
-    } else {
-      onChange([...value, id]);
-    }
-  };
-
-  const displayLabel = allSelected
-    ? 'All employees'
+  const label = allSelected
+    ? 'All departments'
     : `${value.length} department${value.length !== 1 ? 's' : ''} selected`;
 
-  return (
-    <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
-      <label className="text-sm font-bold text-gray-900">Applies To</label>
+  const toggle = (id: string) =>
+    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
 
+  return (
+    <div className="flex flex-col gap-1.5 relative" ref={ref}>
+      <label className="text-sm font-medium text-gray-700">Departments</label>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -89,7 +87,7 @@ function AppliesToSelect({
           open ? 'border-brand ring-1 ring-brand/20' : 'border-gray-300',
         )}
       >
-        <span className={allSelected ? 'text-gray-900' : 'text-gray-900'}>{displayLabel}</span>
+        <span className="text-gray-900">{label}</span>
         <Icons.ChevronDown
           className={cn('text-gray-400 transition-transform duration-150', open && 'rotate-180')}
         />
@@ -98,25 +96,22 @@ function AppliesToSelect({
       {open && (
         <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
           <div className="max-h-52 overflow-y-auto py-1">
-            {/* All Employees option */}
             <button
               type="button"
               onMouseDown={(e) => e.preventDefault()}
-              onClick={toggleAll}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors"
+              onClick={() => onChange([])}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
             >
               <span
                 className={cn(
-                  'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+                  'w-4 h-4 rounded border flex items-center justify-center shrink-0',
                   allSelected ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
                 )}
               >
                 {allSelected && <Icons.Check className="w-2.5 h-2.5 text-white" />}
               </span>
-              All Employees
+              All Departments
             </button>
-
-            {/* Department options */}
             {departments.map((dept) => {
               const checked = value.includes(dept.id);
               return (
@@ -124,12 +119,12 @@ function AppliesToSelect({
                   key={dept.id}
                   type="button"
                   onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => toggleDept(dept.id)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50 transition-colors"
+                  onClick={() => toggle(dept.id)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
                 >
                   <span
                     className={cn(
-                      'w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors',
+                      'w-4 h-4 rounded border flex items-center justify-center shrink-0',
                       checked ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
                     )}
                   >
@@ -139,10 +134,106 @@ function AppliesToSelect({
                 </button>
               );
             })}
-
             {departments.length === 0 && (
               <p className="px-4 py-3 text-sm text-gray-400 text-center">No departments found</p>
             )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Employment type multi-select ── */
+function EmploymentTypeSelect({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (types: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const allSelected = value.length === 0;
+  const label = allSelected
+    ? 'All employment types'
+    : EMPLOYMENT_TYPE_OPTIONS.filter((o) => value.includes(o.value))
+        .map((o) => o.label)
+        .join(', ');
+
+  const toggle = (v: string) =>
+    onChange(value.includes(v) ? value.filter((t) => t !== v) : [...value, v]);
+
+  return (
+    <div className="flex flex-col gap-1.5 relative" ref={ref}>
+      <label className="text-sm font-medium text-gray-700">Employment Type</label>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          'flex items-center justify-between w-full px-4 py-3 border rounded-input bg-white text-sm transition-colors',
+          open ? 'border-brand ring-1 ring-brand/20' : 'border-gray-300',
+        )}
+      >
+        <span className="text-gray-900 truncate">{label}</span>
+        <Icons.ChevronDown
+          className={cn(
+            'text-gray-400 transition-transform duration-150 shrink-0',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+          <div className="py-1">
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onChange([])}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
+            >
+              <span
+                className={cn(
+                  'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+                  allSelected ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
+                )}
+              >
+                {allSelected && <Icons.Check className="w-2.5 h-2.5 text-white" />}
+              </span>
+              All Types
+            </button>
+            {EMPLOYMENT_TYPE_OPTIONS.map((opt) => {
+              const checked = value.includes(opt.value);
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggle(opt.value)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
+                >
+                  <span
+                    className={cn(
+                      'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+                      checked ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
+                    )}
+                  >
+                    {checked && <Icons.Check className="w-2.5 h-2.5 text-white" />}
+                  </span>
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -155,6 +246,9 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
   const toast = useToast();
   const isEditing = !!editCycle;
 
+  const { data: templates = [] } = useAppraisalTemplates();
+  const templateOptions = templates.map((t) => ({ value: t.id, label: t.name }));
+
   const {
     register,
     handleSubmit,
@@ -164,6 +258,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
   } = useForm<FormValues>({
     defaultValues: {
       title: '',
+      description: '',
       frequency: '',
       startDate: '',
       endDate: '',
@@ -171,6 +266,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
       managerReviewDeadline: '',
       templateId: '',
       departmentIds: [],
+      employmentTypes: [],
     },
   });
 
@@ -178,6 +274,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
     if (editCycle) {
       reset({
         title: editCycle.title,
+        description: editCycle.description ?? '',
         frequency: editCycle.frequency ?? '',
         startDate: editCycle.startDate.slice(0, 10),
         endDate: editCycle.endDate.slice(0, 10),
@@ -185,10 +282,12 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         managerReviewDeadline: editCycle.managerReviewDeadline?.slice(0, 10) ?? '',
         templateId: editCycle.templateId ?? '',
         departmentIds: editCycle.departmentIds ?? [],
+        employmentTypes: editCycle.employmentTypes ?? [],
       });
     } else {
       reset({
         title: '',
+        description: '',
         frequency: '',
         startDate: '',
         endDate: '',
@@ -196,6 +295,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         managerReviewDeadline: '',
         templateId: '',
         departmentIds: [],
+        employmentTypes: [],
       });
     }
   }, [editCycle, reset, isOpen]);
@@ -209,13 +309,15 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
   const onSubmit = (values: FormValues) => {
     const payload: Partial<CreateAppraisalCycleDto> = {
       title: values.title,
-      frequency: values.frequency as Frequency,
+      description: values.description || undefined,
+      frequency: (values.frequency as Frequency) || undefined,
       startDate: values.startDate,
       endDate: values.endDate,
-      selfAssessmentDeadline: values.selfAssessmentDeadline,
-      managerReviewDeadline: values.managerReviewDeadline,
+      selfAssessmentDeadline: values.selfAssessmentDeadline || undefined,
+      managerReviewDeadline: values.managerReviewDeadline || undefined,
       templateId: values.templateId || undefined,
       departmentIds: values.departmentIds.length > 0 ? values.departmentIds : undefined,
+      employmentTypes: values.employmentTypes.length > 0 ? values.employmentTypes : undefined,
     };
 
     const options = {
@@ -250,7 +352,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         </div>
       }
     >
-      {/* Cycle Name */}
+      {/* Cycle name */}
       <FormField
         label="Cycle name"
         registration={register('title', { required: 'Cycle name is required' })}
@@ -258,11 +360,18 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         placeholder="eg; 2026 Annual Review"
       />
 
+      {/* Description */}
+      <FormField
+        label="Description"
+        registration={register('description')}
+        error={errors.description}
+        placeholder="Optional description"
+      />
+
       {/* Frequency */}
-      <Controller
+      {/* <Controller
         name="frequency"
         control={control}
-        rules={{ required: 'Frequency is required' }}
         render={({ field }) => (
           <SearchSelect
             label="Frequency"
@@ -273,7 +382,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
             error={errors.frequency?.message}
           />
         )}
-      />
+      /> */}
 
       {/* Start + End Date */}
       <div className="grid grid-cols-2 gap-4">
@@ -287,6 +396,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
               value={field.value}
               onChange={field.onChange}
               error={errors.startDate?.message}
+              disablePast
             />
           )}
         />
@@ -303,61 +413,71 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
               value={field.value}
               onChange={field.onChange}
               error={errors.endDate?.message}
+              disablePast
             />
           )}
         />
       </div>
 
-      {/* Self Assessment + Manager Review Deadline */}
+      {/* Self-assessment + Manager review deadline */}
       <div className="grid grid-cols-2 gap-4">
         <Controller
           name="selfAssessmentDeadline"
           control={control}
-          rules={{ required: 'Self assessment deadline is required' }}
           render={({ field }) => (
             <DatePicker
               label="Self Assessment Deadline"
               value={field.value}
               onChange={field.onChange}
               error={errors.selfAssessmentDeadline?.message}
+              disablePast
             />
           )}
         />
         <Controller
           name="managerReviewDeadline"
           control={control}
-          rules={{ required: 'Manager review deadline is required' }}
           render={({ field }) => (
             <DatePicker
               label="Manager Review Deadline"
               value={field.value}
               onChange={field.onChange}
               error={errors.managerReviewDeadline?.message}
+              disablePast
             />
           )}
         />
       </div>
 
-      {/* Appraisal Template */}
+      {/* Template */}
       <Controller
         name="templateId"
         control={control}
         render={({ field }) => (
           <SearchSelect
             label="Appraisal Template"
-            placeholder="Select Template"
-            options={[]}
+            placeholder="Select template (optional)"
+            options={templateOptions}
             value={field.value}
             onChange={field.onChange}
           />
         )}
       />
 
-      {/* Applies To */}
+      {/* Applies To — departments */}
       <Controller
         name="departmentIds"
         control={control}
-        render={({ field }) => <AppliesToSelect value={field.value} onChange={field.onChange} />}
+        render={({ field }) => <DepartmentSelect value={field.value} onChange={field.onChange} />}
+      />
+
+      {/* Applies To — employment types */}
+      <Controller
+        name="employmentTypes"
+        control={control}
+        render={({ field }) => (
+          <EmploymentTypeSelect value={field.value} onChange={field.onChange} />
+        )}
       />
     </SidePanel>
   );

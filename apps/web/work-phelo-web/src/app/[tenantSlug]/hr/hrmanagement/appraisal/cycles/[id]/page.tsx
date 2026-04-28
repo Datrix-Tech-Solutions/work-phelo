@@ -1,11 +1,9 @@
-// HR MANAGEMENT APPRAISAL CYCLE DETAIL PAGE //
-
 'use client';
 
 import { use } from 'react';
 import Link from 'next/link';
 import { Badge } from '@/components/atoms/Badge';
-import { useAppraisalCycles } from '@/hooks/useAppraisals';
+import { useAppraisalCycles } from '@/hooks';
 import { formatDate } from '@/lib/formatters';
 import { Icons } from '@/components/atoms/icons';
 
@@ -28,65 +26,57 @@ export default function CycleDetailPage({
   const { tenantSlug, id } = use(params);
 
   const { data: cycles = [], isLoading } = useAppraisalCycles();
-
   const cycle = cycles.find((c) => c.id === id);
 
-  if (isLoading) {
-    return <div className="p-8 text-sm text-gray-400">Loading...</div>;
-  }
-
-  if (!cycle) {
-    return <div className="p-8 text-sm text-red-400">Cycle not found.</div>;
-  }
+  if (isLoading) return <div className="p-8 text-sm text-gray-400">Loading...</div>;
+  if (!cycle) return <div className="p-8 text-sm text-red-400">Cycle not found.</div>;
 
   return (
-    <>
-      {/* Header */}
-      <div className="px-8 pt-6 pb-8 flex flex-col gap-4">
-        <Link
-          href={`/${tenantSlug}/hr/hrmanagement/appraisal/cycles`}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors w-fit"
-        >
-          <Icons.ChevronLeft />
-          Back to Cycles
-        </Link>
+    <div className="px-8 pt-6 pb-8 flex flex-col gap-6">
+      <Link
+        href={`/${tenantSlug}/hr/hrmanagement/appraisal/cycles`}
+        className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors w-fit"
+      >
+        <Icons.ChevronLeft />
+        Back to Cycles
+      </Link>
 
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-gray-900">{cycle.title}</h1>
-              <Badge
-                variant={cycle.isActive ? 'success' : 'neutral'}
-                label={cycle.isActive ? 'Active' : 'Inactive'}
-              />
-            </div>
-            <p className="text-sm text-gray-500">
-              {formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}
-            </p>
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold text-gray-900">{cycle.title}</h1>
+            <Badge
+              variant={cycle.isActive ? 'success' : 'neutral'}
+              label={cycle.isActive ? 'Active' : 'Inactive'}
+            />
           </div>
-        </div>
-
-        {/* Overview */}
-        <div className="grid grid-cols-2 gap-x-12 gap-y-6 max-w-2xl mt-4">
-          <DetailRow label="Start Date" value={formatDate(cycle.startDate)} />
-          <DetailRow label="End Date" value={formatDate(cycle.endDate)} />
-          <DetailRow
-            label="Status"
-            value={
-              <Badge
-                variant={cycle.isActive ? 'success' : 'neutral'}
-                label={cycle.isActive ? 'Active' : 'Inactive'}
-              />
-            }
-          />
-          <DetailRow label="Appraisals" value={cycle._count?.appraisals ?? 0} />
-          {cycle.description && (
-            <div className="col-span-2">
-              <DetailRow label="Description" value={cycle.description} />
-            </div>
-          )}
+          <p className="text-sm text-gray-500">
+            {formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}
+          </p>
         </div>
       </div>
-    </>
+
+      <div className="grid grid-cols-2 gap-x-12 gap-y-6 max-w-2xl">
+        <DetailRow label="Frequency" value={cycle.frequency ?? '—'} />
+        <DetailRow label="Appraisals" value={cycle._count?.appraisals ?? 0} />
+        {cycle.selfAssessmentDeadline && (
+          <DetailRow
+            label="Self-Assessment Deadline"
+            value={formatDate(cycle.selfAssessmentDeadline)}
+          />
+        )}
+        {cycle.managerReviewDeadline && (
+          <DetailRow
+            label="Manager Review Deadline"
+            value={formatDate(cycle.managerReviewDeadline)}
+          />
+        )}
+        {cycle.description && (
+          <div className="col-span-2">
+            <DetailRow label="Description" value={cycle.description} />
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
