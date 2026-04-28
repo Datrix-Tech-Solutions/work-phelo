@@ -16,10 +16,10 @@ import type { AppraisalCycle, CreateAppraisalCycleDto, Frequency } from '@/types
 import { Icons } from '@/components/atoms/icons';
 
 const FREQUENCY_OPTIONS = [
-  { value: 'Annual', label: 'Annual' },
-  { value: 'Semi-annual', label: 'Semi-annual' },
-  { value: 'Quarterly', label: 'Quarterly' },
-  { value: 'Ad-hoc', label: 'Ad-hoc' },
+  { value: 'ANNUAL', label: 'Annual' },
+  { value: 'SEMI_ANNUAL', label: 'Semi-annual' },
+  { value: 'QUARTERLY', label: 'Quarterly' },
+  { value: 'AD_HOC', label: 'Ad-hoc' },
 ];
 
 const EMPLOYMENT_TYPE_OPTIONS = [
@@ -307,15 +307,25 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
   const isPending = isCreating || isUpdating;
 
   const onSubmit = (values: FormValues) => {
+    if (
+      !values.frequency ||
+      !values.selfAssessmentDeadline ||
+      !values.managerReviewDeadline ||
+      !values.templateId
+    ) {
+      toast.error('Please complete all required cycle fields');
+      return;
+    }
+
     const payload: Partial<CreateAppraisalCycleDto> = {
       title: values.title,
       description: values.description || undefined,
-      frequency: (values.frequency as Frequency) || undefined,
+      frequency: values.frequency as Frequency,
       startDate: values.startDate,
       endDate: values.endDate,
-      selfAssessmentDeadline: values.selfAssessmentDeadline || undefined,
-      managerReviewDeadline: values.managerReviewDeadline || undefined,
-      templateId: values.templateId || undefined,
+      selfAssessmentDeadline: values.selfAssessmentDeadline,
+      managerReviewDeadline: values.managerReviewDeadline,
+      templateId: values.templateId,
       departmentIds: values.departmentIds.length > 0 ? values.departmentIds : undefined,
       employmentTypes: values.employmentTypes.length > 0 ? values.employmentTypes : undefined,
     };

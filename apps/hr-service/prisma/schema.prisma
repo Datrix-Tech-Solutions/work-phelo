@@ -83,6 +83,26 @@ enum AppraisalStatus {
   @@schema("hr")
 }
 
+enum AppraisalCycleStatus {
+  UPCOMING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+
+  @@schema("hr")
+}
+
+enum AppraisalReminderType {
+  SELF_7_DAYS
+  SELF_3_DAYS
+  SELF_DUE
+  MANAGER_7_DAYS
+  MANAGER_3_DAYS
+  MANAGER_DUE
+
+  @@schema("hr")
+}
+
 enum ReviewStatus {
   PENDING
   SUBMITTED
@@ -577,8 +597,8 @@ model AppraisalTemplate {
   id                      String   @id @default(uuid())
   tenantId                String
   name                    String
-  selfAssessmentWeight    Int      @default(50)
-  managerAssessmentWeight Int      @default(50)
+  selfAssessmentWeight    Int      @default(40)
+  managerAssessmentWeight Int      @default(60)
   isActive                Boolean  @default(true)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
@@ -586,6 +606,7 @@ model AppraisalTemplate {
   kpis   AppraisalTemplateKpi[]
   cycles AppraisalCycle[]
 
+  @@unique([tenantId, name])
   @@schema("hr")
 }
 
@@ -617,7 +638,13 @@ model AppraisalCycle {
   employmentTypes         String[]  @default([])
   employeeIds             String[]  @default([])
   templateId              String?
-  isActive                Boolean   @default(true)
+  selfAssessmentWeight    Int       @default(40)
+  managerAssessmentWeight Int       @default(60)
+  status                  AppraisalCycleStatus @default(UPCOMING)
+  isActive                Boolean   @default(false)
+  activatedAt             DateTime?
+  cancelledAt             DateTime?
+  cancelledReason         String?
   createdBy               String
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
@@ -626,6 +653,7 @@ model AppraisalCycle {
   kpis        AppraisalKpi[]
   template    AppraisalTemplate? @relation(fields: [templateId], references: [id])
 
+  @@unique([tenantId, title])
   @@schema("hr")
 }
 
@@ -656,17 +684,17 @@ model Appraisal {
   managerId   String?
   status      AppraisalStatus @default(DRAFT)
 
-  selfScore   Int?
+  selfScore   Float?
   selfComment String?
   selfStatus  ReviewStatus    @default(PENDING)
   selfSubmittedAt DateTime?
 
-  managerScore   Int?
+  managerScore   Float?
   managerComment String?
   managerStatus  ReviewStatus @default(PENDING)
   managerSubmittedAt DateTime?
 
-  finalScore  Int?
+  finalScore  Float?
   finalComment String?
   completedAt DateTime?
   createdAt   DateTime        @default(now())
@@ -676,6 +704,7 @@ model Appraisal {
   employee    Employee           @relation("AppraisalEmployee", fields: [employeeId], references: [id])
   manager     Employee?          @relation("AppraisalManager", fields: [managerId], references: [id])
   kpiScores   AppraisalKpiScore[]
+  reminderLogs AppraisalReminderLog[]
 
   @@unique([cycleId, employeeId])
   @@schema("hr")
@@ -695,6 +724,19 @@ model AppraisalKpiScore {
   kpi         AppraisalKpi @relation(fields: [kpiId], references: [id], onDelete: Cascade)
 
   @@unique([appraisalId, kpiId, reviewType])
+  @@schema("hr")
+}
+
+model AppraisalReminderLog {
+  id           String               @id @default(uuid())
+  tenantId     String
+  appraisalId  String
+  reminderType AppraisalReminderType
+  createdAt    DateTime             @default(now())
+
+  appraisal    Appraisal            @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+
+  @@unique([appraisalId, reminderType])
   @@schema("hr")
 }
 
@@ -744,6 +786,10 @@ model TenantConfig {
   adminUserId                 String?
   resignationNoticePeriodDays Int      @default(30)
   lateArrivalThresholdMinutes Int      @default(0)
+  outstandingThreshold        Int      @default(90)
+  veryGoodThreshold           Int      @default(80)
+  goodThreshold               Int      @default(70)
+  satisfactoryThreshold       Int      @default(60)
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 

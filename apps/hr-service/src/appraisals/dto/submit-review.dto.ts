@@ -29,15 +29,15 @@ export class KpiScoreDto {
 export class SubmitReviewDto {
   @ApiPropertyOptional({
     description:
-      'Overall score 1–5. Required only when no kpiScores are provided.',
-    example: 4,
-    minimum: 1,
-    maximum: 5,
+      'Overall performance percentage. Required only when no kpiScores are provided.',
+    example: 85,
+    minimum: 0,
+    maximum: 100,
   })
   @IsOptional()
   @IsInt()
-  @Min(1)
-  @Max(5)
+  @Min(0)
+  @Max(100)
   score?: number;
 
   @ApiPropertyOptional({

@@ -1,4 +1,11 @@
-import { IsString, IsInt, IsOptional, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  Min,
+  Max,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAppraisalKpiDto {
@@ -9,11 +16,12 @@ export class CreateAppraisalKpiDto {
   @ApiPropertyOptional({ description: 'KPI description' })
   @IsOptional()
   @IsString()
+  @MaxLength(300)
   description?: string;
 
   @ApiProperty({ description: 'Weight (0-100)' })
   @IsInt()
-  @Min(0)
+  @Min(1)
   @Max(100)
   weight!: number;
 

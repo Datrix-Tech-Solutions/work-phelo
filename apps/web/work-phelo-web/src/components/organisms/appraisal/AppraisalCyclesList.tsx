@@ -15,21 +15,20 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
-import { AppraisalCycle } from '@/types/hr';
+import { AppraisalCycle, AppraisalStatus } from '@/types/hr';
 import { cn } from '@/lib/utils';
 
 interface Props {
   tenantSlug: string;
 }
 
-type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired';
+type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Cancelled';
 
 function deriveCycleStatus(cycle: AppraisalCycle): CycleStatus {
-  if ((cycle.completionRate ?? 0) >= 100) return 'Completed';
-  const today = new Date().toISOString().slice(0, 10);
-  if (cycle.endDate < today) return 'Expired';
-  if ((cycle._count?.appraisals ?? 0) > 0) return 'In Progress';
-  if (cycle.startDate > today) return 'Upcoming';
+  const status = cycle.status ?? ('UPCOMING' as AppraisalStatus);
+  if (status === 'COMPLETED') return 'Completed';
+  if (status === 'CANCELLED') return 'Cancelled';
+  if (status === 'UPCOMING') return 'Upcoming';
   return 'In Progress';
 }
 
@@ -37,7 +36,7 @@ const STATUS_STYLES: Record<CycleStatus, { dot: string; text: string }> = {
   'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
   Completed: { dot: 'bg-green-500', text: 'text-green-600' },
   Upcoming: { dot: 'bg-gray-400', text: 'text-gray-500' },
-  Expired: { dot: 'bg-red-400', text: 'text-red-500' },
+  Cancelled: { dot: 'bg-red-400', text: 'text-red-500' },
 };
 
 function CycleStatusBadge({ cycle }: { cycle: AppraisalCycle }) {
@@ -124,7 +123,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
       width: '120px',
       render: (row) => (
         <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-          {(row._count?.appraisals ?? 0) === 0 && (
+          {row.status === 'UPCOMING' && (
             <button
               onClick={() => setStartTarget(row)}
               className="text-sm font-semibold text-brand hover:text-brand/80 transition-colors"

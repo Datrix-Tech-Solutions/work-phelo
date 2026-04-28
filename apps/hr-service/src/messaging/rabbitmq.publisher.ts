@@ -19,6 +19,8 @@ import {
   TimeCorrectionSubmittedEvent,
   AppraisalSelfSubmittedEvent,
   AppraisalManagerReviewedEvent,
+  AppraisalSelfReminderEvent,
+  AppraisalManagerReminderEvent,
   SchedulePublishedEvent,
 } from '@work-phelo/types';
 
@@ -309,6 +311,30 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_APPRAISAL_MANAGER_REVIEWED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationAppraisalSelfReminder(
+    data: AppraisalSelfReminderEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_APPRAISAL_SELF_REMINDER,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationAppraisalManagerReminder(
+    data: AppraisalManagerReminderEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_APPRAISAL_MANAGER_REMINDER,
       data,
       correlationId,
     );

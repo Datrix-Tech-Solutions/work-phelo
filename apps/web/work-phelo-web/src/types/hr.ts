@@ -454,8 +454,8 @@ export interface PaginatedResponse<T> {
 }
 
 // ── Appraisal ─────────────────────────────────────────────
-export type Frequency = 'Annual' | 'Semi-annual' | 'Quarterly' | 'Ad-hoc';
-export type AppraisalStatus = 'Upcoming' | 'InProgress' | 'Completed' | 'Cancelled';
+export type Frequency = 'ANNUAL' | 'SEMI_ANNUAL' | 'QUARTERLY' | 'AD_HOC';
+export type AppraisalStatus = 'UPCOMING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type SectionType = 'RatingScale' | 'FreeText' | 'YesNo';
 export type ResponseRole = 'Self' | 'Reviewer';
 export type FinalizedStatus = 'Pending' | 'Approved' | 'Cancelled';
@@ -570,7 +570,13 @@ export interface AppraisalCycle {
   departmentIds?: string[];
   employmentTypes?: string[];
   employeeIds?: string[];
+  selfAssessmentWeight?: number;
+  managerAssessmentWeight?: number;
+  status?: AppraisalStatus;
   isActive: boolean;
+  activatedAt?: string;
+  cancelledAt?: string;
+  cancelledReason?: string;
   createdBy: string;
   createdAt: string;
   updatedAt?: string;
@@ -682,13 +688,13 @@ export interface CreateAppraisalTemplateDto {
 
 export interface CreateAppraisalCycleDto {
   title: string;
-  frequency?: Frequency;
+  frequency: Frequency;
   description?: string;
   startDate: string;
   endDate: string;
-  selfAssessmentDeadline?: string;
-  managerReviewDeadline?: string;
-  templateId?: string;
+  selfAssessmentDeadline: string;
+  managerReviewDeadline: string;
+  templateId: string;
   departmentIds?: string[];
   employmentTypes?: string[];
   employeeIds?: string[];

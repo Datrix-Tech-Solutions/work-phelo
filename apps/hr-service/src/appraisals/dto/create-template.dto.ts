@@ -7,6 +7,7 @@ import {
   ArrayMinSize,
   Min,
   Max,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -18,7 +19,7 @@ export class TemplateKpiDto {
 
   @ApiProperty({ description: 'Weight (0-100)' })
   @IsInt()
-  @Min(0)
+  @Min(1)
   @Max(100)
   weight!: number;
 
@@ -31,6 +32,7 @@ export class TemplateKpiDto {
   @ApiPropertyOptional({ description: 'KPI description' })
   @IsOptional()
   @IsString()
+  @MaxLength(300)
   description?: string;
 }
 
@@ -41,7 +43,7 @@ export class CreateAppraisalTemplateDto {
 
   @ApiPropertyOptional({
     description: 'Self-assessment weight (0-100)',
-    default: 50,
+    default: 40,
   })
   @IsOptional()
   @IsInt()
@@ -51,7 +53,7 @@ export class CreateAppraisalTemplateDto {
 
   @ApiPropertyOptional({
     description: 'Manager assessment weight (0-100)',
-    default: 50,
+    default: 60,
   })
   @IsOptional()
   @IsInt()
@@ -59,11 +61,10 @@ export class CreateAppraisalTemplateDto {
   @Max(100)
   managerAssessmentWeight?: number;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     description: 'KPIs for this template',
     type: [TemplateKpiDto],
   })
-  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ValidateNested({ each: true })
