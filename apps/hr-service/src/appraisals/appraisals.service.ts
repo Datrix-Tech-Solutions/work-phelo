@@ -74,6 +74,32 @@ function calcFinalScore(
   );
 }
 
+function validateTemplatePayload(
+  dto: Pick<
+    CreateAppraisalTemplateDto,
+    'kpis' | 'selfAssessmentWeight' | 'managerAssessmentWeight'
+  >,
+) {
+  const selfWeight = dto.selfAssessmentWeight ?? 50;
+  const managerWeight = dto.managerAssessmentWeight ?? 50;
+  const assessmentTotal = selfWeight + managerWeight;
+
+  if (assessmentTotal !== 100) {
+    throw new BadRequestException(
+      `Self and manager weightings must total 100%. Current total is ${assessmentTotal}%`,
+    );
+  }
+
+  const kpis = dto.kpis ?? [];
+  const totalKpiWeight = kpis.reduce((sum, kpi) => sum + kpi.weight, 0);
+
+  if (totalKpiWeight !== 100) {
+    throw new BadRequestException(
+      `KPI weights must total 100%. Current total is ${totalKpiWeight}%`,
+    );
+  }
+}
+
 @Injectable()
 export class AppraisalsService {
   private readonly logger = new Logger(AppraisalsService.name);
@@ -83,6 +109,21 @@ export class AppraisalsService {
     private readonly publisher: RabbitMQPublisher,
   ) {}
 
+  private async ensureTemplateExists(tenantId: string, templateId?: string) {
+    if (!templateId) return;
+
+    const template = await this.prisma.appraisalTemplate.findFirst({
+      where: { id: templateId, tenantId },
+      select: { id: true },
+    });
+
+    if (!template) {
+      throw new BadRequestException(
+        'Selected appraisal template does not exist',
+      );
+    }
+  }
+
   // ── Cycles ─────────────────────────────────────────────────────────────────
 
   async createCycle(
@@ -90,6 +131,8 @@ export class AppraisalsService {
     createdBy: string,
     dto: CreateAppraisalCycleDto,
   ) {
+    await this.ensureTemplateExists(tenantId, dto.templateId);
+
     return this.prisma.appraisalCycle.create({
       data: {
         tenantId,
@@ -140,6 +183,10 @@ export class AppraisalsService {
       where: { id: cycleId, tenantId },
     });
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
+
+    if (dto.templateId !== undefined) {
+      await this.ensureTemplateExists(tenantId, dto.templateId);
+    }
 
     return this.prisma.appraisalCycle.update({
       where: { id: cycleId },
@@ -432,6 +479,8 @@ export class AppraisalsService {
   }
 
   async createTemplate(tenantId: string, dto: CreateAppraisalTemplateDto) {
+    validateTemplatePayload(dto);
+
     return this.prisma.appraisalTemplate.create({
       data: {
         tenantId,
@@ -460,8 +509,26 @@ export class AppraisalsService {
   ) {
     const template = await this.prisma.appraisalTemplate.findFirst({
       where: { id: templateId, tenantId },
+      include: { kpis: true },
     });
     if (!template) throw new NotFoundException('Template not found');
+
+    const nextTemplate = {
+      selfAssessmentWeight:
+        dto.selfAssessmentWeight ?? template.selfAssessmentWeight,
+      managerAssessmentWeight:
+        dto.managerAssessmentWeight ?? template.managerAssessmentWeight,
+      kpis:
+        dto.kpis ??
+        template.kpis.map((kpi) => ({
+          title: kpi.title,
+          weight: kpi.weight,
+          maxScore: kpi.maxScore,
+          description: kpi.description ?? undefined,
+        })),
+    };
+
+    validateTemplatePayload(nextTemplate);
 
     const updated = await this.prisma.appraisalTemplate.update({
       where: { id: templateId },
@@ -816,7 +883,6 @@ export class AppraisalsService {
     const updated = await this.prisma.appraisal.update({
       where: { id: appraisalId },
       data: {
-        managerId: reviewer.id,
         managerScore,
         managerComment: dto.comment,
         managerStatus: 'SUBMITTED',

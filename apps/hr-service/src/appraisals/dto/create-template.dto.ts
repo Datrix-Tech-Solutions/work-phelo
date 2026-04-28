@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsArray,
   ValidateNested,
+  ArrayMinSize,
   Min,
   Max,
 } from 'class-validator';
@@ -64,6 +65,7 @@ export class CreateAppraisalTemplateDto {
   })
   @IsOptional()
   @IsArray()
+  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => TemplateKpiDto)
   kpis?: TemplateKpiDto[];
