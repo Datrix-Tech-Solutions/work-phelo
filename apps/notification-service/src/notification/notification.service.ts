@@ -527,6 +527,97 @@ export class NotificationService {
     });
   }
 
+  async sendAppraisalSelfReminderNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleId: string;
+    cycleTitle: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    deadline: string;
+    daysRemaining: number;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.APPRAISAL_SELF_REMINDER,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_SELF_REMINDER suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalSelfReminderNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.cycleTitle,
+      data.deadline,
+      data.daysRemaining,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_SELF_REMINDER',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject:
+        data.daysRemaining === 0
+          ? `Your self-assessment is due today — ${data.cycleTitle}`
+          : `Self-assessment reminder — ${data.cycleTitle}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendAppraisalManagerReminderNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleId: string;
+    cycleTitle: string;
+    managerEmail: string;
+    managerFirstName: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    deadline: string;
+    daysRemaining: number;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.managerEmail,
+        NotificationType.APPRAISAL_MANAGER_REMINDER,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_MANAGER_REMINDER suppressed for ${data.managerEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalManagerReminderNotification(
+      data.managerEmail,
+      data.managerFirstName,
+      `${data.employeeFirstName} ${data.employeeLastName}`,
+      data.cycleTitle,
+      data.deadline,
+      data.daysRemaining,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_MANAGER_REMINDER',
+      channel: 'EMAIL',
+      recipient: data.managerEmail,
+      subject:
+        data.daysRemaining === 0
+          ? `Manager review is due today — ${data.cycleTitle}`
+          : `Manager review reminder — ${data.cycleTitle}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendSchedulePublishedNotification(data: {
     tenantId: string;
     employeeId: string;

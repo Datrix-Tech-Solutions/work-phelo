@@ -28,6 +28,7 @@ import { UpdateAppraisalCycleDto } from './dto/update-cycle.dto';
 import { SubmitReviewDto } from './dto/submit-review.dto';
 import { CreateAppraisalTemplateDto } from './dto/create-template.dto';
 import { CreateAppraisalKpiDto } from './dto/create-kpi.dto';
+import { CancelAppraisalCycleDto } from './dto/cancel-cycle.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -112,6 +113,24 @@ export class AppraisalsController {
   @ApiResponse({ status: 200, description: 'Appraisal cycle started' })
   startCycle(@Param('cycleId') cycleId: string, @Req() req: any) {
     return this.appraisalsService.startCycle(req.user.tenantId, cycleId);
+  }
+
+  @Patch('cycles/:cycleId/cancel')
+  @RequirePermissions(Permission.CONFIGURE_APPRAISAL)
+  @ApiOperation({ summary: 'Cancel an in-progress appraisal cycle' })
+  @ApiParam({ name: 'cycleId', description: 'Appraisal cycle UUID' })
+  @ApiBody({ type: CancelAppraisalCycleDto })
+  @ApiResponse({ status: 200, description: 'Appraisal cycle cancelled' })
+  cancelCycle(
+    @Param('cycleId') cycleId: string,
+    @Body() dto: CancelAppraisalCycleDto,
+    @Req() req: any,
+  ) {
+    return this.appraisalsService.cancelCycle(
+      req.user.tenantId,
+      cycleId,
+      dto.reason,
+    );
   }
 
   @Get('cycles/:cycleId/appraisals')

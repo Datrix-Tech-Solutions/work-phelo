@@ -923,6 +923,137 @@ export class EmailService {
     );
   }
 
+  async sendAppraisalSelfReminderNotification(
+    to: string,
+    employeeFirstName: string,
+    cycleTitle: string,
+    deadline: string,
+    daysRemaining: number,
+  ): Promise<boolean> {
+    const deadlineLabel = new Date(`${deadline}T00:00:00`).toLocaleDateString(
+      'en-GB',
+      {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      },
+    );
+    const headline =
+      daysRemaining === 0
+        ? 'Your Self-Assessment Is Due Today'
+        : 'Self-Assessment Reminder';
+    const bodyCopy =
+      daysRemaining === 0
+        ? `Your self-assessment for the <strong>${cycleTitle}</strong> appraisal cycle is due today.`
+        : `Your self-assessment for the <strong>${cycleTitle}</strong> appraisal cycle is due in <strong>${daysRemaining} day${daysRemaining === 1 ? '' : 's'}</strong>.`;
+
+    return this.send(
+      to,
+      daysRemaining === 0
+        ? `Your self-assessment is due today — ${cycleTitle}`
+        : `Self-assessment reminder — ${cycleTitle}`,
+      `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><title>Self-Assessment Reminder</title></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px auto;border-radius:8px;overflow:hidden;">
+    <tr><td style="padding:20px 30px;">
+      <h2 style="margin:0;font-weight:bold;">
+        <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+      </h2>
+    </td></tr>
+    <tr><td style="background:#eef1f4;padding:40px 30px;">
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${headline}</p>
+    </td></tr>
+    <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
+      <p>Hi ${employeeFirstName},</p>
+      <p>${bodyCopy}</p>
+      <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
+        <tr style="background:#f9fafb;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Deadline</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${deadlineLabel}</td>
+        </tr>
+      </table>
+      <p>Please log in to WorkPhelo to complete your appraisal submission.</p>
+      <p style="margin-top:30px;">Thank you,</p>
+    </td></tr>
+    <tr><td style="padding:20px 30px;border-top:1px solid #eee;">
+      <h3 style="margin:0;"><span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span></h3>
+      <p style="color:#888;font-size:12px;margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+    );
+  }
+
+  async sendAppraisalManagerReminderNotification(
+    to: string,
+    managerFirstName: string,
+    employeeFullName: string,
+    cycleTitle: string,
+    deadline: string,
+    daysRemaining: number,
+  ): Promise<boolean> {
+    const deadlineLabel = new Date(`${deadline}T00:00:00`).toLocaleDateString(
+      'en-GB',
+      {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      },
+    );
+    const headline =
+      daysRemaining === 0
+        ? 'Manager Review Due Today'
+        : 'Manager Review Reminder';
+    const bodyCopy =
+      daysRemaining === 0
+        ? `Your manager review for <strong>${employeeFullName}</strong> in the <strong>${cycleTitle}</strong> appraisal cycle is due today.`
+        : `Your manager review for <strong>${employeeFullName}</strong> in the <strong>${cycleTitle}</strong> appraisal cycle is due in <strong>${daysRemaining} day${daysRemaining === 1 ? '' : 's'}</strong>.`;
+
+    return this.send(
+      to,
+      daysRemaining === 0
+        ? `Manager review is due today — ${cycleTitle}`
+        : `Manager review reminder — ${cycleTitle}`,
+      `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><title>Manager Review Reminder</title></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px auto;border-radius:8px;overflow:hidden;">
+    <tr><td style="padding:20px 30px;">
+      <h2 style="margin:0;font-weight:bold;">
+        <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+      </h2>
+    </td></tr>
+    <tr><td style="background:#eef1f4;padding:40px 30px;">
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${headline}</p>
+    </td></tr>
+    <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
+      <p>Hi ${managerFirstName},</p>
+      <p>${bodyCopy}</p>
+      <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
+        <tr style="background:#f9fafb;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Deadline</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${deadlineLabel}</td>
+        </tr>
+      </table>
+      <p>Please log in to WorkPhelo to complete the manager review.</p>
+      <p style="margin-top:30px;">Thank you,</p>
+    </td></tr>
+    <tr><td style="padding:20px 30px;border-top:1px solid #eee;">
+      <h3 style="margin:0;"><span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span></h3>
+      <p style="color:#888;font-size:12px;margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+    );
+  }
+
   async sendSchedulePublishedNotification(
     to: string,
     employeeFirstName: string,
@@ -1009,7 +1140,7 @@ export class EmailService {
       <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Final Score</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${finalScore} / 5</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${finalScore}%</td>
         </tr>
         <tr>
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Rating</td>

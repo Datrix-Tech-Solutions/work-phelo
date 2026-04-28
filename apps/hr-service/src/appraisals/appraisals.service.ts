@@ -13,6 +13,7 @@ import { SubmitReviewDto, KpiScoreDto } from './dto/submit-review.dto';
 import { CreateAppraisalTemplateDto } from './dto/create-template.dto';
 import { CreateAppraisalKpiDto } from './dto/create-kpi.dto';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
+import { NotificationsService } from '../notifications/notifications.service';
 import {
   assertHrAccess,
   hasPermissionRule,
@@ -26,12 +27,39 @@ type FinalRating =
   | 'Satisfactory'
   | 'Needs Improvement';
 
-function scoreToRating(score: number | null): FinalRating {
+type PerformanceBandConfig = {
+  outstandingThreshold: number;
+  veryGoodThreshold: number;
+  goodThreshold: number;
+  satisfactoryThreshold: number;
+};
+
+function roundToTwoDecimals(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function normalizeDateOnly(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function differenceInCalendarDays(target: Date, now: Date): number {
+  const targetDate = new Date(`${normalizeDateOnly(target)}T00:00:00.000Z`);
+  const nowDate = new Date(`${normalizeDateOnly(now)}T00:00:00.000Z`);
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  return Math.round(
+    (targetDate.getTime() - nowDate.getTime()) / millisecondsPerDay,
+  );
+}
+
+function scoreToRating(
+  score: number | null,
+  bands: PerformanceBandConfig,
+): FinalRating {
   if (score === null || score === undefined) return 'Needs Improvement';
-  if (score >= 5) return 'Outstanding';
-  if (score >= 4) return 'Very Good';
-  if (score >= 3) return 'Good';
-  if (score >= 2) return 'Satisfactory';
+  if (score >= bands.outstandingThreshold) return 'Outstanding';
+  if (score >= bands.veryGoodThreshold) return 'Very Good';
+  if (score >= bands.goodThreshold) return 'Good';
+  if (score >= bands.satisfactoryThreshold) return 'Satisfactory';
   return 'Needs Improvement';
 }
 
@@ -50,14 +78,15 @@ function deriveOverallStatus(appraisal: {
 function calcWeightedScore(
   kpiScores: { score: number; kpi: { weight: number; maxScore: number } }[],
 ): number {
-  if (!kpiScores.length) return 0;
-  const totalWeight = kpiScores.reduce((s, k) => s + k.kpi.weight, 0);
-  if (!totalWeight) return 0;
-  const weighted = kpiScores.reduce(
-    (s, k) => s + (k.score / k.kpi.maxScore) * 5 * (k.kpi.weight / totalWeight),
-    0,
+  return roundToTwoDecimals(
+    kpiScores.reduce((sum, item) => {
+      if (!item.kpi.maxScore) return sum;
+      const weightedScore = roundToTwoDecimals(
+        (item.score / item.kpi.maxScore) * item.kpi.weight,
+      );
+      return sum + weightedScore;
+    }, 0),
   );
-  return Math.round(weighted);
 }
 
 function calcFinalScore(
@@ -67,10 +96,8 @@ function calcFinalScore(
   managerWeight: number,
 ): number {
   if (selfScore === null) return managerScore;
-  const total = selfWeight + managerWeight;
-  if (!total) return managerScore;
-  return Math.round(
-    (selfScore * selfWeight + managerScore * managerWeight) / total,
+  return roundToTwoDecimals(
+    selfScore * (selfWeight / 100) + managerScore * (managerWeight / 100),
   );
 }
 
@@ -80,8 +107,8 @@ function validateTemplatePayload(
     'kpis' | 'selfAssessmentWeight' | 'managerAssessmentWeight'
   >,
 ) {
-  const selfWeight = dto.selfAssessmentWeight ?? 50;
-  const managerWeight = dto.managerAssessmentWeight ?? 50;
+  const selfWeight = dto.selfAssessmentWeight ?? 40;
+  const managerWeight = dto.managerAssessmentWeight ?? 60;
   const assessmentTotal = selfWeight + managerWeight;
 
   if (assessmentTotal !== 100) {
@@ -107,14 +134,112 @@ export class AppraisalsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly publisher: RabbitMQPublisher,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
-  private async ensureTemplateExists(tenantId: string, templateId?: string) {
-    if (!templateId) return;
+  private async loadPerformanceBands(
+    tenantId: string,
+  ): Promise<PerformanceBandConfig> {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        outstandingThreshold: true,
+        veryGoodThreshold: true,
+        goodThreshold: true,
+        satisfactoryThreshold: true,
+      },
+    });
 
+    return {
+      outstandingThreshold: config?.outstandingThreshold ?? 90,
+      veryGoodThreshold: config?.veryGoodThreshold ?? 80,
+      goodThreshold: config?.goodThreshold ?? 70,
+      satisfactoryThreshold: config?.satisfactoryThreshold ?? 60,
+    };
+  }
+
+  private validateCycleDates(params: {
+    startDate: Date;
+    endDate: Date;
+    selfAssessmentDeadline: Date;
+    managerReviewDeadline: Date;
+  }) {
+    const {
+      startDate,
+      endDate,
+      selfAssessmentDeadline,
+      managerReviewDeadline,
+    } = params;
+
+    if (endDate < startDate) {
+      throw new BadRequestException(
+        'Cycle end date cannot be before cycle start date',
+      );
+    }
+
+    if (
+      selfAssessmentDeadline < startDate ||
+      selfAssessmentDeadline > endDate
+    ) {
+      throw new BadRequestException(
+        'Self assessment deadline must fall within the cycle start and end dates',
+      );
+    }
+
+    if (
+      managerReviewDeadline <= selfAssessmentDeadline ||
+      managerReviewDeadline > endDate
+    ) {
+      throw new BadRequestException(
+        'Manager review deadline must be after self assessment deadline and within the cycle end date',
+      );
+    }
+  }
+
+  private async ensureUniqueTemplateName(
+    tenantId: string,
+    name: string,
+    excludeTemplateId?: string,
+  ) {
+    const existing = await this.prisma.appraisalTemplate.findFirst({
+      where: {
+        tenantId,
+        name: { equals: name.trim(), mode: 'insensitive' },
+        ...(excludeTemplateId ? { id: { not: excludeTemplateId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException('A template with this name already exists');
+    }
+  }
+
+  private async ensureUniqueCycleTitle(
+    tenantId: string,
+    title: string,
+    excludeCycleId?: string,
+  ) {
+    const existing = await this.prisma.appraisalCycle.findFirst({
+      where: {
+        tenantId,
+        title: { equals: title.trim(), mode: 'insensitive' },
+        ...(excludeCycleId ? { id: { not: excludeCycleId } } : {}),
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new ConflictException(
+        'An appraisal cycle with this name already exists',
+      );
+    }
+  }
+
+  private async ensureTemplateExists(tenantId: string, templateId: string) {
     const template = await this.prisma.appraisalTemplate.findFirst({
       where: { id: templateId, tenantId },
-      select: { id: true },
+      include: { kpis: true },
     });
 
     if (!template) {
@@ -122,6 +247,212 @@ export class AppraisalsService {
         'Selected appraisal template does not exist',
       );
     }
+
+    return template;
+  }
+
+  private async ensureTemplateIsNotAssignedToActiveCycle(
+    tenantId: string,
+    templateId: string,
+    action: 'updated' | 'deleted',
+  ) {
+    const activeCycle = await this.prisma.appraisalCycle.findFirst({
+      where: {
+        tenantId,
+        templateId,
+        status: 'IN_PROGRESS',
+      },
+      select: { id: true },
+    });
+
+    if (activeCycle) {
+      throw new BadRequestException(
+        action === 'deleted'
+          ? 'This template is assigned to an active cycle and cannot be deleted'
+          : 'This template is assigned to an active cycle and cannot be updated',
+      );
+    }
+  }
+
+  private assertCycleConfigurable(cycle: { status: string; title: string }) {
+    if (cycle.status === 'IN_PROGRESS') {
+      throw new BadRequestException(
+        `Cycle "${cycle.title}" is already in progress and its KPIs can no longer be changed`,
+      );
+    }
+    if (cycle.status === 'COMPLETED' || cycle.status === 'CANCELLED') {
+      throw new BadRequestException(
+        `Cycle "${cycle.title}" is no longer editable`,
+      );
+    }
+  }
+
+  private async seedCycleKpisFromTemplate(
+    tenantId: string,
+    cycleId: string,
+    template: {
+      kpis: {
+        title: string;
+        description: string | null;
+        weight: number;
+        maxScore: number;
+      }[];
+      selfAssessmentWeight: number;
+      managerAssessmentWeight: number;
+    },
+  ) {
+    if (!template.kpis.length) {
+      throw new BadRequestException('Template has no KPIs to seed from');
+    }
+
+    return this.prisma.$transaction(
+      template.kpis.map((kpi) =>
+        this.prisma.appraisalKpi.create({
+          data: {
+            tenantId,
+            cycleId,
+            title: kpi.title,
+            description: kpi.description,
+            weight: kpi.weight,
+            maxScore: kpi.maxScore,
+            selfWeight: template.selfAssessmentWeight,
+            managerWeight: template.managerAssessmentWeight,
+          },
+        }),
+      ),
+    );
+  }
+
+  private async resolveCycleEmployees(tenantId: string, cycleId: string) {
+    const cycle = await this.prisma.appraisalCycle.findFirst({
+      where: { id: cycleId, tenantId },
+    });
+    if (!cycle) throw new NotFoundException('Appraisal cycle not found');
+
+    const employeeWhere: Record<string, unknown> = {
+      tenantId,
+      employmentStatus: 'ACTIVE',
+    };
+
+    if (cycle.employeeIds.length > 0) {
+      employeeWhere.id = { in: cycle.employeeIds };
+    } else {
+      if (cycle.departmentIds.length > 0) {
+        employeeWhere.departmentId = { in: cycle.departmentIds };
+      }
+      if (cycle.employmentTypes.length > 0) {
+        employeeWhere.employmentType = { in: cycle.employmentTypes };
+      }
+    }
+
+    const employees = await this.prisma.employee.findMany({
+      where: employeeWhere,
+      select: {
+        id: true,
+        userId: true,
+        managerId: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    return { cycle, employees };
+  }
+
+  private async activateCycle(tenantId: string, cycleId: string) {
+    const { cycle, employees } = await this.resolveCycleEmployees(
+      tenantId,
+      cycleId,
+    );
+
+    if (cycle.status !== 'UPCOMING') {
+      return {
+        message: `Appraisal cycle ${cycle.title} is already ${cycle.status.toLowerCase()}`,
+      };
+    }
+
+    if (cycle.templateId) {
+      const existingKpis = await this.prisma.appraisalKpi.count({
+        where: { tenantId, cycleId },
+      });
+
+      if (!existingKpis) {
+        const template = await this.ensureTemplateExists(
+          tenantId,
+          cycle.templateId,
+        );
+        await this.seedCycleKpisFromTemplate(tenantId, cycleId, template);
+      }
+    }
+
+    for (const emp of employees) {
+      await this.prisma.appraisal.upsert({
+        where: { cycleId_employeeId: { cycleId, employeeId: emp.id } },
+        update: {
+          status: 'IN_PROGRESS',
+          managerId: emp.managerId,
+        },
+        create: {
+          tenantId,
+          cycleId,
+          employeeId: emp.id,
+          managerId: emp.managerId,
+          status: 'IN_PROGRESS',
+        },
+      });
+    }
+
+    await this.prisma.appraisalCycle.update({
+      where: { id: cycleId },
+      data: {
+        status: 'IN_PROGRESS',
+        isActive: true,
+        activatedAt: new Date(),
+      },
+    });
+
+    const managerIds = Array.from(
+      new Set(
+        employees
+          .map((emp) => emp.managerId)
+          .filter((managerId): managerId is string => Boolean(managerId)),
+      ),
+    );
+    const managers = managerIds.length
+      ? await this.prisma.employee.findMany({
+          where: { tenantId, id: { in: managerIds } },
+          select: { userId: true },
+        })
+      : [];
+
+    const notifications = employees
+      .filter((emp) => emp.userId)
+      .map((emp) => ({
+        tenantId,
+        userId: emp.userId as string,
+        type: 'APPRAISAL_CYCLE_STARTED',
+        message: `Your appraisal cycle "${cycle.title}" is now active.`,
+        link: `/hr/appraisal/cycles/${cycleId}`,
+      }))
+      .concat(
+        managers
+          .filter((manager) => manager.userId)
+          .map((manager) => ({
+            tenantId,
+            userId: manager.userId as string,
+            type: 'APPRAISAL_CYCLE_STARTED',
+            message: `An appraisal cycle "${cycle.title}" is now active for your team.`,
+            link: `/hr/appraisal/cycles/${cycleId}`,
+          })),
+      );
+
+    if (notifications.length) {
+      await this.notificationsService.createMany(notifications);
+    }
+
+    return {
+      message: `Appraisal cycle started for ${employees.length} employees`,
+    };
   }
 
   // ── Cycles ─────────────────────────────────────────────────────────────────
@@ -131,27 +462,40 @@ export class AppraisalsService {
     createdBy: string,
     dto: CreateAppraisalCycleDto,
   ) {
-    await this.ensureTemplateExists(tenantId, dto.templateId);
+    const template = await this.ensureTemplateExists(tenantId, dto.templateId);
+    await this.ensureUniqueCycleTitle(tenantId, dto.title);
+
+    const startDate = new Date(dto.startDate);
+    const endDate = new Date(dto.endDate);
+    const selfAssessmentDeadline = new Date(dto.selfAssessmentDeadline!);
+    const managerReviewDeadline = new Date(dto.managerReviewDeadline!);
+
+    this.validateCycleDates({
+      startDate,
+      endDate,
+      selfAssessmentDeadline,
+      managerReviewDeadline,
+    });
 
     return this.prisma.appraisalCycle.create({
       data: {
         tenantId,
         createdBy,
-        title: dto.title,
+        title: dto.title.trim(),
         description: dto.description,
-        startDate: new Date(dto.startDate),
-        endDate: new Date(dto.endDate),
-        selfAssessmentDeadline: dto.selfAssessmentDeadline
-          ? new Date(dto.selfAssessmentDeadline)
-          : undefined,
-        managerReviewDeadline: dto.managerReviewDeadline
-          ? new Date(dto.managerReviewDeadline)
-          : undefined,
+        startDate,
+        endDate,
+        selfAssessmentDeadline,
+        managerReviewDeadline,
         frequency: dto.frequency,
         departmentIds: dto.departmentIds ?? [],
         employmentTypes: dto.employmentTypes ?? [],
         employeeIds: dto.employeeIds ?? [],
         templateId: dto.templateId,
+        selfAssessmentWeight: template.selfAssessmentWeight,
+        managerAssessmentWeight: template.managerAssessmentWeight,
+        status: 'UPCOMING',
+        isActive: false,
       },
       include: { _count: { select: { appraisals: true } } },
     });
@@ -181,35 +525,116 @@ export class AppraisalsService {
   ) {
     const cycle = await this.prisma.appraisalCycle.findFirst({
       where: { id: cycleId, tenantId },
+      include: { kpis: true },
     });
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
 
+    if (dto.title && dto.title.trim() !== cycle.title) {
+      await this.ensureUniqueCycleTitle(tenantId, dto.title, cycleId);
+    }
+
+    const nextStartDate = dto.startDate
+      ? new Date(dto.startDate)
+      : cycle.startDate;
+    const nextEndDate = dto.endDate ? new Date(dto.endDate) : cycle.endDate;
+    const nextSelfAssessmentDeadline =
+      dto.selfAssessmentDeadline !== undefined
+        ? new Date(dto.selfAssessmentDeadline)
+        : cycle.selfAssessmentDeadline;
+    const nextManagerReviewDeadline =
+      dto.managerReviewDeadline !== undefined
+        ? new Date(dto.managerReviewDeadline)
+        : cycle.managerReviewDeadline;
+
+    if (!nextSelfAssessmentDeadline || !nextManagerReviewDeadline) {
+      throw new BadRequestException(
+        'Self assessment deadline and manager review deadline are required',
+      );
+    }
+
+    this.validateCycleDates({
+      startDate: nextStartDate,
+      endDate: nextEndDate,
+      selfAssessmentDeadline: nextSelfAssessmentDeadline,
+      managerReviewDeadline: nextManagerReviewDeadline,
+    });
+
+    if (cycle.status === 'IN_PROGRESS') {
+      const allowedKeys = ['selfAssessmentDeadline', 'managerReviewDeadline'];
+      const incomingKeys = Object.keys(dto);
+      if (incomingKeys.some((key) => !allowedKeys.includes(key))) {
+        throw new BadRequestException(
+          'Editing an in-progress cycle is restricted to deadline extensions only',
+        );
+      }
+
+      if (
+        dto.selfAssessmentDeadline &&
+        cycle.selfAssessmentDeadline &&
+        new Date(dto.selfAssessmentDeadline) < cycle.selfAssessmentDeadline
+      ) {
+        throw new BadRequestException(
+          'Self assessment deadline can only be extended for an in-progress cycle',
+        );
+      }
+
+      if (
+        dto.managerReviewDeadline &&
+        cycle.managerReviewDeadline &&
+        new Date(dto.managerReviewDeadline) < cycle.managerReviewDeadline
+      ) {
+        throw new BadRequestException(
+          'Manager review deadline can only be extended for an in-progress cycle',
+        );
+      }
+    } else if (cycle.status !== 'UPCOMING') {
+      throw new BadRequestException('Only upcoming cycles can be edited');
+    }
+
+    let templateUpdate:
+      | {
+          templateId: string;
+          selfAssessmentWeight: number;
+          managerAssessmentWeight: number;
+        }
+      | undefined;
+
     if (dto.templateId !== undefined) {
-      await this.ensureTemplateExists(tenantId, dto.templateId);
+      if (cycle.kpis.length > 0 && dto.templateId !== cycle.templateId) {
+        throw new BadRequestException(
+          'Cannot change the appraisal template after cycle KPIs have been configured',
+        );
+      }
+
+      const template = await this.ensureTemplateExists(
+        tenantId,
+        dto.templateId,
+      );
+      templateUpdate = {
+        templateId: template.id,
+        selfAssessmentWeight: template.selfAssessmentWeight,
+        managerAssessmentWeight: template.managerAssessmentWeight,
+      };
     }
 
     return this.prisma.appraisalCycle.update({
       where: { id: cycleId },
       data: {
-        ...(dto.title && { title: dto.title }),
+        ...(dto.title && { title: dto.title.trim() }),
         ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.startDate && { startDate: new Date(dto.startDate) }),
-        ...(dto.endDate && { endDate: new Date(dto.endDate) }),
+        ...(dto.startDate && { startDate: nextStartDate }),
+        ...(dto.endDate && { endDate: nextEndDate }),
         ...(dto.selfAssessmentDeadline !== undefined && {
-          selfAssessmentDeadline: dto.selfAssessmentDeadline
-            ? new Date(dto.selfAssessmentDeadline)
-            : null,
+          selfAssessmentDeadline: nextSelfAssessmentDeadline,
         }),
         ...(dto.managerReviewDeadline !== undefined && {
-          managerReviewDeadline: dto.managerReviewDeadline
-            ? new Date(dto.managerReviewDeadline)
-            : null,
+          managerReviewDeadline: nextManagerReviewDeadline,
         }),
         ...(dto.frequency !== undefined && { frequency: dto.frequency }),
         ...(dto.departmentIds && { departmentIds: dto.departmentIds }),
         ...(dto.employmentTypes && { employmentTypes: dto.employmentTypes }),
         ...(dto.employeeIds && { employeeIds: dto.employeeIds }),
-        ...(dto.templateId !== undefined && { templateId: dto.templateId }),
+        ...(templateUpdate ?? {}),
       },
       include: { _count: { select: { appraisals: true } } },
     });
@@ -220,54 +645,270 @@ export class AppraisalsService {
       where: { id: cycleId, tenantId },
     });
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
+    if (cycle.status === 'IN_PROGRESS') {
+      throw new BadRequestException('In-progress cycles cannot be deleted');
+    }
     await this.prisma.appraisalCycle.delete({ where: { id: cycleId } });
     return { message: 'Cycle deleted' };
   }
 
   async startCycle(tenantId: string, cycleId: string) {
+    return this.activateCycle(tenantId, cycleId);
+  }
+
+  async cancelCycle(tenantId: string, cycleId: string, reason: string) {
     const cycle = await this.prisma.appraisalCycle.findFirst({
       where: { id: cycleId, tenantId },
+      include: {
+        appraisals: {
+          select: {
+            employee: { select: { userId: true } },
+            manager: { select: { userId: true } },
+          },
+        },
+      },
     });
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
-
-    const employeeWhere: any = { tenantId, employmentStatus: 'ACTIVE' };
-
-    if (cycle.employeeIds.length > 0) {
-      // explicit list takes priority — ignore department and employment type filters
-      employeeWhere.id = { in: cycle.employeeIds };
-    } else {
-      if (cycle.departmentIds.length > 0) {
-        employeeWhere.departmentId = { in: cycle.departmentIds };
-      }
-      if (cycle.employmentTypes.length > 0) {
-        employeeWhere.employmentType = { in: cycle.employmentTypes };
-      }
+    if (cycle.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('Only in-progress cycles can be cancelled');
     }
 
-    const employees = await this.prisma.employee.findMany({
-      where: employeeWhere,
+    await this.prisma.$transaction([
+      this.prisma.appraisalCycle.update({
+        where: { id: cycleId },
+        data: {
+          status: 'CANCELLED',
+          isActive: false,
+          cancelledAt: new Date(),
+          cancelledReason: reason,
+        },
+      }),
+      this.prisma.appraisal.updateMany({
+        where: { tenantId, cycleId, status: 'IN_PROGRESS' },
+        data: { status: 'CANCELLED' },
+      }),
+    ]);
+
+    const notifications = cycle.appraisals.flatMap((appraisal) => {
+      const recipients = [
+        appraisal.employee.userId,
+        appraisal.manager?.userId ?? null,
+      ].filter(Boolean) as string[];
+
+      return recipients.map((userId) => ({
+        tenantId,
+        userId,
+        type: 'APPRAISAL_CYCLE_CANCELLED',
+        message: `The appraisal cycle "${cycle.title}" was cancelled. Reason: ${reason}`,
+        link: `/hr/appraisal/cycles/${cycleId}`,
+      }));
     });
 
-    for (const emp of employees) {
-      await this.prisma.appraisal.upsert({
-        where: { cycleId_employeeId: { cycleId, employeeId: emp.id } },
-        update: {},
-        create: {
-          tenantId,
-          cycleId,
-          employeeId: emp.id,
-          managerId: emp.managerId,
-          status: 'IN_PROGRESS',
-        },
-      });
+    if (notifications.length) {
+      await this.notificationsService.createMany(notifications);
     }
 
-    return {
-      message: `Appraisal cycle started for ${employees.length} employees`,
-    };
+    return { message: 'Cycle cancelled' };
+  }
+
+  async completeExpiredCycles() {
+    await this.prisma.appraisalCycle.updateMany({
+      where: {
+        status: 'IN_PROGRESS',
+        endDate: { lt: new Date() },
+      },
+      data: {
+        status: 'COMPLETED',
+        isActive: false,
+      },
+    });
+  }
+
+  async sendPendingActionReminders() {
+    const now = new Date();
+    const appraisals = await this.prisma.appraisal.findMany({
+      where: {
+        status: 'IN_PROGRESS',
+        cycle: { status: 'IN_PROGRESS' },
+      },
+      include: {
+        cycle: {
+          select: {
+            title: true,
+            selfAssessmentDeadline: true,
+            managerReviewDeadline: true,
+          },
+        },
+        employee: {
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        manager: {
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        },
+        reminderLogs: {
+          select: { reminderType: true },
+        },
+      },
+    });
+
+    for (const appraisal of appraisals) {
+      if (
+        appraisal.selfStatus === 'PENDING' &&
+        appraisal.cycle.selfAssessmentDeadline &&
+        appraisal.employee.userId
+      ) {
+        const daysUntil = differenceInCalendarDays(
+          appraisal.cycle.selfAssessmentDeadline,
+          now,
+        );
+        const reminderType =
+          daysUntil === 7
+            ? 'SELF_7_DAYS'
+            : daysUntil === 3
+              ? 'SELF_3_DAYS'
+              : daysUntil === 0
+                ? 'SELF_DUE'
+                : null;
+
+        if (
+          reminderType &&
+          !appraisal.reminderLogs.some(
+            (log) => log.reminderType === reminderType,
+          )
+        ) {
+          await this.prisma.$transaction([
+            this.prisma.appraisalReminderLog.create({
+              data: {
+                tenantId: appraisal.tenantId,
+                appraisalId: appraisal.id,
+                reminderType,
+              },
+            }),
+            this.prisma.notification.create({
+              data: {
+                tenantId: appraisal.tenantId,
+                userId: appraisal.employee.userId,
+                type: 'APPRAISAL_SELF_REMINDER',
+                message:
+                  daysUntil === 0
+                    ? `Your self assessment for "${appraisal.cycle.title}" is due today.`
+                    : `Your self assessment for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
+                link: `/hr/appraisal/cycles/${appraisal.cycleId}/self-assessment/${appraisal.id}`,
+              },
+            }),
+          ]);
+
+          if (appraisal.employee.email) {
+            this.publisher
+              .notificationAppraisalSelfReminder({
+                tenantId: appraisal.tenantId,
+                appraisalId: appraisal.id,
+                cycleId: appraisal.cycleId,
+                cycleTitle: appraisal.cycle.title,
+                employeeEmail: appraisal.employee.email,
+                employeeFirstName: appraisal.employee.firstName,
+                deadline: normalizeDateOnly(
+                  appraisal.cycle.selfAssessmentDeadline,
+                ),
+                daysRemaining: daysUntil,
+              })
+              .catch((error) =>
+                this.logger.error(
+                  `[appraisal] Failed to publish self reminder for ${appraisal.id}`,
+                  error,
+                ),
+              );
+          }
+        }
+      }
+
+      if (
+        appraisal.selfStatus === 'SUBMITTED' &&
+        appraisal.managerStatus === 'PENDING' &&
+        appraisal.cycle.managerReviewDeadline &&
+        appraisal.manager?.userId
+      ) {
+        const daysUntil = differenceInCalendarDays(
+          appraisal.cycle.managerReviewDeadline,
+          now,
+        );
+        const reminderType =
+          daysUntil === 7
+            ? 'MANAGER_7_DAYS'
+            : daysUntil === 3
+              ? 'MANAGER_3_DAYS'
+              : daysUntil === 0
+                ? 'MANAGER_DUE'
+                : null;
+
+        if (
+          reminderType &&
+          !appraisal.reminderLogs.some(
+            (log) => log.reminderType === reminderType,
+          )
+        ) {
+          await this.prisma.$transaction([
+            this.prisma.appraisalReminderLog.create({
+              data: {
+                tenantId: appraisal.tenantId,
+                appraisalId: appraisal.id,
+                reminderType,
+              },
+            }),
+            this.prisma.notification.create({
+              data: {
+                tenantId: appraisal.tenantId,
+                userId: appraisal.manager.userId,
+                type: 'APPRAISAL_MANAGER_REMINDER',
+                message:
+                  daysUntil === 0
+                    ? `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due today.`
+                    : `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
+                link: `/hr/appraisal/cycles/${appraisal.cycleId}/manager-review/${appraisal.id}`,
+              },
+            }),
+          ]);
+
+          if (appraisal.manager.email) {
+            this.publisher
+              .notificationAppraisalManagerReminder({
+                tenantId: appraisal.tenantId,
+                appraisalId: appraisal.id,
+                cycleId: appraisal.cycleId,
+                cycleTitle: appraisal.cycle.title,
+                managerEmail: appraisal.manager.email,
+                managerFirstName: appraisal.manager.firstName,
+                employeeFirstName: appraisal.employee.firstName,
+                employeeLastName: appraisal.employee.lastName,
+                deadline: normalizeDateOnly(
+                  appraisal.cycle.managerReviewDeadline,
+                ),
+                daysRemaining: daysUntil,
+              })
+              .catch((error) =>
+                this.logger.error(
+                  `[appraisal] Failed to publish manager reminder for ${appraisal.id}`,
+                  error,
+                ),
+              );
+          }
+        }
+      }
+    }
   }
 
   async getCycleResults(tenantId: string, cycleId: string) {
+    const bands = await this.loadPerformanceBands(tenantId);
     const appraisals = await this.prisma.appraisal.findMany({
       where: { tenantId, cycleId },
       include: {
@@ -311,7 +952,7 @@ export class AppraisalsService {
       selfScore: a.selfScore ?? undefined,
       managerScore: a.managerScore ?? undefined,
       overallScore: a.finalScore ?? 0,
-      finalRating: scoreToRating(a.finalScore),
+      finalRating: scoreToRating(a.finalScore, bands),
       reviewCompletedAt: a.completedAt?.toISOString() ?? '',
     }));
 
@@ -362,6 +1003,7 @@ export class AppraisalsService {
       where: { id: cycleId, tenantId },
     });
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
+    this.assertCycleConfigurable(cycle);
 
     return this.prisma.appraisalKpi.create({
       data: {
@@ -371,8 +1013,8 @@ export class AppraisalsService {
         description: dto.description,
         weight: dto.weight,
         maxScore: dto.maxScore ?? 5,
-        selfWeight: dto.selfWeight ?? 50,
-        managerWeight: dto.managerWeight ?? 50,
+        selfWeight: dto.selfWeight ?? cycle.selfAssessmentWeight,
+        managerWeight: dto.managerWeight ?? cycle.managerAssessmentWeight,
       },
     });
   }
@@ -390,8 +1032,10 @@ export class AppraisalsService {
 
     const kpi = await this.prisma.appraisalKpi.findFirst({
       where: { id: kpiId, cycleId, tenantId },
+      include: { cycle: true },
     });
     if (!kpi) throw new NotFoundException('KPI not found');
+    this.assertCycleConfigurable(kpi.cycle);
 
     return this.prisma.appraisalKpi.update({
       where: { id: kpiId },
@@ -414,6 +1058,7 @@ export class AppraisalsService {
       include: { kpis: true },
     });
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
+    this.assertCycleConfigurable(cycle);
     if (!cycle.templateId)
       throw new BadRequestException('Cycle has no linked template');
     if (cycle.kpis.length > 0)
@@ -426,24 +1071,10 @@ export class AppraisalsService {
       include: { kpis: true },
     });
     if (!template) throw new NotFoundException('Linked template not found');
-    if (!template.kpis.length)
-      throw new BadRequestException('Template has no KPIs to seed from');
-
-    const seeded = await this.prisma.$transaction(
-      template.kpis.map((kpi) =>
-        this.prisma.appraisalKpi.create({
-          data: {
-            tenantId,
-            cycleId,
-            title: kpi.title,
-            description: kpi.description,
-            weight: kpi.weight,
-            maxScore: kpi.maxScore,
-            selfWeight: template.selfAssessmentWeight,
-            managerWeight: template.managerAssessmentWeight,
-          },
-        }),
-      ),
+    const seeded = await this.seedCycleKpisFromTemplate(
+      tenantId,
+      cycleId,
+      template,
     );
 
     return { seeded: seeded.length, kpis: seeded };
@@ -480,23 +1111,23 @@ export class AppraisalsService {
 
   async createTemplate(tenantId: string, dto: CreateAppraisalTemplateDto) {
     validateTemplatePayload(dto);
+    await this.ensureUniqueTemplateName(tenantId, dto.name);
+    const templateKpis = dto.kpis ?? [];
 
     return this.prisma.appraisalTemplate.create({
       data: {
         tenantId,
-        name: dto.name,
-        selfAssessmentWeight: dto.selfAssessmentWeight ?? 50,
-        managerAssessmentWeight: dto.managerAssessmentWeight ?? 50,
-        kpis: dto.kpis?.length
-          ? {
-              create: dto.kpis.map((k) => ({
-                title: k.title,
-                weight: k.weight,
-                maxScore: k.maxScore ?? 5,
-                description: k.description,
-              })),
-            }
-          : undefined,
+        name: dto.name.trim(),
+        selfAssessmentWeight: dto.selfAssessmentWeight ?? 40,
+        managerAssessmentWeight: dto.managerAssessmentWeight ?? 60,
+        kpis: {
+          create: templateKpis.map((k) => ({
+            title: k.title,
+            weight: k.weight,
+            maxScore: k.maxScore ?? 5,
+            description: k.description,
+          })),
+        },
       },
       include: { kpis: true },
     });
@@ -512,6 +1143,15 @@ export class AppraisalsService {
       include: { kpis: true },
     });
     if (!template) throw new NotFoundException('Template not found');
+    await this.ensureTemplateIsNotAssignedToActiveCycle(
+      tenantId,
+      templateId,
+      'updated',
+    );
+
+    if (dto.name && dto.name.trim() !== template.name) {
+      await this.ensureUniqueTemplateName(tenantId, dto.name, templateId);
+    }
 
     const nextTemplate = {
       selfAssessmentWeight:
@@ -533,7 +1173,7 @@ export class AppraisalsService {
     const updated = await this.prisma.appraisalTemplate.update({
       where: { id: templateId },
       data: {
-        ...(dto.name && { name: dto.name }),
+        ...(dto.name && { name: dto.name.trim() }),
         ...(dto.selfAssessmentWeight !== undefined && {
           selfAssessmentWeight: dto.selfAssessmentWeight,
         }),
@@ -563,6 +1203,11 @@ export class AppraisalsService {
       where: { id: templateId, tenantId },
     });
     if (!template) throw new NotFoundException('Template not found');
+    await this.ensureTemplateIsNotAssignedToActiveCycle(
+      tenantId,
+      templateId,
+      'deleted',
+    );
     await this.prisma.appraisalTemplate.delete({ where: { id: templateId } });
     return { message: 'Template deleted' };
   }
@@ -593,6 +1238,7 @@ export class AppraisalsService {
   }
 
   async getAppraisal(tenantId: string, appraisalId: string) {
+    const bands = await this.loadPerformanceBands(tenantId);
     const appraisal = await this.prisma.appraisal.findFirst({
       where: { id: appraisalId, tenantId },
       include: {
@@ -657,7 +1303,7 @@ export class AppraisalsService {
       appraisal.finalScore !== null
         ? {
             overallScore: appraisal.finalScore,
-            finalRating: scoreToRating(appraisal.finalScore),
+            finalRating: scoreToRating(appraisal.finalScore, bands),
             finalComment: appraisal.finalComment,
             finalizedAt: appraisal.completedAt?.toISOString(),
           }
@@ -684,6 +1330,7 @@ export class AppraisalsService {
         cycle: {
           select: {
             title: true,
+            status: true,
             startDate: true,
             endDate: true,
             selfAssessmentDeadline: true,
@@ -697,7 +1344,7 @@ export class AppraisalsService {
     return appraisals.map((a) => ({
       ...a,
       cycleName: a.cycle?.title ?? '',
-      cycleStatus: 'InProgress',
+      cycleStatus: a.cycle?.status ?? 'UPCOMING',
       overallStatus: deriveOverallStatus(a),
       selfAssessmentDeadline:
         a.cycle?.selfAssessmentDeadline?.toISOString() ?? null,
@@ -754,7 +1401,13 @@ export class AppraisalsService {
             lastName: true,
           },
         },
-        cycle: { select: { title: true } },
+        cycle: {
+          select: {
+            title: true,
+            selfAssessmentDeadline: true,
+            status: true,
+          },
+        },
       },
     });
 
@@ -765,6 +1418,17 @@ export class AppraisalsService {
       );
     if (appraisal.selfStatus === 'SUBMITTED')
       throw new BadRequestException('Self-assessment already submitted');
+    if (appraisal.cycle.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(
+        'This appraisal cycle is not currently active',
+      );
+    }
+    if (
+      appraisal.cycle.selfAssessmentDeadline &&
+      new Date() > appraisal.cycle.selfAssessmentDeadline
+    ) {
+      throw new BadRequestException('The self assessment deadline has passed');
+    }
     if (!dto.score && (!dto.kpiScores || !dto.kpiScores.length))
       throw new BadRequestException('Provide either a score or kpiScores');
 
@@ -832,12 +1496,10 @@ export class AppraisalsService {
         cycle: {
           select: {
             title: true,
-            template: {
-              select: {
-                selfAssessmentWeight: true,
-                managerAssessmentWeight: true,
-              },
-            },
+            status: true,
+            managerReviewDeadline: true,
+            selfAssessmentWeight: true,
+            managerAssessmentWeight: true,
           },
         },
       },
@@ -850,6 +1512,17 @@ export class AppraisalsService {
       );
     if (appraisal.managerStatus === 'SUBMITTED')
       throw new BadRequestException('Manager review already submitted');
+    if (appraisal.cycle.status !== 'IN_PROGRESS') {
+      throw new BadRequestException(
+        'This appraisal cycle is not currently active',
+      );
+    }
+    if (
+      appraisal.cycle.managerReviewDeadline &&
+      new Date() > appraisal.cycle.managerReviewDeadline
+    ) {
+      throw new BadRequestException('The manager review deadline has passed');
+    }
     if (!dto.score && (!dto.kpiScores || !dto.kpiScores.length))
       throw new BadRequestException('Provide either a score or kpiScores');
 
@@ -869,16 +1542,16 @@ export class AppraisalsService {
       managerScore = calcWeightedScore(kpisWithDetails);
     }
 
-    const selfWeight = appraisal.cycle.template?.selfAssessmentWeight ?? 50;
-    const managerWeight =
-      appraisal.cycle.template?.managerAssessmentWeight ?? 50;
+    const selfWeight = appraisal.cycle.selfAssessmentWeight ?? 40;
+    const managerWeight = appraisal.cycle.managerAssessmentWeight ?? 60;
     const finalScore = calcFinalScore(
       appraisal.selfScore,
       managerScore,
       selfWeight,
       managerWeight,
     );
-    const finalRating = scoreToRating(finalScore);
+    const bands = await this.loadPerformanceBands(tenantId);
+    const finalRating = scoreToRating(finalScore, bands);
 
     const updated = await this.prisma.appraisal.update({
       where: { id: appraisalId },

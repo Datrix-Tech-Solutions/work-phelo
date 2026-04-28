@@ -13,6 +13,7 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { UpdateResignationSettingsDto } from './dto/update-resignation-settings.dto';
 import { UpdateAttendanceSettingsDto } from './dto/update-attendance-settings.dto';
+import { UpdateAppraisalSettingsDto } from './dto/update-appraisal-settings.dto';
 import { SettingsService } from './settings.service';
 
 @ApiTags('Settings')
@@ -74,6 +75,31 @@ export class SettingsController {
     return this.settingsService.updateAttendanceSettings(
       req.user.tenantId,
       dto.lateArrivalThresholdMinutes,
+      req.user.role === 'TENANT_ADMIN' ? req.user.id : null,
+      req.user.role === 'TENANT_ADMIN' ? req.user.email : null,
+    );
+  }
+
+  @Get('appraisal')
+  @ApiOperation({ summary: 'Get appraisal settings for the current tenant' })
+  @ApiResponse({ status: 200, description: 'Appraisal settings retrieved' })
+  getAppraisalSettings(@Req() req: any) {
+    return this.settingsService.getAppraisalSettings(req.user.tenantId);
+  }
+
+  @Patch('appraisal')
+  @RequirePermissions(Permission.MANAGE_HR_SETTINGS)
+  @ApiOperation({
+    summary: 'Update appraisal settings for the current tenant',
+  })
+  @ApiResponse({ status: 200, description: 'Appraisal settings updated' })
+  updateAppraisalSettings(
+    @Body() dto: UpdateAppraisalSettingsDto,
+    @Req() req: any,
+  ) {
+    return this.settingsService.updateAppraisalSettings(
+      req.user.tenantId,
+      dto,
       req.user.role === 'TENANT_ADMIN' ? req.user.id : null,
       req.user.role === 'TENANT_ADMIN' ? req.user.email : null,
     );

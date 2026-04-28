@@ -50,6 +50,7 @@ export class UpdateAppraisalCycleDto {
   @ApiPropertyOptional({ description: 'Frequency', example: 'Annual' })
   @IsOptional()
   @IsString()
+  @IsIn(['ANNUAL', 'SEMI_ANNUAL', 'QUARTERLY', 'AD_HOC'])
   frequency?: string;
 
   @ApiPropertyOptional({

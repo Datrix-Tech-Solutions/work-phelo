@@ -16,7 +16,7 @@ const STATUS_CONFIG: Record<MyAppraisalStatus, { dot: string; text: string }> = 
 };
 
 function deriveStatus(overallStatus: string, deadline: string): MyAppraisalStatus {
-  if (overallStatus === 'Completed' || overallStatus === 'SelfSubmitted') return 'Completed';
+  if (overallStatus === 'Finalized') return 'Completed';
   if (deadline) {
     const today = new Date().toISOString().slice(0, 10);
     if (deadline.slice(0, 10) < today) return 'Overdue';
@@ -64,7 +64,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
           id: String(r.id),
           cycleId,
           cycleName: String(r.cycleName ?? cycle?.title ?? ''),
-          cycleStatus: r.cycleStatus ?? 'Upcoming',
+          cycleStatus: r.cycleStatus ?? 'UPCOMING',
           overallStatus: r.overallStatus ?? 'NotStarted',
           overallScore: r.overallScore != null ? Number(r.overallScore) : undefined,
           selfAssessmentDeadline: cycle?.selfAssessmentDeadline ?? '',

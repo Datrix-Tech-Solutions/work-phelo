@@ -48,6 +48,8 @@ export const EventPatterns = {
   NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
   NOTIFY_APPRAISAL_SELF_SUBMITTED: 'notify.appraisal_self_submitted',
   NOTIFY_APPRAISAL_MANAGER_REVIEWED: 'notify.appraisal_manager_reviewed',
+  NOTIFY_APPRAISAL_SELF_REMINDER: 'notify.appraisal_self_reminder',
+  NOTIFY_APPRAISAL_MANAGER_REMINDER: 'notify.appraisal_manager_reminder',
   NOTIFY_SCHEDULE_PUBLISHED: 'notify.schedule_published',
 } as const;
 
@@ -272,6 +274,30 @@ export interface AppraisalManagerReviewedEvent {
   employeeFirstName: string;
   finalScore: number;
   finalRating: string;
+}
+
+export interface AppraisalSelfReminderEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleId: string;
+  cycleTitle: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  deadline: string;
+  daysRemaining: number;
+}
+
+export interface AppraisalManagerReminderEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleId: string;
+  cycleTitle: string;
+  managerEmail: string;
+  managerFirstName: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  deadline: string;
+  daysRemaining: number;
 }
 
 export interface TimeCorrectionSubmittedEvent {

@@ -4,6 +4,7 @@ import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import { useAppraisalCycles } from '@/hooks/useAppraisals';
 import { cn } from '@/lib/utils';
+import type { AppraisalCycle } from '@/types/hr';
 
 interface Props {
   search: string;
@@ -12,25 +13,29 @@ interface Props {
   onPageChange: (page: number) => void;
 }
 
-type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired';
+type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Cancelled';
 
 const CYCLE_STATUS_STYLES: Record<CycleStatus, { dot: string; text: string }> = {
   'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
   Completed: { dot: 'bg-green-500', text: 'text-green-600' },
   Upcoming: { dot: 'bg-gray-400', text: 'text-gray-500' },
-  Expired: { dot: 'bg-red-400', text: 'text-red-500' },
+  Cancelled: { dot: 'bg-red-400', text: 'text-red-500' },
 };
 
-function deriveCycleStatus(
-  startDate: string,
-  endDate: string,
-  completionRate?: number,
-): CycleStatus {
-  if ((completionRate ?? 0) >= 100) return 'Completed';
-  const today = new Date().toISOString().slice(0, 10);
-  if (startDate > today) return 'Upcoming';
-  if (endDate < today) return 'Expired';
+function deriveCycleStatus(cycle: AppraisalCycle, completionRate?: number): CycleStatus {
+  if (cycle.status === 'COMPLETED' || (completionRate ?? 0) >= 100) return 'Completed';
+  if (cycle.status === 'CANCELLED') return 'Cancelled';
+  if (cycle.status === 'UPCOMING') return 'Upcoming';
   return 'In Progress';
+}
+
+function formatFrequency(frequency?: string) {
+  if (!frequency) return '—';
+  return frequency
+    .toLowerCase()
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join('-');
 }
 
 export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Props) {
@@ -64,7 +69,9 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
     {
       key: 'frequency',
       label: 'Frequency',
-      render: (r) => <span className="font-medium text-gray-900">{r.frequency ?? '—'}</span>,
+      render: (r) => (
+        <span className="font-medium text-gray-900">{formatFrequency(r.frequency)}</span>
+      ),
     },
     {
       key: 'date range',
@@ -102,7 +109,7 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
       key: 'status',
       label: 'Status',
       render: (r) => {
-        const status = deriveCycleStatus(r.startDate, r.endDate, r.completionRate);
+        const status = deriveCycleStatus(r as AppraisalCycle, r.completionRate);
         const s = CYCLE_STATUS_STYLES[status];
         return (
           <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text)}>
