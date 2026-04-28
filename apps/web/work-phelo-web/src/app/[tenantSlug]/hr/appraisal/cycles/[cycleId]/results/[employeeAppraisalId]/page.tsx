@@ -33,21 +33,15 @@ function StatusBadge({ status }: { status: string }) {
 
 function scoreToPercent(score: number | null | undefined): string {
   if (score == null) return '—';
-  return `${Math.round((score / 5) * 100)}%`;
+  return `${Math.round(score)}%`;
 }
 
-function weightedScore(
-  score: number,
-  maxScore: number,
-  weight: number,
-  totalWeight: number,
-): string {
-  if (!totalWeight) return '—';
-  return String(+((score / maxScore) * 5 * (weight / totalWeight)).toFixed(1));
+function weightedScore(score: number, maxScore: number, weight: number): string {
+  if (!maxScore) return '—';
+  return ((score / maxScore) * weight).toFixed(1);
 }
 
 function KpiTable({ rows, label }: { rows: KpiScoreRow[]; label: string }) {
-  const totalWeight = rows.reduce((s, r) => s + r.weight, 0);
   return (
     <table className="w-full text-sm border-collapse">
       <thead>
@@ -66,7 +60,7 @@ function KpiTable({ rows, label }: { rows: KpiScoreRow[]; label: string }) {
             <td className="py-4 pr-4 text-gray-700">{row.maxScore}</td>
             <td className="py-4 pr-4 text-gray-700">{row.score}</td>
             <td className="py-4 pr-4 text-gray-700">
-              {weightedScore(row.score, row.maxScore, row.weight, totalWeight)}
+              {weightedScore(row.score, row.maxScore, row.weight)}
             </td>
             <td className="py-4 text-gray-500">{row.comment ?? '—'}</td>
           </tr>

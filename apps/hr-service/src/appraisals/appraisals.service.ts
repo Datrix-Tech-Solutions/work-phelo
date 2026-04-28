@@ -78,13 +78,19 @@ function deriveOverallStatus(appraisal: {
 function calcWeightedScore(
   kpiScores: { score: number; kpi: { weight: number; maxScore: number } }[],
 ): number {
+  const totalWeight = kpiScores.reduce((s, k) => s + k.kpi.weight, 0);
+  if (!totalWeight) return 0;
   return roundToTwoDecimals(
     kpiScores.reduce((sum, item) => {
       if (!item.kpi.maxScore) return sum;
-      const weightedScore = roundToTwoDecimals(
-        (item.score / item.kpi.maxScore) * item.kpi.weight,
+      return (
+        sum +
+        roundToTwoDecimals(
+          (item.score / item.kpi.maxScore) *
+            (item.kpi.weight / totalWeight) *
+            100,
+        )
       );
-      return sum + weightedScore;
     }, 0),
   );
 }

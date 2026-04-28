@@ -72,8 +72,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
           cycleName: String(r.cycleName ?? cycle?.title ?? ''),
           cycleStatus: r.cycleStatus ?? 'Upcoming',
           overallStatus: r.overallStatus ?? 'NotStarted',
-          overallScore:
-            r.finalScore != null ? Math.round((Number(r.finalScore) / 5) * 100) : undefined,
+          overallScore: r.finalScore != null ? Math.round(Number(r.finalScore)) : undefined,
           selfAssessmentDeadline: cycle?.selfAssessmentDeadline ?? '',
         };
       },

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
@@ -11,42 +11,133 @@ import {
   useDeleteAppraisalCycle,
   useStartAppraisalCycle,
   useSeedCycleFromTemplate,
+  useCancelAppraisalCycle,
+  useCycleAppraisals,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
-import { AppraisalCycle, AppraisalStatus } from '@/types/hr';
+import { AppraisalCycle } from '@/types/hr';
 import { cn } from '@/lib/utils';
 
 interface Props {
   tenantSlug: string;
 }
 
-type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Cancelled';
+type DerivedStatus = 'Upcoming' | 'In Progress' | 'Completed' | 'Expired' | 'Cancelled';
 
-function deriveCycleStatus(cycle: AppraisalCycle): CycleStatus {
-  const status = cycle.status ?? ('UPCOMING' as AppraisalStatus);
-  if (status === 'COMPLETED') return 'Completed';
-  if (status === 'CANCELLED') return 'Cancelled';
-  if (status === 'UPCOMING') return 'Upcoming';
-  return 'In Progress';
-}
-
-const STATUS_STYLES: Record<CycleStatus, { dot: string; text: string }> = {
+const STATUS_STYLES: Record<DerivedStatus, { dot: string; text: string }> = {
   'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
   Completed: { dot: 'bg-green-500', text: 'text-green-600' },
   Upcoming: { dot: 'bg-gray-400', text: 'text-gray-500' },
-  Cancelled: { dot: 'bg-red-400', text: 'text-red-500' },
+  Expired: { dot: 'bg-red-400', text: 'text-red-500' },
+  Cancelled: { dot: 'bg-red-300', text: 'text-red-400' },
 };
 
+function useDerivedCycleStatus(cycle: AppraisalCycle): DerivedStatus {
+  const { data: raw } = useCycleAppraisals(cycle.id);
+
+  const appraisals: { selfStatus?: string; managerStatus?: string }[] = useMemo(() => {
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).data))
+      return (raw as { data: { selfStatus?: string; managerStatus?: string }[] }).data;
+    return [];
+  }, [raw]);
+
+  const total = appraisals.length;
+  const selfCompleted = appraisals.filter((a) => a.selfStatus === 'SUBMITTED').length;
+  const managerCompleted = appraisals.filter((a) => a.managerStatus === 'SUBMITTED').length;
+  const rate = total > 0 ? Math.round(((selfCompleted + managerCompleted) / (total * 2)) * 100) : 0;
+
+  if (cycle.status === 'CANCELLED') return 'Cancelled';
+  if (rate >= 100) return 'Completed';
+  const today = new Date().toISOString().slice(0, 10);
+  if (cycle.endDate < today) return 'Expired';
+  if (cycle.status === 'UPCOMING') return 'Upcoming';
+  return 'In Progress';
+}
+
 function CycleStatusBadge({ cycle }: { cycle: AppraisalCycle }) {
-  const status = deriveCycleStatus(cycle);
+  const status = useDerivedCycleStatus(cycle);
   const s = STATUS_STYLES[status];
   return (
     <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text)}>
       <span className={cn('w-2 h-2 rounded-full shrink-0', s.dot)} />
       {status}
     </span>
+  );
+}
+
+interface CycleActionsProps {
+  cycle: AppraisalCycle;
+  onEdit: (cycle: AppraisalCycle) => void;
+  onDelete: (cycle: AppraisalCycle) => void;
+  onStart: (cycle: AppraisalCycle) => void;
+  onCancel: (cycle: AppraisalCycle) => void;
+}
+
+function CycleActions({ cycle, onEdit, onDelete, onStart, onCancel }: CycleActionsProps) {
+  const status = useDerivedCycleStatus(cycle);
+
+  return (
+    <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+      {status === 'Upcoming' && (
+        <>
+          <button
+            onClick={() => onStart(cycle)}
+            className="text-sm font-semibold text-brand hover:text-brand/80 transition-colors"
+          >
+            Start
+          </button>
+          <button
+            onClick={() => onEdit(cycle)}
+            className="text-sm font-semibold text-gray-800 hover:text-brand transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => onDelete(cycle)}
+            className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
+          >
+            Delete
+          </button>
+        </>
+      )}
+
+      {status === 'In Progress' && (
+        <>
+          <button
+            onClick={() => onEdit(cycle)}
+            className="text-sm font-semibold text-gray-800 hover:text-brand transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => onCancel(cycle)}
+            className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
+          >
+            Cancel Cycle
+          </button>
+        </>
+      )}
+
+      {status === 'Expired' && (
+        <>
+          <button
+            onClick={() => onEdit(cycle)}
+            className="text-sm font-semibold text-gray-800 hover:text-brand transition-colors"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => onDelete(cycle)}
+            className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
+          >
+            Delete
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -58,6 +149,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [editCycle, setEditCycle] = useState<AppraisalCycle | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<AppraisalCycle | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<AppraisalCycle | null>(null);
   const [startTarget, setStartTarget] = useState<AppraisalCycle | null>(null);
 
   const { data, isLoading } = useAppraisalCycles({ page, search: search || undefined });
@@ -66,6 +158,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   const { mutate: startCycle, isPending: isStarting } = useStartAppraisalCycle();
   const { mutate: seedKpis, isPending: isSeeding } = useSeedCycleFromTemplate();
   const { mutate: deleteCycle, isPending: isDeleting } = useDeleteAppraisalCycle();
+  const { mutate: cancelCycle, isPending: isCancelling } = useCancelAppraisalCycle();
 
   const handleStart = (cycle: AppraisalCycle) => {
     const doStart = () =>
@@ -120,33 +213,18 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
     {
       key: 'actions',
       label: '',
-      width: '120px',
+      width: '180px',
       render: (row) => (
-        <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
-          {row.status === 'UPCOMING' && (
-            <button
-              onClick={() => setStartTarget(row)}
-              className="text-sm font-semibold text-brand hover:text-brand/80 transition-colors"
-            >
-              Start
-            </button>
-          )}
-          <button
-            onClick={() => {
-              setEditCycle(row);
-              setPanelOpen(true);
-            }}
-            className="text-sm font-semibold text-gray-800 hover:text-brand transition-colors"
-          >
-            Edit
-          </button>
-          <button
-            onClick={() => setDeleteTarget(row)}
-            className="text-sm font-semibold text-red-500 hover:text-red-700 transition-colors"
-          >
-            Delete
-          </button>
-        </div>
+        <CycleActions
+          cycle={row}
+          onEdit={(c) => {
+            setEditCycle(c);
+            setPanelOpen(true);
+          }}
+          onDelete={setDeleteTarget}
+          onStart={setStartTarget}
+          onCancel={setCancelTarget}
+        />
       ),
     },
   ];
@@ -181,6 +259,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
         editCycle={editCycle}
       />
 
+      {/* Delete modal — Upcoming / Expired only */}
       <Modal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
@@ -212,6 +291,42 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
         }
       />
 
+      {/* Cancel modal — In Progress */}
+      <Modal
+        isOpen={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        title="Cancel Cycle"
+        description={`Are you sure you want to cancel "${cancelTarget?.title}"? All in-progress appraisals will be stopped.`}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setCancelTarget(null)}>
+              Back
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isCancelling}
+              loadingText="Cancelling..."
+              onClick={() =>
+                cancelTarget &&
+                cancelCycle(
+                  { id: cancelTarget.id },
+                  {
+                    onSuccess: () => {
+                      toast.success('Cycle cancelled');
+                      setCancelTarget(null);
+                    },
+                    onError: (err) => toast.error(extractError(err, 'Failed to cancel cycle')),
+                  },
+                )
+              }
+            >
+              Cancel Cycle
+            </Button>
+          </>
+        }
+      />
+
+      {/* Start modal */}
       <Modal
         isOpen={!!startTarget}
         onClose={() => setStartTarget(null)}

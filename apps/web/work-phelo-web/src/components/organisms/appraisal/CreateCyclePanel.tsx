@@ -15,12 +15,12 @@ import { cn } from '@/lib/utils';
 import type { AppraisalCycle, CreateAppraisalCycleDto, Frequency } from '@/types/hr';
 import { Icons } from '@/components/atoms/icons';
 
-// const FREQUENCY_OPTIONS = [
-//   { value: 'Annual', label: 'Annual' },
-//   { value: 'Semi-annual', label: 'Semi-annual' },
-//   { value: 'Quarterly', label: 'Quarterly' },
-//   { value: 'Ad-hoc', label: 'Ad-hoc' },
-// ];
+const FREQUENCY_OPTIONS = [
+  { value: 'ANNUAL', label: 'Annual' },
+  { value: 'SEMI_ANNUAL', label: 'Semi-annual' },
+  { value: 'QUARTERLY', label: 'Quarterly' },
+  { value: 'AD_HOC', label: 'Ad-hoc' },
+];
 
 const EMPLOYMENT_TYPE_OPTIONS = [
   { value: 'FULL_TIME', label: 'Full Time' },
@@ -374,7 +374,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
       />
 
       {/* Frequency */}
-      {/* <Controller
+      <Controller
         name="frequency"
         control={control}
         render={({ field }) => (
@@ -387,7 +387,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
             error={errors.frequency?.message}
           />
         )}
-      /> */}
+      />
 
       {/* Start + End Date */}
       <div className="grid grid-cols-2 gap-4">

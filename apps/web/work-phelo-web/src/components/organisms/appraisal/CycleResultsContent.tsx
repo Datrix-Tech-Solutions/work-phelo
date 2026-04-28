@@ -99,7 +99,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
       width: '100px',
       render: (r) => (
         <span className="text-gray-700">
-          {r.selfScore != null ? `${Math.round((r.selfScore / 5) * 100)}%` : '—'}
+          {r.selfScore != null ? `${Math.round(r.selfScore)}%` : '—'}
         </span>
       ),
     },
@@ -109,7 +109,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
       width: '120px',
       render: (r) => (
         <span className="text-gray-700">
-          {r.managerScore != null ? `${Math.round((r.managerScore / 5) * 100)}%` : '—'}
+          {r.managerScore != null ? `${Math.round(r.managerScore)}%` : '—'}
         </span>
       ),
     },
@@ -119,7 +119,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
       width: '100px',
       render: (r) => (
         <span className="font-medium text-gray-900">
-          {r.overallScore != null ? `${Math.round((r.overallScore / 5) * 100)}%` : '—'}
+          {r.overallScore != null ? `${Math.round(r.overallScore)}%` : '—'}
         </span>
       ),
     },
