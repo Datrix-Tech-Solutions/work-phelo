@@ -816,7 +816,6 @@ export class AppraisalsService {
     const updated = await this.prisma.appraisal.update({
       where: { id: appraisalId },
       data: {
-        managerId: reviewer.id,
         managerScore,
         managerComment: dto.comment,
         managerStatus: 'SUBMITTED',

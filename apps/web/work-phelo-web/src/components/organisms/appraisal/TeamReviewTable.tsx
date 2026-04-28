@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter, useParams } from 'next/navigation';
 import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import { api } from '@/lib/api';
@@ -22,6 +23,8 @@ interface Props {
 }
 
 export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props) {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { data: teamData, isLoading } = useQuery({
     queryKey: ['team-appraisals'],
     queryFn: () => api.get('/hr/appraisals/team').then((r) => r.data),
@@ -105,6 +108,40 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
             {days < 0 ? `${Math.abs(days)}d overdue` : `${days}d`}
           </span>
         );
+      },
+    },
+    {
+      key: 'action',
+      label: '',
+      width: '120px',
+      render: (r) => {
+        if (r.overallStatus === 'ManagerSubmitted' || r.overallStatus === 'Finalized') {
+          return (
+            <button
+              onClick={() =>
+                router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
+              }
+              className="text-sm font-medium text-gray-600 hover:text-brand transition-colors"
+            >
+              View Results
+            </button>
+          );
+        }
+        if (r.overallStatus === 'SelfSubmitted') {
+          return (
+            <button
+              onClick={() =>
+                router.push(
+                  `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/manager-review/${r.id}`,
+                )
+              }
+              className="px-4 py-1.5 rounded-full border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Review
+            </button>
+          );
+        }
+        return <span className="text-sm text-gray-400">Awaiting employee</span>;
       },
     },
   ];

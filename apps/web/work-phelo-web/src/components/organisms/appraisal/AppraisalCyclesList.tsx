@@ -10,7 +10,8 @@ import {
   useAppraisalCycles,
   useDeleteAppraisalCycle,
   useStartAppraisalCycle,
-} from '@/hooks/useAppraisals';
+  useSeedCycleFromTemplate,
+} from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
@@ -26,8 +27,9 @@ type CycleStatus = 'In Progress' | 'Completed' | 'Upcoming' | 'Expired';
 function deriveCycleStatus(cycle: AppraisalCycle): CycleStatus {
   if ((cycle.completionRate ?? 0) >= 100) return 'Completed';
   const today = new Date().toISOString().slice(0, 10);
-  if (cycle.startDate > today) return 'Upcoming';
   if (cycle.endDate < today) return 'Expired';
+  if ((cycle._count?.appraisals ?? 0) > 0) return 'In Progress';
+  if (cycle.startDate > today) return 'Upcoming';
   return 'In Progress';
 }
 
@@ -63,7 +65,28 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   const cycles: AppraisalCycle[] = data ?? [];
 
   const { mutate: startCycle, isPending: isStarting } = useStartAppraisalCycle();
+  const { mutate: seedKpis, isPending: isSeeding } = useSeedCycleFromTemplate();
   const { mutate: deleteCycle, isPending: isDeleting } = useDeleteAppraisalCycle();
+
+  const handleStart = (cycle: AppraisalCycle) => {
+    const doStart = () =>
+      startCycle(cycle.id, {
+        onSuccess: () => {
+          toast.success('Cycle started');
+          setStartTarget(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to start cycle')),
+      });
+
+    if (cycle.templateId) {
+      seedKpis(cycle.id, {
+        onSuccess: doStart,
+        onError: (err) => toast.error(extractError(err, 'Failed to seed KPIs from template')),
+      });
+    } else {
+      doStart();
+    }
+  };
 
   const columns: Column<AppraisalCycle>[] = [
     {
@@ -78,11 +101,6 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
           {row.title}
         </Link>
       ),
-    },
-    {
-      key: 'frequency',
-      label: 'Frequency',
-      render: (row) => <span className="text-gray-700">{row.frequency ?? '—'}</span>,
     },
     {
       key: 'startDate',
@@ -106,6 +124,14 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
       width: '120px',
       render: (row) => (
         <div className="flex items-center gap-4" onClick={(e) => e.stopPropagation()}>
+          {(row._count?.appraisals ?? 0) === 0 && (
+            <button
+              onClick={() => setStartTarget(row)}
+              className="text-sm font-semibold text-brand hover:text-brand/80 transition-colors"
+            >
+              Start
+            </button>
+          )}
           <button
             onClick={() => {
               setEditCycle(row);
@@ -198,18 +224,9 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
               Cancel
             </Button>
             <Button
-              isLoading={isStarting}
-              loadingText="Starting..."
-              onClick={() =>
-                startTarget &&
-                startCycle(startTarget.id, {
-                  onSuccess: () => {
-                    toast.success('Cycle started');
-                    setStartTarget(null);
-                  },
-                  onError: (err) => toast.error(extractError(err, 'Failed to start cycle')),
-                })
-              }
+              isLoading={isSeeding || isStarting}
+              loadingText={isSeeding ? 'Seeding KPIs...' : 'Starting...'}
+              onClick={() => startTarget && handleStart(startTarget)}
             >
               Start Cycle
             </Button>

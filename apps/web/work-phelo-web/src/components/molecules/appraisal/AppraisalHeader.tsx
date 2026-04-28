@@ -3,19 +3,12 @@ import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 
 interface Props {
   tenantSlug: string;
-  cycleId: string;
   cycleTitle?: string;
   employeeName: string;
   overallStatus: string;
 }
 
-export function AppraisalHeader({
-  tenantSlug,
-  cycleId,
-  cycleTitle,
-  employeeName,
-  overallStatus,
-}: Props) {
+export function AppraisalHeader({ tenantSlug, cycleTitle, employeeName, overallStatus }: Props) {
   return (
     <div className="flex flex-col gap-1">
       <nav className="flex items-center gap-1.5 text-xs text-gray-400">
@@ -23,12 +16,7 @@ export function AppraisalHeader({
           Appraisals
         </Link>
         <span>/</span>
-        <Link
-          href={`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/results`}
-          className="hover:text-gray-600"
-        >
-          {cycleTitle || 'Cycle Results'}
-        </Link>
+        <span className="text-gray-600">{cycleTitle || 'Cycle Results'}</span>
         <span>/</span>
         <span className="text-gray-700 font-medium">Detail</span>
       </nav>

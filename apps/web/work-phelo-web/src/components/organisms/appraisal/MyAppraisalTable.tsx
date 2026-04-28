@@ -6,7 +6,6 @@ import { useMyAppraisals, useAppraisalCycles } from '@/hooks/useAppraisals';
 import { Column, DataTable } from '../shared/DataTable';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
-import { SearchIcon } from 'lucide-react';
 
 type MyAppraisalStatus = 'Pending' | 'Completed' | 'Overdue';
 
@@ -40,7 +39,7 @@ interface Props {
   onPageChange: (page: number) => void;
 }
 
-export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Props) {
+export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [statusFilter, setStatusFilter] = useState('');
@@ -137,11 +136,12 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
       width: '160px',
       render: (r) => {
         const status = deriveStatus(r.overallStatus, r.selfAssessmentDeadline);
-        const href = `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`;
         if (status === 'Completed') {
           return (
             <button
-              onClick={() => router.push(href)}
+              onClick={() =>
+                router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
+              }
               className="text-sm font-medium text-gray-700 hover:text-brand transition-colors"
             >
               View Assessment
@@ -150,7 +150,9 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
         }
         return (
           <button
-            onClick={() => router.push(href)}
+            onClick={() =>
+              router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`)
+            }
             className="px-4 py-1.5 rounded-full border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Start
@@ -164,18 +166,6 @@ export function MyAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
     <div className="flex flex-col gap-4 flex-1 min-h-0 h-full">
       {/* Custom toolbar */}
       <div className="flex items-center gap-3 flex-wrap shrink-0">
-        {/* Search */}
-        <div className="relative flex-1 min-w-55 max-w-sm">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="search employee name, job title..."
-            value={search}
-            onChange={(e) => onSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
-          />
-        </div>
-
         {/* Status filter */}
         <div className="relative">
           <select
