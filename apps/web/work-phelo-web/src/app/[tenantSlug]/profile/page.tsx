@@ -75,11 +75,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
 
               {/* Right sections */}
               <div className="flex-1 min-w-0 flex flex-col gap-4">
-                <EmploymentDetailsSection
-                  employee={employee}
-                  departments={[]}
-                  allHrEmployees={[]}
-                />
+                <EmploymentDetailsSection employee={employee} allHrEmployees={[]} />
                 <AccountDetailsSection employee={employee} />
               </div>
             </div>

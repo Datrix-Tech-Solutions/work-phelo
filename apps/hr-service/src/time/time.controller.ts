@@ -27,6 +27,9 @@ import { TimeCorrectionDto } from './dto/time-correction.dto';
 import { ReviewCorrectionDto } from './dto/review-correction.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
+import { CreateShiftSwapDto } from './dto/create-shift-swap.dto';
+import { RespondShiftSwapDto } from './dto/respond-shift-swap.dto';
+import { ReviewShiftSwapDto } from './dto/review-shift-swap.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -260,6 +263,133 @@ export class TimeController {
       req.user.tenantId,
       id,
       req.user as RequestUser,
+    );
+  }
+
+  @Get('shift-swaps/eligible-colleagues')
+  @ApiOperation({
+    summary: 'Get eligible colleague shift options for a swap request',
+  })
+  @ApiQuery({ name: 'scheduleId', required: true })
+  @ApiQuery({
+    name: 'shiftDate',
+    required: true,
+    description: 'ISO date (YYYY-MM-DD)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: 'Optional colleague name search',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Eligible colleague shift options retrieved',
+  })
+  getEligibleSwapColleagues(
+    @Query('scheduleId') scheduleId: string,
+    @Query('shiftDate') shiftDate: string,
+    @Query('search') search: string,
+    @Req() req: any,
+  ) {
+    return this.timeService.getEligibleShiftSwapColleagues(
+      req.user.tenantId,
+      req.user as RequestUser,
+      { scheduleId, shiftDate, search },
+    );
+  }
+
+  @Post('shift-swaps')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a shift swap request' })
+  @ApiBody({ type: CreateShiftSwapDto })
+  @ApiResponse({ status: 201, description: 'Shift swap request created' })
+  createShiftSwap(@Body() dto: CreateShiftSwapDto, @Req() req: any) {
+    return this.timeService.createShiftSwapRequest(
+      req.user.tenantId,
+      req.user as RequestUser,
+      dto,
+    );
+  }
+
+  @Get('shift-swaps/my')
+  @ApiOperation({
+    summary: 'List shift swap requests relevant to the current employee',
+  })
+  @ApiResponse({ status: 200, description: 'Shift swap requests retrieved' })
+  getMyShiftSwaps(@Req() req: any) {
+    return this.timeService.getMyShiftSwapRequests(
+      req.user.tenantId,
+      req.user as RequestUser,
+    );
+  }
+
+  @Get('shift-swaps/pending-manager')
+  @ApiOperation({
+    summary: 'List shift swap requests awaiting the current manager approval',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pending manager shift swaps retrieved',
+  })
+  getPendingManagerShiftSwaps(@Req() req: any) {
+    return this.timeService.getPendingManagerShiftSwaps(
+      req.user.tenantId,
+      req.user as RequestUser,
+    );
+  }
+
+  @Get('shift-swaps/:id')
+  @ApiOperation({ summary: 'Get a single shift swap request' })
+  @ApiParam({ name: 'id', description: 'Shift swap request UUID' })
+  @ApiResponse({ status: 200, description: 'Shift swap request retrieved' })
+  getShiftSwap(@Param('id') id: string, @Req() req: any) {
+    return this.timeService.getShiftSwapRequest(
+      req.user.tenantId,
+      req.user as RequestUser,
+      id,
+    );
+  }
+
+  @Post('shift-swaps/:id/respond')
+  @ApiOperation({
+    summary: 'Accept or decline a shift swap request as the colleague',
+  })
+  @ApiParam({ name: 'id', description: 'Shift swap request UUID' })
+  @ApiBody({ type: RespondShiftSwapDto })
+  @ApiResponse({ status: 200, description: 'Shift swap request responded to' })
+  respondToShiftSwap(
+    @Param('id') id: string,
+    @Body() dto: RespondShiftSwapDto,
+    @Req() req: any,
+  ) {
+    return this.timeService.respondToShiftSwap(
+      req.user.tenantId,
+      req.user as RequestUser,
+      id,
+      dto,
+    );
+  }
+
+  @Post('shift-swaps/:id/manager-decision')
+  @ApiOperation({
+    summary: 'Approve or reject a shift swap request as the manager',
+  })
+  @ApiParam({ name: 'id', description: 'Shift swap request UUID' })
+  @ApiBody({ type: ReviewShiftSwapDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Shift swap request reviewed by manager',
+  })
+  reviewShiftSwap(
+    @Param('id') id: string,
+    @Body() dto: ReviewShiftSwapDto,
+    @Req() req: any,
+  ) {
+    return this.timeService.reviewShiftSwap(
+      req.user.tenantId,
+      req.user as RequestUser,
+      id,
+      dto,
     );
   }
 

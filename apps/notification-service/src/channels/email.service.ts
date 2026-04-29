@@ -1107,7 +1107,247 @@ export class EmailService {
     </td></tr>
   </table>
 </body>
+      </html>`,
+    );
+  }
+
+  private sendShiftSwapEmail(
+    to: string,
+    subject: string,
+    heading: string,
+    firstName: string,
+    bodyHtml: string,
+    ctaLabel?: string,
+    ctaLink?: string,
+  ): Promise<boolean> {
+    const cta =
+      ctaLabel && ctaLink
+        ? `<p>
+        <a href="${ctaLink}" style="display:inline-block;padding:12px 24px;background:#0d1b3e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">${ctaLabel}</a>
+      </p>`
+        : '';
+
+    return this.send(
+      to,
+      subject,
+      `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /><title>${heading}</title></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px auto;border-radius:8px;overflow:hidden;">
+    <tr><td style="padding:20px 30px;">
+      <h2 style="margin:0;font-weight:bold;">
+        <span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span>
+      </h2>
+    </td></tr>
+    <tr><td style="background:#eef1f4;padding:40px 30px;">
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${heading}</p>
+    </td></tr>
+    <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
+      <p>Hi ${firstName},</p>
+      ${bodyHtml}
+      ${cta}
+      <p style="margin-top:30px;">Thank you,</p>
+    </td></tr>
+    <tr><td style="padding:20px 30px;border-top:1px solid #eee;">
+      <h3 style="margin:0;"><span style="color:#ff6a00;">WORK</span><span style="color:#1a3557;">Phelo</span></h3>
+      <p style="color:#888;font-size:12px;margin-top:5px;">© 2026 WorkPhelo All rights reserved</p>
+    </td></tr>
+  </table>
+</body>
 </html>`,
+    );
+  }
+
+  async sendShiftSwapRequestedNotification(
+    to: string,
+    firstName: string,
+    recipientRole: 'REQUESTER' | 'COLLEAGUE',
+    counterpartFullName: string,
+    requesterFullName: string,
+    requesterShiftLabel: string,
+    targetShiftLabel: string,
+    reason?: string | null,
+    scheduleLink?: string,
+  ): Promise<boolean> {
+    const body = [
+      recipientRole === 'REQUESTER'
+        ? `<p>Your shift swap request with <strong>${counterpartFullName}</strong> has been submitted and is awaiting their response.</p>`
+        : `<p><strong>${requesterFullName}</strong> has requested a shift swap with you.</p>`,
+      `<table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
+        <tr style="background:#f9fafb;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Their shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Swap target</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+        </tr>
+      </table>`,
+      reason ? `<p><strong>Reason:</strong> ${reason}</p>` : '',
+      recipientRole === 'COLLEAGUE'
+        ? `<p>Please log in to WorkPhelo to accept or decline this request within 48 hours.</p>`
+        : '<p>You can track the request status from your schedule screen.</p>',
+    ].join('');
+
+    return this.sendShiftSwapEmail(
+      to,
+      recipientRole === 'REQUESTER'
+        ? `Shift swap request submitted with ${counterpartFullName}`
+        : `${requesterFullName} requested a shift swap with you`,
+      recipientRole === 'REQUESTER'
+        ? 'Shift Swap Request Submitted'
+        : 'Shift Swap Request Received',
+      firstName,
+      body,
+      scheduleLink ? 'Open Scheduling' : undefined,
+      scheduleLink,
+    );
+  }
+
+  async sendShiftSwapPendingManagerNotification(
+    to: string,
+    firstName: string,
+    requesterFullName: string,
+    targetFullName: string,
+    requesterShiftLabel: string,
+    targetShiftLabel: string,
+    reason?: string | null,
+    reviewLink?: string,
+  ): Promise<boolean> {
+    const body = [
+      `<p>A shift swap between <strong>${requesterFullName}</strong> and <strong>${targetFullName}</strong> is awaiting your approval.</p>`,
+      `<table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
+        <tr style="background:#f9fafb;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Requester shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Colleague shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+        </tr>
+      </table>`,
+      reason ? `<p><strong>Reason:</strong> ${reason}</p>` : '',
+      '<p>Please review the request in the scheduling section.</p>',
+    ].join('');
+
+    return this.sendShiftSwapEmail(
+      to,
+      `Shift swap awaiting your approval — ${requesterFullName} and ${targetFullName}`,
+      'Shift Swap Awaiting Approval',
+      firstName,
+      body,
+      reviewLink ? 'Review Swap Request' : undefined,
+      reviewLink,
+    );
+  }
+
+  async sendShiftSwapDeclinedNotification(
+    to: string,
+    firstName: string,
+    counterpartFullName: string,
+    scheduleLink?: string,
+  ): Promise<boolean> {
+    return this.sendShiftSwapEmail(
+      to,
+      `Shift swap update with ${counterpartFullName}`,
+      'Shift Swap Declined',
+      firstName,
+      `<p>Your shift swap request with <strong>${counterpartFullName}</strong> was declined. Your original shifts remain unchanged.</p>`,
+      scheduleLink ? 'Open Scheduling' : undefined,
+      scheduleLink,
+    );
+  }
+
+  async sendShiftSwapApprovedNotification(
+    to: string,
+    firstName: string,
+    counterpartFullName: string,
+    requesterShiftLabel: string,
+    targetShiftLabel: string,
+    scheduleLink?: string,
+  ): Promise<boolean> {
+    return this.sendShiftSwapEmail(
+      to,
+      `Your shift swap with ${counterpartFullName} was approved`,
+      'Shift Swap Approved',
+      firstName,
+      `<p>Your shift swap with <strong>${counterpartFullName}</strong> was approved.</p>
+      <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
+        <tr style="background:#f9fafb;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Original requester shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Original colleague shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+        </tr>
+      </table>
+      <p>Your schedule has been updated to reflect the approved swap.</p>`,
+      scheduleLink ? 'View Updated Schedule' : undefined,
+      scheduleLink,
+    );
+  }
+
+  async sendShiftSwapRejectedNotification(
+    to: string,
+    firstName: string,
+    counterpartFullName: string,
+    rejectionReason: string,
+    requesterShiftLabel: string,
+    targetShiftLabel: string,
+    scheduleLink?: string,
+  ): Promise<boolean> {
+    return this.sendShiftSwapEmail(
+      to,
+      `Your shift swap with ${counterpartFullName} was rejected`,
+      'Shift Swap Rejected',
+      firstName,
+      `<p>Your shift swap with <strong>${counterpartFullName}</strong> was rejected by the manager.</p>
+      <p><strong>Reason:</strong> ${rejectionReason}</p>
+      <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
+        <tr style="background:#f9fafb;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Requester shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Colleague shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+        </tr>
+      </table>
+      <p>Your original shifts remain unchanged.</p>`,
+      scheduleLink ? 'Open Scheduling' : undefined,
+      scheduleLink,
+    );
+  }
+
+  async sendShiftSwapExpiredNotification(
+    to: string,
+    firstName: string,
+    counterpartFullName: string,
+    requesterShiftLabel: string,
+    targetShiftLabel: string,
+    scheduleLink?: string,
+  ): Promise<boolean> {
+    return this.sendShiftSwapEmail(
+      to,
+      `Your shift swap with ${counterpartFullName} expired`,
+      'Shift Swap Expired',
+      firstName,
+      `<p>Your shift swap with <strong>${counterpartFullName}</strong> expired without a response within 48 hours.</p>
+      <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
+        <tr style="background:#f9fafb;">
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Requester shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Colleague shift</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+        </tr>
+      </table>
+      <p>Your original shifts remain unchanged.</p>`,
+      scheduleLink ? 'Open Scheduling' : undefined,
+      scheduleLink,
     );
   }
 

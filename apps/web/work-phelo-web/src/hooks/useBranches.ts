@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Branch } from '@/types/hr';
 
+export type BranchOption = Pick<Branch, 'id' | 'name'>;
+
 export function useBranches() {
   return useQuery({
     queryKey: ['branches'],
@@ -9,6 +11,17 @@ export function useBranches() {
       const res = await api.get<Branch[]>('/hr/branches');
       return Array.isArray(res.data) ? res.data : ((res.data as { data: Branch[] })?.data ?? []);
     },
+  });
+}
+
+export function useBranchOptions(enabled = true) {
+  return useQuery({
+    queryKey: ['branch-options'],
+    queryFn: async () => {
+      const res = await api.get<BranchOption[]>('/hr/branches/options');
+      return res.data;
+    },
+    enabled,
   });
 }
 

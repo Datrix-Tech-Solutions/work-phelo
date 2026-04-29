@@ -3,7 +3,9 @@ import {
   BadRequestException,
   Logger,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import Decimal from 'decimal.js';
@@ -12,6 +14,9 @@ import { TimeCorrectionDto } from './dto/time-correction.dto';
 import { ReviewCorrectionDto } from './dto/review-correction.dto';
 import { CreateScheduleDto } from './dto/create-schedule.dto';
 import { UpdateScheduleDto } from './dto/update-schedule.dto';
+import { CreateShiftSwapDto } from './dto/create-shift-swap.dto';
+import { RespondShiftSwapDto } from './dto/respond-shift-swap.dto';
+import { ReviewShiftSwapDto } from './dto/review-shift-swap.dto';
 import {
   assertHrAccess,
   getActorEmployee,
@@ -20,14 +25,24 @@ import {
   isEmployeeSelfServiceUser,
 } from '../auth/access-scope';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
+import { NotificationsService } from '../notifications/notifications.service';
+import {
+  EmploymentStatus,
+  Prisma,
+  ShiftSchedule,
+  ShiftSwapRequest,
+  ShiftSwapStatus,
+} from '../../prisma/generated/client';
 
 @Injectable()
 export class TimeService {
   private readonly logger = new Logger(TimeService.name);
+  private readonly swapSearchWindowDays = 60;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly publisher: RabbitMQPublisher,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   private transformRecord(record: {
@@ -65,6 +80,325 @@ export class TimeService {
     end.setHours(23, 59, 59, 999);
 
     return { start, end };
+  }
+
+  private parseDateOnly(value: string): Date {
+    const parsed = new Date(`${value}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new BadRequestException('Invalid shift date');
+    }
+    parsed.setHours(0, 0, 0, 0);
+    return parsed;
+  }
+
+  private formatDateOnly(value: Date): string {
+    return value.toISOString().slice(0, 10);
+  }
+
+  private isFutureShiftDate(date: Date): boolean {
+    const { start: today } = this.getDayBounds(new Date());
+    return date.getTime() > today.getTime();
+  }
+
+  private formatShiftForMessage(
+    date: Date,
+    startTime: string,
+    endTime: string,
+  ) {
+    return `${date.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })} ${startTime}-${endTime}`;
+  }
+
+  private scheduleAppliesOnDate(schedule: ShiftSchedule, date: Date): boolean {
+    const { start } = this.getDayBounds(date);
+    const effectiveFrom = new Date(schedule.effectiveFrom);
+    effectiveFrom.setHours(0, 0, 0, 0);
+    const effectiveTo = schedule.effectiveTo
+      ? new Date(schedule.effectiveTo)
+      : null;
+    effectiveTo?.setHours(0, 0, 0, 0);
+
+    return (
+      schedule.dayOfWeek.includes(start.getDay()) &&
+      effectiveFrom.getTime() <= start.getTime() &&
+      (!effectiveTo || effectiveTo.getTime() >= start.getTime())
+    );
+  }
+
+  private listScheduleOccurrences(
+    schedule: ShiftSchedule,
+    from: Date,
+    to: Date,
+  ): Date[] {
+    const cursor = new Date(from);
+    cursor.setHours(0, 0, 0, 0);
+    const end = new Date(to);
+    end.setHours(0, 0, 0, 0);
+
+    const dates: Date[] = [];
+    while (cursor.getTime() <= end.getTime()) {
+      if (this.scheduleAppliesOnDate(schedule, cursor)) {
+        dates.push(new Date(cursor));
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    return dates;
+  }
+
+  private async hasApprovedLeaveOnDate(
+    tenantId: string,
+    employeeId: string,
+    date: Date,
+  ): Promise<boolean> {
+    const { start, end } = this.getDayBounds(date);
+    const leave = await this.prisma.leaveRequest.findFirst({
+      where: {
+        tenantId,
+        employeeId,
+        status: 'APPROVED',
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+      select: { id: true },
+    });
+
+    return Boolean(leave);
+  }
+
+  private async assertNoApprovedLeaveOnDate(
+    tenantId: string,
+    employeeId: string,
+    date: Date,
+    message: string,
+  ) {
+    const hasLeave = await this.hasApprovedLeaveOnDate(
+      tenantId,
+      employeeId,
+      date,
+    );
+    if (hasLeave) {
+      throw new BadRequestException(message);
+    }
+  }
+
+  private async getScheduleForSwap(
+    tenantId: string,
+    scheduleId: string,
+  ): Promise<
+    ShiftSchedule & {
+      employee: {
+        id: string;
+        userId: string | null;
+        email: string;
+        firstName: string;
+        lastName: string;
+        managerId: string | null;
+        departmentId: string | null;
+      };
+    }
+  > {
+    const schedule = await this.prisma.shiftSchedule.findFirst({
+      where: { id: scheduleId, tenantId },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+            managerId: true,
+            departmentId: true,
+          },
+        },
+      },
+    });
+
+    if (!schedule) {
+      throw new NotFoundException('Shift schedule not found');
+    }
+
+    return schedule;
+  }
+
+  private async resolveSwapManagerEmployeeId(
+    tenantId: string,
+    requester: {
+      managerId: string | null;
+      departmentId: string | null;
+    },
+    target: {
+      managerId: string | null;
+      departmentId: string | null;
+    },
+  ): Promise<string | null> {
+    if (requester.managerId && requester.managerId === target.managerId) {
+      return requester.managerId;
+    }
+
+    if (
+      requester.departmentId &&
+      requester.departmentId === target.departmentId
+    ) {
+      const department = await this.prisma.department.findFirst({
+        where: { tenantId, id: requester.departmentId, isActive: true },
+        select: { managerId: true },
+      });
+      return department?.managerId ?? null;
+    }
+
+    return null;
+  }
+
+  private areSameTeam(
+    requester: { managerId: string | null; departmentId: string | null },
+    colleague: { managerId: string | null; departmentId: string | null },
+  ): boolean {
+    if (requester.managerId && requester.managerId === colleague.managerId) {
+      return true;
+    }
+
+    return Boolean(
+      requester.departmentId &&
+      colleague.departmentId &&
+      requester.departmentId === colleague.departmentId,
+    );
+  }
+
+  private async ensureNoActiveSwapConflict(
+    tenantId: string,
+    scheduleId: string,
+    shiftDate: Date,
+  ) {
+    const existing = await this.prisma.shiftSwapRequest.findFirst({
+      where: {
+        tenantId,
+        status: { in: ['PENDING_COLLEAGUE', 'PENDING_MANAGER'] },
+        OR: [
+          { requesterScheduleId: scheduleId, requesterShiftDate: shiftDate },
+          { targetScheduleId: scheduleId, targetShiftDate: shiftDate },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (existing) {
+      throw new BadRequestException(
+        'There is already an active swap request for one of these shifts',
+      );
+    }
+  }
+
+  private async notifyShiftSwapUsers(
+    notifications: {
+      tenantId: string;
+      userId: string | null | undefined;
+      type: string;
+      message: string;
+      link?: string;
+    }[],
+  ) {
+    const filtered = notifications.filter(
+      (
+        notification,
+      ): notification is {
+        tenantId: string;
+        userId: string;
+        type: string;
+        message: string;
+        link?: string;
+      } => Boolean(notification.userId),
+    );
+
+    if (filtered.length) {
+      await this.notificationsService.createMany(filtered);
+    }
+  }
+
+  private async logShiftSwapAction(args: {
+    tenantId: string;
+    shiftSwapRequestId: string;
+    action:
+      | 'REQUESTED'
+      | 'COLLEAGUE_ACCEPTED'
+      | 'COLLEAGUE_DECLINED'
+      | 'MANAGER_APPROVED'
+      | 'MANAGER_REJECTED'
+      | 'EXPIRED';
+    actorEmployeeId?: string | null;
+    actorUserId?: string | null;
+    note?: string | null;
+  }) {
+    await this.prisma.shiftSwapActionLog.create({
+      data: {
+        tenantId: args.tenantId,
+        shiftSwapRequestId: args.shiftSwapRequestId,
+        action: args.action,
+        actorEmployeeId: args.actorEmployeeId ?? undefined,
+        actorUserId: args.actorUserId ?? undefined,
+        note: args.note ?? undefined,
+      },
+    });
+  }
+
+  private emitNotificationEvent(promise: Promise<void>, context: string) {
+    void promise.catch((err) =>
+      this.logger.error(
+        `[shift-swap] Failed to publish ${context} notification event`,
+        err,
+      ),
+    );
+  }
+
+  private buildSchedulingLink(
+    tenantSlug: string,
+    tab: 'my-schedule' | 'swap-requests' = 'my-schedule',
+  ): string {
+    const base = process.env.FRONTEND_BASE_URL as string;
+    return `${base}/${tenantSlug}/hr/scheduling?tab=${tab}`;
+  }
+
+  private async getShiftSwapContacts(
+    tenantId: string,
+    swap: {
+      requesterEmployeeId: string;
+      targetEmployeeId: string;
+      managerEmployeeId?: string | null;
+    },
+  ) {
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        tenantId,
+        id: {
+          in: [
+            swap.requesterEmployeeId,
+            swap.targetEmployeeId,
+            ...(swap.managerEmployeeId ? [swap.managerEmployeeId] : []),
+          ],
+        },
+      },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    const byId = new Map(employees.map((employee) => [employee.id, employee]));
+
+    return {
+      requester: byId.get(swap.requesterEmployeeId) ?? null,
+      target: byId.get(swap.targetEmployeeId) ?? null,
+      manager: swap.managerEmployeeId
+        ? (byId.get(swap.managerEmployeeId) ?? null)
+        : null,
+    };
   }
 
   private async getActiveSchedule(
@@ -537,8 +871,7 @@ export class TimeService {
   }
 
   private buildScheduleLink(tenantSlug: string): string {
-    const base = process.env.FRONTEND_BASE_URL as string;
-    return `${base}/${tenantSlug}/hr/scheduling?tab=my-schedule`;
+    return this.buildSchedulingLink(tenantSlug, 'my-schedule');
   }
 
   async createSchedule(
@@ -719,6 +1052,1027 @@ export class TimeService {
     return { message: 'Schedule deleted successfully' };
   }
 
+  async getEligibleShiftSwapColleagues(
+    tenantId: string,
+    actor: RequestUser,
+    params: { scheduleId: string; shiftDate: string; search?: string },
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    const requesterDate = this.parseDateOnly(params.shiftDate);
+
+    if (!this.isFutureShiftDate(requesterDate)) {
+      throw new BadRequestException(
+        "Only future shifts can be swapped. Today's shift and past shifts are not eligible.",
+      );
+    }
+
+    const requesterSchedule = await this.getScheduleForSwap(
+      tenantId,
+      params.scheduleId,
+    );
+
+    if (requesterSchedule.employee.id !== actorEmployee.id) {
+      throw new ForbiddenException(
+        'You can only request a swap for your own shift',
+      );
+    }
+
+    if (!this.scheduleAppliesOnDate(requesterSchedule, requesterDate)) {
+      throw new BadRequestException(
+        'The selected shift does not exist on that date',
+      );
+    }
+
+    await this.assertNoApprovedLeaveOnDate(
+      tenantId,
+      actorEmployee.id,
+      requesterDate,
+      'You cannot request a swap for a shift that falls on approved leave.',
+    );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const windowEnd = new Date(today);
+    windowEnd.setDate(windowEnd.getDate() + this.swapSearchWindowDays);
+
+    const trimmedSearch = params.search?.trim();
+    const colleagues = await this.prisma.employee.findMany({
+      where: {
+        tenantId,
+        id: { not: actorEmployee.id },
+        employmentStatus: {
+          in: [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION],
+        },
+        ...(requesterSchedule.employee.managerId
+          ? { managerId: requesterSchedule.employee.managerId }
+          : requesterSchedule.employee.departmentId
+            ? { departmentId: requesterSchedule.employee.departmentId }
+            : { id: '__no-team__' }),
+        ...(trimmedSearch
+          ? {
+              OR: [
+                { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
+                { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
+      include: {
+        schedules: true,
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+
+    const options: Array<{
+      colleagueEmployeeId: string;
+      colleagueName: string;
+      scheduleId: string;
+      shiftDate: string;
+      shiftType: string;
+      startTime: string;
+      endTime: string;
+      workMode: string;
+    }> = [];
+
+    for (const colleague of colleagues) {
+      for (const schedule of colleague.schedules) {
+        const occurrences = this.listScheduleOccurrences(
+          schedule,
+          today,
+          windowEnd,
+        );
+
+        const hasApprovedLeaveDates = new Set(
+          (
+            await this.prisma.leaveRequest.findMany({
+              where: {
+                tenantId,
+                employeeId: colleague.id,
+                status: 'APPROVED',
+                startDate: { lte: windowEnd },
+                endDate: { gte: today },
+              },
+              select: { startDate: true, endDate: true },
+            })
+          ).flatMap((leave) => {
+            const dates: string[] = [];
+            const cursor = new Date(leave.startDate);
+            cursor.setHours(0, 0, 0, 0);
+            const end = new Date(leave.endDate);
+            end.setHours(0, 0, 0, 0);
+            while (cursor.getTime() <= end.getTime()) {
+              dates.push(this.formatDateOnly(cursor));
+              cursor.setDate(cursor.getDate() + 1);
+            }
+            return dates;
+          }),
+        );
+
+        for (const occurrence of occurrences) {
+          const occurrenceDate = this.formatDateOnly(occurrence);
+          if (occurrenceDate === this.formatDateOnly(requesterDate)) continue;
+          if (hasApprovedLeaveDates.has(occurrenceDate)) continue;
+          if (
+            await this.hasApprovedLeaveOnDate(
+              tenantId,
+              actorEmployee.id,
+              occurrence,
+            )
+          ) {
+            continue;
+          }
+
+          options.push({
+            colleagueEmployeeId: colleague.id,
+            colleagueName: `${colleague.firstName} ${colleague.lastName}`,
+            scheduleId: schedule.id,
+            shiftDate: occurrenceDate,
+            shiftType: schedule.shiftType,
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+            workMode: schedule.workMode,
+          });
+        }
+      }
+    }
+
+    return options;
+  }
+
+  async createShiftSwapRequest(
+    tenantId: string,
+    actor: RequestUser,
+    dto: CreateShiftSwapDto,
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    const requesterDate = this.parseDateOnly(dto.requesterShiftDate);
+    const targetDate = this.parseDateOnly(dto.targetShiftDate);
+
+    if (
+      !this.isFutureShiftDate(requesterDate) ||
+      !this.isFutureShiftDate(targetDate)
+    ) {
+      throw new BadRequestException(
+        "Only future shifts can be swapped. Today's shift and past shifts are not eligible.",
+      );
+    }
+
+    if (
+      this.formatDateOnly(requesterDate) === this.formatDateOnly(targetDate)
+    ) {
+      throw new BadRequestException(
+        'Swap requests must be made against a colleague shift on a different date',
+      );
+    }
+
+    const [requesterSchedule, targetSchedule] = await Promise.all([
+      this.getScheduleForSwap(tenantId, dto.requesterScheduleId),
+      this.getScheduleForSwap(tenantId, dto.targetScheduleId),
+    ]);
+
+    if (requesterSchedule.employee.id !== actorEmployee.id) {
+      throw new ForbiddenException(
+        'You can only request a swap for your own shift',
+      );
+    }
+
+    if (!this.scheduleAppliesOnDate(requesterSchedule, requesterDate)) {
+      throw new BadRequestException(
+        'Your selected shift does not exist on that date',
+      );
+    }
+
+    if (!this.scheduleAppliesOnDate(targetSchedule, targetDate)) {
+      throw new BadRequestException(
+        "The colleague's selected shift does not exist on that date",
+      );
+    }
+
+    if (
+      !this.areSameTeam(requesterSchedule.employee, targetSchedule.employee)
+    ) {
+      throw new BadRequestException(
+        'You can only swap with colleagues in your own team',
+      );
+    }
+
+    await this.assertNoApprovedLeaveOnDate(
+      tenantId,
+      actorEmployee.id,
+      requesterDate,
+      'You cannot request a swap for a shift that falls on approved leave.',
+    );
+    await this.assertNoApprovedLeaveOnDate(
+      tenantId,
+      actorEmployee.id,
+      targetDate,
+      `You have approved leave on ${targetDate.toLocaleDateString('en-GB')} and cannot take this shift.`,
+    );
+    await this.assertNoApprovedLeaveOnDate(
+      tenantId,
+      targetSchedule.employee.id,
+      targetDate,
+      'The selected colleague is on approved leave for their shift and cannot swap at this time.',
+    );
+
+    await Promise.all([
+      this.ensureNoActiveSwapConflict(
+        tenantId,
+        requesterSchedule.id,
+        requesterDate,
+      ),
+      this.ensureNoActiveSwapConflict(tenantId, targetSchedule.id, targetDate),
+    ]);
+
+    const managerEmployeeId = await this.resolveSwapManagerEmployeeId(
+      tenantId,
+      requesterSchedule.employee,
+      targetSchedule.employee,
+    );
+
+    if (!managerEmployeeId) {
+      throw new BadRequestException(
+        'No manager could be resolved for this team swap request',
+      );
+    }
+
+    const swap = await this.prisma.shiftSwapRequest.create({
+      data: {
+        tenantId,
+        requesterEmployeeId: requesterSchedule.employee.id,
+        requesterScheduleId: requesterSchedule.id,
+        requesterShiftDate: requesterDate,
+        targetEmployeeId: targetSchedule.employee.id,
+        targetScheduleId: targetSchedule.id,
+        targetShiftDate: targetDate,
+        managerEmployeeId,
+        reason: dto.reason?.trim() || null,
+        expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+      },
+      include: {
+        requesterEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            userId: true,
+            email: true,
+          },
+        },
+        targetEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            userId: true,
+            email: true,
+          },
+        },
+        requesterSchedule: {
+          select: { startTime: true, endTime: true },
+        },
+        targetSchedule: {
+          select: { startTime: true, endTime: true },
+        },
+      },
+    });
+
+    const requesterName = `${swap.requesterEmployee.firstName} ${swap.requesterEmployee.lastName}`;
+    const targetName = `${swap.targetEmployee.firstName} ${swap.targetEmployee.lastName}`;
+    const requesterShift = this.formatShiftForMessage(
+      requesterDate,
+      requesterSchedule.startTime,
+      requesterSchedule.endTime,
+    );
+    const targetShift = this.formatShiftForMessage(
+      targetDate,
+      targetSchedule.startTime,
+      targetSchedule.endTime,
+    );
+    const link = `/hr/scheduling?tab=my-schedule`;
+    const scheduleLink = this.buildSchedulingLink(
+      actor.tenantSlug,
+      'my-schedule',
+    );
+
+    await this.notifyShiftSwapUsers([
+      {
+        tenantId,
+        userId: swap.requesterEmployee.userId,
+        type: 'SHIFT_SWAP_REQUESTED',
+        message: `Your shift swap request with ${targetName} has been submitted and is awaiting their response.`,
+        link,
+      },
+      {
+        tenantId,
+        userId: swap.targetEmployee.userId,
+        type: 'SHIFT_SWAP_REQUESTED',
+        message: `${requesterName} requested a shift swap: ${requesterShift} for ${targetShift}.`,
+        link,
+      },
+    ]);
+
+    await this.logShiftSwapAction({
+      tenantId,
+      shiftSwapRequestId: swap.id,
+      action: 'REQUESTED',
+      actorEmployeeId: actorEmployee.id,
+      actorUserId: actor.id,
+      note: dto.reason?.trim() || null,
+    });
+
+    this.emitNotificationEvent(
+      this.publisher.notificationShiftSwapRequested({
+        tenantId,
+        shiftSwapId: swap.id,
+        recipientEmail: requesterSchedule.employee.email,
+        recipientFirstName: requesterSchedule.employee.firstName,
+        recipientRole: 'REQUESTER',
+        counterpartFullName: targetName,
+        requesterFullName: requesterName,
+        requesterShiftLabel: requesterShift,
+        targetShiftLabel: targetShift,
+        reason: dto.reason?.trim() || null,
+        scheduleLink,
+      }),
+      'shift_swap_requested(requester)',
+    );
+
+    this.emitNotificationEvent(
+      this.publisher.notificationShiftSwapRequested({
+        tenantId,
+        shiftSwapId: swap.id,
+        recipientEmail: targetSchedule.employee.email,
+        recipientFirstName: targetSchedule.employee.firstName,
+        recipientRole: 'COLLEAGUE',
+        counterpartFullName: requesterName,
+        requesterFullName: requesterName,
+        requesterShiftLabel: requesterShift,
+        targetShiftLabel: targetShift,
+        reason: dto.reason?.trim() || null,
+        scheduleLink,
+      }),
+      'shift_swap_requested(colleague)',
+    );
+
+    return swap;
+  }
+
+  async getMyShiftSwapRequests(tenantId: string, actor: RequestUser) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+
+    return this.prisma.shiftSwapRequest.findMany({
+      where: {
+        tenantId,
+        OR: [
+          { requesterEmployeeId: actorEmployee.id },
+          { targetEmployeeId: actorEmployee.id },
+          { managerEmployeeId: actorEmployee.id },
+        ],
+      },
+      include: {
+        requesterEmployee: {
+          select: { firstName: true, lastName: true },
+        },
+        targetEmployee: {
+          select: { firstName: true, lastName: true },
+        },
+        requesterSchedule: {
+          select: {
+            shiftType: true,
+            startTime: true,
+            endTime: true,
+            workMode: true,
+          },
+        },
+        targetSchedule: {
+          select: {
+            shiftType: true,
+            startTime: true,
+            endTime: true,
+            workMode: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getPendingManagerShiftSwaps(tenantId: string, actor: RequestUser) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    assertHrAccess(
+      isCompanyAdminUser(actor) ||
+        hasPermissionRule(actor, 'schedules:CREATE') ||
+        hasPermissionRule(actor, 'schedules:EDIT'),
+    );
+
+    return this.prisma.shiftSwapRequest.findMany({
+      where: {
+        tenantId,
+        managerEmployeeId: actorEmployee.id,
+        status: ShiftSwapStatus.PENDING_MANAGER,
+      },
+      include: {
+        requesterEmployee: {
+          select: { firstName: true, lastName: true },
+        },
+        targetEmployee: {
+          select: { firstName: true, lastName: true },
+        },
+        requesterSchedule: true,
+        targetSchedule: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getShiftSwapRequest(
+    tenantId: string,
+    actor: RequestUser,
+    shiftSwapId: string,
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+
+    const swap = await this.prisma.shiftSwapRequest.findFirst({
+      where: { id: shiftSwapId, tenantId },
+      include: {
+        requesterEmployee: {
+          select: { id: true, firstName: true, lastName: true, userId: true },
+        },
+        targetEmployee: {
+          select: { id: true, firstName: true, lastName: true, userId: true },
+        },
+        managerEmployee: {
+          select: { id: true, firstName: true, lastName: true, userId: true },
+        },
+        requesterSchedule: true,
+        targetSchedule: true,
+      },
+    });
+
+    if (!swap) {
+      throw new NotFoundException('Shift swap request not found');
+    }
+
+    assertHrAccess(
+      isCompanyAdminUser(actor) ||
+        swap.requesterEmployeeId === actorEmployee.id ||
+        swap.targetEmployeeId === actorEmployee.id ||
+        swap.managerEmployeeId === actorEmployee.id ||
+        hasPermissionRule(actor, 'schedules:CREATE') ||
+        hasPermissionRule(actor, 'schedules:EDIT'),
+    );
+
+    return swap;
+  }
+
+  async respondToShiftSwap(
+    tenantId: string,
+    actor: RequestUser,
+    shiftSwapId: string,
+    dto: RespondShiftSwapDto,
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    const swap = await this.getShiftSwapRequest(tenantId, actor, shiftSwapId);
+
+    if (swap.targetEmployeeId !== actorEmployee.id) {
+      throw new ForbiddenException(
+        'Only the selected colleague can respond to this shift swap',
+      );
+    }
+
+    if (swap.status !== ShiftSwapStatus.PENDING_COLLEAGUE) {
+      throw new BadRequestException(
+        'This shift swap is no longer awaiting colleague response',
+      );
+    }
+
+    if (swap.expiresAt.getTime() < Date.now()) {
+      await this.prisma.shiftSwapRequest.update({
+        where: { id: swap.id },
+        data: { status: ShiftSwapStatus.EXPIRED },
+      });
+      await this.logShiftSwapAction({
+        tenantId,
+        shiftSwapRequestId: swap.id,
+        action: 'EXPIRED',
+      });
+      throw new BadRequestException('This shift swap request has expired');
+    }
+
+    const requesterName = `${swap.requesterEmployee.firstName} ${swap.requesterEmployee.lastName}`;
+    const targetName = `${swap.targetEmployee.firstName} ${swap.targetEmployee.lastName}`;
+    const link = `/hr/scheduling?tab=my-schedule`;
+    const scheduleLink = this.buildSchedulingLink(
+      actor.tenantSlug,
+      'my-schedule',
+    );
+    const managerReviewLink = this.buildSchedulingLink(
+      actor.tenantSlug,
+      'swap-requests',
+    );
+    const requesterShift = this.formatShiftForMessage(
+      swap.requesterShiftDate,
+      swap.requesterSchedule.startTime,
+      swap.requesterSchedule.endTime,
+    );
+    const targetShift = this.formatShiftForMessage(
+      swap.targetShiftDate,
+      swap.targetSchedule.startTime,
+      swap.targetSchedule.endTime,
+    );
+    const contacts = await this.getShiftSwapContacts(tenantId, swap);
+
+    if (dto.action === 'DECLINE') {
+      const declined = await this.prisma.shiftSwapRequest.update({
+        where: { id: swap.id },
+        data: {
+          status: ShiftSwapStatus.DECLINED,
+          colleagueRespondedAt: new Date(),
+        },
+      });
+
+      await this.notifyShiftSwapUsers([
+        {
+          tenantId,
+          userId: swap.requesterEmployee.userId,
+          type: 'SHIFT_SWAP_DECLINED',
+          message: `${targetName} declined your shift swap request.`,
+          link,
+        },
+        {
+          tenantId,
+          userId: swap.targetEmployee.userId,
+          type: 'SHIFT_SWAP_DECLINED',
+          message: `You declined the shift swap request from ${requesterName}.`,
+          link,
+        },
+      ]);
+
+      await this.logShiftSwapAction({
+        tenantId,
+        shiftSwapRequestId: swap.id,
+        action: 'COLLEAGUE_DECLINED',
+        actorEmployeeId: actorEmployee.id,
+        actorUserId: actor.id,
+      });
+
+      if (contacts.requester?.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapDeclined({
+            tenantId,
+            shiftSwapId: swap.id,
+            employeeEmail: contacts.requester.email,
+            employeeFirstName: contacts.requester.firstName,
+            counterpartFullName: targetName,
+            scheduleLink,
+          }),
+          'shift_swap_declined(requester)',
+        );
+      }
+
+      if (contacts.target?.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapDeclined({
+            tenantId,
+            shiftSwapId: swap.id,
+            employeeEmail: contacts.target.email,
+            employeeFirstName: contacts.target.firstName,
+            counterpartFullName: requesterName,
+            scheduleLink,
+          }),
+          'shift_swap_declined(colleague)',
+        );
+      }
+
+      return declined;
+    }
+
+    const accepted = await this.prisma.shiftSwapRequest.update({
+      where: { id: swap.id },
+      data: {
+        status: ShiftSwapStatus.PENDING_MANAGER,
+        colleagueRespondedAt: new Date(),
+      },
+    });
+
+    await this.notifyShiftSwapUsers([
+      {
+        tenantId,
+        userId: swap.requesterEmployee.userId,
+        type: 'SHIFT_SWAP_PENDING_MANAGER',
+        message: `${targetName} accepted your shift swap request. It is now awaiting manager approval.`,
+        link,
+      },
+      {
+        tenantId,
+        userId: swap.targetEmployee.userId,
+        type: 'SHIFT_SWAP_PENDING_MANAGER',
+        message: `You accepted the shift swap request from ${requesterName}. It is now awaiting manager approval.`,
+        link,
+      },
+      {
+        tenantId,
+        userId: swap.managerEmployee?.userId,
+        type: 'SHIFT_SWAP_PENDING_MANAGER',
+        message: `A shift swap between ${requesterName} and ${targetName} is awaiting your approval.`,
+        link: '/hr/scheduling?tab=swap-requests',
+      },
+    ]);
+
+    await this.logShiftSwapAction({
+      tenantId,
+      shiftSwapRequestId: swap.id,
+      action: 'COLLEAGUE_ACCEPTED',
+      actorEmployeeId: actorEmployee.id,
+      actorUserId: actor.id,
+    });
+
+    if (contacts.manager?.email) {
+      this.emitNotificationEvent(
+        this.publisher.notificationShiftSwapPendingManager({
+          tenantId,
+          shiftSwapId: swap.id,
+          managerEmail: contacts.manager.email,
+          managerFirstName: contacts.manager.firstName,
+          requesterFullName: requesterName,
+          targetFullName: targetName,
+          requesterShiftLabel: requesterShift,
+          targetShiftLabel: targetShift,
+          reason: swap.reason,
+          reviewLink: managerReviewLink,
+        }),
+        'shift_swap_pending_manager',
+      );
+    }
+
+    return accepted;
+  }
+
+  async reviewShiftSwap(
+    tenantId: string,
+    actor: RequestUser,
+    shiftSwapId: string,
+    dto: ReviewShiftSwapDto,
+  ) {
+    const actorEmployee = await getActorEmployee(
+      this.prisma,
+      tenantId,
+      actor.id,
+    );
+    const swap = await this.getShiftSwapRequest(tenantId, actor, shiftSwapId);
+
+    assertHrAccess(
+      isCompanyAdminUser(actor) ||
+        swap.managerEmployeeId === actorEmployee.id ||
+        hasPermissionRule(actor, 'schedules:CREATE') ||
+        hasPermissionRule(actor, 'schedules:EDIT'),
+    );
+
+    if (swap.status !== ShiftSwapStatus.PENDING_MANAGER) {
+      throw new BadRequestException(
+        'This shift swap is not awaiting manager approval',
+      );
+    }
+
+    const requesterName = `${swap.requesterEmployee.firstName} ${swap.requesterEmployee.lastName}`;
+    const targetName = `${swap.targetEmployee.firstName} ${swap.targetEmployee.lastName}`;
+    const link = `/hr/scheduling?tab=my-schedule`;
+    const scheduleLink = this.buildSchedulingLink(
+      actor.tenantSlug,
+      'my-schedule',
+    );
+    const requesterShift = this.formatShiftForMessage(
+      swap.requesterShiftDate,
+      swap.requesterSchedule.startTime,
+      swap.requesterSchedule.endTime,
+    );
+    const targetShift = this.formatShiftForMessage(
+      swap.targetShiftDate,
+      swap.targetSchedule.startTime,
+      swap.targetSchedule.endTime,
+    );
+    const contacts = await this.getShiftSwapContacts(tenantId, swap);
+
+    if (dto.action === 'REJECT') {
+      if (!dto.reason?.trim()) {
+        throw new BadRequestException('A rejection reason is required');
+      }
+
+      const rejected = await this.prisma.shiftSwapRequest.update({
+        where: { id: swap.id },
+        data: {
+          status: ShiftSwapStatus.REJECTED,
+          managerDecisionAt: new Date(),
+          managerRejectionReason: dto.reason.trim(),
+        },
+      });
+
+      await this.notifyShiftSwapUsers([
+        {
+          tenantId,
+          userId: swap.requesterEmployee.userId,
+          type: 'SHIFT_SWAP_REJECTED',
+          message: `Your shift swap request with ${targetName} was rejected. Reason: ${dto.reason.trim()}`,
+          link,
+        },
+        {
+          tenantId,
+          userId: swap.targetEmployee.userId,
+          type: 'SHIFT_SWAP_REJECTED',
+          message: `The shift swap request with ${requesterName} was rejected. Reason: ${dto.reason.trim()}`,
+          link,
+        },
+      ]);
+
+      await this.logShiftSwapAction({
+        tenantId,
+        shiftSwapRequestId: swap.id,
+        action: 'MANAGER_REJECTED',
+        actorEmployeeId: actorEmployee.id,
+        actorUserId: actor.id,
+        note: dto.reason.trim(),
+      });
+
+      if (contacts.requester?.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapRejected({
+            tenantId,
+            shiftSwapId: swap.id,
+            employeeEmail: contacts.requester.email,
+            employeeFirstName: contacts.requester.firstName,
+            counterpartFullName: targetName,
+            rejectionReason: dto.reason.trim(),
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+            scheduleLink,
+          }),
+          'shift_swap_rejected(requester)',
+        );
+      }
+
+      if (contacts.target?.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapRejected({
+            tenantId,
+            shiftSwapId: swap.id,
+            employeeEmail: contacts.target.email,
+            employeeFirstName: contacts.target.firstName,
+            counterpartFullName: requesterName,
+            rejectionReason: dto.reason.trim(),
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+            scheduleLink,
+          }),
+          'shift_swap_rejected(colleague)',
+        );
+      }
+
+      return rejected;
+    }
+
+    const approved = await this.prisma.$transaction(async (tx) => {
+      await tx.shiftAssignmentOverride.upsert({
+        where: {
+          scheduleId_shiftDate: {
+            scheduleId: swap.requesterScheduleId,
+            shiftDate: swap.requesterShiftDate,
+          },
+        },
+        create: {
+          tenantId,
+          scheduleId: swap.requesterScheduleId,
+          shiftDate: swap.requesterShiftDate,
+          assignedEmployeeId: swap.targetEmployeeId,
+          swapRequestId: swap.id,
+        },
+        update: {
+          assignedEmployeeId: swap.targetEmployeeId,
+          swapRequestId: swap.id,
+        },
+      });
+
+      await tx.shiftAssignmentOverride.upsert({
+        where: {
+          scheduleId_shiftDate: {
+            scheduleId: swap.targetScheduleId,
+            shiftDate: swap.targetShiftDate,
+          },
+        },
+        create: {
+          tenantId,
+          scheduleId: swap.targetScheduleId,
+          shiftDate: swap.targetShiftDate,
+          assignedEmployeeId: swap.requesterEmployeeId,
+          swapRequestId: swap.id,
+        },
+        update: {
+          assignedEmployeeId: swap.requesterEmployeeId,
+          swapRequestId: swap.id,
+        },
+      });
+
+      return tx.shiftSwapRequest.update({
+        where: { id: swap.id },
+        data: {
+          status: ShiftSwapStatus.APPROVED,
+          managerDecisionAt: new Date(),
+        },
+      });
+    });
+
+    await this.notifyShiftSwapUsers([
+      {
+        tenantId,
+        userId: swap.requesterEmployee.userId,
+        type: 'SHIFT_SWAP_APPROVED',
+        message: `Your shift swap request with ${targetName} was approved.`,
+        link,
+      },
+      {
+        tenantId,
+        userId: swap.targetEmployee.userId,
+        type: 'SHIFT_SWAP_APPROVED',
+        message: `The shift swap request with ${requesterName} was approved.`,
+        link,
+      },
+    ]);
+
+    await this.logShiftSwapAction({
+      tenantId,
+      shiftSwapRequestId: swap.id,
+      action: 'MANAGER_APPROVED',
+      actorEmployeeId: actorEmployee.id,
+      actorUserId: actor.id,
+    });
+
+    if (contacts.requester?.email) {
+      this.emitNotificationEvent(
+        this.publisher.notificationShiftSwapApproved({
+          tenantId,
+          shiftSwapId: swap.id,
+          employeeEmail: contacts.requester.email,
+          employeeFirstName: contacts.requester.firstName,
+          counterpartFullName: targetName,
+          requesterShiftLabel: requesterShift,
+          targetShiftLabel: targetShift,
+          scheduleLink,
+        }),
+        'shift_swap_approved(requester)',
+      );
+    }
+
+    if (contacts.target?.email) {
+      this.emitNotificationEvent(
+        this.publisher.notificationShiftSwapApproved({
+          tenantId,
+          shiftSwapId: swap.id,
+          employeeEmail: contacts.target.email,
+          employeeFirstName: contacts.target.firstName,
+          counterpartFullName: requesterName,
+          requesterShiftLabel: requesterShift,
+          targetShiftLabel: targetShift,
+          scheduleLink,
+        }),
+        'shift_swap_approved(colleague)',
+      );
+    }
+
+    return approved;
+  }
+
+  @Cron(CronExpression.EVERY_HOUR)
+  async expirePendingShiftSwapRequests() {
+    const expiredRequests = await this.prisma.shiftSwapRequest.findMany({
+      where: {
+        status: ShiftSwapStatus.PENDING_COLLEAGUE,
+        expiresAt: { lt: new Date() },
+      },
+      include: {
+        requesterEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            userId: true,
+            email: true,
+          },
+        },
+        targetEmployee: {
+          select: {
+            firstName: true,
+            lastName: true,
+            userId: true,
+            email: true,
+          },
+        },
+        requesterSchedule: {
+          select: { startTime: true, endTime: true },
+        },
+        targetSchedule: {
+          select: { startTime: true, endTime: true },
+        },
+      },
+    });
+
+    if (!expiredRequests.length) return;
+
+    await this.prisma.shiftSwapRequest.updateMany({
+      where: {
+        id: { in: expiredRequests.map((request) => request.id) },
+      },
+      data: { status: ShiftSwapStatus.EXPIRED },
+    });
+
+    for (const request of expiredRequests) {
+      const requesterName = `${request.requesterEmployee.firstName} ${request.requesterEmployee.lastName}`;
+      const targetName = `${request.targetEmployee.firstName} ${request.targetEmployee.lastName}`;
+      const requesterShift = this.formatShiftForMessage(
+        request.requesterShiftDate,
+        request.requesterSchedule.startTime,
+        request.requesterSchedule.endTime,
+      );
+      const targetShift = this.formatShiftForMessage(
+        request.targetShiftDate,
+        request.targetSchedule.startTime,
+        request.targetSchedule.endTime,
+      );
+      await this.notifyShiftSwapUsers([
+        {
+          tenantId: request.tenantId,
+          userId: request.requesterEmployee.userId,
+          type: 'SHIFT_SWAP_EXPIRED',
+          message: `Your shift swap request with ${targetName} expired without a response.`,
+          link: '/hr/scheduling?tab=my-schedule',
+        },
+        {
+          tenantId: request.tenantId,
+          userId: request.targetEmployee.userId,
+          type: 'SHIFT_SWAP_EXPIRED',
+          message: `The shift swap request from ${requesterName} expired without a response.`,
+          link: '/hr/scheduling?tab=my-schedule',
+        },
+      ]);
+
+      await this.logShiftSwapAction({
+        tenantId: request.tenantId,
+        shiftSwapRequestId: request.id,
+        action: 'EXPIRED',
+      });
+
+      if (request.requesterEmployee.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapExpired({
+            tenantId: request.tenantId,
+            shiftSwapId: request.id,
+            employeeEmail: request.requesterEmployee.email,
+            employeeFirstName: request.requesterEmployee.firstName,
+            counterpartFullName: targetName,
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+          }),
+          'shift_swap_expired(requester)',
+        );
+      }
+
+      if (request.targetEmployee.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapExpired({
+            tenantId: request.tenantId,
+            shiftSwapId: request.id,
+            employeeEmail: request.targetEmployee.email,
+            employeeFirstName: request.targetEmployee.firstName,
+            counterpartFullName: requesterName,
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+          }),
+          'shift_swap_expired(colleague)',
+        );
+      }
+    }
+  }
+
   async getMySchedule(
     tenantId: string,
     actor: RequestUser,
@@ -735,7 +2089,13 @@ export class TimeService {
       : undefined;
     const toDate = filters.to ? new Date(filters.to + 'T23:59:59') : undefined;
 
-    const [schedules, leaveRequests, publicHolidays] = await Promise.all([
+    const [
+      schedules,
+      leaveRequests,
+      publicHolidays,
+      assignmentOverrides,
+      shiftSwaps,
+    ] = await Promise.all([
       this.prisma.shiftSchedule.findMany({
         where: {
           tenantId,
@@ -769,6 +2129,71 @@ export class TimeService {
         },
         orderBy: { date: 'asc' },
       }),
+      this.prisma.shiftAssignmentOverride.findMany({
+        where: {
+          tenantId,
+          assignedEmployeeId: actorEmployee.id,
+          ...(fromDate && { shiftDate: { gte: fromDate } }),
+          ...(toDate && { shiftDate: { lte: toDate } }),
+        },
+        include: {
+          schedule: {
+            select: {
+              id: true,
+              shiftType: true,
+              startTime: true,
+              endTime: true,
+              workMode: true,
+            },
+          },
+        },
+        orderBy: { shiftDate: 'asc' },
+      }),
+      this.prisma.shiftSwapRequest.findMany({
+        where: {
+          tenantId,
+          AND: [
+            {
+              OR: [
+                { requesterEmployeeId: actorEmployee.id },
+                { targetEmployeeId: actorEmployee.id },
+              ],
+            },
+            ...(fromDate
+              ? [
+                  {
+                    OR: [
+                      { requesterShiftDate: { gte: fromDate } },
+                      { targetShiftDate: { gte: fromDate } },
+                    ],
+                  },
+                ]
+              : []),
+            ...(toDate
+              ? [
+                  {
+                    OR: [
+                      { requesterShiftDate: { lte: toDate } },
+                      { targetShiftDate: { lte: toDate } },
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        },
+        select: {
+          id: true,
+          requesterEmployeeId: true,
+          targetEmployeeId: true,
+          requesterScheduleId: true,
+          requesterShiftDate: true,
+          targetScheduleId: true,
+          targetShiftDate: true,
+          status: true,
+          expiresAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
     ]);
 
     return {
@@ -784,6 +2209,28 @@ export class TimeService {
         id: h.id,
         name: h.name,
         date: h.date.toISOString().slice(0, 10),
+      })),
+      assignmentOverrides: assignmentOverrides.map((override) => ({
+        id: override.id,
+        scheduleId: override.scheduleId,
+        shiftDate: this.formatDateOnly(override.shiftDate),
+        shiftType: override.schedule.shiftType,
+        startTime: override.schedule.startTime,
+        endTime: override.schedule.endTime,
+        workMode: override.schedule.workMode,
+      })),
+      shiftSwaps: shiftSwaps.map((swap) => ({
+        id: swap.id,
+        role:
+          swap.requesterEmployeeId === actorEmployee.id
+            ? 'REQUESTER'
+            : 'COLLEAGUE',
+        requesterScheduleId: swap.requesterScheduleId,
+        requesterShiftDate: this.formatDateOnly(swap.requesterShiftDate),
+        targetScheduleId: swap.targetScheduleId,
+        targetShiftDate: this.formatDateOnly(swap.targetShiftDate),
+        status: swap.status,
+        expiresAt: swap.expiresAt.toISOString(),
       })),
     };
   }

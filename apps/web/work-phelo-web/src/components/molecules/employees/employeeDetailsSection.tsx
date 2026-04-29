@@ -4,7 +4,6 @@ import type { Employee } from '@/types/hr';
 
 interface Props {
   employee: Employee;
-  departments: { id: string; name: string }[];
   allHrEmployees: Employee[];
   currentRoleName?: string | null;
 }

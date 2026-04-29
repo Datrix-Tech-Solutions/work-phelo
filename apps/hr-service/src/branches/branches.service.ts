@@ -57,6 +57,14 @@ export class BranchesService {
     });
   }
 
+  async findOptions(tenantId: string) {
+    return this.prisma.branch.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findById(tenantId: string, id: string) {
     const branch = await this.prisma.branch.findFirst({
       where: { id, tenantId },

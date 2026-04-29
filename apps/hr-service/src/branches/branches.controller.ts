@@ -25,6 +25,11 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import {
+  assertHrAccess,
+  hasPermissionRule,
+  isCompanyAdminUser,
+} from '../auth/access-scope';
 
 @ApiTags('Branches')
 @Controller('branches')
@@ -49,6 +54,28 @@ export class BranchesController {
   @ApiResponse({ status: 200, description: 'Branches retrieved successfully' })
   findAll(@Req() req: any) {
     return this.branchesService.findAll(req.user.tenantId);
+  }
+
+  @Get('options')
+  @ApiOperation({
+    summary:
+      'List lightweight branch options for forms and selectors in the current tenant',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Branch options retrieved successfully',
+  })
+  findOptions(@Req() req: any) {
+    const user = req.user;
+
+    assertHrAccess(
+      isCompanyAdminUser(user) ||
+        hasPermissionRule(user, 'branches:VIEW') ||
+        hasPermissionRule(user, 'employees:CREATE') ||
+        hasPermissionRule(user, 'employees:EDIT'),
+    );
+
+    return this.branchesService.findOptions(user.tenantId);
   }
 
   @Get(':id')

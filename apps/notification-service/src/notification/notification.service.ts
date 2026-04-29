@@ -662,6 +662,269 @@ export class NotificationService {
     });
   }
 
+  async sendShiftSwapRequestedNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    recipientEmail: string;
+    recipientFirstName: string;
+    recipientRole: 'REQUESTER' | 'COLLEAGUE';
+    counterpartFullName: string;
+    requesterFullName: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    reason?: string | null;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.recipientEmail,
+        NotificationType.SHIFT_SWAP_REQUESTED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_REQUESTED suppressed for ${data.recipientEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapRequestedNotification(
+      data.recipientEmail,
+      data.recipientFirstName,
+      data.recipientRole,
+      data.counterpartFullName,
+      data.requesterFullName,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.reason,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_REQUESTED',
+      channel: 'EMAIL',
+      recipient: data.recipientEmail,
+      subject:
+        data.recipientRole === 'REQUESTER'
+          ? `Your shift swap request with ${data.counterpartFullName} has been submitted`
+          : `${data.requesterFullName} requested a shift swap with you`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapPendingManagerNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    managerEmail: string;
+    managerFirstName: string;
+    requesterFullName: string;
+    targetFullName: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    reason?: string | null;
+    reviewLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.managerEmail,
+        NotificationType.SHIFT_SWAP_PENDING_MANAGER,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_PENDING_MANAGER suppressed for ${data.managerEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapPendingManagerNotification(
+      data.managerEmail,
+      data.managerFirstName,
+      data.requesterFullName,
+      data.targetFullName,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.reason,
+      data.reviewLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_PENDING_MANAGER',
+      channel: 'EMAIL',
+      recipient: data.managerEmail,
+      subject: `Shift swap awaiting your approval — ${data.requesterFullName} and ${data.targetFullName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapDeclinedNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    counterpartFullName: string;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SHIFT_SWAP_DECLINED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_DECLINED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapDeclinedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.counterpartFullName,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_DECLINED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Shift swap update with ${data.counterpartFullName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapApprovedNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    counterpartFullName: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SHIFT_SWAP_APPROVED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_APPROVED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapApprovedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.counterpartFullName,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_APPROVED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your shift swap with ${data.counterpartFullName} was approved`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapRejectedNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    counterpartFullName: string;
+    rejectionReason: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SHIFT_SWAP_REJECTED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_REJECTED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapRejectedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.counterpartFullName,
+      data.rejectionReason,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_REJECTED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your shift swap with ${data.counterpartFullName} was rejected`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapExpiredNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    counterpartFullName: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SHIFT_SWAP_EXPIRED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_EXPIRED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapExpiredNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.counterpartFullName,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_EXPIRED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your shift swap with ${data.counterpartFullName} expired`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendSmsOtp(data: {
     userId?: string;
     tenantId?: string;

@@ -34,6 +34,14 @@ export class DepartmentsService {
     });
   }
 
+  async findOptions(tenantId: string) {
+    return this.prisma.department.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findById(tenantId: string, id: string) {
     const dept = await this.prisma.department.findFirst({
       where: { id, tenantId },

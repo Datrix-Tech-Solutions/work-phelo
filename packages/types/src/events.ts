@@ -51,6 +51,12 @@ export const EventPatterns = {
   NOTIFY_APPRAISAL_SELF_REMINDER: 'notify.appraisal_self_reminder',
   NOTIFY_APPRAISAL_MANAGER_REMINDER: 'notify.appraisal_manager_reminder',
   NOTIFY_SCHEDULE_PUBLISHED: 'notify.schedule_published',
+  NOTIFY_SHIFT_SWAP_REQUESTED: 'notify.shift_swap_requested',
+  NOTIFY_SHIFT_SWAP_PENDING_MANAGER: 'notify.shift_swap_pending_manager',
+  NOTIFY_SHIFT_SWAP_DECLINED: 'notify.shift_swap_declined',
+  NOTIFY_SHIFT_SWAP_APPROVED: 'notify.shift_swap_approved',
+  NOTIFY_SHIFT_SWAP_REJECTED: 'notify.shift_swap_rejected',
+  NOTIFY_SHIFT_SWAP_EXPIRED: 'notify.shift_swap_expired',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -330,4 +336,74 @@ export interface SchedulePublishedEvent {
   endTime: string;
   /** Link to the employee's schedule screen */
   scheduleLink: string;
+}
+
+export interface ShiftSwapRequestedEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  recipientEmail: string;
+  recipientFirstName: string;
+  recipientRole: 'REQUESTER' | 'COLLEAGUE';
+  counterpartFullName: string;
+  requesterFullName: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  reason?: string | null;
+  scheduleLink?: string;
+}
+
+export interface ShiftSwapPendingManagerEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  managerEmail: string;
+  managerFirstName: string;
+  requesterFullName: string;
+  targetFullName: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  reason?: string | null;
+  reviewLink?: string;
+}
+
+export interface ShiftSwapDeclinedEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  counterpartFullName: string;
+  scheduleLink?: string;
+}
+
+export interface ShiftSwapApprovedEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  counterpartFullName: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  scheduleLink?: string;
+}
+
+export interface ShiftSwapRejectedEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  counterpartFullName: string;
+  rejectionReason: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  scheduleLink?: string;
+}
+
+export interface ShiftSwapExpiredEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  counterpartFullName: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  scheduleLink?: string;
 }
