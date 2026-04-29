@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { ShiftSchedule, BackendShiftType } from '@/types/scheduling';
+import { ShiftSchedule, BackendShiftType, WorkMode } from '@/types/scheduling';
 
 interface Props {
   isOpen: boolean;
@@ -54,6 +54,18 @@ const SHIFT_TYPE_OPTIONS = [
   { value: 'NIGHT', label: 'Night' },
 ];
 
+const WORK_MODE_OPTIONS = [
+  { value: 'ONSITE', label: 'Onsite' },
+  { value: 'REMOTE', label: 'Remote' },
+  { value: 'HYBRID', label: 'Hybrid' },
+];
+
+const WORK_MODE_LABEL: Record<WorkMode, string> = {
+  ONSITE: 'Onsite',
+  REMOTE: 'Remote',
+  HYBRID: 'Hybrid',
+};
+
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /* ── Read-only view (past / today) ── */
@@ -89,6 +101,13 @@ function ReadOnlyView({
             className={`inline-flex self-start px-3 py-1 rounded-full text-sm font-semibold ${TYPE_COLORS[schedule.shiftType] ?? 'bg-gray-100 text-gray-700'}`}
           >
             {TYPE_LABEL[schedule.shiftType] ?? schedule.shiftType}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <p className="text-sm font-bold text-gray-900">Work Mode</p>
+          <span className="inline-flex self-start px-3 py-1 rounded-full text-sm font-semibold bg-sky-100 text-sky-700">
+            {WORK_MODE_LABEL[schedule.workMode]}
           </span>
         </div>
 
@@ -141,6 +160,7 @@ function EditForm({
   onClose: () => void;
 }) {
   const [shiftType, setShiftType] = useState<BackendShiftType>(schedule.shiftType);
+  const [workMode, setWorkMode] = useState<WorkMode>(schedule.workMode);
   const [startTime, setStartTime] = useState(schedule.startTime);
   const [endTime, setEndTime] = useState(schedule.endTime);
   const [, setEndDate] = useState(schedule.effectiveTo?.slice(0, 10) ?? '');
@@ -180,6 +200,16 @@ function EditForm({
             options={SHIFT_TYPE_OPTIONS}
             value={shiftType}
             onChange={(v) => setShiftType(v as BackendShiftType)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-gray-900">Work Mode</label>
+          <SearchSelect
+            placeholder="Select work mode…"
+            options={WORK_MODE_OPTIONS}
+            value={workMode}
+            onChange={(v) => setWorkMode(v as WorkMode)}
           />
         </div>
 

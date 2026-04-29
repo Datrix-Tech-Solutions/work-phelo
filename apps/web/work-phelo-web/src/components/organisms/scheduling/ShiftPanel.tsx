@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Button } from '@/components/atoms/Button';
+import type { WorkMode } from '@/types/scheduling';
 
 export type ShiftType = 'morning' | 'afternoon' | 'night' | 'on-leave';
 
@@ -14,6 +15,7 @@ export interface Shift {
   startTime: string;
   endTime: string;
   shiftType: ShiftType;
+  workMode: WorkMode;
   isDraft?: boolean;
   leaveType?: string;
   date: string; // ISO "YYYY-MM-DD"
@@ -40,6 +42,12 @@ const SHIFT_TYPE_OPTIONS: SearchSelectOption[] = [
   { value: 'night', label: 'Night' },
 ];
 
+const WORK_MODE_OPTIONS: SearchSelectOption[] = [
+  { value: 'ONSITE', label: 'Onsite' },
+  { value: 'REMOTE', label: 'Remote' },
+  { value: 'HYBRID', label: 'Hybrid' },
+];
+
 /* ── Inner form ── */
 
 interface FormProps {
@@ -53,6 +61,7 @@ interface FormProps {
     startTime: string;
     endTime: string;
     shiftType: ShiftType;
+    workMode: WorkMode;
   };
   shift: Shift | null | undefined;
   onSave: (data: Omit<Shift, 'id'>, endDate: string) => void;
@@ -61,6 +70,7 @@ interface FormProps {
 
 function ShiftForm({ isEditing, isLoading, employeeName, initial, onSave, onClose }: FormProps) {
   const [shiftType, setShiftType] = useState<ShiftType>(initial.shiftType);
+  const [workMode, setWorkMode] = useState<WorkMode>(initial.workMode);
   const [startTime, setStartTime] = useState(initial.startTime);
   const [endTime, setEndTime] = useState(initial.endTime);
   const [endDate, setEndDate] = useState(initial.startDate);
@@ -86,6 +96,7 @@ function ShiftForm({ isEditing, isLoading, employeeName, initial, onSave, onClos
         startTime,
         endTime,
         shiftType,
+        workMode,
         isDraft,
         date: initial.startDate,
       },
@@ -145,6 +156,16 @@ function ShiftForm({ isEditing, isLoading, employeeName, initial, onSave, onClos
           value={shiftType}
           onChange={(v) => setShiftType(v as ShiftType)}
           error={errors.shiftType}
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-bold text-gray-900">Work Mode</label>
+        <SearchSelect
+          placeholder="Select work mode…"
+          options={WORK_MODE_OPTIONS}
+          value={workMode}
+          onChange={(v) => setWorkMode(v as WorkMode)}
         />
       </div>
 
@@ -238,6 +259,7 @@ export function ShiftPanel({
         startTime: shift?.startTime ?? '',
         endTime: shift?.endTime ?? '',
         shiftType: shift?.shiftType ?? 'morning',
+        workMode: shift?.workMode ?? 'ONSITE',
       }}
       shift={shift}
       onSave={onSave}

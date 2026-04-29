@@ -119,6 +119,14 @@ enum ShiftType {
   @@schema("hr")
 }
 
+enum WorkMode {
+  ONSITE
+  REMOTE
+  HYBRID
+
+  @@schema("hr")
+}
+
 enum DocumentType {
   CONTRACT
   ID_CARD
@@ -466,6 +474,8 @@ model ClockRecord {
   date        DateTime
   hoursWorked Decimal?  @db.Decimal(5, 2)
   isLate      Boolean   @default(false)
+  isOutsideSchedule Boolean @default(false)
+  workMode    WorkMode?
   ipAddress   String?
   location    String?
   note        String?
@@ -525,6 +535,7 @@ model ShiftSchedule {
   tenantId    String
   employeeId  String
   shiftType   ShiftType
+  workMode    WorkMode  @default(ONSITE)
   startTime   String
   endTime     String
   dayOfWeek   Int[]
