@@ -9,7 +9,7 @@ import {
   Max,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ShiftType } from '../../../prisma/generated/client';
+import { ShiftType, WorkMode } from '../../../prisma/generated/client';
 
 export class CreateScheduleDto {
   @ApiProperty({ description: 'Employee ID for the shift', example: 'emp-123' })
@@ -19,6 +19,15 @@ export class CreateScheduleDto {
   @ApiProperty({ description: 'Type of shift', example: 'DAY' })
   @IsEnum(ShiftType)
   shiftType!: ShiftType;
+
+  @ApiPropertyOptional({
+    description: 'Expected work mode for the shift',
+    enum: WorkMode,
+    default: WorkMode.ONSITE,
+  })
+  @IsOptional()
+  @IsEnum(WorkMode)
+  workMode?: WorkMode;
 
   @ApiProperty({ description: 'Shift start time', example: '08:00' })
   @IsString()

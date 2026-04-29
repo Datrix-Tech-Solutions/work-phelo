@@ -1,10 +1,12 @@
-export type BackendShiftType = 'MORNING' | 'AFTERNOON' | 'NIGHT';
+export type BackendShiftType = 'MORNING' | 'AFTERNOON' | 'NIGHT' | 'FLEXIBLE';
+export type WorkMode = 'ONSITE' | 'REMOTE' | 'HYBRID';
 
 export interface ShiftSchedule {
   id: string;
   tenantId: string;
   employeeId: string;
   shiftType: BackendShiftType;
+  workMode: WorkMode;
   startTime: string;
   endTime: string;
   dayOfWeek: number[];
@@ -22,6 +24,7 @@ export interface ShiftSchedule {
 export interface CreateShiftSchedulePayload {
   employeeId: string;
   shiftType: BackendShiftType;
+  workMode: WorkMode;
   startTime: string;
   endTime: string;
   /** JS getDay() values: 0=Sun, 1=Mon … 6=Sat */

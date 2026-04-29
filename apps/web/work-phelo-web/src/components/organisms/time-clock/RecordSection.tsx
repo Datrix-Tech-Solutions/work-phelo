@@ -1,5 +1,6 @@
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { Badge } from '@/components/atoms/Badge';
 import { formatDate, formatTime, formatMinutes } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import type { TimeEntry } from '@/types/timeclock';
@@ -49,6 +50,13 @@ export function RecordsSection({
     },
     { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
     { key: 'department', label: 'Department', render: (r) => <span>{r.department ?? '—'}</span> },
+    {
+      key: 'workMode',
+      label: 'Mode',
+      render: (r) => (
+        <span>{r.workMode ? r.workMode.charAt(0) + r.workMode.slice(1).toLowerCase() : '—'}</span>
+      ),
+    },
     { key: 'clockIn', label: 'Clock In', render: (r) => <span>{formatTime(r.clockIn)}</span> },
     {
       key: 'clockOut',
@@ -59,6 +67,18 @@ export function RecordsSection({
       key: 'totalMinutes',
       label: 'Hours',
       render: (r) => <span className="font-semibold">{formatMinutes(r.totalMinutes)}</span>,
+    },
+    {
+      key: 'flags',
+      label: 'Flags',
+      render: (r) =>
+        r.isOutsideSchedule ? (
+          <Badge variant="warning" label="Off Schedule" />
+        ) : r.isLate ? (
+          <Badge variant="warning" label="Late" />
+        ) : (
+          <span className="text-gray-400">—</span>
+        ),
     },
   ];
 

@@ -37,6 +37,7 @@ export class TimeService {
     hoursWorked: any;
     isLate: boolean;
     isOutsideSchedule: boolean;
+    workMode: 'ONSITE' | 'REMOTE' | 'HYBRID' | null;
   }) {
     const status = record.clockOut ? 'CLOCKED_OUT' : 'CLOCKED_IN';
     const totalMinutes = record.clockOut
@@ -52,6 +53,7 @@ export class TimeService {
       breakMinutes: 0,
       isLate: record.isLate,
       isOutsideSchedule: record.isOutsideSchedule,
+      workMode: record.workMode,
     };
   }
 
@@ -192,6 +194,7 @@ export class TimeService {
         date: today,
         isLate,
         isOutsideSchedule: !activeSchedule,
+        workMode: activeSchedule?.workMode ?? null,
         ipAddress,
         location: dto.location,
         note: dto.note,
@@ -565,6 +568,7 @@ export class TimeService {
         createdBy: actor.id,
         employeeId: dto.employeeId,
         shiftType: dto.shiftType,
+        workMode: dto.workMode ?? 'ONSITE',
         startTime: dto.startTime,
         endTime: dto.endTime,
         dayOfWeek: dto.dayOfWeek,
@@ -643,6 +647,7 @@ export class TimeService {
       where: { id: scheduleId },
       data: {
         ...(dto.shiftType && { shiftType: dto.shiftType }),
+        ...(dto.workMode && { workMode: dto.workMode }),
         ...(dto.startTime && { startTime: dto.startTime }),
         ...(dto.endTime && { endTime: dto.endTime }),
         ...(dto.effectiveTo !== undefined && {
@@ -851,6 +856,7 @@ export class TimeService {
       status: 'CLOCKED_IN',
       isLate: r.isLate,
       isOutsideSchedule: r.isOutsideSchedule,
+      workMode: r.workMode,
     }));
   }
 

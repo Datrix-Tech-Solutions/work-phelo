@@ -1,4 +1,5 @@
 import { ClockInWidget } from '@/components/organisms/time-clock/ClockInWidget';
+import { Badge } from '@/components/atoms/Badge';
 import { formatDate, formatTime, formatMinutes } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import type { TodaySession, TimeEntry } from '@/types/timeclock';
@@ -50,9 +51,22 @@ export function MyTimeSection({
       key: 'status',
       label: 'Status',
       render: (r) => (
-        <span className="font-semibold capitalize">
-          {r.status === 'CLOCKED_IN' ? 'Active' : r.status === 'ON_BREAK' ? 'On Break' : 'Done'}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="font-semibold capitalize">
+            {r.status === 'CLOCKED_IN' ? 'Active' : r.status === 'ON_BREAK' ? 'On Break' : 'Done'}
+          </span>
+          {r.workMode ? (
+            <Badge
+              variant="info"
+              label={r.workMode.charAt(0) + r.workMode.slice(1).toLowerCase()}
+            />
+          ) : null}
+          {r.isOutsideSchedule ? (
+            <Badge variant="warning" label="Off Schedule" />
+          ) : r.isLate ? (
+            <Badge variant="warning" label="Late" />
+          ) : null}
+        </div>
       ),
     },
   ];

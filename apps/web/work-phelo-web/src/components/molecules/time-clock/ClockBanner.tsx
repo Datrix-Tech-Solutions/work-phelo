@@ -52,6 +52,19 @@ export function ClockBanner({
             <span className="text-orange-300 text-xs font-medium">Late arrival</span>
           </span>
         )}
+        {session?.isOutsideSchedule && isClockedIn && (
+          <span className="inline-flex items-center gap-1 mt-1 ml-2 px-2 py-0.5 bg-amber-500/20 rounded-full">
+            <AlertCircle className="w-3 h-3 text-amber-200" />
+            <span className="text-amber-200 text-xs font-medium">No active schedule</span>
+          </span>
+        )}
+        {session?.workMode && isClockedIn && (
+          <span className="inline-flex items-center gap-1 mt-1 ml-2 px-2 py-0.5 bg-sky-500/20 rounded-full">
+            <span className="text-sky-200 text-xs font-medium">
+              {session.workMode.charAt(0) + session.workMode.slice(1).toLowerCase()}
+            </span>
+          </span>
+        )}
       </div>
 
       <div className="flex items-center gap-2">

@@ -21,6 +21,10 @@ function formatTime(time: string): string {
   return `${hour}:${m.toString().padStart(2, '0')}${period}`;
 }
 
+function formatWorkMode(workMode: ShiftSchedule['workMode']): string {
+  return workMode.charAt(0) + workMode.slice(1).toLowerCase();
+}
+
 interface Props {
   schedule: ShiftSchedule;
   onClick: () => void;
@@ -44,7 +48,9 @@ export function ShiftGridCard({ schedule, onClick }: Props) {
       )}
     >
       <p className="text-xs font-semibold">{timeStr}</p>
-      <p className="text-xs mt-0.5 opacity-80">{typeLabel}</p>
+      <p className="text-xs mt-0.5 opacity-80">
+        {typeLabel} · {formatWorkMode(schedule.workMode)}
+      </p>
     </button>
   );
 }
