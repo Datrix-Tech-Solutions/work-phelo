@@ -647,6 +647,7 @@ model AppraisalCycle {
   frequency               String?
   departmentIds           String[]  @default([])
   employmentTypes         String[]  @default([])
+  employmentStatuses      EmploymentStatus[] @default([])
   employeeIds             String[]  @default([])
   templateId              String?
   selfAssessmentWeight    Int       @default(40)
@@ -797,6 +798,7 @@ model TenantConfig {
   adminUserId                 String?
   resignationNoticePeriodDays Int      @default(30)
   lateArrivalThresholdMinutes Int      @default(0)
+  appraisalEligibleStatuses   EmploymentStatus[] @default([ACTIVE, PROBATION])
   outstandingThreshold        Int      @default(90)
   veryGoodThreshold           Int      @default(80)
   goodThreshold               Int      @default(70)

@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, Max, Min } from 'class-validator';
+import { IsArray, IsInt, IsIn, Max, Min } from 'class-validator';
+
+const APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES = [
+  'ACTIVE',
+  'PROBATION',
+  'SUSPENDED',
+] as const;
 
 export class UpdateAppraisalSettingsDto {
   @ApiProperty({ description: 'Outstanding threshold percentage', default: 90 })
@@ -28,4 +34,15 @@ export class UpdateAppraisalSettingsDto {
   @Min(0)
   @Max(100)
   satisfactoryThreshold!: number;
+
+  @ApiProperty({
+    description:
+      'Default employment statuses eligible for new appraisal cycles',
+    type: [String],
+    enum: APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES,
+    default: ['ACTIVE', 'PROBATION'],
+  })
+  @IsArray()
+  @IsIn(APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES, { each: true })
+  appraisalEligibleStatuses!: string[];
 }

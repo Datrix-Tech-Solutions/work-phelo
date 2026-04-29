@@ -8,11 +8,21 @@ import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useCreateAppraisalCycle, useUpdateAppraisalCycle, useAppraisalTemplates } from '@/hooks';
+import {
+  useCreateAppraisalCycle,
+  useUpdateAppraisalCycle,
+  useAppraisalTemplates,
+  useAppraisalSettings,
+} from '@/hooks';
 import { useDepartments } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
-import type { AppraisalCycle, CreateAppraisalCycleDto, Frequency } from '@/types/hr';
+import type {
+  AppraisalCycle,
+  AppraisalEligibleEmploymentStatus,
+  CreateAppraisalCycleDto,
+  Frequency,
+} from '@/types/hr';
 import { Icons } from '@/components/atoms/icons';
 
 const FREQUENCY_OPTIONS = [
@@ -27,6 +37,15 @@ const EMPLOYMENT_TYPE_OPTIONS = [
   { value: 'PART_TIME', label: 'Part Time' },
   { value: 'CONTRACT', label: 'Contract' },
   { value: 'INTERN', label: 'Intern' },
+];
+
+const EMPLOYMENT_STATUS_OPTIONS: {
+  value: AppraisalEligibleEmploymentStatus;
+  label: string;
+}[] = [
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'PROBATION', label: 'Probation' },
+  { value: 'SUSPENDED', label: 'Suspended' },
 ];
 
 interface CreateCyclePanelProps {
@@ -46,6 +65,8 @@ type FormValues = {
   templateId: string;
   departmentIds: string[];
   employmentTypes: string[];
+  useCompanyDefaultEligibility: boolean;
+  employmentStatuses: AppraisalEligibleEmploymentStatus[];
 };
 
 /* ── Applies-To multi-select (departments) ── */
@@ -241,12 +262,94 @@ function EmploymentTypeSelect({
   );
 }
 
+function EmploymentStatusSelect({
+  value,
+  onChange,
+}: {
+  value: AppraisalEligibleEmploymentStatus[];
+  onChange: (statuses: AppraisalEligibleEmploymentStatus[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const label = value.length
+    ? EMPLOYMENT_STATUS_OPTIONS.filter((option) => value.includes(option.value))
+        .map((option) => option.label)
+        .join(', ')
+    : 'Select employment statuses';
+
+  const toggle = (status: AppraisalEligibleEmploymentStatus) =>
+    onChange(
+      value.includes(status) ? value.filter((entry) => entry !== status) : [...value, status],
+    );
+
+  return (
+    <div className="flex flex-col gap-1.5 relative" ref={ref}>
+      <label className="text-sm font-medium text-gray-700">Employment Status Eligibility</label>
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className={cn(
+          'flex items-center justify-between w-full px-4 py-3 border rounded-input bg-white text-sm transition-colors',
+          open ? 'border-brand ring-1 ring-brand/20' : 'border-gray-300',
+        )}
+      >
+        <span className="text-gray-900 truncate">{label}</span>
+        <Icons.ChevronDown
+          className={cn(
+            'text-gray-400 transition-transform duration-150 shrink-0',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+          <div className="py-1">
+            {EMPLOYMENT_STATUS_OPTIONS.map((option) => {
+              const checked = value.includes(option.value);
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => toggle(option.value)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
+                >
+                  <span
+                    className={cn(
+                      'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+                      checked ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
+                    )}
+                  >
+                    {checked && <Icons.Check className="w-2.5 h-2.5 text-white" />}
+                  </span>
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Main panel ── */
 export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePanelProps) {
   const toast = useToast();
   const isEditing = !!editCycle;
 
   const { data: templates = [] } = useAppraisalTemplates();
+  const { data: appraisalSettings } = useAppraisalSettings();
   const templateOptions = templates.map((t) => ({ value: t.id, label: t.name }));
 
   const {
@@ -267,6 +370,8 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
       templateId: '',
       departmentIds: [],
       employmentTypes: [],
+      useCompanyDefaultEligibility: true,
+      employmentStatuses: [],
     },
   });
 
@@ -283,6 +388,8 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         templateId: editCycle.templateId ?? '',
         departmentIds: editCycle.departmentIds ?? [],
         employmentTypes: editCycle.employmentTypes ?? [],
+        useCompanyDefaultEligibility: (editCycle.employmentStatuses?.length ?? 0) === 0,
+        employmentStatuses: editCycle.employmentStatuses ?? [],
       });
     } else {
       reset({
@@ -296,11 +403,17 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         templateId: '',
         departmentIds: [],
         employmentTypes: [],
+        useCompanyDefaultEligibility: true,
+        employmentStatuses: [],
       });
     }
   }, [editCycle, reset, isOpen]);
 
   const startDate = useWatch({ control, name: 'startDate' });
+  const useCompanyDefaultEligibility = useWatch({
+    control,
+    name: 'useCompanyDefaultEligibility',
+  });
 
   const { mutate: createCycle, isPending: isCreating } = useCreateAppraisalCycle();
   const { mutate: updateCycle, isPending: isUpdating } = useUpdateAppraisalCycle();
@@ -323,6 +436,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
       templateId: values.templateId || undefined,
       departmentIds: values.departmentIds.length > 0 ? values.departmentIds : undefined,
       employmentTypes: values.employmentTypes.length > 0 ? values.employmentTypes : undefined,
+      employmentStatuses: values.useCompanyDefaultEligibility ? [] : values.employmentStatuses,
     };
 
     const options = {
@@ -484,6 +598,56 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
           <EmploymentTypeSelect value={field.value} onChange={field.onChange} />
         )}
       />
+
+      <div className="rounded-card border border-gray-200 bg-gray-50 p-4 space-y-3">
+        <Controller
+          name="useCompanyDefaultEligibility"
+          control={control}
+          render={({ field }) => (
+            <button
+              type="button"
+              onClick={() => field.onChange(!field.value)}
+              className="flex items-start gap-3 text-left"
+            >
+              <span
+                className={cn(
+                  'mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0',
+                  field.value ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
+                )}
+              >
+                {field.value && <Icons.Check className="w-2.5 h-2.5 text-white" />}
+              </span>
+              <span className="space-y-1">
+                <span className="block text-sm font-medium text-gray-900">
+                  Use company default employment status policy
+                </span>
+                <span className="block text-xs text-gray-500">
+                  Default eligible statuses:{' '}
+                  {appraisalSettings?.appraisalEligibleStatuses?.length
+                    ? appraisalSettings.appraisalEligibleStatuses
+                        .map(
+                          (status) =>
+                            EMPLOYMENT_STATUS_OPTIONS.find((option) => option.value === status)
+                              ?.label ?? status,
+                        )
+                        .join(', ')
+                    : 'Active, Probation'}
+                </span>
+              </span>
+            </button>
+          )}
+        />
+
+        {!useCompanyDefaultEligibility && (
+          <Controller
+            name="employmentStatuses"
+            control={control}
+            render={({ field }) => (
+              <EmploymentStatusSelect value={field.value} onChange={field.onChange} />
+            )}
+          />
+        )}
+      </div>
     </SidePanel>
   );
 }

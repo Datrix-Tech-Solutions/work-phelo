@@ -456,6 +456,7 @@ export interface PaginatedResponse<T> {
 // ── Appraisal ─────────────────────────────────────────────
 export type Frequency = 'ANNUAL' | 'SEMI_ANNUAL' | 'QUARTERLY' | 'AD_HOC';
 export type AppraisalStatus = 'UPCOMING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type AppraisalEligibleEmploymentStatus = 'ACTIVE' | 'PROBATION' | 'SUSPENDED';
 export type SectionType = 'RatingScale' | 'FreeText' | 'YesNo';
 export type ResponseRole = 'Self' | 'Reviewer';
 export type FinalizedStatus = 'Pending' | 'Approved' | 'Cancelled';
@@ -569,6 +570,7 @@ export interface AppraisalCycle {
   templateId?: string;
   departmentIds?: string[];
   employmentTypes?: string[];
+  employmentStatuses?: AppraisalEligibleEmploymentStatus[];
   employeeIds?: string[];
   selfAssessmentWeight?: number;
   managerAssessmentWeight?: number;
@@ -697,7 +699,16 @@ export interface CreateAppraisalCycleDto {
   templateId: string;
   departmentIds?: string[];
   employmentTypes?: string[];
+  employmentStatuses?: AppraisalEligibleEmploymentStatus[];
   employeeIds?: string[];
+}
+
+export interface AppraisalSettings {
+  appraisalEligibleStatuses: AppraisalEligibleEmploymentStatus[];
+  outstandingThreshold: number;
+  veryGoodThreshold: number;
+  goodThreshold: number;
+  satisfactoryThreshold: number;
 }
 
 export interface CreateAppraisalKpiDto {

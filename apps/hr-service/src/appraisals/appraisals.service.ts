@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
+import { EmploymentStatus, Prisma } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAppraisalCycleDto } from './dto/create-cycle.dto';
 import { UpdateAppraisalCycleDto } from './dto/update-cycle.dto';
@@ -33,6 +34,16 @@ type PerformanceBandConfig = {
   goodThreshold: number;
   satisfactoryThreshold: number;
 };
+
+const DEFAULT_APPRAISAL_ELIGIBLE_STATUSES = [
+  EmploymentStatus.ACTIVE,
+  EmploymentStatus.PROBATION,
+] as const;
+const APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES = [
+  EmploymentStatus.ACTIVE,
+  EmploymentStatus.PROBATION,
+  EmploymentStatus.SUSPENDED,
+] as const;
 
 function roundToTwoDecimals(value: number): number {
   return Math.round(value * 100) / 100;
@@ -142,6 +153,43 @@ export class AppraisalsService {
     private readonly publisher: RabbitMQPublisher,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  private normalizeAppraisalEligibleStatuses(
+    statuses?: string[] | null,
+  ): EmploymentStatus[] {
+    const allowed = new Set(APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES);
+    const normalized = Array.from(new Set(statuses ?? [])).filter((status) =>
+      allowed.has(
+        status as (typeof APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES)[number],
+      ),
+    ) as EmploymentStatus[];
+
+    return normalized.length
+      ? normalized
+      : [...DEFAULT_APPRAISAL_ELIGIBLE_STATUSES];
+  }
+
+  private async loadAppraisalEligibleStatuses(
+    tenantId: string,
+    cycleEmploymentStatuses?: string[] | null,
+  ): Promise<EmploymentStatus[]> {
+    const cycleStatuses = this.normalizeAppraisalEligibleStatuses(
+      cycleEmploymentStatuses,
+    );
+
+    if ((cycleEmploymentStatuses ?? []).length > 0) {
+      return cycleStatuses;
+    }
+
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { appraisalEligibleStatuses: true },
+    });
+
+    return this.normalizeAppraisalEligibleStatuses(
+      config?.appraisalEligibleStatuses,
+    );
+  }
 
   private async loadPerformanceBands(
     tenantId: string,
@@ -335,9 +383,14 @@ export class AppraisalsService {
     });
     if (!cycle) throw new NotFoundException('Appraisal cycle not found');
 
+    const eligibleEmploymentStatuses = await this.loadAppraisalEligibleStatuses(
+      tenantId,
+      cycle.employmentStatuses,
+    );
+
     const employeeWhere: Record<string, unknown> = {
       tenantId,
-      employmentStatus: 'ACTIVE',
+      employmentStatus: { in: eligibleEmploymentStatuses },
     };
 
     if (cycle.employeeIds.length > 0) {
@@ -362,19 +415,23 @@ export class AppraisalsService {
       },
     });
 
-    return { cycle, employees };
+    return { cycle, employees, eligibleEmploymentStatuses };
   }
 
   private async activateCycle(tenantId: string, cycleId: string) {
-    const { cycle, employees } = await this.resolveCycleEmployees(
-      tenantId,
-      cycleId,
-    );
+    const { cycle, employees, eligibleEmploymentStatuses } =
+      await this.resolveCycleEmployees(tenantId, cycleId);
 
     if (cycle.status !== 'UPCOMING') {
       return {
         message: `Appraisal cycle ${cycle.title} is already ${cycle.status.toLowerCase()}`,
       };
+    }
+
+    if (!employees.length) {
+      throw new BadRequestException(
+        `No employees match this cycle's targeting rules. Eligible employment statuses currently in effect: ${eligibleEmploymentStatuses.join(', ')}`,
+      );
     }
 
     if (cycle.templateId) {
@@ -483,26 +540,31 @@ export class AppraisalsService {
       managerReviewDeadline,
     });
 
+    const cycleData: Prisma.AppraisalCycleCreateInput = {
+      tenantId,
+      createdBy,
+      title: dto.title.trim(),
+      description: dto.description,
+      startDate,
+      endDate,
+      selfAssessmentDeadline,
+      managerReviewDeadline,
+      frequency: dto.frequency,
+      departmentIds: dto.departmentIds ?? [],
+      employmentTypes: dto.employmentTypes ?? [],
+      employmentStatuses: (dto.employmentStatuses?.length
+        ? dto.employmentStatuses
+        : []) as EmploymentStatus[],
+      employeeIds: dto.employeeIds ?? [],
+      template: { connect: { id: dto.templateId } },
+      selfAssessmentWeight: template.selfAssessmentWeight,
+      managerAssessmentWeight: template.managerAssessmentWeight,
+      status: 'UPCOMING',
+      isActive: false,
+    };
+
     return this.prisma.appraisalCycle.create({
-      data: {
-        tenantId,
-        createdBy,
-        title: dto.title.trim(),
-        description: dto.description,
-        startDate,
-        endDate,
-        selfAssessmentDeadline,
-        managerReviewDeadline,
-        frequency: dto.frequency,
-        departmentIds: dto.departmentIds ?? [],
-        employmentTypes: dto.employmentTypes ?? [],
-        employeeIds: dto.employeeIds ?? [],
-        templateId: dto.templateId,
-        selfAssessmentWeight: template.selfAssessmentWeight,
-        managerAssessmentWeight: template.managerAssessmentWeight,
-        status: 'UPCOMING',
-        isActive: false,
-      },
+      data: cycleData,
       include: { _count: { select: { appraisals: true } } },
     });
   }
@@ -599,7 +661,7 @@ export class AppraisalsService {
 
     let templateUpdate:
       | {
-          templateId: string;
+          template: { connect: { id: string } };
           selfAssessmentWeight: number;
           managerAssessmentWeight: number;
         }
@@ -617,31 +679,38 @@ export class AppraisalsService {
         dto.templateId,
       );
       templateUpdate = {
-        templateId: template.id,
+        template: { connect: { id: template.id } },
         selfAssessmentWeight: template.selfAssessmentWeight,
         managerAssessmentWeight: template.managerAssessmentWeight,
       };
     }
 
+    const updateData: Prisma.AppraisalCycleUpdateInput = {
+      ...(dto.title && { title: dto.title.trim() }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.startDate && { startDate: nextStartDate }),
+      ...(dto.endDate && { endDate: nextEndDate }),
+      ...(dto.selfAssessmentDeadline !== undefined && {
+        selfAssessmentDeadline: nextSelfAssessmentDeadline,
+      }),
+      ...(dto.managerReviewDeadline !== undefined && {
+        managerReviewDeadline: nextManagerReviewDeadline,
+      }),
+      ...(dto.frequency !== undefined && { frequency: dto.frequency }),
+      ...(dto.departmentIds && { departmentIds: dto.departmentIds }),
+      ...(dto.employmentTypes && { employmentTypes: dto.employmentTypes }),
+      ...(dto.employmentStatuses !== undefined && {
+        employmentStatuses: (dto.employmentStatuses?.length
+          ? dto.employmentStatuses
+          : []) as EmploymentStatus[],
+      }),
+      ...(dto.employeeIds && { employeeIds: dto.employeeIds }),
+      ...(templateUpdate ?? {}),
+    };
+
     return this.prisma.appraisalCycle.update({
       where: { id: cycleId },
-      data: {
-        ...(dto.title && { title: dto.title.trim() }),
-        ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.startDate && { startDate: nextStartDate }),
-        ...(dto.endDate && { endDate: nextEndDate }),
-        ...(dto.selfAssessmentDeadline !== undefined && {
-          selfAssessmentDeadline: nextSelfAssessmentDeadline,
-        }),
-        ...(dto.managerReviewDeadline !== undefined && {
-          managerReviewDeadline: nextManagerReviewDeadline,
-        }),
-        ...(dto.frequency !== undefined && { frequency: dto.frequency }),
-        ...(dto.departmentIds && { departmentIds: dto.departmentIds }),
-        ...(dto.employmentTypes && { employmentTypes: dto.employmentTypes }),
-        ...(dto.employeeIds && { employeeIds: dto.employeeIds }),
-        ...(templateUpdate ?? {}),
-      },
+      data: updateData,
       include: { _count: { select: { appraisals: true } } },
     });
   }
