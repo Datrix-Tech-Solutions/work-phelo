@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmploymentStatus } from '../../prisma/generated/client';
 
 const DEFAULT_NOTICE_PERIOD_DAYS = 30;
 const DEFAULT_APPRAISAL_THRESHOLDS = {
@@ -8,10 +9,34 @@ const DEFAULT_APPRAISAL_THRESHOLDS = {
   goodThreshold: 70,
   satisfactoryThreshold: 60,
 };
+const DEFAULT_APPRAISAL_ELIGIBLE_STATUSES = [
+  EmploymentStatus.ACTIVE,
+  EmploymentStatus.PROBATION,
+] as const;
+const APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES = [
+  EmploymentStatus.ACTIVE,
+  EmploymentStatus.PROBATION,
+  EmploymentStatus.SUSPENDED,
+] as const;
 
 @Injectable()
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private normalizeAppraisalEligibleStatuses(
+    statuses?: string[] | null,
+  ): EmploymentStatus[] {
+    const allowed = new Set(APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES);
+    const normalized = Array.from(new Set(statuses ?? [])).filter((status) =>
+      allowed.has(
+        status as (typeof APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES)[number],
+      ),
+    ) as EmploymentStatus[];
+
+    return normalized.length
+      ? normalized
+      : [...DEFAULT_APPRAISAL_ELIGIBLE_STATUSES];
+  }
 
   async getResignationSettings(
     tenantId: string,
@@ -59,6 +84,7 @@ export class SettingsService {
     const config = await this.prisma.tenantConfig.findUnique({
       where: { tenantId },
       select: {
+        appraisalEligibleStatuses: true,
         outstandingThreshold: true,
         veryGoodThreshold: true,
         goodThreshold: true,
@@ -67,6 +93,9 @@ export class SettingsService {
     });
 
     return {
+      appraisalEligibleStatuses: this.normalizeAppraisalEligibleStatuses(
+        config?.appraisalEligibleStatuses,
+      ),
       outstandingThreshold:
         config?.outstandingThreshold ??
         DEFAULT_APPRAISAL_THRESHOLDS.outstandingThreshold,
@@ -143,6 +172,7 @@ export class SettingsService {
       veryGoodThreshold: number;
       goodThreshold: number;
       satisfactoryThreshold: number;
+      appraisalEligibleStatuses: string[];
     },
     adminUserId?: string | null,
     adminEmail?: string | null,
@@ -159,20 +189,29 @@ export class SettingsService {
       );
     }
 
+    const appraisalEligibleStatuses = this.normalizeAppraisalEligibleStatuses(
+      thresholds.appraisalEligibleStatuses,
+    );
+    const { appraisalEligibleStatuses: _ignored, ...thresholdValues } =
+      thresholds;
+
     const config = await this.prisma.tenantConfig.upsert({
       where: { tenantId },
       create: {
         tenantId,
         adminEmail: adminEmail ?? '',
         adminUserId: adminUserId ?? null,
-        ...thresholds,
+        appraisalEligibleStatuses,
+        ...thresholdValues,
       },
       update: {
-        ...thresholds,
+        appraisalEligibleStatuses,
+        ...thresholdValues,
         ...(adminUserId ? { adminUserId } : {}),
         ...(adminEmail ? { adminEmail } : {}),
       },
       select: {
+        appraisalEligibleStatuses: true,
         outstandingThreshold: true,
         veryGoodThreshold: true,
         goodThreshold: true,

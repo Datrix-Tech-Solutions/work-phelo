@@ -7,6 +7,12 @@ import {
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
+const APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES = [
+  'ACTIVE',
+  'PROBATION',
+  'SUSPENDED',
+] as const;
+
 export class UpdateAppraisalCycleDto {
   @ApiPropertyOptional({ description: 'Cycle title' })
   @IsOptional()
@@ -72,6 +78,17 @@ export class UpdateAppraisalCycleDto {
   @IsArray()
   @IsIn(['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERN'], { each: true })
   employmentTypes?: string[];
+
+  @ApiPropertyOptional({
+    description:
+      'Employment statuses eligible for this cycle. Leave empty to use the company appraisal default.',
+    type: [String],
+    enum: APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES,
+  })
+  @IsOptional()
+  @IsArray()
+  @IsIn(APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES, { each: true })
+  employmentStatuses?: string[];
 
   @ApiPropertyOptional({
     description:

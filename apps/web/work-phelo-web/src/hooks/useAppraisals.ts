@@ -3,6 +3,7 @@ import { api } from '@/lib/api';
 import type {
   AppraisalCycle,
   AppraisalKpi,
+  AppraisalSettings,
   AppraisalTemplate,
   CreateAppraisalCycleDto,
   CreateAppraisalKpiDto,
@@ -104,6 +105,13 @@ export function useAppraisalTemplates(params?: ListParams) {
       });
       return unpackListResponse<Record<string, unknown>>(res.data).map(normalizeTemplate);
     },
+  });
+}
+
+export function useAppraisalSettings() {
+  return useQuery<AppraisalSettings>({
+    queryKey: ['appraisal-settings'],
+    queryFn: () => api.get('/hr/settings/appraisal').then((r) => r.data),
   });
 }
 
