@@ -52,21 +52,21 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   ],
 
   // ── Departments ───────────────────────────────────────────────────────────
+  [Permission.CREATE_BRANCH]: [{ resource: 'branches', actions: ['CREATE'] }],
+  [Permission.READ_BRANCHES]: [{ resource: 'branches', actions: ['VIEW'] }],
+  [Permission.UPDATE_BRANCH]: [{ resource: 'branches', actions: ['EDIT'] }],
+  [Permission.DELETE_BRANCH]: [{ resource: 'branches', actions: ['DELETE'] }],
   [Permission.CREATE_DEPARTMENT]: [
     { resource: 'departments', actions: ['CREATE'] },
-    { resource: 'branches', actions: ['CREATE'] },
   ],
   [Permission.READ_DEPARTMENTS]: [
     { resource: 'departments', actions: ['VIEW'] },
-    { resource: 'branches', actions: ['VIEW'] },
   ],
   [Permission.UPDATE_DEPARTMENT]: [
     { resource: 'departments', actions: ['EDIT'] },
-    { resource: 'branches', actions: ['EDIT'] },
   ],
   [Permission.DELETE_DEPARTMENT]: [
     { resource: 'departments', actions: ['DELETE'] },
-    { resource: 'branches', actions: ['DELETE'] },
   ],
 
   // ── Leave ─────────────────────────────────────────────────────────────────

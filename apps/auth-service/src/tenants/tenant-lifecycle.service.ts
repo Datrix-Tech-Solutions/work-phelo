@@ -102,21 +102,29 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.MANAGE_HR_SETTINGS]: [
       { resource: 'hr-settings', action: PermissionAction.EDIT },
     ],
+    [AppPermission.CREATE_BRANCH]: [
+      { resource: 'branches', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.READ_BRANCHES]: [
+      { resource: 'branches', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.UPDATE_BRANCH]: [
+      { resource: 'branches', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.DELETE_BRANCH]: [
+      { resource: 'branches', action: PermissionAction.DELETE },
+    ],
     [AppPermission.CREATE_DEPARTMENT]: [
       { resource: 'departments', action: PermissionAction.CREATE },
-      { resource: 'branches', action: PermissionAction.CREATE },
     ],
     [AppPermission.READ_DEPARTMENTS]: [
       { resource: 'departments', action: PermissionAction.VIEW },
-      { resource: 'branches', action: PermissionAction.VIEW },
     ],
     [AppPermission.UPDATE_DEPARTMENT]: [
       { resource: 'departments', action: PermissionAction.EDIT },
-      { resource: 'branches', action: PermissionAction.EDIT },
     ],
     [AppPermission.DELETE_DEPARTMENT]: [
       { resource: 'departments', action: PermissionAction.DELETE },
-      { resource: 'branches', action: PermissionAction.DELETE },
     ],
     [AppPermission.MANAGE_ROLES]: [
       { resource: 'permission-sets', action: PermissionAction.EDIT },

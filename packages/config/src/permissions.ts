@@ -30,6 +30,10 @@ export enum Permission {
   MANAGE_HR_SETTINGS = 'manage:hr_settings',
 
   // ── Departments ───────────────────────────────────────────────────────────
+  CREATE_BRANCH = 'create:branch',
+  READ_BRANCHES = 'read:branches',
+  UPDATE_BRANCH = 'update:branch',
+  DELETE_BRANCH = 'delete:branch',
   CREATE_DEPARTMENT = 'create:department',
   READ_DEPARTMENTS = 'read:departments',
   UPDATE_DEPARTMENT = 'update:department',
@@ -117,6 +121,10 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.EXPORT_EMPLOYEES,
     Permission.READ_HR_SETTINGS,
     Permission.MANAGE_HR_SETTINGS,
+    Permission.CREATE_BRANCH,
+    Permission.READ_BRANCHES,
+    Permission.UPDATE_BRANCH,
+    Permission.DELETE_BRANCH,
     Permission.CREATE_DEPARTMENT,
     Permission.READ_DEPARTMENTS,
     Permission.UPDATE_DEPARTMENT,
