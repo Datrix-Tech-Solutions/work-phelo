@@ -11,8 +11,6 @@ import {
   useUpdateEmployee,
   useResignationRecord,
 } from '@/hooks/hr/useEmployees';
-import { useDepartments } from '@/hooks/useDepartments';
-import { useBranches } from '@/hooks/useBranches';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -54,8 +52,6 @@ export default function EmployeeDetailPage({
   // Data fetching
   const { data: employee, isLoading, error } = useEmployee(id);
   const { data: resignationRecord } = useResignationRecord(id);
-  const { data: departments = [] } = useDepartments();
-  const { data: branches = [] } = useBranches();
   const { data: allHrResult } = useEmployees();
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
@@ -168,11 +164,7 @@ export default function EmployeeDetailPage({
 
         {/* Right Sections */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
-          <EmploymentDetailsSection
-            employee={employee}
-            departments={departments}
-            allHrEmployees={allHrEmployees}
-          />
+          <EmploymentDetailsSection employee={employee} allHrEmployees={allHrEmployees} />
           <BankingComplianceSection employee={employee} />
           <EmergencyContactSection employee={employee} />
           <AssetsSection assets={employee.assets || []} />
@@ -199,8 +191,6 @@ export default function EmployeeDetailPage({
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
         employee={employee}
-        departments={departments}
-        branches={branches}
         employees={allHrEmployees}
         name={name}
         onSave={handleUpdateEmployee}

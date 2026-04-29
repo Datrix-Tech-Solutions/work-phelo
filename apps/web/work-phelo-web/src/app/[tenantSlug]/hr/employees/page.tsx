@@ -8,8 +8,7 @@ import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { useEmployees } from '@/hooks/hr/useEmployees';
-import { useDepartments } from '@/hooks/useDepartments';
-import { useBranches } from '@/hooks/useBranches';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useLeaveRequests } from '@/hooks/useLeave';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -55,8 +54,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
     ? allEmployees
     : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus));
 
-  const { data: departments = [] } = useDepartments();
-  const { data: branches = [] } = useBranches();
+  const { data: departments = [] } = useDepartmentOptions();
 
   const { data: approvedLeave = [] } = useLeaveRequests('APPROVED');
   const today = new Date();
@@ -215,8 +213,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           isOpen={panelOpen}
           onClose={() => setPanelOpen(false)}
           onSuccess={(name) => setSuccessEmployee(name)}
-          departments={departments}
-          branches={branches}
           employees={employees}
         />
       )}

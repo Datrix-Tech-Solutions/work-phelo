@@ -9,8 +9,6 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import {
   Employee,
-  Department,
-  Branch,
   UpdateEmployeePayload,
   EmploymentType,
   EmploymentStatus,
@@ -18,13 +16,13 @@ import {
 } from '@/types/hr';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
+import { useBranchOptions } from '@/hooks/useBranches';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;
   onClose: () => void;
   employee: Employee;
-  departments: Department[];
-  branches?: Branch[];
   employees?: Employee[];
   name: string;
   onSave: (data: UpdateEmployeePayload) => void;
@@ -35,8 +33,6 @@ export function EditEmployeePanel({
   isOpen,
   onClose,
   employee,
-  departments,
-  branches = [],
   employees = [],
   name,
   onSave,
@@ -44,6 +40,8 @@ export function EditEmployeePanel({
 }: EditEmployeePanelProps) {
   const editForm = useForm<UpdateEmployeePayload>();
   const { reset } = editForm;
+  const { data: departments = [] } = useDepartmentOptions(isOpen);
+  const { data: branches = [] } = useBranchOptions(isOpen);
 
   const [salaryCurrency, setSalaryCurrency] = useState('GHS');
 

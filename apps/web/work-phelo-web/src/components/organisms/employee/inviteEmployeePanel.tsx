@@ -9,8 +9,10 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { Employee, Department, Branch, CreateEmployeePayload } from '@/types/hr';
+import { Employee, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
+import { useBranchOptions } from '@/hooks/useBranches';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 
 /* ── Types ── */
@@ -35,8 +37,6 @@ interface InviteEmployeePanelProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (fullName: string) => void;
-  departments: Department[];
-  branches: Branch[];
   employees: Employee[];
 }
 
@@ -46,11 +46,11 @@ export function InviteEmployeePanel({
   isOpen,
   onClose,
   onSuccess,
-  departments,
-  branches,
   employees,
 }: InviteEmployeePanelProps) {
   const toast = useToast();
+  const { data: departments = [] } = useDepartmentOptions(isOpen);
+  const { data: branches = [] } = useBranchOptions(isOpen);
 
   const {
     register,
