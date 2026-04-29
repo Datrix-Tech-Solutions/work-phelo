@@ -12,7 +12,7 @@ import { useLeaveTypes, useLeaveRequests } from '@/hooks/useLeave';
 import { useDepartments } from '@/hooks/useDepartments';
 import { formatDate } from '@/lib/formatters';
 import { LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/hr';
-import { Users } from 'lucide-react';
+import { Users, Search } from 'lucide-react';
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   APPROVED: 'success',
@@ -152,16 +152,19 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
 
         {/* Search + Filters */}
         <div className="flex items-center shrink-0 gap-6">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setReqPage(1);
-            }}
-            placeholder="Search by employee name..."
-            className="w-64 rounded-input border border-gray-300 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand"
-          />
+          <div className="relative flex-1 min-w-52 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setReqPage(1);
+              }}
+              placeholder="Search by employee name..."
+              className="w-full h-9 pl-9 pr-4 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+            />
+          </div>
           <div className="flex items-center gap-3">
             <SearchSelect
               placeholder="All leave types"

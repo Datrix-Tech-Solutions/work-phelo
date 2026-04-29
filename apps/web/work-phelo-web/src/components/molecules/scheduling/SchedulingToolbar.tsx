@@ -27,7 +27,7 @@ export function SchedulingToolbar({
     <div className="flex items-center justify-between shrink-0 mb-6 gap-4">
       <div className="flex items-center gap-3 flex-1 min-w-0">
         {/* Search */}
-        <div className="relative flex-1 min-w-0 max-w-sm">
+        <div className="relative flex-1 min-w-52 max-w-sm">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"

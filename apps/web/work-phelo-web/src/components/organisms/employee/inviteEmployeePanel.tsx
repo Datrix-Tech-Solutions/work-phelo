@@ -167,13 +167,15 @@ export function InviteEmployeePanel({
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Job Information
         </p>
-        <SearchSelect
-          label="Department"
-          placeholder="Select department"
-          value={deptFormValue}
-          onChange={(v) => setValue('departmentId', v)}
-          options={departments.map((d) => ({ value: d.id, label: d.name }))}
-        />
+        {departments.length > 0 && (
+          <SearchSelect
+            label="Department"
+            placeholder="Select department"
+            value={deptFormValue}
+            onChange={(v) => setValue('departmentId', v)}
+            options={departments.map((d) => ({ value: d.id, label: d.name }))}
+          />
+        )}
         {branches.length > 0 && (
           <SearchSelect
             label="Branch"

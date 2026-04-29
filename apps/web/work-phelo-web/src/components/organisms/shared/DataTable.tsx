@@ -128,7 +128,7 @@ export function DataTable<T extends { id: string | number }>({
       {/* Toolbar */}
       <div className="flex items-center gap-3 flex-wrap shrink-0">
         {onSearch && (
-          <div className="relative flex-1 min-w-55 max-w-sm">
+          <div className="relative flex-1 min-w-52 max-w-sm">
             <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
