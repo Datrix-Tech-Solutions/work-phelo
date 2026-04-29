@@ -131,6 +131,17 @@ enum ShiftSwapStatus {
   @@schema("hr")
 }
 
+enum ShiftSwapActionType {
+  REQUESTED
+  COLLEAGUE_ACCEPTED
+  COLLEAGUE_DECLINED
+  MANAGER_APPROVED
+  MANAGER_REJECTED
+  EXPIRED
+
+  @@schema("hr")
+}
+
 enum WorkMode {
   ONSITE
   REMOTE
@@ -263,6 +274,7 @@ model Employee {
   requestedShiftSwaps ShiftSwapRequest[] @relation("ShiftSwapRequester")
   targetShiftSwaps    ShiftSwapRequest[] @relation("ShiftSwapTarget")
   managedShiftSwaps   ShiftSwapRequest[] @relation("ShiftSwapManager")
+  shiftSwapActionLogs ShiftSwapActionLog[]
   shiftOverrides      ShiftAssignmentOverride[]
   payrollItems      PayrollItem[]
   appraisals        Appraisal[]       @relation("AppraisalEmployee")
@@ -594,10 +606,28 @@ model ShiftSwapRequest {
   targetSchedule    ShiftSchedule @relation("SwapTargetSchedule", fields: [targetScheduleId], references: [id], onDelete: Cascade)
   managerEmployee   Employee?     @relation("ShiftSwapManager", fields: [managerEmployeeId], references: [id], onDelete: SetNull)
   overrides         ShiftAssignmentOverride[]
+  actionLogs        ShiftSwapActionLog[]
 
   @@index([tenantId, requesterEmployeeId])
   @@index([tenantId, targetEmployeeId])
   @@index([tenantId, managerEmployeeId, status])
+  @@schema("hr")
+}
+
+model ShiftSwapActionLog {
+  id                 String             @id @default(uuid())
+  tenantId           String
+  shiftSwapRequestId String
+  action             ShiftSwapActionType
+  actorEmployeeId    String?
+  actorUserId        String?
+  note               String?
+  createdAt          DateTime           @default(now())
+
+  shiftSwapRequest   ShiftSwapRequest   @relation(fields: [shiftSwapRequestId], references: [id], onDelete: Cascade)
+  actorEmployee      Employee?          @relation(fields: [actorEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, shiftSwapRequestId, createdAt])
   @@schema("hr")
 }
 

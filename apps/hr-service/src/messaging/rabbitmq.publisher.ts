@@ -22,6 +22,12 @@ import {
   AppraisalSelfReminderEvent,
   AppraisalManagerReminderEvent,
   SchedulePublishedEvent,
+  ShiftSwapRequestedEvent,
+  ShiftSwapPendingManagerEvent,
+  ShiftSwapDeclinedEvent,
+  ShiftSwapApprovedEvent,
+  ShiftSwapRejectedEvent,
+  ShiftSwapExpiredEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -347,6 +353,78 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_SCHEDULE_PUBLISHED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationShiftSwapRequested(
+    data: ShiftSwapRequestedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_SHIFT_SWAP_REQUESTED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationShiftSwapPendingManager(
+    data: ShiftSwapPendingManagerEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_SHIFT_SWAP_PENDING_MANAGER,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationShiftSwapDeclined(
+    data: ShiftSwapDeclinedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_SHIFT_SWAP_DECLINED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationShiftSwapApproved(
+    data: ShiftSwapApprovedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_SHIFT_SWAP_APPROVED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationShiftSwapRejected(
+    data: ShiftSwapRejectedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_SHIFT_SWAP_REJECTED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationShiftSwapExpired(
+    data: ShiftSwapExpiredEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_SHIFT_SWAP_EXPIRED,
       data,
       correlationId,
     );

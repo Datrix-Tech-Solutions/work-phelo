@@ -20,6 +20,12 @@ import {
   AppraisalSelfReminderEvent,
   AppraisalManagerReminderEvent,
   SchedulePublishedEvent,
+  ShiftSwapRequestedEvent,
+  ShiftSwapPendingManagerEvent,
+  ShiftSwapDeclinedEvent,
+  ShiftSwapApprovedEvent,
+  ShiftSwapRejectedEvent,
+  ShiftSwapExpiredEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -423,6 +429,134 @@ export class NotificationHandler {
         'notify.schedule_published',
         err,
         `employeeId=${data.employeeId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.shift_swap_requested')
+  async handleShiftSwapRequested(
+    @Payload() data: WithMeta<ShiftSwapRequestedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.shift_swap_requested] Received | email=${data.recipientEmail} | role=${data.recipientRole} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendShiftSwapRequestedNotification(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.shift_swap_requested',
+        err,
+        `shiftSwapId=${data.shiftSwapId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.shift_swap_pending_manager')
+  async handleShiftSwapPendingManager(
+    @Payload() data: WithMeta<ShiftSwapPendingManagerEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.shift_swap_pending_manager] Received | managerEmail=${data.managerEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendShiftSwapPendingManagerNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.shift_swap_pending_manager',
+        err,
+        `shiftSwapId=${data.shiftSwapId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.shift_swap_declined')
+  async handleShiftSwapDeclined(
+    @Payload() data: WithMeta<ShiftSwapDeclinedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.shift_swap_declined] Received | email=${data.employeeEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendShiftSwapDeclinedNotification(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.shift_swap_declined',
+        err,
+        `shiftSwapId=${data.shiftSwapId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.shift_swap_approved')
+  async handleShiftSwapApproved(
+    @Payload() data: WithMeta<ShiftSwapApprovedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.shift_swap_approved] Received | email=${data.employeeEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendShiftSwapApprovedNotification(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.shift_swap_approved',
+        err,
+        `shiftSwapId=${data.shiftSwapId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.shift_swap_rejected')
+  async handleShiftSwapRejected(
+    @Payload() data: WithMeta<ShiftSwapRejectedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.shift_swap_rejected] Received | email=${data.employeeEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendShiftSwapRejectedNotification(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.shift_swap_rejected',
+        err,
+        `shiftSwapId=${data.shiftSwapId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.shift_swap_expired')
+  async handleShiftSwapExpired(
+    @Payload() data: WithMeta<ShiftSwapExpiredEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.shift_swap_expired] Received | email=${data.employeeEmail} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendShiftSwapExpiredNotification(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.shift_swap_expired',
+        err,
+        `shiftSwapId=${data.shiftSwapId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }

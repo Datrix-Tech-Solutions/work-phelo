@@ -193,6 +193,7 @@ export class TimeService {
       employee: {
         id: string;
         userId: string | null;
+        email: string;
         firstName: string;
         lastName: string;
         managerId: string | null;
@@ -207,6 +208,7 @@ export class TimeService {
           select: {
             id: true,
             userId: true,
+            email: true,
             firstName: true,
             lastName: true,
             managerId: true,
@@ -315,6 +317,88 @@ export class TimeService {
     if (filtered.length) {
       await this.notificationsService.createMany(filtered);
     }
+  }
+
+  private async logShiftSwapAction(args: {
+    tenantId: string;
+    shiftSwapRequestId: string;
+    action:
+      | 'REQUESTED'
+      | 'COLLEAGUE_ACCEPTED'
+      | 'COLLEAGUE_DECLINED'
+      | 'MANAGER_APPROVED'
+      | 'MANAGER_REJECTED'
+      | 'EXPIRED';
+    actorEmployeeId?: string | null;
+    actorUserId?: string | null;
+    note?: string | null;
+  }) {
+    await this.prisma.shiftSwapActionLog.create({
+      data: {
+        tenantId: args.tenantId,
+        shiftSwapRequestId: args.shiftSwapRequestId,
+        action: args.action,
+        actorEmployeeId: args.actorEmployeeId ?? undefined,
+        actorUserId: args.actorUserId ?? undefined,
+        note: args.note ?? undefined,
+      },
+    });
+  }
+
+  private emitNotificationEvent(promise: Promise<void>, context: string) {
+    void promise.catch((err) =>
+      this.logger.error(
+        `[shift-swap] Failed to publish ${context} notification event`,
+        err,
+      ),
+    );
+  }
+
+  private buildSchedulingLink(
+    tenantSlug: string,
+    tab: 'my-schedule' | 'swap-requests' = 'my-schedule',
+  ): string {
+    const base = process.env.FRONTEND_BASE_URL as string;
+    return `${base}/${tenantSlug}/hr/scheduling?tab=${tab}`;
+  }
+
+  private async getShiftSwapContacts(
+    tenantId: string,
+    swap: {
+      requesterEmployeeId: string;
+      targetEmployeeId: string;
+      managerEmployeeId?: string | null;
+    },
+  ) {
+    const employees = await this.prisma.employee.findMany({
+      where: {
+        tenantId,
+        id: {
+          in: [
+            swap.requesterEmployeeId,
+            swap.targetEmployeeId,
+            ...(swap.managerEmployeeId ? [swap.managerEmployeeId] : []),
+          ],
+        },
+      },
+      select: {
+        id: true,
+        userId: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+      },
+    });
+
+    const byId = new Map(employees.map((employee) => [employee.id, employee]));
+
+    return {
+      requester: byId.get(swap.requesterEmployeeId) ?? null,
+      target: byId.get(swap.targetEmployeeId) ?? null,
+      manager: swap.managerEmployeeId
+        ? (byId.get(swap.managerEmployeeId) ?? null)
+        : null,
+    };
   }
 
   private async getActiveSchedule(
@@ -787,8 +871,7 @@ export class TimeService {
   }
 
   private buildScheduleLink(tenantSlug: string): string {
-    const base = process.env.FRONTEND_BASE_URL as string;
-    return `${base}/${tenantSlug}/hr/scheduling?tab=my-schedule`;
+    return this.buildSchedulingLink(tenantSlug, 'my-schedule');
   }
 
   async createSchedule(
@@ -1236,10 +1319,26 @@ export class TimeService {
       },
       include: {
         requesterEmployee: {
-          select: { firstName: true, lastName: true, userId: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            userId: true,
+            email: true,
+          },
         },
         targetEmployee: {
-          select: { firstName: true, lastName: true, userId: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            userId: true,
+            email: true,
+          },
+        },
+        requesterSchedule: {
+          select: { startTime: true, endTime: true },
+        },
+        targetSchedule: {
+          select: { startTime: true, endTime: true },
         },
       },
     });
@@ -1257,6 +1356,10 @@ export class TimeService {
       targetSchedule.endTime,
     );
     const link = `/hr/scheduling?tab=my-schedule`;
+    const scheduleLink = this.buildSchedulingLink(
+      actor.tenantSlug,
+      'my-schedule',
+    );
 
     await this.notifyShiftSwapUsers([
       {
@@ -1274,6 +1377,49 @@ export class TimeService {
         link,
       },
     ]);
+
+    await this.logShiftSwapAction({
+      tenantId,
+      shiftSwapRequestId: swap.id,
+      action: 'REQUESTED',
+      actorEmployeeId: actorEmployee.id,
+      actorUserId: actor.id,
+      note: dto.reason?.trim() || null,
+    });
+
+    this.emitNotificationEvent(
+      this.publisher.notificationShiftSwapRequested({
+        tenantId,
+        shiftSwapId: swap.id,
+        recipientEmail: requesterSchedule.employee.email,
+        recipientFirstName: requesterSchedule.employee.firstName,
+        recipientRole: 'REQUESTER',
+        counterpartFullName: targetName,
+        requesterFullName: requesterName,
+        requesterShiftLabel: requesterShift,
+        targetShiftLabel: targetShift,
+        reason: dto.reason?.trim() || null,
+        scheduleLink,
+      }),
+      'shift_swap_requested(requester)',
+    );
+
+    this.emitNotificationEvent(
+      this.publisher.notificationShiftSwapRequested({
+        tenantId,
+        shiftSwapId: swap.id,
+        recipientEmail: targetSchedule.employee.email,
+        recipientFirstName: targetSchedule.employee.firstName,
+        recipientRole: 'COLLEAGUE',
+        counterpartFullName: requesterName,
+        requesterFullName: requesterName,
+        requesterShiftLabel: requesterShift,
+        targetShiftLabel: targetShift,
+        reason: dto.reason?.trim() || null,
+        scheduleLink,
+      }),
+      'shift_swap_requested(colleague)',
+    );
 
     return swap;
   }
@@ -1428,12 +1574,36 @@ export class TimeService {
         where: { id: swap.id },
         data: { status: ShiftSwapStatus.EXPIRED },
       });
+      await this.logShiftSwapAction({
+        tenantId,
+        shiftSwapRequestId: swap.id,
+        action: 'EXPIRED',
+      });
       throw new BadRequestException('This shift swap request has expired');
     }
 
     const requesterName = `${swap.requesterEmployee.firstName} ${swap.requesterEmployee.lastName}`;
     const targetName = `${swap.targetEmployee.firstName} ${swap.targetEmployee.lastName}`;
     const link = `/hr/scheduling?tab=my-schedule`;
+    const scheduleLink = this.buildSchedulingLink(
+      actor.tenantSlug,
+      'my-schedule',
+    );
+    const managerReviewLink = this.buildSchedulingLink(
+      actor.tenantSlug,
+      'swap-requests',
+    );
+    const requesterShift = this.formatShiftForMessage(
+      swap.requesterShiftDate,
+      swap.requesterSchedule.startTime,
+      swap.requesterSchedule.endTime,
+    );
+    const targetShift = this.formatShiftForMessage(
+      swap.targetShiftDate,
+      swap.targetSchedule.startTime,
+      swap.targetSchedule.endTime,
+    );
+    const contacts = await this.getShiftSwapContacts(tenantId, swap);
 
     if (dto.action === 'DECLINE') {
       const declined = await this.prisma.shiftSwapRequest.update({
@@ -1460,6 +1630,42 @@ export class TimeService {
           link,
         },
       ]);
+
+      await this.logShiftSwapAction({
+        tenantId,
+        shiftSwapRequestId: swap.id,
+        action: 'COLLEAGUE_DECLINED',
+        actorEmployeeId: actorEmployee.id,
+        actorUserId: actor.id,
+      });
+
+      if (contacts.requester?.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapDeclined({
+            tenantId,
+            shiftSwapId: swap.id,
+            employeeEmail: contacts.requester.email,
+            employeeFirstName: contacts.requester.firstName,
+            counterpartFullName: targetName,
+            scheduleLink,
+          }),
+          'shift_swap_declined(requester)',
+        );
+      }
+
+      if (contacts.target?.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapDeclined({
+            tenantId,
+            shiftSwapId: swap.id,
+            employeeEmail: contacts.target.email,
+            employeeFirstName: contacts.target.firstName,
+            counterpartFullName: requesterName,
+            scheduleLink,
+          }),
+          'shift_swap_declined(colleague)',
+        );
+      }
 
       return declined;
     }
@@ -1496,6 +1702,32 @@ export class TimeService {
       },
     ]);
 
+    await this.logShiftSwapAction({
+      tenantId,
+      shiftSwapRequestId: swap.id,
+      action: 'COLLEAGUE_ACCEPTED',
+      actorEmployeeId: actorEmployee.id,
+      actorUserId: actor.id,
+    });
+
+    if (contacts.manager?.email) {
+      this.emitNotificationEvent(
+        this.publisher.notificationShiftSwapPendingManager({
+          tenantId,
+          shiftSwapId: swap.id,
+          managerEmail: contacts.manager.email,
+          managerFirstName: contacts.manager.firstName,
+          requesterFullName: requesterName,
+          targetFullName: targetName,
+          requesterShiftLabel: requesterShift,
+          targetShiftLabel: targetShift,
+          reason: swap.reason,
+          reviewLink: managerReviewLink,
+        }),
+        'shift_swap_pending_manager',
+      );
+    }
+
     return accepted;
   }
 
@@ -1528,6 +1760,21 @@ export class TimeService {
     const requesterName = `${swap.requesterEmployee.firstName} ${swap.requesterEmployee.lastName}`;
     const targetName = `${swap.targetEmployee.firstName} ${swap.targetEmployee.lastName}`;
     const link = `/hr/scheduling?tab=my-schedule`;
+    const scheduleLink = this.buildSchedulingLink(
+      actor.tenantSlug,
+      'my-schedule',
+    );
+    const requesterShift = this.formatShiftForMessage(
+      swap.requesterShiftDate,
+      swap.requesterSchedule.startTime,
+      swap.requesterSchedule.endTime,
+    );
+    const targetShift = this.formatShiftForMessage(
+      swap.targetShiftDate,
+      swap.targetSchedule.startTime,
+      swap.targetSchedule.endTime,
+    );
+    const contacts = await this.getShiftSwapContacts(tenantId, swap);
 
     if (dto.action === 'REJECT') {
       if (!dto.reason?.trim()) {
@@ -1559,6 +1806,49 @@ export class TimeService {
           link,
         },
       ]);
+
+      await this.logShiftSwapAction({
+        tenantId,
+        shiftSwapRequestId: swap.id,
+        action: 'MANAGER_REJECTED',
+        actorEmployeeId: actorEmployee.id,
+        actorUserId: actor.id,
+        note: dto.reason.trim(),
+      });
+
+      if (contacts.requester?.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapRejected({
+            tenantId,
+            shiftSwapId: swap.id,
+            employeeEmail: contacts.requester.email,
+            employeeFirstName: contacts.requester.firstName,
+            counterpartFullName: targetName,
+            rejectionReason: dto.reason.trim(),
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+            scheduleLink,
+          }),
+          'shift_swap_rejected(requester)',
+        );
+      }
+
+      if (contacts.target?.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapRejected({
+            tenantId,
+            shiftSwapId: swap.id,
+            employeeEmail: contacts.target.email,
+            employeeFirstName: contacts.target.firstName,
+            counterpartFullName: requesterName,
+            rejectionReason: dto.reason.trim(),
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+            scheduleLink,
+          }),
+          'shift_swap_rejected(colleague)',
+        );
+      }
 
       return rejected;
     }
@@ -1630,6 +1920,46 @@ export class TimeService {
       },
     ]);
 
+    await this.logShiftSwapAction({
+      tenantId,
+      shiftSwapRequestId: swap.id,
+      action: 'MANAGER_APPROVED',
+      actorEmployeeId: actorEmployee.id,
+      actorUserId: actor.id,
+    });
+
+    if (contacts.requester?.email) {
+      this.emitNotificationEvent(
+        this.publisher.notificationShiftSwapApproved({
+          tenantId,
+          shiftSwapId: swap.id,
+          employeeEmail: contacts.requester.email,
+          employeeFirstName: contacts.requester.firstName,
+          counterpartFullName: targetName,
+          requesterShiftLabel: requesterShift,
+          targetShiftLabel: targetShift,
+          scheduleLink,
+        }),
+        'shift_swap_approved(requester)',
+      );
+    }
+
+    if (contacts.target?.email) {
+      this.emitNotificationEvent(
+        this.publisher.notificationShiftSwapApproved({
+          tenantId,
+          shiftSwapId: swap.id,
+          employeeEmail: contacts.target.email,
+          employeeFirstName: contacts.target.firstName,
+          counterpartFullName: requesterName,
+          requesterShiftLabel: requesterShift,
+          targetShiftLabel: targetShift,
+          scheduleLink,
+        }),
+        'shift_swap_approved(colleague)',
+      );
+    }
+
     return approved;
   }
 
@@ -1642,10 +1972,26 @@ export class TimeService {
       },
       include: {
         requesterEmployee: {
-          select: { firstName: true, lastName: true, userId: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            userId: true,
+            email: true,
+          },
         },
         targetEmployee: {
-          select: { firstName: true, lastName: true, userId: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            userId: true,
+            email: true,
+          },
+        },
+        requesterSchedule: {
+          select: { startTime: true, endTime: true },
+        },
+        targetSchedule: {
+          select: { startTime: true, endTime: true },
         },
       },
     });
@@ -1662,6 +2008,16 @@ export class TimeService {
     for (const request of expiredRequests) {
       const requesterName = `${request.requesterEmployee.firstName} ${request.requesterEmployee.lastName}`;
       const targetName = `${request.targetEmployee.firstName} ${request.targetEmployee.lastName}`;
+      const requesterShift = this.formatShiftForMessage(
+        request.requesterShiftDate,
+        request.requesterSchedule.startTime,
+        request.requesterSchedule.endTime,
+      );
+      const targetShift = this.formatShiftForMessage(
+        request.targetShiftDate,
+        request.targetSchedule.startTime,
+        request.targetSchedule.endTime,
+      );
       await this.notifyShiftSwapUsers([
         {
           tenantId: request.tenantId,
@@ -1678,6 +2034,42 @@ export class TimeService {
           link: '/hr/scheduling?tab=my-schedule',
         },
       ]);
+
+      await this.logShiftSwapAction({
+        tenantId: request.tenantId,
+        shiftSwapRequestId: request.id,
+        action: 'EXPIRED',
+      });
+
+      if (request.requesterEmployee.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapExpired({
+            tenantId: request.tenantId,
+            shiftSwapId: request.id,
+            employeeEmail: request.requesterEmployee.email,
+            employeeFirstName: request.requesterEmployee.firstName,
+            counterpartFullName: targetName,
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+          }),
+          'shift_swap_expired(requester)',
+        );
+      }
+
+      if (request.targetEmployee.email) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapExpired({
+            tenantId: request.tenantId,
+            shiftSwapId: request.id,
+            employeeEmail: request.targetEmployee.email,
+            employeeFirstName: request.targetEmployee.firstName,
+            counterpartFullName: requesterName,
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+          }),
+          'shift_swap_expired(colleague)',
+        );
+      }
     }
   }
 
