@@ -27,6 +27,11 @@ function getInitials(name: string) {
     .slice(0, 2);
 }
 
+function formatWorkMode(workMode?: LiveAttendanceEntry['workMode']) {
+  if (!workMode) return null;
+  return workMode.charAt(0) + workMode.slice(1).toLowerCase();
+}
+
 export function LiveAttendanceTable() {
   // Snapshot of current time, updated every 60 s to refresh durations
   const [now, setNow] = useState(() => Date.now());
@@ -64,6 +69,12 @@ export function LiveAttendanceTable() {
       bg: 'bg-orange-50 border-orange-100',
     },
     {
+      label: 'Flagged',
+      value: stats?.flagged ?? 0,
+      color: 'text-amber-700',
+      bg: 'bg-amber-50 border-amber-100',
+    },
+    {
       label: 'On Break',
       value: stats?.onBreak ?? 0,
       color: 'text-blue-700',
@@ -74,7 +85,7 @@ export function LiveAttendanceTable() {
   return (
     <div className="flex flex-col gap-5 flex-1 min-h-0">
       {/* Stat cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 shrink-0">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5 shrink-0">
         {STAT_CARDS.map((card) => (
           <div
             key={card.label}
@@ -149,10 +160,13 @@ function LiveRow({
   now: number;
 }) {
   const duration = formatDurationMs(now - new Date(entry.clockIn).getTime());
+  const workModeLabel = formatWorkMode(entry.workMode);
 
   const statusBadge =
     entry.status === 'ON_BREAK' ? (
       <Badge variant="info" label="On Break" />
+    ) : entry.isOutsideSchedule ? (
+      <Badge variant="warning" label="Off Schedule" />
     ) : entry.isLate ? (
       <Badge variant="warning" label="Late" />
     ) : (
@@ -179,7 +193,12 @@ function LiveRow({
         </div>
         <div className="min-w-0">
           <p className="font-medium text-gray-900 truncate">{entry.employeeName}</p>
-          {entry.jobTitle && <p className="text-xs text-gray-400 truncate">{entry.jobTitle}</p>}
+          {(entry.jobTitle || workModeLabel) && (
+            <p className="text-xs text-gray-400 truncate">
+              {entry.jobTitle ?? 'Shift'}
+              {workModeLabel ? ` · ${workModeLabel}` : ''}
+            </p>
+          )}
         </div>
       </div>
 

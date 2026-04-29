@@ -47,6 +47,7 @@ export function MyScheduleTab() {
           if (!map[date]) map[date] = [];
           map[date].push({
             type: s.shiftType.toLowerCase() as DayShiftType,
+            workMode: s.workMode,
             startTime: s.startTime,
             endTime: s.endTime,
           });

@@ -121,6 +121,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
       {
         employeeId: data.employeeId,
         shiftType: data.shiftType.toUpperCase() as BackendShiftType,
+        workMode: data.workMode,
         startTime: data.startTime,
         endTime: data.endTime,
         dayOfWeek,

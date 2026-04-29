@@ -17,6 +17,9 @@ interface RawAttendanceRecord {
   clockOut?: string | Date | null;
   hoursWorked?: number | null;
   date: string | Date;
+  isLate?: boolean;
+  isOutsideSchedule?: boolean;
+  workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID' | null;
   employee?: {
     firstName: string;
     lastName: string;
@@ -63,7 +66,9 @@ function transformAttendanceRecord(r: RawAttendanceRecord): TimeEntry {
     totalMinutes,
     breakMinutes: 0,
     status: clockOut ? 'CLOCKED_OUT' : 'CLOCKED_IN',
-    isLate: false,
+    isLate: Boolean(r.isLate),
+    isOutsideSchedule: Boolean(r.isOutsideSchedule),
+    workMode: r.workMode ?? null,
   };
 }
 

@@ -7,6 +7,7 @@ export type DayShiftType = 'morning' | 'afternoon' | 'night' | 'on-leave';
 
 export interface DayShift {
   type: DayShiftType;
+  workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID';
   startTime?: string;
   endTime?: string;
   leaveType?: string;
@@ -51,12 +52,18 @@ function SingleShift({
     !isLeave && shift.startTime && shift.endTime
       ? `${formatTime(shift.startTime)} - ${formatTime(shift.endTime)}`
       : '';
+  const workModeLabel = shift.workMode
+    ? shift.workMode.charAt(0) + shift.workMode.slice(1).toLowerCase()
+    : '';
 
   return (
     <div className={cn('flex flex-col flex-1 p-4 min-h-36', styles.bg)}>
       <div className="flex-1">
         <p className={cn('text-xs font-bold uppercase tracking-wide', styles.text)}>{typeLabel}</p>
         {timeStr && <p className={cn('text-xs mt-1', styles.text)}>{timeStr}</p>}
+        {!isLeave && workModeLabel && (
+          <p className={cn('text-[11px] mt-1', styles.text, 'opacity-80')}>{workModeLabel}</p>
+        )}
         {isLeave && shift.leaveType && (
           <p className={cn('text-sm mt-1', styles.text)}>{shift.leaveType}</p>
         )}
@@ -99,6 +106,9 @@ function MultiShift({
           !isLeave && shift.startTime && shift.endTime
             ? `${formatTime(shift.startTime)} - ${formatTime(shift.endTime)}`
             : (shift.leaveType ?? '');
+        const workModeLabel = shift.workMode
+          ? shift.workMode.charAt(0) + shift.workMode.slice(1).toLowerCase()
+          : '';
 
         return (
           <div
@@ -112,6 +122,11 @@ function MultiShift({
               <p className={cn('text-xs font-semibold truncate', styles.text)}>{typeLabel}</p>
               {timeStr && (
                 <p className={cn('text-[11px] truncate', styles.text, 'opacity-80')}>{timeStr}</p>
+              )}
+              {!isLeave && workModeLabel && (
+                <p className={cn('text-[11px] truncate', styles.text, 'opacity-80')}>
+                  {workModeLabel}
+                </p>
               )}
             </div>
 
