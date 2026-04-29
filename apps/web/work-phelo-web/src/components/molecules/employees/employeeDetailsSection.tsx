@@ -9,7 +9,7 @@ interface Props {
   currentRoleName?: string | null;
 }
 
-export function EmploymentDetailsSection({ employee, allHrEmployees, currentRoleName }: Props) {
+export function EmploymentDetailsSection({ employee, allHrEmployees }: Props) {
   const manager = employee?.managerId
     ? allHrEmployees.find((e) => e.id === employee.managerId)
     : null;

@@ -51,22 +51,30 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'hr-settings', actions: ['EDIT'] },
   ],
 
+  // ── Branches ──────────────────────────────────────────────────────────────
+  [Permission.CREATE_BRANCH]: [{ resource: 'branches', actions: ['CREATE'] }],
+  // employees:CREATE is allowed so invite-form users can populate the branch picker
+  [Permission.READ_BRANCHES]: [
+    { resource: 'branches', actions: ['VIEW'] },
+    { resource: 'employees', actions: ['CREATE'] },
+  ],
+  [Permission.UPDATE_BRANCH]: [{ resource: 'branches', actions: ['EDIT'] }],
+  [Permission.DELETE_BRANCH]: [{ resource: 'branches', actions: ['DELETE'] }],
+
   // ── Departments ───────────────────────────────────────────────────────────
   [Permission.CREATE_DEPARTMENT]: [
     { resource: 'departments', actions: ['CREATE'] },
-    { resource: 'branches', actions: ['CREATE'] },
   ],
+  // employees:CREATE is allowed so invite-form users can populate the department picker
   [Permission.READ_DEPARTMENTS]: [
     { resource: 'departments', actions: ['VIEW'] },
-    { resource: 'branches', actions: ['VIEW'] },
+    { resource: 'employees', actions: ['CREATE'] },
   ],
   [Permission.UPDATE_DEPARTMENT]: [
     { resource: 'departments', actions: ['EDIT'] },
-    { resource: 'branches', actions: ['EDIT'] },
   ],
   [Permission.DELETE_DEPARTMENT]: [
     { resource: 'departments', actions: ['DELETE'] },
-    { resource: 'branches', actions: ['DELETE'] },
   ],
 
   // ── Leave ─────────────────────────────────────────────────────────────────
