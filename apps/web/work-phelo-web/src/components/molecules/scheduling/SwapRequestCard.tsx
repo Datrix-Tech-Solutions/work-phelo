@@ -2,6 +2,7 @@
 
 import { ArrowLeftRight } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import Image from 'next/image';
 
 export interface SwapRequestShift {
   date: string; // ISO "YYYY-MM-DD"
@@ -50,7 +51,7 @@ function Avatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
 
   if (avatarUrl) {
     return (
-      <img src={avatarUrl} alt={name} className="w-14 h-14 rounded-full object-cover shrink-0" />
+      <Image src={avatarUrl} alt={name} className="w-14 h-14 rounded-full object-cover shrink-0" />
     );
   }
 

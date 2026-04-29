@@ -36,7 +36,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const [successEmployee, setSuccessEmployee] = useState<string | null>(null);
 
   const handleInviteClick = () => {
-    if (departments.length === 0) {
+    // deptsError means the user lacks READ_DEPARTMENTS — they can still invite,
+    // the form just won't show the department picker.
+    if (!deptsError && departments.length === 0) {
       setNoDeptWarning(true);
     } else {
       setPanelOpen(true);
@@ -55,7 +57,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
     ? allEmployees
     : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus));
 
-  const { data: departments = [] } = useDepartments();
+  const { data: departments = [], isError: deptsError } = useDepartments();
   const { data: branches = [] } = useBranches();
 
   const { data: approvedLeave = [] } = useLeaveRequests('APPROVED');
@@ -78,7 +80,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
 
       {/* Toolbar */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <div className="relative flex-1 min-w-52">
+        <div className="relative flex-1 min-w-52 max-w-sm">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"

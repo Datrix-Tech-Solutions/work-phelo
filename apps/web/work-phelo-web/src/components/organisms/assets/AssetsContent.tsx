@@ -88,7 +88,7 @@ export function AssetsContent({ tenantSlug }: Props) {
       </div>
 
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <div className="relative flex-1 min-w-52">
+        <div className="relative flex-1 min-w-52 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
