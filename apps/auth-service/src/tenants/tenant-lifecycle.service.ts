@@ -56,6 +56,12 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.VIEW_PERMISSION_SETS]: [
       { resource: 'permission-sets', action: PermissionAction.VIEW },
     ],
+    [AppPermission.MANAGE_COMPANY_ROLES]: [
+      { resource: 'permission-sets', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.READ_COMPANY_ROLES]: [
+      { resource: 'permission-sets', action: PermissionAction.VIEW },
+    ],
     [AppPermission.GRANT_PERMISSION]: [
       { resource: 'permission-sets', action: PermissionAction.CREATE },
       { resource: 'permission-sets', action: PermissionAction.EDIT },
@@ -66,6 +72,9 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'employees', action: PermissionAction.CREATE },
     ],
     [AppPermission.READ_EMPLOYEES]: [
+      { resource: 'employees', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_TEAM_EMPLOYEES]: [
       { resource: 'employees', action: PermissionAction.VIEW },
     ],
     [AppPermission.READ_OWN_PROFILE]: [
@@ -102,21 +111,29 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.MANAGE_HR_SETTINGS]: [
       { resource: 'hr-settings', action: PermissionAction.EDIT },
     ],
+    [AppPermission.CREATE_BRANCH]: [
+      { resource: 'branches', action: PermissionAction.CREATE },
+    ],
+    [AppPermission.READ_BRANCHES]: [
+      { resource: 'branches', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.UPDATE_BRANCH]: [
+      { resource: 'branches', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.DELETE_BRANCH]: [
+      { resource: 'branches', action: PermissionAction.DELETE },
+    ],
     [AppPermission.CREATE_DEPARTMENT]: [
       { resource: 'departments', action: PermissionAction.CREATE },
-      { resource: 'branches', action: PermissionAction.CREATE },
     ],
     [AppPermission.READ_DEPARTMENTS]: [
       { resource: 'departments', action: PermissionAction.VIEW },
-      { resource: 'branches', action: PermissionAction.VIEW },
     ],
     [AppPermission.UPDATE_DEPARTMENT]: [
       { resource: 'departments', action: PermissionAction.EDIT },
-      { resource: 'branches', action: PermissionAction.EDIT },
     ],
     [AppPermission.DELETE_DEPARTMENT]: [
       { resource: 'departments', action: PermissionAction.DELETE },
-      { resource: 'branches', action: PermissionAction.DELETE },
     ],
     [AppPermission.MANAGE_ROLES]: [
       { resource: 'permission-sets', action: PermissionAction.EDIT },
@@ -130,7 +147,13 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.APPROVE_LEAVE]: [
       { resource: 'leave', action: PermissionAction.APPROVE },
     ],
+    [AppPermission.APPROVE_TEAM_LEAVE]: [
+      { resource: 'leave', action: PermissionAction.APPROVE },
+    ],
     [AppPermission.READ_ALL_LEAVES]: [
+      { resource: 'leave', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_TEAM_LEAVES]: [
       { resource: 'leave', action: PermissionAction.VIEW },
     ],
     [AppPermission.READ_OWN_LEAVE]: [
@@ -145,10 +168,16 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.READ_ATTENDANCE]: [
       { resource: 'attendance', action: PermissionAction.VIEW },
     ],
+    [AppPermission.READ_TEAM_ATTENDANCE]: [
+      { resource: 'attendance', action: PermissionAction.VIEW },
+    ],
     [AppPermission.SUBMIT_TIME_CORRECTION]: [
       { resource: 'time-corrections', action: PermissionAction.CREATE },
     ],
     [AppPermission.APPROVE_TIME_CORRECTION]: [
+      { resource: 'time-corrections', action: PermissionAction.APPROVE },
+    ],
+    [AppPermission.APPROVE_TEAM_TIME]: [
       { resource: 'time-corrections', action: PermissionAction.APPROVE },
     ],
     [AppPermission.READ_TIMESHEETS]: [
@@ -158,6 +187,10 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'timesheets', action: PermissionAction.APPROVE },
     ],
     [AppPermission.MANAGE_SCHEDULES]: [
+      { resource: 'schedules', action: PermissionAction.CREATE },
+      { resource: 'schedules', action: PermissionAction.EDIT },
+    ],
+    [AppPermission.MANAGE_TEAM_SCHEDULES]: [
       { resource: 'schedules', action: PermissionAction.CREATE },
       { resource: 'schedules', action: PermissionAction.EDIT },
     ],
@@ -183,6 +216,9 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'appraisals', action: PermissionAction.CREATE },
     ],
     [AppPermission.READ_APPRAISALS]: [
+      { resource: 'appraisals', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.READ_TEAM_APPRAISALS]: [
       { resource: 'appraisals', action: PermissionAction.VIEW },
     ],
     [AppPermission.SUBMIT_SELF_ASSESSMENT]: [
