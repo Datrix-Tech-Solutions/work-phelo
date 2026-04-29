@@ -36,6 +36,7 @@ export class TimeService {
     clockOut: Date | null;
     hoursWorked: any;
     isLate: boolean;
+    isOutsideSchedule: boolean;
   }) {
     const status = record.clockOut ? 'CLOCKED_OUT' : 'CLOCKED_IN';
     const totalMinutes = record.clockOut
@@ -50,7 +51,66 @@ export class TimeService {
       totalMinutes,
       breakMinutes: 0,
       isLate: record.isLate,
+      isOutsideSchedule: record.isOutsideSchedule,
     };
+  }
+
+  private getDayBounds(date: Date) {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+
+    return { start, end };
+  }
+
+  private async getActiveSchedule(
+    tenantId: string,
+    employeeId: string,
+    date: Date,
+  ) {
+    const dayOfWeek = date.getDay();
+    const { start } = this.getDayBounds(date);
+
+    return this.prisma.shiftSchedule.findFirst({
+      where: {
+        tenantId,
+        employeeId,
+        dayOfWeek: { has: dayOfWeek },
+        effectiveFrom: { lte: start },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
+      },
+    });
+  }
+
+  private async ensureNotOnApprovedLeave(
+    tenantId: string,
+    employeeId: string,
+    date: Date,
+  ) {
+    const { start, end } = this.getDayBounds(date);
+
+    const leave = await this.prisma.leaveRequest.findFirst({
+      where: {
+        tenantId,
+        employeeId,
+        status: 'APPROVED',
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+      include: {
+        leaveType: {
+          select: { name: true },
+        },
+      },
+    });
+
+    if (leave) {
+      throw new BadRequestException(
+        `You are on approved ${leave.leaveType.name} today and cannot clock in`,
+      );
+    }
   }
 
   private async resolveIsLate(
@@ -106,8 +166,10 @@ export class TimeService {
     ipAddress?: string,
   ) {
     const employee = await this.getEmployeeByUserId(tenantId, userId);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const clockInTime = new Date();
+    const { start: today } = this.getDayBounds(clockInTime);
+
+    await this.ensureNotOnApprovedLeave(tenantId, employee.id, clockInTime);
 
     const existing = await this.prisma.clockRecord.findFirst({
       where: { tenantId, employeeId: employee.id, date: today, clockOut: null },
@@ -115,7 +177,11 @@ export class TimeService {
 
     if (existing) throw new BadRequestException('Already clocked in for today');
 
-    const clockInTime = new Date();
+    const activeSchedule = await this.getActiveSchedule(
+      tenantId,
+      employee.id,
+      clockInTime,
+    );
     const isLate = await this.resolveIsLate(tenantId, employee.id, clockInTime);
 
     const record = await this.prisma.clockRecord.create({
@@ -125,6 +191,7 @@ export class TimeService {
         clockIn: clockInTime,
         date: today,
         isLate,
+        isOutsideSchedule: !activeSchedule,
         ipAddress,
         location: dto.location,
         note: dto.note,
@@ -783,6 +850,7 @@ export class TimeService {
       breakStart: undefined,
       status: 'CLOCKED_IN',
       isLate: r.isLate,
+      isOutsideSchedule: r.isOutsideSchedule,
     }));
   }
 
@@ -813,6 +881,7 @@ export class TimeService {
     const clockedIn = todayRecords.filter((r) => !r.clockOut).length;
     const absent = Math.max(0, total - todayRecords.length);
     const late = todayRecords.filter((r) => r.isLate).length;
-    return { clockedIn, absent, late, onBreak: 0, total };
+    const flagged = todayRecords.filter((r) => r.isOutsideSchedule).length;
+    return { clockedIn, absent, late, flagged, onBreak: 0, total };
   }
 }
