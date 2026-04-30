@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Employee } from '@/types';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '../shared/SidePanel';
@@ -45,6 +45,32 @@ const REASON_OPTIONS = [
 const REASON_LABELS: Record<string, string> = Object.fromEntries(
   REASON_OPTIONS.map((o) => [o.value, o.label]),
 );
+
+const NOTIFY_DELAY_MS = 30 * 60 * 1000;
+
+function useWithdrawalCountdown(submittedAt: string) {
+  const getRemaining = () =>
+    Math.max(0, NOTIFY_DELAY_MS - (Date.now() - new Date(submittedAt).getTime()));
+
+  const [remaining, setRemaining] = useState(getRemaining);
+
+  useEffect(() => {
+    if (remaining === 0) return;
+    const id = setInterval(() => {
+      const r = getRemaining();
+      setRemaining(r);
+      if (r === 0) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submittedAt]);
+
+  const minutes = Math.floor(remaining / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  const expired = remaining === 0;
+  const formatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  return { expired, formatted };
+}
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -120,6 +146,7 @@ export function ResignationPanel({
   };
 
   const hasPendingResignation = resignation?.status === 'PENDING';
+  const countdown = useWithdrawalCountdown(resignation?.submittedAt ?? new Date(0).toISOString());
 
   return (
     <>
@@ -192,6 +219,33 @@ export function ResignationPanel({
       >
         {hasPendingResignation ? (
           <div className="flex flex-col gap-4">
+            {/* Withdrawal window countdown — only visible to the employee */}
+            {!isHrView && (
+              <div
+                className={`rounded-xl px-4 py-3 flex items-center gap-3 ${
+                  countdown.expired
+                    ? 'bg-gray-50 border border-gray-200'
+                    : 'bg-amber-50 border border-amber-200'
+                }`}
+              >
+                <span className="text-lg">{countdown.expired ? '✓' : '⏱'}</span>
+                <div className="flex flex-col gap-0.5">
+                  {countdown.expired ? (
+                    <p className="text-sm font-semibold text-gray-700">HR has been notified</p>
+                  ) : (
+                    <>
+                      <p className="text-sm font-semibold text-amber-800">
+                        HR notified in{' '}
+                        <span className="font-mono tracking-tight">{countdown.formatted}</span>
+                      </p>
+                      <p className="text-xs text-amber-700">
+                        You can still withdraw your resignation before the timer expires.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
               Resignation Details
             </p>

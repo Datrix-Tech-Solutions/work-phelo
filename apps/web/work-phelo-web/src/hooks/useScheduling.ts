@@ -3,13 +3,16 @@ import { api } from '@/lib/api';
 import {
   ShiftSchedule,
   CreateShiftSchedulePayload,
+  UpdateShiftSchedulePayload,
   MyScheduleOverview,
   ShiftSwapEligibleColleagueOption,
   CreateShiftSwapPayload,
+  CreateSwapRequestPayload,
   ShiftSwapRequest,
   RespondShiftSwapPayload,
   ReviewShiftSwapPayload,
 } from '@/types/scheduling';
+import { SwapRequest } from '@/components/molecules/scheduling/SwapRequestCard';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -64,6 +67,52 @@ export function useCreateShiftSchedule() {
   });
 }
 
+export function useUpdateShiftSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: UpdateShiftSchedulePayload }) => {
+      const res = await api.patch<ShiftSchedule>(`/hr/time/schedules/${id}`, payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
+    },
+    onError: (error) => {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    },
+  });
+}
+
+export function useDeleteShiftSchedule() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/hr/time/schedules/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['schedules'] });
+    },
+    onError: (error) => {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    },
+  });
+}
+
+export function useEmployeeSchedules(employeeId: string | undefined) {
+  return useQuery({
+    queryKey: ['schedules', employeeId],
+    enabled: !!employeeId,
+    queryFn: async () => {
+      const res = await api.get<ShiftSchedule[]>('/hr/time/schedules', {
+        params: { employeeId },
+      });
+      return res.data ?? [];
+    },
+  });
+}
+
 export function useEligibleShiftSwapColleagues(params?: {
   scheduleId?: string;
   shiftDate?: string;
@@ -112,6 +161,23 @@ export function useCreateShiftSwapRequest() {
   });
 }
 
+export function useCreateSwapRequest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: CreateSwapRequestPayload) => {
+      const res = await api.post('/hr/time/schedules/swap-requests', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['swap-requests'] });
+    },
+    onError: (error) => {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    },
+  });
+}
+
 export function useMyShiftSwaps() {
   return useQuery({
     queryKey: ['shift-swaps', 'my'],
@@ -122,12 +188,28 @@ export function useMyShiftSwaps() {
   });
 }
 
+export function useMySwapRequests() {
+  return useQuery({
+    queryKey: ['swap-requests', 'me'],
+    queryFn: async () => {
+      const res = await api.get<SwapRequest[]>('/hr/time/schedules/swap-requests');
+      return res.data ?? [];
+    },
+  });
+}
+
 export function usePendingManagerShiftSwaps() {
   return useQuery({
     queryKey: ['shift-swaps', 'pending-manager'],
     queryFn: async () => {
-      const res = await api.get<ShiftSwapRequest[]>('/hr/time/shift-swaps/pending-manager');
-      return res.data ?? [];
+      try {
+        const res = await api.get<ShiftSwapRequest[]>('/hr/time/shift-swaps/pending-manager');
+        return res.data ?? [];
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 404) return [];
+        throw err;
+      }
     },
   });
 }
@@ -191,6 +273,23 @@ export function useReviewShiftSwap() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['shift-swaps'] });
       queryClient.invalidateQueries({ queryKey: ['shift-swaps', variables.shiftSwapId] });
+      queryClient.invalidateQueries({ queryKey: ['schedules', 'me', 'overview'] });
+    },
+    onError: (error) => {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    },
+  });
+}
+
+export function useCancelShiftSwap() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (shiftSwapId: string) => {
+      await api.delete(`/hr/time/shift-swaps/${shiftSwapId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['shift-swaps'] });
       queryClient.invalidateQueries({ queryKey: ['schedules', 'me', 'overview'] });
     },
     onError: (error) => {

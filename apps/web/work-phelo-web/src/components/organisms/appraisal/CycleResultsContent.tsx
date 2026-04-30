@@ -4,11 +4,11 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AppraisalCycle, FinalRating, CycleResultItem, CycleResultsSummary } from '@/types/hr';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
+import { RatingDistributionChart } from '@/components/molecules/appraisal/RatingDistributionChart';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
 import { formatDate } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
@@ -155,16 +155,15 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   return (
     <div className="p-8 flex flex-col gap-6 min-h-full">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-xs text-gray-400 shrink-0">
+      <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link
           href={`/${tenantSlug}/hr/appraisal`}
-          className="flex items-center gap-1 hover:text-gray-600 transition-colors"
+          className="hover:text-gray-600 transition-colors"
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
-          Appraisals
+          Appraisal
         </Link>
-        <span>/</span>
-        <span className="text-gray-700 font-medium">{cycle.title}</span>
+        <span>›</span>
+        <span className="text-gray-600">{cycle.title}</span>
       </nav>
 
       {/* Cycle header */}
@@ -229,35 +228,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Rating Distribution</h2>
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-gray-500 font-medium border-b border-gray-100">
-                  <th className="px-5 py-3 text-left">Rating</th>
-                  <th className="px-5 py-3 text-left">Employees</th>
-                  <th className="px-5 py-3 text-left">Percentage</th>
-                  <th className="px-5 py-3 text-left w-48">Distribution</th>
-                </tr>
-              </thead>
-              <tbody>
-                {distribution.map(({ rating, count, percentage }) => (
-                  <tr key={rating} className="border-b border-gray-50 last:border-0">
-                    <td className="px-5 py-3">
-                      <RatingBadge rating={rating} />
-                    </td>
-                    <td className="px-5 py-3 font-medium text-gray-900">{count}</td>
-                    <td className="px-5 py-3 text-gray-600">{percentage}%</td>
-                    <td className="px-5 py-3">
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden w-36">
-                        <div
-                          className="h-full bg-brand rounded-full transition-all"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <RatingDistributionChart data={distribution} />
           </div>
         </>
       ) : (
@@ -297,7 +268,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
             searchPlaceholder="Search employee…"
             onSearch={setSearch}
             onRowClick={(row) =>
-              router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/results/${row.id}`)
+              router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/employee/${row.id}`)
             }
             emptyMessage="No results match your filters"
             currentPage={1}

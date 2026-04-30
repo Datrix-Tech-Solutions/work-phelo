@@ -44,6 +44,14 @@ export interface CreateShiftSchedulePayload {
   effectiveTo?: string;
 }
 
+export interface UpdateShiftSchedulePayload {
+  shiftType?: BackendShiftType;
+  workMode?: WorkMode;
+  startTime?: string;
+  endTime?: string;
+  effectiveTo?: string;
+}
+
 export interface MyScheduleLeaveBlock {
   id: string;
   startDate: string;
@@ -104,6 +112,14 @@ export interface CreateShiftSwapPayload {
   targetScheduleId: string;
   targetShiftDate: string;
   reason?: string;
+}
+
+export interface CreateSwapRequestPayload {
+  requesterScheduleId: string;
+  requesterDate: string;
+  targetEmployeeId: string;
+  targetScheduleId: string;
+  reason: string;
 }
 
 export interface ShiftSwapScheduleSnapshot {

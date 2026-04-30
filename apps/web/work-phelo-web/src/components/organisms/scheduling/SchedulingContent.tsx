@@ -15,7 +15,7 @@ import { SchedulingGrid } from './SchedulingGrid';
 import { SchedulingToolbar } from '@/components/molecules/scheduling/SchedulingToolbar';
 import { SchedulingGridSkeleton } from '@/components/molecules/scheduling/SchedulingGridSkeleton';
 import {
-  getMondayOf,
+  getSundayOf,
   addDays,
   toISODate,
   WEEKDAYS,
@@ -41,7 +41,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
 
   /* ── Week ── */
-  const [weekStart, setWeekStart] = useState<Date>(() => getMondayOf(new Date()));
+  const [weekStart, setWeekStart] = useState<Date>(() => getSundayOf(new Date()));
   const prevWeek = () => setWeekStart((d) => addDays(d, -7));
   const nextWeek = () => setWeekStart((d) => addDays(d, 7));
 

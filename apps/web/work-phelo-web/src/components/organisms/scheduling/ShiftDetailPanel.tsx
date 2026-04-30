@@ -5,6 +5,8 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { ShiftSchedule, BackendShiftType, WorkMode } from '@/types/scheduling';
+import { useUpdateShiftSchedule, useDeleteShiftSchedule } from '@/hooks/useScheduling';
+import { useToast } from '@/hooks/useToast';
 
 interface Props {
   isOpen: boolean;
@@ -152,21 +154,49 @@ function ReadOnlyView({
 
 function EditForm({
   schedule,
-  cellDate,
   onClose,
 }: {
   schedule: ShiftSchedule;
   cellDate: string;
   onClose: () => void;
 }) {
+  const toast = useToast();
   const [shiftType, setShiftType] = useState<BackendShiftType>(schedule.shiftType);
   const [workMode, setWorkMode] = useState<WorkMode>(schedule.workMode);
   const [startTime, setStartTime] = useState(schedule.startTime);
   const [endTime, setEndTime] = useState(schedule.endTime);
-  const [, setEndDate] = useState(schedule.effectiveTo?.slice(0, 10) ?? '');
+  const [effectiveTo, setEffectiveTo] = useState(schedule.effectiveTo?.slice(0, 10) ?? '');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const { mutate: updateShift, isPending: isSaving } = useUpdateShiftSchedule();
+  const { mutate: deleteShift, isPending: isDeleting } = useDeleteShiftSchedule();
 
   const inputClass =
     'border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand w-full';
+
+  const handleSave = () => {
+    updateShift(
+      {
+        id: schedule.id,
+        payload: { shiftType, workMode, startTime, endTime, effectiveTo: effectiveTo || undefined },
+      },
+      {
+        onSuccess: () => {
+          toast.success('Shift updated successfully');
+          onClose();
+        },
+      },
+    );
+  };
+
+  const handleDelete = () => {
+    deleteShift(schedule.id, {
+      onSuccess: () => {
+        toast.success('Shift deleted');
+        onClose();
+      },
+    });
+  };
 
   return (
     <SidePanel
@@ -175,20 +205,49 @@ function EditForm({
       title="Edit Shift"
       description={`${schedule.employee.firstName} ${schedule.employee.lastName}`}
       footer={
-        <div className="flex gap-3">
-          <Button variant="secondary" className="flex-1" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="danger" className="flex-1" onClick={() => {}}>
-            Delete
-          </Button>
-          <Button
-            className="flex-1 bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
-            onClick={() => {}}
-          >
-            Save
-          </Button>
-        </div>
+        confirmDelete ? (
+          <div className="flex gap-3">
+            <Button
+              variant="secondary"
+              className="flex-1"
+              onClick={() => setConfirmDelete(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              onClick={handleDelete}
+              isLoading={isDeleting}
+              loadingText="Deleting…"
+            >
+              Confirm Delete
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-3">
+            <Button variant="secondary" className="flex-1" onClick={onClose} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              className="flex-1"
+              onClick={() => setConfirmDelete(true)}
+              disabled={isSaving}
+            >
+              Delete
+            </Button>
+            <Button
+              className="flex-1 bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
+              onClick={handleSave}
+              isLoading={isSaving}
+              loadingText="Saving…"
+            >
+              Save
+            </Button>
+          </div>
+        )
       }
     >
       <div className="flex flex-col gap-5">
@@ -217,15 +276,20 @@ function EditForm({
         <div className="grid grid-cols-2 gap-3">
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-gray-900">Start Date</label>
-            <input type="date" value={cellDate} className={inputClass} />
+            <input
+              type="date"
+              value={schedule.effectiveFrom.slice(0, 10)}
+              readOnly
+              className={inputClass + ' bg-gray-50 text-gray-400 cursor-default'}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-gray-900">End Date</label>
             <input
               type="date"
-              value={cellDate}
-              min={cellDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              value={effectiveTo}
+              min={schedule.effectiveFrom.slice(0, 10)}
+              onChange={(e) => setEffectiveTo(e.target.value)}
               className={inputClass}
             />
           </div>
