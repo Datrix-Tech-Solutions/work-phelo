@@ -27,8 +27,10 @@ export interface SwapRequest {
 
 interface Props {
   request: SwapRequest;
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
+  /** Overrides the entire action/badge row when provided */
+  footer?: React.ReactNode;
+  onApprove?: (id: string) => void;
+  onReject?: (id: string) => void;
   isApproving?: boolean;
   isRejecting?: boolean;
 }
@@ -77,7 +79,14 @@ function ShiftBox({ person, shift }: { person: SwapRequestPerson; shift: SwapReq
   );
 }
 
-export function SwapRequestCard({ request, onApprove, onReject, isApproving, isRejecting }: Props) {
+export function SwapRequestCard({
+  request,
+  footer,
+  onApprove,
+  onReject,
+  isApproving,
+  isRejecting,
+}: Props) {
   const isPending = request.status === 'PENDING';
 
   return (
@@ -99,45 +108,50 @@ export function SwapRequestCard({ request, onApprove, onReject, isApproving, isR
         <p className="text-sm text-gray-500 mt-1">{request.reason}</p>
       </div>
 
-      {/* Actions — only shown for pending requests */}
-      {isPending && (
-        <div className="flex justify-end gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => onReject(request.id)}
-            isLoading={isRejecting}
-            loadingText="Rejecting..."
-            disabled={isApproving}
-          >
-            Reject
-          </Button>
-          <Button
-            size="sm"
-            className="bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
-            onClick={() => onApprove(request.id)}
-            isLoading={isApproving}
-            loadingText="Approving..."
-            disabled={isRejecting}
-          >
-            Approve
-          </Button>
-        </div>
-      )}
+      {/* Action row — footer overrides default behaviour when provided */}
+      {footer !== undefined ? (
+        footer
+      ) : (
+        <>
+          {isPending && onApprove && onReject && (
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => onReject(request.id)}
+                isLoading={isRejecting}
+                loadingText="Rejecting..."
+                disabled={isApproving}
+              >
+                Reject
+              </Button>
+              <Button
+                size="sm"
+                className="bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
+                onClick={() => onApprove(request.id)}
+                isLoading={isApproving}
+                loadingText="Approving..."
+                disabled={isRejecting}
+              >
+                Approve
+              </Button>
+            </div>
+          )}
 
-      {/* Status badge for non-pending */}
-      {!isPending && (
-        <div className="flex justify-end">
-          <span
-            className={`text-xs font-semibold px-3 py-1 rounded-full ${
-              request.status === 'APPROVED'
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-600'
-            }`}
-          >
-            {request.status === 'APPROVED' ? 'Approved' : 'Rejected'}
-          </span>
-        </div>
+          {!isPending && (
+            <div className="flex justify-end">
+              <span
+                className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                  request.status === 'APPROVED'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-red-100 text-red-600'
+                }`}
+              >
+                {request.status === 'APPROVED' ? 'Approved' : 'Rejected'}
+              </span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

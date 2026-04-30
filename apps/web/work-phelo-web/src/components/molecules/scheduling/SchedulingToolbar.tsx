@@ -56,7 +56,7 @@ export function SchedulingToolbar({
         </div>
       </div>
 
-      <WeekSelector weekStart={weekStart} onPrev={onPrevWeek} onNext={onNextWeek} />
+      <WeekSelector weekStart={weekStart} onPrev={onPrevWeek} onNext={onNextWeek} endOffset={6} />
     </div>
   );
 }

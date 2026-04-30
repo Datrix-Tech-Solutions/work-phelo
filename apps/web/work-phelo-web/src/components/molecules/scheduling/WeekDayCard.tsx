@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 export type DayShiftType = 'morning' | 'afternoon' | 'night' | 'on-leave';
 
 export interface DayShift {
+  scheduleId?: string;
   type: DayShiftType;
   workMode?: 'ONSITE' | 'REMOTE' | 'HYBRID';
   startTime?: string;
