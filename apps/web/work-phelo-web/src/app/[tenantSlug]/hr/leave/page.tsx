@@ -18,7 +18,6 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   const searchParams = useSearchParams();
 
   const user = useAuthStore((s) => s.user);
-  const isCompanyAdmin = user?.role === 'TENANT_ADMIN';
 
   useEffect(() => {
     if (user !== null && !user.featureConfig?.hr?.leave) {
@@ -59,7 +58,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
 
       {activeTab === 'my' && hasHRProfile && <MyLeaveTab tenantSlug={tenantSlug} />}
       {activeTab === 'requests' && canSeeRequests && (
-        <LeaveRequestsTab tenantSlug={tenantSlug} canReview={isCompanyAdmin} />
+        <LeaveRequestsTab tenantSlug={tenantSlug} canReview={canSeeRequests} />
       )}
     </div>
   );

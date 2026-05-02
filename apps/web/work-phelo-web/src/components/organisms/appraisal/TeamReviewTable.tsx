@@ -32,27 +32,31 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
 
   const teamRows = useMemo(() => {
     const list = Array.isArray(teamData) ? teamData : (teamData?.data ?? []);
-    return list.map(
-      (r: {
-        id: unknown;
-        employeeId: unknown;
-        employeeName?: unknown;
-        cycleId: unknown;
-        cycleName?: unknown;
-        selfSubmittedAt?: unknown;
-        managerReviewDeadline?: unknown;
-        overallStatus?: string;
-      }) => ({
-        id: String(r.id),
-        employeeId: String(r.employeeId),
-        employeeName: String(r.employeeName ?? ''),
-        cycleId: String(r.cycleId),
-        cycleName: String(r.cycleName ?? ''),
-        selfSubmittedAt: r.selfSubmittedAt ? String(r.selfSubmittedAt) : undefined,
-        managerReviewDeadline: String(r.managerReviewDeadline ?? ''),
-        overallStatus: r.overallStatus ?? 'NotStarted',
-      }),
-    );
+    return list
+      .filter((r: { overallStatus?: string }) =>
+        ['SelfSubmitted', 'ManagerSubmitted', 'Finalized'].includes(r.overallStatus ?? ''),
+      )
+      .map(
+        (r: {
+          id: unknown;
+          employeeId: unknown;
+          employeeName?: unknown;
+          cycleId: unknown;
+          cycleName?: unknown;
+          selfSubmittedAt?: unknown;
+          managerReviewDeadline?: unknown;
+          overallStatus?: string;
+        }) => ({
+          id: String(r.id),
+          employeeId: String(r.employeeId),
+          employeeName: String(r.employeeName ?? ''),
+          cycleId: String(r.cycleId),
+          cycleName: String(r.cycleName ?? ''),
+          selfSubmittedAt: r.selfSubmittedAt ? String(r.selfSubmittedAt) : undefined,
+          managerReviewDeadline: String(r.managerReviewDeadline ?? ''),
+          overallStatus: r.overallStatus ?? 'NotStarted',
+        }),
+      );
   }, [teamData]);
 
   const filteredRows = useMemo(() => {
@@ -135,7 +139,7 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
                   `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/manager-review/${r.id}`,
                 )
               }
-              className="px-4 py-1.5 rounded-full border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="px-4 py-1.5 rounded-full border border-blue-700 bg-white text-sm font-medium text-gray-700 hover:bg-blue-300 transition-colors"
             >
               Review
             </button>
@@ -153,6 +157,9 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
       isLoading={isLoading}
       searchPlaceholder="Search employee or cycle..."
       onSearch={onSearch}
+      onRowClick={(r) =>
+        router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/manager-review/${r.id}`)
+      }
       currentPage={page}
       totalPages={totalPages}
       onPageChange={onPageChange}

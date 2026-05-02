@@ -42,6 +42,7 @@ function AssetCard({
   onAssign,
   onUnassign,
   onTransfer,
+  onRetire,
   onDelete,
 }: {
   asset: Asset;
@@ -49,10 +50,11 @@ function AssetCard({
   onAssign?: () => void;
   onUnassign?: () => void;
   onTransfer?: () => void;
+  onRetire?: () => void;
   onDelete?: () => void;
 }) {
   const isAssigned = asset.status === 'ASSIGNED';
-  const hasActions = !!(onEdit || onAssign || onUnassign || onTransfer || onDelete);
+  const hasActions = !!(onEdit || onAssign || onUnassign || onTransfer || onRetire || onDelete);
 
   const formattedPurchaseDate = asset.purchaseDate
     ? new Date(asset.purchaseDate).toLocaleDateString('en-GB', {
@@ -156,7 +158,7 @@ function AssetCard({
               </>
             ) : (
               <>
-                {onAssign && (
+                {onAssign && asset.status !== 'RETIRED' && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -165,6 +167,17 @@ function AssetCard({
                     className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
                   >
                     Assign
+                  </button>
+                )}
+                {onRetire && asset.status !== 'RETIRED' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRetire();
+                    }}
+                    className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-yellow-50 text-yellow-600 hover:bg-yellow-100 transition-colors"
+                  >
+                    Retire
                   </button>
                 )}
                 {onDelete && (

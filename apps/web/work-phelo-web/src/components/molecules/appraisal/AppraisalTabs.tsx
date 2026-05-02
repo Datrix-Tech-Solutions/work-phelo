@@ -5,6 +5,7 @@ interface Props {
   isEmployee: boolean;
   canReviewTeam: boolean;
   canViewAppraisals: boolean;
+  teamUnreviewedCount?: number;
   onTabChange: (tab: 'my' | 'team' | 'hr') => void;
 }
 
@@ -13,11 +14,12 @@ export function AppraisalTabs({
   isEmployee,
   canReviewTeam,
   canViewAppraisals,
+  teamUnreviewedCount = 0,
   onTabChange,
 }: Props) {
   const tabs = [
     ...(isEmployee ? [{ key: 'my', label: 'My Appraisal' }] : []),
-    ...(canReviewTeam ? [{ key: 'team', label: 'Team Review' }] : []),
+    ...(canReviewTeam ? [{ key: 'team', label: 'Team Review', count: teamUnreviewedCount }] : []),
     ...(canViewAppraisals ? [{ key: 'hr', label: 'Appraisals' }] : []),
   ];
 

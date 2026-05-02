@@ -171,6 +171,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
         onClose={() => setDetailOpen(false)}
         schedule={selectedSchedule}
         cellDate={selectedCellDate}
+        canManage={canManageSchedules}
       />
 
       <ShiftPanel

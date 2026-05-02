@@ -10,6 +10,8 @@ import { HR_NAV_GROUPS } from '@/config/hr-nav';
 import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
+import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';
 
 export default function HRLayout({
   children,
@@ -138,6 +140,9 @@ export default function HRLayout({
         <Sidebar groups={groups} collapsed={collapsed} />
         <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
       </div>
+
+      {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
+      {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
     </div>
   );
 }

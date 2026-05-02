@@ -31,7 +31,12 @@ const STATUS_STYLES: Record<string, { dot: string; text: string; bg: string; lab
     label: 'Probation',
   },
   SUSPENDED: { dot: 'bg-red-400', text: 'text-red-700', bg: 'bg-red-50', label: 'Suspended' },
-  OFFBOARDED: { dot: 'bg-gray-400', text: 'text-gray-600', bg: 'bg-gray-100', label: 'Offboarded' },
+  OFFBOARDED: {
+    dot: 'bg-gray-400',
+    text: 'text-gray-600',
+    bg: 'bg-gray-100',
+    label: 'Off boarded',
+  },
   PENDING_VERIFICATION: {
     dot: 'bg-orange-400',
     text: 'text-orange-700',

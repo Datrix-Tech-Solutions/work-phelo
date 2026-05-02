@@ -341,17 +341,19 @@ export function MyScheduleTab() {
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Swap Requests
           </p>
-          {requestsForDay.map((req) => (
-            <SwapRequestItem
-              key={req.id}
-              request={req}
-              currentEmployeeId={currentEmployeeId}
-              onRespond={handleRespond}
-              onCancel={handleCancel}
-              respondingId={respondingId}
-              cancellingId={cancellingId}
-            />
-          ))}
+          <div className="max-h-105 overflow-y-auto flex flex-col gap-4 pr-1">
+            {requestsForDay.map((req) => (
+              <SwapRequestItem
+                key={req.id}
+                request={req}
+                currentEmployeeId={currentEmployeeId}
+                onRespond={handleRespond}
+                onCancel={handleCancel}
+                respondingId={respondingId}
+                cancellingId={cancellingId}
+              />
+            ))}
+          </div>
         </div>
       )}
 
