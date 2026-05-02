@@ -28,6 +28,8 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
 
   const { data: teamData } = useTeamAppraisals();
   const isManager = (teamData?.length ?? 0) > 0;
+  const teamUnreviewedCount =
+    teamData?.filter((r) => r.overallStatus === 'SelfSubmitted').length ?? 0;
 
   // TENANT_ADMIN defaults to the Appraisals tab; employees default to My Appraisal.
   const [activeTab, setActiveTab] = useState<'my' | 'team' | 'hr'>(() => {
@@ -51,6 +53,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
         isEmployee={hasHRProfile}
         canReviewTeam={isManager}
         canViewAppraisals={canViewAppraisals}
+        teamUnreviewedCount={teamUnreviewedCount}
         onTabChange={setActiveTab}
       />
 
