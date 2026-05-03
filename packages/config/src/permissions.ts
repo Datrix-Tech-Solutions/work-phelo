@@ -56,6 +56,7 @@ export enum Permission {
   READ_TIMESHEETS = 'read:timesheets',
   APPROVE_TIMESHEET = 'approve:timesheet',
   MANAGE_SCHEDULES = 'manage:schedules',
+  APPROVE_SHIFT_SWAP = 'approve:shift_swap',
 
   // ── Payroll ───────────────────────────────────────────────────────────────
   READ_PAYROLL = 'read:payroll',
@@ -143,6 +144,7 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.READ_TIMESHEETS,
     Permission.APPROVE_TIMESHEET,
     Permission.MANAGE_SCHEDULES,
+    Permission.APPROVE_SHIFT_SWAP,
     Permission.READ_PAYROLL,
     Permission.RUN_PAYROLL,
     Permission.APPROVE_PAYROLL,

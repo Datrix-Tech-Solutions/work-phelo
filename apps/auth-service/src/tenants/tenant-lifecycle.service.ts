@@ -169,6 +169,9 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
       { resource: 'schedules', action: PermissionAction.CREATE },
       { resource: 'schedules', action: PermissionAction.EDIT },
     ],
+    [AppPermission.APPROVE_SHIFT_SWAP]: [
+      { resource: 'schedules', action: PermissionAction.APPROVE },
+    ],
     [AppPermission.READ_PAYROLL]: [
       { resource: 'payroll', action: PermissionAction.VIEW },
     ],

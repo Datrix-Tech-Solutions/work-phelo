@@ -56,6 +56,7 @@ function toCardRequest(r: ShiftSwapRequest): SwapRequest {
       date: r.requesterShiftDate.slice(0, 10),
       startTime: r.requesterSchedule?.startTime ?? '',
       endTime: r.requesterSchedule?.endTime ?? '',
+      workMode: r.requesterSchedule?.workMode,
     },
     target: {
       name: r.targetEmployee
@@ -66,10 +67,23 @@ function toCardRequest(r: ShiftSwapRequest): SwapRequest {
       date: r.targetShiftDate.slice(0, 10),
       startTime: r.targetSchedule?.startTime ?? '',
       endTime: r.targetSchedule?.endTime ?? '',
+      workMode: r.targetSchedule?.workMode,
     },
     reason: r.reason ?? '',
     status: 'PENDING',
   };
+}
+
+function formatDateTime(value?: string | null): string | null {
+  if (!value) return null;
+
+  return new Date(value).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function SwapRequestItem({
@@ -90,6 +104,52 @@ function SwapRequestItem({
   const isTarget = request.targetEmployeeId === currentEmployeeId;
   const cardData = toCardRequest(request);
   const badge = STATUS_BADGE[request.status];
+  const acceptedAt = formatDateTime(request.colleagueRespondedAt);
+  const decisionAt = formatDateTime(request.managerDecisionAt);
+
+  const details = (
+    <>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-500">
+        {request.status === 'PENDING_COLLEAGUE' && isTarget && (
+          <span>
+            Awaiting your response until {new Date(request.expiresAt).toLocaleDateString('en-US')}
+          </span>
+        )}
+        {request.status === 'PENDING_COLLEAGUE' && !isTarget && (
+          <span>
+            Awaiting colleague response until{' '}
+            {new Date(request.expiresAt).toLocaleDateString('en-US')}
+          </span>
+        )}
+        {request.status === 'PENDING_MANAGER' && acceptedAt && <span>Accepted {acceptedAt}</span>}
+        {request.status === 'APPROVED' && decisionAt && <span>Approved {decisionAt}</span>}
+        {request.status === 'DECLINED' && acceptedAt && <span>Declined {acceptedAt}</span>}
+        {request.status === 'REJECTED' && decisionAt && <span>Rejected {decisionAt}</span>}
+        {request.status === 'EXPIRED' && <span>Request expired</span>}
+        {request.status === 'CANCELLED' && <span>Request cancelled</span>}
+      </div>
+
+      {request.status === 'PENDING_MANAGER' && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          The colleague accepted this request. It is now waiting for approver review.
+        </div>
+      )}
+
+      {request.status === 'APPROVED' && (
+        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+          This swap has been approved and the new shift assignments are already reflected in the
+          schedule.
+        </div>
+      )}
+
+      {request.status === 'REJECTED' && request.managerRejectionReason && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-900">Approver Rejection Reason</p>
+          <p className="mt-1 text-sm text-red-700">{request.managerRejectionReason}</p>
+        </div>
+      )}
+    </>
+  );
 
   let footer: React.ReactNode;
 
@@ -106,17 +166,17 @@ function SwapRequestItem({
             loadingText="Declining..."
             disabled={respondingId?.id === request.id && respondingId.action === 'ACCEPT'}
           >
-            Cancel
+            Decline
           </Button>
           <Button
             size="sm"
             className="bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
             onClick={() => onRespond(request.id, 'ACCEPT')}
             isLoading={respondingId?.id === request.id && respondingId.action === 'ACCEPT'}
-            loadingText="Approving..."
+            loadingText="Accepting..."
             disabled={respondingId?.id === request.id && respondingId.action === 'DECLINE'}
           >
-            Approve
+            Accept
           </Button>
         </div>
       );
@@ -155,7 +215,7 @@ function SwapRequestItem({
     );
   }
 
-  return <SwapRequestCard request={cardData} footer={footer} />;
+  return <SwapRequestCard request={cardData} details={details} footer={footer} />;
 }
 
 export function MyScheduleTab() {
@@ -183,8 +243,7 @@ export function MyScheduleTab() {
 
   const { data: swapRequests = [] } = useMyShiftSwaps();
 
-  /* Derive current employee ID from schedules (more reliable than userId on swap summaries) */
-  const currentEmployeeId = overview?.schedules[0]?.employeeId;
+  const currentEmployeeId = overview?.employeeId;
   const { mutate: respondToSwap } = useRespondToShiftSwap();
   const { mutate: cancelSwap } = useCancelShiftSwap();
 
@@ -217,6 +276,33 @@ export function MyScheduleTab() {
           )
         : [],
     [swapRequests, selectedDate],
+  );
+
+  const incomingRequests = useMemo(
+    () =>
+      currentEmployeeId
+        ? swapRequests.filter(
+            (request) =>
+              request.targetEmployeeId === currentEmployeeId &&
+              request.status === 'PENDING_COLLEAGUE',
+          )
+        : [],
+    [currentEmployeeId, swapRequests],
+  );
+
+  const recentActivity = useMemo(
+    () =>
+      swapRequests
+        .filter(
+          (request) =>
+            !(
+              currentEmployeeId &&
+              request.targetEmployeeId === currentEmployeeId &&
+              request.status === 'PENDING_COLLEAGUE'
+            ),
+        )
+        .slice(0, 6),
+    [currentEmployeeId, swapRequests],
   );
 
   /* Build a date → DayShift[] map for the current week, then apply swap overrides */
@@ -339,7 +425,7 @@ export function MyScheduleTab() {
       {selectedDate && requestsForDay.length > 0 && (
         <div className="flex flex-col gap-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-            Swap Requests
+            Swap Requests On This Day
           </p>
           <div className="max-h-105 overflow-y-auto flex flex-col gap-4 pr-1">
             {requestsForDay.map((req) => (
@@ -354,6 +440,47 @@ export function MyScheduleTab() {
               />
             ))}
           </div>
+        </div>
+      )}
+
+      {incomingRequests.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+            Incoming Swap Requests
+          </p>
+          {incomingRequests.map((req) => (
+            <SwapRequestItem
+              key={req.id}
+              request={req}
+              currentEmployeeId={currentEmployeeId}
+              onRespond={handleRespond}
+              onCancel={handleCancel}
+              respondingId={respondingId}
+              cancellingId={cancellingId}
+            />
+          ))}
+        </div>
+      )}
+
+      {recentActivity.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              Recent Swap Activity
+            </p>
+            <span className="text-xs text-gray-400">Showing latest {recentActivity.length}</span>
+          </div>
+          {recentActivity.map((req) => (
+            <SwapRequestItem
+              key={req.id}
+              request={req}
+              currentEmployeeId={currentEmployeeId}
+              onRespond={handleRespond}
+              onCancel={handleCancel}
+              respondingId={respondingId}
+              cancellingId={cancellingId}
+            />
+          ))}
         </div>
       )}
 

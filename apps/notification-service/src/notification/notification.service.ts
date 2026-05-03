@@ -397,19 +397,18 @@ export class NotificationService {
     const recipients: { email: string; firstName: string }[] = [];
 
     if (data.adminEmail) {
-      recipients.push({ email: data.adminEmail, firstName: 'Admin' });
-    } else {
-      this.logger.warn(
-        `[TIME_CORRECTION_SUBMITTED] No admin email for tenant ${data.tenantId} — skipping admin email`,
-      );
+      recipients.push({ email: data.adminEmail, firstName: 'Approver' });
     }
 
     if (data.managerEmail && data.managerEmail !== data.adminEmail) {
       recipients.push({ email: data.managerEmail, firstName: 'Manager' });
-    } else if (!data.managerEmail) {
+    }
+
+    if (recipients.length === 0) {
       this.logger.warn(
-        `[TIME_CORRECTION_SUBMITTED] No manager email for employee ${data.employeeId} — skipping manager email`,
+        `[TIME_CORRECTION_SUBMITTED] No recipients resolved for correction ${data.correctionId} in tenant ${data.tenantId}`,
       );
+      return;
     }
 
     for (const recipient of recipients) {

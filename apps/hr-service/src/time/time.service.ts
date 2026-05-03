@@ -6,7 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { RequestUser } from '@work-phelo/types';
+import { PermissionRecipient, RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import Decimal from 'decimal.js';
 import { ClockInDto } from './dto/clock-in.dto';
@@ -30,9 +30,27 @@ import {
   EmploymentStatus,
   Prisma,
   ShiftSchedule,
-  ShiftSwapRequest,
   ShiftSwapStatus,
 } from '../../prisma/generated/client';
+
+type TimeApprovalRecipient = {
+  userId: string | null;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  source: 'MANAGER' | 'APPROVER';
+};
+
+type TimeCorrectionRecipients = {
+  manager: TimeApprovalRecipient | null;
+  approvers: TimeApprovalRecipient[];
+  all: TimeApprovalRecipient[];
+};
+
+type ShiftSwapApprovalRecipients = {
+  approvers: PermissionRecipient[];
+  primaryApproverEmployeeId: string | null;
+};
 
 @Injectable()
 export class TimeService {
@@ -95,6 +113,320 @@ export class TimeService {
     return value.toISOString().slice(0, 10);
   }
 
+  private formatWorkModeLabel(workMode?: string | null): string {
+    if (!workMode) return 'Onsite';
+
+    const normalized = workMode.toUpperCase();
+    switch (normalized) {
+      case 'REMOTE':
+        return 'Remote';
+      case 'HYBRID':
+        return 'Hybrid';
+      case 'ONSITE':
+      default:
+        return 'Onsite';
+    }
+  }
+
+  private buildTimeCorrectionAppLink(correctionId: string) {
+    return `/hr/time-clock?tab=corrections&correctionId=${encodeURIComponent(correctionId)}`;
+  }
+
+  private toTimeApprovalRecipient(
+    recipient: PermissionRecipient,
+    source: TimeApprovalRecipient['source'],
+  ): TimeApprovalRecipient {
+    return {
+      userId: recipient.userId,
+      email: recipient.email,
+      firstName: recipient.firstName,
+      lastName: recipient.lastName,
+      source,
+    };
+  }
+
+  private dedupeTimeApprovalRecipients(
+    recipients: TimeApprovalRecipient[],
+  ): TimeApprovalRecipient[] {
+    const unique = new Map<string, TimeApprovalRecipient>();
+
+    for (const recipient of recipients) {
+      const key = recipient.userId || recipient.email.toLowerCase();
+      if (!unique.has(key)) {
+        unique.set(key, recipient);
+      }
+    }
+
+    return [...unique.values()];
+  }
+
+  private dedupePermissionRecipients(
+    recipients: PermissionRecipient[],
+  ): PermissionRecipient[] {
+    const unique = new Map<string, PermissionRecipient>();
+
+    for (const recipient of recipients) {
+      const key = recipient.userId || recipient.email.toLowerCase();
+      if (!unique.has(key)) {
+        unique.set(key, recipient);
+      }
+    }
+
+    return [...unique.values()];
+  }
+
+  private canReviewShiftSwaps(actor: RequestUser): boolean {
+    return (
+      isCompanyAdminUser(actor) ||
+      hasPermissionRule(actor, 'schedules:APPROVE') ||
+      hasPermissionRule(actor, 'schedules:EDIT')
+    );
+  }
+
+  private async resolveShiftSwapApprovalRecipients(
+    tenantId: string,
+    options?: { excludeUserIds?: Array<string | null | undefined> },
+  ): Promise<ShiftSwapApprovalRecipients> {
+    const excludedUserIds = new Set(
+      (options?.excludeUserIds ?? []).filter((userId): userId is string =>
+        Boolean(userId),
+      ),
+    );
+
+    const resolve = async (action: 'APPROVE' | 'EDIT') =>
+      this.dedupePermissionRecipients(
+        (
+          await this.publisher.authResolvePermissionRecipients({
+            tenantId,
+            resource: 'schedules',
+            action,
+            activeOnly: true,
+          })
+        ).filter((recipient) => !excludedUserIds.has(recipient.userId)),
+      );
+
+    let approvers = await resolve('APPROVE');
+
+    if (approvers.length === 0) {
+      approvers = await resolve('EDIT');
+      if (approvers.length > 0) {
+        this.logger.warn(
+          `[shift-swap] No explicit schedules:APPROVE recipients configured for tenant ${tenantId}; falling back to schedules:EDIT approvers`,
+        );
+      }
+    }
+
+    if (approvers.length === 0) {
+      return { approvers: [], primaryApproverEmployeeId: null };
+    }
+
+    const employeeLinks = await this.prisma.employee.findMany({
+      where: {
+        tenantId,
+        userId: { in: approvers.map((recipient) => recipient.userId) },
+        employmentStatus: {
+          in: [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION],
+        },
+      },
+      select: { id: true, userId: true },
+    });
+
+    const employeeByUserId = new Map(
+      employeeLinks.map((employee) => [employee.userId, employee.id]),
+    );
+    const primaryApproverEmployeeId =
+      approvers
+        .map((recipient) => employeeByUserId.get(recipient.userId) ?? null)
+        .find((employeeId): employeeId is string => Boolean(employeeId)) ??
+      null;
+
+    return { approvers, primaryApproverEmployeeId };
+  }
+
+  private async resolveTimeCorrectionManagerRecipient(
+    tenantId: string,
+    employee: {
+      managerId: string | null;
+      departmentId: string | null;
+    },
+  ): Promise<TimeApprovalRecipient | null> {
+    let manager: {
+      userId: string | null;
+      email: string;
+      firstName: string;
+      lastName: string;
+    } | null = null;
+
+    if (employee.managerId) {
+      manager = await this.prisma.employee.findFirst({
+        where: { id: employee.managerId, tenantId },
+        select: {
+          userId: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+    }
+
+    if (!manager && employee.departmentId) {
+      const department = await this.prisma.department.findFirst({
+        where: { id: employee.departmentId, tenantId },
+        select: { managerId: true },
+      });
+
+      if (department?.managerId) {
+        manager = await this.prisma.employee.findFirst({
+          where: { id: department.managerId, tenantId },
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        });
+      }
+    }
+
+    if (!manager?.email) {
+      return null;
+    }
+
+    return {
+      userId: manager.userId,
+      email: manager.email,
+      firstName: manager.firstName,
+      lastName: manager.lastName,
+      source: 'MANAGER',
+    };
+  }
+
+  private async resolveTimeCorrectionRecipients(
+    tenantId: string,
+    employee: {
+      id: string;
+      userId?: string | null;
+      firstName: string;
+      lastName: string;
+      managerId: string | null;
+      departmentId: string | null;
+    },
+  ): Promise<TimeCorrectionRecipients> {
+    const [manager, permissionRecipients] = await Promise.all([
+      this.resolveTimeCorrectionManagerRecipient(tenantId, employee),
+      this.publisher.authResolvePermissionRecipients({
+        tenantId,
+        resource: 'time-corrections',
+        action: 'APPROVE',
+        activeOnly: true,
+      }),
+    ]);
+
+    const approvers = this.dedupeTimeApprovalRecipients(
+      permissionRecipients
+        .filter((recipient) => recipient.email)
+        .filter((recipient) => recipient.userId !== employee.userId)
+        .map((recipient) =>
+          this.toTimeApprovalRecipient(recipient, 'APPROVER'),
+        ),
+    ).filter(
+      (recipient) =>
+        !manager ||
+        (recipient.userId && manager.userId
+          ? recipient.userId !== manager.userId
+          : recipient.email.toLowerCase() !== manager.email.toLowerCase()),
+    );
+
+    const all = this.dedupeTimeApprovalRecipients(
+      [manager, ...approvers].filter(
+        (recipient): recipient is TimeApprovalRecipient => recipient !== null,
+      ),
+    );
+
+    return { manager, approvers, all };
+  }
+
+  private async notifyStakeholdersOfTimeCorrectionSubmission(
+    tenantId: string,
+    correction: {
+      id: string;
+      employeeId: string;
+      date: Date;
+      requestedIn: Date | null;
+      requestedOut: Date | null;
+      reason: string;
+    },
+    employee: {
+      id: string;
+      userId?: string | null;
+      firstName: string;
+      lastName: string;
+      managerId: string | null;
+      departmentId: string | null;
+    },
+    recipientsInput?: TimeCorrectionRecipients,
+  ) {
+    const recipients =
+      recipientsInput ??
+      (await this.resolveTimeCorrectionRecipients(tenantId, employee));
+
+    if (recipients.all.length === 0) {
+      this.logger.warn(
+        `[time-correction] No manager or time correction approver recipients found for employee ${employee.id} in tenant ${tenantId}`,
+      );
+      return;
+    }
+
+    const attendanceDate = correction.date.toISOString().split('T')[0];
+    const detailLink = this.buildTimeCorrectionAppLink(correction.id);
+    const employeeFullName = `${employee.firstName} ${employee.lastName}`;
+    const inAppMessage = `${employeeFullName} submitted a time correction request for ${attendanceDate}`;
+
+    const publishResults = await Promise.allSettled(
+      recipients.all.map((recipient) =>
+        this.publisher.notificationTimeCorrectionSubmitted({
+          tenantId,
+          correctionId: correction.id,
+          employeeId: correction.employeeId,
+          employeeFirstName: employee.firstName,
+          employeeLastName: employee.lastName,
+          attendanceDate,
+          requestedIn: correction.requestedIn?.toISOString() ?? null,
+          requestedOut: correction.requestedOut?.toISOString() ?? null,
+          reason: correction.reason,
+          adminEmail: recipient.source === 'APPROVER' ? recipient.email : null,
+          managerEmail: recipient.source === 'MANAGER' ? recipient.email : null,
+          detailLink,
+        }),
+      ),
+    );
+
+    publishResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.logger.error(
+          `[time-correction] Failed to publish notification event for correction ${correction.id} to ${recipients.all[index]?.email}`,
+          result.reason,
+        );
+      }
+    });
+
+    const inAppRecipients = recipients.all
+      .map((recipient) => recipient.userId)
+      .filter((userId): userId is string => Boolean(userId));
+
+    if (inAppRecipients.length > 0) {
+      await this.notificationsService.createMany(
+        inAppRecipients.map((userId) => ({
+          tenantId,
+          userId,
+          type: 'TIME_CORRECTION_SUBMITTED',
+          message: inAppMessage,
+          link: detailLink,
+        })),
+      );
+    }
+  }
+
   private isFutureShiftDate(date: Date): boolean {
     const { start: today } = this.getDayBounds(new Date());
     return date.getTime() > today.getTime();
@@ -104,12 +436,17 @@ export class TimeService {
     date: Date,
     startTime: string,
     endTime: string,
+    workMode?: string | null,
   ) {
+    const workModeSuffix = workMode
+      ? ` (${this.formatWorkModeLabel(workMode)})`
+      : '';
+
     return `${date.toLocaleDateString('en-GB', {
       day: 'numeric',
       month: 'long',
       year: 'numeric',
-    })} ${startTime}-${endTime}`;
+    })} ${startTime}-${endTime}${workModeSuffix}`;
   }
 
   private scheduleAppliesOnDate(schedule: ShiftSchedule, date: Date): boolean {
@@ -225,35 +562,6 @@ export class TimeService {
     return schedule;
   }
 
-  private async resolveSwapManagerEmployeeId(
-    tenantId: string,
-    requester: {
-      managerId: string | null;
-      departmentId: string | null;
-    },
-    target: {
-      managerId: string | null;
-      departmentId: string | null;
-    },
-  ): Promise<string | null> {
-    if (requester.managerId && requester.managerId === target.managerId) {
-      return requester.managerId;
-    }
-
-    if (
-      requester.departmentId &&
-      requester.departmentId === target.departmentId
-    ) {
-      const department = await this.prisma.department.findFirst({
-        where: { tenantId, id: requester.departmentId, isActive: true },
-        select: { managerId: true },
-      });
-      return department?.managerId ?? null;
-    }
-
-    return null;
-  }
-
   private areSameTeam(
     requester: { managerId: string | null; departmentId: string | null },
     colleague: { managerId: string | null; departmentId: string | null },
@@ -290,6 +598,112 @@ export class TimeService {
       throw new BadRequestException(
         'There is already an active swap request for one of these shifts',
       );
+    }
+  }
+
+  private ensureValidTimeFormat(value: string, fieldLabel: string) {
+    if (!/^\d{2}:\d{2}$/.test(value)) {
+      throw new BadRequestException(`${fieldLabel} must be in HH:MM format`);
+    }
+
+    const [hours, minutes] = value.split(':').map(Number);
+    if (hours > 23 || minutes > 59) {
+      throw new BadRequestException(`${fieldLabel} must be a valid time`);
+    }
+  }
+
+  private validateSchedulePayload(args: {
+    startTime?: string;
+    endTime?: string;
+    dayOfWeek?: number[];
+    effectiveFrom?: string;
+    effectiveTo?: string | null;
+  }) {
+    if (args.startTime) {
+      this.ensureValidTimeFormat(args.startTime, 'Shift start time');
+    }
+
+    if (args.endTime) {
+      this.ensureValidTimeFormat(args.endTime, 'Shift end time');
+    }
+
+    if (args.dayOfWeek) {
+      if (args.dayOfWeek.length === 0) {
+        throw new BadRequestException(
+          'At least one day of week must be selected',
+        );
+      }
+
+      const uniqueDays = new Set(args.dayOfWeek);
+      if (uniqueDays.size !== args.dayOfWeek.length) {
+        throw new BadRequestException(
+          'Schedule days of week cannot contain duplicates',
+        );
+      }
+    }
+
+    if (args.effectiveFrom && args.effectiveTo) {
+      const effectiveFrom = new Date(`${args.effectiveFrom}T00:00:00`);
+      const effectiveTo = new Date(`${args.effectiveTo}T00:00:00`);
+      if (effectiveTo.getTime() < effectiveFrom.getTime()) {
+        throw new BadRequestException(
+          'Schedule effective end date cannot be before the start date',
+        );
+      }
+    }
+  }
+
+  private async assertShiftStillApplies(
+    schedule: ShiftSchedule,
+    date: Date,
+    message: string,
+  ) {
+    if (!this.scheduleAppliesOnDate(schedule, date)) {
+      throw new BadRequestException(message);
+    }
+  }
+
+  private async assertNoApprovedLeaveForIncomingSwapAssignments(
+    tenantId: string,
+    swap: {
+      requesterEmployeeId: string;
+      requesterShiftDate: Date;
+      targetEmployeeId: string;
+      targetShiftDate: Date;
+    },
+  ) {
+    await this.assertNoApprovedLeaveOnDate(
+      tenantId,
+      swap.requesterEmployeeId,
+      swap.targetShiftDate,
+      `You have approved leave on ${swap.targetShiftDate.toLocaleDateString('en-GB')} and cannot take this swapped shift.`,
+    );
+    await this.assertNoApprovedLeaveOnDate(
+      tenantId,
+      swap.targetEmployeeId,
+      swap.requesterShiftDate,
+      `The selected colleague has approved leave on ${swap.requesterShiftDate.toLocaleDateString('en-GB')} and cannot take your shift.`,
+    );
+  }
+
+  private async assertNoAssignmentOverrideConflict(
+    tx: Prisma.TransactionClient,
+    scheduleId: string,
+    shiftDate: Date,
+    message: string,
+  ) {
+    const existing = await tx.shiftAssignmentOverride.findUnique({
+      where: {
+        scheduleId_shiftDate: {
+          scheduleId,
+          shiftDate,
+        },
+      },
+      select: { id: true, swapRequestId: true },
+    });
+
+    if (existing) {
+      throw new BadRequestException(message);
     }
   }
 
@@ -399,6 +813,14 @@ export class TimeService {
         ? (byId.get(swap.managerEmployeeId) ?? null)
         : null,
     };
+  }
+
+  private isClockInConflictError(error: unknown): boolean {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+      return false;
+    }
+
+    return error.code === 'P2002' || error.code === 'P2034';
   }
 
   private async getActiveSchedule(
@@ -520,20 +942,66 @@ export class TimeService {
     );
     const isLate = await this.resolveIsLate(tenantId, employee.id, clockInTime);
 
-    const record = await this.prisma.clockRecord.create({
-      data: {
-        tenantId,
-        employeeId: employee.id,
-        clockIn: clockInTime,
-        date: today,
-        isLate,
-        isOutsideSchedule: !activeSchedule,
-        workMode: activeSchedule?.workMode ?? null,
-        ipAddress,
-        location: dto.location,
-        note: dto.note,
-      },
-    });
+    const record = await (async () => {
+      try {
+        return await this.prisma.$transaction(
+          async (tx) => {
+            const activeRecord = await tx.clockRecord.findFirst({
+              where: {
+                tenantId,
+                employeeId: employee.id,
+                date: today,
+                clockOut: null,
+              },
+            });
+
+            if (activeRecord) {
+              throw new BadRequestException('Already clocked in for today');
+            }
+
+            return tx.clockRecord.create({
+              data: {
+                tenantId,
+                employeeId: employee.id,
+                clockIn: clockInTime,
+                date: today,
+                isLate,
+                isOutsideSchedule: !activeSchedule,
+                workMode: activeSchedule?.workMode ?? null,
+                ipAddress,
+                location: dto.location,
+                note: dto.note,
+              },
+            });
+          },
+          {
+            isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          },
+        );
+      } catch (error) {
+        if (error instanceof BadRequestException) {
+          throw error;
+        }
+
+        if (this.isClockInConflictError(error)) {
+          const activeRecord = await this.prisma.clockRecord.findFirst({
+            where: {
+              tenantId,
+              employeeId: employee.id,
+              date: today,
+              clockOut: null,
+            },
+          });
+
+          if (activeRecord) {
+            throw new BadRequestException('Already clocked in for today');
+          }
+        }
+
+        throw error;
+      }
+    })();
+
     return this.transformRecord(record);
   }
 
@@ -700,6 +1168,14 @@ export class TimeService {
   ) {
     const employee = await this.prisma.employee.findFirst({
       where: { userId, tenantId },
+      select: {
+        id: true,
+        userId: true,
+        firstName: true,
+        lastName: true,
+        managerId: true,
+        departmentId: true,
+      },
     });
     if (!employee)
       throw new NotFoundException(
@@ -717,80 +1193,11 @@ export class TimeService {
       },
     });
 
-    const [config, manager] = await Promise.all([
-      this.prisma.tenantConfig.findUnique({
-        where: { tenantId },
-        select: { adminEmail: true, adminUserId: true },
-      }),
-      employee.managerId
-        ? this.prisma.employee.findFirst({
-            where: { id: employee.managerId, tenantId },
-            select: { email: true, userId: true },
-          })
-        : null,
-    ]);
-
-    const adminEmail = config?.adminEmail || null;
-    const adminUserId = config?.adminUserId || null;
-    const managerEmail = manager?.email ?? null;
-    const managerUserId = manager?.userId ?? null;
-
-    const employeeFullName = `${employee.firstName} ${employee.lastName}`;
-    const attendanceDate = correction.date.toISOString().split('T')[0];
-
-    if (!adminEmail) {
-      this.logger.warn(
-        `[time-correction] No admin email configured for tenant ${tenantId} — skipping admin notification`,
-      );
-    }
-    if (!managerEmail) {
-      this.logger.warn(
-        `[time-correction] Employee ${employee.id} has no manager or manager has no email — skipping manager notification`,
-      );
-    }
-
-    if (adminEmail || managerEmail) {
-      this.publisher
-        .notificationTimeCorrectionSubmitted({
-          tenantId,
-          correctionId: correction.id,
-          employeeId: employee.id,
-          employeeFirstName: employee.firstName,
-          employeeLastName: employee.lastName,
-          attendanceDate,
-          requestedIn: correction.requestedIn?.toISOString() ?? null,
-          requestedOut: correction.requestedOut?.toISOString() ?? null,
-          reason: correction.reason,
-          adminEmail,
-          managerEmail,
-        })
-        .catch((err) =>
-          this.logger.error(
-            `[time-correction] Failed to publish notification event for correction ${correction.id}`,
-            err,
-          ),
-        );
-    }
-
-    const inAppMessage = `${employeeFullName} submitted a time correction request for ${attendanceDate}`;
-    const inAppLink = `/hr/time/corrections/${correction.id}`;
-
-    const inAppRecipients: string[] = [];
-    if (adminUserId) inAppRecipients.push(adminUserId);
-    if (managerUserId && managerUserId !== adminUserId)
-      inAppRecipients.push(managerUserId);
-
-    if (inAppRecipients.length > 0) {
-      await this.prisma.notification.createMany({
-        data: inAppRecipients.map((uid) => ({
-          tenantId,
-          userId: uid,
-          type: 'TIME_CORRECTION_SUBMITTED',
-          message: inAppMessage,
-          link: inAppLink,
-        })),
-      });
-    }
+    void this.notifyStakeholdersOfTimeCorrectionSubmission(
+      tenantId,
+      correction,
+      employee,
+    );
 
     return correction;
   }
@@ -882,6 +1289,7 @@ export class TimeService {
     const canManageSchedules =
       isCompanyAdminUser(actor) || hasPermissionRule(actor, 'schedules:CREATE');
     assertHrAccess(canManageSchedules);
+    this.validateSchedulePayload(dto);
 
     const employee = await this.prisma.employee.findFirst({
       where: { id: dto.employeeId, tenantId },
@@ -975,6 +1383,14 @@ export class TimeService {
       },
     });
     if (!schedule) throw new NotFoundException('Schedule not found');
+    this.validateSchedulePayload({
+      ...dto,
+      effectiveFrom: schedule.effectiveFrom.toISOString().slice(0, 10),
+      effectiveTo:
+        dto.effectiveTo !== undefined
+          ? dto.effectiveTo || null
+          : (schedule.effectiveTo?.toISOString().slice(0, 10) ?? null),
+    });
 
     const updated = await this.prisma.shiftSchedule.update({
       where: { id: scheduleId },
@@ -1244,6 +1660,12 @@ export class TimeService {
       );
     }
 
+    if (targetSchedule.employee.id === actorEmployee.id) {
+      throw new BadRequestException(
+        'You cannot create a shift swap with another one of your own shifts',
+      );
+    }
+
     if (!this.scheduleAppliesOnDate(requesterSchedule, requesterDate)) {
       throw new BadRequestException(
         'Your selected shift does not exist on that date',
@@ -1282,6 +1704,12 @@ export class TimeService {
       targetDate,
       'The selected colleague is on approved leave for their shift and cannot swap at this time.',
     );
+    await this.assertNoApprovedLeaveForIncomingSwapAssignments(tenantId, {
+      requesterEmployeeId: actorEmployee.id,
+      requesterShiftDate: requesterDate,
+      targetEmployeeId: targetSchedule.employee.id,
+      targetShiftDate: targetDate,
+    });
 
     await Promise.all([
       this.ensureNoActiveSwapConflict(
@@ -1292,15 +1720,19 @@ export class TimeService {
       this.ensureNoActiveSwapConflict(tenantId, targetSchedule.id, targetDate),
     ]);
 
-    const managerEmployeeId = await this.resolveSwapManagerEmployeeId(
+    const approvalRecipients = await this.resolveShiftSwapApprovalRecipients(
       tenantId,
-      requesterSchedule.employee,
-      targetSchedule.employee,
+      {
+        excludeUserIds: [
+          requesterSchedule.employee.userId,
+          targetSchedule.employee.userId,
+        ],
+      },
     );
 
-    if (!managerEmployeeId) {
+    if (approvalRecipients.approvers.length === 0) {
       throw new BadRequestException(
-        'No manager could be resolved for this team swap request',
+        'No shift swap approvers are currently configured for this company',
       );
     }
 
@@ -1313,7 +1745,7 @@ export class TimeService {
         targetEmployeeId: targetSchedule.employee.id,
         targetScheduleId: targetSchedule.id,
         targetShiftDate: targetDate,
-        managerEmployeeId,
+        managerEmployeeId: approvalRecipients.primaryApproverEmployeeId,
         reason: dto.reason?.trim() || null,
         expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
       },
@@ -1349,11 +1781,13 @@ export class TimeService {
       requesterDate,
       requesterSchedule.startTime,
       requesterSchedule.endTime,
+      requesterSchedule.workMode,
     );
     const targetShift = this.formatShiftForMessage(
       targetDate,
       targetSchedule.startTime,
       targetSchedule.endTime,
+      targetSchedule.workMode,
     );
     const link = `/hr/scheduling?tab=my-schedule`;
     const scheduleLink = this.buildSchedulingLink(
@@ -1437,7 +1871,6 @@ export class TimeService {
         OR: [
           { requesterEmployeeId: actorEmployee.id },
           { targetEmployeeId: actorEmployee.id },
-          { managerEmployeeId: actorEmployee.id },
         ],
       },
       include: {
@@ -1468,29 +1901,38 @@ export class TimeService {
     });
   }
 
-  async getPendingManagerShiftSwaps(tenantId: string, actor: RequestUser) {
-    const actorEmployee = await getActorEmployee(
-      this.prisma,
-      tenantId,
-      actor.id,
-    );
-    assertHrAccess(
-      isCompanyAdminUser(actor) ||
-        hasPermissionRule(actor, 'schedules:CREATE') ||
-        hasPermissionRule(actor, 'schedules:EDIT'),
-    );
+  async getPendingManagerShiftSwaps(
+    tenantId: string,
+    actor: RequestUser,
+    status?: string,
+  ) {
+    assertHrAccess(this.canReviewShiftSwaps(actor));
+
+    const requestedStatus =
+      status && status !== 'PENDING' ? status : ShiftSwapStatus.PENDING_MANAGER;
+    const allowedStatuses = new Set<ShiftSwapStatus>([
+      ShiftSwapStatus.PENDING_MANAGER,
+      ShiftSwapStatus.APPROVED,
+      ShiftSwapStatus.REJECTED,
+    ]);
+
+    if (!allowedStatuses.has(requestedStatus as ShiftSwapStatus)) {
+      throw new BadRequestException('Unsupported shift swap status filter');
+    }
 
     return this.prisma.shiftSwapRequest.findMany({
       where: {
         tenantId,
-        managerEmployeeId: actorEmployee.id,
-        status: ShiftSwapStatus.PENDING_MANAGER,
+        status: requestedStatus as ShiftSwapStatus,
       },
       include: {
         requesterEmployee: {
           select: { firstName: true, lastName: true },
         },
         targetEmployee: {
+          select: { firstName: true, lastName: true },
+        },
+        managerEmployee: {
           select: { firstName: true, lastName: true },
         },
         requesterSchedule: true,
@@ -1505,12 +1947,6 @@ export class TimeService {
     actor: RequestUser,
     shiftSwapId: string,
   ) {
-    const actorEmployee = await getActorEmployee(
-      this.prisma,
-      tenantId,
-      actor.id,
-    );
-
     const swap = await this.prisma.shiftSwapRequest.findFirst({
       where: { id: shiftSwapId, tenantId },
       include: {
@@ -1532,14 +1968,18 @@ export class TimeService {
       throw new NotFoundException('Shift swap request not found');
     }
 
-    assertHrAccess(
-      isCompanyAdminUser(actor) ||
-        swap.requesterEmployeeId === actorEmployee.id ||
-        swap.targetEmployeeId === actorEmployee.id ||
-        swap.managerEmployeeId === actorEmployee.id ||
-        hasPermissionRule(actor, 'schedules:CREATE') ||
-        hasPermissionRule(actor, 'schedules:EDIT'),
-    );
+    if (!isCompanyAdminUser(actor)) {
+      const actorEmployee = await this.prisma.employee.findFirst({
+        where: { tenantId, userId: actor.id },
+        select: { id: true },
+      });
+
+      assertHrAccess(
+        swap.requesterEmployeeId === actorEmployee?.id ||
+          swap.targetEmployeeId === actorEmployee?.id ||
+          this.canReviewShiftSwaps(actor),
+      );
+    }
 
     return swap;
   }
@@ -1597,13 +2037,27 @@ export class TimeService {
       swap.requesterShiftDate,
       swap.requesterSchedule.startTime,
       swap.requesterSchedule.endTime,
+      swap.requesterSchedule.workMode,
     );
     const targetShift = this.formatShiftForMessage(
       swap.targetShiftDate,
       swap.targetSchedule.startTime,
       swap.targetSchedule.endTime,
+      swap.targetSchedule.workMode,
     );
     const contacts = await this.getShiftSwapContacts(tenantId, swap);
+
+    await this.assertShiftStillApplies(
+      swap.requesterSchedule,
+      swap.requesterShiftDate,
+      'The requester shift is no longer valid for the selected date',
+    );
+    await this.assertShiftStillApplies(
+      swap.targetSchedule,
+      swap.targetShiftDate,
+      "The colleague's shift is no longer valid for the selected date",
+    );
+    await this.assertNoApprovedLeaveForIncomingSwapAssignments(tenantId, swap);
 
     if (dto.action === 'DECLINE') {
       const declined = await this.prisma.shiftSwapRequest.update({
@@ -1670,11 +2124,23 @@ export class TimeService {
       return declined;
     }
 
+    const approvalRecipients = await this.resolveShiftSwapApprovalRecipients(
+      tenantId,
+      {
+        excludeUserIds: [
+          swap.requesterEmployee.userId,
+          swap.targetEmployee.userId,
+        ],
+      },
+    );
     const accepted = await this.prisma.shiftSwapRequest.update({
       where: { id: swap.id },
       data: {
         status: ShiftSwapStatus.PENDING_MANAGER,
         colleagueRespondedAt: new Date(),
+        managerEmployeeId:
+          approvalRecipients.primaryApproverEmployeeId ??
+          swap.managerEmployeeId,
       },
     });
 
@@ -1683,23 +2149,23 @@ export class TimeService {
         tenantId,
         userId: swap.requesterEmployee.userId,
         type: 'SHIFT_SWAP_PENDING_MANAGER',
-        message: `${targetName} accepted your shift swap request. It is now awaiting manager approval.`,
+        message: `${targetName} accepted your shift swap request. It is now awaiting approver review.`,
         link,
       },
       {
         tenantId,
         userId: swap.targetEmployee.userId,
         type: 'SHIFT_SWAP_PENDING_MANAGER',
-        message: `You accepted the shift swap request from ${requesterName}. It is now awaiting manager approval.`,
+        message: `You accepted the shift swap request from ${requesterName}. It is now awaiting approver review.`,
         link,
       },
-      {
+      ...approvalRecipients.approvers.map((recipient) => ({
         tenantId,
-        userId: swap.managerEmployee?.userId,
+        userId: recipient.userId,
         type: 'SHIFT_SWAP_PENDING_MANAGER',
         message: `A shift swap between ${requesterName} and ${targetName} is awaiting your approval.`,
         link: '/hr/scheduling?tab=swap-requests',
-      },
+      })),
     ]);
 
     await this.logShiftSwapAction({
@@ -1710,22 +2176,28 @@ export class TimeService {
       actorUserId: actor.id,
     });
 
-    if (contacts.manager?.email) {
-      this.emitNotificationEvent(
-        this.publisher.notificationShiftSwapPendingManager({
-          tenantId,
-          shiftSwapId: swap.id,
-          managerEmail: contacts.manager.email,
-          managerFirstName: contacts.manager.firstName,
-          requesterFullName: requesterName,
-          targetFullName: targetName,
-          requesterShiftLabel: requesterShift,
-          targetShiftLabel: targetShift,
-          reason: swap.reason,
-          reviewLink: managerReviewLink,
-        }),
-        'shift_swap_pending_manager',
+    if (approvalRecipients.approvers.length === 0) {
+      this.logger.warn(
+        `[shift-swap] Shift swap ${swap.id} reached approver review, but no approver recipients are currently configured for tenant ${tenantId}`,
       );
+    } else {
+      for (const recipient of approvalRecipients.approvers) {
+        this.emitNotificationEvent(
+          this.publisher.notificationShiftSwapPendingManager({
+            tenantId,
+            shiftSwapId: swap.id,
+            managerEmail: recipient.email,
+            managerFirstName: recipient.firstName,
+            requesterFullName: requesterName,
+            targetFullName: targetName,
+            requesterShiftLabel: requesterShift,
+            targetShiftLabel: targetShift,
+            reason: swap.reason,
+            reviewLink: managerReviewLink,
+          }),
+          `shift_swap_pending_manager(${recipient.email})`,
+        );
+      }
     }
 
     return accepted;
@@ -1737,23 +2209,17 @@ export class TimeService {
     shiftSwapId: string,
     dto: ReviewShiftSwapDto,
   ) {
-    const actorEmployee = await getActorEmployee(
-      this.prisma,
-      tenantId,
-      actor.id,
-    );
+    const actorEmployee = await this.prisma.employee.findFirst({
+      where: { tenantId, userId: actor.id },
+      select: { id: true },
+    });
     const swap = await this.getShiftSwapRequest(tenantId, actor, shiftSwapId);
 
-    assertHrAccess(
-      isCompanyAdminUser(actor) ||
-        swap.managerEmployeeId === actorEmployee.id ||
-        hasPermissionRule(actor, 'schedules:CREATE') ||
-        hasPermissionRule(actor, 'schedules:EDIT'),
-    );
+    assertHrAccess(this.canReviewShiftSwaps(actor));
 
     if (swap.status !== ShiftSwapStatus.PENDING_MANAGER) {
       throw new BadRequestException(
-        'This shift swap is not awaiting manager approval',
+        'This shift swap is not awaiting approver review',
       );
     }
 
@@ -1768,13 +2234,27 @@ export class TimeService {
       swap.requesterShiftDate,
       swap.requesterSchedule.startTime,
       swap.requesterSchedule.endTime,
+      swap.requesterSchedule.workMode,
     );
     const targetShift = this.formatShiftForMessage(
       swap.targetShiftDate,
       swap.targetSchedule.startTime,
       swap.targetSchedule.endTime,
+      swap.targetSchedule.workMode,
     );
     const contacts = await this.getShiftSwapContacts(tenantId, swap);
+
+    await this.assertShiftStillApplies(
+      swap.requesterSchedule,
+      swap.requesterShiftDate,
+      'The requester shift is no longer valid for the selected date',
+    );
+    await this.assertShiftStillApplies(
+      swap.targetSchedule,
+      swap.targetShiftDate,
+      "The colleague's shift is no longer valid for the selected date",
+    );
+    await this.assertNoApprovedLeaveForIncomingSwapAssignments(tenantId, swap);
 
     if (dto.action === 'REJECT') {
       if (!dto.reason?.trim()) {
@@ -1786,6 +2266,7 @@ export class TimeService {
         data: {
           status: ShiftSwapStatus.REJECTED,
           managerDecisionAt: new Date(),
+          managerEmployeeId: actorEmployee?.id ?? swap.managerEmployeeId,
           managerRejectionReason: dto.reason.trim(),
         },
       });
@@ -1811,7 +2292,7 @@ export class TimeService {
         tenantId,
         shiftSwapRequestId: swap.id,
         action: 'MANAGER_REJECTED',
-        actorEmployeeId: actorEmployee.id,
+        actorEmployeeId: actorEmployee?.id,
         actorUserId: actor.id,
         note: dto.reason.trim(),
       });
@@ -1854,41 +2335,34 @@ export class TimeService {
     }
 
     const approved = await this.prisma.$transaction(async (tx) => {
-      await tx.shiftAssignmentOverride.upsert({
-        where: {
-          scheduleId_shiftDate: {
-            scheduleId: swap.requesterScheduleId,
-            shiftDate: swap.requesterShiftDate,
-          },
-        },
-        create: {
+      await this.assertNoAssignmentOverrideConflict(
+        tx,
+        swap.requesterScheduleId,
+        swap.requesterShiftDate,
+        'The requester shift already has an override and cannot be swapped anymore',
+      );
+      await this.assertNoAssignmentOverrideConflict(
+        tx,
+        swap.targetScheduleId,
+        swap.targetShiftDate,
+        "The colleague's shift already has an override and cannot be swapped anymore",
+      );
+
+      await tx.shiftAssignmentOverride.create({
+        data: {
           tenantId,
           scheduleId: swap.requesterScheduleId,
           shiftDate: swap.requesterShiftDate,
           assignedEmployeeId: swap.targetEmployeeId,
           swapRequestId: swap.id,
         },
-        update: {
-          assignedEmployeeId: swap.targetEmployeeId,
-          swapRequestId: swap.id,
-        },
       });
 
-      await tx.shiftAssignmentOverride.upsert({
-        where: {
-          scheduleId_shiftDate: {
-            scheduleId: swap.targetScheduleId,
-            shiftDate: swap.targetShiftDate,
-          },
-        },
-        create: {
+      await tx.shiftAssignmentOverride.create({
+        data: {
           tenantId,
           scheduleId: swap.targetScheduleId,
           shiftDate: swap.targetShiftDate,
-          assignedEmployeeId: swap.requesterEmployeeId,
-          swapRequestId: swap.id,
-        },
-        update: {
           assignedEmployeeId: swap.requesterEmployeeId,
           swapRequestId: swap.id,
         },
@@ -1899,6 +2373,7 @@ export class TimeService {
         data: {
           status: ShiftSwapStatus.APPROVED,
           managerDecisionAt: new Date(),
+          managerEmployeeId: actorEmployee?.id ?? swap.managerEmployeeId,
         },
       });
     });
@@ -1924,7 +2399,7 @@ export class TimeService {
       tenantId,
       shiftSwapRequestId: swap.id,
       action: 'MANAGER_APPROVED',
-      actorEmployeeId: actorEmployee.id,
+      actorEmployeeId: actorEmployee?.id,
       actorUserId: actor.id,
     });
 
@@ -1988,10 +2463,10 @@ export class TimeService {
           },
         },
         requesterSchedule: {
-          select: { startTime: true, endTime: true },
+          select: { startTime: true, endTime: true, workMode: true },
         },
         targetSchedule: {
-          select: { startTime: true, endTime: true },
+          select: { startTime: true, endTime: true, workMode: true },
         },
       },
     });
@@ -2012,11 +2487,13 @@ export class TimeService {
         request.requesterShiftDate,
         request.requesterSchedule.startTime,
         request.requesterSchedule.endTime,
+        request.requesterSchedule.workMode,
       );
       const targetShift = this.formatShiftForMessage(
         request.targetShiftDate,
         request.targetSchedule.startTime,
         request.targetSchedule.endTime,
+        request.targetSchedule.workMode,
       );
       await this.notifyShiftSwapUsers([
         {
@@ -2197,6 +2674,7 @@ export class TimeService {
     ]);
 
     return {
+      employeeId: actorEmployee.id,
       schedules,
       leaveBlocks: leaveRequests.map((r) => ({
         id: r.id,

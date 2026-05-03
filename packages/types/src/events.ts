@@ -31,6 +31,7 @@ export const EventPatterns = {
   AUTH_RESEND_EMPLOYEE_INVITE: 'auth.resend_employee_invite',
   AUTH_PROVISION_EMPLOYEE_INVITE: 'auth.provision_employee_invite',
   AUTH_DELETE_PENDING_EMPLOYEE_INVITE: 'auth.delete_pending_employee_invite',
+  AUTH_RESOLVE_PERMISSION_RECIPIENTS: 'auth.resolve_permission_recipients',
 
   // Auth → Notification
   NOTIFICATION_EMAIL_VERIFICATION: 'notification.email_verification',
@@ -146,6 +147,23 @@ export interface DeletePendingEmployeeInviteResult {
   deleted: boolean;
 }
 
+export interface ResolvePermissionRecipientsCommand {
+  tenantId: string;
+  resource: string;
+  action: string;
+  includeTenantAdmins?: boolean;
+  activeOnly?: boolean;
+}
+
+export interface PermissionRecipient {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  status: string;
+}
+
 // ── Auth/HR → Notification Events ─────────────────────────────────────────
 
 export interface EmailVerificationEvent {
@@ -210,6 +228,7 @@ export interface EmployeeTerminationEvent {
 
 export interface ResignationSubmittedEvent {
   tenantId: string;
+  /** Recipient email for a resignation approver notification */
   adminEmail: string;
   employeeId: string;
   employeeFirstName: string;
@@ -316,9 +335,9 @@ export interface TimeCorrectionSubmittedEvent {
   requestedIn: string | null;
   requestedOut: string | null;
   reason: string;
-  /** Company Admin email from TenantConfig — null if not configured */
+  /** Recipient email for a non-manager approver notification */
   adminEmail: string | null;
-  /** Manager's email — null if employee has no assigned manager */
+  /** Recipient email for a manager approver notification */
   managerEmail: string | null;
   detailLink?: string;
 }

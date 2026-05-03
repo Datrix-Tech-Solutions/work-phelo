@@ -8,6 +8,7 @@ export interface SwapRequestShift {
   date: string; // ISO "YYYY-MM-DD"
   startTime: string; // "HH:MM"
   endTime: string; // "HH:MM"
+  workMode?: string;
 }
 
 export interface SwapRequestPerson {
@@ -27,6 +28,7 @@ export interface SwapRequest {
 
 interface Props {
   request: SwapRequest;
+  details?: React.ReactNode;
   /** Overrides the entire action/badge row when provided */
   footer?: React.ReactNode;
   onApprove?: (id: string) => void;
@@ -41,6 +43,20 @@ function formatDate(iso: string): string {
     month: 'short',
     day: 'numeric',
   });
+}
+
+function formatWorkMode(workMode?: string): string | null {
+  if (!workMode) return null;
+
+  switch (workMode.toUpperCase()) {
+    case 'REMOTE':
+      return 'Remote';
+    case 'HYBRID':
+      return 'Hybrid';
+    case 'ONSITE':
+    default:
+      return 'Onsite';
+  }
 }
 
 function Avatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
@@ -65,6 +81,8 @@ function Avatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
 }
 
 function ShiftBox({ person, shift }: { person: SwapRequestPerson; shift: SwapRequestShift }) {
+  const workMode = formatWorkMode(shift.workMode);
+
   return (
     <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4">
       <Avatar name={person.name} avatarUrl={person.avatarUrl} />
@@ -74,6 +92,7 @@ function ShiftBox({ person, shift }: { person: SwapRequestPerson; shift: SwapReq
         <p className="text-sm font-medium text-blue-600 mt-0.5">
           {shift.startTime} - {shift.endTime}
         </p>
+        {workMode && <p className="text-xs text-gray-500 mt-1">{workMode}</p>}
       </div>
     </div>
   );
@@ -81,6 +100,7 @@ function ShiftBox({ person, shift }: { person: SwapRequestPerson; shift: SwapReq
 
 export function SwapRequestCard({
   request,
+  details,
   footer,
   onApprove,
   onReject,
@@ -105,8 +125,10 @@ export function SwapRequestCard({
       {/* Reason */}
       <div className="bg-gray-50 rounded-xl px-4 py-3">
         <p className="text-sm font-semibold text-gray-900">Reason for Swap</p>
-        <p className="text-sm text-gray-500 mt-1">{request.reason}</p>
+        <p className="text-sm text-gray-500 mt-1">{request.reason || 'No reason provided'}</p>
       </div>
+
+      {details && <div className="flex flex-col gap-2">{details}</div>}
 
       {/* Action row — footer overrides default behaviour when provided */}
       {footer !== undefined ? (

@@ -3,7 +3,7 @@ import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class ReviewShiftSwapDto {
   @ApiProperty({
-    description: 'Manager decision on the shift swap request',
+    description: 'Approver decision on the shift swap request',
     enum: ['APPROVE', 'REJECT'],
   })
   @IsIn(['APPROVE', 'REJECT'])

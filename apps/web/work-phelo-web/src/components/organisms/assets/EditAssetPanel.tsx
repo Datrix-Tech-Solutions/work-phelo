@@ -105,6 +105,7 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
           options={[
             { value: 'LAPTOP', label: 'Laptop' },
             { value: 'PHONE', label: 'Phone' },
+            { value: 'TABLET', label: 'Tablet' },
             { value: 'PRINTER', label: 'Printer' },
             { value: 'MONITOR', label: 'Monitor' },
             { value: 'VEHICLE', label: 'Vehicle' },

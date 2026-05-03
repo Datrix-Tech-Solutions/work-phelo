@@ -88,6 +88,7 @@ export interface MyScheduleShiftSwapSummary {
 }
 
 export interface MyScheduleOverview {
+  employeeId: string;
   schedules: ShiftSchedule[];
   leaveBlocks: MyScheduleLeaveBlock[];
   publicHolidays: MyScheduleHoliday[];

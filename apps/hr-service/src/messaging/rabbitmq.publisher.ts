@@ -11,6 +11,8 @@ import {
   ProvisionEmployeeInviteResult,
   DeletePendingEmployeeInviteCommand,
   DeletePendingEmployeeInviteResult,
+  ResolvePermissionRecipientsCommand,
+  PermissionRecipient,
   EmployeeTerminationEvent,
   ResignationSubmittedEvent,
   LeaveRequestedEvent,
@@ -219,6 +221,18 @@ export class RabbitMQPublisher {
     return this.request(
       this.authClient,
       EventPatterns.AUTH_DELETE_PENDING_EMPLOYEE_INVITE,
+      data,
+      correlationId,
+    );
+  }
+
+  authResolvePermissionRecipients(
+    data: ResolvePermissionRecipientsCommand,
+    correlationId?: string,
+  ): Promise<PermissionRecipient[]> {
+    return this.request(
+      this.authClient,
+      EventPatterns.AUTH_RESOLVE_PERMISSION_RECIPIENTS,
       data,
       correlationId,
     );

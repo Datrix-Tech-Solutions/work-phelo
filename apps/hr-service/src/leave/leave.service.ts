@@ -8,7 +8,7 @@ import {
   Inject,
   forwardRef,
 } from '@nestjs/common';
-import { RequestUser } from '@work-phelo/types';
+import { PermissionRecipient, RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
@@ -59,6 +59,20 @@ const DEFAULT_LEAVE_TYPES = [
     isDefault: true,
   },
 ];
+
+type LeaveNotificationRecipient = {
+  userId: string | null;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  source: 'MANAGER' | 'APPROVER';
+};
+
+type LeaveNotificationRecipients = {
+  manager: LeaveNotificationRecipient | null;
+  approvers: LeaveNotificationRecipient[];
+  all: LeaveNotificationRecipient[];
+};
 
 @Injectable()
 export class LeaveService {
@@ -492,9 +506,10 @@ export class LeaveService {
     const notificationRecipients =
       await this.resolveLeaveNotificationRecipients(tenantId, empRecord);
 
-    // Notify the employee's manager and Company Admin (fire-and-forget)
+    // Notify the employee's manager and active leave approvers (fire-and-forget)
     void this.notifyStakeholdersOfLeaveRequest(
       tenantId,
+      request.id,
       empRecord,
       leaveType.name,
       dto.startDate,
@@ -507,12 +522,18 @@ export class LeaveService {
 
     return {
       request,
-      message: notificationRecipients.managerEmail
-        ? 'Leave request submitted. Your manager and Company Admin will be notified.'
-        : 'Leave request submitted. You do not have a manager assigned, so only your Company Admin will be notified.',
+      message:
+        notificationRecipients.manager &&
+        notificationRecipients.approvers.length
+          ? 'Leave request submitted. Your manager and the relevant leave approvers will be notified.'
+          : notificationRecipients.manager
+            ? 'Leave request submitted. Your manager will be notified.'
+            : notificationRecipients.approvers.length
+              ? 'Leave request submitted. The relevant leave approvers will be notified.'
+              : 'Leave request submitted, but no manager or leave approver recipients are currently configured.',
       notificationSummary: {
-        managerNotified: !!notificationRecipients.managerEmail,
-        adminNotified: !!notificationRecipients.adminEmail,
+        managerNotified: !!notificationRecipients.manager,
+        approverCount: notificationRecipients.approvers.length,
       },
     };
   }
@@ -658,48 +679,144 @@ export class LeaveService {
     return `${baseUrl}/${tenantSlug}/hr/leave?tab=requests&requestId=${encodeURIComponent(requestId)}`;
   }
 
-  private async resolveLeaveNotificationRecipients(
+  private buildLeaveRequestAppLink(requestId: string) {
+    return `/hr/leave?tab=requests&requestId=${encodeURIComponent(requestId)}`;
+  }
+
+  private toLeaveNotificationRecipient(
+    recipient: PermissionRecipient,
+    source: LeaveNotificationRecipient['source'],
+  ): LeaveNotificationRecipient {
+    return {
+      userId: recipient.userId,
+      email: recipient.email,
+      firstName: recipient.firstName,
+      lastName: recipient.lastName,
+      source,
+    };
+  }
+
+  private dedupeLeaveRecipients(
+    recipients: LeaveNotificationRecipient[],
+  ): LeaveNotificationRecipient[] {
+    const unique = new Map<string, LeaveNotificationRecipient>();
+
+    for (const recipient of recipients) {
+      const key = recipient.userId || recipient.email.toLowerCase();
+      if (!unique.has(key)) {
+        unique.set(key, recipient);
+      }
+    }
+
+    return [...unique.values()];
+  }
+
+  private async resolveLeaveManagerRecipient(
     tenantId: string,
     employee: {
-      id: string;
-      firstName: string;
-      lastName: string;
       managerId: string | null;
       departmentId: string | null;
     },
-  ) {
-    let managerEmail: string | null = null;
+  ): Promise<LeaveNotificationRecipient | null> {
+    let manager: {
+      userId: string | null;
+      email: string;
+      firstName: string;
+      lastName: string;
+    } | null = null;
 
-    // Prefer the employee's direct manager metadata if present.
     if (employee.managerId) {
-      const manager = await this.prisma.employee.findUnique({
+      manager = await this.prisma.employee.findUnique({
         where: { id: employee.managerId },
-        select: { email: true },
+        select: {
+          userId: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+        },
       });
-      managerEmail = manager?.email ?? null;
     }
 
-    // Fall back to the department's assigned manager metadata.
-    if (!managerEmail && employee.departmentId) {
+    if (!manager && employee.departmentId) {
       const dept = await this.prisma.department.findUnique({
         where: { id: employee.departmentId },
         select: { managerId: true },
       });
       if (dept?.managerId) {
-        const deptManager = await this.prisma.employee.findUnique({
+        manager = await this.prisma.employee.findUnique({
           where: { id: dept.managerId },
-          select: { email: true },
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
         });
-        managerEmail = deptManager?.email ?? null;
       }
     }
 
-    const adminEmail = await this.getTenantAdminEmail(tenantId);
-    return { managerEmail, adminEmail };
+    if (!manager?.email) {
+      return null;
+    }
+
+    return {
+      userId: manager.userId,
+      email: manager.email,
+      firstName: manager.firstName,
+      lastName: manager.lastName,
+      source: 'MANAGER',
+    };
+  }
+
+  private async resolveLeaveNotificationRecipients(
+    tenantId: string,
+    employee: {
+      id: string;
+      userId?: string | null;
+      firstName: string;
+      lastName: string;
+      managerId: string | null;
+      departmentId: string | null;
+    },
+  ): Promise<LeaveNotificationRecipients> {
+    const [manager, permissionRecipients] = await Promise.all([
+      this.resolveLeaveManagerRecipient(tenantId, employee),
+      this.rabbitmq.authResolvePermissionRecipients({
+        tenantId,
+        resource: 'leave',
+        action: 'APPROVE',
+        activeOnly: true,
+      }),
+    ]);
+
+    const approvers = this.dedupeLeaveRecipients(
+      permissionRecipients
+        .filter((recipient) => recipient.email)
+        .filter((recipient) => recipient.userId !== employee.userId)
+        .map((recipient) =>
+          this.toLeaveNotificationRecipient(recipient, 'APPROVER'),
+        ),
+    ).filter(
+      (recipient) =>
+        !manager ||
+        (recipient.userId && manager.userId
+          ? recipient.userId !== manager.userId
+          : recipient.email.toLowerCase() !== manager.email.toLowerCase()),
+    );
+
+    const all = this.dedupeLeaveRecipients(
+      [manager, ...approvers].filter(
+        (recipient): recipient is LeaveNotificationRecipient =>
+          recipient !== null,
+      ),
+    );
+
+    return { manager, approvers, all };
   }
 
   private async notifyStakeholdersOfLeaveRequest(
     tenantId: string,
+    requestId: string,
     employee: {
       id: string;
       firstName: string;
@@ -713,43 +830,21 @@ export class LeaveService {
     totalDays: number,
     reason?: string,
     detailLink?: string,
-    recipientsInput?: {
-      managerEmail: string | null;
-      adminEmail: string | null;
-    },
+    recipientsInput?: LeaveNotificationRecipients,
   ) {
     try {
-      const { managerEmail, adminEmail } =
+      const recipients =
         recipientsInput ??
         (await this.resolveLeaveNotificationRecipients(tenantId, employee));
-      const recipientMap = new Map<
-        string,
-        { email: string; includeDetailLink: boolean }
-      >();
-      for (const recipient of [
-        managerEmail ? { email: managerEmail, includeDetailLink: false } : null,
-        adminEmail ? { email: adminEmail, includeDetailLink: true } : null,
-      ]) {
-        if (!recipient?.email) continue;
-        const existing = recipientMap.get(recipient.email);
-        recipientMap.set(recipient.email, {
-          email: recipient.email,
-          includeDetailLink:
-            (existing?.includeDetailLink ?? false) ||
-            recipient.includeDetailLink,
-        });
-      }
-      const recipients = [...recipientMap.values()];
-
-      if (recipients.length === 0) {
+      if (recipients.all.length === 0) {
         this.logger.warn(
-          `No manager or tenant admin found for tenant ${tenantId} — leave request notification skipped`,
+          `No manager or leave approver recipients found for tenant ${tenantId} — leave request notification skipped`,
         );
         return;
       }
 
       await Promise.all(
-        recipients.map((recipient) =>
+        recipients.all.map((recipient) =>
           this.rabbitmq.notificationLeaveRequested({
             tenantId,
             employeeId: employee.id,
@@ -761,10 +856,25 @@ export class LeaveService {
             endDate,
             totalDays,
             reason,
-            detailLink: recipient.includeDetailLink ? detailLink : undefined,
+            detailLink,
           }),
         ),
       );
+
+      const inAppRecipients = recipients.all.filter(
+        (recipient) => recipient.userId,
+      );
+      if (inAppRecipients.length > 0) {
+        await this.prisma.notification.createMany({
+          data: inAppRecipients.map((recipient) => ({
+            tenantId,
+            userId: recipient.userId!,
+            type: 'LEAVE_REQUESTED',
+            message: `${employee.firstName} ${employee.lastName} submitted a ${leaveTypeName} request from ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')}.`,
+            link: this.buildLeaveRequestAppLink(requestId),
+          })),
+        });
+      }
     } catch (err) {
       this.logger.error(
         `Failed to emit leave requested notification for employee ${employee.id}`,
@@ -822,14 +932,6 @@ export class LeaveService {
     }
   }
 
-  private async getTenantAdminEmail(tenantId: string): Promise<string | null> {
-    const config = await this.prisma.tenantConfig.findUnique({
-      where: { tenantId },
-      select: { adminEmail: true },
-    });
-    return config?.adminEmail ?? null;
-  }
-
   async cancelRequest(tenantId: string, requestId: string, userId: string) {
     const empRecord = await this.prisma.employee.findFirst({
       where: { userId, tenantId },
@@ -865,11 +967,16 @@ export class LeaveService {
       },
     });
 
-    // Notify manager that the request was withdrawn (fire-and-forget)
-    void this.notifyManagerOfLeaveCancellation(
+    const notificationRecipients =
+      await this.resolveLeaveNotificationRecipients(tenantId, empRecord);
+
+    // Notify the manager and active leave approvers that the request was withdrawn.
+    void this.notifyStakeholdersOfLeaveCancellation(
       tenantId,
+      request.id,
       {
         id: empRecord.id,
+        userId: empRecord.userId,
         firstName: empRecord.firstName,
         lastName: empRecord.lastName,
         managerId: empRecord.managerId,
@@ -879,15 +986,18 @@ export class LeaveService {
       request.startDate.toISOString(),
       request.endDate.toISOString(),
       request.totalDays,
+      notificationRecipients,
     );
 
     return { message: 'Leave request cancelled' };
   }
 
-  private async notifyManagerOfLeaveCancellation(
+  private async notifyStakeholdersOfLeaveCancellation(
     tenantId: string,
+    requestId: string,
     employee: {
       id: string;
+      userId?: string | null;
       firstName: string;
       lastName: string;
       managerId: string | null;
@@ -897,54 +1007,50 @@ export class LeaveService {
     startDate: string,
     endDate: string,
     totalDays: number,
+    recipientsInput?: LeaveNotificationRecipients,
   ) {
     try {
-      let managerEmail: string | null = null;
+      const recipients =
+        recipientsInput ??
+        (await this.resolveLeaveNotificationRecipients(tenantId, employee));
 
-      if (employee.managerId) {
-        const manager = await this.prisma.employee.findUnique({
-          where: { id: employee.managerId },
-          select: { email: true },
-        });
-        managerEmail = manager?.email ?? null;
-      }
-
-      if (!managerEmail && employee.departmentId) {
-        const dept = await this.prisma.department.findUnique({
-          where: { id: employee.departmentId },
-          select: { managerId: true },
-        });
-        if (dept?.managerId) {
-          const deptManager = await this.prisma.employee.findUnique({
-            where: { id: dept.managerId },
-            select: { email: true },
-          });
-          managerEmail = deptManager?.email ?? null;
-        }
-      }
-
-      if (!managerEmail) {
-        managerEmail = await this.getTenantAdminEmail(tenantId);
-      }
-
-      if (!managerEmail) {
+      if (recipients.all.length === 0) {
         this.logger.warn(
-          `No manager or tenant admin found for tenant ${tenantId} — leave cancellation notification skipped`,
+          `No manager or leave approver recipients found for tenant ${tenantId} — leave cancellation notification skipped`,
         );
         return;
       }
 
-      await this.rabbitmq.notificationLeaveCancelled({
-        tenantId,
-        employeeId: employee.id,
-        employeeFirstName: employee.firstName,
-        employeeLastName: employee.lastName,
-        managerEmail,
-        leaveTypeName,
-        startDate,
-        endDate,
-        totalDays,
-      });
+      await Promise.all(
+        recipients.all.map((recipient) =>
+          this.rabbitmq.notificationLeaveCancelled({
+            tenantId,
+            employeeId: employee.id,
+            employeeFirstName: employee.firstName,
+            employeeLastName: employee.lastName,
+            managerEmail: recipient.email,
+            leaveTypeName,
+            startDate,
+            endDate,
+            totalDays,
+          }),
+        ),
+      );
+
+      const inAppRecipients = recipients.all.filter(
+        (recipient) => recipient.userId,
+      );
+      if (inAppRecipients.length > 0) {
+        await this.prisma.notification.createMany({
+          data: inAppRecipients.map((recipient) => ({
+            tenantId,
+            userId: recipient.userId!,
+            type: 'LEAVE_CANCELLED',
+            message: `${employee.firstName} ${employee.lastName} cancelled a ${leaveTypeName} request from ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')}.`,
+            link: this.buildLeaveRequestAppLink(requestId),
+          })),
+        });
+      }
     } catch (err) {
       this.logger.error(
         `Failed to emit leave cancelled notification for employee ${employee.id}`,

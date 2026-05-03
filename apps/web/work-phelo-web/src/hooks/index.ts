@@ -16,3 +16,4 @@ export * from './useBranches';
 export * from './useAppraisals';
 export * from './useRoles';
 export * from './useScheduling';
+export * from './useAssets';

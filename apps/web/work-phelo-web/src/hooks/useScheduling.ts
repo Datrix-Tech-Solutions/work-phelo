@@ -9,6 +9,7 @@ import {
   CreateShiftSwapPayload,
   CreateSwapRequestPayload,
   ShiftSwapRequest,
+  ShiftSwapStatus,
   RespondShiftSwapPayload,
   ReviewShiftSwapPayload,
 } from '@/types/scheduling';
@@ -198,12 +199,14 @@ export function useMySwapRequests() {
   });
 }
 
-export function usePendingManagerShiftSwaps() {
+export function usePendingManagerShiftSwaps(status?: ShiftSwapStatus) {
   return useQuery({
-    queryKey: ['shift-swaps', 'pending-manager'],
+    queryKey: ['shift-swaps', 'pending-manager', status ?? null],
     queryFn: async () => {
       try {
-        const res = await api.get<ShiftSwapRequest[]>('/hr/time/shift-swaps/pending-manager');
+        const res = await api.get<ShiftSwapRequest[]>('/hr/time/shift-swaps/pending-manager', {
+          params: status ? { status } : undefined,
+        });
         return res.data ?? [];
       } catch (err: unknown) {
         const status = (err as { response?: { status?: number } })?.response?.status;

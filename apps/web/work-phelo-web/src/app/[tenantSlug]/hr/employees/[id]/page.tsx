@@ -11,6 +11,7 @@ import {
   useUpdateEmployee,
   useResignationRecord,
 } from '@/hooks/hr/useEmployees';
+import { useAssignAsset, useAvailableAssets } from '@/hooks/useAssets';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -53,6 +54,7 @@ export default function EmployeeDetailPage({
   const { data: employee, isLoading, error } = useEmployee(id);
   const { data: resignationRecord } = useResignationRecord(id);
   const { data: allHrResult } = useEmployees();
+  const { data: availableAssets = [] } = useAvailableAssets();
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
   const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
@@ -65,6 +67,7 @@ export default function EmployeeDetailPage({
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { mutate: assignAsset } = useAssignAsset();
   const { mutate: assignPermissionSet, isPending: isAssigningPermissionSet } =
     useAssignPermissionSet();
   const { mutate: removePermissionSet, isPending: isRemovingPermissionSet } =
@@ -112,6 +115,21 @@ export default function EmployeeDetailPage({
       {
         onSuccess: () => toast.success('Permission set removed successfully'),
         onError: () => toast.error('Failed to remove permission set'),
+      },
+    );
+  };
+
+  const handleAssignAsset = (assetId: string) => {
+    assignAsset(
+      { assetId, employeeId: id },
+      {
+        onSuccess: () => {
+          toast.success('Asset assigned successfully');
+          setAssignAssetOpen(false);
+        },
+        onError: () => {
+          toast.error('Failed to assign asset');
+        },
       },
     );
   };
@@ -201,8 +219,14 @@ export default function EmployeeDetailPage({
         isOpen={assignAssetOpen}
         onClose={() => setAssignAssetOpen(false)}
         employeeName={name}
-        availableAssets={[]}
-        onAssign={() => {}}
+        availableAssets={availableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.name,
+          type: asset.type,
+          condition: asset.condition ?? 'GOOD',
+          assetNumber: asset.assetNumber ?? '—',
+        }))}
+        onAssign={handleAssignAsset}
       />
 
       {employee.userId && (
