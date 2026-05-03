@@ -85,6 +85,9 @@ export default function HRManagementLayout({ children }: { children: React.React
     {
       tabs: canAccessRoles ? [{ label: 'Roles & Permissions', href: `${base}/roles` }] : [],
     },
+    {
+      tabs: [{ label: 'Company Policies', href: `${base}/companyPolicies` }],
+    },
   ].filter((group) => group.tabs.length > 0);
 
   return (

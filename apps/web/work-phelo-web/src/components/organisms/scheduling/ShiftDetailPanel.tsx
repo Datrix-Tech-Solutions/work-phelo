@@ -13,6 +13,7 @@ interface Props {
   onClose: () => void;
   schedule: ShiftSchedule | null;
   cellDate?: string;
+  canManage?: boolean;
 }
 
 /* ── Helpers ── */
@@ -342,7 +343,13 @@ function EditForm({
 
 /* ── Public wrapper ── */
 
-export function ShiftDetailPanel({ isOpen, onClose, schedule, cellDate }: Props) {
+export function ShiftDetailPanel({
+  isOpen,
+  onClose,
+  schedule,
+  cellDate,
+  canManage = false,
+}: Props) {
   if (!isOpen) {
     return (
       <SidePanel isOpen={false} onClose={onClose} title="">
@@ -356,7 +363,7 @@ export function ShiftDetailPanel({ isOpen, onClose, schedule, cellDate }: Props)
   const today = toISODate(new Date());
   const isFuture = cellDate ? cellDate > today : false;
 
-  if (isFuture) {
+  if (canManage && isFuture) {
     return (
       <EditForm key={schedule.id} schedule={schedule} cellDate={cellDate ?? ''} onClose={onClose} />
     );

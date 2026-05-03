@@ -6,6 +6,10 @@ import { Search } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { AddAssetPanel } from '@/components/organisms/assets/AddAssetPanel';
+import { EditAssetPanel } from '@/components/organisms/assets/EditAssetPanel';
+import { AssignAssetPanel } from '@/components/organisms/assets/AssignAssetPanel';
+import { RetireAssetModal } from '@/components/organisms/assets/RetireAssetModal';
+import { DeleteAssetModal } from '@/components/organisms/assets/DeleteAssetModal';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/components/atoms/assetIcons';
 import { Asset } from '@/types/asset';
@@ -40,9 +44,23 @@ const DUMMY_ASSETS: Asset[] = [
   },
 ];
 
+// TODO: replace with useEmployees() hook when wiring up assign
+const DUMMY_EMPLOYEES = [
+  { id: 'e1', firstName: 'Kwame', lastName: 'Asante', jobTitle: 'Software Engineer' },
+  { id: 'e2', firstName: 'Ama', lastName: 'Boateng', jobTitle: 'Product Manager' },
+];
+
 interface Props {
   tenantSlug: string;
 }
+
+type PanelState =
+  | { type: 'none' }
+  | { type: 'add' }
+  | { type: 'edit'; asset: Asset }
+  | { type: 'assign'; asset: Asset }
+  | { type: 'retire'; asset: Asset }
+  | { type: 'delete'; asset: Asset };
 
 export function AssetsContent({ tenantSlug }: Props) {
   const router = useRouter();
@@ -54,7 +72,9 @@ export function AssetsContent({ tenantSlug }: Props) {
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [conditionFilter, setConditionFilter] = useState('');
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [panel, setPanel] = useState<PanelState>({ type: 'none' });
+
+  const closePanel = () => setPanel({ type: 'none' });
 
   const filtered = useMemo(() => {
     return DUMMY_ASSETS.filter((asset) => {
@@ -84,7 +104,7 @@ export function AssetsContent({ tenantSlug }: Props) {
             {filtered.length} asset{filtered.length !== 1 ? 's' : ''}
           </p>
         </div>
-        {canCreateAsset && <Button onClick={() => setPanelOpen(true)}>+ Add Asset</Button>}
+        {canCreateAsset && <Button onClick={() => setPanel({ type: 'add' })}>+ Add Asset</Button>}
       </div>
 
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
@@ -167,28 +187,74 @@ export function AssetsContent({ tenantSlug }: Props) {
             >
               <AssetCard
                 asset={asset}
-                onEdit={canUpdateAsset ? () => {} : undefined}
-                onAssign={canAssignAsset ? () => {} : undefined}
-                onUnassign={canAssignAsset ? () => {} : undefined}
-                onTransfer={canAssignAsset ? () => {} : undefined}
-                onDelete={canUpdateAsset ? () => {} : undefined}
+                onEdit={canUpdateAsset ? () => setPanel({ type: 'edit', asset }) : undefined}
+                onAssign={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
+                onUnassign={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
+                onTransfer={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
+                onRetire={canUpdateAsset ? () => setPanel({ type: 'retire', asset }) : undefined}
+                onDelete={canUpdateAsset ? () => setPanel({ type: 'delete', asset }) : undefined}
               />
             </div>
           ))}
         </div>
       )}
 
-      {canCreateAsset && (
-        <AddAssetPanel
-          isOpen={panelOpen}
-          onClose={() => setPanelOpen(false)}
-          onSubmit={(data) => {
-            // TODO: POST /hr/assets
-            console.log('Create asset:', data);
-            setPanelOpen(false);
-          }}
-        />
-      )}
+      {/* Retire button lives in detail page; expose it here via card context menu if needed */}
+
+      <AddAssetPanel
+        isOpen={panel.type === 'add'}
+        onClose={closePanel}
+        onSubmit={(data) => {
+          // TODO: POST /hr/assets
+          console.log('Create asset:', data);
+          closePanel();
+        }}
+      />
+
+      <EditAssetPanel
+        isOpen={panel.type === 'edit'}
+        onClose={closePanel}
+        asset={panel.type === 'edit' ? panel.asset : null}
+        onSubmit={(assetId, data) => {
+          // TODO: PATCH /hr/assets/:id
+          console.log('Edit asset:', assetId, data);
+          closePanel();
+        }}
+      />
+
+      <AssignAssetPanel
+        isOpen={panel.type === 'assign'}
+        onClose={closePanel}
+        asset={panel.type === 'assign' ? panel.asset : null}
+        employees={DUMMY_EMPLOYEES}
+        onAssign={(assetId, employeeId) => {
+          // TODO: POST /hr/assets/:id/assign
+          console.log('Assign asset:', assetId, 'to employee:', employeeId);
+          closePanel();
+        }}
+      />
+
+      <RetireAssetModal
+        isOpen={panel.type === 'retire'}
+        onClose={closePanel}
+        asset={panel.type === 'retire' ? panel.asset : null}
+        onConfirm={(assetId) => {
+          // TODO: PATCH /hr/assets/:id/retire
+          console.log('Retire asset:', assetId);
+          closePanel();
+        }}
+      />
+
+      <DeleteAssetModal
+        isOpen={panel.type === 'delete'}
+        onClose={closePanel}
+        asset={panel.type === 'delete' ? panel.asset : null}
+        onConfirm={(assetId) => {
+          // TODO: DELETE /hr/assets/:id
+          console.log('Delete asset:', assetId);
+          closePanel();
+        }}
+      />
     </>
   );
 }

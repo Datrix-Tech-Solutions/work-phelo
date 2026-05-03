@@ -138,7 +138,7 @@ export function OffboardEmployeePanel({
         await initiate(buildDto(values));
         await syncChecklist();
       }
-      toast.success('Offboarding saved as draft');
+      toast.success('Off boarding saved as draft');
     } catch (err) {
       toast.error(extractError(err, 'Failed to save draft'));
     }
@@ -151,10 +151,10 @@ export function OffboardEmployeePanel({
         await syncChecklist();
       }
       await complete();
-      toast.success('Employee offboarded successfully');
+      toast.success('Employee off boarded successfully');
       onClose();
     } catch (err) {
-      toast.error(extractError(err, 'Failed to offboard employee'));
+      toast.error(extractError(err, 'Failed to off board employee'));
     }
   });
 
@@ -185,7 +185,7 @@ export function OffboardEmployeePanel({
             loadingText="Offboarding…"
             disabled={isBusy || (!!record && !allDone)}
           >
-            Offboard
+            Off board
           </Button>
         </div>
       }

@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, BadgeCheck } from 'lucide-react';
 import { DetailField } from '../shared/DetailField';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import type { Employee } from '@/types/hr';
@@ -32,14 +32,27 @@ export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCar
       )}
 
       <div className="text-left">
-        <p className="text-base font-bold text-gray-900">{name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-base font-bold text-gray-900">{name}</p>
+          {!isPendingInvite && <BadgeCheck className="w-4.5 h-4.5 text-brand shrink-0" />}
+        </div>
         {employee?.jobTitle && <p className="text-sm text-gray-400 mt-0.5">{employee.jobTitle}</p>}
       </div>
 
       {/* Status badges */}
       <div className="flex flex-wrap gap-2">
-        <StatusBadge status={employee.employmentStatus} />
-        <StatusBadge status={isPendingInvite ? 'PENDING' : 'ACTIVE'} />
+        {employee.employmentStatus === 'ACTIVE' ? (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+            Permanent Staff
+          </span>
+        ) : (
+          <StatusBadge status={employee.employmentStatus} />
+        )}
+        {isPendingInvite && (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+            Pending Invite
+          </span>
+        )}
       </div>
 
       <div className="w-full border-t border-gray-100" />
