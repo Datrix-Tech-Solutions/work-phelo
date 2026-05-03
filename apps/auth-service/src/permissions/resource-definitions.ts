@@ -33,6 +33,7 @@ export const RESOURCES = [
   { name: 'schedules', module: 'HR', description: 'Shift schedules' },
   { name: 'payroll', module: 'HR', description: 'Payroll runs and payslips' },
   { name: 'appraisals', module: 'HR', description: 'Performance appraisals' },
+  { name: 'assets', module: 'HR', description: 'Company asset management' },
   { name: 'documents', module: 'HR', description: 'Employee documents' },
   { name: 'allowances', module: 'HR', description: 'Employee allowances' },
 

@@ -11,16 +11,27 @@ export class DashboardService {
     firstName: string,
     tenantName: string,
   ) {
-    const [totalEmployees, activeEmployees, pendingLeaveRequests] =
-      await Promise.all([
-        this.prisma.employee.count({ where: { tenantId } }),
-        this.prisma.employee.count({
-          where: { tenantId, employmentStatus: 'ACTIVE' },
-        }),
-        this.prisma.leaveRequest.count({
-          where: { tenantId, status: 'PENDING' },
-        }),
-      ]);
+    const [
+      totalEmployees,
+      activeEmployees,
+      pendingLeaveRequests,
+      assignedAssetsCount,
+    ] = await Promise.all([
+      this.prisma.employee.count({ where: { tenantId } }),
+      this.prisma.employee.count({
+        where: { tenantId, employmentStatus: 'ACTIVE' },
+      }),
+      this.prisma.leaveRequest.count({
+        where: { tenantId, status: 'PENDING' },
+      }),
+      this.prisma.asset.count({
+        where: {
+          tenantId,
+          isActive: true,
+          status: 'ASSIGNED',
+        },
+      }),
+    ]);
 
     return {
       adminFirstName: firstName,
@@ -28,12 +39,12 @@ export class DashboardService {
       totalEmployees,
       activeEmployees,
       pendingLeaveRequests,
-      assignedAssetsCount: 0, // Assets module not yet implemented
+      assignedAssetsCount,
       hasEmployees: totalEmployees > 0,
       modules: {
         hr: { enabled: true, locked: false },
         payroll: { enabled: true, locked: false },
-        assets: { enabled: false, locked: true },
+        assets: { enabled: true, locked: false },
         recruitment: { enabled: false, locked: true },
       },
     };

@@ -171,6 +171,38 @@ enum AllowanceType {
   @@schema("hr")
 }
 
+enum AssetType {
+  LAPTOP
+  PHONE
+  TABLET
+  PRINTER
+  MONITOR
+  VEHICLE
+  FURNITURE
+  SOFTWARE_LICENSE
+  OTHER
+
+  @@schema("hr")
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ASSIGNED
+  MAINTENANCE
+  RETIRED
+
+  @@schema("hr")
+}
+
+enum AssetCondition {
+  NEW
+  GOOD
+  FAIR
+  POOR
+
+  @@schema("hr")
+}
+
 // ── Branch ───────────────────────────────────────────────────────────────
 
 model Branch {
@@ -281,11 +313,60 @@ model Employee {
   managedAppraisals Appraisal[]       @relation("AppraisalManager")
   documents         EmployeeDocument[]
   allowances        EmployeeAllowance[]
+  assignedAssets    Asset[]           @relation("AssignedAssets")
+  assetAssignments  AssetAssignment[] @relation("EmployeeAssetAssignments")
   offboarding       OffboardingRecord?
   resignation       ResignationRecord?
 
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, email])
+  @@schema("hr")
+}
+
+// ── Assets ────────────────────────────────────────────────────────────────
+
+model Asset {
+  id                 String          @id @default(uuid())
+  tenantId           String
+  assetNumber        String
+  name               String
+  type               AssetType
+  serialNumber       String?
+  purchaseDate       DateTime?
+  purchaseCost       Decimal?        @db.Decimal(15, 2)
+  currency           String?
+  condition          AssetCondition?
+  notes              String?
+  status             AssetStatus     @default(AVAILABLE)
+  assignedEmployeeId String?
+  assignedAt         DateTime?
+  isActive           Boolean         @default(true)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  assignedEmployee   Employee?        @relation("AssignedAssets", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  assignments        AssetAssignment[]
+
+  @@unique([tenantId, assetNumber])
+  @@index([tenantId, status])
+  @@index([tenantId, assignedEmployeeId])
+  @@schema("hr")
+}
+
+model AssetAssignment {
+  id         String   @id @default(uuid())
+  tenantId   String
+  assetId    String
+  employeeId String
+  assignedAt DateTime @default(now())
+  returnedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employee   Employee @relation("EmployeeAssetAssignments", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId, returnedAt])
+  @@index([tenantId, assetId, returnedAt])
   @@schema("hr")
 }
 

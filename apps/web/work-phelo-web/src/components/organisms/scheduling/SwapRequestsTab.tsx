@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { type ChangeEvent, useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { SwapRequestCard, SwapRequest } from '@/components/molecules/scheduling/SwapRequestCard';
 import { usePendingManagerShiftSwaps, useReviewShiftSwap } from '@/hooks/useScheduling';
 import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { ShiftSwapRequest, ShiftSwapStatus } from '@/types/scheduling';
+import { ShiftSwapRequest } from '@/types/scheduling';
 
 const STATUS_FILTERS = [
   { key: 'PENDING_MANAGER', label: 'Pending' },
@@ -235,7 +235,7 @@ export function SwapRequestsTab() {
             type="textarea"
             label="Reason"
             value={rejectReason}
-            onChange={(event) => {
+            onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
               setRejectReason(event.target.value);
               if (rejectError) setRejectError(null);
             }}

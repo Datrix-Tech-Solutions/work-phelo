@@ -96,6 +96,15 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'schedules', actions: ['APPROVE'] },
   ],
 
+  // ── Assets ────────────────────────────────────────────────────────────────
+  [Permission.MANAGE_ASSETS]: [
+    { resource: 'assets', actions: ['VIEW', 'CREATE', 'EDIT', 'DELETE'] },
+  ],
+  [Permission.READ_ASSETS]: [{ resource: 'assets', actions: ['VIEW'] }],
+  [Permission.ASSIGN_ASSET]: [
+    { resource: 'assets', actions: ['VIEW', 'ASSIGN'] },
+  ],
+
   // ── Payroll ───────────────────────────────────────────────────────────────
   [Permission.READ_PAYROLL]: [{ resource: 'payroll', actions: ['VIEW'] }],
   [Permission.RUN_PAYROLL]: [{ resource: 'payroll', actions: ['RUN'] }],

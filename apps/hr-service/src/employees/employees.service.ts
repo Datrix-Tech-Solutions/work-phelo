@@ -81,6 +81,17 @@ export class EmployeesService {
     );
   }
 
+  private mapEmployeeAssets<T extends { assignedAssets?: unknown[] }>(
+    employee: T,
+  ) {
+    const { assignedAssets, ...rest } = employee;
+
+    return {
+      ...rest,
+      assets: assignedAssets ?? [],
+    };
+  }
+
   async create(tenantId: string, dto: CreateEmployeeDto) {
     // Enforce minimum one department before adding employees
     const deptCount = await this.prisma.department.count({
@@ -275,6 +286,16 @@ export class EmployeesService {
         branch: true,
         allowances: true,
         documents: true,
+        assignedAssets: {
+          where: { isActive: true, status: 'ASSIGNED' },
+          orderBy: { assignedAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            assignedAt: true,
+          },
+        },
         leaveBalances: { include: { leaveType: true } },
         offboarding: true,
         resignation: true,
@@ -283,16 +304,16 @@ export class EmployeesService {
     if (!employee) throw new NotFoundException('Employee not found');
 
     if (!actor) {
-      return employee;
+      return this.mapEmployeeAssets(employee);
     }
 
     if (isCompanyAdminUser(actor)) {
-      return employee;
+      return this.mapEmployeeAssets(employee);
     }
 
     if (isEmployeeSelfServiceUser(actor)) {
       if (hasPermissionRule(actor, 'employees:VIEW')) {
-        return employee;
+        return this.mapEmployeeAssets(employee);
       }
 
       const actorEmployee = await getActorEmployee(
@@ -301,20 +322,34 @@ export class EmployeesService {
         actor.id,
       );
       assertHrAccess(employee.id === actorEmployee.id);
-      return employee;
+      return this.mapEmployeeAssets(employee);
     }
 
     assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
-    return employee;
+    return this.mapEmployeeAssets(employee);
   }
 
   async findByUserId(tenantId: string, userId: string) {
     const employee = await this.prisma.employee.findFirst({
       where: { userId, tenantId },
-      include: { department: true, allowances: true, resignation: true },
+      include: {
+        department: true,
+        allowances: true,
+        resignation: true,
+        assignedAssets: {
+          where: { isActive: true, status: 'ASSIGNED' },
+          orderBy: { assignedAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            assignedAt: true,
+          },
+        },
+      },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
-    return employee;
+    return this.mapEmployeeAssets(employee);
   }
 
   async update(

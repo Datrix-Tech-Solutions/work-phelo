@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
@@ -12,9 +11,20 @@ import { RetireAssetModal } from '@/components/organisms/assets/RetireAssetModal
 import { DeleteAssetModal } from '@/components/organisms/assets/DeleteAssetModal';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/components/atoms/assetIcons';
-import { Asset } from '@/types/asset';
+import { Asset, CreateAssetPayload, UpdateAssetPayload } from '@/types/asset';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import {
+  useAssets,
+  useCreateAsset,
+  useDeleteAsset,
+  useAssignAsset,
+  useRetireAsset,
+  useUnassignAsset,
+  useUpdateAsset,
+} from '@/hooks/useAssets';
+import { useEmployees } from '@/hooks/hr/useEmployees';
+import { useToast } from '@/hooks/useToast';
 
 const TYPE_LABELS: Record<AssetType, string> = {
   LAPTOP: 'Laptop',
@@ -28,32 +38,6 @@ const TYPE_LABELS: Record<AssetType, string> = {
   OTHER: 'Other',
 };
 
-// TODO: replace with useAssets() hook when endpoint is ready
-const DUMMY_ASSETS: Asset[] = [
-  {
-    id: '1',
-    assetNumber: 'PHN-0002',
-    name: 'iPhone 15 Pro',
-    type: 'PHONE',
-    serialNumber: 'F4GT9XXXXXAB',
-    purchaseDate: '2024-01-20',
-    purchaseCost: 3200,
-    currency: 'GHS',
-    condition: 'NEW',
-    status: 'AVAILABLE',
-  },
-];
-
-// TODO: replace with useEmployees() hook when wiring up assign
-const DUMMY_EMPLOYEES = [
-  { id: 'e1', firstName: 'Kwame', lastName: 'Asante', jobTitle: 'Software Engineer' },
-  { id: 'e2', firstName: 'Ama', lastName: 'Boateng', jobTitle: 'Product Manager' },
-];
-
-interface Props {
-  tenantSlug: string;
-}
-
 type PanelState =
   | { type: 'none' }
   | { type: 'add' }
@@ -62,11 +46,33 @@ type PanelState =
   | { type: 'retire'; asset: Asset }
   | { type: 'delete'; asset: Asset };
 
-export function AssetsContent({ tenantSlug }: Props) {
-  const router = useRouter();
+type AssetForm = {
+  name: string;
+  type: string;
+  serialNumber?: string;
+  purchaseDate?: string;
+  purchaseCost?: string;
+  currency: string;
+  condition?: string;
+  notes?: string;
+};
+
+export function AssetsContent() {
   const canCreateAsset = usePermission(Permission.MANAGE_ASSETS);
   const canUpdateAsset = usePermission(Permission.MANAGE_ASSETS);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const toast = useToast();
+  const { data: assets = [], isLoading } = useAssets();
+  const { data: employeesResult } = useEmployees({ limit: 200 });
+  const employees = (employeesResult?.data ?? []).filter((employee) =>
+    ['ACTIVE', 'PROBATION'].includes(employee.employmentStatus),
+  );
+  const { mutate: createAsset } = useCreateAsset();
+  const { mutate: updateAsset } = useUpdateAsset();
+  const { mutate: assignAsset } = useAssignAsset();
+  const { mutate: unassignAsset } = useUnassignAsset();
+  const { mutate: retireAsset, isPending: isRetiringAsset } = useRetireAsset();
+  const { mutate: deleteAsset, isPending: isDeletingAsset } = useDeleteAsset();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -76,8 +82,38 @@ export function AssetsContent({ tenantSlug }: Props) {
 
   const closePanel = () => setPanel({ type: 'none' });
 
+  const normalizeAssetForm = (data: AssetForm): CreateAssetPayload => {
+    const payload: CreateAssetPayload = {
+      name: data.name.trim(),
+      type: data.type as AssetType,
+      currency: data.currency?.trim() || 'GHS',
+    };
+
+    if (data.serialNumber?.trim()) {
+      payload.serialNumber = data.serialNumber.trim();
+    }
+
+    if (data.purchaseDate) {
+      payload.purchaseDate = data.purchaseDate;
+    }
+
+    if (data.purchaseCost?.trim()) {
+      payload.purchaseCost = Number(data.purchaseCost);
+    }
+
+    if (data.condition) {
+      payload.condition = data.condition as NonNullable<UpdateAssetPayload['condition']>;
+    }
+
+    if (data.notes?.trim()) {
+      payload.notes = data.notes.trim();
+    }
+
+    return payload;
+  };
+
   const filtered = useMemo(() => {
-    return DUMMY_ASSETS.filter((asset) => {
+    return assets.filter((asset) => {
       if (statusFilter && asset.status !== statusFilter) return false;
       if (typeFilter && asset.type !== typeFilter) return false;
       if (conditionFilter && asset.condition !== conditionFilter) return false;
@@ -91,7 +127,7 @@ export function AssetsContent({ tenantSlug }: Props) {
       }
       return true;
     });
-  }, [search, statusFilter, typeFilter, conditionFilter]);
+  }, [assets, search, statusFilter, typeFilter, conditionFilter]);
 
   const hasFilters = !!(search || statusFilter || typeFilter || conditionFilter);
 
@@ -170,7 +206,11 @@ export function AssetsContent({ tenantSlug }: Props) {
         )}
       </div>
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">
+          <p className="text-sm font-medium text-gray-900">Loading assets...</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">
           <p className="text-sm font-medium text-gray-900">No assets found</p>
           <p className="text-xs text-gray-400">
@@ -180,16 +220,30 @@ export function AssetsContent({ tenantSlug }: Props) {
       ) : (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto items-start">
           {filtered.map((asset) => (
-            <div
-              key={asset.id}
-              onClick={() => router.push(`/${tenantSlug}/hr/assets/${asset.id}`)}
-              className="cursor-pointer"
-            >
+            <div key={asset.id}>
               <AssetCard
                 asset={asset}
                 onEdit={canUpdateAsset ? () => setPanel({ type: 'edit', asset }) : undefined}
                 onAssign={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
-                onUnassign={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
+                onUnassign={
+                  canAssignAsset
+                    ? () => {
+                        const confirmed = window.confirm(
+                          `Unassign ${asset.name} from ${asset.assignedEmployeeName ?? 'the current employee'}?`,
+                        );
+                        if (!confirmed) return;
+
+                        unassignAsset(asset.id, {
+                          onSuccess: () => {
+                            toast.success('Asset unassigned successfully');
+                          },
+                          onError: () => {
+                            toast.error('Failed to unassign asset');
+                          },
+                        });
+                      }
+                    : undefined
+                }
                 onTransfer={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
                 onRetire={canUpdateAsset ? () => setPanel({ type: 'retire', asset }) : undefined}
                 onDelete={canUpdateAsset ? () => setPanel({ type: 'delete', asset }) : undefined}
@@ -205,9 +259,15 @@ export function AssetsContent({ tenantSlug }: Props) {
         isOpen={panel.type === 'add'}
         onClose={closePanel}
         onSubmit={(data) => {
-          // TODO: POST /hr/assets
-          console.log('Create asset:', data);
-          closePanel();
+          createAsset(normalizeAssetForm(data), {
+            onSuccess: () => {
+              toast.success('Asset created successfully');
+              closePanel();
+            },
+            onError: () => {
+              toast.error('Failed to create asset');
+            },
+          });
         }}
       />
 
@@ -216,9 +276,18 @@ export function AssetsContent({ tenantSlug }: Props) {
         onClose={closePanel}
         asset={panel.type === 'edit' ? panel.asset : null}
         onSubmit={(assetId, data) => {
-          // TODO: PATCH /hr/assets/:id
-          console.log('Edit asset:', assetId, data);
-          closePanel();
+          updateAsset(
+            { id: assetId, ...normalizeAssetForm(data) },
+            {
+              onSuccess: () => {
+                toast.success('Asset updated successfully');
+                closePanel();
+              },
+              onError: () => {
+                toast.error('Failed to update asset');
+              },
+            },
+          );
         }}
       />
 
@@ -226,11 +295,20 @@ export function AssetsContent({ tenantSlug }: Props) {
         isOpen={panel.type === 'assign'}
         onClose={closePanel}
         asset={panel.type === 'assign' ? panel.asset : null}
-        employees={DUMMY_EMPLOYEES}
+        employees={employees}
         onAssign={(assetId, employeeId) => {
-          // TODO: POST /hr/assets/:id/assign
-          console.log('Assign asset:', assetId, 'to employee:', employeeId);
-          closePanel();
+          assignAsset(
+            { assetId, employeeId },
+            {
+              onSuccess: () => {
+                toast.success('Asset assigned successfully');
+                closePanel();
+              },
+              onError: () => {
+                toast.error('Failed to assign asset');
+              },
+            },
+          );
         }}
       />
 
@@ -238,10 +316,17 @@ export function AssetsContent({ tenantSlug }: Props) {
         isOpen={panel.type === 'retire'}
         onClose={closePanel}
         asset={panel.type === 'retire' ? panel.asset : null}
+        isLoading={isRetiringAsset}
         onConfirm={(assetId) => {
-          // TODO: PATCH /hr/assets/:id/retire
-          console.log('Retire asset:', assetId);
-          closePanel();
+          retireAsset(assetId, {
+            onSuccess: () => {
+              toast.success('Asset retired successfully');
+              closePanel();
+            },
+            onError: () => {
+              toast.error('Failed to retire asset');
+            },
+          });
         }}
       />
 
@@ -249,10 +334,17 @@ export function AssetsContent({ tenantSlug }: Props) {
         isOpen={panel.type === 'delete'}
         onClose={closePanel}
         asset={panel.type === 'delete' ? panel.asset : null}
+        isLoading={isDeletingAsset}
         onConfirm={(assetId) => {
-          // TODO: DELETE /hr/assets/:id
-          console.log('Delete asset:', assetId);
-          closePanel();
+          deleteAsset(assetId, {
+            onSuccess: () => {
+              toast.success('Asset deleted successfully');
+              closePanel();
+            },
+            onError: () => {
+              toast.error('Failed to delete asset');
+            },
+          });
         }}
       />
     </>

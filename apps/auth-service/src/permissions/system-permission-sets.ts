@@ -30,6 +30,7 @@ const EMPLOYEE_SET: PermissionResourceMap = {
   attendance: [PermissionAction.CREATE],
   'time-corrections': [PermissionAction.CREATE],
   schedules: [PermissionAction.VIEW],
+  assets: [PermissionAction.VIEW],
   payroll: [PermissionAction.VIEW],
   appraisals: [PermissionAction.VIEW, PermissionAction.EDIT],
 };

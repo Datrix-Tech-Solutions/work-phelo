@@ -13,6 +13,7 @@ const EMPLOYEE_SET: Record<string, string[]> = {
   leave: ['VIEW', 'CREATE'],
   attendance: ['CREATE'],
   'time-corrections': ['CREATE'],
+  assets: ['VIEW'],
   projects: ['VIEW'],
   payroll: ['VIEW'],
   appraisals: ['VIEW', 'EDIT'],

@@ -244,6 +244,7 @@ export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
   'resignations',
   'departments',
   'branches',
+  'assets',
   'documents',
   'leave',
   'attendance',
