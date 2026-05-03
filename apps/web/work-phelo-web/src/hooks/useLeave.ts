@@ -55,7 +55,7 @@ interface RawCreateLeaveRequestResponse {
   message?: string;
   notificationSummary?: {
     managerNotified: boolean;
-    adminNotified: boolean;
+    approverCount?: number;
   };
 }
 

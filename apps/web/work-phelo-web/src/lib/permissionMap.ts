@@ -59,6 +59,7 @@ export enum Permission {
   APPROVE_TIMESHEET = 'approve:timesheet',
   READ_SCHEDULES = 'read:schedules',
   MANAGE_SCHEDULES = 'manage:schedules',
+  APPROVE_SHIFT_SWAP = 'approve:shift_swap',
 
   // ── Payroll ───────────────────────────────────────────────────────────────
   READ_PAYROLL = 'read:payroll',
@@ -158,6 +159,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.APPROVE_TIMESHEET]: ['timesheets:APPROVE'],
   [Permission.READ_SCHEDULES]: ['schedules:VIEW'],
   [Permission.MANAGE_SCHEDULES]: ['schedules:CREATE', 'schedules:EDIT'],
+  [Permission.APPROVE_SHIFT_SWAP]: ['schedules:APPROVE'],
 
   // Payroll
   [Permission.READ_PAYROLL]: ['payroll:VIEW'],
@@ -220,7 +222,7 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   attendance: ['VIEW', 'CREATE'],
   'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
   timesheets: ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
   projects: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
   payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
   appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],

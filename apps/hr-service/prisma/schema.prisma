@@ -493,6 +493,8 @@ model LeaveRequest {
 
 // ── Time Management ───────────────────────────────────────────────────────
 
+/// Manual SQL migration adds a partial unique index so only one open
+/// clock record can exist per employee per day.
 model ClockRecord {
   id          String    @id @default(uuid())
   tenantId    String

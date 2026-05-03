@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { RequestUser } from '@work-phelo/types';
+import { PermissionRecipient, RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -39,6 +39,20 @@ import {
 } from './resignation-notification.processor';
 
 const RESIGNATION_NOTIFY_DELAY_MS = 30 * 60 * 1000;
+
+type ResignationNotificationRecipient = {
+  userId: string | null;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  source: 'MANAGER' | 'APPROVER';
+};
+
+type ResignationNotificationRecipients = {
+  manager: ResignationNotificationRecipient | null;
+  approvers: ResignationNotificationRecipient[];
+  all: ResignationNotificationRecipient[];
+};
 
 @Injectable()
 export class EmployeesService {
@@ -432,21 +446,158 @@ export class EmployeesService {
     const config = await this.prisma.tenantConfig.findUnique({
       where: { tenantId },
       select: {
-        adminEmail: true,
-        adminUserId: true,
         resignationNoticePeriodDays: true,
       },
     });
 
     return {
-      adminEmail: config?.adminEmail || null,
-      adminUserId: config?.adminUserId || null,
       resignationNoticePeriodDays: config?.resignationNoticePeriodDays ?? 30,
     };
   }
 
   private buildResignationDetailLink(tenantSlug: string, employeeId: string) {
     return `/${tenantSlug}/hr/employees/${employeeId}?tab=resignation`;
+  }
+
+  private toResignationNotificationRecipient(
+    recipient: PermissionRecipient,
+    source: ResignationNotificationRecipient['source'],
+  ): ResignationNotificationRecipient {
+    return {
+      userId: recipient.userId,
+      email: recipient.email,
+      firstName: recipient.firstName,
+      lastName: recipient.lastName,
+      source,
+    };
+  }
+
+  private dedupeResignationRecipients(
+    recipients: ResignationNotificationRecipient[],
+  ): ResignationNotificationRecipient[] {
+    const unique = new Map<string, ResignationNotificationRecipient>();
+
+    for (const recipient of recipients) {
+      const key = recipient.userId || recipient.email.toLowerCase();
+      if (!unique.has(key)) {
+        unique.set(key, recipient);
+      }
+    }
+
+    return [...unique.values()];
+  }
+
+  private async resolveResignationManagerRecipient(
+    tenantId: string,
+    employee: {
+      managerId: string | null;
+      departmentId: string | null;
+    },
+  ): Promise<ResignationNotificationRecipient | null> {
+    let manager: {
+      userId: string | null;
+      email: string;
+      firstName: string;
+      lastName: string;
+    } | null = null;
+
+    if (employee.managerId) {
+      manager = await this.prisma.employee.findFirst({
+        where: { id: employee.managerId, tenantId },
+        select: {
+          userId: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+    }
+
+    if (!manager && employee.departmentId) {
+      const department = await this.prisma.department.findFirst({
+        where: { id: employee.departmentId, tenantId },
+        select: { managerId: true },
+      });
+
+      if (department?.managerId) {
+        manager = await this.prisma.employee.findFirst({
+          where: { id: department.managerId, tenantId },
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        });
+      }
+    }
+
+    if (!manager?.email) {
+      return null;
+    }
+
+    return {
+      userId: manager.userId,
+      email: manager.email,
+      firstName: manager.firstName,
+      lastName: manager.lastName,
+      source: 'MANAGER',
+    };
+  }
+
+  async resolveResignationNotificationRecipients(
+    tenantId: string,
+    employeeId: string,
+  ): Promise<ResignationNotificationRecipients> {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: {
+        id: true,
+        userId: true,
+        firstName: true,
+        lastName: true,
+        managerId: true,
+        departmentId: true,
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const [manager, permissionRecipients] = await Promise.all([
+      this.resolveResignationManagerRecipient(tenantId, employee),
+      this.rabbitmq.authResolvePermissionRecipients({
+        tenantId,
+        resource: 'employees',
+        action: 'DELETE',
+        activeOnly: true,
+      }),
+    ]);
+
+    const approvers = this.dedupeResignationRecipients(
+      permissionRecipients
+        .filter((recipient) => recipient.email)
+        .filter((recipient) => recipient.userId !== employee.userId)
+        .map((recipient) =>
+          this.toResignationNotificationRecipient(recipient, 'APPROVER'),
+        ),
+    ).filter(
+      (recipient) =>
+        !manager ||
+        (recipient.userId && manager.userId
+          ? recipient.userId !== manager.userId
+          : recipient.email.toLowerCase() !== manager.email.toLowerCase()),
+    );
+
+    const all = this.dedupeResignationRecipients(
+      [manager, ...approvers].filter(
+        (recipient): recipient is ResignationNotificationRecipient =>
+          recipient !== null,
+      ),
+    );
+
+    return { manager, approvers, all };
   }
 
   async submitResignation(
@@ -557,15 +708,13 @@ export class EmployeesService {
         reason: reasonLabel,
         additionalNotes: dto.additionalNotes?.trim() || undefined,
         detailLink,
-        adminEmail: config.adminEmail,
-        adminUserId: config.adminUserId,
       },
       { delay: RESIGNATION_NOTIFY_DELAY_MS },
     );
 
     return {
       message:
-        'Your resignation has been submitted. You have 30 minutes to withdraw it if you change your mind. Your HR administrator will be notified after that.',
+        'Your resignation has been submitted. You have 30 minutes to withdraw it if you change your mind. Your manager and relevant offboarding approvers will be notified after that.',
       resignation,
     };
   }

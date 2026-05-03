@@ -76,6 +76,9 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.MANAGE_ROLES]: [
     { resource: 'permission-sets', actions: [PermissionAction.EDIT] },
   ],
+  [Permission.APPROVE_SHIFT_SWAP]: [
+    { resource: 'schedules', actions: [PermissionAction.APPROVE] },
+  ],
 };
 
 @Injectable()

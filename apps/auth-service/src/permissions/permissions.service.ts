@@ -352,6 +352,80 @@ export class PermissionsService {
     }));
   }
 
+  async getPermissionRecipients(
+    tenantId: string,
+    resourceName: string,
+    action: PermissionAction,
+    options?: {
+      includeTenantAdmins?: boolean;
+      activeOnly?: boolean;
+    },
+  ) {
+    const includeTenantAdmins = options?.includeTenantAdmins ?? false;
+    const activeOnly = options?.activeOnly ?? true;
+    const now = new Date();
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        ...(activeOnly ? { status: 'ACTIVE' } : {}),
+        ...(includeTenantAdmins ? {} : { role: 'EMPLOYEE' }),
+        OR: [
+          {
+            userPermissions: {
+              some: {
+                isActive: true,
+                OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                action,
+                resource: {
+                  name: resourceName,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          {
+            permissionSets: {
+              some: {
+                permissionSet: {
+                  isActive: true,
+                  resources: {
+                    some: {
+                      action,
+                      resource: {
+                        name: resourceName,
+                        isActive: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          ...(includeTenantAdmins ? [{ role: 'TENANT_ADMIN' as const }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+
+    return users.map((user) => ({
+      userId: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      status: user.status,
+    }));
+  }
+
   async assignPermissionSet(
     grantedBy: string,
     tenantId: string,

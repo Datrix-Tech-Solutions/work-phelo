@@ -92,6 +92,9 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.MANAGE_SCHEDULES]: [
     { resource: 'schedules', actions: ['CREATE', 'EDIT'] },
   ],
+  [Permission.APPROVE_SHIFT_SWAP]: [
+    { resource: 'schedules', actions: ['APPROVE'] },
+  ],
 
   // ── Payroll ───────────────────────────────────────────────────────────────
   [Permission.READ_PAYROLL]: [{ resource: 'payroll', actions: ['VIEW'] }],

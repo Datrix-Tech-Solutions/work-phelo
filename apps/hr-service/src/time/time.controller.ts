@@ -325,16 +325,26 @@ export class TimeController {
 
   @Get('shift-swaps/pending-manager')
   @ApiOperation({
-    summary: 'List shift swap requests awaiting the current manager approval',
+    summary:
+      'List shift swap requests for the current approver or tenant admin',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    description: 'Optional shift swap status filter',
   })
   @ApiResponse({
     status: 200,
-    description: 'Pending manager shift swaps retrieved',
+    description: 'Approver shift swaps retrieved',
   })
-  getPendingManagerShiftSwaps(@Req() req: any) {
+  getPendingManagerShiftSwaps(
+    @Query('status') status: string,
+    @Req() req: any,
+  ) {
     return this.timeService.getPendingManagerShiftSwaps(
       req.user.tenantId,
       req.user as RequestUser,
+      status,
     );
   }
 
@@ -372,13 +382,13 @@ export class TimeController {
 
   @Post('shift-swaps/:id/manager-decision')
   @ApiOperation({
-    summary: 'Approve or reject a shift swap request as the manager',
+    summary: 'Approve or reject a shift swap request as an approver',
   })
   @ApiParam({ name: 'id', description: 'Shift swap request UUID' })
   @ApiBody({ type: ReviewShiftSwapDto })
   @ApiResponse({
     status: 200,
-    description: 'Shift swap request reviewed by manager',
+    description: 'Shift swap request reviewed by approver',
   })
   reviewShiftSwap(
     @Param('id') id: string,

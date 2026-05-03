@@ -88,6 +88,7 @@ const COMPANY_ADMIN_SET: PermissionResourceMap = {
     PermissionAction.CREATE,
     PermissionAction.EDIT,
     PermissionAction.DELETE,
+    PermissionAction.APPROVE,
   ],
   payroll: [
     PermissionAction.VIEW,

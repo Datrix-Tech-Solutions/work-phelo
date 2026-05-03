@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Req,
   HttpCode,
@@ -18,6 +19,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { PermissionsService } from './permissions.service';
 import {
@@ -26,6 +28,7 @@ import {
   AssignPermissionSetDto,
   CreatePermissionSetDto,
   UpdatePermissionSetDto,
+  PermissionAction,
 } from './dto/grant-permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -64,6 +67,49 @@ export class PermissionsController {
     return this.permissionsService.getUserPermissions(
       req.user.tenantId,
       userId,
+    );
+  }
+
+  @Get('recipients')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
+  @ApiOperation({
+    summary:
+      'List active users in a tenant who effectively hold a resource-action permission',
+  })
+  @ApiQuery({ name: 'resource', required: true, example: 'leave' })
+  @ApiQuery({
+    name: 'action',
+    required: true,
+    enum: PermissionAction,
+    example: PermissionAction.APPROVE,
+  })
+  @ApiQuery({
+    name: 'includeTenantAdmins',
+    required: false,
+    type: Boolean,
+    example: false,
+  })
+  @ApiQuery({
+    name: 'activeOnly',
+    required: false,
+    type: Boolean,
+    example: true,
+  })
+  getPermissionRecipients(
+    @Query('resource') resource: string,
+    @Query('action') action: PermissionAction,
+    @Query('includeTenantAdmins') includeTenantAdmins: string,
+    @Query('activeOnly') activeOnly: string,
+    @Req() req: any,
+  ) {
+    return this.permissionsService.getPermissionRecipients(
+      req.user.tenantId,
+      resource,
+      action,
+      {
+        includeTenantAdmins: includeTenantAdmins === 'true',
+        activeOnly: activeOnly !== 'false',
+      },
     );
   }
 

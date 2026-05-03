@@ -31,7 +31,7 @@ const COMPANY_ADMIN_SET: Record<string, string[]> = {
   attendance: ['VIEW', 'CREATE'],
   'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
   timesheets: ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
   projects: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
   payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
   assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],

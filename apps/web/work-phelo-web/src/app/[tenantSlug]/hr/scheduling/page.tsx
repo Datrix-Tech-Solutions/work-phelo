@@ -21,12 +21,16 @@ export default function SchedulingPage({ params }: { params: Promise<{ tenantSlu
   const user = useAuthStore((s) => s.user);
   const hasEmployeeProfile = user?.role === 'EMPLOYEE';
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
+  const canApproveShiftSwap = usePermission(Permission.APPROVE_SHIFT_SWAP);
+  const canReviewShiftSwaps = canManageSchedules || canApproveShiftSwap;
 
   const defaultTab: Tab = hasEmployeeProfile
     ? 'my-schedule'
     : canManageSchedules
       ? 'shift-scheduler'
-      : 'my-schedule';
+      : canReviewShiftSwaps
+        ? 'swap-requests'
+        : 'my-schedule';
 
   const tabParam = searchParams.get('tab') as Tab | null;
   const resolvedTab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : defaultTab;
@@ -35,10 +39,11 @@ export default function SchedulingPage({ params }: { params: Promise<{ tenantSlu
   const activeTab: Tab =
     resolvedTab === 'my-schedule' && !hasEmployeeProfile
       ? defaultTab
-      : (resolvedTab === 'shift-scheduler' || resolvedTab === 'swap-requests') &&
-          !canManageSchedules
+      : resolvedTab === 'shift-scheduler' && !canManageSchedules
         ? defaultTab
-        : resolvedTab;
+        : resolvedTab === 'swap-requests' && !canReviewShiftSwaps
+          ? defaultTab
+          : resolvedTab;
 
   const handleTabChange = (tab: string) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -56,6 +61,7 @@ export default function SchedulingPage({ params }: { params: Promise<{ tenantSlu
         activeTab={activeTab}
         hasEmployeeProfile={hasEmployeeProfile}
         canManageSchedules={canManageSchedules}
+        canReviewShiftSwaps={canReviewShiftSwaps}
         onTabChange={handleTabChange}
       />
 
@@ -63,7 +69,7 @@ export default function SchedulingPage({ params }: { params: Promise<{ tenantSlu
       {activeTab === 'shift-scheduler' && canManageSchedules && (
         <SchedulingContent tenantSlug={tenantSlug} />
       )}
-      {activeTab === 'swap-requests' && canManageSchedules && <SwapRequestsTab />}
+      {activeTab === 'swap-requests' && canReviewShiftSwaps && <SwapRequestsTab />}
     </div>
   );
 }

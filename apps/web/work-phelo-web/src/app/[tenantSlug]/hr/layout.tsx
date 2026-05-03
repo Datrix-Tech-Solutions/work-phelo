@@ -46,6 +46,7 @@ export default function HRLayout({
   const canApproveTimeCorrection = usePermission(Permission.APPROVE_TIME_CORRECTION);
   const canReadSchedules = usePermission(Permission.READ_SCHEDULES);
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
+  const canApproveShiftSwap = usePermission(Permission.APPROVE_SHIFT_SWAP);
   const canReadProjects = usePermission(Permission.READ_PROJECTS);
   const canCreateProject = usePermission(Permission.CREATE_PROJECT);
   const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
@@ -67,7 +68,7 @@ export default function HRLayout({
     canConfigureAppraisal;
   const canAccessTimeClock =
     canClockInOut || canReadAttendance || canSubmitTimeCorrection || canApproveTimeCorrection;
-  const canAccessScheduling = canReadSchedules || canManageSchedules;
+  const canAccessScheduling = canReadSchedules || canManageSchedules || canApproveShiftSwap;
   const canAccessProjects =
     canReadProjects || canCreateProject || canUpdateProject || canAssignProject;
   const canAccessPayroll =
