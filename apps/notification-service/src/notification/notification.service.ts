@@ -105,7 +105,6 @@ export class NotificationService {
     email: string;
     firstName: string;
     resetLink: string;
-    otpCode?: string;
     tenantName?: string;
   }) {
     if (
