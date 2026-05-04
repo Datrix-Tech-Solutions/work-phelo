@@ -158,7 +158,7 @@ export default function EmployeeDetailPage({
 
       {/* Actions Bar */}
       <EmployeeActionsBar
-        isPendingInvite={!employee.userId}
+        isPendingInvite={employee.userStatus === 'PENDING_VERIFICATION'}
         isOffboarded={employee.employmentStatus === 'OFFBOARDED'}
         resendInvite={handleResendInvite}
         isResending={isResending}

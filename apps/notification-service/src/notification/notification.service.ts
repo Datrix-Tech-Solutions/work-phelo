@@ -120,7 +120,6 @@ export class NotificationService {
       data.email,
       data.firstName,
       data.resetLink,
-      data.otpCode,
     );
     await this.log({
       userId: data.userId ?? 'system',

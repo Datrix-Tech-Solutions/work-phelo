@@ -12,7 +12,7 @@ interface EmployeeProfileCardProps {
 export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCardProps) {
   const name = `${employee.firstName} ${employee.lastName}`;
   const initials = `${employee.firstName[0] ?? ''}${employee.lastName[0] ?? ''}`.toUpperCase();
-  const isPendingInvite = !employee.userId;
+  const isPendingInvite = employee.userStatus === 'PENDING_VERIFICATION';
 
   return (
     <div className="w-72 shrink-0 bg-white border border-gray-200 rounded-card p-6 flex flex-col items-start gap-4">
@@ -50,7 +50,7 @@ export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCar
         )}
         {isPendingInvite && (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-            Pending Invite
+            Pending Verification
           </span>
         )}
       </div>

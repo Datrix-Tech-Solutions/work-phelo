@@ -755,7 +755,6 @@ export class EmailService {
     to: string,
     firstName: string,
     resetLink: string,
-    otpCode?: string,
   ): Promise<boolean> {
     return this.send(
       to,
@@ -773,18 +772,7 @@ export class EmailService {
           </a>
         </div>
 
-        ${
-          otpCode
-            ? `
-        <p style="font-weight: 600; margin-top: 8px;">Option 2 — Enter this code on the verification page</p>
-        <div style="text-align: center; margin: 16px 0 24px;">
-          <div style="display: inline-block; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 32px;">
-            <span style="font-size: 32px; font-weight: 700; letter-spacing: 8px; color: #111827; font-family: monospace;">${otpCode}</span>
-          </div>
-        </div>
-        `
-            : ''
-        }
+        
 
         <p style="color: #6b7280; font-size: 13px; margin-top: 8px;">This code and link expire in <strong>15 minutes</strong>.</p>
         <p style="color: #9ca3af; font-size: 12px; margin-top: 16px;">If you did not request a password reset, you can safely ignore this email.</p>

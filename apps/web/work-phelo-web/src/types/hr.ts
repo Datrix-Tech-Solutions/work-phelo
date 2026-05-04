@@ -74,6 +74,7 @@ export interface Employee {
   branch?: Branch;
   managerId?: string;
   userId?: string;
+  userStatus?: 'PENDING_VERIFICATION' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   avatarUrl?: string;
   bankName?: string;
   bankAccountNumber?: string;

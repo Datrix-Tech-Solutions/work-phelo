@@ -159,7 +159,7 @@ export class EventsHandler {
 
     await this.prisma.employee.update({
       where: { id: employee.id },
-      data: { userId },
+      data: { userId, userStatus: 'ACTIVE' },
     });
 
     return { linked: true, employeeId: employee.id };
