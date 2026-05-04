@@ -267,6 +267,7 @@ export class EmployeesService {
           employmentType: true,
           hireDate: true,
           avatarUrl: true,
+          userStatus: true,
           department: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
         },
