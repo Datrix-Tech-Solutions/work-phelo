@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -72,6 +73,22 @@ export function InviteEmployeePanel({
   const branchFormValue = useWatch({ control, name: 'branchId' });
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
+
+  useEffect(() => {
+    if (employmentTypeValue === 'CONTRACT' || !hireDateValue || probationDateValue) {
+      return;
+    }
+
+    const hireDate = new Date(hireDateValue);
+    if (isNaN(hireDate.getTime())) return;
+
+    const probationDate = new Date(hireDate.getFullYear(), hireDate.getMonth() + 3, 1);
+    const probationMonth = `${probationDate.getFullYear()}-${String(
+      probationDate.getMonth() + 1,
+    ).padStart(2, '0')}`;
+
+    setValue('probationEndsAt', probationMonth);
+  }, [employmentTypeValue, hireDateValue, probationDateValue, setValue]);
 
   const { mutate: createEmployee, isPending } = useCreateEmployee();
 
