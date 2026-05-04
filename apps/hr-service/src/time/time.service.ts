@@ -2718,7 +2718,7 @@ export class TimeService {
     actor: RequestUser,
     employeeId?: string,
   ) {
-    let where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
+    const where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
 
     if (!isCompanyAdminUser(actor)) {
       assertHrAccess(hasPermissionRule(actor, 'schedules:VIEW'));
