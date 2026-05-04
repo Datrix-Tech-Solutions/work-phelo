@@ -105,7 +105,6 @@ export class NotificationService {
     email: string;
     firstName: string;
     resetLink: string;
-    otpCode?: string;
     tenantName?: string;
   }) {
     if (
@@ -120,7 +119,6 @@ export class NotificationService {
       data.email,
       data.firstName,
       data.resetLink,
-      data.otpCode,
     );
     await this.log({
       userId: data.userId ?? 'system',
