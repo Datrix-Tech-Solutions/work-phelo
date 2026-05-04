@@ -2718,16 +2718,9 @@ export class TimeService {
     actor: RequestUser,
     employeeId?: string,
   ) {
-    let where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
+    const where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
 
-    if (isEmployeeSelfServiceUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      where = { tenantId, employeeId: actorEmployee.id };
-    } else if (!isCompanyAdminUser(actor)) {
+    if (!isCompanyAdminUser(actor)) {
       assertHrAccess(hasPermissionRule(actor, 'schedules:VIEW'));
     }
 
