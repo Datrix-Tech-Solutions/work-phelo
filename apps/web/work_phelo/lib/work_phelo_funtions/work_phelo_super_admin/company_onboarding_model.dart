@@ -27,9 +27,9 @@ extension CompanyStatusX on CompanyStatus {
 
   Color get color => switch (this) {
     CompanyStatus.active => Colors.green,
-    CompanyStatus.inactive => Colors.red,
-    CompanyStatus.pending => Colors.orange,
-    CompanyStatus.suspended => Colors.grey,
+    CompanyStatus.inactive => Colors.amber,
+    CompanyStatus.pending => Colors.blue,
+    CompanyStatus.suspended => Colors.red,
   };
 }
 
@@ -52,6 +52,7 @@ class CompanyModel {
   final String systemRole;
   final String adminPassword;
   final List<String> enabledModules;
+  final String? slug;
 
   CompanyModel({
     required this.companyName,
@@ -70,6 +71,7 @@ class CompanyModel {
     required this.systemRole,
     required this.adminPassword,
     this.enabledModules = const [],
+    this.slug,
   });
 
   // ── Computed getters ────────────────────────────────────────
@@ -80,7 +82,7 @@ class CompanyModel {
     return parts.length == 2 ? parts[1] : '';
   }
 
-  String get tenantSlug => companyName
+  String get tenantSlug => slug ?? companyName
       .trim()
       .toLowerCase()
       .replaceAll(RegExp(r'\s+'), '-')
@@ -122,6 +124,7 @@ class CompanyModel {
       status: status ?? this.status,
       systemRole: systemRole ?? this.systemRole,
       enabledModules: enabledModules ?? this.enabledModules,
+      slug: slug ?? this.slug,
     );
   }
 
@@ -209,6 +212,7 @@ class CompanyModel {
           ? DateTime.parse(json['createdAt'] as String)
           : null,
       enabledModules: const [],
+      slug: json['slug'] as String?,
     );
   }
 }
@@ -228,4 +232,3 @@ class ModuleConfig {
     this.isEnabled = false,
   });
 }
-

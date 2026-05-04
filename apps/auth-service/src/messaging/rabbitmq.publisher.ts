@@ -1,70 +1,260 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { ClientProxy } from '@nestjs/microservices';
+import { randomUUID } from 'crypto';
+import {
+  EventPatterns,
+  WithMeta,
+  TenantApprovedEvent,
+  EmployeeActivatedEvent,
+  ProvisionTenantWorkspaceCommand,
+  ProvisionTenantWorkspaceResult,
+  LinkEmployeeIdentityCommand,
+  LinkEmployeeIdentityResult,
+  EmailVerificationEvent,
+  InviteUserEvent,
+  PasswordResetLinkEvent,
+  PasswordResetOtpEvent,
+  SmsOtpEvent,
+} from '@work-phelo/types';
 
 @Injectable()
 export class RabbitMQPublisher {
   private readonly logger = new Logger(RabbitMQPublisher.name);
 
   constructor(
-    @Inject('NOTIFICATION_SERVICE') private readonly client: ClientProxy,
+    @Inject('NOTIFICATION_SERVICE')
+    private readonly notificationClient: ClientProxy,
+    @Inject('HR_SERVICE') private readonly hrClient: ClientProxy,
   ) {}
 
-  emit(pattern: string, data: any) {
-    try {
-      this.client.emit(pattern, data);
-    } catch (error) {
-      this.logger.error(`Failed to emit event ${pattern}`, error);
+  private normalizeRpcError(err: unknown): Error & {
+    statusCode?: number;
+    error?: string;
+  } {
+    if (err instanceof Error) {
+      return err as Error & { statusCode?: number; error?: string };
     }
+
+    const remote =
+      err && typeof err === 'object' && 'message' in err
+        ? (err as {
+            message?: unknown;
+            statusCode?: unknown;
+            error?: unknown;
+          })
+        : undefined;
+
+    const payload =
+      remote?.message &&
+      typeof remote.message === 'object' &&
+      !Array.isArray(remote.message)
+        ? (remote.message as {
+            message?: unknown;
+            statusCode?: unknown;
+            error?: unknown;
+          })
+        : remote;
+
+    const message =
+      typeof payload?.message === 'string'
+        ? payload.message
+        : typeof remote?.message === 'string'
+          ? remote.message
+          : String(err);
+    const wrapped = new Error(message) as Error & {
+      statusCode?: number;
+      error?: string;
+    };
+
+    if (typeof payload?.statusCode === 'number') {
+      wrapped.statusCode = payload.statusCode;
+    } else if (typeof remote?.statusCode === 'number') {
+      wrapped.statusCode = remote.statusCode;
+    }
+
+    if (typeof payload?.error === 'string') {
+      wrapped.error = payload.error;
+    } else if (typeof remote?.error === 'string') {
+      wrapped.error = remote.error;
+    }
+
+    return wrapped;
   }
 
-  sendEmailVerification(data: {
-    userId: string;
-    tenantId: string;
-    email: string;
-    firstName: string;
-    otp: string;
-  }) {
-    this.emit('notification.email_verification', data);
+  // ── Internal publish ───────────────────────────────────────────────────────
+
+  private publish<T extends object>(
+    client: ClientProxy,
+    pattern: string,
+    data: T,
+    correlationId?: string,
+  ): Promise<void> {
+    const envelope: WithMeta<T> = {
+      ...data,
+      _meta: {
+        messageId: randomUUID(),
+        correlationId: correlationId ?? randomUUID(),
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    this.logger.log(
+      `Publishing ${pattern} | msgId=${envelope._meta.messageId} | corrId=${envelope._meta.correlationId}`,
+    );
+
+    return new Promise((resolve, reject) => {
+      client.emit(pattern, envelope).subscribe({
+        complete: () => resolve(),
+        error: (err) => {
+          this.logger.error(
+            `Failed to publish ${pattern} | corrId=${envelope._meta.correlationId}`,
+            err,
+          );
+          reject(err instanceof Error ? err : new Error(String(err)));
+        },
+      });
+    });
   }
 
-  sendInviteEmail(data: {
-    userId: string;
-    tenantId: string;
-    email: string;
-    firstName: string;
-    inviteToken: string;
-    tenantName: string;
-  }) {
-    this.emit('notification.invite_user', data);
+  private request<T extends object, TResult>(
+    client: ClientProxy,
+    pattern: string,
+    data: T,
+    correlationId?: string,
+  ): Promise<TResult> {
+    const envelope: WithMeta<T> = {
+      ...data,
+      _meta: {
+        messageId: randomUUID(),
+        correlationId: correlationId ?? randomUUID(),
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    this.logger.log(
+      `Requesting ${pattern} | msgId=${envelope._meta.messageId} | corrId=${envelope._meta.correlationId}`,
+    );
+
+    return new Promise<TResult>((resolve, reject) => {
+      client.send<TResult, WithMeta<T>>(pattern, envelope).subscribe({
+        next: (result) => resolve(result),
+        error: (err) => {
+          this.logger.error(
+            `Failed to request ${pattern} | corrId=${envelope._meta.correlationId}`,
+            err,
+          );
+          reject(this.normalizeRpcError(err));
+        },
+      });
+    });
   }
 
-  sendPasswordResetLink(data: {
-    userId: string;
-    tenantId: string;
-    email: string;
-    firstName: string;
-    resetToken: string;
-  }) {
-    this.emit('notification.password_reset_link', data);
+  // ── Auth → HR ──────────────────────────────────────────────────────────────
+
+  hrTenantApproved(
+    data: TenantApprovedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.hrClient,
+      EventPatterns.HR_TENANT_APPROVED,
+      data,
+      correlationId,
+    );
   }
 
-  sendPasswordResetOtp(data: {
-    userId: string;
-    tenantId: string;
-    email: string;
-    firstName: string;
-    otp: string;
-  }) {
-    this.emit('notification.password_reset_otp', data);
+  hrEmployeeActivated(
+    data: EmployeeActivatedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.hrClient,
+      EventPatterns.HR_EMPLOYEE_ACTIVATED,
+      data,
+      correlationId,
+    );
   }
 
-  sendSmsOtp(data: {
-    userId: string;
-    tenantId: string;
-    phone: string;
-    otp: string;
-    context: string;
-  }) {
-    this.emit('notification.sms_otp', data);
+  hrProvisionTenantWorkspace(
+    data: ProvisionTenantWorkspaceCommand,
+    correlationId?: string,
+  ): Promise<ProvisionTenantWorkspaceResult> {
+    return this.request(
+      this.hrClient,
+      EventPatterns.HR_PROVISION_TENANT_WORKSPACE,
+      data,
+      correlationId,
+    );
+  }
+
+  hrLinkEmployeeIdentity(
+    data: LinkEmployeeIdentityCommand,
+    correlationId?: string,
+  ): Promise<LinkEmployeeIdentityResult> {
+    return this.request(
+      this.hrClient,
+      EventPatterns.HR_LINK_EMPLOYEE_IDENTITY,
+      data,
+      correlationId,
+    );
+  }
+
+  // ── Auth → Notification ────────────────────────────────────────────────────
+
+  notificationEmailVerification(
+    data: EmailVerificationEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFICATION_EMAIL_VERIFICATION,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationInviteUser(
+    data: InviteUserEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFICATION_INVITE_USER,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationPasswordResetLink(
+    data: PasswordResetLinkEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFICATION_PASSWORD_RESET_LINK,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationPasswordResetOtp(
+    data: PasswordResetOtpEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFICATION_PASSWORD_RESET_OTP,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationSmsOtp(data: SmsOtpEvent, correlationId?: string): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFICATION_SMS_OTP,
+      data,
+      correlationId,
+    );
   }
 }

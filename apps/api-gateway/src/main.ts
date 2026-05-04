@@ -1,15 +1,26 @@
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import helmet from 'helmet';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
+import { assertGatewayRuntimeEnv } from './config/runtime-env';
 
 async function bootstrap() {
+  assertGatewayRuntimeEnv();
   const app = await NestFactory.create(AppModule);
 
+  app.use(helmet());
   app.use(cookieParser());
 
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
 
   app.enableCors({
     origin: process.env.ALLOWED_ORIGINS?.split(',') || [
@@ -29,4 +40,4 @@ async function bootstrap() {
   console.log(`HR Service:    ${process.env.HR_SERVICE_URL}`);
 }
 
-bootstrap();
+void bootstrap();

@@ -1,12 +1,15 @@
 import { Module } from '@nestjs/common';
-import { TenantsService } from './tenants.service';
 import { TenantsController } from './tenants.controller';
+import { TenantLifecycleService } from './tenant-lifecycle.service';
+import { TenantConfigService } from './tenant-config.service';
+import { TenantAdminService } from './tenant-admin.service';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
-  imports: [RabbitMQModule],
+  imports: [RabbitMQModule, AuditModule],
   controllers: [TenantsController],
-  providers: [TenantsService],
-  exports: [TenantsService],
+  providers: [TenantLifecycleService, TenantConfigService, TenantAdminService],
+  exports: [TenantLifecycleService],
 })
 export class TenantsModule {}

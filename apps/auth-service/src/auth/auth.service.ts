@@ -4,11 +4,13 @@ import {
   ForbiddenException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import * as qrcode from 'qrcode';
+import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
@@ -23,12 +25,16 @@ import { ForceResetPasswordDto } from './dto/force-reset-password.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
+import { RequestUser } from '@work-phelo/types';
+import { generateSecureToken } from '../common/otp.helper';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -36,21 +42,86 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
+  private async resolveEffectivePermissions(
+    userId: string,
+    tenantId: string,
+    role: string,
+  ): Promise<string[]> {
+    if (role !== 'EMPLOYEE') return [];
+
+    const [allDirectPerms, setAssignments] = await Promise.all([
+      this.prisma.userPermission.findMany({
+        where: { tenantId, userId },
+        include: { resource: true },
+      }),
+      this.prisma.userPermissionSet.findMany({
+        where: { userId },
+        include: {
+          permissionSet: {
+            include: { resources: { include: { resource: true } } },
+          },
+        },
+      }),
+    ]);
+
+    const direct = allDirectPerms
+      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
+      .map((p) => `${p.resource.name}:${p.action}`);
+
+    const fromSets = setAssignments.flatMap((a) =>
+      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
+    );
+
+    // Revoked direct permissions remain as audit history, but they do not act
+    // as hard denies against permissions granted via roles or permission sets.
+    return [...new Set([...direct, ...fromSets])];
+  }
+
+  signAccessToken(user: RequestUser): string {
+    return this.jwtService.sign(
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        tenantId: user.tenantId,
+        tenantSlug: user.tenantSlug,
+        tenantName: user.tenantName,
+        firstName: user.firstName,
+        moduleConfig: user.moduleConfig,
+        featureConfig: user.featureConfig,
+        permissions: user.permissions ?? [],
+      },
+      { expiresIn: '15m' },
+    );
+  }
+
   // ── Token Generation ────────────────────────────────────────────────────
-  private generateTokens(user: any, tenant: any) {
+  private async generateTokens(user: any, tenant: any) {
+    const permissions = await this.resolveEffectivePermissions(
+      user.id,
+      tenant.id,
+      user.role,
+    );
     const payload = {
       sub: user.id,
       email: user.email,
       role: user.role,
-      companyRoleId: user.companyRoleId,
       tenantId: tenant.id,
       tenantSlug: tenant.slug,
       tenantName: tenant.name,
       firstName: user.firstName,
+      moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {
+        hr: false,
+        accounting: false,
+        marketing: false,
+      },
+      featureConfig:
+        (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
+      permissions,
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
-      { sub: user.id, type: 'refresh' },
+      { sub: user.id, type: 'refresh', jti: randomUUID() },
       { expiresIn: '7d' },
     );
     return { accessToken, refreshToken };
@@ -62,8 +133,14 @@ export class AuthService {
     ipAddress?: string,
     userAgent?: string,
   ) {
-    await this.prisma.refreshToken.create({
-      data: {
+    await this.prisma.refreshToken.upsert({
+      where: { token },
+      update: {
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        ipAddress,
+        userAgent,
+      },
+      create: {
         userId,
         token,
         expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -150,7 +227,7 @@ export class AuthService {
     }
     if (user.status === 'INACTIVE') {
       throw new ForbiddenException(
-        'Your account is inactive. Contact your administrator.',
+        'Your account has been deactivated. Please contact your HR administrator.',
       );
     }
 
@@ -178,7 +255,10 @@ export class AuthService {
       };
     }
 
-    const { accessToken, refreshToken } = this.generateTokens(user, tenant);
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user,
+      tenant,
+    );
     await this.storeRefreshToken(user.id, refreshToken, ipAddress, userAgent);
     await this.prisma.user.update({
       where: { id: user.id },
@@ -209,7 +289,14 @@ export class AuthService {
         tenantId: user.tenantId,
         tenantSlug: tenant.slug,
         tenantName: tenant.name,
-        companyRoleId: user.companyRoleId ?? null,
+        moduleConfig: (tenant.moduleConfig as Record<string, boolean>) ?? {
+          hr: false,
+          accounting: false,
+          marketing: false,
+        },
+        featureConfig:
+          (tenant.featureConfig as Record<string, Record<string, boolean>>) ??
+          {},
       },
     };
   }
@@ -235,7 +322,7 @@ export class AuthService {
 
     if (user.failedLoginAttempts > 0) await this.clearFailedAttempts(user.id);
 
-    const { accessToken, refreshToken } = this.generateTokens(
+    const { accessToken, refreshToken } = await this.generateTokens(
       user,
       user.tenant,
     );
@@ -341,12 +428,13 @@ export class AuthService {
       },
     });
 
-    this.rabbitmq.sendEmailVerification({
+    void this.rabbitmq.notificationEmailVerification({
       userId: user.id,
       tenantId: user.tenantId,
       email: user.email,
       firstName: user.firstName,
       otp: code,
+      tenantName: tenant.name,
     });
 
     return {
@@ -374,7 +462,7 @@ export class AuthService {
       data: { isRevoked: true },
     });
 
-    const { accessToken, refreshToken } = this.generateTokens(
+    const { accessToken, refreshToken } = await this.generateTokens(
       storedToken.user,
       storedToken.user.tenant,
     );
@@ -409,7 +497,7 @@ export class AuthService {
     // to prevent tenant enumeration via timing attacks
     if (!tenant || tenant.status !== 'ACTIVE') {
       return {
-        message: 'If that email exists, reset instructions have been sent',
+        message: "If this email is registered, you'll receive a code shortly",
       };
     }
 
@@ -419,7 +507,23 @@ export class AuthService {
 
     if (!user) {
       return {
-        message: 'If that email exists, reset instructions have been sent',
+        message: "If this email is registered, you'll receive a code shortly",
+      };
+    }
+
+    // Resend rate limit: max 3 OTPs per hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentCount = await this.prisma.otpCode.count({
+      where: {
+        userId: user.id,
+        type: 'PASSWORD_RESET',
+        createdAt: { gt: oneHourAgo },
+      },
+    });
+
+    if (recentCount >= 3) {
+      return {
+        message: 'Too many attempts. Please try again in one hour.',
       };
     }
 
@@ -429,69 +533,158 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
 
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    await this.prisma.otpCode.create({
-      data: {
-        userId: user.id,
-        type: 'PASSWORD_RESET',
-        code,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
-      },
-    });
-
     if (dto.method === 'sms' && user.phone) {
-      await this.rabbitmq.emit('notification.password_reset_otp', {
-        phone: user.phone,
-        otp: code,
-        firstName: user.firstName,
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      await this.prisma.otpCode.create({
+        data: {
+          userId: user.id,
+          type: 'PASSWORD_RESET',
+          code,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        },
       });
+      void this.rabbitmq
+        .notificationPasswordResetOtp({
+          phone: user.phone,
+          otp: code,
+          firstName: user.firstName,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit password_reset_otp for ${user.phone}`,
+            err,
+          ),
+        );
     } else {
-      // Workspace-aware reset link — slug gives frontend context; token is the authority
-      const resetLink = WorkspaceUrl.resetPassword(tenant.slug, code);
-      await this.rabbitmq.emit('notification.password_reset_link', {
-        email: user.email,
-        firstName: user.firstName,
-        resetLink,
-        tenantName: tenant.name,
+      const resetToken = generateSecureToken();
+      await this.prisma.otpCode.create({
+        data: {
+          userId: user.id,
+          type: 'PASSWORD_RESET',
+          code: resetToken,
+          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+        },
       });
+      const resetLink = WorkspaceUrl.resetPassword(tenant.slug, resetToken);
+      void this.rabbitmq
+        .notificationPasswordResetLink({
+          email: user.email,
+          firstName: user.firstName,
+          resetLink,
+          tenantName: tenant.name,
+        })
+        .catch((err) =>
+          this.logger.error(
+            `Failed to emit password_reset_link for ${user.email}`,
+            err,
+          ),
+        );
     }
 
     return {
-      message: 'If that email exists, reset instructions have been sent',
+      message: "If this email is registered, you'll receive a code shortly",
     };
   }
 
   async resetPassword(dto: ResetPasswordDto) {
-    if (!dto.email || !dto.tenantSlug) {
-      throw new BadRequestException('Email and tenant slug are required');
-    }
-
-    const tenant = await this.prisma.tenant.findUnique({
-      where: { slug: dto.tenantSlug },
-    });
-    if (!tenant) throw new NotFoundException('Tenant not found');
-
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
-    });
-    if (!user) throw new BadRequestException('Invalid or expired reset token');
-
-    const code = dto.token || dto.otpCode;
-    if (!code)
+    const credential = dto.token || dto.otpCode;
+    if (!credential)
       throw new BadRequestException('Reset token or OTP code is required');
 
-    const record = await this.prisma.otpCode.findFirst({
-      where: {
-        userId: user.id,
-        type: 'PASSWORD_RESET',
-        code,
-        usedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-    });
+    let record;
+    if (dto.token) {
+      if (!dto.tenantSlug) {
+        throw new BadRequestException(
+          'Tenant workspace slug is required for reset links.',
+        );
+      }
 
-    if (!record)
+      record = await this.prisma.otpCode.findFirst({
+        where: {
+          type: 'PASSWORD_RESET',
+          code: dto.token,
+          usedAt: null,
+          user: {
+            tenant: {
+              slug: dto.tenantSlug,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { user: { include: { tenant: true } } },
+      });
+    } else {
+      if (!dto.tenantSlug || !dto.email) {
+        throw new BadRequestException(
+          'Tenant workspace slug and email are required when using a reset code.',
+        );
+      }
+
+      const tenant = await this.prisma.tenant.findUnique({
+        where: { slug: dto.tenantSlug },
+      });
+      if (!tenant) throw new NotFoundException('Tenant not found');
+
+      const user = await this.prisma.user.findUnique({
+        where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+      });
+      if (!user)
+        throw new BadRequestException('Invalid or expired reset token');
+
+      record = await this.prisma.otpCode.findFirst({
+        where: {
+          userId: user.id,
+          type: 'PASSWORD_RESET',
+          code: dto.otpCode,
+          usedAt: null,
+        },
+        orderBy: { createdAt: 'desc' },
+        include: { user: { include: { tenant: true } } },
+      });
+    }
+
+    if (!record) {
       throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    // Check if locked due to too many attempts
+    if (record.lockedUntil && record.lockedUntil > new Date()) {
+      throw new BadRequestException(
+        'Too many incorrect attempts. Please try again in 30 minutes.',
+      );
+    }
+
+    // Check expiry
+    if (record.expiresAt < new Date()) {
+      throw new BadRequestException(
+        'This code has expired. Please request a new one.',
+      );
+    }
+
+    // Check code correctness
+    if (record.code !== credential) {
+      const newAttempts = record.attempts + 1;
+      const updateData: any = { attempts: newAttempts };
+
+      if (newAttempts >= 5) {
+        updateData.lockedUntil = new Date(Date.now() + 30 * 60 * 1000);
+      }
+
+      await this.prisma.otpCode.update({
+        where: { id: record.id },
+        data: updateData,
+      });
+
+      if (newAttempts >= 5) {
+        throw new BadRequestException(
+          'Too many incorrect attempts. Your reset code has been locked for 30 minutes.',
+        );
+      }
+
+      throw new BadRequestException(
+        `Incorrect code. Please try again. ${5 - newAttempts} attempt(s) remaining.`,
+      );
+    }
 
     const hashed = await bcrypt.hash(dto.newPassword, 12);
     await this.prisma.otpCode.update({
@@ -499,7 +692,7 @@ export class AuthService {
       data: { usedAt: new Date() },
     });
     await this.prisma.user.update({
-      where: { id: user.id },
+      where: { id: record.user.id },
       data: {
         password: hashed,
         passwordChangedAt: new Date(),
@@ -509,7 +702,7 @@ export class AuthService {
       },
     });
     await this.prisma.refreshToken.updateMany({
-      where: { userId: user.id },
+      where: { userId: record.user.id },
       data: { isRevoked: true },
     });
 
@@ -556,7 +749,7 @@ export class AuthService {
       },
     });
 
-    const { accessToken, refreshToken } = this.generateTokens(
+    const { accessToken, refreshToken } = await this.generateTokens(
       user,
       user.tenant,
     );
@@ -642,7 +835,7 @@ export class AuthService {
       },
     });
 
-    this.rabbitmq.sendSmsOtp({
+    void this.rabbitmq.notificationSmsOtp({
       userId: user.id,
       tenantId: user.tenantId,
       phone: user.phone,
@@ -718,7 +911,7 @@ export class AuthService {
     });
 
     if (existing) {
-      const { accessToken, refreshToken } = this.generateTokens(
+      const { accessToken, refreshToken } = await this.generateTokens(
         existing.user,
         existing.user.tenant,
       );
@@ -751,8 +944,12 @@ export class AuthService {
       });
     }
 
-    const { accessToken, refreshToken } = this.generateTokens(user, tenant);
+    const { accessToken, refreshToken } = await this.generateTokens(
+      user,
+      tenant,
+    );
     await this.storeRefreshToken(user.id, refreshToken);
     return { accessToken, refreshToken };
   }
 }
+// Mon Apr  6 16:41:02 GMT 2026

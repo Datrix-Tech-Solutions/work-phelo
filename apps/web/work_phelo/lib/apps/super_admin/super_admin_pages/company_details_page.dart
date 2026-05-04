@@ -9,6 +9,9 @@ import '../../../work_phelo_components/widgets/custom_cards/title_card.dart';
 import '../../../work_phelo_components/widgets/custom_lists/app_list.dart';
 import '../../../work_phelo_components/widgets/form_components/side_form_panel.dart';
 import '../../../work_phelo_funtions/work_phelo_login_functions/authentication_state.dart';
+import '../../../work_phelo_funtions/work_phelo_login_functions/authentication_service.dart';
+import 'package:dio/dio.dart';
+import '../../../work_phelo_funtions/work_phelo_super_admin/company_onboarding_state.dart';
 import '../super_admin_widgets/admin_update_form.dart';
 import '../super_admin_widgets/company_editing_form.dart';
 import '../super_admin_widgets/module_features.dart';
@@ -38,6 +41,12 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
     final cs = ColorScheme.of(context);
     final authState = ref.watch(authNotifierProvider);
     final currentUser = authState.user;
+
+    // Watch live company state so UI updates on status change
+    final liveCompany = ref.watch(companyProvider).companies.firstWhere(
+      (c) => c.tenantId == widget.company.tenantId,
+      orElse: () => widget.company,
+    );
 
     if (currentUser == null) {
       return const Center(child: CircularProgressIndicator());
@@ -81,9 +90,24 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
 
         // Top bar — status + actions
         CompanyCard(
-          company: widget.company,
+          company: liveCompany,
           onDelete: () {},
-          onToggleStatus: () {},
+          onToggleStatus: () async {
+    try {
+      await ref
+          .read(companyProvider.notifier)
+          .toggleCompanyStatus(liveCompany);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  },
         ),
 
         Expanded(
@@ -92,7 +116,7 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
             children: [
               Expanded(
                 child: CompanyDetailCard(
-                  company: widget.company,
+                  company: liveCompany,
                   onEdit: () => _panel.show(
                     context: context,
                     formTitle: 'Company Editing Form',
@@ -103,15 +127,46 @@ class _CompanyDetailPageState extends ConsumerState<CompanyDetailPage> {
                   onAdminEdit: () => _panel.show(
                     context: context,
                     formTitle: 'Assign Company Administrator',
-                    onPressed: () async {},
-                    secOnPressed: () {},
+                    onPressed: () async {
+                      final data = _adminEditingFormKey.currentState?.submit();
+                      if (data == null) return;
+                      try {
+                        final tenantId = widget.company.tenantId;
+                        if (tenantId == null) return;
+                        final dio = ref.read(dioProvider);
+                        await dio.post('/auth/users/assign-admin', data: {
+                          'email': data['email'],
+                          'firstName': data['firstName'],
+                          'lastName': data['lastName'],
+                          'role': 'TENANT_ADMIN',
+                          'tenantId': tenantId,
+                        });
+                        _panel.close();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Company Admin assigned. Invite email sent.'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } on DioException catch (e) {
+                        final msg = (e.response?.data as Map?)?['message']?.toString() ?? 'Failed to assign admin';
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(msg), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+                    secOnPressed: () => _adminEditingFormKey.currentState?.reset(),
                     child: AdminUpdateForm(key: _adminEditingFormKey),
                   ),
                 ),
               ),
               Expanded(
                 child: ModuleConfigCard(
-                  company: widget.company,
+                  company: liveCompany,
                   onOpenModule: (String moduleKey) {
                     _panel.show(
                       context: context,

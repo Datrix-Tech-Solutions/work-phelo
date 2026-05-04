@@ -8,46 +8,36 @@ async function hash(pw: string) {
   return bcrypt.hash(pw, 12);
 }
 
-// Default permission sets per tenant
-// resource name → actions
-const MANAGER_SET: Record<string, string[]> = {
-  employees: ['VIEW'],
-  departments: ['VIEW'],
-  leave: ['VIEW', 'APPROVE'],
-  attendance: ['VIEW'],
-  timesheets: ['VIEW', 'APPROVE'],
-  'time-corrections': ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT'],
-  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
-  documents: ['VIEW'],
-};
-
 const EMPLOYEE_SET: Record<string, string[]> = {
-  employees: ['VIEW'],
+  'employee-profile': ['VIEW', 'EDIT'],
   leave: ['VIEW', 'CREATE'],
-  attendance: ['VIEW'],
+  attendance: ['CREATE'],
   'time-corrections': ['CREATE'],
-  appraisals: ['VIEW'],
+  assets: ['VIEW'],
+  projects: ['VIEW'],
   payroll: ['VIEW'],
+  appraisals: ['VIEW', 'EDIT'],
 };
 
 const COMPANY_ADMIN_SET: Record<string, string[]> = {
-  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
-  departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'EXPORT'],
-  attendance: ['VIEW', 'EXPORT'],
-  timesheets: ['VIEW', 'APPROVE'],
-  'time-corrections': ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  payroll: ['VIEW', 'CREATE', 'RUN', 'APPROVE', 'EXPORT'],
-  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
-  documents: ['VIEW', 'CREATE', 'DELETE'],
-  allowances: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   'company-roles': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
   'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  'audit-logs': ['VIEW', 'EXPORT'],
-  'payroll-reports': ['VIEW', 'EXPORT'],
+  'audit-logs': ['VIEW'],
+  employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
+  'employee-profile': ['VIEW', 'EDIT'],
+  departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  branches: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  attendance: ['VIEW', 'CREATE'],
+  'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
+  timesheets: ['VIEW', 'APPROVE'],
+  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
+  projects: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
+  assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  documents: ['VIEW', 'CREATE', 'EDIT'],
 };
 
 async function seedTenantPermissionSets(
@@ -56,22 +46,12 @@ async function seedTenantPermissionSets(
 ) {
   const sets = [
     { name: 'Company Admin Set', perms: COMPANY_ADMIN_SET, isSystem: true },
-    { name: 'Manager Set', perms: MANAGER_SET, isSystem: true },
     { name: 'Employee Set', perms: EMPLOYEE_SET, isSystem: true },
   ];
 
   const createdSets: Record<string, string> = {};
 
   for (const set of sets) {
-    const existing = await prisma.permissionSet.findUnique({
-      where: { tenantId_name: { tenantId, name: set.name } },
-    });
-
-    if (existing) {
-      createdSets[set.name] = existing.id;
-      continue;
-    }
-
     const permSetResources: { resourceId: string; action: any }[] = [];
     for (const [resourceName, actions] of Object.entries(set.perms)) {
       const resourceId = resources[resourceName];
@@ -79,6 +59,28 @@ async function seedTenantPermissionSets(
       for (const action of actions) {
         permSetResources.push({ resourceId, action });
       }
+    }
+
+    const existing = await prisma.permissionSet.findUnique({
+      where: { tenantId_name: { tenantId, name: set.name } },
+    });
+
+    if (existing) {
+      // Re-sync resources in case the set was created empty or perms changed
+      await prisma.permissionSetResource.deleteMany({
+        where: { permissionSetId: existing.id },
+      });
+      if (permSetResources.length > 0) {
+        await prisma.permissionSetResource.createMany({
+          data: permSetResources.map((r) => ({
+            permissionSetId: existing.id,
+            resourceId: r.resourceId,
+            action: r.action,
+          })),
+        });
+      }
+      createdSets[set.name] = existing.id;
+      continue;
     }
 
     const created = await prisma.permissionSet.create({
@@ -95,14 +97,9 @@ async function seedTenantPermissionSets(
   return createdSets;
 }
 
-async function main() {
-  console.log('Starting seed...\n');
+// ── Platform seed — runs in all environments ───────────────────────────────
 
-  // ── Seed platform resources first ─────────────────────────────────────────
-  console.log('Seeding platform resources...');
-  const resources = await seedResources();
-
-  // ── 1. DATRIX INTERNAL (SuperAdmin) ───────────────────────────────────────
+async function seedPlatform(resources: Record<string, string>) {
   console.log('\nCreating Datrix internal tenant...');
   const datrixTenant = await prisma.tenant.upsert({
     where: { slug: 'datrix-internal' },
@@ -116,23 +113,39 @@ async function main() {
       status: 'ACTIVE',
       industry: 'Technology',
       size: '10-50',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
 
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD;
+
+  if (!superAdminEmail || !superAdminPassword) {
+    throw new Error(
+      'SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD env vars are required',
+    );
+  }
+
   await prisma.user.upsert({
     where: {
-      tenantId_email: {
-        tenantId: datrixTenant.id,
-        email: process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com',
-      },
+      tenantId_email: { tenantId: datrixTenant.id, email: superAdminEmail },
     },
     update: {},
     create: {
       tenantId: datrixTenant.id,
-      email: process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com',
-      password: await hash(
-        process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin123!',
-      ),
+      email: superAdminEmail,
+      password: await hash(superAdminPassword),
       firstName: 'Super',
       lastName: 'Admin',
       role: 'SUPER_ADMIN',
@@ -140,11 +153,16 @@ async function main() {
       emailVerifiedAt: new Date(),
     },
   });
-  console.log(
-    `  ${process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com'} (from env or default)`,
-  );
 
-  // ── 2. ACME GHANA ──────────────────────────────────────────────────────────
+  console.log(`  SuperAdmin: ${superAdminEmail}`);
+
+  await seedTenantPermissionSets(datrixTenant.id, resources);
+}
+
+// ── Demo seed — dev and staging only ──────────────────────────────────────
+
+async function seedDemo(resources: Record<string, string>) {
+  // ── ACME GHANA ─────────────────────────────────────────────────────────────
   console.log('\nCreating Acme Ghana Ltd...');
   const acmeTenant = await prisma.tenant.upsert({
     where: { slug: 'acme-ghana' },
@@ -158,10 +176,21 @@ async function main() {
       status: 'ACTIVE',
       industry: 'Manufacturing',
       size: '100-500',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
 
-  // Seed company roles
   const acmeAdminRole = await prisma.companyRole.upsert({
     where: {
       tenantId_name: { tenantId: acmeTenant.id, name: 'Company Admin' },
@@ -169,22 +198,14 @@ async function main() {
     update: {},
     create: { tenantId: acmeTenant.id, name: 'Company Admin', isSystem: true },
   });
-  const acmeManagerRole = await prisma.companyRole.upsert({
-    where: { tenantId_name: { tenantId: acmeTenant.id, name: 'Manager' } },
-    update: {},
-    create: { tenantId: acmeTenant.id, name: 'Manager', isSystem: true },
-  });
   const acmeEmployeeRole = await prisma.companyRole.upsert({
     where: { tenantId_name: { tenantId: acmeTenant.id, name: 'Employee' } },
     update: {},
     create: { tenantId: acmeTenant.id, name: 'Employee', isSystem: true },
   });
 
-  // Seed permission sets
   const acmeSets = await seedTenantPermissionSets(acmeTenant.id, resources);
-  console.log(`  Permission sets: ${Object.keys(acmeSets).join(', ')}`);
 
-  // Users
   const acmeAdmin = await prisma.user.upsert({
     where: {
       tenantId_email: { tenantId: acmeTenant.id, email: 'admin@acmeghana.com' },
@@ -218,30 +239,12 @@ async function main() {
       firstName: 'Kwame',
       lastName: 'Asante',
       role: 'EMPLOYEE',
-      companyRoleId: acmeManagerRole.id,
+      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111002',
     },
   });
-
-  // Assign Manager Set to manager user
-  if (acmeSets['Manager Set']) {
-    await prisma.userPermissionSet.upsert({
-      where: {
-        userId_permissionSetId: {
-          userId: acmeManager.id,
-          permissionSetId: acmeSets['Manager Set'],
-        },
-      },
-      update: {},
-      create: {
-        userId: acmeManager.id,
-        permissionSetId: acmeSets['Manager Set'],
-        grantedBy: acmeAdmin.id,
-      },
-    });
-  }
 
   const acmeEmp1 = await prisma.user.upsert({
     where: {
@@ -265,7 +268,6 @@ async function main() {
     },
   });
 
-  // Assign Employee Set to employee
   if (acmeSets['Employee Set']) {
     await prisma.userPermissionSet.upsert({
       where: {
@@ -305,7 +307,7 @@ async function main() {
     },
   });
 
-  const acmeAccountant = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: acmeTenant.id,
@@ -320,7 +322,7 @@ async function main() {
       firstName: 'Yaw',
       lastName: 'Darko',
       role: 'EMPLOYEE',
-      companyRoleId: acmeManagerRole.id,
+      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111005',
@@ -394,19 +396,54 @@ async function main() {
     },
   });
 
+  // Assign Employee Set to all remaining acme employees that don't have it yet
+  if (acmeSets['Employee Set']) {
+    const acmeEmployeesWithoutSet = [acmeEmp2.id];
+    // accountant, newuser, mfa.user, invited — fetch their IDs
+    const extraAcmeEmps = await prisma.user.findMany({
+      where: {
+        tenantId: acmeTenant.id,
+        email: {
+          in: [
+            'accountant@acmeghana.com',
+            'newuser@acmeghana.com',
+            'mfa.user@acmeghana.com',
+            'invited@acmeghana.com',
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    for (const emp of [
+      ...acmeEmployeesWithoutSet.map((id) => ({ id })),
+      ...extraAcmeEmps,
+    ]) {
+      await prisma.userPermissionSet.upsert({
+        where: {
+          userId_permissionSetId: {
+            userId: emp.id,
+            permissionSetId: acmeSets['Employee Set'],
+          },
+        },
+        update: {},
+        create: {
+          userId: emp.id,
+          permissionSetId: acmeSets['Employee Set'],
+          grantedBy: acmeAdmin.id,
+        },
+      });
+    }
+  }
+
   console.log('  admin@acmeghana.com / Admin123! (TENANT_ADMIN)');
-  console.log(
-    '  hr.manager@acmeghana.com / Manager123! → Manager Set assigned',
-  );
-  console.log(
-    '  kofi.boateng@acmeghana.com / Employee123! → Employee Set assigned',
-  );
+  console.log('  hr.manager@acmeghana.com / Manager123!');
+  console.log('  kofi.boateng@acmeghana.com / Employee123!');
   console.log('  ama.owusu@acmeghana.com / Employee123!');
   console.log('  accountant@acmeghana.com / Accountant123!');
   console.log('  newuser@acmeghana.com / TempPass123! (force reset)');
   console.log('  mfa.user@acmeghana.com / MfaUser123!');
 
-  // ── 3. STELLAR TECH ────────────────────────────────────────────────────────
+  // ── STELLAR TECH ───────────────────────────────────────────────────────────
   console.log('\nCreating Stellar Tech Ghana...');
   const stellarTenant = await prisma.tenant.upsert({
     where: { slug: 'stellar-tech' },
@@ -420,6 +457,18 @@ async function main() {
       status: 'ACTIVE',
       industry: 'Technology',
       size: '10-50',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
 
@@ -433,11 +482,6 @@ async function main() {
       name: 'Company Admin',
       isSystem: true,
     },
-  });
-  const stellarManagerRole = await prisma.companyRole.upsert({
-    where: { tenantId_name: { tenantId: stellarTenant.id, name: 'Manager' } },
-    update: {},
-    create: { tenantId: stellarTenant.id, name: 'Manager', isSystem: true },
   });
   const stellarEmployeeRole = await prisma.companyRole.upsert({
     where: { tenantId_name: { tenantId: stellarTenant.id, name: 'Employee' } },
@@ -486,29 +530,12 @@ async function main() {
       firstName: 'Nana',
       lastName: 'Osei',
       role: 'EMPLOYEE',
-      companyRoleId: stellarManagerRole.id,
+      companyRoleId: stellarEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244222002',
     },
   });
-
-  if (stellarSets['Manager Set']) {
-    await prisma.userPermissionSet.upsert({
-      where: {
-        userId_permissionSetId: {
-          userId: stellarManager.id,
-          permissionSetId: stellarSets['Manager Set'],
-        },
-      },
-      update: {},
-      create: {
-        userId: stellarManager.id,
-        permissionSetId: stellarSets['Manager Set'],
-        grantedBy: stellarAdmin.id,
-      },
-    });
-  }
 
   const stellarEmployee = await prisma.user.upsert({
     where: {
@@ -550,14 +577,10 @@ async function main() {
   }
 
   console.log('  admin@stellartech.com.gh / Admin123!');
-  console.log(
-    '  manager@stellartech.com.gh / Manager123! → Manager Set assigned',
-  );
-  console.log(
-    '  dev@stellartech.com.gh / Employee123! → Employee Set assigned',
-  );
+  console.log('  manager@stellartech.com.gh / Manager123!');
+  console.log('  dev@stellartech.com.gh / Employee123!');
 
-  // ── 4. GOLDEN HARVEST (PENDING) ───────────────────────────────────────────
+  // ── GOLDEN HARVEST (PENDING) ───────────────────────────────────────────────
   console.log('\nCreating Golden Harvest Foods (pending)...');
   const pendingTenant = await prisma.tenant.upsert({
     where: { slug: 'golden-harvest' },
@@ -570,6 +593,18 @@ async function main() {
       status: 'PENDING',
       industry: 'Food & Beverage',
       size: '50-100',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
   await prisma.user.upsert({
@@ -592,7 +627,7 @@ async function main() {
   });
   console.log('  PENDING — approve via: PATCH /tenants/{id}/approve');
 
-  // ── 5. SUNRISE IMPORTS (SUSPENDED) ────────────────────────────────────────
+  // ── SUNRISE IMPORTS (SUSPENDED) ───────────────────────────────────────────
   console.log('\nCreating Sunrise Imports (suspended)...');
   const suspendedTenant = await prisma.tenant.upsert({
     where: { slug: 'sunrise-imports' },
@@ -605,6 +640,18 @@ async function main() {
       status: 'SUSPENDED',
       industry: 'Import/Export',
       size: '10-50',
+      moduleConfig: { hr: false, accounting: false, marketing: false },
+      featureConfig: {
+        hr: {
+          leave: false,
+          time: false,
+          payroll: false,
+          appraisals: false,
+          projects: false,
+          assets: false,
+        },
+        marketing: { leads: false, pipeline: false, contacts: false },
+      },
     },
   });
   await prisma.user.upsert({
@@ -627,46 +674,38 @@ async function main() {
     },
   });
   console.log('  SUSPENDED — login returns 403');
+}
 
-  // ── SUMMARY ────────────────────────────────────────────────────────────────
+// ── Entry point ────────────────────────────────────────────────────────────
+
+async function main() {
+  const isProd = process.env.NODE_ENV === 'production';
+
+  console.log('Starting seed...');
+  console.log(`Environment: ${process.env.NODE_ENV ?? 'development'}\n`);
+
+  console.log('Seeding platform resources...');
+  const resources = await seedResources();
+
+  await seedPlatform(resources);
+
+  if (!isProd) {
+    console.log('\nSeeding demo tenants (non-production)...');
+    await seedDemo(resources);
+  } else {
+    console.log('\nProduction environment — skipping demo tenants.');
+  }
+
   console.log('\n' + '='.repeat(65));
-  console.log(' SEED COMPLETE\n');
-  console.log('Resources seeded:     ' + Object.keys(resources).length);
-  console.log('System Roles (3):     SUPER_ADMIN | TENANT_ADMIN | EMPLOYEE');
-  console.log(
-    'Company Roles:        Company Admin | Manager | Employee (per tenant)',
-  );
-  console.log(
-    'Permission Sets:      Company Admin Set | Manager Set | Employee Set (per tenant)',
-  );
+  console.log(' SEED COMPLETE');
   console.log('='.repeat(65));
-  const superAdminEmail =
-    process.env.SUPER_ADMIN_EMAIL || 'superadmin@datrix.com';
-  const superAdminPasswordSource = process.env.SUPER_ADMIN_PASSWORD
-    ? 'environment variable'
-    : 'default seed value';
-  console.log(
-    '\nSuperAdmin:           ' +
-      superAdminEmail +
-      ' / [password from ' +
-      superAdminPasswordSource +
-      ']',
-  );
-  console.log('\nAcme Ghana (acme-ghana):');
-  console.log('  Admin (TENANT_ADMIN): admin@acmeghana.com / Admin123!');
-  console.log('  Manager + Set:        hr.manager@acmeghana.com / Manager123!');
-  console.log(
-    '  Employee + Set:       kofi.boateng@acmeghana.com / Employee123!',
-  );
-  console.log('  Employee:             ama.owusu@acmeghana.com / Employee123!');
-  console.log('\nStellar Tech (stellar-tech):');
-  console.log('  Admin (TENANT_ADMIN): admin@stellartech.com.gh / Admin123!');
-  console.log(
-    '  Manager + Set:        manager@stellartech.com.gh / Manager123!',
-  );
-  console.log('  Employee + Set:       dev@stellartech.com.gh / Employee123!');
-  console.log('\nGolden Harvest (golden-harvest): PENDING');
-  console.log('Sunrise Imports (sunrise-imports): SUSPENDED');
+  console.log(`Resources:   ${Object.keys(resources).length}`);
+  console.log(`SuperAdmin:  ${process.env.SUPER_ADMIN_EMAIL}`);
+  if (!isProd) {
+    console.log(
+      'Demo tenants: acme-ghana, stellar-tech, golden-harvest, sunrise-imports',
+    );
+  }
   console.log('='.repeat(65));
 }
 

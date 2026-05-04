@@ -29,6 +29,18 @@ const DENY_MESSAGE =
   "You don't have permission to access this. Contact your administrator.";
 
 const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
+  [Permission.READ_TENANT]: [
+    { resource: 'tenants', actions: [PermissionAction.VIEW] },
+  ],
+  [Permission.UPDATE_TENANT]: [
+    { resource: 'tenants', actions: [PermissionAction.EDIT] },
+  ],
+  [Permission.MANAGE_MODULES]: [
+    { resource: 'tenants', actions: [PermissionAction.EDIT] },
+  ],
+  [Permission.VIEW_AUDIT_LOGS]: [
+    { resource: 'audit-logs', actions: [PermissionAction.VIEW] },
+  ],
   [Permission.INVITE_USER]: [
     { resource: 'users', actions: [PermissionAction.CREATE] },
   ],
@@ -44,21 +56,28 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.FORCE_RESET_USER]: [
     { resource: 'users', actions: [PermissionAction.EDIT] },
   ],
-  [Permission.READ_COMPANY_ROLES]: [
-    { resource: 'company-roles', actions: [PermissionAction.VIEW] },
+  [Permission.VIEW_PERMISSION_SETS]: [
+    { resource: 'permission-sets', actions: [PermissionAction.VIEW] },
   ],
-  [Permission.MANAGE_COMPANY_ROLES]: [
+  [Permission.GRANT_PERMISSION]: [
     {
-      resource: 'company-roles',
+      resource: 'permission-sets',
       actions: [
         PermissionAction.CREATE,
         PermissionAction.EDIT,
         PermissionAction.DELETE,
+        PermissionAction.ASSIGN,
       ],
     },
   ],
   [Permission.ASSIGN_ROLE]: [
-    { resource: 'company-roles', actions: [PermissionAction.ASSIGN] },
+    { resource: 'permission-sets', actions: [PermissionAction.ASSIGN] },
+  ],
+  [Permission.MANAGE_ROLES]: [
+    { resource: 'permission-sets', actions: [PermissionAction.EDIT] },
+  ],
+  [Permission.APPROVE_SHIFT_SWAP]: [
+    { resource: 'schedules', actions: [PermissionAction.APPROVE] },
   ],
 };
 

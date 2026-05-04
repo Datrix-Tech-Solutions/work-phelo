@@ -31,7 +31,11 @@ import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { MicrosoftAuthGuard } from './guards/microsoft-auth.guard';
-import { setAuthCookies, clearAuthCookies } from '../common/cookie.helper';
+import {
+  setAuthCookies,
+  clearAuthCookies,
+  setAccessTokenCookie,
+} from '../common/cookie.helper';
 
 @ApiTags('Auth')
 @Controller()
@@ -176,6 +180,30 @@ export class AuthController {
     await this.authService.logoutAll(req.user.id);
     clearAuthCookies(res);
     return { message: 'Logged out from all devices' };
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get current authenticated user' })
+  @ApiResponse({ status: 200, description: 'Current user returned' })
+  me(@Req() req: any, @Res({ passthrough: true }) res: Response) {
+    setAccessTokenCookie(res, this.authService.signAccessToken(req.user));
+
+    return {
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        role: req.user.role,
+        tenantId: req.user.tenantId,
+        tenantSlug: req.user.tenantSlug,
+        tenantName: req.user.tenantName,
+        firstName: req.user.firstName,
+        moduleConfig: req.user.moduleConfig ?? {},
+        featureConfig: req.user.featureConfig ?? {},
+      },
+      permissions: req.user.permissions ?? [],
+    };
   }
 
   @Post('forgot-password')
@@ -347,7 +375,10 @@ export class AuthController {
       'GOOGLE',
       tenantSlug,
     );
-    const frontendUrl = process.env.APP_URL || 'http://localhost:3000';
+    const frontendUrl =
+      process.env.FRONTEND_URL ||
+      process.env.APP_URL ||
+      'http://localhost:3000';
     setAuthCookies(res, result.accessToken, result.refreshToken);
     res.redirect(`${frontendUrl}/auth/social-callback`);
   }
@@ -375,7 +406,10 @@ export class AuthController {
       'MICROSOFT',
       tenantSlug,
     );
-    const frontendUrl = process.env.APP_URL || 'http://localhost:3000';
+    const frontendUrl =
+      process.env.FRONTEND_URL ||
+      process.env.APP_URL ||
+      'http://localhost:3000';
     setAuthCookies(res, result.accessToken, result.refreshToken);
     res.redirect(`${frontendUrl}/auth/social-callback`);
   }

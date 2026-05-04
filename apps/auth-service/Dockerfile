@@ -9,7 +9,7 @@ COPY packages/utils ./packages/utils
 COPY packages/config ./packages/config
 COPY apps/auth-service ./apps/auth-service
 RUN npm ci
-RUN cd apps/auth-service && npx prisma generate
+RUN cd apps/auth-service && npx prisma@5.22.0 generate
 RUN npm run build --workspace=packages/types
 RUN npm run build --workspace=packages/schemas
 RUN npm run build --workspace=packages/utils
@@ -39,8 +39,9 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-# Install production deps with full workspace context
-RUN npm ci --omit=dev --ignore-scripts && npm rebuild bcrypt --update-binary
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/auth-service/node_modules ./apps/auth-service/node_modules
+RUN npm rebuild bcrypt --update-binary
 # Copy built service
 COPY --from=builder /app/apps/auth-service/dist ./apps/auth-service/dist
 COPY --from=builder /app/apps/auth-service/prisma ./apps/auth-service/prisma
@@ -48,3 +49,4 @@ COPY --from=builder /app/apps/auth-service/prisma ./apps/auth-service/prisma
 WORKDIR /app/apps/auth-service
 EXPOSE 4001
 CMD ["node", "dist/main"]
+

@@ -3,13 +3,14 @@ import {
   CanActivate,
   ExecutionContext,
   UnauthorizedException,
+  SetMetadata,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import * as jwt from 'jsonwebtoken';
+import { JwtPayload, RequestUser } from '@work-phelo/types';
 
 export const IS_PUBLIC_KEY = 'isPublic';
-export const Public = () =>
-  require('@nestjs/common').SetMetadata(IS_PUBLIC_KEY, true);
+export const Public = () => SetMetadata(IS_PUBLIC_KEY, true);
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -30,15 +31,22 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) throw new UnauthorizedException('No token provided');
 
     try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
-      request.user = {
+      const payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+
+      const user: RequestUser = {
         id: payload.sub,
         email: payload.email,
         role: payload.role,
-        companyRoleId: payload.companyRoleId,
         tenantId: payload.tenantId,
         tenantSlug: payload.tenantSlug,
+        tenantName: payload.tenantName ?? '',
+        firstName: payload.firstName ?? '',
+        moduleConfig: payload.moduleConfig ?? {},
+        featureConfig: payload.featureConfig ?? {},
+        permissions: payload.permissions ?? [],
       };
+
+      request.user = user;
       return true;
     } catch {
       throw new UnauthorizedException('Invalid or expired token');

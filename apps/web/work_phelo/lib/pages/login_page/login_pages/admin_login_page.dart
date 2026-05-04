@@ -57,18 +57,22 @@ class _SuperAdminLoginPageState extends ConsumerState<SuperAdminLoginPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
+      // ── Error handling ──
       if (next.error != null) {
         setState(() {
           _errorMessage = next.error;
           showLoginState = true;
         });
-      } else if (previous?.isAuthenticated == false &&
+        return;
+      }
+
+      // ── Successful login → route to dashboard ──
+      if (previous?.isAuthenticated == false &&
           next.isAuthenticated &&
-          next.user != null) {
-        setState(() => showLoginState = false);
-        if (next.user!.isSuperAdmin) {
-          context.go('/platform/dashboard');
-        }
+          next.user != null &&
+          next.user!.isSuperAdmin) {
+        context.go('/platform/dashboard');
+        return;
       }
     });
 

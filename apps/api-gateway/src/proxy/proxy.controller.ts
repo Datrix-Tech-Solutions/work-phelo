@@ -3,14 +3,11 @@ import { Request, Response } from 'express';
 import * as http from 'http';
 import * as https from 'https';
 import * as jwt from 'jsonwebtoken';
-
-const SERVICES: Record<string, string> = {
-  auth: process.env.AUTH_SERVICE_URL || 'http://localhost:4001',
-  hr: process.env.HR_SERVICE_URL || 'http://localhost:4002',
-  notification: process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:4004',
-  subscription: process.env.SUBSCRIPTION_SERVICE_URL || 'http://localhost:4005',
-  marketing: process.env.MARKETING_SERVICE_URL || 'http://localhost:4006',
-};
+import {
+  GatewayServiceName,
+  getConfiguredGatewayServices,
+  getGatewayServiceUrl,
+} from '../config/runtime-env';
 
 const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/login$/,
@@ -31,18 +28,22 @@ const PUBLIC_PATTERNS = [
 @Controller()
 export class ProxyController {
   private readonly logger = new Logger(ProxyController.name);
+  private readonly services = getConfiguredGatewayServices();
 
   @All('api/v1/*')
   async proxy(@Req() req: Request, @Res() res: Response) {
     // pathParts: ['api', 'v1', 'auth', 'login', ...]
     const pathParts = req.path.split('/').filter(Boolean);
-    const service = pathParts[2]; // index 2 — after 'api' and 'v1'
-    const serviceUrl = SERVICES[service];
+    const service = pathParts[2] as GatewayServiceName | undefined; // index 2 — after 'api' and 'v1'
+    const serviceUrl = service ? getGatewayServiceUrl(service) : undefined;
 
     if (!serviceUrl) {
-      return res.status(404).json({
-        message: `Service '${service}' not found`,
-        statusCode: 404,
+      const availableServices = Object.keys(this.services);
+
+      return res.status(503).json({
+        message: `Service '${service ?? 'unknown'}' is not configured for this environment`,
+        availableServices,
+        statusCode: 503,
       });
     }
 
@@ -68,9 +69,6 @@ export class ProxyController {
         req.headers['x-tenant-slug'] = payload.tenantSlug;
         req.headers['x-tenant-name'] = payload.tenantName ?? '';
         req.headers['x-user-first-name'] = payload.firstName ?? '';
-        if (payload.companyRoleId) {
-          req.headers['x-company-role-id'] = payload.companyRoleId;
-        }
       } catch {
         return res
           .status(401)
@@ -80,7 +78,6 @@ export class ProxyController {
 
     // Strip 'api', 'v1', and service name — forward the rest downstream
     // /api/v1/auth/login     → /auth/login    (auth-service)
-    // /api/v1/auth/company-roles  → /company-roles (auth-service)
     // /api/v1/hr/departments      → /departments   (hr-service)
     const remainingParts = pathParts.slice(3); // remove 'api', 'v1', service
     const downstreamPath = '/' + remainingParts.join('/');

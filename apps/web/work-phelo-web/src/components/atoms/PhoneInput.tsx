@@ -1,0 +1,110 @@
+'use client';
+
+import { forwardRef, useState } from 'react';
+import { cn } from '@/lib/utils';
+import { Icons } from '@/components/atoms/icons';
+
+const COUNTRY_CODES = [
+  { code: '+233', flag: 'GH' },
+  { code: '+1', flag: 'US' },
+  { code: '+44', flag: 'GB' },
+  { code: '+27', flag: 'ZA' },
+  { code: '+234', flag: 'NG' },
+  { code: '+254', flag: 'KE' },
+];
+
+const ALL_CODES = COUNTRY_CODES.map((c) => c.code);
+
+function parsePhone(raw: string | null | undefined): { code: string; number: string } {
+  if (!raw) return { code: '+233', number: '' };
+  const matched = ALL_CODES.find((c) => raw.startsWith(c));
+  return matched
+    ? { code: matched, number: raw.slice(matched.length).replace(/\D/g, '') }
+    : { code: '+233', number: raw.replace(/\D/g, '') };
+}
+
+interface PhoneInputProps {
+  label?: string;
+  error?: string;
+  placeholder?: string;
+  value?: string | null;
+  onChange?: (value: string) => void;
+  defaultCountryCode?: string;
+  className?: string;
+}
+
+export const PhoneInput = forwardRef<HTMLInputElement, PhoneInputProps>(
+  (
+    {
+      label,
+      error,
+      placeholder = '00 000 0000',
+      value,
+      onChange,
+      defaultCountryCode = '+233',
+      className,
+    },
+    ref,
+  ) => {
+    const isControlled = value != null;
+    const parsed = isControlled ? parsePhone(value) : { code: defaultCountryCode, number: '' };
+
+    const [internalCode, setInternalCode] = useState(defaultCountryCode);
+    const [internalNumber, setInternalNumber] = useState('');
+
+    const countryCode = isControlled ? parsed.code : internalCode;
+    const localValue = isControlled ? parsed.number : internalNumber;
+
+    return (
+      <div className="flex flex-col gap-1.5">
+        {label && <label className="text-sm font-bold text-gray-900">{label}</label>}
+        <div
+          className={cn(
+            'flex border rounded-input overflow-hidden bg-white transition-colors',
+            'focus-within:ring-1 focus-within:ring-gray-400 focus-within:border-gray-400',
+            error ? 'border-red-500' : 'border-gray-300',
+            className,
+          )}
+        >
+          {/* Country code selector */}
+          <div className="relative flex items-center border-r border-gray-300 px-3 bg-white shrink-0">
+            <select
+              value={countryCode}
+              onChange={(e) => {
+                if (!isControlled) setInternalCode(e.target.value);
+                onChange?.(e.target.value + localValue);
+              }}
+              className="appearance-none bg-transparent text-sm text-gray-800 pr-5 focus:outline-none cursor-pointer"
+            >
+              {COUNTRY_CODES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-2 text-gray-400">
+              <Icons.ChevronDown className="w-5 h-5" />
+            </div>
+          </div>
+
+          {/* Number input */}
+          <input
+            ref={ref}
+            type="tel"
+            value={localValue}
+            onChange={(e) => {
+              const numeric = e.target.value.replace(/\D/g, '').slice(0, 10);
+              if (!isControlled) setInternalNumber(numeric);
+              onChange?.(countryCode + numeric);
+            }}
+            placeholder={placeholder}
+            className="flex-1 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 bg-transparent focus:outline-none"
+          />
+        </div>
+        {error && <p className="text-xs text-red-500">{error}</p>}
+      </div>
+    );
+  },
+);
+
+PhoneInput.displayName = 'PhoneInput';

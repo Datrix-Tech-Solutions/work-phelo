@@ -84,6 +84,8 @@ model Tenant {
   address        String?
   country        String       @default("GH")
   status         TenantStatus @default(PENDING)
+  moduleConfig   Json         @default("{\"hr\": false, \"accounting\": false, \"marketing\": false}")
+  featureConfig  Json         @default("{\"hr\": {\"leave\": false, \"time\": false, \"payroll\": false, \"appraisals\": false, \"projects\": false, \"assets\": false}, \"marketing\": {\"leads\": false, \"pipeline\": false, \"contacts\": false}}")
   logoUrl        String?
   website        String?
   industry       String?
@@ -94,7 +96,6 @@ model Tenant {
   updatedAt      DateTime     @updatedAt
 
   users           User[]
-  companyRoles    CompanyRole[]
   permissionSets  PermissionSet[]
   userPermissions UserPermission[]
 
@@ -200,25 +201,6 @@ model UserPermissionSet {
   @@schema("auth")
 }
 
-// ── CompanyRole ────────────────────────────────────────────────────────────
-
-model CompanyRole {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  description String?
-  isSystem    Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users   User[]
-
-  @@unique([tenantId, name])
-  @@schema("auth")
-}
-
 // ── User ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -230,7 +212,6 @@ model User {
   lastName            String
   phone               String?
   role                UserRole    @default(EMPLOYEE)
-  companyRoleId       String?
   status              UserStatus  @default(PENDING_VERIFICATION)
   avatarUrl           String?
   isMfaEnabled        Boolean     @default(false)
@@ -248,7 +229,6 @@ model User {
   updatedAt           DateTime    @updatedAt
 
   tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  companyRole         CompanyRole?        @relation(fields: [companyRoleId], references: [id])
   refreshTokens       RefreshToken[]
   otpCodes            OtpCode[]
   socialAccounts      SocialAccount[]
@@ -282,13 +262,15 @@ model RefreshToken {
 // ── OtpCode ────────────────────────────────────────────────────────────────
 
 model OtpCode {
-  id        String    @id @default(uuid())
-  userId    String
-  type      OtpType
-  code      String
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  id          String    @id @default(uuid())
+  userId      String
+  type        OtpType
+  code        String
+  expiresAt   DateTime
+  usedAt      DateTime?
+  attempts    Int       @default(0)
+  lockedUntil DateTime?
+  createdAt   DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

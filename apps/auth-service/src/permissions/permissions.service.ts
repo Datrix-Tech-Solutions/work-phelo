@@ -10,6 +10,8 @@ import {
   GrantPermissionDto,
   RevokePermissionDto,
   AssignPermissionSetDto,
+  CreatePermissionSetDto,
+  UpdatePermissionSetDto,
 } from './dto/grant-permission.dto';
 import { PermissionAction } from './dto/grant-permission.dto';
 
@@ -122,7 +124,17 @@ export class PermissionsService {
   // Row is NEVER hard-deleted.
 
   async revoke(revokedBy: string, tenantId: string, dto: RevokePermissionDto) {
-    const permission = await this.prisma.userPermission.findFirst({
+    const user = await this.prisma.user.findFirst({
+      where: { id: dto.userId, tenantId },
+    });
+    if (!user) throw new NotFoundException('User not found in your tenant');
+
+    const resource = await this.prisma.resource.findUnique({
+      where: { id: dto.resourceId },
+    });
+    if (!resource) throw new NotFoundException('Resource not found');
+
+    const existing = await this.prisma.userPermission.findFirst({
       where: {
         tenantId,
         userId: dto.userId,
@@ -131,19 +143,29 @@ export class PermissionsService {
       },
     });
 
-    if (!permission) {
-      throw new NotFoundException(
-        'Permission not found — user may not have this permission',
-      );
-    }
-
-    if (!permission.isActive) {
+    if (existing && !existing.isActive) {
       throw new BadRequestException('Permission is already revoked');
     }
 
-    const updated = await this.prisma.userPermission.update({
-      where: { id: permission.id },
-      data: {
+    const updated = await this.prisma.userPermission.upsert({
+      where: {
+        userId_resourceId_action: {
+          userId: dto.userId,
+          resourceId: dto.resourceId,
+          action: dto.action as any,
+        },
+      },
+      update: {
+        isActive: false,
+        revokedBy,
+        revokedAt: new Date(),
+      },
+      create: {
+        tenantId,
+        userId: dto.userId,
+        resourceId: dto.resourceId,
+        action: dto.action as any,
+        grantedBy: revokedBy,
         isActive: false,
         revokedBy,
         revokedAt: new Date(),
@@ -165,12 +187,109 @@ export class PermissionsService {
 
   // ── Permission Sets ────────────────────────────────────────────────────────
 
-  async createPermissionSet(
+  async createPermissionSet(tenantId: string, dto: CreatePermissionSetDto) {
+    const existing = await this.prisma.permissionSet.findFirst({
+      where: { tenantId, name: dto.name },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `A permission set named "${dto.name}" already exists`,
+      );
+    }
+
+    if (dto.resources.length > 0) {
+      const uniqueResourceIds = [
+        ...new Set(dto.resources.map((r) => r.resourceId)),
+      ];
+      const found = await this.prisma.resource.findMany({
+        where: { id: { in: uniqueResourceIds } },
+        select: { id: true },
+      });
+      if (found.length !== uniqueResourceIds.length) {
+        throw new NotFoundException('One or more resources not found');
+      }
+    }
+
+    return this.prisma.permissionSet.create({
+      data: {
+        tenantId,
+        name: dto.name,
+        description: dto.description,
+        resources: {
+          create: dto.resources.map((r) => ({
+            resourceId: r.resourceId,
+            action: r.action as any,
+          })),
+        },
+      },
+      include: { resources: { include: { resource: true } } },
+    });
+  }
+
+  async updatePermissionSet(
+    tenantId: string,
+    id: string,
+    dto: UpdatePermissionSetDto,
+  ) {
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { id, tenantId, isActive: true },
+    });
+    if (!set) throw new NotFoundException('Permission set not found');
+
+    if (dto.resources.length > 0) {
+      const uniqueResourceIds = [
+        ...new Set(dto.resources.map((r) => r.resourceId)),
+      ];
+      const found = await this.prisma.resource.findMany({
+        where: { id: { in: uniqueResourceIds } },
+        select: { id: true },
+      });
+      if (found.length !== uniqueResourceIds.length) {
+        throw new NotFoundException('One or more resources not found');
+      }
+    }
+
+    // Replace all resources atomically
+    await this.prisma.permissionSetResource.deleteMany({
+      where: { permissionSetId: id },
+    });
+
+    return this.prisma.permissionSet.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        resources: {
+          create: dto.resources.map((r) => ({
+            resourceId: r.resourceId,
+            action: r.action as any,
+          })),
+        },
+      },
+      include: { resources: { include: { resource: true } } },
+    });
+  }
+
+  // kept for internal seeding use
+  async _createPermissionSetRaw(
     tenantId: string,
     name: string,
     description: string,
     resources: { resourceId: string; action: string }[],
   ) {
+    if (resources.length > 0) {
+      const uniqueResourceIds = [
+        ...new Set(resources.map((r) => r.resourceId)),
+      ];
+      const found = await this.prisma.resource.findMany({
+        where: { id: { in: uniqueResourceIds } },
+        select: { id: true },
+      });
+      if (found.length !== uniqueResourceIds.length) {
+        throw new NotFoundException('One or more resources not found');
+      }
+    }
+
     return this.prisma.permissionSet.create({
       data: {
         tenantId,
@@ -196,6 +315,115 @@ export class PermissionsService {
       },
       orderBy: { name: 'asc' },
     });
+  }
+
+  async getPermissionSetMembers(tenantId: string, permissionSetId: string) {
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { id: permissionSetId, tenantId, isActive: true },
+      select: { id: true },
+    });
+    if (!set) throw new NotFoundException('Permission set not found');
+
+    const assignments = await this.prisma.userPermissionSet.findMany({
+      where: { permissionSetId },
+      include: {
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+            status: true,
+          },
+        },
+      },
+      orderBy: [{ user: { firstName: 'asc' } }, { user: { lastName: 'asc' } }],
+    });
+
+    return assignments.map((assignment) => ({
+      id: assignment.user.id,
+      firstName: assignment.user.firstName,
+      lastName: assignment.user.lastName,
+      email: assignment.user.email,
+      role: assignment.user.role,
+      status: assignment.user.status,
+      grantedAt: assignment.grantedAt,
+    }));
+  }
+
+  async getPermissionRecipients(
+    tenantId: string,
+    resourceName: string,
+    action: PermissionAction,
+    options?: {
+      includeTenantAdmins?: boolean;
+      activeOnly?: boolean;
+    },
+  ) {
+    const includeTenantAdmins = options?.includeTenantAdmins ?? false;
+    const activeOnly = options?.activeOnly ?? true;
+    const now = new Date();
+
+    const users = await this.prisma.user.findMany({
+      where: {
+        tenantId,
+        ...(activeOnly ? { status: 'ACTIVE' } : {}),
+        ...(includeTenantAdmins ? {} : { role: 'EMPLOYEE' }),
+        OR: [
+          {
+            userPermissions: {
+              some: {
+                isActive: true,
+                OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+                action,
+                resource: {
+                  name: resourceName,
+                  isActive: true,
+                },
+              },
+            },
+          },
+          {
+            permissionSets: {
+              some: {
+                permissionSet: {
+                  isActive: true,
+                  resources: {
+                    some: {
+                      action,
+                      resource: {
+                        name: resourceName,
+                        isActive: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          ...(includeTenantAdmins ? [{ role: 'TENANT_ADMIN' as const }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
+
+    return users.map((user) => ({
+      userId: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      status: user.status,
+    }));
   }
 
   async assignPermissionSet(
@@ -229,6 +457,18 @@ export class PermissionsService {
     });
   }
 
+  async deletePermissionSet(tenantId: string, id: string) {
+    const set = await this.prisma.permissionSet.findFirst({
+      where: { id, tenantId },
+    });
+    if (!set) throw new NotFoundException('Permission set not found');
+    if (set.isSystem) {
+      throw new ForbiddenException('System permission sets cannot be deleted');
+    }
+    await this.prisma.permissionSet.delete({ where: { id } });
+    return { message: 'Permission set deleted' };
+  }
+
   async removePermissionSet(
     tenantId: string,
     userId: string,
@@ -252,20 +492,23 @@ export class PermissionsService {
   async getUserPermissions(tenantId: string, userId: string) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      include: { companyRole: true },
     });
     if (!user) throw new NotFoundException('User not found');
 
     // Direct permissions (active and not expired)
-    const directPerms = await this.prisma.userPermission.findMany({
+    // Direct permissions (all records, to distinguish active vs explicitly denied)
+    const allDirectPerms = await this.prisma.userPermission.findMany({
       where: {
         tenantId,
         userId,
-        isActive: true,
-        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
       },
       include: { resource: true },
     });
+
+    // Active direct permissions (must not be expired)
+    const directPerms = allDirectPerms.filter(
+      (p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()),
+    );
 
     // Permission set permissions
     const setAssignments = await this.prisma.userPermissionSet.findMany({
@@ -303,7 +546,6 @@ export class PermissionsService {
     return {
       userId,
       systemRole: user.role,
-      companyRole: user.companyRole?.name || null,
       directPermissions: directFormatted,
       permissionSets: setAssignments.map((a) => ({
         id: a.permissionSet.id,

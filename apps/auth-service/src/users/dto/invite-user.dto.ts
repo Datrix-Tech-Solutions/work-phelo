@@ -22,8 +22,4 @@ export class InviteUserDto {
   @IsOptional()
   @IsEnum(UserSystemRole)
   role?: UserSystemRole;
-
-  @IsOptional()
-  @IsString()
-  companyRoleId?: string;
 }

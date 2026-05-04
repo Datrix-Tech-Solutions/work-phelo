@@ -1,5 +1,6 @@
 import 'dart:developer';
 
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 
@@ -32,9 +33,18 @@ class AuthenticationState {
 
 class AuthNotifier extends StateNotifier<AuthenticationState> {
   final AuthenticationService _service;
-  final Ref ref;
+  final Ref _ref;
 
-  AuthNotifier(this._service, this.ref) : super(const AuthenticationState());
+  AuthNotifier(this._service, this._ref) : super(const AuthenticationState()) {
+    _restore();
+  }
+
+  Future<void> _restore() async {
+    final user = await _service.restoreSession();
+    if (user != null) {
+      state = state.copyWith(user: user, isLoading: false);
+    }
+  }
 
   // Super Admin Login
   Future<void> loginSuperAdmin({
@@ -50,13 +60,14 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
       );
       state = state.copyWith(user: user, isLoading: false);
     } catch (e) {
-      state = state.copyWith(
-        error: e
-            .toString()
-            .replaceFirst('Exception: ', '')
-            .replaceFirst('Exception', ''),
-        isLoading: false,
-      );
+      String msg = 'An error occurred. Please try again.';
+      if (e is DioException) {
+        final data = e.response?.data;
+        if (data is Map && data['message'] != null) {
+          msg = data['message'].toString();
+        }
+      }
+      state = state.copyWith(error: msg, isLoading: false);
     }
   }
 
@@ -105,10 +116,17 @@ class AuthNotifier extends StateNotifier<AuthenticationState> {
 
     // ── Route back to the correct login page ──
     if (isSuperAdmin) {
-      ref.read(goRouterProvider).go('/platform/login');
+      _ref.read(goRouterProvider).go('/platform/login');
     } else if (tenantSlug != null && tenantSlug.isNotEmpty) {
-      ref.read(goRouterProvider).go('/$tenantSlug/login');
+      _ref.read(goRouterProvider).go('/$tenantSlug/login');
     }
+  }
+
+  void clearUser() {
+    log('CLEAR USER CALLED');
+    // Print the stack trace to see exactly what called it
+    log(StackTrace.current.toString());
+    state = const AuthenticationState();
   }
 }
 

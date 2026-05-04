@@ -1,4 +1,11 @@
-import { ApiTags } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiParam,
+  ApiBody,
+} from '@nestjs/swagger';
 import {
   Controller,
   Get,
@@ -14,35 +21,84 @@ import {
 import { PayrollService } from './payroll.service';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ModuleGuard } from '../auth/guards/module.guard';
+import { FeatureGuard } from '../auth/guards/feature.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequireModule } from '../auth/decorators/module.decorator';
+import { RequireFeature } from '../auth/decorators/feature.decorator';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
 
-@ApiTags('upayroll')
+@ApiTags('Payroll')
 @Controller('payroll')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
+@RequireModule('hr')
+@RequireFeature('hr', 'payroll')
+@ApiBearerAuth('access-token')
 export class PayrollController {
   constructor(private readonly payrollService: PayrollService) {}
 
   @Post('run')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.RUN_PAYROLL)
+  @ApiOperation({
+    summary:
+      'Run payroll for a given period — Ghana GRA tax calculations applied',
+  })
+  @ApiBody({
+    schema: {
+      example: {
+        month: 4,
+        year: 2026,
+        description: 'April 2026 monthly payroll',
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Payroll run created successfully' })
+  @ApiResponse({ status: 400, description: 'No active employees found' })
   runPayroll(@Body() dto: RunPayrollDto, @Req() req: any) {
     return this.payrollService.runPayroll(req.user.tenantId, req.user.id, dto);
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_PAYROLL)
+  @ApiOperation({ summary: 'List all payroll runs for the tenant' })
+  @ApiResponse({ status: 200, description: 'Payroll runs retrieved' })
   getPayrollRuns(@Req() req: any) {
-    return this.payrollService.getPayrollRuns(req.user.tenantId);
+    return this.payrollService.getPayrollRuns(
+      req.user.tenantId,
+      req.user as RequestUser,
+    );
   }
 
   @Get('my-payslips')
+  @RequirePermissions(Permission.READ_OWN_PAYSLIP)
+  @ApiOperation({ summary: 'Get payslips for the logged-in employee' })
+  @ApiResponse({ status: 200, description: 'Payslips retrieved' })
   getMyPayslips(@Req() req: any) {
     return this.payrollService.getMyPayslips(req.user.tenantId, req.user.id);
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.READ_PAYROLL)
+  @ApiOperation({ summary: 'Get a specific payroll run with all payslips' })
+  @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiResponse({ status: 200, description: 'Payroll run retrieved' })
+  @ApiResponse({ status: 404, description: 'Payroll run not found' })
   getPayrollRun(@Param('id') id: string, @Req() req: any) {
-    return this.payrollService.getPayrollRunById(req.user.tenantId, id);
+    return this.payrollService.getPayrollRunById(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Patch(':id/approve')
+  @RequirePermissions(Permission.APPROVE_PAYROLL)
+  @ApiOperation({ summary: 'Approve a payroll run' })
+  @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiResponse({ status: 200, description: 'Payroll approved' })
   approvePayroll(@Param('id') id: string, @Req() req: any) {
     return this.payrollService.approvePayroll(
       req.user.tenantId,
@@ -52,6 +108,10 @@ export class PayrollController {
   }
 
   @Patch(':id/mark-paid')
+  @RequirePermissions(Permission.APPROVE_PAYROLL)
+  @ApiOperation({ summary: 'Mark a payroll run as paid' })
+  @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiResponse({ status: 200, description: 'Payroll marked as paid' })
   markAsPaid(@Param('id') id: string, @Req() req: any) {
     return this.payrollService.markAsPaid(req.user.tenantId, id);
   }

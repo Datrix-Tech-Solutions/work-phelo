@@ -3,10 +3,14 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -15,23 +19,31 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { PermissionsService } from './permissions.service';
 import {
   GrantPermissionDto,
   RevokePermissionDto,
   AssignPermissionSetDto,
+  CreatePermissionSetDto,
+  UpdatePermissionSetDto,
+  PermissionAction,
 } from './dto/grant-permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../auth/guards/permissions.guard';
+import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Permission } from '@work-phelo/config';
 
 @ApiTags('Permissions')
 @Controller('permissions')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth('access-token')
 export class PermissionsController {
   constructor(private readonly permissionsService: PermissionsService) {}
 
   @Get('resources')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({ summary: 'List all platform resources' })
   @ApiResponse({ status: 200, description: 'Resources list retrieved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
@@ -40,6 +52,7 @@ export class PermissionsController {
   }
 
   @Get('users/:userId')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({
     summary: 'Get effective permissions for a user — direct + from sets',
   })
@@ -57,7 +70,51 @@ export class PermissionsController {
     );
   }
 
+  @Get('recipients')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
+  @ApiOperation({
+    summary:
+      'List active users in a tenant who effectively hold a resource-action permission',
+  })
+  @ApiQuery({ name: 'resource', required: true, example: 'leave' })
+  @ApiQuery({
+    name: 'action',
+    required: true,
+    enum: PermissionAction,
+    example: PermissionAction.APPROVE,
+  })
+  @ApiQuery({
+    name: 'includeTenantAdmins',
+    required: false,
+    type: Boolean,
+    example: false,
+  })
+  @ApiQuery({
+    name: 'activeOnly',
+    required: false,
+    type: Boolean,
+    example: true,
+  })
+  getPermissionRecipients(
+    @Query('resource') resource: string,
+    @Query('action') action: PermissionAction,
+    @Query('includeTenantAdmins') includeTenantAdmins: string,
+    @Query('activeOnly') activeOnly: string,
+    @Req() req: any,
+  ) {
+    return this.permissionsService.getPermissionRecipients(
+      req.user.tenantId,
+      resource,
+      action,
+      {
+        includeTenantAdmins: includeTenantAdmins === 'true',
+        activeOnly: activeOnly !== 'false',
+      },
+    );
+  }
+
   @Get('users/:userId/history')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({
     summary: 'Full permission history including revoked — useful for audit',
   })
@@ -72,6 +129,7 @@ export class PermissionsController {
   }
 
   @Post('grant')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({
     summary: 'Grant a direct permission to a user on a resource',
   })
@@ -96,6 +154,7 @@ export class PermissionsController {
   }
 
   @Patch('revoke')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({
     summary: 'Revoke a permission — soft update, row is never deleted',
   })
@@ -116,13 +175,102 @@ export class PermissionsController {
   }
 
   @Get('sets')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({ summary: 'List all permission sets in tenant' })
   @ApiResponse({ status: 200, description: 'Permission sets retrieved' })
   getPermissionSets(@Req() req: any) {
     return this.permissionsService.getPermissionSets(req.user.tenantId);
   }
 
+  @Get('sets/:id/members')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
+  @ApiOperation({ summary: 'List users assigned to a permission set' })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiResponse({ status: 200, description: 'Permission set members retrieved' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  getPermissionSetMembers(@Param('id') id: string, @Req() req: any) {
+    return this.permissionsService.getPermissionSetMembers(
+      req.user.tenantId,
+      id,
+    );
+  }
+
+  @Post('sets')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Create a new permission set with resource-action pairs',
+  })
+  @ApiBody({
+    description: 'Create permission set payload',
+    schema: {
+      example: {
+        name: 'Leave Manager Set',
+        description: 'Can view employees and approve leave requests',
+        resources: [
+          { resourceId: 'uuid', action: 'VIEW' },
+          { resourceId: 'uuid', action: 'APPROVE' },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Permission set created' })
+  @ApiResponse({
+    status: 400,
+    description: 'Set name already exists or invalid resources',
+  })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  createSet(@Body() dto: CreatePermissionSetDto, @Req() req: any) {
+    return this.permissionsService.createPermissionSet(req.user.tenantId, dto);
+  }
+
+  @Patch('sets/:id')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @ApiOperation({
+    summary:
+      'Replace all resource-action pairs on a permission set — this is how the Permission Matrix saves',
+  })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiBody({
+    description: 'Update permission set payload',
+    schema: {
+      example: {
+        resources: [
+          { resourceId: 'uuid', action: 'VIEW' },
+          { resourceId: 'uuid', action: 'APPROVE' },
+        ],
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Permission set updated' })
+  @ApiResponse({ status: 400, description: 'Invalid resources' })
+  @ApiResponse({ status: 401, description: 'Missing or invalid token' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  updateSet(
+    @Param('id') id: string,
+    @Body() dto: UpdatePermissionSetDto,
+    @Req() req: any,
+  ) {
+    return this.permissionsService.updatePermissionSet(
+      req.user.tenantId,
+      id,
+      dto,
+    );
+  }
+
+  @Delete('sets/:id')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @ApiOperation({ summary: 'Delete a custom permission set' })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiResponse({ status: 200, description: 'Permission set deleted' })
+  @ApiResponse({ status: 403, description: 'System sets cannot be deleted' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  deleteSet(@Param('id') id: string, @Req() req: any) {
+    return this.permissionsService.deletePermissionSet(req.user.tenantId, id);
+  }
+
   @Post('sets/assign')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({ summary: 'Assign a permission set to a user' })
   @ApiBody({
     description: 'Assign permission set payload',
@@ -143,6 +291,7 @@ export class PermissionsController {
   }
 
   @Patch('sets/remove/:userId/:permissionSetId')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
   @ApiOperation({ summary: 'Remove a permission set from a user' })
   @ApiParam({ name: 'userId', description: 'User UUID' })
   @ApiParam({ name: 'permissionSetId', description: 'Permission set UUID' })

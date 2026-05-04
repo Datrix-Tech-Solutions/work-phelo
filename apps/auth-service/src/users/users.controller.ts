@@ -15,6 +15,7 @@ import {
   Param,
   UseGuards,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -23,9 +24,13 @@ import { InviteUserDto } from './dto/invite-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { AcceptInviteDto } from '../auth/dto/accept-invite.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { Response } from 'express';
+import { setAuthCookies } from '../common/cookie.helper';
 
 @ApiTags('Users')
 @Controller('users')
@@ -60,6 +65,58 @@ export class UsersController {
     return this.usersService.invite(req.user.tenantId, dto);
   }
 
+  @Post('assign-admin')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'SuperAdmin assigns a Company Admin to a tenant' })
+  @ApiBody({
+    schema: {
+      example: {
+        tenantId: 'uuid-of-target-tenant',
+        email: 'admin@companyname.com',
+        firstName: 'Abena',
+        lastName: 'Mensah',
+        role: 'TENANT_ADMIN',
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Company Admin invited successfully',
+  })
+  @ApiResponse({ status: 409, description: 'Company already has an admin' })
+  @ApiResponse({
+    status: 403,
+    description: 'SuperAdmin email cannot be assigned',
+  })
+  assignAdmin(
+    @Body() dto: InviteUserDto & { tenantId: string },
+    @Req() req: any,
+  ) {
+    const tenantId = dto.tenantId;
+    const { tenantId: _, ...inviteDto } = dto;
+    return this.usersService.invite(tenantId, {
+      ...inviteDto,
+      role: 'TENANT_ADMIN',
+    } as any);
+  }
+
+  @Post('set-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Alias for accept-invite — set password via invite token',
+  })
+  @ApiBody({
+    schema: {
+      example: { inviteToken: 'invite-token-here', password: 'NewPass123!' },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Password set, auto-logged in' })
+  setPassword(@Body() dto: AcceptInviteDto) {
+    return this.usersService.acceptInvite(dto);
+  }
+
   @Post('accept-invite')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Accept invitation and set initial password' })
@@ -74,8 +131,26 @@ export class UsersController {
   })
   @ApiResponse({ status: 200, description: 'Invite accepted successfully' })
   @ApiResponse({ status: 400, description: 'Invalid or expired invite token' })
-  acceptInvite(@Body() dto: AcceptInviteDto) {
-    return this.usersService.acceptInvite(dto);
+  async acceptInvite(
+    @Body() dto: AcceptInviteDto,
+    @Res({ passthrough: false }) res: Response,
+  ) {
+    const result = await this.usersService.acceptInvite(dto);
+    setAuthCookies(res, result.accessToken, result.refreshToken);
+    const { accessToken, refreshToken, ...safeResult } = result;
+    return res.json(safeResult);
+  }
+
+  @Post(':id/resend-invite')
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.INVITE_USER)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend invite email for a user in current tenant' })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'Invitation resent successfully' })
+  @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  async resendInvite(@Req() req: any, @Param('id') userId: string) {
+    return this.usersService.resendInvite(req.user.tenantId, userId);
   }
 
   @Get()

@@ -1,4 +1,3 @@
-import 'dart:developer';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -80,7 +79,6 @@ class _TenantLoginPageState extends ConsumerState<TenantLoginPage> {
     }
 
     final String route = switch (user.role) {
-      'SUPER_ADMIN' => '/platform/dashboard',
       'TENANT_ADMIN' => '/tenant/dashboard',
       _ => '/dashboard',
     };
@@ -91,19 +89,27 @@ class _TenantLoginPageState extends ConsumerState<TenantLoginPage> {
   @override
   Widget build(BuildContext context) {
     ref.listen<AuthenticationState>(authNotifierProvider, (previous, next) {
-      if (next.error != null) {
-        setState(() {
-          _errorMessage = next.error;
-          showLoginState = true;
-        });
-      }
-      if (previous?.isAuthenticated == false &&
-          next.isAuthenticated &&
-          next.user != null) {
-        log('TENANT PAGE >> routing for role: ${next.user!.role}');
-        _routeToDashboard(next.user!);
-      }
+  // ── Clear error when loading starts ──
+  if (next.isLoading) {
+    setState(() => showLoginState = false);
+    return;
+  }
+
+  if (next.error != null) {
+    setState(() {
+      _errorMessage = next.error;
+      showLoginState = true;
     });
+    return;
+  }
+
+  if (previous?.isAuthenticated == false &&
+      next.isAuthenticated &&
+      next.user != null) {
+    setState(() => showLoginState = false);
+    _routeToDashboard(next.user!);
+  }
+});
 
     final isLoading = ref.watch(authNotifierProvider).isLoading;
     return AuthLayout(
@@ -148,7 +154,7 @@ class _TenantLoginPageState extends ConsumerState<TenantLoginPage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const EmailConfirmation(),
+                      builder: (_) => EmailConfirmationForReset(tenantSlug: widget.tenantSlug),
                     ),
                   );
                 },

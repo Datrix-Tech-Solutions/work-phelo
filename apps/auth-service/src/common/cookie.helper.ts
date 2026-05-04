@@ -13,13 +13,7 @@ export function setAuthCookies(
   accessToken: string,
   refreshToken: string,
 ) {
-  res.cookie('access_token', accessToken, {
-    httpOnly: true,
-    secure: COOKIE_SECURE,
-    sameSite: SAME_SITE,
-    maxAge: 15 * 60 * 1000, // 15 minutes
-    path: '/',
-  });
+  setAccessTokenCookie(res, accessToken);
 
   res.cookie('refresh_token', refreshToken, {
     httpOnly: true,
@@ -27,6 +21,16 @@ export function setAuthCookies(
     sameSite: SAME_SITE,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     path: '/api/v1/auth/refresh', // scoped — not sent on every request
+  });
+}
+
+export function setAccessTokenCookie(res: Response, accessToken: string) {
+  res.cookie('access_token', accessToken, {
+    httpOnly: true,
+    secure: COOKIE_SECURE,
+    sameSite: SAME_SITE,
+    maxAge: 15 * 60 * 1000, // 15 minutes
+    path: '/',
   });
 }
 

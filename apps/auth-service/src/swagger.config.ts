@@ -10,6 +10,34 @@ export function setupSwagger(app: INestApplication) {
 
 Handles all authentication, user management, tenant management, and RBAC.
 
+### Base URL
+All requests go through the API Gateway at /api/v1/auth/...
+
+**Example (dev):** POST https://dev.workphelo.datrixtechsolutions.com/api/v1/auth/login
+
+**Example (prod):** POST https://workphelo.datrixtechsolutions.com/api/v1/auth/login
+
+### Sprint 1 — Key Flows
+
+**1. SuperAdmin Registration of Tenant**
+- POST /auth/admin/login → get token
+- POST /auth/tenants/register → creates tenant + sends invite email
+
+**2. Tenant Admin Onboarding**
+- GET email invite link → POST /auth/users/accept-invite → auto-login
+
+**3. Tenant Login**
+- POST /auth/login with tenantSlug
+
+**4. Forgot Password**
+- POST /auth/forgot-password → OTP sent to email
+- POST /auth/reset-password with OTP token
+
+**5. Session Management**
+- POST /auth/refresh → rotate tokens
+- POST /auth/logout → revoke session
+- GET /auth/me → get current user
+
 ### Authentication
 All protected endpoints require a valid JWT token either via:
 - **Cookie**: \`access_token\` (set automatically on login)
@@ -26,19 +54,22 @@ Access tokens expire in **15 minutes**. Use \`POST /auth/refresh\` to rotate tok
 | EMPLOYEE | Regular user — access controlled by company role |
 
 ### Company Roles
-Each tenant has 3 default company roles seeded automatically: **Company Admin**, **Manager**, **Employee**.
+Each tenant has 2 default company roles seeded automatically: **Company Admin** and **Employee**.
 Tenant Admins can create custom roles with specific permissions.
 
 ### Demo Credentials
-| Role | Slug | Email | Password |
-|---|---|---|---|
-| SuperAdmin | — | superadmin@datrix.com | SuperAdmin123! |
-| Tenant Admin | acme-ghana | admin@acmeghana.com | Admin123! |
-| Manager | acme-ghana | hr.manager@acmeghana.com | Manager123! |
-| Employee | acme-ghana | kofi.boateng@acmeghana.com | Employee123! |
+Use seeded local test accounts or your own tenant credentials. Avoid publishing real credentials inside Swagger documentation.
     `,
     )
     .setVersion('1.0')
+    .addServer(
+      'https://dev.workphelo.datrixtechsolutions.com/api/v1/auth',
+      'Dev (via API Gateway)',
+    )
+    .addServer(
+      'https://workphelo.datrixtechsolutions.com/api/v1/auth',
+      'Production (via API Gateway)',
+    )
     .addTag('Auth', 'Login, logout, token refresh, MFA, social auth')
     .addTag('Tenants', 'Tenant registration and management')
     .addTag('Users', 'User management and invitations')
@@ -54,6 +85,7 @@ Tenant Admins can create custom roles with specific permissions.
       },
       'access-token',
     )
+    .addCookieAuth('access_token')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

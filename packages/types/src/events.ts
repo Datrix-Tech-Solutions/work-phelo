@@ -1,0 +1,428 @@
+// ── Event Infrastructure ───────────────────────────────────────────────────
+
+/**
+ * Metadata injected into every event envelope by the publisher.
+ * Consumers can use messageId for idempotency and correlationId for tracing.
+ */
+export interface EventMeta {
+  /** Unique ID for this specific message — use for idempotency checks */
+  messageId: string;
+  /** Traces a chain of events back to the originating request */
+  correlationId: string;
+  /** ISO timestamp of when the event was published */
+  timestamp: string;
+}
+
+/** Utility: the full envelope shape a consumer receives */
+export type WithMeta<T> = T & { _meta: EventMeta };
+
+// ── Event Pattern Constants ────────────────────────────────────────────────
+
+export const EventPatterns = {
+  // Auth → HR
+  HR_TENANT_APPROVED: 'hr.tenant_approved',
+  HR_EMPLOYEE_ACTIVATED: 'hr.employee_activated',
+  HR_PROVISION_TENANT_WORKSPACE: 'hr.provision_tenant_workspace',
+  HR_LINK_EMPLOYEE_IDENTITY: 'hr.link_employee_identity',
+
+  // HR → Auth
+  AUTH_INVITE_EMPLOYEE: 'auth.invite_employee',
+  AUTH_EMPLOYEE_OFFBOARDED: 'hr.employee_offboarded',
+  AUTH_RESEND_EMPLOYEE_INVITE: 'auth.resend_employee_invite',
+  AUTH_PROVISION_EMPLOYEE_INVITE: 'auth.provision_employee_invite',
+  AUTH_DELETE_PENDING_EMPLOYEE_INVITE: 'auth.delete_pending_employee_invite',
+  AUTH_RESOLVE_PERMISSION_RECIPIENTS: 'auth.resolve_permission_recipients',
+
+  // Auth → Notification
+  NOTIFICATION_EMAIL_VERIFICATION: 'notification.email_verification',
+  NOTIFICATION_INVITE_USER: 'notification.invite_user',
+  NOTIFICATION_PASSWORD_RESET_LINK: 'notification.password_reset_link',
+  NOTIFICATION_PASSWORD_RESET_OTP: 'notification.password_reset_otp',
+  NOTIFICATION_SMS_OTP: 'notification.sms_otp',
+
+  // HR → Notification
+  NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
+  NOTIFY_RESIGNATION_SUBMITTED: 'notify.resignation_submitted',
+  NOTIFY_LEAVE_REQUESTED: 'notify.leave_requested',
+  NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
+  NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
+  NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
+  NOTIFY_APPRAISAL_SELF_SUBMITTED: 'notify.appraisal_self_submitted',
+  NOTIFY_APPRAISAL_MANAGER_REVIEWED: 'notify.appraisal_manager_reviewed',
+  NOTIFY_APPRAISAL_SELF_REMINDER: 'notify.appraisal_self_reminder',
+  NOTIFY_APPRAISAL_MANAGER_REMINDER: 'notify.appraisal_manager_reminder',
+  NOTIFY_SCHEDULE_PUBLISHED: 'notify.schedule_published',
+  NOTIFY_SHIFT_SWAP_REQUESTED: 'notify.shift_swap_requested',
+  NOTIFY_SHIFT_SWAP_PENDING_MANAGER: 'notify.shift_swap_pending_manager',
+  NOTIFY_SHIFT_SWAP_DECLINED: 'notify.shift_swap_declined',
+  NOTIFY_SHIFT_SWAP_APPROVED: 'notify.shift_swap_approved',
+  NOTIFY_SHIFT_SWAP_REJECTED: 'notify.shift_swap_rejected',
+  NOTIFY_SHIFT_SWAP_EXPIRED: 'notify.shift_swap_expired',
+} as const;
+
+export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
+
+// ── Auth → HR Events ───────────────────────────────────────────────────────
+
+export interface TenantApprovedEvent {
+  tenantId: string;
+  adminEmail: string;
+  adminUserId?: string;
+}
+
+export interface EmployeeActivatedEvent {
+  tenantId: string;
+  email: string;
+  userId: string;
+}
+
+export interface ProvisionTenantWorkspaceCommand {
+  tenantId: string;
+  adminEmail: string;
+  adminUserId?: string;
+}
+
+export interface ProvisionTenantWorkspaceResult {
+  provisioned: boolean;
+}
+
+export interface LinkEmployeeIdentityCommand {
+  tenantId: string;
+  email: string;
+  userId: string;
+}
+
+export interface LinkEmployeeIdentityResult {
+  linked: boolean;
+  employeeId: string;
+}
+
+// ── HR → Auth Events ───────────────────────────────────────────────────────
+
+export interface InviteEmployeeEvent {
+  tenantId: string;
+  employeeId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface EmployeeOffboardedEvent {
+  tenantId: string;
+  userId: string;
+  email: string;
+  reason: string;
+}
+
+export interface ResendEmployeeInviteEvent {
+  tenantId: string;
+  employeeId: string;
+  email: string;
+  firstName: string;
+  lastName?: string;
+}
+
+export interface ProvisionEmployeeInviteCommand {
+  tenantId: string;
+  employeeId?: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+}
+
+export interface ProvisionEmployeeInviteResult {
+  userId: string;
+  email: string;
+  inviteSent: boolean;
+}
+
+export interface DeletePendingEmployeeInviteCommand {
+  tenantId: string;
+  userId?: string;
+  email: string;
+}
+
+export interface DeletePendingEmployeeInviteResult {
+  deleted: boolean;
+}
+
+export interface ResolvePermissionRecipientsCommand {
+  tenantId: string;
+  resource: string;
+  action: string;
+  includeTenantAdmins?: boolean;
+  activeOnly?: boolean;
+}
+
+export interface PermissionRecipient {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  role: string;
+  status: string;
+}
+
+// ── Auth/HR → Notification Events ─────────────────────────────────────────
+
+export interface EmailVerificationEvent {
+  userId?: string;
+  tenantId?: string;
+  email: string;
+  firstName: string;
+  otp: string;
+  tenantName: string;
+}
+
+export type InviteUserKind = 'EMPLOYEE' | 'TENANT_ADMIN';
+
+export interface InviteUserEvent {
+  userId?: string;
+  tenantId?: string;
+  email: string;
+  firstName: string;
+  inviteToken?: string;
+  acceptInviteUrl: string;
+  tenantName: string;
+  inviteKind?: InviteUserKind;
+}
+
+export interface PasswordResetLinkEvent {
+  userId?: string;
+  tenantId?: string;
+  email: string;
+  firstName: string;
+  resetLink: string;
+  otpCode?: string;
+  tenantName: string;
+}
+
+export interface PasswordResetOtpEvent {
+  userId?: string;
+  tenantId?: string;
+  phone: string;
+  otp: string;
+  firstName: string;
+}
+
+export interface SmsOtpEvent {
+  userId?: string;
+  tenantId?: string;
+  phone: string;
+  otp: string;
+  context: string;
+}
+
+// ── HR → Notification Events ───────────────────────────────────────────────
+
+export interface EmployeeTerminationEvent {
+  tenantId: string;
+  employeeId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  reason: string;
+  lastWorkingDate: string;
+}
+
+export interface ResignationSubmittedEvent {
+  tenantId: string;
+  /** Recipient email for a resignation approver notification */
+  adminEmail: string;
+  employeeId: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  lastWorkingDate: string;
+  reason?: string;
+  additionalNotes?: string;
+  detailLink?: string;
+}
+
+export interface LeaveRequestedEvent {
+  tenantId: string;
+  employeeId: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  /** Manager's email — null if the employee has no assigned manager */
+  managerEmail: string | null;
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  reason?: string;
+  detailLink?: string;
+}
+
+export interface LeaveReviewedEvent {
+  tenantId: string;
+  employeeId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  status: 'APPROVED' | 'REJECTED';
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+  note?: string;
+}
+
+export interface LeaveCancelledEvent {
+  tenantId: string;
+  employeeId: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  /** Manager's email — null if no manager found */
+  managerEmail: string | null;
+  leaveTypeName: string;
+  startDate: string;
+  endDate: string;
+  totalDays: number;
+}
+
+export interface AppraisalSelfSubmittedEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleTitle: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  /** Manager's email — null if employee has no manager */
+  managerEmail: string | null;
+  managerFirstName: string | null;
+}
+
+export interface AppraisalManagerReviewedEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleTitle: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  finalScore: number;
+  finalRating: string;
+}
+
+export interface AppraisalSelfReminderEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleId: string;
+  cycleTitle: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  deadline: string;
+  daysRemaining: number;
+}
+
+export interface AppraisalManagerReminderEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleId: string;
+  cycleTitle: string;
+  managerEmail: string;
+  managerFirstName: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  deadline: string;
+  daysRemaining: number;
+}
+
+export interface TimeCorrectionSubmittedEvent {
+  tenantId: string;
+  correctionId: string;
+  employeeId: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  attendanceDate: string;
+  requestedIn: string | null;
+  requestedOut: string | null;
+  reason: string;
+  /** Recipient email for a non-manager approver notification */
+  adminEmail: string | null;
+  /** Recipient email for a manager approver notification */
+  managerEmail: string | null;
+  detailLink?: string;
+}
+
+export interface SchedulePublishedEvent {
+  tenantId: string;
+  employeeId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  employeeLastName: string;
+  /** ISO date — the effectiveFrom date of the new schedule */
+  effectiveFrom: string;
+  shiftType: string;
+  startTime: string;
+  endTime: string;
+  /** Link to the employee's schedule screen */
+  scheduleLink: string;
+}
+
+export interface ShiftSwapRequestedEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  recipientEmail: string;
+  recipientFirstName: string;
+  recipientRole: 'REQUESTER' | 'COLLEAGUE';
+  counterpartFullName: string;
+  requesterFullName: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  reason?: string | null;
+  scheduleLink?: string;
+}
+
+export interface ShiftSwapPendingManagerEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  managerEmail: string;
+  managerFirstName: string;
+  requesterFullName: string;
+  targetFullName: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  reason?: string | null;
+  reviewLink?: string;
+}
+
+export interface ShiftSwapDeclinedEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  counterpartFullName: string;
+  scheduleLink?: string;
+}
+
+export interface ShiftSwapApprovedEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  counterpartFullName: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  scheduleLink?: string;
+}
+
+export interface ShiftSwapRejectedEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  counterpartFullName: string;
+  rejectionReason: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  scheduleLink?: string;
+}
+
+export interface ShiftSwapExpiredEvent {
+  tenantId: string;
+  shiftSwapId: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  counterpartFullName: string;
+  requesterShiftLabel: string;
+  targetShiftLabel: string;
+  scheduleLink?: string;
+}

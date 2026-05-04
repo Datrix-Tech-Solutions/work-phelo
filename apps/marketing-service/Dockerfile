@@ -9,6 +9,7 @@ COPY packages/utils/package.json ./packages/utils/
 COPY packages/config/package.json ./packages/config/
 COPY apps/marketing-service/package.json ./apps/marketing-service/
 RUN npm ci
+RUN npm install --workspace=apps/marketing-service @nestjs/platform-express --ignore-scripts
 COPY packages/types ./packages/types
 COPY packages/schemas ./packages/schemas
 COPY packages/utils ./packages/utils
@@ -35,9 +36,11 @@ COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/schemas/dist ./packages/schemas/dist
 COPY --from=builder /app/packages/utils/dist ./packages/utils/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
-RUN npm ci --omit=dev --ignore-scripts
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/apps/marketing-service/node_modules ./apps/marketing-service/node_modules
 COPY --from=builder /app/apps/marketing-service/dist ./apps/marketing-service/dist
 COPY --from=builder /app/apps/marketing-service/prisma ./apps/marketing-service/prisma
 WORKDIR /app/apps/marketing-service
 EXPOSE 4006
 CMD ["node", "dist/main"]
+

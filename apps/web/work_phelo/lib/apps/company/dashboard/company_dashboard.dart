@@ -15,6 +15,7 @@ import '../../../work_phelo_components/widgets/custom_cards/title_card.dart';
 import '../../../work_phelo_components/widgets/custom_lists/horizontal_nav_bar.dart';
 import '../../../work_phelo_components/widgets/misc/user_avator.dart';
 import '../../../work_phelo_funtions/work_phelo_companies/company_asset_management_functions/company_asset_state.dart';
+import '../../../work_phelo_funtions/work_phelo_companies/dashboard_summary_provider.dart';
 import '../company_pages/management_pages/management_page_layout.dart';
 import '../company_pages/management_pages/permissions_roles_pages/roles_permissions_page.dart';
 import '../company_pages/management_pages/tmp_pages.dart';
@@ -47,6 +48,12 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
 
     final users = ref.watch(usersByTenantProvider(user.tenantSlug));
     final assetCount = ref.watch(tenantAssetsCountProvider(user.tenantSlug));
+    final summaryAsync = ref.watch(dashboardSummaryProvider);
+    final summary = summaryAsync.when(
+      data: (s) => s,
+      loading: () => null,
+      error: (_, __) => null,
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -121,31 +128,19 @@ class _CompanyDashboardState extends ConsumerState<CompanyDashboard> {
             stats: [
               TitleCardStat(
                 title: 'Employees',
-                value: statDisplay(users.length.toString()),
+                value: statDisplay((summary?.totalEmployees ?? 0).toString()),
               ),
               TitleCardStat(
-                title: 'On Leave',
-                value: statDisplay(
-                  users
-                      .where((u) => u.status == EmploymentStatus.onLeave)
-                      .length
-                      .toString(),
-                ),
+                title: 'Pending Leave',
+                value: statDisplay((summary?.pendingLeaveRequests ?? 0).toString()),
               ),
               TitleCardStat(
                 title: 'Active Employees',
-                value: statDisplay(
-                  ref
-                      .watch(userProvider)
-                      .users
-                      .where((u) => u.status == EmploymentStatus.active)
-                      .length
-                      .toString(),
-                ),
+                value: statDisplay((summary?.activeEmployees ?? 0).toString()),
               ),
               TitleCardStat(
                 title: 'Company Assets',
-                value: statDisplay(assetCount.toString()),
+                value: statDisplay((summary?.assignedAssetsCount ?? 0).toString()),
               ),
             ],
           ),

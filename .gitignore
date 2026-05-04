@@ -43,6 +43,9 @@ prisma/migrations/
 
 # Test coverage
 coverage/
+apps/*/test/
+**/*.spec.ts
+**/*.e2e-spec.ts
 prisma/generated/
 packages/*/src/*.js
 packages/*/src/*.js.map
@@ -51,3 +54,15 @@ packages/*/src/*.d.ts.map
 
 # Prisma generated clients
 **/prisma/generated/
+CLAUDE.md
+HOME
+
+# Local UI specs / design references
+roles-ui-spec/
+
+# Local docs drafts
+docs/
+
+.compose.local.env
+.env.dev
+

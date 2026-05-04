@@ -3,22 +3,42 @@ name: Deploy to Dev
 on:
   push:
     branches: [dev]
+  pull_request_target:
+    branches: [dev]
+    types: [closed]
+
+# ── 1. Concurrency control ─────────────────────────────────────────────────────
+# Collapse duplicate runs for the same target SHA (for example push + PR-merge
+# events for the same merge commit) while still allowing newer SHAs to replace
+# older in-flight dev deploys.
+concurrency:
+  group: deploy-dev-${{ github.event.pull_request.merge_commit_sha || github.sha }}
+  cancel-in-progress: true
 
 env:
   REGISTRY: ghcr.io
   ORG: datrix-tech-solutions
   IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
   COMPOSE_FILE: infrastructure/docker-compose.dev.yml
-  DEPLOY_PATH: /var/www/apps/dev.work-phelo.com/work-phelo
+  DEPLOY_PATH: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo
+  WEB_PUBLIC_API_URL: https://dev.workphelo.datrixtechsolutions.com/api/v1
+  BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+  BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+  CHECKOUT_REF: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
 jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -27,7 +47,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Type checks
         run: npm run check-types
@@ -35,20 +55,34 @@ jobs:
       - name: Build validation
         run: npm run build
 
-  
+
   detect-changes:
     name: Detect Changed Services
     runs-on: ubuntu-latest
     needs: quality-gates
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
 
+    # ── 6. Per-service boolean outputs ──────────────────────────────────────────
+    # Each output is 'true'/'false' so the build matrix can skip unchanged services
+    # without fragile inline jq parsing of a JSON array.
     outputs:
       changed: ${{ steps.filter.outputs.changes }}
+      api-gateway: ${{ steps.filter.outputs.api-gateway }}
+      auth-service: ${{ steps.filter.outputs.auth-service }}
+      hr-service: ${{ steps.filter.outputs.hr-service }}
+      notification-service: ${{ steps.filter.outputs.notification-service }}
+      subscription-service: ${{ steps.filter.outputs.subscription-service }}
+      marketing-service: ${{ steps.filter.outputs.marketing-service }}
+      nextjs-web: ${{ steps.filter.outputs.nextjs-web }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          ref: ${{ env.CHECKOUT_REF }}
+          fetch-depth: 0
 
       - name: Detect changed services
         id: filter
@@ -85,7 +119,10 @@ jobs:
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+            nextjs-web:
+              - 'apps/web/work-phelo-web/**'
           list-files: none
+
 
   build-and-push:
     name: Build & Push — ${{ matrix.service }}
@@ -98,33 +135,45 @@ jobs:
       contents: read
       packages: write
 
+    # ── 2. Next.js moved into the unified change-filtered matrix ──────────────
+    # All services share one job definition; per-service dockerfile paths are
+    # declared here so there is no separate nextjs-build-push job to maintain.
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - api-gateway
-          - auth-service
-          - hr-service
-          - notification-service
-          - subscription-service
-          - marketing-service
-
+        include:
+          - service: api-gateway
+            dockerfile: apps/api-gateway/Dockerfile
+          - service: auth-service
+            dockerfile: apps/auth-service/Dockerfile
+          - service: hr-service
+            dockerfile: apps/hr-service/Dockerfile
+          - service: notification-service
+            dockerfile: apps/notification-service/Dockerfile
+          - service: subscription-service
+            dockerfile: apps/subscription-service/Dockerfile
+          - service: marketing-service
+            dockerfile: apps/marketing-service/Dockerfile
+          - service: nextjs-web
+            dockerfile: apps/web/work-phelo-web/Dockerfile
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
 
+      # ── 6. Use per-service boolean output — no inline jq ──────────────────
       - name: Check if service changed
         id: changed
+        env:
+          SERVICE_CHANGED: ${{ needs.detect-changes.outputs[matrix.service] }}
         run: |
-          FILTER_KEY="${{ matrix.service }}"
-          CHANGED_LIST='${{ needs.detect-changes.outputs.changed }}'
-          # changed is a JSON array like ["auth-service","hr-service"]
-          if echo "$CHANGED_LIST" | jq -e --arg svc "$FILTER_KEY" 'index($svc) != null' > /dev/null 2>&1; then
+          if [[ "$SERVICE_CHANGED" == "true" ]]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
           else
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo " ${{ matrix.service }} unchanged — skipping build"
+            echo "⚡ ${{ matrix.service }} unchanged — skipping build"
           fi
 
       - name: Log in to GitHub Container Registry
@@ -148,205 +197,101 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: apps/${{ matrix.service }}/Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: true
-          # Two immutable tags per image:
-          #   :dev        — floating "latest dev" pointer, used by compose
-          #   :<sha>      — pinned to this exact commit for rollback
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:dev
-            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.sha }}
-          # Per-service GHA cache scoped by service name
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ env.BUILD_SHA }}
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
-          # Pass build-time args for traceability
           build-args: |
-            BUILD_SHA=${{ github.sha }}
-            BUILD_REF=${{ github.ref_name }}
+            BUILD_SHA=${{ env.BUILD_SHA }}
+            BUILD_REF=${{ env.BUILD_REF }}
+            NEXT_PUBLIC_API_URL=${{ env.WEB_PUBLIC_API_URL }}
 
-
-
-  flutter-build-deploy:
-    name: Build & Deploy Flutter Web
-    runs-on: ubuntu-latest
-    needs: quality-gates
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.41.6'
-          channel: 'stable'
-          cache: true
-
-      - name: Install dependencies
-        working-directory: apps/web/work_phelo
-        run: flutter pub get
-
-      - name: Build Flutter Web
-        working-directory: apps/web/work_phelo
-        run: flutter build web --release
-
-      - name: Deploy static files to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          source: "apps/web/work_phelo/build/web/*"
-          target: "/var/www/apps/dev.work-phelo.com/frontend/"
-          strip_components: 5
-
-      - name: Reload Nginx
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          script: nginx -t && systemctl reload nginx && echo "Flutter Web deployed"
 
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
-    needs: [detect-changes, build-and-push, flutter-build-deploy]
+    # ── 3. Fixed deploy condition ──────────────────────────────────────────────
+    # Deploy if quality gates pass AND the build either succeeded or was
+    # legitimately skipped (no services changed). Prevents deploying stale images
+    # after a build failure.
+    needs: [quality-gates, detect-changes, build-and-push]
+    if: |
+      always() &&
+      needs.quality-gates.result == 'success' &&
+      (needs.build-and-push.result == 'success' || needs.build-and-push.result == 'skipped')
 
-    if: always() && needs.quality-gates.result == 'success'
+    # ── 8. Use GITHUB_TOKEN for GHCR pull on the server ───────────────────────
+    # packages: read grants the token pull access; no long-lived CR_PAT needed.
+    permissions:
+      contents: read
+      packages: read
 
     environment:
       name: dev
-      url: https://dev.work-phelo.com
+      url: https://dev.workphelo.datrixtechsolutions.com
+
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GHCR_USERNAME: ${{ github.actor }}
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RABBITMQ_URL: ${{ secrets.RABBITMQ_URL }}
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
+      ALLOWED_ORIGINS: ${{ vars.ALLOWED_ORIGINS }}
+      AUTH_FRONTEND_BASE_URL: ${{ vars.AUTH_FRONTEND_BASE_URL }}
+      AUTH_COOKIE_SECURE: ${{ vars.AUTH_COOKIE_SECURE }}
+      AUTH_COOKIE_SAME_SITE: ${{ vars.AUTH_COOKIE_SAME_SITE }}
+      AUTH_GOOGLE_CLIENT_ID: ${{ vars.AUTH_GOOGLE_CLIENT_ID }}
+      AUTH_GOOGLE_CALLBACK_URL: ${{ vars.AUTH_GOOGLE_CALLBACK_URL }}
+      AUTH_MICROSOFT_CLIENT_ID: ${{ vars.AUTH_MICROSOFT_CLIENT_ID }}
+      AUTH_MICROSOFT_CALLBACK_URL: ${{ vars.AUTH_MICROSOFT_CALLBACK_URL }}
+      AUTH_GOOGLE_CLIENT_SECRET: ${{ secrets.AUTH_GOOGLE_CLIENT_SECRET }}
+      AUTH_MICROSOFT_CLIENT_SECRET: ${{ secrets.AUTH_MICROSOFT_CLIENT_SECRET }}
+      NOTIFY_RESEND_FROM_EMAIL: ${{ vars.NOTIFY_RESEND_FROM_EMAIL }}
+      NOTIFY_TERMII_SENDER_ID: ${{ vars.NOTIFY_TERMII_SENDER_ID }}
+      NOTIFY_RESEND_API_KEY: ${{ secrets.NOTIFY_RESEND_API_KEY }}
+      NOTIFY_TERMII_API_KEY: ${{ secrets.NOTIFY_TERMII_API_KEY }}
+      SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
+      SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
+      BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+      BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+      IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
+      CHANGED_SERVICES: ${{ needs.detect-changes.outputs.changed }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+
+      - name: Validate deployment inputs
+        run: bash .github/scripts/validate-deploy-env.sh dev
+
+      # Upload the compose file — the server needs nothing else from the repo.
+      # Source code is already baked into the images; git is not used on the server.
+      - name: Upload deployment assets to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ vars.DEV_SERVER_HOST }}
+          username: ${{ vars.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          port: 22
+          source: .github/scripts/deploy-common.sh,infrastructure/docker-compose.dev.yml
+          target: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo/
+          strip_components: 0
+
+      # ── 10. SSH deploy via extracted script ───────────────────────────────
+      # All secrets are injected as env vars; the script lives in .github/scripts/
+      # so it is version-controlled and reviewable independently of this workflow.
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          host: ${{ vars.DEV_SERVER_HOST }}
+          username: ${{ vars.DEV_SERVER_USER }}
+          key: ${{ secrets.DEV_SSH_KEY }}
           port: 22
-          command_timeout: 30m
-          script: |
-            set -euo pipefail
-
-            echo "──────────────────────────────────────"
-            echo "  WorkPhelo Dev Deployment"
-            echo "  SHA: ${{ github.sha }}"
-            echo "  Ref: ${{ github.ref_name }}"
-            echo "  Time: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "──────────────────────────────────────"
-
-            # ── 1. Pull latest code ────────────────────────────────────────
-            cd "${{ env.DEPLOY_PATH }}"
-            git fetch origin dev
-            git checkout dev
-            git reset --hard origin/dev
-            echo " Code updated to $(git rev-parse --short HEAD)"
-
-            # ── 2. Authenticate with GHCR ─────────────────────────────────
-            # CR_PAT is a Classic PAT with read:packages scope only.
-            # We use --password-stdin to avoid the token appearing in
-            # the process list or shell history.
-            echo "${{ secrets.CR_PAT }}" \
-              | docker login ghcr.io -u datrix-tech-solutions --password-stdin
-            echo " Authenticated with GHCR"
-
-            # ── 3. Pull updated images ─────────────────────────────────────
-            # compose pull fetches images in parallel, skipping any that
-            # are already up-to-date (fast for unchanged services).
-            docker compose -f "${{ env.COMPOSE_FILE }}" pull
-            echo " Images pulled"
-
-            # ── 4. Rolling restart ─────────────────────────────────────────
-            # --remove-orphans cleans up containers for removed services.
-            # --no-build ensures we always use the registry image, never
-            # a locally built one (avoids stale builds on the server).
-            docker compose -f "${{ env.COMPOSE_FILE }}" \
-              up -d --remove-orphans --no-build
-            echo " Services recreated"
-
-            # ── 5. Run DB migrations ──────────────────────────────────
-            echo "Running database migrations..."
-            # Ensure schemas exist before migrating
-            docker exec erp-postgres-dev psql -U erp -d workphelo               -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS hr;"               2>/dev/null || true
-            # Auth service migrations
-            docker exec erp-auth-dev npx prisma migrate deploy               --schema /app/apps/auth-service/prisma/schema.prisma || true
-            # HR service migrations
-            docker exec erp-hr-dev npx prisma migrate deploy               --schema /app/apps/hr-service/prisma/schema.prisma || true
-            echo " Migrations complete"
-
-            # ── Run seed (idempotent — safe to run on every deploy) ────────
-            echo "Running database seed..."
-            docker exec               -e SUPER_ADMIN_EMAIL=superadmin@datrix.com               -e SUPER_ADMIN_PASSWORD=SuperAdmin123!               erp-auth-dev node /app/apps/auth-service/prisma/seed.js               && echo " Seed complete"               || echo " Seed skipped (compiled seed not found — run manually)"
-
-            # ── 6. Health checks ───────────────────────────────────────────
-            echo "Waiting 20s for services to initialise..."
-            sleep 20
-
-            FAILED_SERVICES=""
-
-            # Check each critical service container is running and healthy.
-            # We query the compose-assigned health status; containers without
-            # a HEALTHCHECK fall back to 'running' state check only.
-            check_service() {
-              local service="$1"
-              local container_status
-              # Docker Compose v5 changed --format json output structure.
-              # Use docker inspect directly on the container name for reliability.
-              local container_name
-              container_name=$(docker compose -f "${{ env.COMPOSE_FILE }}" ps -q "$service" 2>/dev/null | head -1)
-              if [[ -z "$container_name" ]]; then
-                echo "  $service — not found (UNHEALTHY)"
-                FAILED_SERVICES="$FAILED_SERVICES $service"
-                return
-              fi
-              container_status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null || echo "unknown")
-              if [[ "$container_status" == "running" ]]; then
-                echo "  $service — running"
-              else
-                echo "  $service — $container_status (UNHEALTHY)"
-                FAILED_SERVICES="$FAILED_SERVICES $service"
-              fi
-            }
-
-            echo ""
-            echo "── Service Health ────────────────────"
-            check_service api-gateway
-            check_service auth-service
-            check_service hr-service
-            check_service notification-service
-
-            # Non-critical: warn but don't fail
-            warn_service() {
-              local service="$1"
-              local status
-              status=$(docker compose -f "${{ env.COMPOSE_FILE }}" \
-                ps --format json "$service" 2>/dev/null \
-                | jq -r '.[0].State // "unknown"' 2>/dev/null \
-                || echo "unknown")
-              echo "   $service — $status (non-critical)"
-            }
-            warn_service subscription-service
-            warn_service marketing-service
-
-            # ── 6. Full status printout ────────────────────────────────────
-            echo ""
-            echo "── Container Status ──────────────────"
-            docker compose -f "${{ env.COMPOSE_FILE }}" ps
-
-            # ── 8. Clean up dangling images ────────────────────────────────
-            docker image prune -f --filter "until=24h"
-
-            # ── 9. Fail if critical services are unhealthy ─────────────────
-            if [[ -n "$FAILED_SERVICES" ]]; then
-              echo ""
-              echo " Deployment failed — unhealthy services:$FAILED_SERVICES"
-              echo "Run: docker compose -f ${{ env.COMPOSE_FILE }} logs <service>"
-              exit 1
-            fi
-
-            echo ""
-            echo " Dev deployment complete at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          command_timeout: 60m
+          script_path: .github/scripts/deploy-dev.sh
+          envs: GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,BUILD_SHA,BUILD_REF,IMAGE_PREFIX,CHANGED_SERVICES

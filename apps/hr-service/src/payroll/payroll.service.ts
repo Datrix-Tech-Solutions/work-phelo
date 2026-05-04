@@ -3,6 +3,7 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
+import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import Decimal from 'decimal.js';
 import {
@@ -11,6 +12,11 @@ import {
   calculateNetSalary,
 } from '../common/ghana-payroll.helper';
 import { RunPayrollDto } from './dto/run-payroll.dto';
+import {
+  assertHrAccess,
+  hasPermissionRule,
+  isCompanyAdminUser,
+} from '../auth/access-scope';
 
 @Injectable()
 export class PayrollService {
@@ -304,14 +310,22 @@ export class PayrollService {
     });
   }
 
-  async getPayrollRuns(tenantId: string) {
+  async getPayrollRuns(tenantId: string, actor: RequestUser) {
+    if (!isCompanyAdminUser(actor)) {
+      assertHrAccess(hasPermissionRule(actor, 'payroll:VIEW'));
+    }
+
     return this.prisma.payrollRun.findMany({
       where: { tenantId },
       orderBy: [{ year: 'desc' }, { month: 'desc' }],
     });
   }
 
-  async getPayrollRunById(tenantId: string, id: string) {
+  async getPayrollRunById(tenantId: string, id: string, actor: RequestUser) {
+    if (!isCompanyAdminUser(actor)) {
+      assertHrAccess(hasPermissionRule(actor, 'payroll:VIEW'));
+    }
+
     const run = await this.prisma.payrollRun.findFirst({
       where: { id, tenantId },
       include: {

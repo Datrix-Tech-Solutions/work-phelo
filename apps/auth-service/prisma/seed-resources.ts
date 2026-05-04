@@ -24,7 +24,15 @@ export const RESOURCES = [
 
   // ── HR module ──────────────────────────────────────────────────
   { name: 'employees', module: 'HR', description: 'Employee profiles' },
-  { name: 'departments', module: 'HR', description: 'Departments' },
+  {
+    name: 'employee-profile',
+    module: 'HR',
+    description: 'Employee self-service profile access',
+  },
+  { name: 'resignations', module: 'HR', description: 'Employee resignations' },
+  { name: 'departments', module: 'HR', description: 'Department management' },
+  { name: 'branches', module: 'HR', description: 'Branch locations' },
+  { name: 'hr-settings', module: 'HR', description: 'HR workspace settings' },
   { name: 'leave', module: 'HR', description: 'Leave requests and types' },
   { name: 'attendance', module: 'HR', description: 'Clock-in/out records' },
   { name: 'timesheets', module: 'HR', description: 'Weekly timesheets' },
@@ -34,8 +42,14 @@ export const RESOURCES = [
     description: 'Time correction requests',
   },
   { name: 'schedules', module: 'HR', description: 'Shift schedules' },
+  {
+    name: 'projects',
+    module: 'HR',
+    description: 'Project and task management',
+  },
   { name: 'payroll', module: 'HR', description: 'Payroll runs and payslips' },
   { name: 'appraisals', module: 'HR', description: 'Performance appraisals' },
+  { name: 'assets', module: 'HR', description: 'Company asset management' },
   { name: 'documents', module: 'HR', description: 'Employee documents' },
   { name: 'allowances', module: 'HR', description: 'Employee allowances' },
 
