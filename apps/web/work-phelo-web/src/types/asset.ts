@@ -39,4 +39,6 @@ export interface EmployeeAsset {
   name: string;
   type: AssetType;
   assignedAt: string;
+  serialNumber?: string;
+  condition?: AssetCondition;
 }

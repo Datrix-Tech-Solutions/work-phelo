@@ -15,6 +15,7 @@ import { EditMyProfilePanel } from '@/components/organisms/employee/EditMyProfil
 import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
 import type { UpdateEmployeePayload } from '@/types/hr';
 import { ResignationPanel } from '@/components/organisms/employee/resignationPanel';
+import { AssetsSection } from '@/components/molecules/employees/assetSection';
 
 function formatDate(iso?: string | null) {
   if (!iso) return undefined;
@@ -134,6 +135,9 @@ export default function MyProfilePage() {
               <DetailField label="TIN Number" value={employee.tinNumber} />
             </div>
           </SectionCard>
+
+          {/* Assets */}
+          <AssetsSection assets={employee.assets ?? []} />
         </div>
       </div>
 

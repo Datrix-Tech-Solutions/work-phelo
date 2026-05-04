@@ -68,7 +68,9 @@ export function CorrectionsSection({
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200',
             )}
           >
-            {s === 'PENDING' ? `Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}` : s}
+            {s === 'PENDING'
+              ? `Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}`
+              : s.charAt(0) + s.slice(1).toLowerCase()}
           </button>
         ))}
       </div>
