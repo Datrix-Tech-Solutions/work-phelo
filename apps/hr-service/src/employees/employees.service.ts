@@ -24,6 +24,7 @@ import {
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
+import { AssetStatus } from '../../prisma/generated/client';
 import {
   assertHrAccess,
   getActorEmployee,
@@ -316,53 +317,65 @@ export class EmployeesService {
   }
 
   async findById(tenantId: string, id: string, actor?: RequestUser) {
-    const employee = await this.prisma.employee.findFirst({
-      where: { id, tenantId },
-      include: {
-        department: true,
-        branch: true,
-        allowances: true,
-        documents: true,
-        assignedAssets: {
-          where: { isActive: true, status: 'ASSIGNED' },
-          orderBy: { assignedAt: 'desc' },
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            assignedAt: true,
-          },
+    const [employee, assignedAssets] = await Promise.all([
+      this.prisma.employee.findFirst({
+        where: { id, tenantId },
+        include: {
+          department: true,
+          branch: true,
+          allowances: true,
+          documents: true,
+          leaveBalances: { include: { leaveType: true } },
+          offboarding: true,
+          resignation: true,
         },
-        leaveBalances: { include: { leaveType: true } },
-        offboarding: true,
-        resignation: true,
-      },
-    });
+      }),
+      this.prisma.asset.findMany({
+        where: {
+          assignedEmployeeId: id,
+          tenantId,
+          isActive: true,
+          status: AssetStatus.ASSIGNED,
+        },
+        orderBy: { assignedAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          serialNumber: true,
+          condition: true,
+          assignedAt: true,
+        },
+      }),
+    ]);
     if (!employee) throw new NotFoundException('Employee not found');
+    const employeeWithAssets = { ...employee, assignedAssets };
+
+    const statusMap = await this.getUserStatusMap(
+      tenantId,
+      employee.userId ? [employee.userId] : [],
+    );
 
     if (!actor) {
-      const statusMap = await this.getUserStatusMap(
-        tenantId,
-        employee.userId ? [employee.userId] : [],
+      return this.withUserStatus(
+        this.mapEmployeeAssets(employeeWithAssets),
+        statusMap,
       );
-      return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
     }
 
     if (isCompanyAdminUser(actor)) {
-      const statusMap = await this.getUserStatusMap(
-        tenantId,
-        employee.userId ? [employee.userId] : [],
+      return this.withUserStatus(
+        this.mapEmployeeAssets(employeeWithAssets),
+        statusMap,
       );
-      return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
     }
 
     if (isEmployeeSelfServiceUser(actor)) {
       if (hasPermissionRule(actor, 'employees:VIEW')) {
-        const statusMap = await this.getUserStatusMap(
-          tenantId,
-          employee.userId ? [employee.userId] : [],
+        return this.withUserStatus(
+          this.mapEmployeeAssets(employeeWithAssets),
+          statusMap,
         );
-        return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
       }
 
       const actorEmployee = await getActorEmployee(
@@ -371,19 +384,17 @@ export class EmployeesService {
         actor.id,
       );
       assertHrAccess(employee.id === actorEmployee.id);
-      const statusMap = await this.getUserStatusMap(
-        tenantId,
-        employee.userId ? [employee.userId] : [],
+      return this.withUserStatus(
+        this.mapEmployeeAssets(employeeWithAssets),
+        statusMap,
       );
-      return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
     }
 
     assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
-    const statusMap = await this.getUserStatusMap(
-      tenantId,
-      employee.userId ? [employee.userId] : [],
+    return this.withUserStatus(
+      this.mapEmployeeAssets(employeeWithAssets),
+      statusMap,
     );
-    return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
   }
 
   async findByUserId(tenantId: string, userId: string) {
@@ -393,24 +404,36 @@ export class EmployeesService {
         department: true,
         allowances: true,
         resignation: true,
-        assignedAssets: {
-          where: { isActive: true, status: 'ASSIGNED' },
-          orderBy: { assignedAt: 'desc' },
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            assignedAt: true,
-          },
-        },
       },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
-    const statusMap = await this.getUserStatusMap(
-      tenantId,
-      employee.userId ? [employee.userId] : [],
+
+    const [statusMap, assignedAssets] = await Promise.all([
+      this.getUserStatusMap(tenantId, employee.userId ? [employee.userId] : []),
+      this.prisma.asset.findMany({
+        where: {
+          assignedEmployeeId: employee.id,
+          tenantId,
+          isActive: true,
+          status: AssetStatus.ASSIGNED,
+        },
+        orderBy: { assignedAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          serialNumber: true,
+          condition: true,
+          assignedAt: true,
+        },
+      }),
+    ]);
+
+    const employeeWithAssets = { ...employee, assignedAssets };
+    return this.withUserStatus(
+      this.mapEmployeeAssets(employeeWithAssets),
+      statusMap,
     );
-    return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
   }
 
   async update(

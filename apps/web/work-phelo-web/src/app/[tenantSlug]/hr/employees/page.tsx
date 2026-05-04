@@ -52,9 +52,11 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   });
   const RESTRICTED_STATUSES = ['SUSPENDED', 'OFFBOARDED'];
   const allEmployees = empResult?.data ?? [];
-  const employees = canViewAllStatuses
-    ? allEmployees
-    : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus));
+  // Advanced users can filter for restricted statuses explicitly, but they're hidden by default
+  const employees =
+    canViewAllStatuses && statusFilter
+      ? allEmployees
+      : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus));
 
   const { data: departments = [], isError: deptsError } = useDepartmentOptions();
 
