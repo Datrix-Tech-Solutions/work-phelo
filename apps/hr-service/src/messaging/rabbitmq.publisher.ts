@@ -13,6 +13,8 @@ import {
   DeletePendingEmployeeInviteResult,
   ResolvePermissionRecipientsCommand,
   PermissionRecipient,
+  GetUserStatusesCommand,
+  UserStatusSnapshot,
   EmployeeTerminationEvent,
   ResignationSubmittedEvent,
   LeaveRequestedEvent,
@@ -233,6 +235,18 @@ export class RabbitMQPublisher {
     return this.request(
       this.authClient,
       EventPatterns.AUTH_RESOLVE_PERMISSION_RECIPIENTS,
+      data,
+      correlationId,
+    );
+  }
+
+  authGetUserStatuses(
+    data: GetUserStatusesCommand,
+    correlationId?: string,
+  ): Promise<UserStatusSnapshot[]> {
+    return this.request(
+      this.authClient,
+      EventPatterns.AUTH_GET_USER_STATUSES,
       data,
       correlationId,
     );

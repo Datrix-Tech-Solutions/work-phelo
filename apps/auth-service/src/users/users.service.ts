@@ -199,6 +199,20 @@ export class UsersService {
     return { deleted: true };
   }
 
+  async getUserStatuses(tenantId: string, userIds: string[]) {
+    if (userIds.length === 0) {
+      return [];
+    }
+
+    const uniqueUserIds = Array.from(new Set(userIds));
+    const users = await this.prisma.user.findMany({
+      where: { tenantId, id: { in: uniqueUserIds } },
+      select: { id: true, status: true },
+    });
+
+    return users.map((user) => ({ userId: user.id, status: user.status }));
+  }
+
   async acceptInvite(dto: AcceptInviteDto) {
     const user = await this.prisma.user.findUnique({
       where: { inviteToken: dto.inviteToken },

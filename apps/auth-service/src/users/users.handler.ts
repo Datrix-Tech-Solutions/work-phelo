@@ -17,6 +17,8 @@ import {
   ResendEmployeeInviteEvent,
   ProvisionEmployeeInviteCommand,
   DeletePendingEmployeeInviteCommand,
+  GetUserStatusesCommand,
+  UserStatusSnapshot,
 } from '@work-phelo/types';
 
 @Controller()
@@ -212,6 +214,30 @@ export class UsersHandler {
         'auth.delete_pending_employee_invite',
         error,
         `email=${email} | corrId=${_meta?.correlationId}`,
+      );
+      throw new RpcException(this.toRpcErrorPayload(error));
+    }
+  }
+
+  @MessagePattern(EventPatterns.AUTH_GET_USER_STATUSES)
+  async handleGetUserStatuses(
+    @Payload() data: WithMeta<GetUserStatusesCommand>,
+    @Ctx() context: RmqContext,
+  ): Promise<UserStatusSnapshot[]> {
+    const { tenantId, userIds, _meta } = data;
+    this.logger.log(
+      `[auth.get_user_statuses] Received | count=${userIds.length} | corrId=${_meta?.correlationId}`,
+    );
+    try {
+      const result = await this.usersService.getUserStatuses(tenantId, userIds);
+      this.ack(context);
+      return result;
+    } catch (error) {
+      this.settleRpcFailure(
+        context,
+        'auth.get_user_statuses',
+        error,
+        `count=${userIds.length} | corrId=${_meta?.correlationId}`,
       );
       throw new RpcException(this.toRpcErrorPayload(error));
     }

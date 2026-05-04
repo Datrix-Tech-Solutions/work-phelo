@@ -92,6 +92,31 @@ export class EmployeesService {
     };
   }
 
+  private async getUserStatusMap(tenantId: string, userIds: string[]) {
+    if (userIds.length === 0) {
+      return new Map<string, string>();
+    }
+
+    const uniqueUserIds = Array.from(new Set(userIds));
+    const statuses = await this.rabbitmq.authGetUserStatuses({
+      tenantId,
+      userIds: uniqueUserIds,
+    });
+
+    return new Map(statuses.map((status) => [status.userId, status.status]));
+  }
+
+  private withUserStatus<T extends { userId?: string | null }>(
+    employee: T,
+    statusMap: Map<string, string>,
+  ) {
+    const userStatus = employee.userId
+      ? (statusMap.get(employee.userId) ?? 'PENDING_VERIFICATION')
+      : 'PENDING_VERIFICATION';
+
+    return { ...employee, userStatus };
+  }
+
   async create(tenantId: string, dto: CreateEmployeeDto) {
     // Enforce minimum one department before adding employees
     const deptCount = await this.prisma.department.count({
@@ -267,7 +292,7 @@ export class EmployeesService {
           employmentType: true,
           hireDate: true,
           avatarUrl: true,
-          userStatus: true,
+          userId: true,
           department: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
         },
@@ -276,7 +301,18 @@ export class EmployeesService {
       this.prisma.employee.count({ where }),
     ]);
 
-    return { employees, meta: buildMeta(page, take, total) };
+    const userIds = employees
+      .map((employee) => employee.userId)
+      .filter((id): id is string => Boolean(id));
+    const statusMap = await this.getUserStatusMap(tenantId, userIds);
+    const employeesWithStatus = employees.map((employee) =>
+      this.withUserStatus(employee, statusMap),
+    );
+
+    return {
+      employees: employeesWithStatus,
+      meta: buildMeta(page, take, total),
+    };
   }
 
   async findById(tenantId: string, id: string, actor?: RequestUser) {
@@ -305,16 +341,28 @@ export class EmployeesService {
     if (!employee) throw new NotFoundException('Employee not found');
 
     if (!actor) {
-      return this.mapEmployeeAssets(employee);
+      const statusMap = await this.getUserStatusMap(
+        tenantId,
+        employee.userId ? [employee.userId] : [],
+      );
+      return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
     }
 
     if (isCompanyAdminUser(actor)) {
-      return this.mapEmployeeAssets(employee);
+      const statusMap = await this.getUserStatusMap(
+        tenantId,
+        employee.userId ? [employee.userId] : [],
+      );
+      return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
     }
 
     if (isEmployeeSelfServiceUser(actor)) {
       if (hasPermissionRule(actor, 'employees:VIEW')) {
-        return this.mapEmployeeAssets(employee);
+        const statusMap = await this.getUserStatusMap(
+          tenantId,
+          employee.userId ? [employee.userId] : [],
+        );
+        return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
       }
 
       const actorEmployee = await getActorEmployee(
@@ -323,11 +371,19 @@ export class EmployeesService {
         actor.id,
       );
       assertHrAccess(employee.id === actorEmployee.id);
-      return this.mapEmployeeAssets(employee);
+      const statusMap = await this.getUserStatusMap(
+        tenantId,
+        employee.userId ? [employee.userId] : [],
+      );
+      return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
     }
 
     assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
-    return this.mapEmployeeAssets(employee);
+    const statusMap = await this.getUserStatusMap(
+      tenantId,
+      employee.userId ? [employee.userId] : [],
+    );
+    return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
   }
 
   async findByUserId(tenantId: string, userId: string) {
@@ -350,7 +406,11 @@ export class EmployeesService {
       },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
-    return this.mapEmployeeAssets(employee);
+    const statusMap = await this.getUserStatusMap(
+      tenantId,
+      employee.userId ? [employee.userId] : [],
+    );
+    return this.withUserStatus(this.mapEmployeeAssets(employee), statusMap);
   }
 
   async update(
