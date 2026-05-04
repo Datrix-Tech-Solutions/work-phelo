@@ -32,6 +32,7 @@ export const EventPatterns = {
   AUTH_PROVISION_EMPLOYEE_INVITE: 'auth.provision_employee_invite',
   AUTH_DELETE_PENDING_EMPLOYEE_INVITE: 'auth.delete_pending_employee_invite',
   AUTH_RESOLVE_PERMISSION_RECIPIENTS: 'auth.resolve_permission_recipients',
+  AUTH_GET_USER_STATUSES: 'auth.get_user_statuses',
 
   // Auth → Notification
   NOTIFICATION_EMAIL_VERIFICATION: 'notification.email_verification',
@@ -153,6 +154,16 @@ export interface ResolvePermissionRecipientsCommand {
   action: string;
   includeTenantAdmins?: boolean;
   activeOnly?: boolean;
+}
+
+export interface GetUserStatusesCommand {
+  tenantId: string;
+  userIds: string[];
+}
+
+export interface UserStatusSnapshot {
+  userId: string;
+  status: string;
 }
 
 export interface PermissionRecipient {

@@ -255,7 +255,6 @@ model Employee {
   id                String           @id @default(uuid())
   tenantId          String
   userId            String?          @unique
-  userStatus        String           @default("PENDING_VERIFICATION")
   employeeNumber    String
   firstName         String
   lastName          String
