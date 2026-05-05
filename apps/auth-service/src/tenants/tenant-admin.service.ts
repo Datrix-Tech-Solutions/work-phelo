@@ -24,12 +24,21 @@ export class TenantAdminService {
     });
 
     if (existing) {
+      const shouldResendInvite = existing.status === 'PENDING_VERIFICATION';
+      const inviteToken = shouldResendInvite
+        ? generateSecureToken()
+        : undefined;
+      const inviteExpiresAt = shouldResendInvite
+        ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        : undefined;
+
       const updated = await this.prisma.user.update({
         where: { id: existing.id },
         data: {
           firstName: dto.firstName,
           lastName: dto.lastName,
           email: dto.email,
+          ...(shouldResendInvite ? { inviteToken, inviteExpiresAt } : {}),
         },
         select: {
           id: true,
@@ -40,7 +49,36 @@ export class TenantAdminService {
           status: true,
         },
       });
-      return { message: 'Admin updated successfully', user: updated };
+
+      if (shouldResendInvite && inviteToken) {
+        void this.rabbitmq
+          .notificationInviteUser({
+            userId: updated.id,
+            tenantId: id,
+            email: updated.email,
+            firstName: updated.firstName,
+            inviteToken,
+            acceptInviteUrl: WorkspaceUrl.acceptInvite(
+              tenant.slug,
+              inviteToken,
+            ),
+            tenantName: tenant.name,
+            inviteKind: 'TENANT_ADMIN',
+          })
+          .catch((err) =>
+            this.logger.error(
+              `Failed to emit invite for ${updated.email}`,
+              err,
+            ),
+          );
+      }
+
+      return {
+        message: shouldResendInvite
+          ? 'Admin updated successfully. New invite sent.'
+          : 'Admin updated successfully',
+        user: updated,
+      };
     }
 
     const inviteToken = generateSecureToken();
