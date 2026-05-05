@@ -3,6 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmploymentStatus } from '../../prisma/generated/client';
 
 const DEFAULT_NOTICE_PERIOD_DAYS = 30;
+const DEFAULT_PAYROLL_TIER3_ENABLED = false;
+const DEFAULT_PAYROLL_TIER3_RATE: number | null = null;
+const DEFAULT_PAYROLL_TIER3_SCHEME_NAME: string | null = null;
 const DEFAULT_APPRAISAL_THRESHOLDS = {
   outstandingThreshold: 90,
   veryGoodThreshold: 80,
@@ -77,6 +80,28 @@ export class SettingsService {
     });
     return {
       lateArrivalThresholdMinutes: config?.lateArrivalThresholdMinutes ?? 0,
+    };
+  }
+
+  async getPayrollSettings(tenantId: string) {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        payrollTier3Enabled: true,
+        payrollTier3Rate: true,
+        payrollTier3SchemeName: true,
+      },
+    });
+
+    return {
+      payrollTier3Enabled:
+        config?.payrollTier3Enabled ?? DEFAULT_PAYROLL_TIER3_ENABLED,
+      payrollTier3Rate:
+        config?.payrollTier3Rate != null
+          ? Number(config.payrollTier3Rate.toString())
+          : DEFAULT_PAYROLL_TIER3_RATE,
+      payrollTier3SchemeName:
+        config?.payrollTier3SchemeName ?? DEFAULT_PAYROLL_TIER3_SCHEME_NAME,
     };
   }
 
@@ -165,6 +190,74 @@ export class SettingsService {
     };
   }
 
+  async updatePayrollSettings(
+    tenantId: string,
+    payrollSettings: {
+      payrollTier3Enabled?: boolean;
+      payrollTier3Rate?: number;
+      payrollTier3SchemeName?: string;
+    },
+    adminUserId?: string | null,
+    adminEmail?: string | null,
+  ) {
+    const tier3Enabled =
+      payrollSettings.payrollTier3Enabled ?? DEFAULT_PAYROLL_TIER3_ENABLED;
+    const normalizedTier3Rate =
+      payrollSettings.payrollTier3Rate == null
+        ? null
+        : Number(payrollSettings.payrollTier3Rate);
+    const normalizedTier3SchemeName =
+      payrollSettings.payrollTier3SchemeName?.trim() || null;
+
+    if (tier3Enabled) {
+      if (normalizedTier3Rate == null) {
+        throw new BadRequestException(
+          'Tier 3 rate is required when Tier 3 payroll support is enabled.',
+        );
+      }
+
+      if (!normalizedTier3SchemeName) {
+        throw new BadRequestException(
+          'Tier 3 scheme name is required when Tier 3 payroll support is enabled.',
+        );
+      }
+    }
+
+    const config = await this.prisma.tenantConfig.upsert({
+      where: { tenantId },
+      create: {
+        tenantId,
+        adminEmail: adminEmail ?? '',
+        adminUserId: adminUserId ?? null,
+        payrollTier3Enabled: tier3Enabled,
+        payrollTier3Rate: tier3Enabled ? normalizedTier3Rate : null,
+        payrollTier3SchemeName: tier3Enabled ? normalizedTier3SchemeName : null,
+      },
+      update: {
+        payrollTier3Enabled: tier3Enabled,
+        payrollTier3Rate: tier3Enabled ? normalizedTier3Rate : null,
+        payrollTier3SchemeName: tier3Enabled ? normalizedTier3SchemeName : null,
+        ...(adminUserId ? { adminUserId } : {}),
+        ...(adminEmail ? { adminEmail } : {}),
+      },
+      select: {
+        payrollTier3Enabled: true,
+        payrollTier3Rate: true,
+        payrollTier3SchemeName: true,
+      },
+    });
+
+    return {
+      message: 'Payroll settings updated successfully',
+      payrollTier3Enabled: config.payrollTier3Enabled,
+      payrollTier3Rate:
+        config.payrollTier3Rate != null
+          ? Number(config.payrollTier3Rate.toString())
+          : null,
+      payrollTier3SchemeName: config.payrollTier3SchemeName,
+    };
+  }
+
   async updateAppraisalSettings(
     tenantId: string,
     thresholds: {
@@ -192,8 +285,12 @@ export class SettingsService {
     const appraisalEligibleStatuses = this.normalizeAppraisalEligibleStatuses(
       thresholds.appraisalEligibleStatuses,
     );
-    const { appraisalEligibleStatuses: _ignored, ...thresholdValues } =
-      thresholds;
+    const thresholdValues = {
+      outstandingThreshold: thresholds.outstandingThreshold,
+      veryGoodThreshold: thresholds.veryGoodThreshold,
+      goodThreshold: thresholds.goodThreshold,
+      satisfactoryThreshold: thresholds.satisfactoryThreshold,
+    };
 
     const config = await this.prisma.tenantConfig.upsert({
       where: { tenantId },
