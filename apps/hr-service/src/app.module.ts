@@ -17,6 +17,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SchedulingModule } from './scheduling/scheduling.module';
 import { AssetsModule } from './assets/assets.module';
+import { CompanyPoliciesModule } from './company-policies/company-policies.module';
 import { ModuleGuard } from './auth/guards/module.guard';
 import { FeatureGuard } from './auth/guards/feature.guard';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
@@ -39,6 +40,7 @@ import { SettingsModule } from './settings/settings.module';
     AppraisalsModule,
     DashboardModule,
     AssetsModule,
+    CompanyPoliciesModule,
     RabbitMQModule,
     AnnouncementsModule,
     NotificationsModule,

@@ -15,6 +15,7 @@ import { UpdateResignationSettingsDto } from './dto/update-resignation-settings.
 import { UpdateAttendanceSettingsDto } from './dto/update-attendance-settings.dto';
 import { UpdateAppraisalSettingsDto } from './dto/update-appraisal-settings.dto';
 import { UpdatePayrollSettingsDto } from './dto/update-payroll-settings.dto';
+import { UpdateCompanyPoliciesDto } from './dto/update-company-policies.dto';
 import { SettingsService } from './settings.service';
 
 @ApiTags('Settings')
@@ -63,6 +64,18 @@ export class SettingsController {
     return this.settingsService.getAttendanceSettings(req.user.tenantId);
   }
 
+  @Get('company-policies')
+  @ApiOperation({
+    summary: 'Get company policy settings for the current tenant',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Company policy settings retrieved',
+  })
+  getCompanyPoliciesSettings(@Req() req: any) {
+    return this.settingsService.getCompanyPoliciesSettings(req.user.tenantId);
+  }
+
   @Get('payroll')
   @ApiOperation({ summary: 'Get payroll settings for the current tenant' })
   @ApiResponse({ status: 200, description: 'Payroll settings retrieved' })
@@ -99,6 +112,27 @@ export class SettingsController {
     @Req() req: any,
   ) {
     return this.settingsService.updatePayrollSettings(
+      req.user.tenantId,
+      dto,
+      req.user.role === 'TENANT_ADMIN' ? req.user.id : null,
+      req.user.role === 'TENANT_ADMIN' ? req.user.email : null,
+    );
+  }
+
+  @Patch('company-policies')
+  @RequirePermissions(Permission.MANAGE_HR_SETTINGS)
+  @ApiOperation({
+    summary: 'Update company policy settings for the current tenant',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Company policy settings updated',
+  })
+  updateCompanyPoliciesSettings(
+    @Body() dto: UpdateCompanyPoliciesDto,
+    @Req() req: any,
+  ) {
+    return this.settingsService.updateCompanyPoliciesSettings(
       req.user.tenantId,
       dto,
       req.user.role === 'TENANT_ADMIN' ? req.user.id : null,

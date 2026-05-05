@@ -793,6 +793,58 @@ export interface AppraisalSettings {
   satisfactoryThreshold: number;
 }
 
+export type CompanyPolicyProbationPeriod = '3' | '4' | '5' | '6' | 'undefined';
+
+export type CompanyPolicyResignationWindow = '1w' | '2w' | '1m' | '2m' | '3m' | '6m' | '1y' | '2y';
+
+export type CompanyPolicyCycleRecipient =
+  | 'all'
+  | 'permanent'
+  | 'contractual'
+  | 'probation'
+  | 'interns';
+
+export interface CompanyPoliciesSettings {
+  probationPeriod: CompanyPolicyProbationPeriod;
+  resignationWindow: CompanyPolicyResignationWindow;
+  cycleRecipients: CompanyPolicyCycleRecipient[];
+  defaultProbationPeriodMonths: number | null;
+  resignationNoticePeriodDays: number;
+}
+
+export interface UpdateCompanyPoliciesDto {
+  probationPeriod?: CompanyPolicyProbationPeriod;
+  resignationWindow?: CompanyPolicyResignationWindow;
+  cycleRecipients?: CompanyPolicyCycleRecipient[];
+}
+
+export type CompanyAgreementType =
+  | 'NDA'
+  | 'EMPLOYMENT_CONTRACT'
+  | 'CONFIDENTIALITY'
+  | 'NON_COMPETE'
+  | 'CODE_OF_CONDUCT'
+  | 'IP_ASSIGNMENT'
+  | 'PROBATION_AGREEMENT'
+  | 'OTHER';
+
+export interface CompanyAgreement {
+  id: string;
+  tenantId: string;
+  type: CompanyAgreementType;
+  title: string;
+  details: string;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCompanyAgreementDto {
+  type: CompanyAgreementType;
+  title: string;
+  details: string;
+}
+
 export interface CreateAppraisalKpiDto {
   cycleId: string;
   title: string;

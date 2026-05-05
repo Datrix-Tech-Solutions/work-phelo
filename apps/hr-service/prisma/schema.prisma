@@ -92,6 +92,16 @@ enum AppraisalCycleStatus {
   @@schema("hr")
 }
 
+enum AppraisalCycleRecipientGroup {
+  ALL
+  PERMANENT
+  CONTRACTUAL
+  PROBATION
+  INTERNS
+
+  @@schema("hr")
+}
+
 enum AppraisalReminderType {
   SELF_7_DAYS
   SELF_3_DAYS
@@ -199,6 +209,19 @@ enum AssetCondition {
   GOOD
   FAIR
   POOR
+
+  @@schema("hr")
+}
+
+enum CompanyAgreementType {
+  NDA
+  EMPLOYMENT_CONTRACT
+  CONFIDENTIALITY
+  NON_COMPETE
+  CODE_OF_CONDUCT
+  IP_ASSIGNMENT
+  PROBATION_AGREEMENT
+  OTHER
 
   @@schema("hr")
 }
@@ -988,11 +1011,13 @@ model TenantConfig {
   tenantId                    String   @unique
   adminEmail                  String
   adminUserId                 String?
+  defaultProbationPeriodMonths Int?
   resignationNoticePeriodDays Int      @default(30)
   lateArrivalThresholdMinutes Int      @default(0)
   payrollTier3Enabled         Boolean  @default(false)
   payrollTier3Rate            Decimal? @db.Decimal(5, 2)
   payrollTier3SchemeName      String?
+  appraisalCycleRecipients    AppraisalCycleRecipientGroup[] @default([ALL])
   appraisalEligibleStatuses   EmploymentStatus[] @default([ACTIVE, PROBATION])
   outstandingThreshold        Int      @default(90)
   veryGoodThreshold           Int      @default(80)
@@ -1001,5 +1026,19 @@ model TenantConfig {
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
 
+  @@schema("hr")
+}
+
+model CompanyAgreement {
+  id        String               @id @default(uuid())
+  tenantId  String
+  type      CompanyAgreementType
+  title     String
+  details   String
+  createdBy String?
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([tenantId, createdAt])
   @@schema("hr")
 }
