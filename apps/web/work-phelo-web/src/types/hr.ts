@@ -290,21 +290,102 @@ export interface LeaveBalance {
 }
 
 // ── Payroll ───────────────────────────────────────────────
+export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+
 export interface PayrollRun {
   id: string;
   month: number;
   year: number;
-  status: 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+  status: PayrollRunStatus;
   notes?: string;
   totalGross: string;
   totalNet: string;
   totalSSNIT: string;
+  totalTier3: string;
   totalPAYE: string;
   runBy: string;
+  submittedBy?: string | null;
+  submittedAt?: string | null;
   approvedBy?: string;
   approvedAt?: string;
   paidAt?: string;
+  tier3Enabled: boolean;
+  tier3Rate?: string | null;
+  tier3SchemeName?: string | null;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PayrollRunEmployeeSummary {
+  firstName: string;
+  lastName: string;
+  employeeNumber: string;
+  jobTitle: string;
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
+}
+
+export interface PayrollItem {
+  id: string;
+  tenantId: string;
+  payrollRunId: string;
+  employeeId: string;
+  basicSalary: string;
+  totalAllowances: string;
+  transportAmount: string;
+  otherDeductions: string;
+  overtimePay: string;
+  bonus: string;
+  thirteenthMonth: string;
+  grossSalary: string;
+  employeeSSNIT: string;
+  employerSSNIT: string;
+  tier3Employee: string;
+  taxableIncome: string;
+  payeTax: string;
+  totalDeductions: string;
+  netSalary: string;
+  createdAt: string;
+  updatedAt?: string;
+  employee?: PayrollRunEmployeeSummary;
+  payrollRun?: {
+    month: number;
+    year: number;
+    status: PayrollRunStatus;
+    paidAt?: string | null;
+    tier3Enabled: boolean;
+    tier3Rate?: string | null;
+    tier3SchemeName?: string | null;
+  };
+}
+
+export interface PayrollRunDetail extends PayrollRun {
+  items: PayrollItem[];
+}
+
+export interface RunPayrollDto {
+  month: number;
+  year: number;
+  notes?: string;
+}
+
+export interface UpdatePayrollItemDto {
+  basicSalary?: number;
+  totalAllowances?: number;
+  transportAmount?: number;
+  otherDeductions?: number;
+}
+
+export interface PayrollSettings {
+  payrollTier3Enabled: boolean;
+  payrollTier3Rate: number | null;
+  payrollTier3SchemeName: string | null;
+}
+
+export interface UpdatePayrollSettingsDto {
+  payrollTier3Enabled?: boolean;
+  payrollTier3Rate?: number;
+  payrollTier3SchemeName?: string;
 }
 
 // ── Project ───────────────────────────────────────────────
