@@ -1,11 +1,18 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { EmploymentStatus } from '../../prisma/generated/client';
+import {
+  AppraisalCycleRecipientGroup,
+  EmploymentStatus,
+} from '../../prisma/generated/client';
 
 const DEFAULT_NOTICE_PERIOD_DAYS = 30;
+const DEFAULT_PROBATION_PERIOD_MONTHS: number | null = null;
 const DEFAULT_PAYROLL_TIER3_ENABLED = false;
 const DEFAULT_PAYROLL_TIER3_RATE: number | null = null;
 const DEFAULT_PAYROLL_TIER3_SCHEME_NAME: string | null = null;
+const DEFAULT_APPRAISAL_CYCLE_RECIPIENTS = [
+  AppraisalCycleRecipientGroup.ALL,
+] as const;
 const DEFAULT_APPRAISAL_THRESHOLDS = {
   outstandingThreshold: 90,
   veryGoodThreshold: 80,
@@ -21,10 +28,165 @@ const APPRAISAL_ELIGIBLE_EMPLOYMENT_STATUSES = [
   EmploymentStatus.PROBATION,
   EmploymentStatus.SUSPENDED,
 ] as const;
+type CompanyPolicyProbationOption = '3' | '4' | '5' | '6' | 'undefined';
+type CompanyPolicyResignationWindow =
+  | '1w'
+  | '2w'
+  | '1m'
+  | '2m'
+  | '3m'
+  | '6m'
+  | '1y'
+  | '2y';
+type CompanyPolicyCycleRecipient =
+  | 'all'
+  | 'permanent'
+  | 'contractual'
+  | 'probation'
+  | 'interns';
+const RESIGNATION_WINDOW_TO_DAYS: Record<
+  CompanyPolicyResignationWindow,
+  number
+> = {
+  '1w': 7,
+  '2w': 14,
+  '1m': 30,
+  '2m': 60,
+  '3m': 90,
+  '6m': 180,
+  '1y': 365,
+  '2y': 730,
+};
+const DAYS_TO_RESIGNATION_WINDOW = Object.fromEntries(
+  Object.entries(RESIGNATION_WINDOW_TO_DAYS).map(([window, days]) => [
+    days,
+    window,
+  ]),
+) as Record<number, CompanyPolicyResignationWindow>;
+const CYCLE_RECIPIENT_API_TO_DB: Record<
+  CompanyPolicyCycleRecipient,
+  AppraisalCycleRecipientGroup
+> = {
+  all: AppraisalCycleRecipientGroup.ALL,
+  permanent: AppraisalCycleRecipientGroup.PERMANENT,
+  contractual: AppraisalCycleRecipientGroup.CONTRACTUAL,
+  probation: AppraisalCycleRecipientGroup.PROBATION,
+  interns: AppraisalCycleRecipientGroup.INTERNS,
+};
+const CYCLE_RECIPIENT_DB_TO_API: Record<
+  AppraisalCycleRecipientGroup,
+  CompanyPolicyCycleRecipient
+> = {
+  [AppraisalCycleRecipientGroup.ALL]: 'all',
+  [AppraisalCycleRecipientGroup.PERMANENT]: 'permanent',
+  [AppraisalCycleRecipientGroup.CONTRACTUAL]: 'contractual',
+  [AppraisalCycleRecipientGroup.PROBATION]: 'probation',
+  [AppraisalCycleRecipientGroup.INTERNS]: 'interns',
+};
 
 @Injectable()
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private normalizeCompanyPolicyProbationPeriod(
+    probationPeriod?: string | null,
+  ): number | null {
+    if (!probationPeriod || probationPeriod === 'undefined') {
+      return DEFAULT_PROBATION_PERIOD_MONTHS;
+    }
+
+    return Number(probationPeriod);
+  }
+
+  private serializeCompanyPolicyProbationPeriod(
+    months?: number | null,
+  ): CompanyPolicyProbationOption {
+    switch (months) {
+      case 3:
+        return '3';
+      case 4:
+        return '4';
+      case 5:
+        return '5';
+      case 6:
+        return '6';
+      default:
+        return 'undefined';
+    }
+  }
+
+  private normalizeCompanyPolicyResignationWindow(
+    resignationWindow?: string | null,
+  ) {
+    if (!resignationWindow) {
+      return DEFAULT_NOTICE_PERIOD_DAYS;
+    }
+
+    return RESIGNATION_WINDOW_TO_DAYS[
+      resignationWindow as CompanyPolicyResignationWindow
+    ];
+  }
+
+  private serializeCompanyPolicyResignationWindow(days?: number | null) {
+    return (
+      DAYS_TO_RESIGNATION_WINDOW[days ?? DEFAULT_NOTICE_PERIOD_DAYS] ?? '1m'
+    );
+  }
+
+  private normalizeCompanyPolicyCycleRecipients(
+    cycleRecipients?: string[] | null,
+  ): AppraisalCycleRecipientGroup[] {
+    const normalized = Array.from(new Set(cycleRecipients ?? []))
+      .map(
+        (recipient) =>
+          CYCLE_RECIPIENT_API_TO_DB[recipient as CompanyPolicyCycleRecipient],
+      )
+      .filter(
+        (recipient): recipient is AppraisalCycleRecipientGroup =>
+          recipient !== undefined,
+      );
+
+    return normalized.length
+      ? normalized
+      : [...DEFAULT_APPRAISAL_CYCLE_RECIPIENTS];
+  }
+
+  private serializeCompanyPolicyCycleRecipients(
+    cycleRecipients?: AppraisalCycleRecipientGroup[] | null,
+  ): CompanyPolicyCycleRecipient[] {
+    const normalized = cycleRecipients?.length
+      ? cycleRecipients
+      : [...DEFAULT_APPRAISAL_CYCLE_RECIPIENTS];
+
+    return normalized.map((recipient) => CYCLE_RECIPIENT_DB_TO_API[recipient]);
+  }
+
+  private deriveAppraisalEligibleStatusesFromCycleRecipients(
+    cycleRecipients: AppraisalCycleRecipientGroup[],
+  ): EmploymentStatus[] {
+    const includeActive =
+      cycleRecipients.includes(AppraisalCycleRecipientGroup.ALL) ||
+      cycleRecipients.includes(AppraisalCycleRecipientGroup.PERMANENT) ||
+      cycleRecipients.includes(AppraisalCycleRecipientGroup.CONTRACTUAL) ||
+      cycleRecipients.includes(AppraisalCycleRecipientGroup.INTERNS);
+    const includeProbation =
+      cycleRecipients.includes(AppraisalCycleRecipientGroup.ALL) ||
+      cycleRecipients.includes(AppraisalCycleRecipientGroup.PROBATION);
+
+    const statuses: EmploymentStatus[] = [];
+
+    if (includeActive) {
+      statuses.push(EmploymentStatus.ACTIVE);
+    }
+
+    if (includeProbation) {
+      statuses.push(EmploymentStatus.PROBATION);
+    }
+
+    return statuses.length
+      ? statuses
+      : [...DEFAULT_APPRAISAL_ELIGIBLE_STATUSES];
+  }
 
   private normalizeAppraisalEligibleStatuses(
     statuses?: string[] | null,
@@ -132,6 +294,36 @@ export class SettingsService {
       satisfactoryThreshold:
         config?.satisfactoryThreshold ??
         DEFAULT_APPRAISAL_THRESHOLDS.satisfactoryThreshold,
+    };
+  }
+
+  async getCompanyPoliciesSettings(tenantId: string) {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        defaultProbationPeriodMonths: true,
+        resignationNoticePeriodDays: true,
+        appraisalCycleRecipients: true,
+      },
+    });
+
+    const resignationNoticePeriodDays =
+      config?.resignationNoticePeriodDays ?? DEFAULT_NOTICE_PERIOD_DAYS;
+    const defaultProbationPeriodMonths =
+      config?.defaultProbationPeriodMonths ?? DEFAULT_PROBATION_PERIOD_MONTHS;
+
+    return {
+      probationPeriod: this.serializeCompanyPolicyProbationPeriod(
+        defaultProbationPeriodMonths,
+      ),
+      resignationWindow: this.serializeCompanyPolicyResignationWindow(
+        resignationNoticePeriodDays,
+      ),
+      cycleRecipients: this.serializeCompanyPolicyCycleRecipients(
+        config?.appraisalCycleRecipients,
+      ),
+      defaultProbationPeriodMonths,
+      resignationNoticePeriodDays,
     };
   }
 
@@ -255,6 +447,92 @@ export class SettingsService {
           ? Number(config.payrollTier3Rate.toString())
           : null,
       payrollTier3SchemeName: config.payrollTier3SchemeName,
+    };
+  }
+
+  async updateCompanyPoliciesSettings(
+    tenantId: string,
+    policies: {
+      probationPeriod?: string;
+      resignationWindow?: string;
+      cycleRecipients?: string[];
+    },
+    adminUserId?: string | null,
+    adminEmail?: string | null,
+  ) {
+    const existing = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        defaultProbationPeriodMonths: true,
+        resignationNoticePeriodDays: true,
+        appraisalCycleRecipients: true,
+      },
+    });
+
+    const appraisalCycleRecipients =
+      policies.cycleRecipients !== undefined
+        ? this.normalizeCompanyPolicyCycleRecipients(policies.cycleRecipients)
+        : existing?.appraisalCycleRecipients?.length
+          ? existing.appraisalCycleRecipients
+          : [...DEFAULT_APPRAISAL_CYCLE_RECIPIENTS];
+
+    const defaultProbationPeriodMonths =
+      policies.probationPeriod !== undefined
+        ? this.normalizeCompanyPolicyProbationPeriod(policies.probationPeriod)
+        : (existing?.defaultProbationPeriodMonths ??
+          DEFAULT_PROBATION_PERIOD_MONTHS);
+
+    const resignationNoticePeriodDays =
+      policies.resignationWindow !== undefined
+        ? this.normalizeCompanyPolicyResignationWindow(
+            policies.resignationWindow,
+          )
+        : (existing?.resignationNoticePeriodDays ?? DEFAULT_NOTICE_PERIOD_DAYS);
+
+    const appraisalEligibleStatuses =
+      this.deriveAppraisalEligibleStatusesFromCycleRecipients(
+        appraisalCycleRecipients,
+      );
+
+    const config = await this.prisma.tenantConfig.upsert({
+      where: { tenantId },
+      create: {
+        tenantId,
+        adminEmail: adminEmail ?? '',
+        adminUserId: adminUserId ?? null,
+        defaultProbationPeriodMonths,
+        resignationNoticePeriodDays,
+        appraisalCycleRecipients,
+        appraisalEligibleStatuses,
+      },
+      update: {
+        defaultProbationPeriodMonths,
+        resignationNoticePeriodDays,
+        appraisalCycleRecipients,
+        appraisalEligibleStatuses,
+        ...(adminUserId ? { adminUserId } : {}),
+        ...(adminEmail ? { adminEmail } : {}),
+      },
+      select: {
+        defaultProbationPeriodMonths: true,
+        resignationNoticePeriodDays: true,
+        appraisalCycleRecipients: true,
+      },
+    });
+
+    return {
+      message: 'Company policy settings updated successfully',
+      probationPeriod: this.serializeCompanyPolicyProbationPeriod(
+        config.defaultProbationPeriodMonths,
+      ),
+      resignationWindow: this.serializeCompanyPolicyResignationWindow(
+        config.resignationNoticePeriodDays,
+      ),
+      cycleRecipients: this.serializeCompanyPolicyCycleRecipients(
+        config.appraisalCycleRecipients,
+      ),
+      defaultProbationPeriodMonths: config.defaultProbationPeriodMonths,
+      resignationNoticePeriodDays: config.resignationNoticePeriodDays,
     };
   }
 
