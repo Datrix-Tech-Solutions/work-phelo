@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import { ShieldCheck, BadgeCheck } from 'lucide-react';
 import { DetailField } from '../shared/DetailField';
-import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
+import { EmploymentStatusBadge } from './EmploymentStatusBadge';
 import type { Employee } from '@/types/hr';
 
 interface EmployeeProfileCardProps {
@@ -41,13 +41,7 @@ export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCar
 
       {/* Status badges */}
       <div className="flex flex-wrap gap-2">
-        {employee.employmentStatus === 'ACTIVE' ? (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-            Permanent Staff
-          </span>
-        ) : (
-          <StatusBadge status={employee.employmentStatus} />
-        )}
+        <EmploymentStatusBadge status={employee.employmentStatus} />
         {isPendingInvite && (
           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
             Pending Verification

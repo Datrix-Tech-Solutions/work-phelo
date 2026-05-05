@@ -2,8 +2,10 @@
 
 'use client';
 
-import { useState, use } from 'react';
+import { useState, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { Users, UserCheck, Clock, CalendarOff, UserX } from 'lucide-react';
+import { SummaryCard } from '@/components/atoms/SummaryCard';
 import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
@@ -17,6 +19,9 @@ import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '@/components/atoms/NoSearchLogo';
+
+const RESTRICTED_STATUSES = ['SUSPENDED', 'OFFBOARDED'];
+const TODAY = new Date();
 
 export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
@@ -50,7 +55,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
     departmentId: deptFilter || undefined,
     limit: 100,
   });
-  const RESTRICTED_STATUSES = ['SUSPENDED', 'OFFBOARDED'];
+  const { data: allStaffResult } = useEmployees({ limit: 500 });
+  const allStaff = useMemo(() => allStaffResult?.data ?? [], [allStaffResult]);
+
   const allEmployees = empResult?.data ?? [];
   // Advanced users can filter for restricted statuses explicitly, but they're hidden by default
   const employees =
@@ -61,11 +68,25 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const { data: departments = [], isError: deptsError } = useDepartmentOptions();
 
   const { data: approvedLeave = [] } = useLeaveRequests('APPROVED');
-  const today = new Date();
-  const onLeaveEmployeeIds = new Set(
-    approvedLeave
-      .filter((r) => new Date(r.startDate) <= today && new Date(r.endDate) >= today)
-      .map((r) => r.employeeId),
+  const onLeaveEmployeeIds = useMemo(
+    () =>
+      new Set(
+        approvedLeave
+          .filter((r) => new Date(r.startDate) <= TODAY && new Date(r.endDate) >= TODAY)
+          .map((r) => r.employeeId),
+      ),
+    [approvedLeave],
+  );
+
+  const summary = useMemo(
+    () => ({
+      total: allStaff.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus)).length,
+      permanent: allStaff.filter((e) => e.employmentStatus === 'ACTIVE').length,
+      probation: allStaff.filter((e) => e.employmentStatus === 'PROBATION').length,
+      onLeave: allStaff.filter((e) => onLeaveEmployeeIds.has(e.id)).length,
+      offboarded: allStaff.filter((e) => e.employmentStatus === 'OFFBOARDED').length,
+    }),
+    [allStaff, onLeaveEmployeeIds],
   );
 
   return (
@@ -76,6 +97,45 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           <h1 className="text-xl font-bold text-gray-900">Employee Directory</h1>
         </div>
         {canInvite && <Button onClick={handleInviteClick}>+ Invite Employee</Button>}
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-5 gap-3 shrink-0">
+        <SummaryCard
+          label="Total Employees"
+          value={summary.total}
+          icon={Users}
+          iconColor="text-gray-600"
+          iconBg="bg-gray-100"
+        />
+        <SummaryCard
+          label="Permanent Staff"
+          value={summary.permanent}
+          icon={UserCheck}
+          iconColor="text-green-600"
+          iconBg="bg-green-50"
+        />
+        <SummaryCard
+          label="On Probation"
+          value={summary.probation}
+          icon={Clock}
+          iconColor="text-yellow-600"
+          iconBg="bg-yellow-50"
+        />
+        <SummaryCard
+          label="On Leave"
+          value={summary.onLeave}
+          icon={CalendarOff}
+          iconColor="text-blue-600"
+          iconBg="bg-blue-50"
+        />
+        <SummaryCard
+          label="Offboarded"
+          value={summary.offboarded}
+          icon={UserX}
+          iconColor="text-red-500"
+          iconBg="bg-red-50"
+        />
       </div>
 
       {/* Toolbar */}

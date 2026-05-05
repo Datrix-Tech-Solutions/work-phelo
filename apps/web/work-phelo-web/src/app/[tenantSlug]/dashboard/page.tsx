@@ -11,6 +11,8 @@ import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { StatPill } from '@/components/molecules/departments/StatPill';
 import { getGreeting } from '@/lib/formatters';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 /* ── Module definitions ── */
 interface ModuleDef {
@@ -82,6 +84,8 @@ export default function TenantDashboardPage({
     return { total, active, pending };
   }, [users]);
 
+  const canViewEmployeeStats = usePermission(Permission.READ_EMPLOYEES);
+
   /* ── Enabled modules from tenant config ── */
   const moduleConfig = user?.moduleConfig ?? {};
   const enabledKeys = new Set(
@@ -110,10 +114,14 @@ export default function TenantDashboardPage({
             </h1>
           </div>
           <div className="flex items-center gap-0">
-            <StatPill label="Active modules" value={activeModuleCount} />
-            <StatPill label="Total Employees" value={stats.total} />
-            <StatPill label="Active" value={stats.active} />
-            <StatPill label="Pending" value={stats.pending} />
+            {canViewEmployeeStats && (
+              <>
+                <StatPill label="Active modules" value={activeModuleCount} />
+                <StatPill label="Total Employees" value={stats.total} />
+                <StatPill label="Active" value={stats.active} />
+                <StatPill label="Pending" value={stats.pending} />
+              </>
+            )}
           </div>
         </div>
 
