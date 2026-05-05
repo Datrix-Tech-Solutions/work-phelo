@@ -50,13 +50,7 @@ export function RecordsSection({
     },
     { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
     { key: 'department', label: 'Department', render: (r) => <span>{r.department ?? '—'}</span> },
-    {
-      key: 'workMode',
-      label: 'Mode',
-      render: (r) => (
-        <span>{r.workMode ? r.workMode.charAt(0) + r.workMode.slice(1).toLowerCase() : '—'}</span>
-      ),
-    },
+
     { key: 'clockIn', label: 'Clock In', render: (r) => <span>{formatTime(r.clockIn)}</span> },
     {
       key: 'clockOut',

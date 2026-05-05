@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
+import { EmploymentStatusBadge } from './EmploymentStatusBadge';
 
 /* ── Types ── */
 export type EmploymentStatus = 'ACTIVE' | 'PROBATION' | 'SUSPENDED' | 'OFFBOARDED';
@@ -19,47 +20,6 @@ export interface EmployeeCardProps {
   avatarUrl?: string;
   isOnLeave?: boolean;
   onClick?: () => void;
-}
-
-/* ── Status badge ── */
-const STATUS_STYLES: Record<string, { dot: string; text: string; bg: string; label: string }> = {
-  ACTIVE: { dot: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50', label: 'Active' },
-  PROBATION: {
-    dot: 'bg-yellow-400',
-    text: 'text-yellow-700',
-    bg: 'bg-yellow-50',
-    label: 'Probation',
-  },
-  SUSPENDED: { dot: 'bg-red-400', text: 'text-red-700', bg: 'bg-red-50', label: 'Suspended' },
-  OFFBOARDED: {
-    dot: 'bg-gray-400',
-    text: 'text-gray-600',
-    bg: 'bg-gray-100',
-    label: 'Off boarded',
-  },
-  PENDING_VERIFICATION: {
-    dot: 'bg-orange-400',
-    text: 'text-orange-700',
-    bg: 'bg-orange-50',
-    label: 'Invite Pending',
-  },
-  INACTIVE: { dot: 'bg-gray-400', text: 'text-gray-500', bg: 'bg-gray-100', label: 'Inactive' },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const s = STATUS_STYLES[status] ?? STATUS_STYLES.OFFBOARDED;
-  return (
-    <span
-      className={cn(
-        'flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold',
-        s.bg,
-        s.text,
-      )}
-    >
-      <span className={cn('w-2 h-2 rounded-full shrink-0', s.dot)} />
-      {s.label}
-    </span>
-  );
 }
 
 /* ── Avatar ── */
@@ -135,7 +95,7 @@ export function EmployeeCard({
       <div className="flex items-start justify-between">
         <Avatar firstName={firstName} lastName={lastName} avatarUrl={avatarUrl} />
         <div className="flex flex-col items-end gap-1.5">
-          <StatusBadge status={status} />
+          <EmploymentStatusBadge status={status} />
           {isOnLeave && (
             <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
               <span className="w-2 h-2 rounded-full shrink-0 bg-blue-500" />

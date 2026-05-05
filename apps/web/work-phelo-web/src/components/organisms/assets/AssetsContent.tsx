@@ -7,8 +7,10 @@ import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { AddAssetPanel } from '@/components/organisms/assets/AddAssetPanel';
 import { EditAssetPanel } from '@/components/organisms/assets/EditAssetPanel';
 import { AssignAssetPanel } from '@/components/organisms/assets/AssignAssetPanel';
+import { TransferAssetPanel } from '@/components/organisms/assets/TransferAssetPanel';
 import { RetireAssetModal } from '@/components/organisms/assets/RetireAssetModal';
 import { DeleteAssetModal } from '@/components/organisms/assets/DeleteAssetModal';
+import { Modal } from '@/components/organisms/shared/Modal';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/components/atoms/assetIcons';
 import { Asset, CreateAssetPayload, UpdateAssetPayload } from '@/types/asset';
@@ -25,6 +27,8 @@ import {
 } from '@/hooks/useAssets';
 import { useEmployees } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
+import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
+import { SummaryCard } from '@/components/atoms/SummaryCard';
 
 const TYPE_LABELS: Record<AssetType, string> = {
   LAPTOP: 'Laptop',
@@ -43,6 +47,8 @@ type PanelState =
   | { type: 'add' }
   | { type: 'edit'; asset: Asset }
   | { type: 'assign'; asset: Asset }
+  | { type: 'unassign'; asset: Asset }
+  | { type: 'transfer'; asset: Asset }
   | { type: 'retire'; asset: Asset }
   | { type: 'delete'; asset: Asset };
 
@@ -63,6 +69,17 @@ export function AssetsContent() {
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
   const toast = useToast();
   const { data: assets = [], isLoading } = useAssets();
+
+  const summary = useMemo(
+    () => ({
+      total: assets.length,
+      assigned: assets.filter((a) => a.status === 'ASSIGNED').length,
+      available: assets.filter((a) => a.status === 'AVAILABLE').length,
+      maintenance: assets.filter((a) => a.status === 'MAINTENANCE').length,
+      retired: assets.filter((a) => a.status === 'RETIRED').length,
+    }),
+    [assets],
+  );
   const { data: employeesResult } = useEmployees({ limit: 200 });
   const employees = (employeesResult?.data ?? []).filter((employee) =>
     ['ACTIVE', 'PROBATION'].includes(employee.employmentStatus),
@@ -141,6 +158,45 @@ export function AssetsContent() {
           </p>
         </div>
         {canCreateAsset && <Button onClick={() => setPanel({ type: 'add' })}>+ Add Asset</Button>}
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-5 gap-3 shrink-0">
+        <SummaryCard
+          label="Total Assets"
+          value={summary.total}
+          icon={Package}
+          iconColor="text-gray-600"
+          iconBg="bg-gray-100"
+        />
+        <SummaryCard
+          label="Assigned"
+          value={summary.assigned}
+          icon={UserCheck}
+          iconColor="text-blue-600"
+          iconBg="bg-blue-50"
+        />
+        <SummaryCard
+          label="Available"
+          value={summary.available}
+          icon={CheckCircle}
+          iconColor="text-green-600"
+          iconBg="bg-green-50"
+        />
+        <SummaryCard
+          label="Under Maintenance"
+          value={summary.maintenance}
+          icon={Wrench}
+          iconColor="text-yellow-600"
+          iconBg="bg-yellow-50"
+        />
+        <SummaryCard
+          label="Retired"
+          value={summary.retired}
+          icon={Archive}
+          iconColor="text-red-500"
+          iconBg="bg-red-50"
+        />
       </div>
 
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
@@ -226,25 +282,11 @@ export function AssetsContent() {
                 onEdit={canUpdateAsset ? () => setPanel({ type: 'edit', asset }) : undefined}
                 onAssign={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
                 onUnassign={
-                  canAssignAsset
-                    ? () => {
-                        const confirmed = window.confirm(
-                          `Unassign ${asset.name} from ${asset.assignedEmployeeName ?? 'the current employee'}?`,
-                        );
-                        if (!confirmed) return;
-
-                        unassignAsset(asset.id, {
-                          onSuccess: () => {
-                            toast.success('Asset unassigned successfully');
-                          },
-                          onError: () => {
-                            toast.error('Failed to unassign asset');
-                          },
-                        });
-                      }
-                    : undefined
+                  canAssignAsset ? () => setPanel({ type: 'unassign', asset }) : undefined
                 }
-                onTransfer={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
+                onTransfer={
+                  canAssignAsset ? () => setPanel({ type: 'transfer', asset }) : undefined
+                }
                 onRetire={canUpdateAsset ? () => setPanel({ type: 'retire', asset }) : undefined}
                 onDelete={canUpdateAsset ? () => setPanel({ type: 'delete', asset }) : undefined}
               />
@@ -312,6 +354,27 @@ export function AssetsContent() {
         }}
       />
 
+      <TransferAssetPanel
+        isOpen={panel.type === 'transfer'}
+        onClose={closePanel}
+        asset={panel.type === 'transfer' ? panel.asset : null}
+        employees={employees}
+        onTransfer={(assetId, employeeId) => {
+          assignAsset(
+            { assetId, employeeId },
+            {
+              onSuccess: () => {
+                toast.success('Asset transferred successfully');
+                closePanel();
+              },
+              onError: () => {
+                toast.error('Failed to transfer asset');
+              },
+            },
+          );
+        }}
+      />
+
       <RetireAssetModal
         isOpen={panel.type === 'retire'}
         onClose={closePanel}
@@ -346,6 +409,41 @@ export function AssetsContent() {
             },
           });
         }}
+      />
+
+      <Modal
+        isOpen={panel.type === 'unassign'}
+        onClose={closePanel}
+        title="Unassign Asset"
+        description={
+          panel.type === 'unassign'
+            ? `Are you sure you want to unassign "${panel.asset.name}" from ${panel.asset.assignedEmployeeName ?? 'the current employee'}?`
+            : ''
+        }
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={closePanel}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (panel.type !== 'unassign') return;
+                unassignAsset(panel.asset.id, {
+                  onSuccess: () => {
+                    toast.success('Asset unassigned successfully');
+                    closePanel();
+                  },
+                  onError: () => {
+                    toast.error('Failed to unassign asset');
+                  },
+                });
+              }}
+            >
+              Unassign
+            </Button>
+          </div>
+        }
       />
     </>
   );

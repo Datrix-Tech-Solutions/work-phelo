@@ -13,6 +13,7 @@ import {
 export const leaveKeys = {
   all: ['leave'] as const,
   types: (tenantSlug: string) => ['leave', 'types', tenantSlug] as const,
+  requestsBase: () => ['leave', 'requests'] as const,
   requests: (status?: string) => ['leave', 'requests', status ?? 'all'] as const,
   myRequests: () => ['leave', 'requests', 'my'] as const,
   balances: (employeeId?: string) => ['leave', 'balances', employeeId ?? 'me'] as const,
@@ -188,7 +189,7 @@ export function useCreateLeaveRequest() {
       };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requestsBase() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -216,7 +217,7 @@ export function useReviewLeaveRequest() {
       return transformRequest(res.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requestsBase() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -232,7 +233,7 @@ export function useCancelLeaveRequest() {
       await api.patch(`/hr/leave/requests/${id}/cancel`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requestsBase() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
     },

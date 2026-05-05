@@ -97,7 +97,7 @@ export default function HRLayout({
     scheduling: canAccessScheduling,
     projects: canAccessProjects,
     payroll: canAccessPayroll,
-    assets: canAccessAssets,
+    assets: canManageAssets,
     management: hasAnyManagementAccess,
   };
 
