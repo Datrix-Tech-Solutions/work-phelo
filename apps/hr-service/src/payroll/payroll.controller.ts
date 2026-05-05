@@ -20,6 +20,7 @@ import {
 } from '@nestjs/common';
 import { PayrollService } from './payroll.service';
 import { RunPayrollDto } from './dto/run-payroll.dto';
+import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -51,14 +52,53 @@ export class PayrollController {
       example: {
         month: 4,
         year: 2026,
-        description: 'April 2026 monthly payroll',
+        notes: 'April 2026 monthly payroll draft',
       },
     },
   })
-  @ApiResponse({ status: 201, description: 'Payroll run created successfully' })
+  @ApiResponse({
+    status: 201,
+    description: 'Payroll draft created successfully',
+  })
   @ApiResponse({ status: 400, description: 'No active employees found' })
   runPayroll(@Body() dto: RunPayrollDto, @Req() req: any) {
     return this.payrollService.runPayroll(req.user.tenantId, req.user.id, dto);
+  }
+
+  @Patch(':id/items/:itemId')
+  @RequirePermissions(Permission.RUN_PAYROLL)
+  @ApiOperation({
+    summary: 'Edit payroll values for a specific employee within a draft run',
+  })
+  @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiParam({ name: 'itemId', description: 'Payroll item UUID' })
+  @ApiBody({ type: UpdatePayrollItemDto })
+  @ApiResponse({ status: 200, description: 'Payroll item updated' })
+  updatePayrollItem(
+    @Param('id') id: string,
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdatePayrollItemDto,
+    @Req() req: any,
+  ) {
+    return this.payrollService.updatePayrollItem(
+      req.user.tenantId,
+      id,
+      itemId,
+      dto,
+    );
+  }
+
+  @Patch(':id/submit')
+  @RequirePermissions(Permission.RUN_PAYROLL)
+  @ApiOperation({ summary: 'Submit a draft payroll run for approval' })
+  @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiResponse({ status: 200, description: 'Payroll submitted for approval' })
+  submitPayroll(@Param('id') id: string, @Req() req: any) {
+    return this.payrollService.submitPayrollForApproval(
+      req.user.tenantId,
+      id,
+      req.user.id,
+    );
   }
 
   @Get()
@@ -105,6 +145,17 @@ export class PayrollController {
       id,
       req.user.id,
     );
+  }
+
+  @Patch(':id/return-to-draft')
+  @RequirePermissions(Permission.APPROVE_PAYROLL)
+  @ApiOperation({
+    summary: 'Return a pending payroll run to draft for further edits',
+  })
+  @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiResponse({ status: 200, description: 'Payroll returned to draft' })
+  returnPayrollToDraft(@Param('id') id: string, @Req() req: any) {
+    return this.payrollService.returnPayrollToDraft(req.user.tenantId, id);
   }
 
   @Patch(':id/mark-paid')

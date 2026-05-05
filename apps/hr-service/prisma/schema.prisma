@@ -743,12 +743,18 @@ model PayrollRun {
   totalGross   Decimal       @db.Decimal(15, 2)
   totalNet     Decimal       @db.Decimal(15, 2)
   totalSSNIT   Decimal       @db.Decimal(15, 2)
+  totalTier3   Decimal       @db.Decimal(15, 2) @default(0)
   totalPAYE    Decimal       @db.Decimal(15, 2)
   runBy        String
+  submittedBy  String?
+  submittedAt  DateTime?
   approvedBy   String?
   approvedAt   DateTime?
   paidAt       DateTime?
   notes        String?
+  tier3Enabled Boolean       @default(false)
+  tier3Rate    Decimal?      @db.Decimal(5, 2)
+  tier3SchemeName String?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -765,12 +771,16 @@ model PayrollItem {
   employeeId      String
   basicSalary     Decimal    @db.Decimal(15, 2)
   totalAllowances Decimal    @db.Decimal(15, 2) @default(0)
+  transportAmount Decimal    @db.Decimal(15, 2) @default(0)
+  otherDeductions Decimal    @db.Decimal(15, 2) @default(0)
   overtimePay     Decimal    @db.Decimal(15, 2) @default(0)
   bonus           Decimal    @db.Decimal(15, 2) @default(0)
   thirteenthMonth Decimal    @db.Decimal(15, 2) @default(0)
   grossSalary     Decimal    @db.Decimal(15, 2)
   employeeSSNIT   Decimal    @db.Decimal(15, 2)
   employerSSNIT   Decimal    @db.Decimal(15, 2)
+  tier3Employee   Decimal    @db.Decimal(15, 2) @default(0)
+  taxableIncome   Decimal    @db.Decimal(15, 2) @default(0)
   payeTax         Decimal    @db.Decimal(15, 2)
   totalDeductions Decimal    @db.Decimal(15, 2)
   netSalary       Decimal    @db.Decimal(15, 2)
@@ -980,6 +990,9 @@ model TenantConfig {
   adminUserId                 String?
   resignationNoticePeriodDays Int      @default(30)
   lateArrivalThresholdMinutes Int      @default(0)
+  payrollTier3Enabled         Boolean  @default(false)
+  payrollTier3Rate            Decimal? @db.Decimal(5, 2)
+  payrollTier3SchemeName      String?
   appraisalEligibleStatuses   EmploymentStatus[] @default([ACTIVE, PROBATION])
   outstandingThreshold        Int      @default(90)
   veryGoodThreshold           Int      @default(80)
