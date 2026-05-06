@@ -27,6 +27,7 @@ export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get('resignation')
+  @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({
     summary: 'Get resignation settings for the current tenant',
   })
@@ -58,6 +59,7 @@ export class SettingsController {
   }
 
   @Get('attendance')
+  @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({ summary: 'Get attendance settings for the current tenant' })
   @ApiResponse({ status: 200, description: 'Attendance settings retrieved' })
   getAttendanceSettings(@Req() req: any) {
@@ -65,6 +67,7 @@ export class SettingsController {
   }
 
   @Get('company-policies')
+  @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({
     summary: 'Get company policy settings for the current tenant',
   })
@@ -77,6 +80,7 @@ export class SettingsController {
   }
 
   @Get('payroll')
+  @RequirePermissions(Permission.MANAGE_PAYROLL_SETTINGS)
   @ApiOperation({ summary: 'Get payroll settings for the current tenant' })
   @ApiResponse({ status: 200, description: 'Payroll settings retrieved' })
   getPayrollSettings(@Req() req: any) {
@@ -141,6 +145,7 @@ export class SettingsController {
   }
 
   @Get('appraisal')
+  @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({ summary: 'Get appraisal settings for the current tenant' })
   @ApiResponse({ status: 200, description: 'Appraisal settings retrieved' })
   getAppraisalSettings(@Req() req: any) {

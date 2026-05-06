@@ -6,6 +6,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { EmployeesService } from './employees.service';
 import { EmployeesController } from './employees.controller';
 import { EmployeeStatusCronService } from './employee-status.cron';
+import { EmployeeSyncRecoveryCronService } from './employee-sync-recovery.cron';
 import {
   RESIGNATION_QUEUE,
   ResignationNotificationProcessor,
@@ -22,6 +23,7 @@ import {
   providers: [
     EmployeesService,
     EmployeeStatusCronService,
+    EmployeeSyncRecoveryCronService,
     ResignationNotificationProcessor,
   ],
   exports: [EmployeesService],

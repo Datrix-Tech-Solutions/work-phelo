@@ -84,6 +84,41 @@ export class LeaveService {
     private readonly rabbitmq: RabbitMQPublisher,
   ) {}
 
+  private parseDateOnly(value: string, label: string): Date {
+    const parts = value.split('-').map((part) => Number(part));
+    if (
+      parts.length !== 3 ||
+      parts.some((part) => Number.isNaN(part)) ||
+      parts[1] < 1 ||
+      parts[1] > 12 ||
+      parts[2] < 1 ||
+      parts[2] > 31
+    ) {
+      throw new BadRequestException(`${label} is invalid.`);
+    }
+
+    const [year, month, day] = parts;
+    const parsed = new Date(year, month - 1, day);
+    parsed.setHours(0, 0, 0, 0);
+
+    if (
+      parsed.getFullYear() !== year ||
+      parsed.getMonth() !== month - 1 ||
+      parsed.getDate() !== day
+    ) {
+      throw new BadRequestException(`${label} is invalid.`);
+    }
+
+    return parsed;
+  }
+
+  private formatDateOnly(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   // ── Seed default leave types for new tenant ───────────────────────────────
   async seedDefaultLeaveTypes(tenantId: string) {
     for (const lt of DEFAULT_LEAVE_TYPES) {
@@ -194,7 +229,11 @@ export class LeaveService {
     dto: { name: string; date: string },
   ) {
     return this.prisma.publicHoliday.create({
-      data: { tenantId, name: dto.name, date: new Date(dto.date) },
+      data: {
+        tenantId,
+        name: dto.name,
+        date: this.parseDateOnly(dto.date, 'Public holiday date'),
+      },
     });
   }
 
@@ -216,7 +255,12 @@ export class LeaveService {
     if (!holiday) throw new NotFoundException('Public holiday not found');
     return this.prisma.publicHoliday.update({
       where: { id },
-      data: { name: dto.name, date: dto.date ? new Date(dto.date) : undefined },
+      data: {
+        name: dto.name,
+        date: dto.date
+          ? this.parseDateOnly(dto.date, 'Public holiday date')
+          : undefined,
+      },
     });
   }
 
@@ -241,13 +285,13 @@ export class LeaveService {
       },
     });
     const holidayDates = new Set(
-      holidays.map((h) => h.date.toISOString().split('T')[0]),
+      holidays.map((h) => this.formatDateOnly(h.date)),
     );
     let count = 0;
     const current = new Date(startDate);
     while (current <= endDate) {
       const dayOfWeek = current.getDay();
-      const dateStr = current.toISOString().split('T')[0];
+      const dateStr = this.formatDateOnly(current);
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDates.has(dateStr)) {
         count++;
       }
@@ -429,11 +473,33 @@ export class LeaveService {
         `This leave type is not available for your employment type (${empRecord.employmentType.replace('_', ' ').toLowerCase()})`,
       );
     }
-    const start = new Date(dto.startDate);
-    const end = new Date(dto.endDate);
+    const start = this.parseDateOnly(dto.startDate, 'Start date');
+    const end = this.parseDateOnly(dto.endDate, 'End date');
 
     if (end < start)
       throw new BadRequestException('End date must be after start date');
+
+    const overlappingRequest = await this.prisma.leaveRequest.findFirst({
+      where: {
+        tenantId,
+        employeeId,
+        status: { in: ['PENDING', 'APPROVED'] },
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+      select: {
+        id: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+      },
+    });
+
+    if (overlappingRequest) {
+      throw new ConflictException(
+        `You already have a ${overlappingRequest.status.toLowerCase()} leave request overlapping ${this.formatDateOnly(overlappingRequest.startDate)} to ${this.formatDateOnly(overlappingRequest.endDate)}.`,
+      );
+    }
 
     const totalDays = await this.countWorkingDays(tenantId, start, end);
 
@@ -473,36 +539,47 @@ export class LeaveService {
       );
     }
 
-    const request = await this.prisma.leaveRequest.create({
-      data: {
-        tenantId,
-        employeeId,
-        leaveTypeId: dto.leaveTypeId,
-        startDate: start,
-        endDate: end,
-        totalDays,
-        reason: dto.reason,
-        status: 'PENDING',
-      },
-      include: {
-        leaveType: true,
-        employee: { select: { firstName: true, lastName: true } },
-      },
-    });
+    const request = await this.prisma.$transaction(async (tx) => {
+      const reservedBalance = await tx.leaveBalance.updateMany({
+        where: {
+          id: balance.id,
+          remainingDays: { gte: totalDays },
+        },
+        data: {
+          pendingDays: { increment: totalDays },
+          remainingDays: { decrement: totalDays },
+        },
+      });
 
-    // Reserve days as pending
-    await this.prisma.leaveBalance.update({
-      where: { id: balance.id },
-      data: {
-        pendingDays: { increment: totalDays },
-        remainingDays: { decrement: totalDays },
-      },
+      if (reservedBalance.count !== 1) {
+        throw new BadRequestException(
+          'Leave balance changed while processing your request. Please try again.',
+        );
+      }
+
+      return tx.leaveRequest.create({
+        data: {
+          tenantId,
+          employeeId,
+          leaveTypeId: dto.leaveTypeId,
+          startDate: start,
+          endDate: end,
+          totalDays,
+          reason: dto.reason,
+          status: 'PENDING',
+        },
+        include: {
+          leaveType: true,
+          employee: { select: { firstName: true, lastName: true } },
+        },
+      });
     });
 
     const detailLink = this.buildLeaveRequestDetailLink(
       actor.tenantSlug,
       request.id,
     );
+    const platformLink = this.buildTenantWorkspaceLink(actor.tenantSlug);
     const notificationRecipients =
       await this.resolveLeaveNotificationRecipients(tenantId, empRecord);
 
@@ -517,6 +594,7 @@ export class LeaveService {
       totalDays,
       dto.reason,
       detailLink,
+      platformLink,
       notificationRecipients,
     );
 
@@ -606,52 +684,75 @@ export class LeaveService {
         hasPermissionRule(reviewer, 'leave:APPROVE'),
     );
 
-    const updated = await this.prisma.leaveRequest.update({
-      where: { id: requestId },
-      data: {
-        status: dto.action,
-        ...(dto.action === 'APPROVED'
-          ? { approvedBy: reviewer.id, approvedAt: new Date() }
-          : {
-              rejectedBy: reviewer.id,
-              rejectedAt: new Date(),
-              rejectionNote: dto.note,
-            }),
-      },
-    });
-
-    // Update balance
     const year = request.startDate.getFullYear();
-    const balance = await this.prisma.leaveBalance.findUnique({
-      where: {
-        employeeId_leaveTypeId_year: {
-          employeeId: request.employeeId,
-          leaveTypeId: request.leaveTypeId,
-          year,
-        },
-      },
-    });
+    const { updated, balanceMissing } = await this.prisma.$transaction(
+      async (tx) => {
+        const reviewed = await tx.leaveRequest.updateMany({
+          where: { id: requestId, tenantId, status: 'PENDING' },
+          data: {
+            status: dto.action,
+            ...(dto.action === 'APPROVED'
+              ? { approvedBy: reviewer.id, approvedAt: new Date() }
+              : {
+                  rejectedBy: reviewer.id,
+                  rejectedAt: new Date(),
+                  rejectionNote: dto.note,
+                }),
+          },
+        });
 
-    if (balance) {
-      if (dto.action === 'APPROVED') {
-        await this.prisma.leaveBalance.update({
-          where: { id: balance.id },
-          data: {
-            usedDays: { increment: request.totalDays },
-            pendingDays: { decrement: request.totalDays },
+        if (reviewed.count !== 1) {
+          throw new BadRequestException(
+            'This request has already been reviewed',
+          );
+        }
+
+        const balance = await tx.leaveBalance.findUnique({
+          where: {
+            employeeId_leaveTypeId_year: {
+              employeeId: request.employeeId,
+              leaveTypeId: request.leaveTypeId,
+              year,
+            },
           },
         });
-      } else {
-        // Rejected — restore days
-        await this.prisma.leaveBalance.update({
-          where: { id: balance.id },
-          data: {
-            pendingDays: { decrement: request.totalDays },
-            remainingDays: { increment: request.totalDays },
-          },
+
+        if (balance) {
+          if (dto.action === 'APPROVED') {
+            await tx.leaveBalance.update({
+              where: { id: balance.id },
+              data: {
+                usedDays: { increment: request.totalDays },
+                pendingDays: { decrement: request.totalDays },
+              },
+            });
+          } else {
+            await tx.leaveBalance.update({
+              where: { id: balance.id },
+              data: {
+                pendingDays: { decrement: request.totalDays },
+                remainingDays: { increment: request.totalDays },
+              },
+            });
+          }
+        }
+
+        const updatedRequest = await tx.leaveRequest.findUnique({
+          where: { id: requestId },
         });
-      }
-    } else {
+
+        if (!updatedRequest) {
+          throw new NotFoundException('Leave request not found');
+        }
+
+        return {
+          updated: updatedRequest,
+          balanceMissing: !balance,
+        };
+      },
+    );
+
+    if (balanceMissing) {
       this.logger.warn(
         `Leave balance not found for employee=${request.employeeId} leaveType=${request.leaveTypeId} year=${year} — balance counters not updated for request ${requestId}`,
       );
@@ -662,6 +763,7 @@ export class LeaveService {
       tenantId,
       request.employeeId,
       request.leaveTypeId,
+      reviewer.tenantSlug,
       dto.action,
       request.startDate,
       request.endDate,
@@ -677,6 +779,11 @@ export class LeaveService {
   private buildLeaveRequestDetailLink(tenantSlug: string, requestId: string) {
     const baseUrl = process.env.FRONTEND_BASE_URL!;
     return `${baseUrl}/${tenantSlug}/hr/leave?tab=requests&requestId=${encodeURIComponent(requestId)}`;
+  }
+
+  private buildTenantWorkspaceLink(tenantSlug: string) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/login`;
   }
 
   private buildLeaveRequestAppLink(requestId: string) {
@@ -726,8 +833,8 @@ export class LeaveService {
     } | null = null;
 
     if (employee.managerId) {
-      manager = await this.prisma.employee.findUnique({
-        where: { id: employee.managerId },
+      manager = await this.prisma.employee.findFirst({
+        where: { id: employee.managerId, tenantId },
         select: {
           userId: true,
           email: true,
@@ -738,13 +845,13 @@ export class LeaveService {
     }
 
     if (!manager && employee.departmentId) {
-      const dept = await this.prisma.department.findUnique({
-        where: { id: employee.departmentId },
+      const dept = await this.prisma.department.findFirst({
+        where: { id: employee.departmentId, tenantId },
         select: { managerId: true },
       });
       if (dept?.managerId) {
-        manager = await this.prisma.employee.findUnique({
-          where: { id: dept.managerId },
+        manager = await this.prisma.employee.findFirst({
+          where: { id: dept.managerId, tenantId },
           select: {
             userId: true,
             email: true,
@@ -789,29 +896,45 @@ export class LeaveService {
       }),
     ]);
 
-    const approvers = this.dedupeLeaveRecipients(
+    const rawApprovers = this.dedupeLeaveRecipients(
       permissionRecipients
         .filter((recipient) => recipient.email)
         .filter((recipient) => recipient.userId !== employee.userId)
         .map((recipient) =>
           this.toLeaveNotificationRecipient(recipient, 'APPROVER'),
         ),
-    ).filter(
+    );
+
+    const managerIsApprover = rawApprovers.some((recipient) =>
+      manager
+        ? recipient.userId && manager.userId
+          ? recipient.userId === manager.userId
+          : recipient.email.toLowerCase() === manager.email.toLowerCase()
+        : false,
+    );
+
+    const effectiveManager =
+      manager && managerIsApprover
+        ? { ...manager, source: 'APPROVER' as const }
+        : manager;
+
+    const approvers = rawApprovers.filter(
       (recipient) =>
-        !manager ||
-        (recipient.userId && manager.userId
-          ? recipient.userId !== manager.userId
-          : recipient.email.toLowerCase() !== manager.email.toLowerCase()),
+        !effectiveManager ||
+        (recipient.userId && effectiveManager.userId
+          ? recipient.userId !== effectiveManager.userId
+          : recipient.email.toLowerCase() !==
+            effectiveManager.email.toLowerCase()),
     );
 
     const all = this.dedupeLeaveRecipients(
-      [manager, ...approvers].filter(
+      [effectiveManager, ...approvers].filter(
         (recipient): recipient is LeaveNotificationRecipient =>
           recipient !== null,
       ),
     );
 
-    return { manager, approvers, all };
+    return { manager: effectiveManager, approvers, all };
   }
 
   private async notifyStakeholdersOfLeaveRequest(
@@ -830,6 +953,7 @@ export class LeaveService {
     totalDays: number,
     reason?: string,
     detailLink?: string,
+    platformLink?: string,
     recipientsInput?: LeaveNotificationRecipients,
   ) {
     try {
@@ -856,7 +980,10 @@ export class LeaveService {
             endDate,
             totalDays,
             reason,
-            detailLink,
+            detailLink:
+              recipient.source === 'APPROVER' ? detailLink : undefined,
+            platformLink:
+              recipient.source === 'APPROVER' ? undefined : platformLink,
           }),
         ),
       );
@@ -887,6 +1014,7 @@ export class LeaveService {
     tenantId: string,
     employeeId: string,
     leaveTypeId: string,
+    tenantSlug: string,
     status: 'APPROVED' | 'REJECTED',
     startDate: Date,
     endDate: Date,
@@ -923,6 +1051,7 @@ export class LeaveService {
         endDate: endDate.toISOString(),
         totalDays,
         note,
+        platformLink: this.buildTenantWorkspaceLink(tenantSlug),
       });
     } catch (err) {
       this.logger.error(
@@ -932,9 +1061,9 @@ export class LeaveService {
     }
   }
 
-  async cancelRequest(tenantId: string, requestId: string, userId: string) {
+  async cancelRequest(tenantId: string, requestId: string, actor: RequestUser) {
     const empRecord = await this.prisma.employee.findFirst({
-      where: { userId, tenantId },
+      where: { userId: actor.id, tenantId },
     });
     if (!empRecord) throw new NotFoundException('Employee profile not found');
 
@@ -986,6 +1115,7 @@ export class LeaveService {
       request.startDate.toISOString(),
       request.endDate.toISOString(),
       request.totalDays,
+      this.buildTenantWorkspaceLink(actor.tenantSlug),
       notificationRecipients,
     );
 
@@ -1007,6 +1137,7 @@ export class LeaveService {
     startDate: string,
     endDate: string,
     totalDays: number,
+    platformLink?: string,
     recipientsInput?: LeaveNotificationRecipients,
   ) {
     try {
@@ -1033,6 +1164,7 @@ export class LeaveService {
             startDate,
             endDate,
             totalDays,
+            platformLink,
           }),
         ),
       );

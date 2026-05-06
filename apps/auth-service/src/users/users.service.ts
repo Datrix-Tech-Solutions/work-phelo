@@ -52,26 +52,17 @@ export class UsersService {
 
     const userRole = dto.role ?? UserSystemRole.EMPLOYEE;
 
-    // One Company Admin per tenant
+    // One Company Admin per tenant. Admin reassignment must go through the
+    // dedicated tenant-admin flow so we do not silently demote the current admin.
     if (userRole === UserSystemRole.TENANT_ADMIN) {
       const existingAdmin = await this.prisma.user.findFirst({
         where: { tenantId, role: 'TENANT_ADMIN' },
+        select: { id: true },
       });
-      // Demote existing admin to EMPLOYEE before assigning new one
+
       if (existingAdmin) {
-        await this.prisma.user.update({
-          where: { id: existingAdmin.id },
-          data: { role: 'EMPLOYEE' },
-        });
-        await syncUserSystemPermissionSet(
-          this.prisma,
-          {
-            tenantId,
-            userId: existingAdmin.id,
-            role: 'EMPLOYEE',
-            grantedBy: existingAdmin.id,
-          },
-          this.logger,
+        throw new ConflictException(
+          'This company already has an administrator. Use the tenant admin update flow instead.',
         );
       }
     }

@@ -28,11 +28,16 @@ import { TenantLifecycleService } from './tenant-lifecycle.service';
 import { TenantConfigService } from './tenant-config.service';
 import { TenantAdminService } from './tenant-admin.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
+import { QueryTenantsDto } from './dto/query-tenants.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { RequestUser } from '@work-phelo/types';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & { user: RequestUser };
 
 @ApiTags('Tenants')
 @Controller('tenants')
@@ -99,14 +104,10 @@ export class TenantsController {
   })
   @ApiQuery({ name: 'search', required: false })
   @ApiResponse({ status: 200, description: 'Tenants list' })
-  findAll(
-    @Req() req: any,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
-  ) {
+  findAll(@Req() req: AuthenticatedRequest, @Query() query: QueryTenantsDto) {
     const isSuperAdmin = req.user?.role === 'SUPER_ADMIN';
     const tenantId = isSuperAdmin ? undefined : req.user?.tenantId;
-    return this.lifecycle.findAll({ status, search, tenantId });
+    return this.lifecycle.findAll({ ...query, tenantId });
   }
 
   @Get(':id/users')
@@ -246,7 +247,7 @@ export class TenantsController {
   updateModules(
     @Param('id') id: string,
     @Body() dto: Record<string, boolean>,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.config.updateModules(id, dto, req.user.id);
   }
@@ -276,7 +277,7 @@ export class TenantsController {
   updateFeatures(
     @Param('id') id: string,
     @Body() dto: { module: string; features: Record<string, boolean> },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     if (req.user.role === 'TENANT_ADMIN' && id !== req.user.tenantId) {
       throw new ForbiddenException(

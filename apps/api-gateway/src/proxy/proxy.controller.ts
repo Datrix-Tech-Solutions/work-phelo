@@ -18,12 +18,22 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/forgot-password$/,
   /^\/api\/v1\/auth\/reset-password$/,
   /^\/api\/v1\/auth\/force-reset-password$/,
-  /^\/api\/v1\/auth\/google/,
-  /^\/api\/v1\/auth\/microsoft/,
+  /^\/api\/v1\/auth\/google(?:\/callback)?$/,
+  /^\/api\/v1\/auth\/microsoft(?:\/callback)?$/,
   /^\/api\/v1\/auth\/tenants\/register$/,
   /^\/api\/v1\/auth\/users\/accept-invite$/,
   /^\/api\/v1\/auth\/mfa\/send-sms$/,
 ];
+
+const FORWARDED_AUTH_CONTEXT_HEADERS = [
+  'x-user-id',
+  'x-user-email',
+  'x-user-role',
+  'x-tenant-id',
+  'x-tenant-slug',
+  'x-tenant-name',
+  'x-user-first-name',
+] as const;
 
 @Controller()
 export class ProxyController {
@@ -45,6 +55,10 @@ export class ProxyController {
         availableServices,
         statusCode: 503,
       });
+    }
+
+    for (const header of FORWARDED_AUTH_CONTEXT_HEADERS) {
+      delete req.headers[header];
     }
 
     const isPublic = PUBLIC_PATTERNS.some((p) => p.test(req.path));

@@ -8,11 +8,12 @@ import {
   RpcException,
 } from '@nestjs/microservices';
 import { UsersService } from './users.service';
-import { PrismaService } from '../prisma/prisma.service';
 import {
   EventPatterns,
   WithMeta,
   InviteEmployeeEvent,
+  DeactivateEmployeeAccessCommand,
+  DeactivateEmployeeAccessResult,
   EmployeeOffboardedEvent,
   ResendEmployeeInviteEvent,
   ProvisionEmployeeInviteCommand,
@@ -25,10 +26,7 @@ import {
 export class UsersHandler {
   private readonly logger = new Logger(UsersHandler.name);
 
-  constructor(
-    private readonly usersService: UsersService,
-    private readonly prisma: PrismaService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   private ack(context: RmqContext) {
     context.getChannelRef().ack(context.getMessage());
@@ -243,24 +241,41 @@ export class UsersHandler {
     }
   }
 
+  @MessagePattern(EventPatterns.AUTH_DEACTIVATE_EMPLOYEE_ACCESS)
+  async handleDeactivateEmployeeAccess(
+    @Payload() data: WithMeta<DeactivateEmployeeAccessCommand>,
+    @Ctx() context: RmqContext,
+  ): Promise<DeactivateEmployeeAccessResult> {
+    const { tenantId, userId, email, _meta } = data;
+    this.logger.log(
+      `[auth.deactivate_employee_access] Received | email=${email} | corrId=${_meta?.correlationId}`,
+    );
+    try {
+      await this.usersService.deactivate(tenantId, userId);
+      this.ack(context);
+      return { deactivated: true };
+    } catch (error) {
+      this.settleRpcFailure(
+        context,
+        'auth.deactivate_employee_access',
+        error,
+        `email=${email} | corrId=${_meta?.correlationId}`,
+      );
+      throw new RpcException(this.toRpcErrorPayload(error));
+    }
+  }
+
   @EventPattern('hr.employee_offboarded')
   async handleEmployeeOffboarded(
     @Payload() data: WithMeta<EmployeeOffboardedEvent>,
     @Ctx() context: RmqContext,
   ) {
-    const { userId, email, _meta } = data;
+    const { tenantId, userId, email, _meta } = data;
     this.logger.log(
       `[hr.employee_offboarded] Received | email=${email} | corrId=${_meta?.correlationId}`,
     );
     try {
-      await this.prisma.user.update({
-        where: { id: userId },
-        data: { status: 'INACTIVE' },
-      });
-      await this.prisma.refreshToken.updateMany({
-        where: { userId, isRevoked: false },
-        data: { isRevoked: true },
-      });
+      await this.usersService.deactivate(tenantId, userId);
       this.logger.log(
         `[hr.employee_offboarded] Account deactivated and tokens revoked | email=${email} | corrId=${_meta?.correlationId}`,
       );

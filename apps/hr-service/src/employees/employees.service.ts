@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -24,7 +25,7 @@ import {
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
-import { AssetStatus } from '../../prisma/generated/client';
+import { AssetStatus, Prisma } from '../../prisma/generated/client';
 import {
   assertHrAccess,
   getActorEmployee,
@@ -54,6 +55,8 @@ type ResignationNotificationRecipients = {
   approvers: ResignationNotificationRecipient[];
   all: ResignationNotificationRecipient[];
 };
+
+type HrPrismaTx = Prisma.TransactionClient;
 
 @Injectable()
 export class EmployeesService {
@@ -118,6 +121,209 @@ export class EmployeesService {
     return { ...employee, userStatus };
   }
 
+  private isDuplicateEmployeeNumberError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const maybePrismaError = error as {
+      code?: unknown;
+      meta?: { target?: unknown };
+    };
+
+    if (maybePrismaError.code !== 'P2002') {
+      return false;
+    }
+
+    const target = maybePrismaError.meta?.target;
+    return Array.isArray(target) && target.includes('employeeNumber');
+  }
+
+  private async generateEmployeeNumber(tenantId: string) {
+    const count = await this.prisma.employee.count({ where: { tenantId } });
+    return `EMP-${String(count + 1).padStart(4, '0')}`;
+  }
+
+  private async assertValidManagerAssignment(
+    tenantId: string,
+    managerId: string,
+    employeeId?: string,
+  ) {
+    const manager = await this.prisma.employee.findFirst({
+      where: { id: managerId, tenantId },
+      select: { id: true, managerId: true },
+    });
+
+    if (!manager) {
+      throw new NotFoundException('Manager not found');
+    }
+
+    if (!employeeId) {
+      return;
+    }
+
+    if (managerId === employeeId) {
+      throw new BadRequestException(
+        'An employee cannot be assigned as their own manager.',
+      );
+    }
+
+    const visited = new Set<string>([employeeId]);
+    let current: { id: string; managerId: string | null } | null = manager;
+
+    while (current) {
+      if (visited.has(current.id)) {
+        throw new BadRequestException(
+          'This manager assignment would create a reporting cycle.',
+        );
+      }
+
+      visited.add(current.id);
+
+      if (!current.managerId) {
+        break;
+      }
+
+      current = await this.prisma.employee.findFirst({
+        where: { id: current.managerId, tenantId },
+        select: { id: true, managerId: true },
+      });
+    }
+  }
+
+  private async createEmployeeWithUniqueNumber(
+    tenantId: string,
+    dto: CreateEmployeeDto,
+    provisionedUser: { userId: string },
+  ) {
+    let attempt = 0;
+
+    while (attempt < 5) {
+      const employeeNumber = await this.generateEmployeeNumber(tenantId);
+
+      try {
+        return await this.prisma.employee.create({
+          data: {
+            tenantId,
+            employeeNumber,
+            userId: provisionedUser.userId,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            email: dto.email,
+            phone: dto.phone,
+            gender: dto.gender,
+            dateOfBirth: dto.dateOfBirth
+              ? new Date(dto.dateOfBirth)
+              : undefined,
+            maritalStatus: dto.maritalStatus,
+            nationality: dto.nationality,
+            address: dto.address,
+            city: dto.city,
+            region: dto.region,
+            emergencyName: dto.emergencyName,
+            emergencyPhone: dto.emergencyPhone,
+            emergencyRelation: dto.emergencyRelation,
+            jobTitle: dto.jobTitle,
+            employmentType: dto.employmentType,
+            hireDate: new Date(dto.hireDate),
+            probationEndsAt: dto.probationEndsAt
+              ? new Date(dto.probationEndsAt)
+              : undefined,
+            contractEndDate: dto.contractEndDate
+              ? new Date(dto.contractEndDate)
+              : undefined,
+            basicSalary: dto.basicSalary ?? 0,
+            nationalId: dto.nationalId,
+            bankName: dto.bankName,
+            bankAccountNumber: dto.bankAccountNumber,
+            bankBranch: dto.bankBranch,
+            ssnit: dto.ssnit,
+            tinNumber: dto.tinNumber,
+            ...(dto.departmentId && { departmentId: dto.departmentId }),
+            ...(dto.branchId && { branchId: dto.branchId }),
+            ...(dto.managerId && { managerId: dto.managerId }),
+          },
+          include: { department: true, branch: true },
+        });
+      } catch (error) {
+        if (this.isDuplicateEmployeeNumberError(error)) {
+          attempt += 1;
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new ConflictException(
+      'Could not allocate a unique employee number. Please retry.',
+    );
+  }
+
+  private validateEmploymentDates(input: {
+    hireDate: Date;
+    probationEndsAt?: Date;
+    contractEndDate?: Date;
+  }) {
+    if (input.probationEndsAt && input.probationEndsAt < input.hireDate) {
+      throw new BadRequestException(
+        'Probation end date cannot be before the hire date.',
+      );
+    }
+
+    if (input.contractEndDate && input.contractEndDate < input.hireDate) {
+      throw new BadRequestException(
+        'Contract end date cannot be before the hire date.',
+      );
+    }
+  }
+
+  private async upsertOffboardingRecord(
+    tx: HrPrismaTx,
+    tenantId: string,
+    employeeId: string,
+    dto: {
+      reason: OffboardReason;
+      otherReason?: string;
+      lastWorkingDate: string;
+      exitNotes?: string;
+    },
+    employee: { hireDate: Date },
+  ) {
+    if (dto.reason === OffboardReason.OTHER && !dto.otherReason?.trim()) {
+      throw new BadRequestException(
+        'A specific reason is required when "Other" is selected',
+      );
+    }
+
+    const lastWorkingDate = new Date(dto.lastWorkingDate);
+    if (lastWorkingDate < employee.hireDate) {
+      throw new BadRequestException(
+        'Last working date cannot be before the employee hire date',
+      );
+    }
+
+    return tx.offboardingRecord.upsert({
+      where: { employeeId },
+      create: {
+        tenantId,
+        employeeId,
+        reason: dto.reason,
+        otherReason: dto.otherReason,
+        lastWorkingDate,
+        exitNotes: dto.exitNotes,
+        isDraft: true,
+      },
+      update: {
+        reason: dto.reason,
+        otherReason: dto.otherReason,
+        lastWorkingDate,
+        exitNotes: dto.exitNotes,
+        isDraft: true,
+      },
+    });
+  }
+
   async create(tenantId: string, dto: CreateEmployeeDto) {
     // Enforce minimum one department before adding employees
     const deptCount = await this.prisma.department.count({
@@ -149,8 +355,20 @@ export class EmployeesService {
       if (!dept) throw new NotFoundException('Department not found');
     }
 
-    const count = await this.prisma.employee.count({ where: { tenantId } });
-    const employeeNumber = `EMP-${String(count + 1).padStart(4, '0')}`;
+    if (dto.managerId) {
+      await this.assertValidManagerAssignment(tenantId, dto.managerId);
+    }
+
+    this.validateEmploymentDates({
+      hireDate: new Date(dto.hireDate),
+      probationEndsAt: dto.probationEndsAt
+        ? new Date(dto.probationEndsAt)
+        : undefined,
+      contractEndDate: dto.contractEndDate
+        ? new Date(dto.contractEndDate)
+        : undefined,
+    });
+
     let provisionedUser;
     try {
       provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite({
@@ -169,48 +387,27 @@ export class EmployeesService {
 
     let employee;
     try {
-      employee = await this.prisma.employee.create({
-        data: {
-          tenantId,
-          employeeNumber,
-          userId: provisionedUser.userId,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          email: dto.email,
-          phone: dto.phone,
-          gender: dto.gender,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-          maritalStatus: dto.maritalStatus,
-          nationality: dto.nationality,
-          address: dto.address,
-          city: dto.city,
-          region: dto.region,
-          emergencyName: dto.emergencyName,
-          emergencyPhone: dto.emergencyPhone,
-          emergencyRelation: dto.emergencyRelation,
-          jobTitle: dto.jobTitle,
-          employmentType: dto.employmentType,
-          hireDate: new Date(dto.hireDate),
-          probationEndsAt: dto.probationEndsAt
-            ? new Date(dto.probationEndsAt)
-            : undefined,
-          contractEndDate: dto.contractEndDate
-            ? new Date(dto.contractEndDate)
-            : undefined,
-          basicSalary: dto.basicSalary ?? 0,
-          nationalId: dto.nationalId,
-          bankName: dto.bankName,
-          bankAccountNumber: dto.bankAccountNumber,
-          bankBranch: dto.bankBranch,
-          ssnit: dto.ssnit,
-          tinNumber: dto.tinNumber,
-          ...(dto.departmentId && { departmentId: dto.departmentId }),
-          ...(dto.branchId && { branchId: dto.branchId }),
-          ...(dto.managerId && { managerId: dto.managerId }),
-        },
-        include: { department: true, branch: true },
-      });
+      employee = await this.createEmployeeWithUniqueNumber(
+        tenantId,
+        dto,
+        provisionedUser,
+      );
+      await this.leaveService.initializeLeaveBalances(tenantId, employee.id);
+      this.logger.log(`Leave balances initialised for ${employee.email}`);
     } catch (err) {
+      if (employee) {
+        try {
+          await this.prisma.employee.delete({
+            where: { id: employee.id },
+          });
+        } catch (rollbackErr) {
+          this.logger.error(
+            `Failed to roll back HR employee ${dto.email} after onboarding setup failed`,
+            rollbackErr,
+          );
+        }
+      }
+
       try {
         await this.rabbitmq.authDeletePendingEmployeeInvite({
           tenantId,
@@ -219,26 +416,12 @@ export class EmployeesService {
         });
       } catch (rollbackErr) {
         this.logger.error(
-          `Failed to roll back auth invite for ${dto.email} after HR employee creation failed`,
+          `Failed to roll back auth invite for ${dto.email} after onboarding setup failed`,
           rollbackErr,
         );
       }
       throw err;
     }
-
-    // Initialise leave balances immediately so the employee can request leave
-    // as soon as their account is active. Uses upsert — safe to call multiple times.
-    void this.leaveService
-      .initializeLeaveBalances(tenantId, employee.id)
-      .then(() =>
-        this.logger.log(`Leave balances initialised for ${employee.email}`),
-      )
-      .catch((err) =>
-        this.logger.error(
-          `Failed to initialise leave balances for ${employee.email}`,
-          err,
-        ),
-      );
 
     return employee;
   }
@@ -529,11 +712,18 @@ export class EmployeesService {
     }
 
     if (rest.managerId) {
-      const manager = await this.prisma.employee.findFirst({
-        where: { id: rest.managerId, tenantId },
-      });
-      if (!manager) throw new NotFoundException('Manager not found');
+      await this.assertValidManagerAssignment(tenantId, rest.managerId, id);
     }
+
+    this.validateEmploymentDates({
+      hireDate: existing.hireDate,
+      probationEndsAt: probationEndsAt
+        ? new Date(probationEndsAt)
+        : (existing.probationEndsAt ?? undefined),
+      contractEndDate: contractEndDate
+        ? new Date(contractEndDate)
+        : (existing.contractEndDate ?? undefined),
+    });
 
     // Track status change
     const statusChanged =
@@ -777,6 +967,22 @@ export class EmployeesService {
       );
     }
 
+    const previousResignationSnapshot = existing
+      ? {
+          lastWorkingDate: existing.lastWorkingDate,
+          reason: existing.reason,
+          additionalNotes: existing.additionalNotes,
+          status: existing.status,
+          submittedAt: existing.submittedAt,
+          withdrawnAt: existing.withdrawnAt,
+          dismissedAt: existing.dismissedAt,
+          dismissedById: existing.dismissedById,
+          dismissedByEmail: existing.dismissedByEmail,
+          offboardingInitiatedAt: existing.offboardingInitiatedAt,
+          offboardingRecordId: existing.offboardingRecordId,
+        }
+      : null;
+
     const resignation = await this.prisma.resignationRecord.upsert({
       where: { employeeId },
       create: {
@@ -816,20 +1022,58 @@ export class EmployeesService {
 
     // Delay notifications by 30 minutes — gives the employee a withdrawal window.
     // The processor re-checks status before firing; if withdrawn, it skips silently.
-    await this.resignationQueue.add(
-      RESIGNATION_NOTIFY_JOB,
-      {
-        tenantId,
-        employeeId,
-        employeeFirstName: employee.firstName,
-        employeeLastName: employee.lastName,
-        lastWorkingDate: lastWorkingDate.toISOString(),
-        reason: reasonLabel,
-        additionalNotes: dto.additionalNotes?.trim() || undefined,
-        detailLink,
-      },
-      { delay: RESIGNATION_NOTIFY_DELAY_MS },
-    );
+    try {
+      await this.resignationQueue.add(
+        RESIGNATION_NOTIFY_JOB,
+        {
+          tenantId,
+          employeeId,
+          employeeFirstName: employee.firstName,
+          employeeLastName: employee.lastName,
+          lastWorkingDate: lastWorkingDate.toISOString(),
+          reason: reasonLabel,
+          additionalNotes: dto.additionalNotes?.trim() || undefined,
+          detailLink,
+        },
+        {
+          delay: RESIGNATION_NOTIFY_DELAY_MS,
+          jobId: `resignation-notify:${tenantId}:${employeeId}:${submittedAt.getTime()}`,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 60_000,
+          },
+          removeOnComplete: true,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to schedule resignation notification for employee ${employeeId}`,
+        error,
+      );
+
+      try {
+        if (previousResignationSnapshot) {
+          await this.prisma.resignationRecord.update({
+            where: { employeeId },
+            data: previousResignationSnapshot,
+          });
+        } else {
+          await this.prisma.resignationRecord.delete({
+            where: { employeeId },
+          });
+        }
+      } catch (rollbackError) {
+        this.logger.error(
+          `Failed to roll back resignation submission after queue scheduling error for employee ${employeeId}`,
+          rollbackError,
+        );
+      }
+
+      throw new ServiceUnavailableException(
+        'Could not submit the resignation right now. Please try again.',
+      );
+    }
 
     return {
       message:
@@ -937,43 +1181,73 @@ export class EmployeesService {
   ) {
     await this.findById(tenantId, employeeId, actor);
 
-    const resignation = await this.prisma.resignationRecord.findUnique({
-      where: { employeeId },
-    });
+    const { offboarding, resignation } = await this.prisma.$transaction(
+      async (tx) => {
+        const employee = await tx.employee.findFirst({
+          where: { id: employeeId, tenantId },
+          select: { hireDate: true, employmentStatus: true },
+        });
 
-    if (!resignation || resignation.tenantId !== tenantId) {
-      throw new NotFoundException('No resignation found for this employee.');
-    }
+        if (!employee) {
+          throw new NotFoundException('Employee not found');
+        }
 
-    if (resignation.status !== 'PENDING') {
-      throw new BadRequestException(
-        'Only a pending resignation can be used to initiate offboarding.',
-      );
-    }
+        if (
+          employee.employmentStatus !== 'ACTIVE' &&
+          employee.employmentStatus !== 'PROBATION'
+        ) {
+          throw new BadRequestException(
+            'Offboarding can only be initiated for Active or Probation employees',
+          );
+        }
 
-    const offboarding = await this.initiateOffboard(
-      tenantId,
-      employeeId,
-      {
-        reason: OffboardReason.RESIGNATION,
-        lastWorkingDate: resignation.lastWorkingDate.toISOString(),
-        exitNotes: resignation.additionalNotes ?? undefined,
+        const resignation = await tx.resignationRecord.findUnique({
+          where: { employeeId },
+        });
+
+        if (!resignation || resignation.tenantId !== tenantId) {
+          throw new NotFoundException(
+            'No resignation found for this employee.',
+          );
+        }
+
+        if (resignation.status !== 'PENDING') {
+          throw new BadRequestException(
+            'Only a pending resignation can be used to initiate offboarding.',
+          );
+        }
+
+        const offboarding = await this.upsertOffboardingRecord(
+          tx,
+          tenantId,
+          employeeId,
+          {
+            reason: OffboardReason.RESIGNATION,
+            lastWorkingDate: resignation.lastWorkingDate.toISOString(),
+            exitNotes: resignation.additionalNotes ?? undefined,
+          },
+          employee,
+        );
+
+        const updatedResignation = await tx.resignationRecord.update({
+          where: { employeeId },
+          data: {
+            status: 'OFFBOARDING_INITIATED',
+            offboardingInitiatedAt: new Date(),
+            offboardingRecordId: offboarding.id,
+          },
+        });
+
+        return {
+          offboarding,
+          resignation: updatedResignation,
+        };
       },
-      { id: actor.id, email: actor.email },
     );
-
-    const updatedResignation = await this.prisma.resignationRecord.update({
-      where: { employeeId },
-      data: {
-        status: 'OFFBOARDING_INITIATED',
-        offboardingInitiatedAt: new Date(),
-        offboardingRecordId: offboarding.id,
-      },
-    });
 
     return {
       message: 'Offboarding initiated from resignation successfully.',
-      resignation: updatedResignation,
+      resignation,
       offboarding,
     };
   }
@@ -984,7 +1258,6 @@ export class EmployeesService {
     tenantId: string,
     id: string,
     dto: InitiateOffboardDto,
-    actor: { id: string; email: string },
   ) {
     const employee = await this.findById(tenantId, id);
 
@@ -997,37 +1270,8 @@ export class EmployeesService {
       );
     }
 
-    if (dto.reason === OffboardReason.OTHER && !dto.otherReason?.trim()) {
-      throw new BadRequestException(
-        'A specific reason is required when "Other" is selected',
-      );
-    }
-
-    const lastWorkingDate = new Date(dto.lastWorkingDate);
-    if (lastWorkingDate < employee.hireDate) {
-      throw new BadRequestException(
-        'Last working date cannot be before the employee hire date',
-      );
-    }
-
-    return this.prisma.offboardingRecord.upsert({
-      where: { employeeId: id },
-      create: {
-        tenantId,
-        employeeId: id,
-        reason: dto.reason,
-        otherReason: dto.otherReason,
-        lastWorkingDate,
-        exitNotes: dto.exitNotes,
-        isDraft: true,
-      },
-      update: {
-        reason: dto.reason,
-        otherReason: dto.otherReason,
-        lastWorkingDate,
-        exitNotes: dto.exitNotes,
-        isDraft: true,
-      },
+    return this.upsertOffboardingRecord(this.prisma, tenantId, id, dto, {
+      hireDate: employee.hireDate,
     });
   }
 
@@ -1167,10 +1411,11 @@ export class EmployeesService {
       }),
     ]);
 
-    // 2. Revoke auth access (fire-and-forget)
+    // 2. Revoke auth access immediately. If this fails, the recovery cron
+    // will retry for any still-active auth account tied to an offboarded employee.
     if (employee.userId) {
-      void this.rabbitmq
-        .authEmployeeOffboarded({
+      await this.rabbitmq
+        .authDeactivateEmployeeAccess({
           tenantId,
           userId: employee.userId,
           email: employee.email,
@@ -1178,7 +1423,7 @@ export class EmployeesService {
         })
         .catch((err) =>
           this.logger.error(
-            `Failed to emit hr.employee_offboarded for ${employee.email}`,
+            `Failed to deactivate auth access for offboarded employee ${employee.email}`,
             err,
           ),
         );
