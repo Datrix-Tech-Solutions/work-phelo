@@ -51,8 +51,13 @@ export default function EmployeeDetailPage({
   const [resignOpen, setResignOpen] = useState(false);
 
   // Data fetching
+  const NOTIFY_DELAY_MS = 30 * 60 * 1000;
+
   const { data: employee, isLoading, error } = useEmployee(id);
   const { data: resignationRecord } = useResignationRecord(id);
+  const hrIsNotified =
+    resignationRecord?.status === 'PENDING' &&
+    Date.now() - new Date(resignationRecord.submittedAt).getTime() >= NOTIFY_DELAY_MS;
   const { data: allHrResult } = useEmployees();
   const { data: availableAssets = [] } = useAvailableAssets();
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
@@ -171,7 +176,7 @@ export default function EmployeeDetailPage({
         }
         onOffboard={canOffboardEmployee ? () => setOffboardOpen(true) : undefined}
         onResign={() => setResignOpen(true)}
-        hasPendingResignation={resignationRecord?.status === 'PENDING'}
+        hasPendingResignation={hrIsNotified}
         onEdit={canEditEmployee ? () => setEditOpen(true) : undefined}
       />
 

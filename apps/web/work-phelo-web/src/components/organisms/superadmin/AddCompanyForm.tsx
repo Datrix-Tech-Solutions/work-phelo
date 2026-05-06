@@ -20,6 +20,7 @@ interface AddCompanyPayload {
   lastName: string;
   phone?: string;
   industry?: string;
+  customIndustry?: string;
   size?: string;
 }
 
@@ -56,15 +57,18 @@ function AddCompanyInner({
   const { mutate: registerTenant, isPending } = useRegisterTenant();
 
   const onSubmit = (data: AddCompanyPayload) => {
-    registerTenant(
-      { ...data, slug: generateSlug(data.name) },
-      {
-        onSuccess: (_, vars) => {
-          onSuccess(vars.name);
-          onClose();
-        },
+    const payload = { ...data, slug: generateSlug(data.name) };
+    if (payload.industry === 'Other' && payload.customIndustry) {
+      payload.industry = payload.customIndustry;
+    }
+    delete payload.customIndustry;
+
+    registerTenant(payload, {
+      onSuccess: (_, vars) => {
+        onSuccess(vars.name);
+        onClose();
       },
-    );
+    });
   };
 
   return (
@@ -117,8 +121,17 @@ function AddCompanyInner({
           onChange={(v) => {
             setIndustry(v);
             setValue('industry', v);
+            if (v !== 'Other') setValue('customIndustry', undefined);
           }}
         />
+        {industry === 'Other' && (
+          <FormField
+            label="Please specify industry"
+            registration={register('customIndustry', { required: 'Please specify your industry' })}
+            error={errors.customIndustry}
+            placeholder="eg; Space Tourism"
+          />
+        )}
       </FormSection>
 
       {/* Administrator Information */}

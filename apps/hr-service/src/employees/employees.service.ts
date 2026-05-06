@@ -477,6 +477,7 @@ export class EmployeesService {
           hireDate: true,
           avatarUrl: true,
           userId: true,
+          basicSalary: true,
           department: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
         },
