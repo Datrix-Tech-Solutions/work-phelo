@@ -118,6 +118,145 @@ export class EmployeesService {
     return { ...employee, userStatus };
   }
 
+  private isDuplicateEmployeeNumberError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const maybePrismaError = error as {
+      code?: unknown;
+      meta?: { target?: unknown };
+    };
+
+    if (maybePrismaError.code !== 'P2002') {
+      return false;
+    }
+
+    const target = maybePrismaError.meta?.target;
+    return Array.isArray(target) && target.includes('employeeNumber');
+  }
+
+  private async generateEmployeeNumber(tenantId: string) {
+    const count = await this.prisma.employee.count({ where: { tenantId } });
+    return `EMP-${String(count + 1).padStart(4, '0')}`;
+  }
+
+  private async assertValidManagerAssignment(
+    tenantId: string,
+    managerId: string,
+    employeeId?: string,
+  ) {
+    const manager = await this.prisma.employee.findFirst({
+      where: { id: managerId, tenantId },
+      select: { id: true, managerId: true },
+    });
+
+    if (!manager) {
+      throw new NotFoundException('Manager not found');
+    }
+
+    if (!employeeId) {
+      return;
+    }
+
+    if (managerId === employeeId) {
+      throw new BadRequestException(
+        'An employee cannot be assigned as their own manager.',
+      );
+    }
+
+    const visited = new Set<string>([employeeId]);
+    let current: { id: string; managerId: string | null } | null = manager;
+
+    while (current) {
+      if (visited.has(current.id)) {
+        throw new BadRequestException(
+          'This manager assignment would create a reporting cycle.',
+        );
+      }
+
+      visited.add(current.id);
+
+      if (!current.managerId) {
+        break;
+      }
+
+      current = await this.prisma.employee.findFirst({
+        where: { id: current.managerId, tenantId },
+        select: { id: true, managerId: true },
+      });
+    }
+  }
+
+  private async createEmployeeWithUniqueNumber(
+    tenantId: string,
+    dto: CreateEmployeeDto,
+    provisionedUser: { userId: string },
+  ) {
+    let attempt = 0;
+
+    while (attempt < 5) {
+      const employeeNumber = await this.generateEmployeeNumber(tenantId);
+
+      try {
+        return await this.prisma.employee.create({
+          data: {
+            tenantId,
+            employeeNumber,
+            userId: provisionedUser.userId,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            email: dto.email,
+            phone: dto.phone,
+            gender: dto.gender,
+            dateOfBirth: dto.dateOfBirth
+              ? new Date(dto.dateOfBirth)
+              : undefined,
+            maritalStatus: dto.maritalStatus,
+            nationality: dto.nationality,
+            address: dto.address,
+            city: dto.city,
+            region: dto.region,
+            emergencyName: dto.emergencyName,
+            emergencyPhone: dto.emergencyPhone,
+            emergencyRelation: dto.emergencyRelation,
+            jobTitle: dto.jobTitle,
+            employmentType: dto.employmentType,
+            hireDate: new Date(dto.hireDate),
+            probationEndsAt: dto.probationEndsAt
+              ? new Date(dto.probationEndsAt)
+              : undefined,
+            contractEndDate: dto.contractEndDate
+              ? new Date(dto.contractEndDate)
+              : undefined,
+            basicSalary: dto.basicSalary ?? 0,
+            nationalId: dto.nationalId,
+            bankName: dto.bankName,
+            bankAccountNumber: dto.bankAccountNumber,
+            bankBranch: dto.bankBranch,
+            ssnit: dto.ssnit,
+            tinNumber: dto.tinNumber,
+            ...(dto.departmentId && { departmentId: dto.departmentId }),
+            ...(dto.branchId && { branchId: dto.branchId }),
+            ...(dto.managerId && { managerId: dto.managerId }),
+          },
+          include: { department: true, branch: true },
+        });
+      } catch (error) {
+        if (this.isDuplicateEmployeeNumberError(error)) {
+          attempt += 1;
+          continue;
+        }
+
+        throw error;
+      }
+    }
+
+    throw new ConflictException(
+      'Could not allocate a unique employee number. Please retry.',
+    );
+  }
+
   async create(tenantId: string, dto: CreateEmployeeDto) {
     // Enforce minimum one department before adding employees
     const deptCount = await this.prisma.department.count({
@@ -149,8 +288,10 @@ export class EmployeesService {
       if (!dept) throw new NotFoundException('Department not found');
     }
 
-    const count = await this.prisma.employee.count({ where: { tenantId } });
-    const employeeNumber = `EMP-${String(count + 1).padStart(4, '0')}`;
+    if (dto.managerId) {
+      await this.assertValidManagerAssignment(tenantId, dto.managerId);
+    }
+
     let provisionedUser;
     try {
       provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite({
@@ -169,47 +310,11 @@ export class EmployeesService {
 
     let employee;
     try {
-      employee = await this.prisma.employee.create({
-        data: {
-          tenantId,
-          employeeNumber,
-          userId: provisionedUser.userId,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          email: dto.email,
-          phone: dto.phone,
-          gender: dto.gender,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-          maritalStatus: dto.maritalStatus,
-          nationality: dto.nationality,
-          address: dto.address,
-          city: dto.city,
-          region: dto.region,
-          emergencyName: dto.emergencyName,
-          emergencyPhone: dto.emergencyPhone,
-          emergencyRelation: dto.emergencyRelation,
-          jobTitle: dto.jobTitle,
-          employmentType: dto.employmentType,
-          hireDate: new Date(dto.hireDate),
-          probationEndsAt: dto.probationEndsAt
-            ? new Date(dto.probationEndsAt)
-            : undefined,
-          contractEndDate: dto.contractEndDate
-            ? new Date(dto.contractEndDate)
-            : undefined,
-          basicSalary: dto.basicSalary ?? 0,
-          nationalId: dto.nationalId,
-          bankName: dto.bankName,
-          bankAccountNumber: dto.bankAccountNumber,
-          bankBranch: dto.bankBranch,
-          ssnit: dto.ssnit,
-          tinNumber: dto.tinNumber,
-          ...(dto.departmentId && { departmentId: dto.departmentId }),
-          ...(dto.branchId && { branchId: dto.branchId }),
-          ...(dto.managerId && { managerId: dto.managerId }),
-        },
-        include: { department: true, branch: true },
-      });
+      employee = await this.createEmployeeWithUniqueNumber(
+        tenantId,
+        dto,
+        provisionedUser,
+      );
     } catch (err) {
       try {
         await this.rabbitmq.authDeletePendingEmployeeInvite({
@@ -529,10 +634,7 @@ export class EmployeesService {
     }
 
     if (rest.managerId) {
-      const manager = await this.prisma.employee.findFirst({
-        where: { id: rest.managerId, tenantId },
-      });
-      if (!manager) throw new NotFoundException('Manager not found');
+      await this.assertValidManagerAssignment(tenantId, rest.managerId, id);
     }
 
     // Track status change

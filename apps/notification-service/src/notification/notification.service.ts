@@ -18,10 +18,17 @@ export class NotificationService {
   private async isDuplicate(
     recipient: string,
     type: NotificationType,
+    tenantId?: string,
   ): Promise<boolean> {
     const since = new Date(Date.now() - 2 * 60 * 1000);
     const existing = await this.prisma.notificationLog.findFirst({
-      where: { recipient, type, status: 'SENT', sentAt: { gt: since } },
+      where: {
+        recipient,
+        type,
+        tenantId: tenantId ?? 'system',
+        status: 'SENT',
+        sentAt: { gt: since },
+      },
     });
     return !!existing;
   }
@@ -35,7 +42,11 @@ export class NotificationService {
     tenantName?: string;
   }) {
     if (
-      await this.isDuplicate(data.email, NotificationType.EMAIL_VERIFICATION)
+      await this.isDuplicate(
+        data.email,
+        NotificationType.EMAIL_VERIFICATION,
+        data.tenantId,
+      )
     ) {
       this.logger.warn(
         `Duplicate EMAIL_VERIFICATION suppressed for ${data.email}`,
@@ -68,7 +79,13 @@ export class NotificationService {
     tenantName: string;
     inviteKind?: InviteUserKind;
   }) {
-    if (await this.isDuplicate(data.email, NotificationType.INVITE_USER)) {
+    if (
+      await this.isDuplicate(
+        data.email,
+        NotificationType.INVITE_USER,
+        data.tenantId,
+      )
+    ) {
       this.logger.warn(`Duplicate INVITE_USER suppressed for ${data.email}`);
       return;
     }
@@ -108,7 +125,11 @@ export class NotificationService {
     tenantName?: string;
   }) {
     if (
-      await this.isDuplicate(data.email, NotificationType.PASSWORD_RESET_LINK)
+      await this.isDuplicate(
+        data.email,
+        NotificationType.PASSWORD_RESET_LINK,
+        data.tenantId,
+      )
     ) {
       this.logger.warn(
         `Duplicate PASSWORD_RESET_LINK suppressed for ${data.email}`,
@@ -141,7 +162,11 @@ export class NotificationService {
   }) {
     const recipient = data.email ?? data.phone ?? 'unknown';
     if (
-      await this.isDuplicate(recipient, NotificationType.PASSWORD_RESET_OTP)
+      await this.isDuplicate(
+        recipient,
+        NotificationType.PASSWORD_RESET_OTP,
+        data.tenantId,
+      )
     ) {
       this.logger.warn(
         `Duplicate PASSWORD_RESET_OTP suppressed for ${recipient}`,
@@ -176,7 +201,11 @@ export class NotificationService {
     lastWorkingDate: string;
   }) {
     if (
-      await this.isDuplicate(data.email, NotificationType.EMPLOYEE_TERMINATION)
+      await this.isDuplicate(
+        data.email,
+        NotificationType.EMPLOYEE_TERMINATION,
+        data.tenantId,
+      )
     ) {
       this.logger.warn(
         `Duplicate EMPLOYEE_TERMINATION suppressed for ${data.email}`,
@@ -216,6 +245,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.adminEmail,
         NotificationType.RESIGNATION_SUBMITTED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -262,6 +292,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.managerEmail,
         NotificationType.LEAVE_REQUESTED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -307,6 +338,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.employeeEmail,
         NotificationType.LEAVE_REVIEWED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -350,6 +382,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.managerEmail,
         NotificationType.LEAVE_CANCELLED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -414,6 +447,7 @@ export class NotificationService {
         await this.isDuplicate(
           recipient.email,
           NotificationType.TIME_CORRECTION_SUBMITTED,
+          data.tenantId,
         )
       ) {
         this.logger.warn(
@@ -458,6 +492,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.managerEmail,
         NotificationType.APPRAISAL_SELF_SUBMITTED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -497,6 +532,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.employeeEmail,
         NotificationType.APPRAISAL_MANAGER_REVIEWED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -538,6 +574,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.employeeEmail,
         NotificationType.APPRAISAL_SELF_REMINDER,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -584,6 +621,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.managerEmail,
         NotificationType.APPRAISAL_MANAGER_REMINDER,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -630,6 +668,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.employeeEmail,
         NotificationType.SCHEDULE_PUBLISHED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -676,6 +715,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.recipientEmail,
         NotificationType.SHIFT_SWAP_REQUESTED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -726,6 +766,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.managerEmail,
         NotificationType.SHIFT_SWAP_PENDING_MANAGER,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -768,6 +809,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.employeeEmail,
         NotificationType.SHIFT_SWAP_DECLINED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -808,6 +850,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.employeeEmail,
         NotificationType.SHIFT_SWAP_APPROVED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -851,6 +894,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.employeeEmail,
         NotificationType.SHIFT_SWAP_REJECTED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -894,6 +938,7 @@ export class NotificationService {
       await this.isDuplicate(
         data.employeeEmail,
         NotificationType.SHIFT_SWAP_EXPIRED,
+        data.tenantId,
       )
     ) {
       this.logger.warn(
@@ -929,7 +974,13 @@ export class NotificationService {
     otp: string;
     context: string;
   }) {
-    if (await this.isDuplicate(data.phone, NotificationType.SMS_OTP)) {
+    if (
+      await this.isDuplicate(
+        data.phone,
+        NotificationType.SMS_OTP,
+        data.tenantId,
+      )
+    ) {
       this.logger.warn(`Duplicate SMS_OTP suppressed for ${data.phone}`);
       return;
     }

@@ -726,8 +726,8 @@ export class LeaveService {
     } | null = null;
 
     if (employee.managerId) {
-      manager = await this.prisma.employee.findUnique({
-        where: { id: employee.managerId },
+      manager = await this.prisma.employee.findFirst({
+        where: { id: employee.managerId, tenantId },
         select: {
           userId: true,
           email: true,
@@ -738,13 +738,13 @@ export class LeaveService {
     }
 
     if (!manager && employee.departmentId) {
-      const dept = await this.prisma.department.findUnique({
-        where: { id: employee.departmentId },
+      const dept = await this.prisma.department.findFirst({
+        where: { id: employee.departmentId, tenantId },
         select: { managerId: true },
       });
       if (dept?.managerId) {
-        manager = await this.prisma.employee.findUnique({
-          where: { id: dept.managerId },
+        manager = await this.prisma.employee.findFirst({
+          where: { id: dept.managerId, tenantId },
           select: {
             userId: true,
             email: true,
