@@ -7,7 +7,7 @@ export const api = axios.create({
 });
 
 // Routes that should never trigger a token refresh attempt
-const SKIP_REFRESH = ['/auth/refresh', '/auth/me', '/auth/admin/login', '/auth/login'];
+const SKIP_REFRESH = ['/auth/refresh', '/auth/admin/login', '/auth/login'];
 
 api.interceptors.response.use(
   (res) => res,

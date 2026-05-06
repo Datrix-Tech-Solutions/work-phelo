@@ -91,6 +91,7 @@ write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.prod" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema notify)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
+  "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}" \
   "RESEND_API_KEY=${NOTIFY_RESEND_API_KEY}" \
   "RESEND_FROM_EMAIL=${NOTIFY_RESEND_FROM_EMAIL}" \
   "TERMII_API_KEY=${NOTIFY_TERMII_API_KEY:-}" \
