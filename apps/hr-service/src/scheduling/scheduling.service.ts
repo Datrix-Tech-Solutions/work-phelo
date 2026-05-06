@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { SYSTEM_ACTOR_EMAIL, SYSTEM_ACTOR_ID } from '../common/system-actor';
 
 @Injectable()
 export class SchedulingService {
@@ -123,8 +124,8 @@ export class SchedulingService {
       data: {
         employmentStatus: 'ACTIVE',
         statusChangedAt: now,
-        statusChangedById: 'system',
-        statusChangedByEmail: 'system',
+        statusChangedById: SYSTEM_ACTOR_ID,
+        statusChangedByEmail: SYSTEM_ACTOR_EMAIL,
       },
     });
 
@@ -156,8 +157,8 @@ export class SchedulingService {
         employmentStatus: 'SUSPENDED',
         offboardReason: 'CONTRACT_ENDED',
         statusChangedAt: now,
-        statusChangedById: 'system',
-        statusChangedByEmail: 'system',
+        statusChangedById: SYSTEM_ACTOR_ID,
+        statusChangedByEmail: SYSTEM_ACTOR_EMAIL,
       },
     });
 

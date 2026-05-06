@@ -260,6 +260,24 @@ export class EmployeesService {
     );
   }
 
+  private validateEmploymentDates(input: {
+    hireDate: Date;
+    probationEndsAt?: Date;
+    contractEndDate?: Date;
+  }) {
+    if (input.probationEndsAt && input.probationEndsAt < input.hireDate) {
+      throw new BadRequestException(
+        'Probation end date cannot be before the hire date.',
+      );
+    }
+
+    if (input.contractEndDate && input.contractEndDate < input.hireDate) {
+      throw new BadRequestException(
+        'Contract end date cannot be before the hire date.',
+      );
+    }
+  }
+
   private async upsertOffboardingRecord(
     tx: HrPrismaTx,
     tenantId: string,
@@ -340,6 +358,16 @@ export class EmployeesService {
     if (dto.managerId) {
       await this.assertValidManagerAssignment(tenantId, dto.managerId);
     }
+
+    this.validateEmploymentDates({
+      hireDate: new Date(dto.hireDate),
+      probationEndsAt: dto.probationEndsAt
+        ? new Date(dto.probationEndsAt)
+        : undefined,
+      contractEndDate: dto.contractEndDate
+        ? new Date(dto.contractEndDate)
+        : undefined,
+    });
 
     let provisionedUser;
     try {
@@ -685,6 +713,16 @@ export class EmployeesService {
     if (rest.managerId) {
       await this.assertValidManagerAssignment(tenantId, rest.managerId, id);
     }
+
+    this.validateEmploymentDates({
+      hireDate: existing.hireDate,
+      probationEndsAt: probationEndsAt
+        ? new Date(probationEndsAt)
+        : (existing.probationEndsAt ?? undefined),
+      contractEndDate: contractEndDate
+        ? new Date(contractEndDate)
+        : (existing.contractEndDate ?? undefined),
+    });
 
     // Track status change
     const statusChanged =

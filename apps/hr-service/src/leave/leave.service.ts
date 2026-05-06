@@ -84,6 +84,41 @@ export class LeaveService {
     private readonly rabbitmq: RabbitMQPublisher,
   ) {}
 
+  private parseDateOnly(value: string, label: string): Date {
+    const parts = value.split('-').map((part) => Number(part));
+    if (
+      parts.length !== 3 ||
+      parts.some((part) => Number.isNaN(part)) ||
+      parts[1] < 1 ||
+      parts[1] > 12 ||
+      parts[2] < 1 ||
+      parts[2] > 31
+    ) {
+      throw new BadRequestException(`${label} is invalid.`);
+    }
+
+    const [year, month, day] = parts;
+    const parsed = new Date(year, month - 1, day);
+    parsed.setHours(0, 0, 0, 0);
+
+    if (
+      parsed.getFullYear() !== year ||
+      parsed.getMonth() !== month - 1 ||
+      parsed.getDate() !== day
+    ) {
+      throw new BadRequestException(`${label} is invalid.`);
+    }
+
+    return parsed;
+  }
+
+  private formatDateOnly(value: Date): string {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   // ── Seed default leave types for new tenant ───────────────────────────────
   async seedDefaultLeaveTypes(tenantId: string) {
     for (const lt of DEFAULT_LEAVE_TYPES) {
@@ -194,7 +229,11 @@ export class LeaveService {
     dto: { name: string; date: string },
   ) {
     return this.prisma.publicHoliday.create({
-      data: { tenantId, name: dto.name, date: new Date(dto.date) },
+      data: {
+        tenantId,
+        name: dto.name,
+        date: this.parseDateOnly(dto.date, 'Public holiday date'),
+      },
     });
   }
 
@@ -216,7 +255,12 @@ export class LeaveService {
     if (!holiday) throw new NotFoundException('Public holiday not found');
     return this.prisma.publicHoliday.update({
       where: { id },
-      data: { name: dto.name, date: dto.date ? new Date(dto.date) : undefined },
+      data: {
+        name: dto.name,
+        date: dto.date
+          ? this.parseDateOnly(dto.date, 'Public holiday date')
+          : undefined,
+      },
     });
   }
 
@@ -241,13 +285,13 @@ export class LeaveService {
       },
     });
     const holidayDates = new Set(
-      holidays.map((h) => h.date.toISOString().split('T')[0]),
+      holidays.map((h) => this.formatDateOnly(h.date)),
     );
     let count = 0;
     const current = new Date(startDate);
     while (current <= endDate) {
       const dayOfWeek = current.getDay();
-      const dateStr = current.toISOString().split('T')[0];
+      const dateStr = this.formatDateOnly(current);
       if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDates.has(dateStr)) {
         count++;
       }
@@ -429,11 +473,33 @@ export class LeaveService {
         `This leave type is not available for your employment type (${empRecord.employmentType.replace('_', ' ').toLowerCase()})`,
       );
     }
-    const start = new Date(dto.startDate);
-    const end = new Date(dto.endDate);
+    const start = this.parseDateOnly(dto.startDate, 'Start date');
+    const end = this.parseDateOnly(dto.endDate, 'End date');
 
     if (end < start)
       throw new BadRequestException('End date must be after start date');
+
+    const overlappingRequest = await this.prisma.leaveRequest.findFirst({
+      where: {
+        tenantId,
+        employeeId,
+        status: { in: ['PENDING', 'APPROVED'] },
+        startDate: { lte: end },
+        endDate: { gte: start },
+      },
+      select: {
+        id: true,
+        status: true,
+        startDate: true,
+        endDate: true,
+      },
+    });
+
+    if (overlappingRequest) {
+      throw new ConflictException(
+        `You already have a ${overlappingRequest.status.toLowerCase()} leave request overlapping ${this.formatDateOnly(overlappingRequest.startDate)} to ${this.formatDateOnly(overlappingRequest.endDate)}.`,
+      );
+    }
 
     const totalDays = await this.countWorkingDays(tenantId, start, end);
 
