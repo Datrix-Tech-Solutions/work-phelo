@@ -13,6 +13,14 @@ const nextConfig: NextConfig = {
         hostname: 'workphelo.datrixtechsolutions.com',
       },
       {
+        protocol: 'https',
+        hostname: 'workphelo.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'www.workphelo.com',
+      },
+      {
         protocol: 'http',
         hostname: 'localhost',
       },

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 DEPLOY_ENV="prod"
-DEPLOY_PATH="/var/www/apps/workphelo.datrixtechsolutions.com/work-phelo"
+DEPLOY_PATH="/var/www/apps/workphelo.com/work-phelo"
 COMPOSE_FILE="${DEPLOY_PATH}/infrastructure/docker-compose.prod.yml"
 COMPOSE_ENV_FILE="${DEPLOY_PATH}/.compose.prod.env"
 COMPOSE_PROJECT_NAME="workphelo-prod"
