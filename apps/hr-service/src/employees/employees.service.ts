@@ -1038,7 +1038,7 @@ export class EmployeesService {
         },
         {
           delay: RESIGNATION_NOTIFY_DELAY_MS,
-          jobId: `resignation-notify:${tenantId}:${employeeId}:${submittedAt.getTime()}`,
+          jobId: `resignation-notify-${tenantId}-${employeeId}-${submittedAt.getTime()}`,
           attempts: 3,
           backoff: {
             type: 'exponential',
