@@ -21,8 +21,8 @@ env:
   ORG: datrix-tech-solutions
   IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
   COMPOSE_FILE: infrastructure/docker-compose.prod.yml
-  DEPLOY_PATH: /var/www/apps/workphelo.datrixtechsolutions.com/work-phelo
-  WEB_PUBLIC_API_URL: https://workphelo.datrixtechsolutions.com/api/v1
+  DEPLOY_PATH: /var/www/apps/workphelo.com/work-phelo
+  WEB_PUBLIC_API_URL: https://workphelo.com/api/v1
   BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
   BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
   CHECKOUT_REF: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
@@ -204,7 +204,7 @@ jobs:
 
     environment:
       name: prod
-      url: https://workphelo.datrixtechsolutions.com
+      url: https://workphelo.com
 
     env:
       GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}

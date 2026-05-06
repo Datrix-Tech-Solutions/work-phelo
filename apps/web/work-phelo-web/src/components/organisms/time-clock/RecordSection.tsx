@@ -1,5 +1,6 @@
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { Badge } from '@/components/atoms/Badge';
 import { formatDate, formatTime, formatMinutes } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import type { TimeEntry } from '@/types/timeclock';
@@ -49,6 +50,7 @@ export function RecordsSection({
     },
     { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
     { key: 'department', label: 'Department', render: (r) => <span>{r.department ?? '—'}</span> },
+
     { key: 'clockIn', label: 'Clock In', render: (r) => <span>{formatTime(r.clockIn)}</span> },
     {
       key: 'clockOut',
@@ -59,6 +61,18 @@ export function RecordsSection({
       key: 'totalMinutes',
       label: 'Hours',
       render: (r) => <span className="font-semibold">{formatMinutes(r.totalMinutes)}</span>,
+    },
+    {
+      key: 'flags',
+      label: 'Flags',
+      render: (r) =>
+        r.isOutsideSchedule ? (
+          <Badge variant="warning" label="Off Schedule" />
+        ) : r.isLate ? (
+          <Badge variant="warning" label="Late" />
+        ) : (
+          <span className="text-gray-400">—</span>
+        ),
     },
   ];
 
@@ -80,10 +94,8 @@ export function RecordsSection({
           placeholder="All statuses"
           options={[
             { value: '', label: 'All statuses' },
-            { value: 'CLOCKED_IN', label: 'Active' },
+            { value: 'CLOCKED_IN', label: 'Clocked In' },
             { value: 'CLOCKED_OUT', label: 'Clocked Out' },
-            { value: 'ON_BREAK', label: 'On Break' },
-            { value: 'ABSENT', label: 'Absent' },
           ]}
           value={filterStatus}
           onChange={onFilterStatusChange}

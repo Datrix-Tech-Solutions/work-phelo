@@ -5,35 +5,16 @@ import { PrismaService } from '../prisma/prisma.service';
 export const HR_PERMISSION_DENY_MESSAGE =
   "You don't have permission to access this. Contact your administrator.";
 
-const DEFAULT_COMPANY_ROLES = new Set(['Company Admin', 'Manager', 'Employee']);
-
 export function hasPermissionRule(user: RequestUser, rule: string): boolean {
   return (user.permissions ?? []).includes(rule);
 }
 
 export function isCompanyAdminUser(user: RequestUser): boolean {
-  return (
-    user.role === 'TENANT_ADMIN' || user.companyRoleName === 'Company Admin'
-  );
-}
-
-export function isManagerUser(user: RequestUser): boolean {
-  return user.role === 'EMPLOYEE' && user.companyRoleName === 'Manager';
+  return user.role === 'TENANT_ADMIN';
 }
 
 export function isEmployeeSelfServiceUser(user: RequestUser): boolean {
-  return (
-    user.role === 'EMPLOYEE' &&
-    (!user.companyRoleName || user.companyRoleName === 'Employee')
-  );
-}
-
-export function isCustomCompanyRoleUser(user: RequestUser): boolean {
-  return (
-    user.role === 'EMPLOYEE' &&
-    !!user.companyRoleName &&
-    !DEFAULT_COMPANY_ROLES.has(user.companyRoleName)
-  );
+  return user.role === 'EMPLOYEE';
 }
 
 export function assertHrAccess(condition: unknown): asserts condition {

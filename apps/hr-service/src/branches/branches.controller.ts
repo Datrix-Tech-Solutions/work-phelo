@@ -25,6 +25,11 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import {
+  assertHrAccess,
+  hasPermissionRule,
+  isCompanyAdminUser,
+} from '../auth/access-scope';
 
 @ApiTags('Branches')
 @Controller('branches')
@@ -35,7 +40,7 @@ export class BranchesController {
   constructor(private readonly branchesService: BranchesService) {}
 
   @Post()
-  @RequirePermissions(Permission.CREATE_DEPARTMENT)
+  @RequirePermissions(Permission.CREATE_BRANCH)
   @ApiOperation({ summary: 'Create a new branch' })
   @ApiResponse({ status: 201, description: 'Branch created successfully' })
   @ApiResponse({ status: 409, description: 'Branch name already exists' })
@@ -44,15 +49,37 @@ export class BranchesController {
   }
 
   @Get()
-  @RequirePermissions(Permission.READ_DEPARTMENTS)
+  @RequirePermissions(Permission.READ_BRANCHES)
   @ApiOperation({ summary: 'List all branches for the current tenant' })
   @ApiResponse({ status: 200, description: 'Branches retrieved successfully' })
   findAll(@Req() req: any) {
     return this.branchesService.findAll(req.user.tenantId);
   }
 
+  @Get('options')
+  @ApiOperation({
+    summary:
+      'List lightweight branch options for forms and selectors in the current tenant',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Branch options retrieved successfully',
+  })
+  findOptions(@Req() req: any) {
+    const user = req.user;
+
+    assertHrAccess(
+      isCompanyAdminUser(user) ||
+        hasPermissionRule(user, 'branches:VIEW') ||
+        hasPermissionRule(user, 'employees:CREATE') ||
+        hasPermissionRule(user, 'employees:EDIT'),
+    );
+
+    return this.branchesService.findOptions(user.tenantId);
+  }
+
   @Get(':id')
-  @RequirePermissions(Permission.READ_DEPARTMENTS)
+  @RequirePermissions(Permission.READ_BRANCHES)
   @ApiOperation({ summary: 'Get a branch by ID' })
   @ApiParam({ name: 'id', description: 'Branch UUID' })
   @ApiResponse({ status: 200, description: 'Branch retrieved successfully' })
@@ -62,7 +89,7 @@ export class BranchesController {
   }
 
   @Patch(':id')
-  @RequirePermissions(Permission.UPDATE_DEPARTMENT)
+  @RequirePermissions(Permission.UPDATE_BRANCH)
   @ApiOperation({ summary: 'Update a branch' })
   @ApiParam({ name: 'id', description: 'Branch UUID' })
   @ApiResponse({ status: 200, description: 'Branch updated successfully' })
@@ -76,7 +103,7 @@ export class BranchesController {
   }
 
   @Delete(':id')
-  @RequirePermissions(Permission.DELETE_DEPARTMENT)
+  @RequirePermissions(Permission.DELETE_BRANCH)
   @ApiOperation({ summary: 'Delete a branch' })
   @ApiParam({ name: 'id', description: 'Branch UUID' })
   @ApiResponse({ status: 200, description: 'Branch deleted successfully' })

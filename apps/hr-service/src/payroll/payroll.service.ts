@@ -7,23 +7,52 @@ import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import Decimal from 'decimal.js';
 import {
-  calculateSSNIT,
   calculateMonthlyPAYE,
-  calculateNetSalary,
+  calculatePayrollGross,
+  calculatePayrollNetIncome,
+  calculateSSNIT,
+  calculateTaxableIncome,
+  calculateTier3Contribution,
+  calculateTotalPayrollDeductions,
 } from '../common/ghana-payroll.helper';
 import { RunPayrollDto } from './dto/run-payroll.dto';
+import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
 import {
   assertHrAccess,
   hasPermissionRule,
   isCompanyAdminUser,
-  isCustomCompanyRoleUser,
 } from '../auth/access-scope';
+
+type PayrollSettingsSnapshot = {
+  tier3Enabled: boolean;
+  tier3Rate: string | null;
+  tier3SchemeName: string | null;
+};
+
+type EditablePayrollValues = {
+  basicSalary: string;
+  totalAllowances: string;
+  transportAmount: string;
+  otherDeductions: string;
+};
+
+type CalculatedPayrollValues = EditablePayrollValues & {
+  overtimePay: string;
+  bonus: string;
+  thirteenthMonth: string;
+  grossSalary: string;
+  employeeSSNIT: string;
+  employerSSNIT: string;
+  tier3Employee: string;
+  taxableIncome: string;
+  payeTax: string;
+  totalDeductions: string;
+  netSalary: string;
+};
 
 @Injectable()
 export class PayrollService {
   constructor(private readonly prisma: PrismaService) {}
-
-  // ── Helpers ───────────────────────────────────────────────────────────────
 
   private getMonthBounds(
     month: number,
@@ -34,103 +63,150 @@ export class PayrollService {
     return { start, end };
   }
 
-  private countWorkingDays(start: Date, end: Date): number {
-    let count = 0;
-    const current = new Date(start);
-    while (current <= end) {
-      const day = current.getDay();
-      if (day !== 0 && day !== 6) count++;
-      current.setDate(current.getDate() + 1);
-    }
-    return count;
-  }
-
-  // ── Pull overtime from clock records ─────────────────────────────────────
-
-  private async getOvertimePay(
-    employeeId: string,
+  private async getPayrollSettingsSnapshot(
     tenantId: string,
-    start: Date,
-    end: Date,
-    basicSalary: string,
-    workingDays: number,
-  ): Promise<{ overtimeHours: string; overtimePay: string }> {
-    const clockRecords = await this.prisma.clockRecord.findMany({
-      where: {
-        tenantId,
-        employeeId,
-        date: { gte: start, lte: end },
-        clockOut: { not: null },
+  ): Promise<PayrollSettingsSnapshot> {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        payrollTier3Enabled: true,
+        payrollTier3Rate: true,
+        payrollTier3SchemeName: true,
       },
     });
 
-    const totalHours = clockRecords.reduce((sum, r) => {
-      return sum.plus(new Decimal(r.hoursWorked?.toString() || '0'));
-    }, new Decimal(0));
-
-    const basicDec = new Decimal(basicSalary);
-    const standardHours = new Decimal(workingDays * 8);
-    const overtimeHours = Decimal.max(
-      new Decimal(0),
-      totalHours.minus(standardHours),
-    );
-
-    const hourlyRate = basicDec.div(standardHours);
-    const overtimePay = overtimeHours
-      .times(hourlyRate)
-      .times('1.5')
-      .toDecimalPlaces(2);
-
     return {
-      overtimeHours: overtimeHours.toString(),
-      overtimePay: overtimePay.toString(),
+      tier3Enabled: config?.payrollTier3Enabled ?? false,
+      tier3Rate:
+        config?.payrollTier3Rate != null
+          ? config.payrollTier3Rate.toString()
+          : null,
+      tier3SchemeName: config?.payrollTier3SchemeName ?? null,
     };
   }
 
-  // ── Pull unpaid leave deductions ──────────────────────────────────────────
+  private calculatePayrollItemValues(
+    values: EditablePayrollValues,
+    settings: PayrollSettingsSnapshot,
+  ): CalculatedPayrollValues {
+    const grossSalary = calculatePayrollGross(
+      values.basicSalary,
+      values.totalAllowances,
+      values.transportAmount,
+      values.otherDeductions,
+    );
+    const { employeeSSNIT, employerSSNIT } = calculateSSNIT(values.basicSalary);
+    const tier3Employee =
+      settings.tier3Enabled && settings.tier3Rate
+        ? calculateTier3Contribution(values.basicSalary, settings.tier3Rate)
+        : '0';
+    const taxableIncome = calculateTaxableIncome(
+      grossSalary,
+      employeeSSNIT,
+      values.transportAmount,
+      tier3Employee,
+    );
+    const payeTax = calculateMonthlyPAYE(taxableIncome);
+    const totalDeductions = calculateTotalPayrollDeductions(
+      values.otherDeductions,
+      employeeSSNIT,
+      payeTax,
+      tier3Employee,
+    );
+    const netSalary = calculatePayrollNetIncome(taxableIncome, payeTax);
 
-  private async getLeaveDeduction(
-    employeeId: string,
-    tenantId: string,
-    start: Date,
-    end: Date,
-    basicSalary: string,
-    workingDays: number,
-  ): Promise<{ unpaidDays: number; leaveDeduction: string }> {
-    // Get approved leave requests that overlap this payroll period
-    const leaveRequests = await this.prisma.leaveRequest.findMany({
-      where: {
-        tenantId,
-        employeeId,
-        status: 'APPROVED',
-        startDate: { lte: end },
-        endDate: { gte: start },
-      },
-      include: { leaveType: { select: { isPaid: true } } },
-    });
-
-    // Count only UNPAID leave days that fall within the payroll month
-    let unpaidDays = 0;
-    for (const req of leaveRequests) {
-      if (req.leaveType.isPaid) continue;
-
-      // Clamp leave period to payroll month
-      const leaveStart = req.startDate < start ? start : req.startDate;
-      const leaveEnd = req.endDate > end ? end : req.endDate;
-      const days = this.countWorkingDays(leaveStart, leaveEnd);
-      unpaidDays += days;
-    }
-
-    const basicDec = new Decimal(basicSalary);
-    const dailyRate = basicDec.div(workingDays).toDecimalPlaces(2);
-    const leaveDeduction = new Decimal(unpaidDays)
-      .times(dailyRate)
-      .toDecimalPlaces(2);
-
-    return { unpaidDays, leaveDeduction: leaveDeduction.toString() };
+    return {
+      ...values,
+      overtimePay: '0',
+      bonus: '0',
+      thirteenthMonth: '0',
+      grossSalary,
+      employeeSSNIT,
+      employerSSNIT,
+      tier3Employee,
+      taxableIncome,
+      payeTax,
+      totalDeductions,
+      netSalary,
+    };
   }
 
-  // ── Run Payroll ───────────────────────────────────────────────────────────
+  private buildSeedValuesFromEmployee(employee: {
+    basicSalary: { toString(): string };
+    allowances: Array<{
+      amount: { toString(): string };
+      type: string;
+    }>;
+  }): EditablePayrollValues {
+    const transportAmount = employee.allowances
+      .filter((allowance) => allowance.type === 'TRANSPORT')
+      .reduce(
+        (sum, allowance) => sum.plus(allowance.amount.toString()),
+        new Decimal(0),
+      );
+
+    const totalAllowances = employee.allowances
+      .filter((allowance) => allowance.type !== 'TRANSPORT')
+      .reduce(
+        (sum, allowance) => sum.plus(allowance.amount.toString()),
+        new Decimal(0),
+      );
+
+    return {
+      basicSalary: employee.basicSalary.toString(),
+      totalAllowances: totalAllowances.toString(),
+      transportAmount: transportAmount.toString(),
+      otherDeductions: '0',
+    };
+  }
+
+  private calculateRunTotals(
+    items: Array<{
+      grossSalary: { toString(): string } | string | number;
+      netSalary: { toString(): string } | string | number;
+      employeeSSNIT: { toString(): string } | string | number;
+      employerSSNIT: { toString(): string } | string | number;
+      tier3Employee: { toString(): string } | string | number;
+      payeTax: { toString(): string } | string | number;
+    }>,
+  ) {
+    return items.reduce(
+      (acc, item) => {
+        acc.totalGross = acc.totalGross.plus(item.grossSalary.toString());
+        acc.totalNet = acc.totalNet.plus(item.netSalary.toString());
+        acc.totalSSNIT = acc.totalSSNIT
+          .plus(item.employeeSSNIT.toString())
+          .plus(item.employerSSNIT.toString());
+        acc.totalTier3 = acc.totalTier3.plus(item.tier3Employee.toString());
+        acc.totalPAYE = acc.totalPAYE.plus(item.payeTax.toString());
+        return acc;
+      },
+      {
+        totalGross: new Decimal(0),
+        totalNet: new Decimal(0),
+        totalSSNIT: new Decimal(0),
+        totalTier3: new Decimal(0),
+        totalPAYE: new Decimal(0),
+      },
+    );
+  }
+
+  private async getEditableRunOrThrow(tenantId: string, runId: string) {
+    const run = await this.prisma.payrollRun.findFirst({
+      where: { id: runId, tenantId },
+      include: { items: true },
+    });
+
+    if (!run) {
+      throw new NotFoundException('Payroll run not found');
+    }
+
+    if (run.status !== 'DRAFT') {
+      throw new BadRequestException('Only draft payroll runs can be edited.');
+    }
+
+    return run;
+  }
 
   async runPayroll(tenantId: string, runBy: string, dto: RunPayrollDto) {
     const existing = await this.prisma.payrollRun.findUnique({
@@ -145,122 +221,85 @@ export class PayrollService {
       );
     }
 
+    const { start, end } = this.getMonthBounds(dto.month, dto.year);
     const employees = await this.prisma.employee.findMany({
       where: { tenantId, employmentStatus: 'ACTIVE' },
-      include: { allowances: { where: { isRecurring: true } } },
+      include: {
+        allowances: {
+          where: {
+            isRecurring: true,
+            effectiveFrom: { lte: end },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
+          },
+        },
+      },
     });
 
     if (employees.length === 0) {
       throw new BadRequestException('No active employees found');
     }
 
-    const { start, end } = this.getMonthBounds(dto.month, dto.year);
-    const workingDays = this.countWorkingDays(start, end);
-
-    let totalGross = new Decimal(0);
-    let totalNet = new Decimal(0);
-    let totalSSNIT = new Decimal(0);
-    let totalPAYE = new Decimal(0);
-
-    const payrollItems = await Promise.all(
-      employees.map(async (emp) => {
-        const basicSalary = new Decimal(emp.basicSalary.toString());
-        const totalAllowances = emp.allowances.reduce(
-          (sum, a) => sum.plus(new Decimal(a.amount.toString())),
-          new Decimal(0),
-        );
-
-        // Pull overtime from clock records
-        const { overtimePay } = await this.getOvertimePay(
-          emp.id,
-          tenantId,
-          start,
-          end,
-          basicSalary.toString(),
-          workingDays,
-        );
-
-        // Pull unpaid leave deductions
-        const { leaveDeduction } = await this.getLeaveDeduction(
-          emp.id,
-          tenantId,
-          start,
-          end,
-          basicSalary.toString(),
-          workingDays,
-        );
-
-        // Gross = basic + allowances + overtime - unpaid leave deduction
-        const grossSalary = basicSalary
-          .plus(totalAllowances)
-          .plus(new Decimal(overtimePay))
-          .minus(new Decimal(leaveDeduction))
-          .toDecimalPlaces(2);
-
-        const { employeeSSNIT, employerSSNIT } = calculateSSNIT(
-          basicSalary.toString(),
-        );
-        const payeTax = calculateMonthlyPAYE(grossSalary.toString());
-        const netSalary = calculateNetSalary(
-          grossSalary.toString(),
-          employeeSSNIT,
-          payeTax,
-        );
-
-        const totalDeductions = new Decimal(employeeSSNIT)
-          .plus(new Decimal(payeTax))
-          .plus(leaveDeduction)
-          .toString();
-
-        totalGross = totalGross.plus(grossSalary);
-        totalNet = totalNet.plus(new Decimal(netSalary));
-        totalSSNIT = totalSSNIT.plus(new Decimal(employeeSSNIT));
-        totalPAYE = totalPAYE.plus(new Decimal(payeTax));
-
-        return {
-          tenantId,
-          employeeId: emp.id,
-          basicSalary: basicSalary.toString(),
-          totalAllowances: totalAllowances.toString(),
-          overtimePay: overtimePay.toString(),
-          bonus: '0',
-          thirteenthMonth: '0',
-          grossSalary: grossSalary.toString(),
-          employeeSSNIT,
-          employerSSNIT,
-          payeTax,
-          totalDeductions,
-          netSalary,
-        };
-      }),
+    const settings = await this.getPayrollSettingsSnapshot(tenantId);
+    const payrollItems = employees.map((employee) =>
+      this.calculatePayrollItemValues(
+        this.buildSeedValuesFromEmployee(employee),
+        settings,
+      ),
     );
+    const totals = this.calculateRunTotals(payrollItems);
 
-    const payrollRun = await this.prisma.payrollRun.upsert({
+    return this.prisma.payrollRun.upsert({
       where: {
         tenantId_month_year: { tenantId, month: dto.month, year: dto.year },
       },
       update: {
-        status: 'PENDING_APPROVAL',
-        totalGross: totalGross.toString(),
-        totalNet: totalNet.toString(),
-        totalSSNIT: totalSSNIT.toString(),
-        totalPAYE: totalPAYE.toString(),
+        status: 'DRAFT',
+        totalGross: totals.totalGross.toString(),
+        totalNet: totals.totalNet.toString(),
+        totalSSNIT: totals.totalSSNIT.toString(),
+        totalTier3: totals.totalTier3.toString(),
+        totalPAYE: totals.totalPAYE.toString(),
         runBy,
+        submittedBy: null,
+        submittedAt: null,
+        approvedBy: null,
+        approvedAt: null,
+        paidAt: null,
         notes: dto.notes,
-        items: { deleteMany: {}, create: payrollItems },
+        tier3Enabled: settings.tier3Enabled,
+        tier3Rate: settings.tier3Rate,
+        tier3SchemeName: settings.tier3SchemeName,
+        items: {
+          deleteMany: {},
+          create: payrollItems.map((item, index) => ({
+            tenantId,
+            employeeId: employees[index].id,
+            ...item,
+          })),
+        },
       },
       create: {
         tenantId,
         month: dto.month,
         year: dto.year,
-        status: 'PENDING_APPROVAL',
-        totalGross: totalGross.toString(),
-        totalNet: totalNet.toString(),
-        totalSSNIT: totalSSNIT.toString(),
-        totalPAYE: totalPAYE.toString(),
+        status: 'DRAFT',
+        totalGross: totals.totalGross.toString(),
+        totalNet: totals.totalNet.toString(),
+        totalSSNIT: totals.totalSSNIT.toString(),
+        totalTier3: totals.totalTier3.toString(),
+        totalPAYE: totals.totalPAYE.toString(),
         runBy,
         notes: dto.notes,
-        items: { create: payrollItems },
+        tier3Enabled: settings.tier3Enabled,
+        tier3Rate: settings.tier3Rate,
+        tier3SchemeName: settings.tier3SchemeName,
+        items: {
+          create: payrollItems.map((item, index) => ({
+            tenantId,
+            employeeId: employees[index].id,
+            ...item,
+          })),
+        },
       },
       include: {
         items: {
@@ -277,11 +316,134 @@ export class PayrollService {
         },
       },
     });
-
-    return payrollRun;
   }
 
-  // ── Approve / Paid / Get ──────────────────────────────────────────────────
+  async updatePayrollItem(
+    tenantId: string,
+    runId: string,
+    itemId: string,
+    dto: UpdatePayrollItemDto,
+  ) {
+    const run = await this.getEditableRunOrThrow(tenantId, runId);
+    const currentItem = run.items.find((item) => item.id === itemId);
+
+    if (!currentItem) {
+      throw new NotFoundException('Payroll item not found');
+    }
+
+    const settings: PayrollSettingsSnapshot = {
+      tier3Enabled: run.tier3Enabled,
+      tier3Rate: run.tier3Rate?.toString() ?? null,
+      tier3SchemeName: run.tier3SchemeName,
+    };
+
+    const recalculatedItem = this.calculatePayrollItemValues(
+      {
+        basicSalary:
+          dto.basicSalary != null
+            ? new Decimal(dto.basicSalary).toFixed(2)
+            : currentItem.basicSalary.toString(),
+        totalAllowances:
+          dto.totalAllowances != null
+            ? new Decimal(dto.totalAllowances).toFixed(2)
+            : currentItem.totalAllowances.toString(),
+        transportAmount:
+          dto.transportAmount != null
+            ? new Decimal(dto.transportAmount).toFixed(2)
+            : currentItem.transportAmount.toString(),
+        otherDeductions:
+          dto.otherDeductions != null
+            ? new Decimal(dto.otherDeductions).toFixed(2)
+            : currentItem.otherDeductions.toString(),
+      },
+      settings,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.payrollItem.update({
+        where: { id: itemId },
+        data: recalculatedItem,
+      });
+
+      const items = await tx.payrollItem.findMany({
+        where: { payrollRunId: runId, tenantId },
+      });
+      const totals = this.calculateRunTotals(items);
+
+      await tx.payrollRun.update({
+        where: { id: runId },
+        data: {
+          totalGross: totals.totalGross.toString(),
+          totalNet: totals.totalNet.toString(),
+          totalSSNIT: totals.totalSSNIT.toString(),
+          totalTier3: totals.totalTier3.toString(),
+          totalPAYE: totals.totalPAYE.toString(),
+        },
+      });
+
+      return tx.payrollRun.findFirst({
+        where: { id: runId, tenantId },
+        include: {
+          items: {
+            include: {
+              employee: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  employeeNumber: true,
+                  jobTitle: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+  }
+
+  async submitPayrollForApproval(
+    tenantId: string,
+    runId: string,
+    submittedBy: string,
+  ) {
+    const run = await this.getEditableRunOrThrow(tenantId, runId);
+
+    if (run.items.length === 0) {
+      throw new BadRequestException(
+        'Draft payroll run has no payroll items to submit.',
+      );
+    }
+
+    return this.prisma.payrollRun.update({
+      where: { id: runId },
+      data: {
+        status: 'PENDING_APPROVAL',
+        submittedBy,
+        submittedAt: new Date(),
+      },
+    });
+  }
+
+  async returnPayrollToDraft(tenantId: string, id: string) {
+    const run = await this.prisma.payrollRun.findFirst({
+      where: { id, tenantId },
+    });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException(
+        'Only payroll runs pending approval can be returned to draft.',
+      );
+    }
+
+    return this.prisma.payrollRun.update({
+      where: { id },
+      data: {
+        status: 'DRAFT',
+        approvedBy: null,
+        approvedAt: null,
+      },
+    });
+  }
 
   async approvePayroll(tenantId: string, id: string, approvedBy: string) {
     const run = await this.prisma.payrollRun.findFirst({
@@ -313,10 +475,7 @@ export class PayrollService {
 
   async getPayrollRuns(tenantId: string, actor: RequestUser) {
     if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(
-        isCustomCompanyRoleUser(actor) &&
-          hasPermissionRule(actor, 'payroll:VIEW'),
-      );
+      assertHrAccess(hasPermissionRule(actor, 'payroll:VIEW'));
     }
 
     return this.prisma.payrollRun.findMany({
@@ -327,10 +486,7 @@ export class PayrollService {
 
   async getPayrollRunById(tenantId: string, id: string, actor: RequestUser) {
     if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(
-        isCustomCompanyRoleUser(actor) &&
-          hasPermissionRule(actor, 'payroll:VIEW'),
-      );
+      assertHrAccess(hasPermissionRule(actor, 'payroll:VIEW'));
     }
 
     const run = await this.prisma.payrollRun.findFirst({
@@ -366,7 +522,15 @@ export class PayrollService {
       where: { employeeId: employee.id, tenantId },
       include: {
         payrollRun: {
-          select: { month: true, year: true, status: true, paidAt: true },
+          select: {
+            month: true,
+            year: true,
+            status: true,
+            paidAt: true,
+            tier3Enabled: true,
+            tier3Rate: true,
+            tier3SchemeName: true,
+          },
         },
       },
       orderBy: { createdAt: 'desc' },

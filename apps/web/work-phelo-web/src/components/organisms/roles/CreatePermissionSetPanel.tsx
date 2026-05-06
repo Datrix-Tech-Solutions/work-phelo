@@ -9,10 +9,12 @@ import {
   PermissionMatrix,
   FeaturePermissions,
 } from '@/components/molecules/roles/PermissionMatrix';
-import { FEATURE_PERMISSION_MAPPING } from '@/lib/permissionMap';
 import { usePermissionResources } from '@/hooks/useRoles';
 import type { PermissionSetResourceDto, PermissionAction, PermissionSet } from '@/types/roles';
-import { reverseTransformFeaturePermissions } from '@/lib/permissionMap';
+import {
+  reverseTransformFeaturePermissions,
+  transformFeaturePermissions,
+} from '@/lib/permissionMap';
 
 export interface PermissionSetSubmitValues {
   name: string;
@@ -72,19 +74,15 @@ function PanelInner({
     const seen = new Set<string>();
     const resourceDtos: PermissionSetResourceDto[] = [];
 
-    for (const [featureKey, uiActions] of Object.entries(featurePermissions)) {
-      if (!uiActions.length) continue;
-      const mapping = FEATURE_PERMISSION_MAPPING[featureKey];
-      if (!mapping) continue;
-      for (const uiAction of uiActions) {
-        for (const { resource, action } of mapping[uiAction] ?? []) {
-          const resourceId = resourceIdMap.get(resource);
-          if (!resourceId) continue;
-          const key = `${resourceId}:${action}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          resourceDtos.push({ resourceId, action: action as PermissionAction });
-        }
+    const backendPermissions = transformFeaturePermissions(featurePermissions);
+    for (const [resource, actions] of Object.entries(backendPermissions)) {
+      const resourceId = resourceIdMap.get(resource);
+      if (!resourceId) continue;
+      for (const action of actions) {
+        const key = `${resourceId}:${action}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        resourceDtos.push({ resourceId, action: action as PermissionAction });
       }
     }
 

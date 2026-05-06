@@ -20,10 +20,25 @@ export interface Asset {
   assignedAt?: string;
 }
 
+export interface CreateAssetPayload {
+  name: string;
+  type: AssetType;
+  serialNumber?: string;
+  purchaseDate?: string;
+  purchaseCost?: number;
+  currency?: string;
+  condition?: AssetCondition;
+  notes?: string;
+}
+
+export type UpdateAssetPayload = Partial<CreateAssetPayload>;
+
 // Subset used when rendering an employee's assigned assets (assignedAt is always present)
 export interface EmployeeAsset {
   id: string;
   name: string;
   type: AssetType;
   assignedAt: string;
+  serialNumber?: string;
+  condition?: AssetCondition;
 }

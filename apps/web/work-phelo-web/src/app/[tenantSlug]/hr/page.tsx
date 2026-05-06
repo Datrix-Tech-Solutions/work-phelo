@@ -20,7 +20,6 @@ import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
-import { UpcomingBirthday } from '@/types/hr';
 import { formatTime } from '@/lib/formatters';
 
 /* ── Avatar colour picker ── */
@@ -70,11 +69,23 @@ export default function EmployeeDashboardPage({
       b.leaveTypeName?.toLowerCase().includes('annual'),
     ) ?? null;
 
-  /* ── Derived: upcoming leave ── */
-  const upcomingLeave = dashboard?.leave?.upcomingLeave ?? null;
-
   /* ── Derived: my leave requests ── */
   const myLeave = Array.isArray(myLeaveRaw) ? myLeaveRaw : [];
+
+  /* ── Derived: upcoming leave ── */
+  const today = new Date().toISOString().slice(0, 10);
+  const nextLeave =
+    myLeave
+      .filter((r) => (r.status === 'APPROVED' || r.status === 'PENDING') && r.endDate >= today)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate))[0] ?? null;
+  const upcomingLeave = nextLeave
+    ? {
+        leaveType: nextLeave.leaveTypeName,
+        startDate: nextLeave.startDate,
+        endDate: nextLeave.endDate,
+        status: nextLeave.status,
+      }
+    : null;
 
   /* ── Derived: my payslips ── */
   const myPayslips = Array.isArray(myPayslipsRaw) ? myPayslipsRaw : [];
@@ -103,16 +114,20 @@ export default function EmployeeDashboardPage({
     .slice(0, 5);
 
   /* ── Derived: birthdays ── */
-  const rawBirthdays = Array.isArray(birthdaysRaw)
-    ? birthdaysRaw
-    : ((birthdaysRaw as unknown as { data?: UpcomingBirthday[] })?.data ?? []);
+  const rawBirthdays = birthdaysRaw?.birthdays ?? [];
   const birthdays = (Array.isArray(rawBirthdays) ? rawBirthdays : []).map((b) => {
-    const name = `${b.firstName} ${b.lastName}`;
+    const name = b.name;
+    const initials = name
+      .split(' ')
+      .map((part) => part[0] ?? '')
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
     return {
       id: b.id,
       name,
       date: new Date(b.dateOfBirth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }),
-      initials: `${b.firstName[0]}${b.lastName[0]}`.toUpperCase(),
+      initials,
       color: avatarColor(name),
     };
   });
@@ -120,8 +135,20 @@ export default function EmployeeDashboardPage({
   /* ── Attendance ── */
   const attendance = dashboard?.attendance;
   const [optimisticClockedIn, setOptimisticClockedIn] = useState<boolean | null>(null);
-  const clockedIn = optimisticClockedIn ?? attendance?.status === 'CLOCKED_IN';
+  const clockedIn =
+    optimisticClockedIn === true ||
+    (optimisticClockedIn === null && attendance?.status === 'CLOCKED_IN');
+  const isDone =
+    optimisticClockedIn === false ||
+    (optimisticClockedIn === null && attendance?.status === 'CLOCKED_OUT');
   const clockInTime = attendance?.clockedInAt ? formatTime(attendance.clockedInAt) : undefined;
+  const hoursWorked = attendance?.totalMinutes
+    ? (() => {
+        const h = Math.floor(attendance.totalMinutes / 60);
+        const m = attendance.totalMinutes % 60;
+        return h > 0 && m > 0 ? `${h}h ${m}m` : h > 0 ? `${h}h` : `${m}m`;
+      })()
+    : undefined;
 
   const { mutate: clockIn, isPending: isClockinIn } = useClockIn();
   const { mutate: clockOut, isPending: isClockingOut } = useClockOut();
@@ -171,7 +198,9 @@ export default function EmployeeDashboardPage({
         annualBalance={annualBalance}
         upcomingLeave={upcomingLeave}
         clockedIn={clockedIn}
+        isDone={isDone}
         clockInTime={clockInTime}
+        hoursWorked={hoursWorked}
         isClockLoading={isClockinIn || isClockingOut}
         onRequestLeave={() => setApplyLeaveOpen(true)}
         onClockIn={handleClockIn}

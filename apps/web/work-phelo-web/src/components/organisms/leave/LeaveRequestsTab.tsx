@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { Badge } from '@/components/atoms/Badge';
@@ -11,7 +12,7 @@ import { useLeaveTypes, useLeaveRequests } from '@/hooks/useLeave';
 import { useDepartments } from '@/hooks/useDepartments';
 import { formatDate } from '@/lib/formatters';
 import { LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/hr';
-import { Users } from 'lucide-react';
+import { Users, Search } from 'lucide-react';
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   APPROVED: 'success',
@@ -22,10 +23,12 @@ const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger
 
 interface Props {
   tenantSlug: string;
+  canReview: boolean;
 }
 
-export function LeaveRequestsTab({ tenantSlug }: Props) {
-  const [selectedRequest, setSelectedRequest] = useState<LeaveRequest | null>(null);
+export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState('');
   const [filterLeaveType, setFilterLeaveType] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
@@ -46,6 +49,12 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   const totalEmployees = employeesData?.total ?? null;
 
   const { data: reqList = [], isLoading: reqLoading } = useLeaveRequests();
+  const requestIdFromQuery = searchParams.get('requestId');
+
+  const selectedRequest = useMemo(
+    () => reqList.find((r) => r.id === requestIdFromQuery) ?? null,
+    [requestIdFromQuery, reqList],
+  );
 
   const totalRequests = reqList.length || null;
   const pendingCount = useMemo(
@@ -65,6 +74,19 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
   const PAGE_SIZE = 10;
   const reqTotalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
   const pagedRequests = filteredRequests.slice((reqPage - 1) * PAGE_SIZE, reqPage * PAGE_SIZE);
+
+  const handleRequestOpen = (request: LeaveRequest) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', 'requests');
+    params.set('requestId', request.id);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
+
+  const handleRequestClose = () => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('requestId');
+    router.replace(`?${params.toString()}`, { scroll: false });
+  };
 
   const columns: Column<LeaveRequest>[] = [
     {
@@ -130,16 +152,19 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
 
         {/* Search + Filters */}
         <div className="flex items-center shrink-0 gap-6">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setReqPage(1);
-            }}
-            placeholder="Search by employee name..."
-            className="w-64 rounded-input border border-gray-300 px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-brand/20 focus:border-brand"
-          />
+          <div className="relative flex-1 min-w-52 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setReqPage(1);
+              }}
+              placeholder="Search by employee name..."
+              className="w-full h-9 pl-9 pr-4 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+            />
+          </div>
           <div className="flex items-center gap-3">
             <SearchSelect
               placeholder="All leave types"
@@ -197,15 +222,16 @@ export function LeaveRequestsTab({ tenantSlug }: Props) {
           currentPage={reqPage}
           totalPages={reqTotalPages}
           onPageChange={setReqPage}
-          onRowClick={(row) => setSelectedRequest(row)}
+          onRowClick={(row) => handleRequestOpen(row)}
         />
       </div>
 
       <LeaveRequestDetailPanel
         isOpen={!!selectedRequest}
-        onClose={() => setSelectedRequest(null)}
+        onClose={handleRequestClose}
         tenantSlug={tenantSlug}
         request={selectedRequest}
+        canReview={canReview}
       />
     </>
   );

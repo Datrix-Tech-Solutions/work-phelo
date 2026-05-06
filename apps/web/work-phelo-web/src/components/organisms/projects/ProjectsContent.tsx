@@ -9,6 +9,8 @@ import { ProjectCard } from '@/components/molecules/ProjectCard';
 import { CreateProjectPanel } from '@/components/organisms/projects/CreateProjectPanel';
 import { useEmployees } from '@/hooks/hr/useEmployees';
 import { Project, CreateProjectDto } from '@/types/hr';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 // TODO: replace with useProjects() hook when endpoint is ready
 const DUMMY_PROJECTS: Project[] = [
@@ -32,6 +34,10 @@ interface Props {
 
 export function ProjectsContent({ tenantSlug }: Props) {
   void tenantSlug;
+  const canCreateProject = usePermission(Permission.CREATE_PROJECT);
+  const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
+  const canAssignProject = usePermission(Permission.ASSIGN_PROJECT);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
@@ -79,7 +85,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
             {filtered.length} project{filtered.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>
+        {canCreateProject && <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>}
       </div>
 
       {/* Metric cards */}
@@ -107,7 +113,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
 
       {/* Search + filter */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <div className="relative flex-1 min-w-52">
+        <div className="relative flex-1 min-w-52 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
           <input
             type="text"
@@ -156,20 +162,24 @@ export function ProjectsContent({ tenantSlug }: Props) {
             <ProjectCard
               key={project.id}
               project={project}
-              onAddTasks={() => console.log('Add tasks', project.id)}
-              onAssignEmployees={() => console.log('Assign employees', project.id)}
-              onDelete={() => console.log('Delete', project.id)}
+              onAddTasks={canUpdateProject ? () => console.log('Add tasks', project.id) : undefined}
+              onAssignEmployees={
+                canAssignProject ? () => console.log('Assign employees', project.id) : undefined
+              }
+              onDelete={canUpdateProject ? () => console.log('Delete', project.id) : undefined}
             />
           ))}
         </div>
       )}
 
-      <CreateProjectPanel
-        isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        employees={employees}
-        onSubmit={handleCreate}
-      />
+      {canCreateProject && (
+        <CreateProjectPanel
+          isOpen={panelOpen}
+          onClose={() => setPanelOpen(false)}
+          employees={employees}
+          onSubmit={handleCreate}
+        />
+      )}
     </>
   );
 }

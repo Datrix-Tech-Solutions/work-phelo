@@ -2,14 +2,15 @@
 
 'use client';
 
-import { useState, use } from 'react';
+import { useState, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { Users, UserCheck, Clock, CalendarOff, UserX } from 'lucide-react';
+import { SummaryCard } from '@/components/atoms/SummaryCard';
 import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { useEmployees } from '@/hooks/hr/useEmployees';
-import { useDepartments } from '@/hooks/useDepartments';
-import { useBranches } from '@/hooks/useBranches';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useLeaveRequests } from '@/hooks/useLeave';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -19,11 +20,15 @@ import { Permission } from '@/lib/permissionMap';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '@/components/atoms/NoSearchLogo';
 
+const RESTRICTED_STATUSES = ['SUSPENDED', 'OFFBOARDED'];
+const TODAY = new Date();
+
 export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
   const canInvite = usePermission(Permission.CREATE_EMPLOYEE);
-  const canViewDetail = usePermission(Permission.UPDATE_EMPLOYEE);
+  const canViewDetail = usePermission(Permission.READ_EMPLOYEES);
+  const canViewAllStatuses = usePermission(Permission.READ_EMPLOYEES);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -35,7 +40,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const [successEmployee, setSuccessEmployee] = useState<string | null>(null);
 
   const handleInviteClick = () => {
-    if (departments.length === 0) {
+    // deptsError means the user lacks READ_DEPARTMENTS — they can still invite,
+    // the form just won't show the department picker.
+    if (!deptsError && departments.length === 0) {
       setNoDeptWarning(true);
     } else {
       setPanelOpen(true);
@@ -48,35 +55,92 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
     departmentId: deptFilter || undefined,
     limit: 100,
   });
-  const employees = empResult?.data ?? [];
+  const { data: allStaffResult } = useEmployees({ limit: 500 });
+  const allStaff = useMemo(() => allStaffResult?.data ?? [], [allStaffResult]);
 
-  const { data: departments = [] } = useDepartments();
-  const { data: branches = [] } = useBranches();
+  const allEmployees = empResult?.data ?? [];
+  // Advanced users can filter for restricted statuses explicitly, but they're hidden by default
+  const employees =
+    canViewAllStatuses && statusFilter
+      ? allEmployees
+      : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus));
+
+  const { data: departments = [], isError: deptsError } = useDepartmentOptions();
 
   const { data: approvedLeave = [] } = useLeaveRequests('APPROVED');
-  const today = new Date();
-  const onLeaveEmployeeIds = new Set(
-    approvedLeave
-      .filter((r) => new Date(r.startDate) <= today && new Date(r.endDate) >= today)
-      .map((r) => r.employeeId),
+  const onLeaveEmployeeIds = useMemo(
+    () =>
+      new Set(
+        approvedLeave
+          .filter((r) => new Date(r.startDate) <= TODAY && new Date(r.endDate) >= TODAY)
+          .map((r) => r.employeeId),
+      ),
+    [approvedLeave],
+  );
+
+  const summary = useMemo(
+    () => ({
+      total: allStaff.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus)).length,
+      permanent: allStaff.filter((e) => e.employmentStatus === 'ACTIVE').length,
+      probation: allStaff.filter((e) => e.employmentStatus === 'PROBATION').length,
+      onLeave: allStaff.filter((e) => onLeaveEmployeeIds.has(e.id)).length,
+      offboarded: allStaff.filter((e) => e.employmentStatus === 'OFFBOARDED').length,
+    }),
+    [allStaff, onLeaveEmployeeIds],
   );
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-8 flex flex-col gap-3 h-full">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Employees</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            {isLoading ? '—' : `${employees.length} employee${employees.length !== 1 ? 's' : ''}`}
-          </p>
+          <h1 className="text-xl font-bold text-gray-900">Employee Directory</h1>
         </div>
         {canInvite && <Button onClick={handleInviteClick}>+ Invite Employee</Button>}
       </div>
 
+      {/* Summary cards */}
+      <div className="grid grid-cols-5 gap-3 shrink-0">
+        <SummaryCard
+          label="Total Employees"
+          value={summary.total}
+          icon={Users}
+          iconColor="text-gray-600"
+          iconBg="bg-gray-100"
+        />
+        <SummaryCard
+          label="Permanent Staff"
+          value={summary.permanent}
+          icon={UserCheck}
+          iconColor="text-green-600"
+          iconBg="bg-green-50"
+        />
+        <SummaryCard
+          label="On Probation"
+          value={summary.probation}
+          icon={Clock}
+          iconColor="text-yellow-600"
+          iconBg="bg-yellow-50"
+        />
+        <SummaryCard
+          label="On Leave"
+          value={summary.onLeave}
+          icon={CalendarOff}
+          iconColor="text-blue-600"
+          iconBg="bg-blue-50"
+        />
+        <SummaryCard
+          label="Offboarded"
+          value={summary.offboarded}
+          icon={UserX}
+          iconColor="text-red-500"
+          iconBg="bg-red-50"
+        />
+      </div>
+
       {/* Toolbar */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <div className="relative flex-1 min-w-52">
+        <div className="relative flex-1 min-w-52 max-w-sm">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
             type="text"
@@ -94,8 +158,12 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           options={[
             { value: 'ACTIVE', label: 'Active' },
             { value: 'PROBATION', label: 'Probation' },
-            { value: 'SUSPENDED', label: 'Suspended' },
-            { value: 'OFFBOARDED', label: 'Offboarded' },
+            ...(canViewAllStatuses
+              ? [
+                  { value: 'SUSPENDED', label: 'Suspended' },
+                  { value: 'OFFBOARDED', label: 'Offboarded' },
+                ]
+              : []),
           ]}
         />
         <FilterSelect
@@ -209,8 +277,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           isOpen={panelOpen}
           onClose={() => setPanelOpen(false)}
           onSuccess={(name) => setSuccessEmployee(name)}
-          departments={departments}
-          branches={branches}
           employees={employees}
         />
       )}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -9,8 +10,11 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { Employee, Department, Branch, CreateEmployeePayload } from '@/types/hr';
+import { Employee, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
+import { useBranchOptions } from '@/hooks/useBranches';
+import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 
 /* ── Types ── */
@@ -35,27 +39,24 @@ interface InviteEmployeePanelProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (fullName: string) => void;
-  departments: Department[];
-  branches: Branch[];
   employees: Employee[];
 }
 
-/* ── Component ── */
+/* ── Inner form (mounts fresh each time the panel opens) ── */
 
-export function InviteEmployeePanel({
-  isOpen,
+function InviteEmployeeForm({
   onClose,
   onSuccess,
-  departments,
-  branches,
   employees,
-}: InviteEmployeePanelProps) {
+}: Omit<InviteEmployeePanelProps, 'isOpen'>) {
   const toast = useToast();
+  const { data: departments = [] } = useDepartmentOptions(true);
+  const { data: branches = [] } = useBranchOptions(true);
+  const { data: policiesSettings } = useCompanyPoliciesSettings();
 
   const {
     register,
     handleSubmit,
-    reset,
     control,
     setValue,
     formState: { errors },
@@ -73,22 +74,46 @@ export function InviteEmployeePanel({
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
 
+  useEffect(() => {
+    const probationMonths = policiesSettings?.defaultProbationPeriodMonths;
+    if (
+      employmentTypeValue === 'CONTRACT' ||
+      !hireDateValue ||
+      probationDateValue ||
+      !probationMonths
+    ) {
+      return;
+    }
+
+    const hireDate = new Date(hireDateValue);
+    if (isNaN(hireDate.getTime())) return;
+
+    const probationDate = new Date(
+      hireDate.getFullYear(),
+      hireDate.getMonth() + probationMonths,
+      1,
+    );
+    const probationMonth = `${probationDate.getFullYear()}-${String(
+      probationDate.getMonth() + 1,
+    ).padStart(2, '0')}`;
+
+    setValue('probationEndsAt', probationMonth);
+  }, [employmentTypeValue, hireDateValue, probationDateValue, policiesSettings, setValue]);
+
   const { mutate: createEmployee, isPending } = useCreateEmployee();
 
-  const handleClose = () => {
-    onClose();
-    reset();
-  };
-
   const onSubmit = (d: InviteForm) => {
+    const normalized = { ...d };
+    if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
+    if (normalized.contractEndDate?.length === 7) normalized.contractEndDate += '-01';
+
     const payload = Object.fromEntries(
-      Object.entries(d).filter(([, v]) => v !== '' && v !== undefined && v !== null),
+      Object.entries(normalized).filter(([, v]) => v !== '' && v !== undefined && v !== null),
     ) as unknown as CreateEmployeePayload;
 
     createEmployee(payload, {
       onSuccess: () => {
         const name = `${d.firstName} ${d.lastName}`;
-        reset();
         onClose();
         onSuccess(name);
       },
@@ -98,13 +123,13 @@ export function InviteEmployeePanel({
 
   return (
     <SidePanel
-      isOpen={isOpen}
-      onClose={handleClose}
+      isOpen
+      onClose={onClose}
       title="Add New Employee"
       description="Add a new employee to onboard them onto WorkPhelo."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
@@ -163,13 +188,15 @@ export function InviteEmployeePanel({
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Job Information
         </p>
-        <SearchSelect
-          label="Department"
-          placeholder="Select department"
-          value={deptFormValue}
-          onChange={(v) => setValue('departmentId', v)}
-          options={departments.map((d) => ({ value: d.id, label: d.name }))}
-        />
+        {departments.length > 0 && (
+          <SearchSelect
+            label="Department"
+            placeholder="Select department"
+            value={deptFormValue}
+            onChange={(v) => setValue('departmentId', v)}
+            options={departments.map((d) => ({ value: d.id, label: d.name }))}
+          />
+        )}
         {branches.length > 0 && (
           <SearchSelect
             label="Branch"
@@ -234,4 +261,22 @@ export function InviteEmployeePanel({
       </div>
     </SidePanel>
   );
+}
+
+/* ── Public wrapper ── */
+
+export function InviteEmployeePanel({
+  isOpen,
+  onClose,
+  onSuccess,
+  employees,
+}: InviteEmployeePanelProps) {
+  if (!isOpen) {
+    return (
+      <SidePanel isOpen={false} onClose={onClose} title="">
+        {null}
+      </SidePanel>
+    );
+  }
+  return <InviteEmployeeForm onClose={onClose} onSuccess={onSuccess} employees={employees} />;
 }

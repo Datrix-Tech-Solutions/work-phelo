@@ -19,7 +19,7 @@ export function AssetsSection({ assets }: Props) {
 
   return (
     <SectionCard title="Assets" scrollX>
-      <div className="flex gap-4 px-6 py-5" style={{ width: 'max-content', minWidth: '100%' }}>
+      <div className="flex gap-2 px-3 py-0" style={{ width: 'max-content', minWidth: '100%' }}>
         {assets.map((asset) => (
           <AssetCard key={asset.id} asset={asset} />
         ))}

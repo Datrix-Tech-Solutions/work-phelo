@@ -86,8 +86,10 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.dev" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema hr)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
+  "REDIS_URL=redis://redis:6379" \
   "JWT_SECRET=${JWT_SECRET}" \
-  "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}"
+  "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
+  "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}"
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.dev" \
   "PORT=4004" \

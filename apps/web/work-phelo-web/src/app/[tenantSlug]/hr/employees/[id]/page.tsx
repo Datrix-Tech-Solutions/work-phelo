@@ -11,30 +11,29 @@ import {
   useUpdateEmployee,
   useResignationRecord,
 } from '@/hooks/hr/useEmployees';
-import { useDepartments } from '@/hooks/useDepartments';
-import { useBranches } from '@/hooks/useBranches';
+import { useAssignAsset, useAvailableAssets } from '@/hooks/useAssets';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
-  useCompanyRoles,
-  useUserPermissions,
-  useAssignRole,
-  useUnassignRole,
+  useAssignPermissionSet,
+  usePermissionSets,
   useRemovePermissionSet,
+  useUserPermissions,
 } from '@/hooks/useRoles';
 import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
 import { ResignationPanel } from '@/components/organisms/employee/resignationPanel';
 import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
 import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
-import { AssignRolePanel } from '@/components/organisms/roles/AssignRolePanel';
+import { EmployeePermissionsPanel } from '@/components/organisms/roles/EmployeePermissionsPanel';
 import { AssignPermissionPanel } from '@/components/organisms/roles/assignPermissionPanel';
 import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
 import { EmployeeActionsBar } from '@/components/molecules/employees/employeeActionBar';
 import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
 import { EmploymentDetailsSection } from '@/components/molecules/employees/employeeDetailsSection';
-import { AccountDetailsSection } from '@/components/molecules/employees/accountDetailSection';
 import { AssetsSection } from '@/components/molecules/employees/assetSection';
+import { BankingComplianceSection } from '@/components/molecules/employees/bankingComplianceSection';
+import { EmergencyContactSection } from '@/components/molecules/employees/emergencyContactSection';
 import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
 
 export default function EmployeeDetailPage({
@@ -47,41 +46,36 @@ export default function EmployeeDetailPage({
   const [offboardOpen, setOffboardOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [assignAssetOpen, setAssignAssetOpen] = useState(false);
-  const [assignRoleOpen, setAssignRoleOpen] = useState(false);
+  const [permissionSetsOpen, setPermissionSetsOpen] = useState(false);
   const [assignPermOpen, setAssignPermOpen] = useState(false);
   const [resignOpen, setResignOpen] = useState(false);
 
   // Data fetching
   const { data: employee, isLoading, error } = useEmployee(id);
   const { data: resignationRecord } = useResignationRecord(id);
-  const { data: departments = [] } = useDepartments();
-  const { data: branches = [] } = useBranches();
   const { data: allHrResult } = useEmployees();
+  const { data: availableAssets = [] } = useAvailableAssets();
+  const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
+  const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
+  const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
+  const { data: permissionSets = [] } = usePermissionSets({
+    enabled: canGrantPermission,
+  });
   const allHrEmployees = allHrResult?.data ?? [];
 
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
   const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
-  const { mutate: assignRole, isPending: isAssigningRole } = useAssignRole();
-  const { mutate: unassignRole, isPending: isRemovingRole } = useUnassignRole();
+  const { mutate: assignAsset } = useAssignAsset();
+  const { mutate: assignPermissionSet, isPending: isAssigningPermissionSet } =
+    useAssignPermissionSet();
   const { mutate: removePermissionSet, isPending: isRemovingPermissionSet } =
     useRemovePermissionSet();
-  const canAssignRole = usePermission(Permission.ASSIGN_ROLE);
-  const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
 
-  // Roles data
-  const { data: rolesRaw = [] } = useCompanyRoles();
-  const roles = Array.isArray(rolesRaw) ? rolesRaw : [];
-
-  // /auth/permissions/users/:id is the authoritative source — always returns companyRole name
-  // regardless of whether GET /auth/users includes the companyRole relation.
   const { data: userPerms } = useUserPermissions(employee?.userId ?? '');
-
-  const currentRoleName = userPerms?.companyRole ?? null;
   const assignedSets = userPerms?.permissionSets ?? [];
-  const displayedRoleNames = roles
-    .filter((role) => assignedSets.some((set) => set.name === `${role.name} Set`))
-    .map((role) => role.name);
+  const customPermissionSets = permissionSets.filter((set) => !set.isSystem);
 
   const handleResendInvite = () => {
     resendInvite(id, {
@@ -99,6 +93,43 @@ export default function EmployeeDetailPage({
           setEditOpen(false);
         },
         onError: () => toast.error('Failed to update employee'),
+      },
+    );
+  };
+
+  const handleAssignPermissionSet = (permissionSetId: string) => {
+    if (!employee?.userId) return;
+    assignPermissionSet(
+      { userId: employee.userId, permissionSetId },
+      {
+        onSuccess: () => toast.success('Permission set assigned successfully'),
+        onError: () => toast.error('Failed to assign permission set'),
+      },
+    );
+  };
+
+  const handleRemovePermissionSet = (permissionSetId: string) => {
+    if (!employee?.userId) return;
+    removePermissionSet(
+      { userId: employee.userId, permissionSetId },
+      {
+        onSuccess: () => toast.success('Permission set removed successfully'),
+        onError: () => toast.error('Failed to remove permission set'),
+      },
+    );
+  };
+
+  const handleAssignAsset = (assetId: string) => {
+    assignAsset(
+      { assetId, employeeId: id },
+      {
+        onSuccess: () => {
+          toast.success('Asset assigned successfully');
+          setAssignAssetOpen(false);
+        },
+        onError: () => {
+          toast.error('Failed to assign asset');
+        },
       },
     );
   };
@@ -127,44 +158,33 @@ export default function EmployeeDetailPage({
 
       {/* Actions Bar */}
       <EmployeeActionsBar
-        isPendingInvite={!employee.userId}
+        isPendingInvite={employee.userStatus === 'PENDING_VERIFICATION'}
         isOffboarded={employee.employmentStatus === 'OFFBOARDED'}
         resendInvite={handleResendInvite}
         isResending={isResending}
-        onAssignAsset={() => setAssignAssetOpen(true)}
-        onAssignRole={employee.userId && canAssignRole ? () => setAssignRoleOpen(true) : undefined}
+        onAssignAsset={canAssignAsset ? () => setAssignAssetOpen(true) : undefined}
+        onAssignRole={
+          employee.userId && canGrantPermission ? () => setPermissionSetsOpen(true) : undefined
+        }
         onAssignPermission={
           employee.userId && canGrantPermission ? () => setAssignPermOpen(true) : undefined
         }
-        onOffboard={() => setOffboardOpen(true)}
+        onOffboard={canOffboardEmployee ? () => setOffboardOpen(true) : undefined}
         onResign={() => setResignOpen(true)}
         hasPendingResignation={resignationRecord?.status === 'PENDING'}
-        onEdit={() => setEditOpen(true)}
+        onEdit={canEditEmployee ? () => setEditOpen(true) : undefined}
       />
 
       {/* Main Content */}
       <div className="flex gap-6 items-start">
         {/* Left Sidebar */}
-        <EmployeeProfileCard
-          employee={employee}
-          roles={
-            displayedRoleNames.length > 0
-              ? displayedRoleNames
-              : currentRoleName
-                ? [currentRoleName]
-                : []
-          }
-        />
+        <EmployeeProfileCard employee={employee} roles={assignedSets.map((s) => s.name)} />
 
         {/* Right Sections */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
-          <EmploymentDetailsSection
-            employee={employee}
-            departments={departments}
-            allHrEmployees={allHrEmployees}
-            currentRoleName={currentRoleName}
-          />
-          <AccountDetailsSection employee={employee} />
+          <EmploymentDetailsSection employee={employee} allHrEmployees={allHrEmployees} />
+          <BankingComplianceSection employee={employee} />
+          <EmergencyContactSection employee={employee} />
           <AssetsSection assets={employee.assets || []} />
         </div>
       </div>
@@ -189,8 +209,6 @@ export default function EmployeeDetailPage({
         isOpen={editOpen}
         onClose={() => setEditOpen(false)}
         employee={employee}
-        departments={departments}
-        branches={branches}
         employees={allHrEmployees}
         name={name}
         onSave={handleUpdateEmployee}
@@ -201,48 +219,29 @@ export default function EmployeeDetailPage({
         isOpen={assignAssetOpen}
         onClose={() => setAssignAssetOpen(false)}
         employeeName={name}
-        availableAssets={[]}
-        onAssign={() => {}}
+        availableAssets={availableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.name,
+          type: asset.type,
+          condition: asset.condition ?? 'GOOD',
+          assetNumber: asset.assetNumber ?? '—',
+        }))}
+        onAssign={handleAssignAsset}
       />
 
       {employee.userId && (
-        <AssignRolePanel
-          isOpen={assignRoleOpen}
-          onClose={() => setAssignRoleOpen(false)}
+        <EmployeePermissionsPanel
+          isOpen={permissionSetsOpen}
+          onClose={() => setPermissionSetsOpen(false)}
           employeeName={name}
           userId={employee.userId}
-          currentRoleName={currentRoleName}
-          assignedSets={assignedSets}
-          roles={roles}
-          isAssigning={isAssigningRole}
-          isRemoving={isRemovingRole || isRemovingPermissionSet}
-          onAssign={(roleId, userId) => {
-            assignRole(
-              { roleId, userId },
-              {
-                onSuccess: () => toast.success(`Role added to ${name}`),
-                onError: () => toast.error('Failed to assign role'),
-              },
-            );
-          }}
-          onRemoveRole={(roleId, userId) => {
-            unassignRole(
-              { roleId, userId },
-              {
-                onSuccess: () => toast.success(`Role removed from ${name}`),
-                onError: () => toast.error('Failed to remove role'),
-              },
-            );
-          }}
-          onRemovePermissionSet={(permissionSetId) =>
-            removePermissionSet(
-              { userId: employee.userId!, permissionSetId },
-              {
-                onSuccess: () => toast.success(`Role access removed from ${name}`),
-                onError: () => toast.error('Failed to remove permission set'),
-              },
-            )
-          }
+          availableSets={customPermissionSets}
+          assignedSets={assignedSets.map((set) => ({ id: set.id, name: set.name }))}
+          baseSetName="Employee Set"
+          onAssign={handleAssignPermissionSet}
+          onRemove={handleRemovePermissionSet}
+          isAssigning={isAssigningPermissionSet}
+          isRemoving={isRemovingPermissionSet}
         />
       )}
 

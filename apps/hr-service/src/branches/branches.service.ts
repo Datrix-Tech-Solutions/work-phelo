@@ -11,12 +11,38 @@ import { UpdateBranchDto } from './dto/update-branch.dto';
 export class BranchesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private async assertSingleHeadOffice(
+    tenantId: string,
+    isHeadOffice?: boolean,
+    excludeBranchId?: string,
+  ) {
+    if (!isHeadOffice) return;
+
+    const existingHeadOffice = await this.prisma.branch.findFirst({
+      where: {
+        tenantId,
+        isActive: true,
+        isHeadOffice: true,
+        ...(excludeBranchId ? { id: { not: excludeBranchId } } : {}),
+      },
+      select: { id: true, name: true },
+    });
+
+    if (existingHeadOffice) {
+      throw new ConflictException(
+        `A head office already exists (${existingHeadOffice.name}). Remove that designation before assigning another head office.`,
+      );
+    }
+  }
+
   async create(tenantId: string, dto: CreateBranchDto) {
     const existing = await this.prisma.branch.findUnique({
       where: { tenantId_name: { tenantId, name: dto.name } },
     });
     if (existing)
       throw new ConflictException('A branch with this name already exists');
+
+    await this.assertSingleHeadOffice(tenantId, dto.isHeadOffice);
 
     return this.prisma.branch.create({
       data: { tenantId, ...dto },
@@ -27,6 +53,14 @@ export class BranchesService {
     return this.prisma.branch.findMany({
       where: { tenantId, isActive: true },
       include: { _count: { select: { employees: true } } },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async findOptions(tenantId: string) {
+    return this.prisma.branch.findMany({
+      where: { tenantId, isActive: true },
+      select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
   }
@@ -55,6 +89,8 @@ export class BranchesService {
       where: { id, tenantId },
     });
     if (!branch) throw new NotFoundException('Branch not found');
+
+    await this.assertSingleHeadOffice(tenantId, dto.isHeadOffice, id);
 
     return this.prisma.branch.update({
       where: { id },

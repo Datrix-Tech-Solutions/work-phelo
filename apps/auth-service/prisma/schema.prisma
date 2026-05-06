@@ -96,7 +96,6 @@ model Tenant {
   updatedAt      DateTime     @updatedAt
 
   users           User[]
-  companyRoles    CompanyRole[]
   permissionSets  PermissionSet[]
   userPermissions UserPermission[]
 
@@ -202,26 +201,6 @@ model UserPermissionSet {
   @@schema("auth")
 }
 
-// ── CompanyRole ────────────────────────────────────────────────────────────
-
-model CompanyRole {
-  id          String   @id @default(uuid())
-  tenantId    String
-  name        String
-  description String?
-  isSystem    Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  permissions Json     @default("{\"hr\": \"none\", \"accounting\": \"none\", \"marketing\": \"none\"}")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  tenant  Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users   User[]
-
-  @@unique([tenantId, name])
-  @@schema("auth")
-}
-
 // ── User ───────────────────────────────────────────────────────────────────
 
 model User {
@@ -233,7 +212,6 @@ model User {
   lastName            String
   phone               String?
   role                UserRole    @default(EMPLOYEE)
-  companyRoleId       String?
   status              UserStatus  @default(PENDING_VERIFICATION)
   avatarUrl           String?
   isMfaEnabled        Boolean     @default(false)
@@ -251,7 +229,6 @@ model User {
   updatedAt           DateTime    @updatedAt
 
   tenant              Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  companyRole         CompanyRole?        @relation(fields: [companyRoleId], references: [id])
   refreshTokens       RefreshToken[]
   otpCodes            OtpCode[]
   socialAccounts      SocialAccount[]

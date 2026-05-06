@@ -33,7 +33,7 @@ export interface TenantUser {
   firstName: string;
   lastName: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE' | 'MANAGER';
+  role: 'SUPER_ADMIN' | 'TENANT_ADMIN' | 'EMPLOYEE';
   status: string;
 }
 

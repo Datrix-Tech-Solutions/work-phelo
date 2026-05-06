@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRouter, useParams } from 'next/navigation';
 import { formatDate } from '@/lib/formatters';
 import { Column, DataTable } from '../shared/DataTable';
 import { api } from '@/lib/api';
@@ -22,6 +23,8 @@ interface Props {
 }
 
 export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props) {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const { data: teamData, isLoading } = useQuery({
     queryKey: ['team-appraisals'],
     queryFn: () => api.get('/hr/appraisals/team').then((r) => r.data),
@@ -29,27 +32,31 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
 
   const teamRows = useMemo(() => {
     const list = Array.isArray(teamData) ? teamData : (teamData?.data ?? []);
-    return list.map(
-      (r: {
-        id: unknown;
-        employeeId: unknown;
-        employeeName?: unknown;
-        cycleId: unknown;
-        cycleName?: unknown;
-        selfSubmittedAt?: unknown;
-        managerReviewDeadline?: unknown;
-        overallStatus?: string;
-      }) => ({
-        id: String(r.id),
-        employeeId: String(r.employeeId),
-        employeeName: String(r.employeeName ?? ''),
-        cycleId: String(r.cycleId),
-        cycleName: String(r.cycleName ?? ''),
-        selfSubmittedAt: r.selfSubmittedAt ? String(r.selfSubmittedAt) : undefined,
-        managerReviewDeadline: String(r.managerReviewDeadline ?? ''),
-        overallStatus: r.overallStatus ?? 'NotStarted',
-      }),
-    );
+    return list
+      .filter((r: { overallStatus?: string }) =>
+        ['SelfSubmitted', 'ManagerSubmitted', 'Finalized'].includes(r.overallStatus ?? ''),
+      )
+      .map(
+        (r: {
+          id: unknown;
+          employeeId: unknown;
+          employeeName?: unknown;
+          cycleId: unknown;
+          cycleName?: unknown;
+          selfSubmittedAt?: unknown;
+          managerReviewDeadline?: unknown;
+          overallStatus?: string;
+        }) => ({
+          id: String(r.id),
+          employeeId: String(r.employeeId),
+          employeeName: String(r.employeeName ?? ''),
+          cycleId: String(r.cycleId),
+          cycleName: String(r.cycleName ?? ''),
+          selfSubmittedAt: r.selfSubmittedAt ? String(r.selfSubmittedAt) : undefined,
+          managerReviewDeadline: String(r.managerReviewDeadline ?? ''),
+          overallStatus: r.overallStatus ?? 'NotStarted',
+        }),
+      );
   }, [teamData]);
 
   const filteredRows = useMemo(() => {
@@ -107,6 +114,40 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
         );
       },
     },
+    {
+      key: 'action',
+      label: '',
+      width: '120px',
+      render: (r) => {
+        if (r.overallStatus === 'ManagerSubmitted' || r.overallStatus === 'Finalized') {
+          return (
+            <button
+              onClick={() =>
+                router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
+              }
+              className="text-sm font-medium text-gray-600 hover:text-brand transition-colors"
+            >
+              View Results
+            </button>
+          );
+        }
+        if (r.overallStatus === 'SelfSubmitted') {
+          return (
+            <button
+              onClick={() =>
+                router.push(
+                  `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/manager-review/${r.id}`,
+                )
+              }
+              className="px-4 py-1.5 rounded-full border border-blue-700 bg-white text-sm font-medium text-gray-700 hover:bg-blue-300 transition-colors"
+            >
+              Review
+            </button>
+          );
+        }
+        return <span className="text-sm text-gray-400">Awaiting employee</span>;
+      },
+    },
   ];
 
   return (
@@ -116,6 +157,9 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
       isLoading={isLoading}
       searchPlaceholder="Search employee or cycle..."
       onSearch={onSearch}
+      onRowClick={(r) =>
+        router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/manager-review/${r.id}`)
+      }
       currentPage={page}
       totalPages={totalPages}
       onPageChange={onPageChange}

@@ -1,6 +1,7 @@
 import Image from 'next/image';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, BadgeCheck } from 'lucide-react';
 import { DetailField } from '../shared/DetailField';
+import { EmploymentStatusBadge } from './EmploymentStatusBadge';
 import type { Employee } from '@/types/hr';
 
 interface EmployeeProfileCardProps {
@@ -11,6 +12,7 @@ interface EmployeeProfileCardProps {
 export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCardProps) {
   const name = `${employee.firstName} ${employee.lastName}`;
   const initials = `${employee.firstName[0] ?? ''}${employee.lastName[0] ?? ''}`.toUpperCase();
+  const isPendingInvite = employee.userStatus === 'PENDING_VERIFICATION';
 
   return (
     <div className="w-72 shrink-0 bg-white border border-gray-200 rounded-card p-6 flex flex-col items-start gap-4">
@@ -30,8 +32,21 @@ export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCar
       )}
 
       <div className="text-left">
-        <p className="text-base font-bold text-gray-900">{name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-base font-bold text-gray-900">{name}</p>
+          {!isPendingInvite && <BadgeCheck className="w-4.5 h-4.5 text-brand shrink-0" />}
+        </div>
         {employee?.jobTitle && <p className="text-sm text-gray-400 mt-0.5">{employee.jobTitle}</p>}
+      </div>
+
+      {/* Status badges */}
+      <div className="flex flex-wrap gap-2">
+        <EmploymentStatusBadge status={employee.employmentStatus} />
+        {isPendingInvite && (
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+            Pending Verification
+          </span>
+        )}
       </div>
 
       <div className="w-full border-t border-gray-100" />
@@ -45,11 +60,10 @@ export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCar
         )}
       </div>
 
-      {/* Roles — only rendered when at least one is assigned */}
+      {/* Roles */}
       {roles.length > 0 && (
         <>
           <div className="w-full border-t border-gray-100" />
-
           <div className="w-full flex flex-col gap-2.5">
             <p className="text-xs text-gray-400 font-medium tracking-wider">Roles</p>
             {roles.map((role) => (

@@ -4,143 +4,237 @@ import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Button } from '@/components/atoms/Button';
+import type { WorkMode } from '@/types/scheduling';
+
+export type ShiftType = 'morning' | 'afternoon' | 'night' | 'on-leave';
 
 export interface Shift {
   id: string;
   employeeId: string;
   employeeName: string;
-  startTime: string; // "HH:MM"
-  endTime: string; // "HH:MM"
-  day: number; // 1=Mon … 5=Fri (ISO weekday)
-  date: string; // ISO date "YYYY-MM-DD"
+  startTime: string;
+  endTime: string;
+  shiftType: ShiftType;
+  workMode: WorkMode;
+  isDraft?: boolean;
+  leaveType?: string;
+  date: string; // ISO "YYYY-MM-DD"
 }
 
 interface ShiftPanelProps {
   isOpen: boolean;
+  isLoading?: boolean;
   onClose: () => void;
   employeeOptions: SearchSelectOption[];
-  /** The day this shift belongs to (used when adding) */
-  day?: number;
+  /** Pre-selected employee when opening from a row cell */
+  employeeId?: string;
+  /** Pre-filled start date (cell's date); cannot be changed by the user */
   date?: string;
   /** Populated when editing an existing shift */
   shift?: Shift | null;
-  onSave: (data: Omit<Shift, 'id'>) => void;
+  /** endDate allows multi-day range creation */
+  onSave: (data: Omit<Shift, 'id'>, endDate: string) => void;
 }
 
-/* ── Inner form — remounted via key whenever the panel target changes ── */
+const SHIFT_TYPE_OPTIONS: SearchSelectOption[] = [
+  { value: 'morning', label: 'Morning' },
+  { value: 'afternoon', label: 'Afternoon' },
+  { value: 'night', label: 'Night' },
+];
+
+const WORK_MODE_OPTIONS: SearchSelectOption[] = [
+  { value: 'ONSITE', label: 'Onsite' },
+  { value: 'REMOTE', label: 'Remote' },
+  { value: 'HYBRID', label: 'Hybrid' },
+];
+
+/* ── Inner form ── */
 
 interface FormProps {
   isEditing: boolean;
+  isLoading?: boolean;
+  employeeName: string;
   employeeOptions: SearchSelectOption[];
-  initial: { employeeId: string; startTime: string; endTime: string };
-  day: number;
-  date: string;
+  initial: {
+    employeeId: string;
+    startDate: string;
+    startTime: string;
+    endTime: string;
+    shiftType: ShiftType;
+    workMode: WorkMode;
+  };
   shift: Shift | null | undefined;
-  onSave: (data: Omit<Shift, 'id'>) => void;
+  onSave: (data: Omit<Shift, 'id'>, endDate: string) => void;
   onClose: () => void;
 }
 
-function ShiftForm({
-  isEditing,
-  employeeOptions,
-  initial,
-  day,
-  date,
-  shift,
-  onSave,
-  onClose,
-}: FormProps) {
-  const [employeeId, setEmployeeId] = useState(initial.employeeId);
+function ShiftForm({ isEditing, isLoading, employeeName, initial, onSave, onClose }: FormProps) {
+  const [shiftType, setShiftType] = useState<ShiftType>(initial.shiftType);
+  const [workMode, setWorkMode] = useState<WorkMode>(initial.workMode);
   const [startTime, setStartTime] = useState(initial.startTime);
   const [endTime, setEndTime] = useState(initial.endTime);
-  const [errors, setErrors] = useState<{ employee?: string; start?: string; end?: string }>({});
+  const [endDate, setEndDate] = useState(initial.startDate);
+  const [errors, setErrors] = useState<{ shiftType?: string; start?: string; end?: string }>({});
 
   const validate = () => {
     const next: typeof errors = {};
-    if (!employeeId) next.employee = 'Please select an employee';
+    if (!shiftType) next.shiftType = 'Please select a shift type';
     if (!startTime) next.start = 'Start time is required';
     if (!endTime) next.end = 'End time is required';
-    if (startTime && endTime && startTime >= endTime)
+    if (startTime && endTime && initial.startDate === endDate && startTime >= endTime)
       next.end = 'End time must be after start time';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = (isDraft: boolean) => {
     if (!validate()) return;
-    const emp = employeeOptions.find((o) => o.value === employeeId);
-    onSave({
-      employeeId,
-      employeeName: emp?.label ?? '',
-      startTime,
-      endTime,
-      day: shift?.day ?? day,
-      date: shift?.date ?? date,
-    });
-    onClose();
+    onSave(
+      {
+        employeeId: initial.employeeId,
+        employeeName,
+        startTime,
+        endTime,
+        shiftType,
+        workMode,
+        isDraft,
+        date: initial.startDate,
+      },
+      endDate,
+    );
   };
+
+  const inputClass =
+    'border border-gray-300 rounded-input px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand w-full';
+  const readonlyClass =
+    'border border-gray-200 rounded-input px-4 py-3 text-sm text-gray-400 bg-gray-50 w-full cursor-not-allowed';
 
   return (
     <SidePanel
       isOpen
       onClose={onClose}
-      title={isEditing ? 'Edit Shift' : 'Add Shift'}
-      description={
-        isEditing ? 'Update the details for this shift.' : 'Assign a shift to an employee.'
-      }
+      title={employeeName}
+      description={isEditing ? 'Edit shift details' : 'Add a new shift'}
       footer={
-        <Button className="w-full" onClick={handleSubmit}>
-          {isEditing ? 'Save Changes' : 'Add Shift'}
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            variant="secondary"
+            className="flex-1"
+            type="button"
+            disabled={isLoading}
+            onClick={onClose}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="secondary"
+            className="flex-1"
+            type="button"
+            disabled={isLoading}
+            onClick={() => handleSubmit(true)}
+          >
+            Save to Draft
+          </Button>
+          <Button
+            className="flex-1 bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
+            type="button"
+            isLoading={isLoading}
+            loadingText="Saving..."
+            onClick={() => handleSubmit(false)}
+          >
+            Save
+          </Button>
+        </div>
       }
     >
-      <SearchSelect
-        label="Employee"
-        placeholder="Search employee…"
-        options={employeeOptions}
-        value={employeeId}
-        onChange={setEmployeeId}
-        error={errors.employee}
-      />
-
+      {/* Shift type */}
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-bold text-gray-900">Start Time</label>
-        <input
-          type="time"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          className="border rounded-input px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand border-gray-300"
+        <label className="text-sm font-bold text-gray-900">Shift Type</label>
+        <SearchSelect
+          placeholder="Select shift type…"
+          options={SHIFT_TYPE_OPTIONS}
+          value={shiftType}
+          onChange={(v) => setShiftType(v as ShiftType)}
+          error={errors.shiftType}
         />
-        {errors.start && <p className="text-xs text-red-500">{errors.start}</p>}
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-bold text-gray-900">End Time</label>
-        <input
-          type="time"
-          value={endTime}
-          onChange={(e) => setEndTime(e.target.value)}
-          className="border rounded-input px-4 py-3 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-brand focus:border-brand border-gray-300"
+        <label className="text-sm font-bold text-gray-900">Work Mode</label>
+        <SearchSelect
+          placeholder="Select work mode…"
+          options={WORK_MODE_OPTIONS}
+          value={workMode}
+          onChange={(v) => setWorkMode(v as WorkMode)}
         />
-        {errors.end && <p className="text-xs text-red-500">{errors.end}</p>}
       </div>
+
+      {/* Dates — side by side */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-gray-900">Start Date</label>
+          <input type="date" value={initial.startDate} readOnly className={readonlyClass} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-gray-900">End Date</label>
+          <input
+            type="date"
+            value={endDate}
+            min={initial.startDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className={inputClass}
+          />
+        </div>
+      </div>
+
+      {/* Times — side by side */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-gray-900">Start Time</label>
+          <input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            className={inputClass}
+          />
+          {errors.start && <p className="text-xs text-red-500">{errors.start}</p>}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-gray-900">End Time</label>
+          <input
+            type="time"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+            className={inputClass}
+          />
+          {errors.end && <p className="text-xs text-red-500">{errors.end}</p>}
+        </div>
+      </div>
+
+      {endDate > initial.startDate && (
+        <p className="text-xs text-blue-500">
+          Shifts will be created for each day from{' '}
+          <span className="font-semibold">{initial.startDate}</span> to{' '}
+          <span className="font-semibold">{endDate}</span>.
+        </p>
+      )}
     </SidePanel>
   );
 }
 
-/* ── Public wrapper — renders nothing when closed, remounts form on open ── */
+/* ── Public wrapper ── */
 
 export function ShiftPanel({
   isOpen,
+  isLoading,
   onClose,
   employeeOptions,
-  day = 1,
+  employeeId = '',
   date = '',
   shift,
   onSave,
 }: ShiftPanelProps) {
   if (!isOpen) {
-    /* Render the panel in closed state so it can animate out */
     return (
       <SidePanel isOpen={false} onClose={onClose} title="">
         {null}
@@ -148,18 +242,25 @@ export function ShiftPanel({
     );
   }
 
+  const resolvedEmployeeId = shift?.employeeId ?? employeeId;
+  const employeeName =
+    employeeOptions.find((o) => o.value === resolvedEmployeeId)?.label ?? 'Employee';
+
   return (
     <ShiftForm
-      key={shift?.id ?? `new-${date}`}
+      key={shift?.id ?? `new-${employeeId}-${date}`}
       isEditing={!!shift}
+      isLoading={isLoading}
+      employeeName={employeeName}
       employeeOptions={employeeOptions}
       initial={{
-        employeeId: shift?.employeeId ?? '',
+        employeeId: resolvedEmployeeId,
+        startDate: shift?.date ?? date,
         startTime: shift?.startTime ?? '',
         endTime: shift?.endTime ?? '',
+        shiftType: shift?.shiftType ?? 'morning',
+        workMode: shift?.workMode ?? 'ONSITE',
       }}
-      day={day}
-      date={date}
       shift={shift}
       onSave={onSave}
       onClose={onClose}

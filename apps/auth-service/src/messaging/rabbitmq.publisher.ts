@@ -6,6 +6,10 @@ import {
   WithMeta,
   TenantApprovedEvent,
   EmployeeActivatedEvent,
+  ProvisionTenantWorkspaceCommand,
+  ProvisionTenantWorkspaceResult,
+  LinkEmployeeIdentityCommand,
+  LinkEmployeeIdentityResult,
   EmailVerificationEvent,
   InviteUserEvent,
   PasswordResetLinkEvent,
@@ -22,6 +26,60 @@ export class RabbitMQPublisher {
     private readonly notificationClient: ClientProxy,
     @Inject('HR_SERVICE') private readonly hrClient: ClientProxy,
   ) {}
+
+  private normalizeRpcError(err: unknown): Error & {
+    statusCode?: number;
+    error?: string;
+  } {
+    if (err instanceof Error) {
+      return err as Error & { statusCode?: number; error?: string };
+    }
+
+    const remote =
+      err && typeof err === 'object' && 'message' in err
+        ? (err as {
+            message?: unknown;
+            statusCode?: unknown;
+            error?: unknown;
+          })
+        : undefined;
+
+    const payload =
+      remote?.message &&
+      typeof remote.message === 'object' &&
+      !Array.isArray(remote.message)
+        ? (remote.message as {
+            message?: unknown;
+            statusCode?: unknown;
+            error?: unknown;
+          })
+        : remote;
+
+    const message =
+      typeof payload?.message === 'string'
+        ? payload.message
+        : typeof remote?.message === 'string'
+          ? remote.message
+          : String(err);
+    const wrapped = new Error(message) as Error & {
+      statusCode?: number;
+      error?: string;
+    };
+
+    if (typeof payload?.statusCode === 'number') {
+      wrapped.statusCode = payload.statusCode;
+    } else if (typeof remote?.statusCode === 'number') {
+      wrapped.statusCode = remote.statusCode;
+    }
+
+    if (typeof payload?.error === 'string') {
+      wrapped.error = payload.error;
+    } else if (typeof remote?.error === 'string') {
+      wrapped.error = remote.error;
+    }
+
+    return wrapped;
+  }
 
   // ── Internal publish ───────────────────────────────────────────────────────
 
@@ -58,6 +116,39 @@ export class RabbitMQPublisher {
     });
   }
 
+  private request<T extends object, TResult>(
+    client: ClientProxy,
+    pattern: string,
+    data: T,
+    correlationId?: string,
+  ): Promise<TResult> {
+    const envelope: WithMeta<T> = {
+      ...data,
+      _meta: {
+        messageId: randomUUID(),
+        correlationId: correlationId ?? randomUUID(),
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    this.logger.log(
+      `Requesting ${pattern} | msgId=${envelope._meta.messageId} | corrId=${envelope._meta.correlationId}`,
+    );
+
+    return new Promise<TResult>((resolve, reject) => {
+      client.send<TResult, WithMeta<T>>(pattern, envelope).subscribe({
+        next: (result) => resolve(result),
+        error: (err) => {
+          this.logger.error(
+            `Failed to request ${pattern} | corrId=${envelope._meta.correlationId}`,
+            err,
+          );
+          reject(this.normalizeRpcError(err));
+        },
+      });
+    });
+  }
+
   // ── Auth → HR ──────────────────────────────────────────────────────────────
 
   hrTenantApproved(
@@ -79,6 +170,30 @@ export class RabbitMQPublisher {
     return this.publish(
       this.hrClient,
       EventPatterns.HR_EMPLOYEE_ACTIVATED,
+      data,
+      correlationId,
+    );
+  }
+
+  hrProvisionTenantWorkspace(
+    data: ProvisionTenantWorkspaceCommand,
+    correlationId?: string,
+  ): Promise<ProvisionTenantWorkspaceResult> {
+    return this.request(
+      this.hrClient,
+      EventPatterns.HR_PROVISION_TENANT_WORKSPACE,
+      data,
+      correlationId,
+    );
+  }
+
+  hrLinkEmployeeIdentity(
+    data: LinkEmployeeIdentityCommand,
+    correlationId?: string,
+  ): Promise<LinkEmployeeIdentityResult> {
+    return this.request(
+      this.hrClient,
+      EventPatterns.HR_LINK_EMPLOYEE_IDENTITY,
       data,
       correlationId,
     );

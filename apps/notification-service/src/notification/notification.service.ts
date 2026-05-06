@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotificationType } from '../../prisma/generated/client';
+import { InviteUserKind } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../channels/email.service';
 import { SmsService } from '../channels/sms.service';
@@ -65,25 +66,35 @@ export class NotificationService {
     inviteToken?: string;
     acceptInviteUrl: string;
     tenantName: string;
+    inviteKind?: InviteUserKind;
   }) {
     if (await this.isDuplicate(data.email, NotificationType.INVITE_USER)) {
       this.logger.warn(`Duplicate INVITE_USER suppressed for ${data.email}`);
       return;
     }
-    // Use workspace-aware URL built by auth service
-    const success = await this.email.sendInviteEmail(
-      data.email,
-      data.firstName,
-      data.tenantName,
-      data.acceptInviteUrl,
-    );
+    const isTenantAdminInvite = data.inviteKind === 'TENANT_ADMIN';
+    const success = isTenantAdminInvite
+      ? await this.email.sendTenantAdminWelcomeEmail(
+          data.email,
+          data.firstName,
+          data.tenantName,
+          data.acceptInviteUrl,
+        )
+      : await this.email.sendEmployeeInviteEmail(
+          data.email,
+          data.firstName,
+          data.tenantName,
+          data.acceptInviteUrl,
+        );
     await this.log({
       userId: data.userId ?? 'system',
       tenantId: data.tenantId ?? 'system',
       type: 'INVITE_USER',
       channel: 'EMAIL',
       recipient: data.email,
-      subject: `Invitation to ${data.tenantName}`,
+      subject: isTenantAdminInvite
+        ? `Welcome to ${data.tenantName}`
+        : `Invitation to ${data.tenantName}`,
       status: success ? 'SENT' : 'FAILED',
     });
   }
@@ -94,7 +105,6 @@ export class NotificationService {
     email: string;
     firstName: string;
     resetLink: string;
-    otpCode?: string;
     tenantName?: string;
   }) {
     if (
@@ -109,7 +119,6 @@ export class NotificationService {
       data.email,
       data.firstName,
       data.resetLink,
-      data.otpCode,
     );
     await this.log({
       userId: data.userId ?? 'system',
@@ -247,6 +256,7 @@ export class NotificationService {
     endDate: string;
     totalDays: number;
     reason?: string;
+    detailLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -268,6 +278,7 @@ export class NotificationService {
       data.endDate,
       data.totalDays,
       data.reason,
+      data.detailLink,
     );
     await this.log({
       userId: data.employeeId,
@@ -366,6 +377,551 @@ export class NotificationService {
     });
   }
 
+  async sendTimeCorrectionSubmittedNotification(data: {
+    tenantId: string;
+    correctionId: string;
+    employeeId: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    attendanceDate: string;
+    requestedIn: string | null;
+    requestedOut: string | null;
+    reason: string;
+    adminEmail: string | null;
+    managerEmail: string | null;
+    detailLink?: string;
+  }) {
+    const employeeFullName = `${data.employeeFirstName} ${data.employeeLastName}`;
+    const recipients: { email: string; firstName: string }[] = [];
+
+    if (data.adminEmail) {
+      recipients.push({ email: data.adminEmail, firstName: 'Approver' });
+    }
+
+    if (data.managerEmail && data.managerEmail !== data.adminEmail) {
+      recipients.push({ email: data.managerEmail, firstName: 'Manager' });
+    }
+
+    if (recipients.length === 0) {
+      this.logger.warn(
+        `[TIME_CORRECTION_SUBMITTED] No recipients resolved for correction ${data.correctionId} in tenant ${data.tenantId}`,
+      );
+      return;
+    }
+
+    for (const recipient of recipients) {
+      if (
+        await this.isDuplicate(
+          recipient.email,
+          NotificationType.TIME_CORRECTION_SUBMITTED,
+        )
+      ) {
+        this.logger.warn(
+          `Duplicate TIME_CORRECTION_SUBMITTED suppressed for ${recipient.email}`,
+        );
+        continue;
+      }
+
+      const success = await this.email.sendTimeCorrectionNotification(
+        recipient.email,
+        recipient.firstName,
+        employeeFullName,
+        data.attendanceDate,
+        data.requestedIn,
+        data.requestedOut,
+        data.reason,
+        data.detailLink,
+      );
+
+      await this.log({
+        userId: data.employeeId,
+        tenantId: data.tenantId,
+        type: 'TIME_CORRECTION_SUBMITTED',
+        channel: 'EMAIL',
+        recipient: recipient.email,
+        subject: `Time correction request pending your approval — ${employeeFullName}`,
+        status: success ? 'SENT' : 'FAILED',
+      });
+    }
+  }
+
+  async sendAppraisalSelfSubmittedNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleTitle: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    managerEmail: string;
+    managerFirstName: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.managerEmail,
+        NotificationType.APPRAISAL_SELF_SUBMITTED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_SELF_SUBMITTED suppressed for ${data.managerEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalSelfSubmittedNotification(
+      data.managerEmail,
+      data.managerFirstName,
+      `${data.employeeFirstName} ${data.employeeLastName}`,
+      data.cycleTitle,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_SELF_SUBMITTED',
+      channel: 'EMAIL',
+      recipient: data.managerEmail,
+      subject: `Self-assessment submitted by ${data.employeeFirstName} ${data.employeeLastName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendAppraisalManagerReviewedNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleTitle: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    finalScore: number;
+    finalRating: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.APPRAISAL_MANAGER_REVIEWED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_MANAGER_REVIEWED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalManagerReviewedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.cycleTitle,
+      data.finalScore,
+      data.finalRating,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_MANAGER_REVIEWED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your appraisal review is complete — ${data.cycleTitle}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendAppraisalSelfReminderNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleId: string;
+    cycleTitle: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    deadline: string;
+    daysRemaining: number;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.APPRAISAL_SELF_REMINDER,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_SELF_REMINDER suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalSelfReminderNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.cycleTitle,
+      data.deadline,
+      data.daysRemaining,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_SELF_REMINDER',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject:
+        data.daysRemaining === 0
+          ? `Your self-assessment is due today — ${data.cycleTitle}`
+          : `Self-assessment reminder — ${data.cycleTitle}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendAppraisalManagerReminderNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleId: string;
+    cycleTitle: string;
+    managerEmail: string;
+    managerFirstName: string;
+    employeeFirstName: string;
+    employeeLastName: string;
+    deadline: string;
+    daysRemaining: number;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.managerEmail,
+        NotificationType.APPRAISAL_MANAGER_REMINDER,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_MANAGER_REMINDER suppressed for ${data.managerEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalManagerReminderNotification(
+      data.managerEmail,
+      data.managerFirstName,
+      `${data.employeeFirstName} ${data.employeeLastName}`,
+      data.cycleTitle,
+      data.deadline,
+      data.daysRemaining,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_MANAGER_REMINDER',
+      channel: 'EMAIL',
+      recipient: data.managerEmail,
+      subject:
+        data.daysRemaining === 0
+          ? `Manager review is due today — ${data.cycleTitle}`
+          : `Manager review reminder — ${data.cycleTitle}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendSchedulePublishedNotification(data: {
+    tenantId: string;
+    employeeId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    effectiveFrom: string;
+    shiftType: string;
+    startTime: string;
+    endTime: string;
+    scheduleLink: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SCHEDULE_PUBLISHED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SCHEDULE_PUBLISHED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendSchedulePublishedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.effectiveFrom,
+      data.shiftType,
+      data.startTime,
+      data.endTime,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SCHEDULE_PUBLISHED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: 'Your shift schedule has been published',
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapRequestedNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    recipientEmail: string;
+    recipientFirstName: string;
+    recipientRole: 'REQUESTER' | 'COLLEAGUE';
+    counterpartFullName: string;
+    requesterFullName: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    reason?: string | null;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.recipientEmail,
+        NotificationType.SHIFT_SWAP_REQUESTED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_REQUESTED suppressed for ${data.recipientEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapRequestedNotification(
+      data.recipientEmail,
+      data.recipientFirstName,
+      data.recipientRole,
+      data.counterpartFullName,
+      data.requesterFullName,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.reason,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_REQUESTED',
+      channel: 'EMAIL',
+      recipient: data.recipientEmail,
+      subject:
+        data.recipientRole === 'REQUESTER'
+          ? `Your shift swap request with ${data.counterpartFullName} has been submitted`
+          : `${data.requesterFullName} requested a shift swap with you`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapPendingManagerNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    managerEmail: string;
+    managerFirstName: string;
+    requesterFullName: string;
+    targetFullName: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    reason?: string | null;
+    reviewLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.managerEmail,
+        NotificationType.SHIFT_SWAP_PENDING_MANAGER,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_PENDING_MANAGER suppressed for ${data.managerEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapPendingManagerNotification(
+      data.managerEmail,
+      data.managerFirstName,
+      data.requesterFullName,
+      data.targetFullName,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.reason,
+      data.reviewLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_PENDING_MANAGER',
+      channel: 'EMAIL',
+      recipient: data.managerEmail,
+      subject: `Shift swap awaiting your approval — ${data.requesterFullName} and ${data.targetFullName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapDeclinedNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    counterpartFullName: string;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SHIFT_SWAP_DECLINED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_DECLINED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapDeclinedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.counterpartFullName,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_DECLINED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Shift swap update with ${data.counterpartFullName}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapApprovedNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    counterpartFullName: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SHIFT_SWAP_APPROVED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_APPROVED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapApprovedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.counterpartFullName,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_APPROVED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your shift swap with ${data.counterpartFullName} was approved`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapRejectedNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    counterpartFullName: string;
+    rejectionReason: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SHIFT_SWAP_REJECTED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_REJECTED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapRejectedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.counterpartFullName,
+      data.rejectionReason,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_REJECTED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your shift swap with ${data.counterpartFullName} was rejected`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
+  async sendShiftSwapExpiredNotification(data: {
+    tenantId: string;
+    shiftSwapId: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    counterpartFullName: string;
+    requesterShiftLabel: string;
+    targetShiftLabel: string;
+    scheduleLink?: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.SHIFT_SWAP_EXPIRED,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate SHIFT_SWAP_EXPIRED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendShiftSwapExpiredNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.counterpartFullName,
+      data.requesterShiftLabel,
+      data.targetShiftLabel,
+      data.scheduleLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'SHIFT_SWAP_EXPIRED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Your shift swap with ${data.counterpartFullName} expired`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendSmsOtp(data: {
     userId?: string;
     tenantId?: string;
@@ -389,7 +945,7 @@ export class NotificationService {
   }
 
   private async log(entry: {
-    userId: string;
+    userId: string | undefined;
     tenantId: string;
     type: any;
     channel: any;

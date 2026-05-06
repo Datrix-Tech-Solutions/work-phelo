@@ -59,8 +59,7 @@ export class TenantsController {
         tenantId: 'uuid',
         tenantName: 'Acme Ghana Ltd',
         tenantSlug: 'acme-ghana',
-        workspaceUrl:
-          'https://workphelo.datrixtechsolutions.com/acme-ghana/login',
+        workspaceUrl: 'https://workphelo.com/acme-ghana/login',
         userId: 'uuid',
       },
     },

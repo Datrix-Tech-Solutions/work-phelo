@@ -1,4 +1,5 @@
 export type ClockStatus = 'CLOCKED_IN' | 'CLOCKED_OUT' | 'ON_BREAK';
+export type AttendanceWorkMode = 'ONSITE' | 'REMOTE' | 'HYBRID';
 
 export interface TodaySession {
   entryId?: string;
@@ -9,6 +10,8 @@ export interface TodaySession {
   totalMinutes: number;
   breakMinutes: number;
   isLate: boolean;
+  isOutsideSchedule?: boolean;
+  workMode?: AttendanceWorkMode | null;
 }
 
 export interface TimeEntry {
@@ -25,6 +28,8 @@ export interface TimeEntry {
   totalMinutes: number;
   status: ClockStatus | 'ABSENT';
   isLate: boolean;
+  isOutsideSchedule?: boolean;
+  workMode?: AttendanceWorkMode | null;
   notes?: string;
 }
 
@@ -39,12 +44,15 @@ export interface LiveAttendanceEntry {
   breakStart?: string;
   status: ClockStatus;
   isLate: boolean;
+  isOutsideSchedule?: boolean;
+  workMode?: AttendanceWorkMode | null;
 }
 
 export interface AttendanceStats {
   clockedIn: number;
   absent: number;
   late: number;
+  flagged?: number;
   onBreak: number;
   total: number;
 }

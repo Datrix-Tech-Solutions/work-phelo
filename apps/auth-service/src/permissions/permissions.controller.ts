@@ -3,8 +3,10 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
+  Query,
   UseGuards,
   Req,
   HttpCode,
@@ -17,6 +19,7 @@ import {
   ApiBearerAuth,
   ApiParam,
   ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { PermissionsService } from './permissions.service';
 import {
@@ -25,6 +28,7 @@ import {
   AssignPermissionSetDto,
   CreatePermissionSetDto,
   UpdatePermissionSetDto,
+  PermissionAction,
 } from './dto/grant-permission.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -63,6 +67,49 @@ export class PermissionsController {
     return this.permissionsService.getUserPermissions(
       req.user.tenantId,
       userId,
+    );
+  }
+
+  @Get('recipients')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
+  @ApiOperation({
+    summary:
+      'List active users in a tenant who effectively hold a resource-action permission',
+  })
+  @ApiQuery({ name: 'resource', required: true, example: 'leave' })
+  @ApiQuery({
+    name: 'action',
+    required: true,
+    enum: PermissionAction,
+    example: PermissionAction.APPROVE,
+  })
+  @ApiQuery({
+    name: 'includeTenantAdmins',
+    required: false,
+    type: Boolean,
+    example: false,
+  })
+  @ApiQuery({
+    name: 'activeOnly',
+    required: false,
+    type: Boolean,
+    example: true,
+  })
+  getPermissionRecipients(
+    @Query('resource') resource: string,
+    @Query('action') action: PermissionAction,
+    @Query('includeTenantAdmins') includeTenantAdmins: string,
+    @Query('activeOnly') activeOnly: string,
+    @Req() req: any,
+  ) {
+    return this.permissionsService.getPermissionRecipients(
+      req.user.tenantId,
+      resource,
+      action,
+      {
+        includeTenantAdmins: includeTenantAdmins === 'true',
+        activeOnly: activeOnly !== 'false',
+      },
     );
   }
 
@@ -135,6 +182,19 @@ export class PermissionsController {
     return this.permissionsService.getPermissionSets(req.user.tenantId);
   }
 
+  @Get('sets/:id/members')
+  @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
+  @ApiOperation({ summary: 'List users assigned to a permission set' })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiResponse({ status: 200, description: 'Permission set members retrieved' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  getPermissionSetMembers(@Param('id') id: string, @Req() req: any) {
+    return this.permissionsService.getPermissionSetMembers(
+      req.user.tenantId,
+      id,
+    );
+  }
+
   @Post('sets')
   @RequirePermissions(Permission.GRANT_PERMISSION)
   @HttpCode(HttpStatus.CREATED)
@@ -196,6 +256,17 @@ export class PermissionsController {
       id,
       dto,
     );
+  }
+
+  @Delete('sets/:id')
+  @RequirePermissions(Permission.GRANT_PERMISSION)
+  @ApiOperation({ summary: 'Delete a custom permission set' })
+  @ApiParam({ name: 'id', description: 'Permission set UUID' })
+  @ApiResponse({ status: 200, description: 'Permission set deleted' })
+  @ApiResponse({ status: 403, description: 'System sets cannot be deleted' })
+  @ApiResponse({ status: 404, description: 'Permission set not found' })
+  deleteSet(@Param('id') id: string, @Req() req: any) {
+    return this.permissionsService.deletePermissionSet(req.user.tenantId, id);
   }
 
   @Post('sets/assign')

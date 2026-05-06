@@ -62,3 +62,7 @@ roles-ui-spec/
 
 # Local docs drafts
 docs/
+
+.compose.local.env
+.env.dev
+

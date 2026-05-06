@@ -6,11 +6,6 @@ export const RESOURCES = [
   },
   { name: 'tenants', module: 'AUTH', description: 'Company tenants' },
   {
-    name: 'company-roles',
-    module: 'AUTH',
-    description: 'Company role definitions',
-  },
-  {
     name: 'permission-sets',
     module: 'AUTH',
     description: 'Permission set bundles',
@@ -18,6 +13,11 @@ export const RESOURCES = [
   { name: 'audit-logs', module: 'AUTH', description: 'Audit trail' },
 
   { name: 'employees', module: 'HR', description: 'Employee profiles' },
+  {
+    name: 'employee-profile',
+    module: 'HR',
+    description: 'Employee self-service profile access',
+  },
   { name: 'resignations', module: 'HR', description: 'Employee resignations' },
   { name: 'departments', module: 'HR', description: 'Department management' },
   { name: 'branches', module: 'HR', description: 'Branch locations' },
@@ -33,6 +33,7 @@ export const RESOURCES = [
   { name: 'schedules', module: 'HR', description: 'Shift schedules' },
   { name: 'payroll', module: 'HR', description: 'Payroll runs and payslips' },
   { name: 'appraisals', module: 'HR', description: 'Performance appraisals' },
+  { name: 'assets', module: 'HR', description: 'Company asset management' },
   { name: 'documents', module: 'HR', description: 'Employee documents' },
   { name: 'allowances', module: 'HR', description: 'Employee allowances' },
 

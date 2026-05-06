@@ -5,7 +5,9 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import { RequestUser } from '@work-phelo/types';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import { PermissionRecipient, RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
@@ -22,17 +24,36 @@ import {
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
+import { AssetStatus } from '../../prisma/generated/client';
 import {
   assertHrAccess,
   getActorEmployee,
-  getManagedEmployeeIds,
   hasPermissionRule,
   isCompanyAdminUser,
-  isCustomCompanyRoleUser,
   isEmployeeSelfServiceUser,
-  isManagerUser,
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  RESIGNATION_QUEUE,
+  RESIGNATION_NOTIFY_JOB,
+  ResignationNotifyPayload,
+} from './resignation-notification.processor';
+
+const RESIGNATION_NOTIFY_DELAY_MS = 30 * 60 * 1000;
+
+type ResignationNotificationRecipient = {
+  userId: string | null;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  source: 'MANAGER' | 'APPROVER';
+};
+
+type ResignationNotificationRecipients = {
+  manager: ResignationNotificationRecipient | null;
+  approvers: ResignationNotificationRecipient[];
+  all: ResignationNotificationRecipient[];
+};
 
 @Injectable()
 export class EmployeesService {
@@ -43,7 +64,59 @@ export class EmployeesService {
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly leaveService: LeaveService,
     private readonly notificationsService: NotificationsService,
+    @InjectQueue(RESIGNATION_QUEUE)
+    private readonly resignationQueue: Queue<ResignationNotifyPayload>,
   ) {}
+
+  private isDuplicateAuthUserError(error: unknown) {
+    const remote =
+      error && typeof error === 'object'
+        ? (error as { message?: unknown; statusCode?: unknown })
+        : undefined;
+    const message =
+      typeof remote?.message === 'string' ? remote.message : String(error);
+
+    return (
+      remote?.statusCode === 409 ||
+      message.includes('A user with this email already exists')
+    );
+  }
+
+  private mapEmployeeAssets<T extends { assignedAssets?: unknown[] }>(
+    employee: T,
+  ) {
+    const { assignedAssets, ...rest } = employee;
+
+    return {
+      ...rest,
+      assets: assignedAssets ?? [],
+    };
+  }
+
+  private async getUserStatusMap(tenantId: string, userIds: string[]) {
+    if (userIds.length === 0) {
+      return new Map<string, string>();
+    }
+
+    const uniqueUserIds = Array.from(new Set(userIds));
+    const statuses = await this.rabbitmq.authGetUserStatuses({
+      tenantId,
+      userIds: uniqueUserIds,
+    });
+
+    return new Map(statuses.map((status) => [status.userId, status.status]));
+  }
+
+  private withUserStatus<T extends { userId?: string | null }>(
+    employee: T,
+    statusMap: Map<string, string>,
+  ) {
+    const userStatus = employee.userId
+      ? (statusMap.get(employee.userId) ?? 'PENDING_VERIFICATION')
+      : 'PENDING_VERIFICATION';
+
+    return { ...employee, userStatus };
+  }
 
   async create(tenantId: string, dto: CreateEmployeeDto) {
     // Enforce minimum one department before adding employees
@@ -78,68 +151,80 @@ export class EmployeesService {
 
     const count = await this.prisma.employee.count({ where: { tenantId } });
     const employeeNumber = `EMP-${String(count + 1).padStart(4, '0')}`;
-
-    const employee = await this.prisma.employee.create({
-      data: {
+    let provisionedUser;
+    try {
+      provisionedUser = await this.rabbitmq.authProvisionEmployeeInvite({
         tenantId,
-        employeeNumber,
-        ...(dto.userId ? { userId: dto.userId } : {}),
+        email: dto.email,
         firstName: dto.firstName,
         lastName: dto.lastName,
-        email: dto.email,
         phone: dto.phone,
-        gender: dto.gender,
-        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
-        maritalStatus: dto.maritalStatus,
-        nationality: dto.nationality,
-        address: dto.address,
-        city: dto.city,
-        region: dto.region,
-        emergencyName: dto.emergencyName,
-        emergencyPhone: dto.emergencyPhone,
-        emergencyRelation: dto.emergencyRelation,
-        jobTitle: dto.jobTitle,
-        employmentType: dto.employmentType,
-        hireDate: new Date(dto.hireDate),
-        probationEndsAt: dto.probationEndsAt
-          ? new Date(dto.probationEndsAt)
-          : undefined,
-        contractEndDate: dto.contractEndDate
-          ? new Date(dto.contractEndDate)
-          : undefined,
-        basicSalary: dto.basicSalary ?? 0,
-        nationalId: dto.nationalId,
-        bankName: dto.bankName,
-        bankAccountNumber: dto.bankAccountNumber,
-        bankBranch: dto.bankBranch,
-        ssnit: dto.ssnit,
-        tinNumber: dto.tinNumber,
-        ...(dto.departmentId && { departmentId: dto.departmentId }),
-        ...(dto.branchId && { branchId: dto.branchId }),
-        ...(dto.managerId && { managerId: dto.managerId }),
-      },
-      include: { department: true, branch: true },
-    });
+      });
+    } catch (error) {
+      if (this.isDuplicateAuthUserError(error)) {
+        throw new ConflictException('A user with this email already exists.');
+      }
+      throw error;
+    }
 
-    // Fire-and-forget — HR returns immediately, auth handles invite async
-    this.logger.log(`Emitting auth.invite_employee for ${employee.email}`);
-    void this.rabbitmq
-      .authInviteEmployee({
-        tenantId,
-        employeeId: employee.id,
-        email: employee.email,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-      })
-      .then(() =>
-        this.logger.log(`auth.invite_employee emitted for ${employee.email}`),
-      )
-      .catch((err) =>
+    let employee;
+    try {
+      employee = await this.prisma.employee.create({
+        data: {
+          tenantId,
+          employeeNumber,
+          userId: provisionedUser.userId,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          email: dto.email,
+          phone: dto.phone,
+          gender: dto.gender,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+          maritalStatus: dto.maritalStatus,
+          nationality: dto.nationality,
+          address: dto.address,
+          city: dto.city,
+          region: dto.region,
+          emergencyName: dto.emergencyName,
+          emergencyPhone: dto.emergencyPhone,
+          emergencyRelation: dto.emergencyRelation,
+          jobTitle: dto.jobTitle,
+          employmentType: dto.employmentType,
+          hireDate: new Date(dto.hireDate),
+          probationEndsAt: dto.probationEndsAt
+            ? new Date(dto.probationEndsAt)
+            : undefined,
+          contractEndDate: dto.contractEndDate
+            ? new Date(dto.contractEndDate)
+            : undefined,
+          basicSalary: dto.basicSalary ?? 0,
+          nationalId: dto.nationalId,
+          bankName: dto.bankName,
+          bankAccountNumber: dto.bankAccountNumber,
+          bankBranch: dto.bankBranch,
+          ssnit: dto.ssnit,
+          tinNumber: dto.tinNumber,
+          ...(dto.departmentId && { departmentId: dto.departmentId }),
+          ...(dto.branchId && { branchId: dto.branchId }),
+          ...(dto.managerId && { managerId: dto.managerId }),
+        },
+        include: { department: true, branch: true },
+      });
+    } catch (err) {
+      try {
+        await this.rabbitmq.authDeletePendingEmployeeInvite({
+          tenantId,
+          userId: provisionedUser.userId,
+          email: dto.email,
+        });
+      } catch (rollbackErr) {
         this.logger.error(
-          `Failed to emit auth.invite_employee for ${employee.email}`,
-          err,
-        ),
-      );
+          `Failed to roll back auth invite for ${dto.email} after HR employee creation failed`,
+          rollbackErr,
+        );
+      }
+      throw err;
+    }
 
     // Initialise leave balances immediately so the employee can request leave
     // as soon as their account is active. Uses upsert — safe to call multiple times.
@@ -168,22 +253,13 @@ export class EmployeesService {
     const where: any = { tenantId };
 
     if (actor && !isCompanyAdminUser(actor)) {
-      if (isManagerUser(actor)) {
-        const managedEmployeeIds = await getManagedEmployeeIds(
-          this.prisma,
-          tenantId,
-          actor.id,
-        );
+      const canReadEmployees = hasPermissionRule(actor, 'employees:VIEW');
 
-        if (managedEmployeeIds.size === 0) {
-          return { employees: [], meta: buildMeta(page, take, 0) };
-        }
-
-        where.id = { in: Array.from(managedEmployeeIds) };
-      } else if (isEmployeeSelfServiceUser(actor)) {
-        assertHrAccess(false);
+      if (isEmployeeSelfServiceUser(actor)) {
+        // Self-service employees can view the lightweight company directory,
+        // but detailed profile access is still enforced in findById().
       } else {
-        assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
+        assertHrAccess(canReadEmployees);
       }
     }
 
@@ -217,6 +293,7 @@ export class EmployeesService {
           employmentType: true,
           hireDate: true,
           avatarUrl: true,
+          userId: true,
           department: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
         },
@@ -225,73 +302,138 @@ export class EmployeesService {
       this.prisma.employee.count({ where }),
     ]);
 
-    return { employees, meta: buildMeta(page, take, total) };
+    const userIds = employees
+      .map((employee) => employee.userId)
+      .filter((id): id is string => Boolean(id));
+    const statusMap = await this.getUserStatusMap(tenantId, userIds);
+    const employeesWithStatus = employees.map((employee) =>
+      this.withUserStatus(employee, statusMap),
+    );
+
+    return {
+      employees: employeesWithStatus,
+      meta: buildMeta(page, take, total),
+    };
   }
 
   async findById(tenantId: string, id: string, actor?: RequestUser) {
-    const employee = await this.prisma.employee.findFirst({
-      where: { id, tenantId },
-      include: {
-        department: true,
-        branch: true,
-        allowances: true,
-        documents: true,
-        leaveBalances: { include: { leaveType: true } },
-        offboarding: true,
-        resignation: true,
-      },
-    });
+    const [employee, assignedAssets] = await Promise.all([
+      this.prisma.employee.findFirst({
+        where: { id, tenantId },
+        include: {
+          department: true,
+          branch: true,
+          allowances: true,
+          documents: true,
+          leaveBalances: { include: { leaveType: true } },
+          offboarding: true,
+          resignation: true,
+        },
+      }),
+      this.prisma.asset.findMany({
+        where: {
+          assignedEmployeeId: id,
+          tenantId,
+          isActive: true,
+          status: AssetStatus.ASSIGNED,
+        },
+        orderBy: { assignedAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          serialNumber: true,
+          condition: true,
+          assignedAt: true,
+        },
+      }),
+    ]);
     if (!employee) throw new NotFoundException('Employee not found');
+    const employeeWithAssets = { ...employee, assignedAssets };
+
+    const statusMap = await this.getUserStatusMap(
+      tenantId,
+      employee.userId ? [employee.userId] : [],
+    );
 
     if (!actor) {
-      return employee;
+      return this.withUserStatus(
+        this.mapEmployeeAssets(employeeWithAssets),
+        statusMap,
+      );
     }
 
     if (isCompanyAdminUser(actor)) {
-      return employee;
-    }
-
-    if (isManagerUser(actor)) {
-      const actorEmployee = await getActorEmployee(
-        this.prisma,
-        tenantId,
-        actor.id,
+      return this.withUserStatus(
+        this.mapEmployeeAssets(employeeWithAssets),
+        statusMap,
       );
-      const managedEmployeeIds = await getManagedEmployeeIds(
-        this.prisma,
-        tenantId,
-        actor.id,
-      );
-      assertHrAccess(
-        employee.id === actorEmployee.id || managedEmployeeIds.has(employee.id),
-      );
-      return employee;
     }
 
     if (isEmployeeSelfServiceUser(actor)) {
+      if (hasPermissionRule(actor, 'employees:VIEW')) {
+        return this.withUserStatus(
+          this.mapEmployeeAssets(employeeWithAssets),
+          statusMap,
+        );
+      }
+
       const actorEmployee = await getActorEmployee(
         this.prisma,
         tenantId,
         actor.id,
       );
       assertHrAccess(employee.id === actorEmployee.id);
-      return employee;
+      return this.withUserStatus(
+        this.mapEmployeeAssets(employeeWithAssets),
+        statusMap,
+      );
     }
 
     assertHrAccess(hasPermissionRule(actor, 'employees:VIEW'));
-    return employee;
+    return this.withUserStatus(
+      this.mapEmployeeAssets(employeeWithAssets),
+      statusMap,
+    );
   }
 
   async findByUserId(tenantId: string, userId: string) {
     const employee = await this.prisma.employee.findFirst({
       where: { userId, tenantId },
-      include: { department: true, allowances: true, resignation: true },
+      include: {
+        department: true,
+        allowances: true,
+        resignation: true,
+      },
     });
     if (!employee) throw new NotFoundException('Employee profile not found');
-    const managedDeptCount = await this.prisma.department.count({
-      where: { managerId: employee.id, tenantId },
-    });
-    return { ...employee, isManager: managedDeptCount > 0 };
+
+    const [statusMap, assignedAssets] = await Promise.all([
+      this.getUserStatusMap(tenantId, employee.userId ? [employee.userId] : []),
+      this.prisma.asset.findMany({
+        where: {
+          assignedEmployeeId: employee.id,
+          tenantId,
+          isActive: true,
+          status: AssetStatus.ASSIGNED,
+        },
+        orderBy: { assignedAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          serialNumber: true,
+          condition: true,
+          assignedAt: true,
+        },
+      }),
+    ]);
+
+    const employeeWithAssets = { ...employee, assignedAssets };
+    return this.withUserStatus(
+      this.mapEmployeeAssets(employeeWithAssets),
+      statusMap,
+    );
   }
 
   async update(
@@ -306,9 +448,7 @@ export class EmployeesService {
     if (!existing) throw new NotFoundException('Employee not found');
 
     const fullUpdateAllowed =
-      isCompanyAdminUser(actor) ||
-      (isCustomCompanyRoleUser(actor) &&
-        hasPermissionRule(actor, 'employees:EDIT'));
+      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'employees:EDIT');
 
     let updateData: UpdateEmployeeDto = { ...dto };
 
@@ -425,21 +565,158 @@ export class EmployeesService {
     const config = await this.prisma.tenantConfig.findUnique({
       where: { tenantId },
       select: {
-        adminEmail: true,
-        adminUserId: true,
         resignationNoticePeriodDays: true,
       },
     });
 
     return {
-      adminEmail: config?.adminEmail || null,
-      adminUserId: config?.adminUserId || null,
       resignationNoticePeriodDays: config?.resignationNoticePeriodDays ?? 30,
     };
   }
 
   private buildResignationDetailLink(tenantSlug: string, employeeId: string) {
     return `/${tenantSlug}/hr/employees/${employeeId}?tab=resignation`;
+  }
+
+  private toResignationNotificationRecipient(
+    recipient: PermissionRecipient,
+    source: ResignationNotificationRecipient['source'],
+  ): ResignationNotificationRecipient {
+    return {
+      userId: recipient.userId,
+      email: recipient.email,
+      firstName: recipient.firstName,
+      lastName: recipient.lastName,
+      source,
+    };
+  }
+
+  private dedupeResignationRecipients(
+    recipients: ResignationNotificationRecipient[],
+  ): ResignationNotificationRecipient[] {
+    const unique = new Map<string, ResignationNotificationRecipient>();
+
+    for (const recipient of recipients) {
+      const key = recipient.userId || recipient.email.toLowerCase();
+      if (!unique.has(key)) {
+        unique.set(key, recipient);
+      }
+    }
+
+    return [...unique.values()];
+  }
+
+  private async resolveResignationManagerRecipient(
+    tenantId: string,
+    employee: {
+      managerId: string | null;
+      departmentId: string | null;
+    },
+  ): Promise<ResignationNotificationRecipient | null> {
+    let manager: {
+      userId: string | null;
+      email: string;
+      firstName: string;
+      lastName: string;
+    } | null = null;
+
+    if (employee.managerId) {
+      manager = await this.prisma.employee.findFirst({
+        where: { id: employee.managerId, tenantId },
+        select: {
+          userId: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+        },
+      });
+    }
+
+    if (!manager && employee.departmentId) {
+      const department = await this.prisma.department.findFirst({
+        where: { id: employee.departmentId, tenantId },
+        select: { managerId: true },
+      });
+
+      if (department?.managerId) {
+        manager = await this.prisma.employee.findFirst({
+          where: { id: department.managerId, tenantId },
+          select: {
+            userId: true,
+            email: true,
+            firstName: true,
+            lastName: true,
+          },
+        });
+      }
+    }
+
+    if (!manager?.email) {
+      return null;
+    }
+
+    return {
+      userId: manager.userId,
+      email: manager.email,
+      firstName: manager.firstName,
+      lastName: manager.lastName,
+      source: 'MANAGER',
+    };
+  }
+
+  async resolveResignationNotificationRecipients(
+    tenantId: string,
+    employeeId: string,
+  ): Promise<ResignationNotificationRecipients> {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: {
+        id: true,
+        userId: true,
+        firstName: true,
+        lastName: true,
+        managerId: true,
+        departmentId: true,
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const [manager, permissionRecipients] = await Promise.all([
+      this.resolveResignationManagerRecipient(tenantId, employee),
+      this.rabbitmq.authResolvePermissionRecipients({
+        tenantId,
+        resource: 'employees',
+        action: 'DELETE',
+        activeOnly: true,
+      }),
+    ]);
+
+    const approvers = this.dedupeResignationRecipients(
+      permissionRecipients
+        .filter((recipient) => recipient.email)
+        .filter((recipient) => recipient.userId !== employee.userId)
+        .map((recipient) =>
+          this.toResignationNotificationRecipient(recipient, 'APPROVER'),
+        ),
+    ).filter(
+      (recipient) =>
+        !manager ||
+        (recipient.userId && manager.userId
+          ? recipient.userId !== manager.userId
+          : recipient.email.toLowerCase() !== manager.email.toLowerCase()),
+    );
+
+    const all = this.dedupeResignationRecipients(
+      [manager, ...approvers].filter(
+        (recipient): recipient is ResignationNotificationRecipient =>
+          recipient !== null,
+      ),
+    );
+
+    return { manager, approvers, all };
   }
 
   async submitResignation(
@@ -537,42 +814,26 @@ export class EmployeesService {
           .join(' ')
       : undefined;
 
-    if (config.adminUserId) {
-      await this.notificationsService.create({
+    // Delay notifications by 30 minutes — gives the employee a withdrawal window.
+    // The processor re-checks status before firing; if withdrawn, it skips silently.
+    await this.resignationQueue.add(
+      RESIGNATION_NOTIFY_JOB,
+      {
         tenantId,
-        userId: config.adminUserId,
-        type: 'RESIGNATION_SUBMITTED',
-        message: `${employee.firstName} ${employee.lastName} submitted a resignation effective ${lastWorkingDate.toLocaleDateString(
-          'en-GB',
-        )}${reasonLabel ? ` (${reasonLabel})` : ''}.`,
-        link: detailLink,
-      });
-    }
-
-    if (config.adminEmail) {
-      void this.rabbitmq
-        .notificationResignationSubmitted({
-          tenantId,
-          adminEmail: config.adminEmail,
-          employeeId,
-          employeeFirstName: employee.firstName,
-          employeeLastName: employee.lastName,
-          lastWorkingDate: lastWorkingDate.toISOString(),
-          reason: reasonLabel,
-          additionalNotes: dto.additionalNotes?.trim() || undefined,
-          detailLink,
-        })
-        .catch((err) =>
-          this.logger.error(
-            `Failed to emit resignation notification for ${employee.email}`,
-            err,
-          ),
-        );
-    }
+        employeeId,
+        employeeFirstName: employee.firstName,
+        employeeLastName: employee.lastName,
+        lastWorkingDate: lastWorkingDate.toISOString(),
+        reason: reasonLabel,
+        additionalNotes: dto.additionalNotes?.trim() || undefined,
+        detailLink,
+      },
+      { delay: RESIGNATION_NOTIFY_DELAY_MS },
+    );
 
     return {
       message:
-        'Your resignation has been submitted. Your HR administrator will be in touch regarding your offboarding process.',
+        'Your resignation has been submitted. You have 30 minutes to withdraw it if you change your mind. Your manager and relevant offboarding approvers will be notified after that.',
       resignation,
     };
   }
@@ -829,7 +1090,7 @@ export class EmployeesService {
         doneByEmail: 'financeClearanceDoneByEmail',
         doneAt: 'financeClearanceDoneAt',
       },
-      managerApproval: {
+      reportingClearance: {
         done: 'managerApprovalDone',
         doneById: 'managerApprovalDoneById',
         doneByEmail: 'managerApprovalDoneByEmail',
@@ -876,7 +1137,7 @@ export class EmployeesService {
 
     if (!allClear) {
       throw new BadRequestException(
-        'All four clearance checklist items must be completed before offboarding can be finalised',
+        'All clearance checklist items must be completed before offboarding can be finalised',
       );
     }
 

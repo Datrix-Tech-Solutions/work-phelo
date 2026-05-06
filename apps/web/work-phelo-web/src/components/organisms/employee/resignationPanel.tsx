@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Employee } from '@/types';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '../shared/SidePanel';
@@ -13,6 +14,7 @@ import {
   useWithdrawResignation,
   useDismissResignation,
 } from '@/hooks/hr/useEmployees';
+import { useCompanyPoliciesSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import type { ResignationPayload, ResignationReason } from '@/types/hr';
@@ -44,6 +46,32 @@ const REASON_LABELS: Record<string, string> = Object.fromEntries(
   REASON_OPTIONS.map((o) => [o.value, o.label]),
 );
 
+const NOTIFY_DELAY_MS = 30 * 60 * 1000;
+
+function useWithdrawalCountdown(submittedAt: string) {
+  const getRemaining = () =>
+    Math.max(0, NOTIFY_DELAY_MS - (Date.now() - new Date(submittedAt).getTime()));
+
+  const [remaining, setRemaining] = useState(getRemaining);
+
+  useEffect(() => {
+    if (remaining === 0) return;
+    const id = setInterval(() => {
+      const r = getRemaining();
+      setRemaining(r);
+      if (r === 0) clearInterval(id);
+    }, 1000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submittedAt]);
+
+  const minutes = Math.floor(remaining / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  const expired = remaining === 0;
+  const formatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  return { expired, formatted };
+}
+
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -60,7 +88,15 @@ export function ResignationPanel({
   onAccept,
 }: ResignationPanelProps) {
   const toast = useToast();
+  const { data: policiesSettings } = useCompanyPoliciesSettings();
   const { data: resignation } = useResignationRecord(employee.id);
+
+  const minLastWorkingDate = (() => {
+    const noticeDays = policiesSettings?.resignationNoticePeriodDays ?? 0;
+    const d = new Date();
+    d.setDate(d.getDate() + noticeDays);
+    return d.toISOString().split('T')[0];
+  })();
   const { mutate: resignEmployee, isPending: isSubmitting } = useResignEmployee(employee.id);
   const { mutate: withdrawResignation, isPending: isWithdrawing } = useWithdrawResignation(
     employee.id,
@@ -77,21 +113,50 @@ export function ResignationPanel({
     formState: { errors },
   } = useForm<ResignationForm>();
 
+  // Countdown-before-submit state
+  const [countdownPayload, setCountdownPayload] = useState<ResignationPayload | null>(null);
+  const [timeLeft, setTimeLeft] = useState(NOTIFY_DELAY_MS);
+
+  useEffect(() => {
+    if (!countdownPayload) return;
+    const start = Date.now();
+    const id = setInterval(() => {
+      const remaining = Math.max(0, NOTIFY_DELAY_MS - (Date.now() - start));
+      setTimeLeft(remaining);
+      if (remaining === 0) {
+        clearInterval(id);
+        resignEmployee(countdownPayload, {
+          onSuccess: () => {
+            toast.success('Resignation submitted successfully');
+            reset();
+            setCountdownPayload(null);
+            onClose();
+          },
+          onError: (err) => {
+            toast.error(extractError(err, 'Failed to submit resignation'));
+            setCountdownPayload(null);
+          },
+        });
+      }
+    }, 1000);
+    return () => clearInterval(id);
+    // resignEmployee, toast, reset, onClose are all stable references
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [countdownPayload]);
+
   const onSubmit = (data: ResignationForm) => {
     const payload: ResignationPayload = {
       lastWorkingDate: data.lastWorkingDate,
       ...(data.reason && { reason: data.reason }),
       ...(data.additionalNotes && { additionalNotes: data.additionalNotes }),
     };
+    setTimeLeft(NOTIFY_DELAY_MS);
+    setCountdownPayload(payload);
+  };
 
-    resignEmployee(payload, {
-      onSuccess: () => {
-        toast.success('Resignation submitted successfully');
-        reset();
-        onClose();
-      },
-      onError: (err) => toast.error(extractError(err, 'Failed to submit resignation')),
-    });
+  const cancelCountdown = () => {
+    setCountdownPayload(null);
+    setTimeLeft(NOTIFY_DELAY_MS);
   };
 
   const handleWithdraw = () => {
@@ -105,6 +170,98 @@ export function ResignationPanel({
   };
 
   const hasPendingResignation = resignation?.status === 'PENDING';
+  const countdown = useWithdrawalCountdown(resignation?.submittedAt ?? new Date(0).toISOString());
+
+  const countdownMinutes = Math.floor(timeLeft / 60000);
+  const countdownSeconds = Math.floor((timeLeft % 60000) / 1000);
+  const countdownFormatted = `${String(countdownMinutes).padStart(2, '0')}:${String(countdownSeconds).padStart(2, '0')}`;
+
+  // Countdown-before-submit view
+  if (countdownPayload) {
+    return (
+      <SidePanel
+        isOpen={isOpen}
+        onClose={() => {
+          cancelCountdown();
+          onClose();
+        }}
+        title="Resignation"
+        description={`${employee.firstName} ${employee.lastName}`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                onClose();
+              }}
+              disabled={isSubmitting}
+            >
+              Close
+            </Button>
+            <Button
+              variant="outline"
+              onClick={cancelCountdown}
+              disabled={isSubmitting}
+              className="text-red-600 border-red-200 hover:bg-red-50"
+            >
+              Withdraw
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-6">
+          {/* Timer ring */}
+          <div className="flex flex-col items-center gap-3 py-4">
+            <div className="w-32 h-32 rounded-full border-4 border-amber-200 bg-amber-50 flex flex-col items-center justify-center">
+              <span className="font-mono text-3xl font-bold text-amber-700 tracking-tight">
+                {countdownFormatted}
+              </span>
+            </div>
+            <p className="text-sm font-semibold text-gray-700">Submitting resignation in…</p>
+          </div>
+
+          <div className="w-full bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex flex-col gap-1">
+            <p className="text-sm text-amber-800 font-medium">
+              Your resignation has not been sent yet.
+            </p>
+            <p className="text-xs text-amber-700">
+              Click <span className="font-semibold">Withdraw</span> to abort before the timer
+              expires. Once submitted, you will have a window to withdraw before HR is notified.
+            </p>
+          </div>
+
+          {/* Resignation details summary */}
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              Resignation Details
+            </p>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs text-gray-400">Last Working Date</span>
+                <span className="text-sm font-medium text-gray-900">
+                  {formatDate(countdownPayload.lastWorkingDate)}
+                </span>
+              </div>
+              {countdownPayload.reason && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-gray-400">Reason</span>
+                  <span className="text-sm font-medium text-gray-900">
+                    {REASON_LABELS[countdownPayload.reason] ?? countdownPayload.reason}
+                  </span>
+                </div>
+              )}
+              {countdownPayload.additionalNotes && (
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs text-gray-400">Additional Notes</span>
+                  <span className="text-sm text-gray-700">{countdownPayload.additionalNotes}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </SidePanel>
+    );
+  }
 
   return (
     <SidePanel
@@ -168,7 +325,7 @@ export function ResignationPanel({
               loadingText="Submitting…"
               onClick={handleSubmit(onSubmit)}
             >
-              Submit
+              Resign
             </Button>
           </div>
         )
@@ -176,6 +333,33 @@ export function ResignationPanel({
     >
       {hasPendingResignation ? (
         <div className="flex flex-col gap-4">
+          {/* HR notification countdown — employee only */}
+          {!isHrView && (
+            <div
+              className={`rounded-xl px-4 py-3 flex items-center gap-3 ${
+                countdown.expired
+                  ? 'bg-gray-50 border border-gray-200'
+                  : 'bg-amber-50 border border-amber-200'
+              }`}
+            >
+              <span className="text-lg">{countdown.expired ? '✓' : '⏱'}</span>
+              <div className="flex flex-col gap-0.5">
+                {countdown.expired ? (
+                  <p className="text-sm font-semibold text-gray-700">HR has been notified</p>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-amber-800">
+                      HR notified in{' '}
+                      <span className="font-mono tracking-tight">{countdown.formatted}</span>
+                    </p>
+                    <p className="text-xs text-amber-700">
+                      You can still withdraw your resignation before the timer expires.
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Resignation Details
           </p>
@@ -225,7 +409,7 @@ export function ResignationPanel({
                   label="Last Working Date"
                   value={field.value}
                   onChange={field.onChange}
-                  disablePast
+                  minDate={minLastWorkingDate}
                   error={errors.lastWorkingDate?.message}
                 />
               )}

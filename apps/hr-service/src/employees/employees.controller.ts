@@ -84,7 +84,6 @@ export class EmployeesController {
   }
 
   @Get()
-  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({
     summary: 'List all employees — supports filtering and search',
   })

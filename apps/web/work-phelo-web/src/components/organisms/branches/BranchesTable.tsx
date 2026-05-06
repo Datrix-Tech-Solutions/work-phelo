@@ -10,7 +10,7 @@ import { BranchMembersPanel } from '@/components/organisms/branches/BranchMember
 import { BranchStatus } from '@/components/molecules/branches/BranchStatus';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { useBranches, useDeleteBranch, useEmployees } from '@/hooks';
+import { useBranches, useDeleteBranch, useUpdateBranch, useEmployees } from '@/hooks';
 import type { Branch, Employee } from '@/types/hr';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -23,7 +23,9 @@ function branchLocation(b: Branch) {
 
 export function BranchesTable() {
   const toast = useToast();
-  const canManage = usePermission(Permission.CREATE_DEPARTMENT);
+  const canCreate = usePermission(Permission.CREATE_BRANCH);
+  const canUpdate = usePermission(Permission.UPDATE_BRANCH);
+  const canDelete = usePermission(Permission.DELETE_BRANCH);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -31,6 +33,7 @@ export function BranchesTable() {
   const [editTarget, setEditTarget] = useState<Branch | null>(null);
   const [membersTarget, setMembersTarget] = useState<Branch | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Branch | null>(null);
+  const [toggleActiveTarget, setToggleActiveTarget] = useState<Branch | null>(null);
 
   const { data: branches = [], isLoading } = useBranches();
   const { data: empResult } = useEmployees({ limit: 500 });
@@ -58,12 +61,12 @@ export function BranchesTable() {
   const pageData = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const { mutate: deleteBranch, isPending: isDeleting } = useDeleteBranch();
+  const { mutate: updateBranch, isPending: isTogglingActive } = useUpdateBranch();
 
   const columns: Column<Branch>[] = [
     {
       key: 'name',
       label: 'Branch Name',
-      width: '2fr',
       render: (row) => (
         <div className="flex items-center gap-2">
           <span className="font-medium text-gray-900">{row.name}</span>
@@ -78,7 +81,6 @@ export function BranchesTable() {
     {
       key: 'location',
       label: 'Location',
-      width: '2fr',
       render: (row) => (
         <div className="flex items-center gap-1.5 text-sm text-gray-600">
           {(row.city || row.country) && <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
@@ -104,7 +106,6 @@ export function BranchesTable() {
     {
       key: '_count',
       label: 'Members',
-      width: '80px',
       render: (row) => (
         <span className="text-sm font-medium text-gray-700">{row._count?.employees ?? 0}</span>
       ),
@@ -112,7 +113,6 @@ export function BranchesTable() {
     {
       key: 'status',
       label: 'Status',
-      width: '120px',
       render: (row) => (
         <BranchStatus
           count={row._count?.employees ?? 0}
@@ -145,17 +145,33 @@ export function BranchesTable() {
           setSearch(q);
           setPage(1);
         }}
-        {...(canManage && {
+        {...(canCreate && {
           actionButton: { label: 'New Branch', onClick: () => setCreateOpen(true) },
         })}
         rowActions={
-          !canManage
-            ? undefined
-            : (row) => [
-                { label: 'Edit Branch', onClick: () => setEditTarget(row) },
-                { label: 'Add Members', onClick: () => setMembersTarget(row) },
-                { label: 'Delete Branch', danger: true, onClick: () => setDeleteTarget(row) },
+          canUpdate || canDelete
+            ? (row) => [
+                ...(canUpdate
+                  ? [
+                      { label: 'Edit Branch', onClick: () => setEditTarget(row) },
+                      { label: 'Add Members', onClick: () => setMembersTarget(row) },
+                      {
+                        label: row.isActive ? 'Deactivate' : 'Activate',
+                        onClick: () => setToggleActiveTarget(row),
+                      },
+                    ]
+                  : []),
+                ...(canDelete
+                  ? [
+                      {
+                        label: 'Delete Branch',
+                        danger: true,
+                        onClick: () => setDeleteTarget(row),
+                      },
+                    ]
+                  : []),
               ]
+            : undefined
         }
         emptyMessage="No branches found"
         currentPage={page}
@@ -163,46 +179,98 @@ export function BranchesTable() {
         onPageChange={setPage}
       />
 
-      {canManage && (
+      {(canCreate || canUpdate || canDelete) && (
         <>
-          <BranchFormPanel
-            isOpen={createOpen}
-            onClose={() => setCreateOpen(false)}
-            employees={employees}
-          />
-          <BranchFormPanel
-            isOpen={!!editTarget}
-            onClose={() => setEditTarget(null)}
-            branch={editTarget}
-            employees={employees}
-          />
-          <BranchMembersPanel
-            isOpen={!!membersTarget}
-            onClose={() => setMembersTarget(null)}
-            branch={membersTarget}
-            employees={employees}
-          />
-          <Modal
-            isOpen={!!deleteTarget}
-            onClose={() => setDeleteTarget(null)}
-            title="Delete Branch"
-            description={`Delete "${deleteTarget?.name}"? This cannot be undone. Employees assigned to this branch will be unassigned.`}
-            footer={
-              <div className="flex justify-end gap-3">
-                <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-                  Cancel
-                </Button>
-                <Button
-                  variant="danger"
-                  isLoading={isDeleting}
-                  loadingText="Deleting…"
-                  onClick={confirmDelete}
-                >
-                  Delete Branch
-                </Button>
-              </div>
-            }
-          />
+          {canCreate && (
+            <BranchFormPanel
+              isOpen={createOpen}
+              onClose={() => setCreateOpen(false)}
+              employees={employees}
+            />
+          )}
+          {canUpdate && (
+            <>
+              <BranchFormPanel
+                isOpen={!!editTarget}
+                onClose={() => setEditTarget(null)}
+                branch={editTarget}
+                employees={employees}
+              />
+              <BranchMembersPanel
+                isOpen={!!membersTarget}
+                onClose={() => setMembersTarget(null)}
+                branch={membersTarget}
+                employees={employees}
+              />
+            </>
+          )}
+          {canUpdate && (
+            <Modal
+              isOpen={!!toggleActiveTarget}
+              onClose={() => setToggleActiveTarget(null)}
+              title={toggleActiveTarget?.isActive ? 'Deactivate Branch' : 'Activate Branch'}
+              description={
+                toggleActiveTarget?.isActive
+                  ? `Are you sure you want to deactivate "${toggleActiveTarget?.name}"? Members will remain assigned but the branch will be marked inactive.`
+                  : `Are you sure you want to activate "${toggleActiveTarget?.name}"?`
+              }
+              footer={
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => setToggleActiveTarget(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant={toggleActiveTarget?.isActive ? 'danger' : 'primary'}
+                    isLoading={isTogglingActive}
+                    loadingText={toggleActiveTarget?.isActive ? 'Deactivating...' : 'Activating...'}
+                    onClick={() => {
+                      if (!toggleActiveTarget) return;
+                      updateBranch(
+                        { id: toggleActiveTarget.id, isActive: !toggleActiveTarget.isActive },
+                        {
+                          onSuccess: () => {
+                            toast.success(
+                              toggleActiveTarget.isActive
+                                ? `"${toggleActiveTarget.name}" deactivated`
+                                : `"${toggleActiveTarget.name}" activated`,
+                            );
+                            setToggleActiveTarget(null);
+                          },
+                          onError: (err: unknown) =>
+                            toast.error(extractError(err, 'Failed to update branch')),
+                        },
+                      );
+                    }}
+                  >
+                    {toggleActiveTarget?.isActive ? 'Deactivate' : 'Activate'}
+                  </Button>
+                </div>
+              }
+            />
+          )}
+          {canDelete && (
+            <Modal
+              isOpen={!!deleteTarget}
+              onClose={() => setDeleteTarget(null)}
+              title="Delete Branch"
+              description={`Delete "${deleteTarget?.name}"? This cannot be undone. Employees assigned to this branch will be unassigned.`}
+              footer={
+                <div className="flex justify-end gap-3">
+                  <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    isLoading={isDeleting}
+                    loadingText="Deleting…"
+                    onClick={confirmDelete}
+                  >
+                    Delete Branch
+                  </Button>
+                </div>
+              }
+            />
+          )}
         </>
       )}
     </>

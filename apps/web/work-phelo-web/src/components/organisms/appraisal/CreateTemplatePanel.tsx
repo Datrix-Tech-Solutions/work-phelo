@@ -3,13 +3,13 @@
 import { useEffect } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, useFieldArray, useWatch, Controller } from 'react-hook-form';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
+import { useCreateAppraisalTemplate, useUpdateAppraisalTemplate } from '@/hooks';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import { AppraisalTemplate, CreateAppraisalTemplateDto } from '@/types/hr';
 import { Icons } from '@/components/atoms/icons';
@@ -35,14 +35,8 @@ type FormValues = {
   kpis: KpiFormValue[];
 };
 
-export function CreateTemplatePanel({
-  isOpen,
-  onClose,
-  tenantSlug,
-  editTemplate,
-}: CreateTemplatePanelProps) {
+export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTemplatePanelProps) {
   const toast = useToast();
-  const queryClient = useQueryClient();
   const isEditing = !!editTemplate;
 
   const {
@@ -90,20 +84,9 @@ export function CreateTemplatePanel({
   const totalWeight = selfWeight + managerWeight;
   const weightIsValid = totalWeight === 100;
 
-  const { mutate, isPending } = useMutation({
-    mutationFn: (data: CreateAppraisalTemplateDto) =>
-      isEditing
-        ? api.put(`/hr/appraisals/templates/${editTemplate!.id}`, data)
-        : api.post(`/hr/appraisals/templates`, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['appraisal-templates', tenantSlug] });
-      toast.success(isEditing ? 'Template updated' : 'Template created');
-      onClose();
-    },
-    onError: (err) => {
-      toast.error(extractError(err, 'Something went wrong'));
-    },
-  });
+  const createTemplate = useCreateAppraisalTemplate();
+  const updateTemplate = useUpdateAppraisalTemplate();
+  const isPending = createTemplate.isPending || updateTemplate.isPending;
 
   const onSubmit = (values: FormValues) => {
     if (!weightIsValid) {
@@ -114,8 +97,8 @@ export function CreateTemplatePanel({
       toast.error('Add at least one KPI');
       return;
     }
-    mutate({
-      tenantSlug,
+
+    const payload: Partial<CreateAppraisalTemplateDto> = {
       name: values.name,
       selfAssessmentWeight: Number(values.selfAssessmentWeight),
       managerAssessmentWeight: Number(values.managerAssessmentWeight),
@@ -125,7 +108,23 @@ export function CreateTemplatePanel({
         maxScore: Number(k.maxScore),
         description: k.description || undefined,
       })),
-    });
+    };
+
+    const callbacks = {
+      onSuccess: () => {
+        toast.success(isEditing ? 'Template updated' : 'Template created');
+        onClose();
+      },
+      onError: (err: unknown) => {
+        toast.error(extractError(err, 'Something went wrong'));
+      },
+    };
+
+    if (isEditing) {
+      updateTemplate.mutate({ id: editTemplate!.id, ...payload }, callbacks);
+    } else {
+      createTemplate.mutate(payload, callbacks);
+    }
   };
 
   const addKpi = () => append({ title: '', weight: '', maxScore: '', description: '' });
@@ -269,15 +268,23 @@ export function CreateTemplatePanel({
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-sm font-medium text-gray-700">Max Score</label>
-                  <Input
-                    type="number"
-                    placeholder="eg; 10"
-                    error={kpiErrors?.maxScore?.message}
-                    {...register(`kpis.${index}.maxScore`, {
-                      required: 'Required',
-                      min: { value: 1, message: 'Min 1' },
-                    })}
+                  <Controller
+                    name={`kpis.${index}.maxScore`}
+                    control={control}
+                    rules={{ required: 'Required' }}
+                    render={({ field }) => (
+                      <SearchSelect
+                        label="Max Score"
+                        placeholder="Select"
+                        options={[
+                          { value: '5', label: '1 – 5' },
+                          { value: '10', label: '1 – 10' },
+                        ]}
+                        value={field.value === '' ? '' : String(field.value)}
+                        onChange={(v) => field.onChange(v === '' ? '' : Number(v))}
+                        error={kpiErrors?.maxScore?.message}
+                      />
+                    )}
                   />
                 </div>
               </div>

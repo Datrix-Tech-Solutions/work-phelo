@@ -8,29 +8,12 @@ async function hash(pw: string) {
   return bcrypt.hash(pw, 12);
 }
 
-const MANAGER_SET: Record<string, string[]> = {
-  users: ['VIEW'],
-  'company-roles': ['VIEW'],
-  employees: ['VIEW'],
-  departments: ['VIEW'],
-  branches: ['VIEW'],
-  leave: ['VIEW', 'CREATE', 'APPROVE'],
-  attendance: ['VIEW', 'CREATE'],
-  'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
-  timesheets: ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT'],
-  projects: ['VIEW'],
-  payroll: ['VIEW'],
-  assets: ['VIEW'],
-  appraisals: ['VIEW', 'EDIT'],
-  documents: ['VIEW'],
-};
-
 const EMPLOYEE_SET: Record<string, string[]> = {
-  employees: ['VIEW', 'EDIT'],
+  'employee-profile': ['VIEW', 'EDIT'],
   leave: ['VIEW', 'CREATE'],
   attendance: ['CREATE'],
   'time-corrections': ['CREATE'],
+  assets: ['VIEW'],
   projects: ['VIEW'],
   payroll: ['VIEW'],
   appraisals: ['VIEW', 'EDIT'],
@@ -42,13 +25,14 @@ const COMPANY_ADMIN_SET: Record<string, string[]> = {
   'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
   'audit-logs': ['VIEW'],
   employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
+  'employee-profile': ['VIEW', 'EDIT'],
   departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   branches: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
   attendance: ['VIEW', 'CREATE'],
   'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
   timesheets: ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
   projects: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
   payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
   assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
@@ -62,7 +46,6 @@ async function seedTenantPermissionSets(
 ) {
   const sets = [
     { name: 'Company Admin Set', perms: COMPANY_ADMIN_SET, isSystem: true },
-    { name: 'Manager Set', perms: MANAGER_SET, isSystem: true },
     { name: 'Employee Set', perms: EMPLOYEE_SET, isSystem: true },
   ];
 
@@ -215,11 +198,6 @@ async function seedDemo(resources: Record<string, string>) {
     update: {},
     create: { tenantId: acmeTenant.id, name: 'Company Admin', isSystem: true },
   });
-  const acmeManagerRole = await prisma.companyRole.upsert({
-    where: { tenantId_name: { tenantId: acmeTenant.id, name: 'Manager' } },
-    update: {},
-    create: { tenantId: acmeTenant.id, name: 'Manager', isSystem: true },
-  });
   const acmeEmployeeRole = await prisma.companyRole.upsert({
     where: { tenantId_name: { tenantId: acmeTenant.id, name: 'Employee' } },
     update: {},
@@ -261,29 +239,12 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Kwame',
       lastName: 'Asante',
       role: 'EMPLOYEE',
-      companyRoleId: acmeManagerRole.id,
+      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111002',
     },
   });
-
-  if (acmeSets['Manager Set']) {
-    await prisma.userPermissionSet.upsert({
-      where: {
-        userId_permissionSetId: {
-          userId: acmeManager.id,
-          permissionSetId: acmeSets['Manager Set'],
-        },
-      },
-      update: {},
-      create: {
-        userId: acmeManager.id,
-        permissionSetId: acmeSets['Manager Set'],
-        grantedBy: acmeAdmin.id,
-      },
-    });
-  }
 
   const acmeEmp1 = await prisma.user.upsert({
     where: {
@@ -361,7 +322,7 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Yaw',
       lastName: 'Darko',
       role: 'EMPLOYEE',
-      companyRoleId: acmeManagerRole.id,
+      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111005',
@@ -522,11 +483,6 @@ async function seedDemo(resources: Record<string, string>) {
       isSystem: true,
     },
   });
-  const stellarManagerRole = await prisma.companyRole.upsert({
-    where: { tenantId_name: { tenantId: stellarTenant.id, name: 'Manager' } },
-    update: {},
-    create: { tenantId: stellarTenant.id, name: 'Manager', isSystem: true },
-  });
   const stellarEmployeeRole = await prisma.companyRole.upsert({
     where: { tenantId_name: { tenantId: stellarTenant.id, name: 'Employee' } },
     update: {},
@@ -574,29 +530,12 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Nana',
       lastName: 'Osei',
       role: 'EMPLOYEE',
-      companyRoleId: stellarManagerRole.id,
+      companyRoleId: stellarEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244222002',
     },
   });
-
-  if (stellarSets['Manager Set']) {
-    await prisma.userPermissionSet.upsert({
-      where: {
-        userId_permissionSetId: {
-          userId: stellarManager.id,
-          permissionSetId: stellarSets['Manager Set'],
-        },
-      },
-      update: {},
-      create: {
-        userId: stellarManager.id,
-        permissionSetId: stellarSets['Manager Set'],
-        grantedBy: stellarAdmin.id,
-      },
-    });
-  }
 
   const stellarEmployee = await prisma.user.upsert({
     where: {

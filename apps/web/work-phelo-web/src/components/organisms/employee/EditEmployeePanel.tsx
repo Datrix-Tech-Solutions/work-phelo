@@ -9,23 +9,20 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import {
   Employee,
-  Department,
-  Branch,
   UpdateEmployeePayload,
-  Gender,
-  MaritalStatus,
   EmploymentType,
   EmploymentStatus,
+  Gender,
 } from '@/types/hr';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
+import { useBranchOptions } from '@/hooks/useBranches';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;
   onClose: () => void;
   employee: Employee;
-  departments: Department[];
-  branches?: Branch[];
   employees?: Employee[];
   name: string;
   onSave: (data: UpdateEmployeePayload) => void;
@@ -36,8 +33,6 @@ export function EditEmployeePanel({
   isOpen,
   onClose,
   employee,
-  departments,
-  branches = [],
   employees = [],
   name,
   onSave,
@@ -45,6 +40,8 @@ export function EditEmployeePanel({
 }: EditEmployeePanelProps) {
   const editForm = useForm<UpdateEmployeePayload>();
   const { reset } = editForm;
+  const { data: departments = [] } = useDepartmentOptions(isOpen);
+  const { data: branches = [] } = useBranchOptions(isOpen);
 
   const [salaryCurrency, setSalaryCurrency] = useState('GHS');
 
@@ -56,7 +53,6 @@ export function EditEmployeePanel({
   const editTypeValue = useWatch({ control: editForm.control, name: 'employmentType' });
   const editStatusValue = useWatch({ control: editForm.control, name: 'employmentStatus' });
   const editGenderValue = useWatch({ control: editForm.control, name: 'gender' });
-  const editMaritalValue = useWatch({ control: editForm.control, name: 'maritalStatus' });
   const basicSalaryValue = useWatch({ control: editForm.control, name: 'basicSalary' });
   const probationValue = useWatch({ control: editForm.control, name: 'probationEndsAt' });
   const contractEndValue = useWatch({ control: editForm.control, name: 'contractEndDate' });
@@ -111,9 +107,17 @@ export function EditEmployeePanel({
             isLoading={isUpdating}
             loadingText="Saving…"
             onClick={editForm.handleSubmit((data) => {
-              const dateFields = ['dateOfBirth', 'probationEndsAt', 'contractEndDate'] as const;
+              const dateFields = ['dateOfBirth'] as const;
               for (const field of dateFields) {
                 if (!data[field]) data[field] = undefined;
+              }
+              const monthFields = ['probationEndsAt', 'contractEndDate'] as const;
+              for (const field of monthFields) {
+                if (!data[field]) {
+                  data[field] = undefined;
+                } else if (data[field]!.length === 7) {
+                  data[field] = `${data[field]}-01`;
+                }
               }
               const relationFields = ['departmentId', 'branchId', 'managerId'] as const;
               for (const field of relationFields) {
@@ -143,11 +147,7 @@ export function EditEmployeePanel({
           error={editForm.formState.errors.lastName}
           placeholder="eg; Boateng"
         />
-        <FormField
-          label="Phone"
-          registration={editForm.register('phone')}
-          placeholder="+233 24 000 0000"
-        />
+
         <DatePicker
           label="Date of Birth"
           value={editDobValue}
@@ -164,33 +164,6 @@ export function EditEmployeePanel({
             { value: 'FEMALE', label: 'Female' },
           ]}
         />
-        <SearchSelect
-          label="Marital Status"
-          placeholder="Select status"
-          value={editMaritalValue}
-          onChange={(v) => editForm.setValue('maritalStatus', v as MaritalStatus)}
-          options={[
-            { value: 'SINGLE', label: 'Single' },
-            { value: 'MARRIED', label: 'Married' },
-            { value: 'DIVORCED', label: 'Divorced' },
-            { value: 'WIDOWED', label: 'Widowed' },
-          ]}
-        />
-        <FormField
-          label="Nationality"
-          registration={editForm.register('nationality')}
-          placeholder="eg; Ghanaian"
-        />
-        <FormField
-          label="National ID Number"
-          registration={editForm.register('nationalId')}
-          placeholder="eg; GHA-000000000-0"
-        />
-        {/* <FileUpload
-          onChange={function (file: File | null): void {
-            throw new Error('Function not implemented.');
-          }}
-        /> */}
         <FormField
           label="Address"
           registration={editForm.register('address')}
@@ -203,28 +176,6 @@ export function EditEmployeePanel({
           placeholder="eg; Greater Accra"
         />
       </div>
-
-      <div className="flex flex-col gap-4">
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
-          Emergency Contact
-        </p>
-        <FormField
-          label="Full Name"
-          registration={editForm.register('emergencyName')}
-          placeholder="eg; Abena Boateng"
-        />
-        <FormField
-          label="Phone"
-          registration={editForm.register('emergencyPhone')}
-          placeholder="+233 24 000 0000"
-        />
-        <FormField
-          label="Relationship"
-          registration={editForm.register('emergencyRelation')}
-          placeholder="eg; Spouse"
-        />
-      </div>
-
       <div className="flex flex-col gap-4">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
           Job Information
@@ -318,32 +269,6 @@ export function EditEmployeePanel({
           onValueChange={(v) => editForm.setValue('basicSalary', parseFloat(v) || undefined)}
           onCurrencyChange={setSalaryCurrency}
           placeholder="0.00"
-        />
-
-        <FormField
-          label="Bank Name"
-          registration={editForm.register('bankName')}
-          placeholder="eg; GCB Bank"
-        />
-        <FormField
-          label="Account Number"
-          registration={editForm.register('bankAccountNumber')}
-          placeholder="eg; 1234567890"
-        />
-        <FormField
-          label="Bank Branch"
-          registration={editForm.register('bankBranch')}
-          placeholder="eg; Accra Main"
-        />
-        <FormField
-          label="SSNIT Number"
-          registration={editForm.register('ssnit')}
-          placeholder="eg; P00123456"
-        />
-        <FormField
-          label="TIN Number"
-          registration={editForm.register('tinNumber')}
-          placeholder="eg; P0012345678"
         />
       </div>
     </SidePanel>

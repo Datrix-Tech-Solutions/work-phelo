@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import { useTeamAppraisals } from '@/hooks';
 import { AppraisalTabs } from '@/components/molecules/appraisal/AppraisalTabs';
 import { MyAppraisalsTable } from '@/components/organisms/appraisal/MyAppraisalTable';
 import { TeamReviewTable } from '@/components/organisms/appraisal/TeamReviewTable';
@@ -22,19 +23,18 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
       router.replace(`/${tenantSlug}/hr`);
     }
   }, [user, tenantSlug, router]);
-  // isManager comes from the employee profile (department head), not from permissions.
-  const isHR = user?.role === 'TENANT_ADMIN';
   const hasHRProfile = user?.role === 'EMPLOYEE';
-  const canReviewTeam = usePermission(Permission.SUBMIT_MANAGER_REVIEW);
-  // Department head OR explicitly granted manager-review permission
-  const canSeeTeamReview = user?.isManager === true || canReviewTeam || isHR;
+  const canViewAppraisals = usePermission(Permission.APPROVE_APPRAISAL);
 
-  // Admin (TENANT_ADMIN) has no personal appraisal record — default to team review.
-  // Use getState() so the initializer reads the correct role on first render
-  // without needing a useEffect.
+  const { data: teamData } = useTeamAppraisals();
+  const isManager = (teamData?.length ?? 0) > 0;
+  const teamUnreviewedCount =
+    teamData?.filter((r) => r.overallStatus === 'SelfSubmitted').length ?? 0;
+
+  // TENANT_ADMIN defaults to the Appraisals tab; employees default to My Appraisal.
   const [activeTab, setActiveTab] = useState<'my' | 'team' | 'hr'>(() => {
     const role = useAuthStore.getState().user?.role;
-    return role === 'TENANT_ADMIN' ? 'team' : 'my';
+    return role === 'TENANT_ADMIN' ? 'hr' : 'my';
   });
   const [mySearch, setMySearch] = useState('');
   const [teamSearch, setTeamSearch] = useState('');
@@ -45,11 +45,15 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
+      <div className="shrink-0">
+        <h1 className="text-xl font-bold text-gray-900">Appraisal Management</h1>
+      </div>
       <AppraisalTabs
         activeTab={activeTab}
         isEmployee={hasHRProfile}
-        isManager={canSeeTeamReview}
-        isHR={isHR}
+        canReviewTeam={isManager}
+        canViewAppraisals={canViewAppraisals}
+        teamUnreviewedCount={teamUnreviewedCount}
         onTabChange={setActiveTab}
       />
 
@@ -62,7 +66,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
         />
       )}
 
-      {activeTab === 'team' && canSeeTeamReview && (
+      {activeTab === 'team' && isManager && (
         <TeamReviewTable
           search={teamSearch}
           onSearch={setTeamSearch}
@@ -71,7 +75,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
         />
       )}
 
-      {activeTab === 'hr' && isHR && (
+      {activeTab === 'hr' && canViewAppraisals && (
         <HRAppraisalsTable
           search={hrSearch}
           onSearch={setHrSearch}

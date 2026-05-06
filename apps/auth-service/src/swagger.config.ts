@@ -15,7 +15,7 @@ All requests go through the API Gateway at /api/v1/auth/...
 
 **Example (dev):** POST https://dev.workphelo.datrixtechsolutions.com/api/v1/auth/login
 
-**Example (prod):** POST https://workphelo.datrixtechsolutions.com/api/v1/auth/login
+**Example (prod):** POST https://workphelo.com/api/v1/auth/login
 
 ### Sprint 1 — Key Flows
 
@@ -54,7 +54,7 @@ Access tokens expire in **15 minutes**. Use \`POST /auth/refresh\` to rotate tok
 | EMPLOYEE | Regular user — access controlled by company role |
 
 ### Company Roles
-Each tenant has 3 default company roles seeded automatically: **Company Admin**, **Manager**, **Employee**.
+Each tenant has 2 default company roles seeded automatically: **Company Admin** and **Employee**.
 Tenant Admins can create custom roles with specific permissions.
 
 ### Demo Credentials
@@ -67,7 +67,7 @@ Use seeded local test accounts or your own tenant credentials. Avoid publishing 
       'Dev (via API Gateway)',
     )
     .addServer(
-      'https://workphelo.datrixtechsolutions.com/api/v1/auth',
+      'https://workphelo.com/api/v1/auth',
       'Production (via API Gateway)',
     )
     .addTag('Auth', 'Login, logout, token refresh, MFA, social auth')

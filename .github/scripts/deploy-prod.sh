@@ -3,7 +3,7 @@
 set -euo pipefail
 
 DEPLOY_ENV="prod"
-DEPLOY_PATH="/var/www/apps/workphelo.datrixtechsolutions.com/work-phelo"
+DEPLOY_PATH="/var/www/apps/workphelo.com/work-phelo"
 COMPOSE_FILE="${DEPLOY_PATH}/infrastructure/docker-compose.prod.yml"
 COMPOSE_ENV_FILE="${DEPLOY_PATH}/.compose.prod.env"
 COMPOSE_PROJECT_NAME="workphelo-prod"
@@ -81,8 +81,10 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema hr)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
+  "REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379" \
   "JWT_SECRET=${JWT_SECRET}" \
-  "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}"
+  "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
+  "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}"
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.prod" \
   "PORT=4004" \

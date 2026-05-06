@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
 import { useLeaveTypes, useCreateLeaveRequest } from '@/hooks/useLeave';
 import { usePublicHolidays } from '@/hooks/usePublicHolidays';
+import { useMyProfile } from '@/hooks';
 import { CreateLeaveRequestDto, LeaveBalance, PublicHoliday } from '@/types/hr';
 import { FileUpload } from '@/components/atoms/FileUpload';
 import { LeaveBalanceBar } from '@/components/molecules/leave/LeaveBalanceBar';
@@ -53,6 +54,17 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
 
   const { data: leaveTypes = [] } = useLeaveTypes(tenantSlug);
   const { data: holidays = [] } = usePublicHolidays();
+  const { data: myProfile } = useMyProfile();
+
+  const visibleLeaveTypes = useMemo(() => {
+    const gender = myProfile?.gender;
+    return leaveTypes.filter((t) => {
+      const name = t.name.toLowerCase();
+      if (name.includes('maternity') && gender !== 'FEMALE') return false;
+      if (name.includes('paternity') && gender !== 'MALE') return false;
+      return true;
+    });
+  }, [leaveTypes, myProfile?.gender]);
 
   const {
     register,
@@ -117,8 +129,8 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
     };
 
     mutate(payload, {
-      onSuccess: () => {
-        toast.success('Leave request submitted');
+      onSuccess: (result) => {
+        toast.success(result.message ?? 'Leave request submitted');
         handleClose();
       },
       onError: (err: unknown) => {
@@ -132,7 +144,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
       isOpen={isOpen}
       onClose={handleClose}
       title="Apply for Leave"
-      description="Submit a leave request for your manager's approval."
+      description="Submit a leave request for Company Admin review."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={handleClose}>
@@ -157,7 +169,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
           <SearchSelect
             label="Leave Type"
             placeholder="Select leave type"
-            options={leaveTypes.map((t) => ({ value: t.id, label: t.name }))}
+            options={visibleLeaveTypes.map((t) => ({ value: t.id, label: t.name }))}
             value={field.value}
             onChange={field.onChange}
             error={errors.leaveTypeId?.message}

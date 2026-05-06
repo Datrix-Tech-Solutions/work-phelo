@@ -1,8 +1,10 @@
 export const hrRequiredEnvVars = [
   'DATABASE_URL',
   'RABBITMQ_URL',
+  'REDIS_URL',
   'JWT_SECRET',
   'ALLOWED_ORIGINS',
+  'FRONTEND_BASE_URL',
 ] as const;
 
 export function assertHrRuntimeEnv(): void {

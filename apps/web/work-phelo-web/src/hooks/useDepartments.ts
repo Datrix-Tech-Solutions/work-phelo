@@ -2,6 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Department } from '@/types/hr';
 
+export type DepartmentOption = Pick<Department, 'id' | 'name'>;
+
 export function useDepartments() {
   return useQuery({
     queryKey: ['departments'],
@@ -9,6 +11,17 @@ export function useDepartments() {
       const res = await api.get<Department[]>('/hr/departments');
       return res.data;
     },
+  });
+}
+
+export function useDepartmentOptions(enabled = true) {
+  return useQuery({
+    queryKey: ['department-options'],
+    queryFn: async () => {
+      const res = await api.get<DepartmentOption[]>('/hr/departments/options');
+      return res.data;
+    },
+    enabled,
   });
 }
 
@@ -50,6 +63,7 @@ export function useUpdateDepartment() {
       name?: string;
       description?: string;
       managerId?: string | null;
+      isActive?: boolean;
     }) => {
       const res = await api.patch<Department>(`/hr/departments/${id}`, payload);
       return res.data;

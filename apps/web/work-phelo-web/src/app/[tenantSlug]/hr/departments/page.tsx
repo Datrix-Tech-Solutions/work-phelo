@@ -22,12 +22,15 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const { tenantSlug } = use(params);
   const toast = useToast();
 
-  const canManage = usePermission(Permission.CREATE_DEPARTMENT);
+  const canCreate = usePermission(Permission.CREATE_DEPARTMENT);
+  const canUpdate = usePermission(Permission.UPDATE_DEPARTMENT);
+  const canDelete = usePermission(Permission.DELETE_DEPARTMENT);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Department | null>(null);
   const [membersTarget, setMembersTarget] = useState<Department | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
+  const [toggleActiveTarget, setToggleActiveTarget] = useState<Department | null>(null);
   const [successName, setSuccessName] = useState<string | null>(null);
 
   // Data fetching
@@ -39,6 +42,7 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
   const { mutateAsync: updateDepartmentAsync } = useUpdateDepartment();
   const { mutate: deleteDepartment, isPending: isDeleting } = useDeleteDepartment();
+  const { mutate: updateDepartment, isPending: isTogglingActive } = useUpdateDepartment();
 
   const handleAddMembers = async (departmentId: string, employeeIds: string[]) => {
     await Promise.all(
@@ -50,6 +54,24 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
         }
         await updateEmployeeAsync({ id: empId, departmentId });
       }),
+    );
+  };
+
+  const handleToggleActiveConfirm = () => {
+    if (!toggleActiveTarget) return;
+    updateDepartment(
+      { id: toggleActiveTarget.id, isActive: !toggleActiveTarget.isActive },
+      {
+        onSuccess: () => {
+          toast.success(
+            toggleActiveTarget.isActive
+              ? `"${toggleActiveTarget.name}" deactivated`
+              : `"${toggleActiveTarget.name}" activated`,
+          );
+          setToggleActiveTarget(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to update department')),
+      },
     );
   };
 
@@ -66,62 +88,105 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
+      <div>
+        <h1 className="text-xl font-bold text-gray-900">Department Directory</h1>
+      </div>
       <DepartmentsTable
         departments={departments}
         employees={employees}
         isLoading={isLoading}
-        isEmployee={!canManage}
+        canCreate={canCreate}
+        canUpdate={canUpdate}
+        canDelete={canDelete}
         onCreate={() => setCreateOpen(true)}
         onEdit={(dept) => setEditTarget(dept)}
         onAddMembers={(dept) => setMembersTarget(dept)}
         onDelete={(dept) => setDeleteTarget(dept)}
+        onToggleActive={(dept) => setToggleActiveTarget(dept)}
       />
 
       {/* Side Panels */}
-      <CreateDepartmentPanel
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
-        tenantSlug={tenantSlug}
-        employees={employees}
-        onSuccess={(name) => setSuccessName(name)}
-      />
+      {canCreate && (
+        <CreateDepartmentPanel
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
+          tenantSlug={tenantSlug}
+          employees={employees}
+          onSuccess={(name) => setSuccessName(name)}
+        />
+      )}
 
-      <EditDepartmentPanel
-        isOpen={!!editTarget}
-        onClose={() => setEditTarget(null)}
-        editTarget={editTarget}
-      />
+      {canUpdate && (
+        <EditDepartmentPanel
+          isOpen={!!editTarget}
+          onClose={() => setEditTarget(null)}
+          editTarget={editTarget}
+        />
+      )}
 
-      <AddMembersPanel
-        isOpen={!!membersTarget}
-        onClose={() => setMembersTarget(null)}
-        department={membersTarget}
-        employees={employees}
-        onAddMembers={handleAddMembers}
-      />
+      {canUpdate && (
+        <AddMembersPanel
+          isOpen={!!membersTarget}
+          onClose={() => setMembersTarget(null)}
+          department={membersTarget}
+          employees={employees}
+          onAddMembers={handleAddMembers}
+        />
+      )}
+
+      {/* Deactivate / Activate confirmation */}
+      {canUpdate && (
+        <Modal
+          isOpen={!!toggleActiveTarget}
+          onClose={() => setToggleActiveTarget(null)}
+          title={toggleActiveTarget?.isActive ? 'Deactivate Department' : 'Activate Department'}
+          description={
+            toggleActiveTarget?.isActive
+              ? `Are you sure you want to deactivate "${toggleActiveTarget?.name}"? Members will remain assigned but the department will be marked inactive.`
+              : `Are you sure you want to activate "${toggleActiveTarget?.name}"?`
+          }
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setToggleActiveTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant={toggleActiveTarget?.isActive ? 'danger' : 'primary'}
+                isLoading={isTogglingActive}
+                loadingText={toggleActiveTarget?.isActive ? 'Deactivating...' : 'Activating...'}
+                onClick={handleToggleActiveConfirm}
+              >
+                {toggleActiveTarget?.isActive ? 'Deactivate' : 'Activate'}
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       {/* Delete confirmation */}
-      <Modal
-        isOpen={!!deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        title="Delete Department"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              isLoading={isDeleting}
-              loadingText="Deleting..."
-              onClick={handleDeleteConfirm}
-            >
-              Delete Department
-            </Button>
-          </div>
-        }
-      />
+      {canDelete && (
+        <Modal
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          title="Delete Department"
+          description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                isLoading={isDeleting}
+                loadingText="Deleting..."
+                onClick={handleDeleteConfirm}
+              >
+                Delete Department
+              </Button>
+            </div>
+          }
+        />
+      )}
 
       <SuccessModal
         isOpen={!!successName}

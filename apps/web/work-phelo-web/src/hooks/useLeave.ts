@@ -13,6 +13,7 @@ import {
 export const leaveKeys = {
   all: ['leave'] as const,
   types: (tenantSlug: string) => ['leave', 'types', tenantSlug] as const,
+  requestsBase: () => ['leave', 'requests'] as const,
   requests: (status?: string) => ['leave', 'requests', status ?? 'all'] as const,
   myRequests: () => ['leave', 'requests', 'my'] as const,
   balances: (employeeId?: string) => ['leave', 'balances', employeeId ?? 'me'] as const,
@@ -48,6 +49,15 @@ interface RawLeaveRequest {
   rejectionNote?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+interface RawCreateLeaveRequestResponse {
+  request: RawLeaveRequest;
+  message?: string;
+  notificationSummary?: {
+    managerNotified: boolean;
+    approverCount?: number;
+  };
 }
 
 // ─── Response transformers ────────────────────────────────────────────────────
@@ -171,11 +181,15 @@ export function useCreateLeaveRequest() {
 
   return useMutation({
     mutationFn: async (payload: CreateLeaveRequestDto) => {
-      const res = await api.post<RawLeaveRequest>('/hr/leave/requests', payload);
-      return transformRequest(res.data);
+      const res = await api.post<RawCreateLeaveRequestResponse>('/hr/leave/requests', payload);
+      return {
+        request: transformRequest(res.data.request),
+        message: res.data.message,
+        notificationSummary: res.data.notificationSummary,
+      };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requestsBase() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -203,7 +217,7 @@ export function useReviewLeaveRequest() {
       return transformRequest(res.data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requestsBase() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -219,7 +233,7 @@ export function useCancelLeaveRequest() {
       await api.patch(`/hr/leave/requests/${id}/cancel`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: leaveKeys.requests() });
+      queryClient.invalidateQueries({ queryKey: leaveKeys.requestsBase() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.myRequests() });
       queryClient.invalidateQueries({ queryKey: leaveKeys.balances() });
     },

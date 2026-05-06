@@ -74,6 +74,7 @@ export interface Employee {
   branch?: Branch;
   managerId?: string;
   userId?: string;
+  userStatus?: 'PENDING_VERIFICATION' | 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   avatarUrl?: string;
   bankName?: string;
   bankAccountNumber?: string;
@@ -289,21 +290,102 @@ export interface LeaveBalance {
 }
 
 // ── Payroll ───────────────────────────────────────────────
+export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+
 export interface PayrollRun {
   id: string;
   month: number;
   year: number;
-  status: 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+  status: PayrollRunStatus;
   notes?: string;
   totalGross: string;
   totalNet: string;
   totalSSNIT: string;
+  totalTier3: string;
   totalPAYE: string;
   runBy: string;
+  submittedBy?: string | null;
+  submittedAt?: string | null;
   approvedBy?: string;
   approvedAt?: string;
   paidAt?: string;
+  tier3Enabled: boolean;
+  tier3Rate?: string | null;
+  tier3SchemeName?: string | null;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface PayrollRunEmployeeSummary {
+  firstName: string;
+  lastName: string;
+  employeeNumber: string;
+  jobTitle: string;
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
+}
+
+export interface PayrollItem {
+  id: string;
+  tenantId: string;
+  payrollRunId: string;
+  employeeId: string;
+  basicSalary: string;
+  totalAllowances: string;
+  transportAmount: string;
+  otherDeductions: string;
+  overtimePay: string;
+  bonus: string;
+  thirteenthMonth: string;
+  grossSalary: string;
+  employeeSSNIT: string;
+  employerSSNIT: string;
+  tier3Employee: string;
+  taxableIncome: string;
+  payeTax: string;
+  totalDeductions: string;
+  netSalary: string;
+  createdAt: string;
+  updatedAt?: string;
+  employee?: PayrollRunEmployeeSummary;
+  payrollRun?: {
+    month: number;
+    year: number;
+    status: PayrollRunStatus;
+    paidAt?: string | null;
+    tier3Enabled: boolean;
+    tier3Rate?: string | null;
+    tier3SchemeName?: string | null;
+  };
+}
+
+export interface PayrollRunDetail extends PayrollRun {
+  items: PayrollItem[];
+}
+
+export interface RunPayrollDto {
+  month: number;
+  year: number;
+  notes?: string;
+}
+
+export interface UpdatePayrollItemDto {
+  basicSalary?: number;
+  totalAllowances?: number;
+  transportAmount?: number;
+  otherDeductions?: number;
+}
+
+export interface PayrollSettings {
+  payrollTier3Enabled: boolean;
+  payrollTier3Rate: number | null;
+  payrollTier3SchemeName: string | null;
+}
+
+export interface UpdatePayrollSettingsDto {
+  payrollTier3Enabled?: boolean;
+  payrollTier3Rate?: number;
+  payrollTier3SchemeName?: string;
 }
 
 // ── Project ───────────────────────────────────────────────
@@ -335,9 +417,10 @@ export interface CreateProjectDto {
 // ── Dashboard ─────────────────────────────────────────────
 export interface UpcomingBirthday {
   id: string;
-  firstName: string;
-  lastName: string;
+  name: string;
+  department: string;
   dateOfBirth: string;
+  upcomingBirthday: string;
   avatarUrl?: string;
 }
 
@@ -440,7 +523,7 @@ export interface ResignationPayload {
 }
 
 export interface UpdateChecklistDto {
-  item: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'managerApproval';
+  item: 'assetReturn' | 'hrClearance' | 'financeClearance' | 'reportingClearance';
   done: boolean;
 }
 
@@ -453,10 +536,11 @@ export interface PaginatedResponse<T> {
 }
 
 // ── Appraisal ─────────────────────────────────────────────
-export type Frequency = 'Annual' | 'Semi-annual' | 'Quarterly' | 'Ad-hoc';
-export type AppraisalStatus = 'Upcoming' | 'InProgress' | 'Completed' | 'Cancelled';
+export type Frequency = 'ANNUAL' | 'SEMI_ANNUAL' | 'QUARTERLY' | 'AD_HOC';
+export type AppraisalStatus = 'UPCOMING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type AppraisalEligibleEmploymentStatus = 'ACTIVE' | 'PROBATION' | 'SUSPENDED';
 export type SectionType = 'RatingScale' | 'FreeText' | 'YesNo';
-export type ResponseRole = 'Self' | 'Manager';
+export type ResponseRole = 'Self' | 'Reviewer';
 export type FinalizedStatus = 'Pending' | 'Approved' | 'Cancelled';
 export type EmployeeAppraisalStatus =
   | 'NotStarted'
@@ -567,7 +651,16 @@ export interface AppraisalCycle {
   managerReviewDeadline?: string;
   templateId?: string;
   departmentIds?: string[];
+  employmentTypes?: string[];
+  employmentStatuses?: AppraisalEligibleEmploymentStatus[];
+  employeeIds?: string[];
+  selfAssessmentWeight?: number;
+  managerAssessmentWeight?: number;
+  status?: AppraisalStatus;
   isActive: boolean;
+  activatedAt?: string;
+  cancelledAt?: string;
+  cancelledReason?: string;
   createdBy: string;
   createdAt: string;
   updatedAt?: string;
@@ -671,7 +764,6 @@ export interface FinalizedAppraisal {
 }
 
 export interface CreateAppraisalTemplateDto {
-  tenantSlug: string;
   name: string;
   selfAssessmentWeight: number;
   managerAssessmentWeight: number;
@@ -686,8 +778,71 @@ export interface CreateAppraisalCycleDto {
   endDate: string;
   selfAssessmentDeadline: string;
   managerReviewDeadline: string;
-  templateId?: string;
+  templateId: string;
   departmentIds?: string[];
+  employmentTypes?: string[];
+  employmentStatuses?: AppraisalEligibleEmploymentStatus[];
+  employeeIds?: string[];
+}
+
+export interface AppraisalSettings {
+  appraisalEligibleStatuses: AppraisalEligibleEmploymentStatus[];
+  outstandingThreshold: number;
+  veryGoodThreshold: number;
+  goodThreshold: number;
+  satisfactoryThreshold: number;
+}
+
+export type CompanyPolicyProbationPeriod = '3' | '4' | '5' | '6' | 'undefined';
+
+export type CompanyPolicyResignationWindow = '1w' | '2w' | '1m' | '2m' | '3m' | '6m' | '1y' | '2y';
+
+export type CompanyPolicyCycleRecipient =
+  | 'all'
+  | 'permanent'
+  | 'contractual'
+  | 'probation'
+  | 'interns';
+
+export interface CompanyPoliciesSettings {
+  probationPeriod: CompanyPolicyProbationPeriod;
+  resignationWindow: CompanyPolicyResignationWindow;
+  cycleRecipients: CompanyPolicyCycleRecipient[];
+  defaultProbationPeriodMonths: number | null;
+  resignationNoticePeriodDays: number;
+}
+
+export interface UpdateCompanyPoliciesDto {
+  probationPeriod?: CompanyPolicyProbationPeriod;
+  resignationWindow?: CompanyPolicyResignationWindow;
+  cycleRecipients?: CompanyPolicyCycleRecipient[];
+}
+
+export type CompanyAgreementType =
+  | 'NDA'
+  | 'EMPLOYMENT_CONTRACT'
+  | 'CONFIDENTIALITY'
+  | 'NON_COMPETE'
+  | 'CODE_OF_CONDUCT'
+  | 'IP_ASSIGNMENT'
+  | 'PROBATION_AGREEMENT'
+  | 'OTHER';
+
+export interface CompanyAgreement {
+  id: string;
+  tenantId: string;
+  type: CompanyAgreementType;
+  title: string;
+  details: string;
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateCompanyAgreementDto {
+  type: CompanyAgreementType;
+  title: string;
+  details: string;
 }
 
 export interface CreateAppraisalKpiDto {

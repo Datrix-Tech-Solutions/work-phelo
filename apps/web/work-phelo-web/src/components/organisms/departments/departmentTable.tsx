@@ -7,22 +7,28 @@ interface DepartmentsTableProps {
   departments: Department[];
   employees: Employee[];
   isLoading: boolean;
-  isEmployee: boolean;
+  canCreate: boolean;
+  canUpdate: boolean;
+  canDelete: boolean;
   onCreate: () => void;
   onEdit: (dept: Department) => void;
   onAddMembers: (dept: Department) => void;
   onDelete: (dept: Department) => void;
+  onToggleActive: (dept: Department) => void;
 }
 
 export function DepartmentsTable({
   departments,
   employees,
   isLoading,
-  isEmployee,
+  canCreate,
+  canUpdate,
+  canDelete,
   onCreate,
   onEdit,
   onAddMembers,
   onDelete,
+  onToggleActive,
 }: DepartmentsTableProps) {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -90,15 +96,25 @@ export function DepartmentsTable({
         setSearch(q);
         setPage(1);
       }}
-      actionButton={!isEmployee ? { label: 'New Department', onClick: onCreate } : undefined}
+      actionButton={canCreate ? { label: 'New Department', onClick: onCreate } : undefined}
       rowActions={
-        isEmployee
-          ? undefined
-          : (row) => [
-              { label: 'Edit Department', onClick: () => onEdit(row) },
-              { label: 'Add Members', onClick: () => onAddMembers(row) },
-              { label: 'Delete', onClick: () => onDelete(row), danger: true },
+        canUpdate || canDelete
+          ? (row) => [
+              ...(canUpdate
+                ? [
+                    { label: 'Edit Department', onClick: () => onEdit(row) },
+                    { label: 'Add Members', onClick: () => onAddMembers(row) },
+                    {
+                      label: row.isActive ? 'Deactivate' : 'Activate',
+                      onClick: () => onToggleActive(row),
+                    },
+                  ]
+                : []),
+              ...(canDelete
+                ? [{ label: 'Delete', onClick: () => onDelete(row), danger: true }]
+                : []),
             ]
+          : undefined
       }
       emptyMessage="No departments found"
       currentPage={page}

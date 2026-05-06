@@ -4,17 +4,21 @@ import type { Employee } from '@/types/hr';
 
 interface Props {
   employee: Employee;
-  departments: { id: string; name: string }[];
   allHrEmployees: Employee[];
   currentRoleName?: string | null;
 }
 
-export function EmploymentDetailsSection({ employee, allHrEmployees, currentRoleName }: Props) {
+export function EmploymentDetailsSection({ employee, allHrEmployees }: Props) {
   const manager = employee?.managerId
     ? allHrEmployees.find((e) => e.id === employee.managerId)
     : null;
 
   const managerName = manager ? `${manager.firstName} ${manager.lastName}` : undefined;
+
+  const isContract = employee?.employmentType === 'CONTRACT';
+
+  const probationActive =
+    !isContract && employee?.probationEndsAt && new Date(employee.probationEndsAt) >= new Date();
 
   return (
     <SectionCard title="Employment Details">
@@ -23,8 +27,13 @@ export function EmploymentDetailsSection({ employee, allHrEmployees, currentRole
         <DetailField label="Job Title" value={employee?.jobTitle} />
         <DetailField label="Reporting Manager" value={managerName} />
         <DetailField label="Date of Hire" value={formatDate(employee?.hireDate)} />
+        {isContract && employee?.contractEndDate && (
+          <DetailField label="Contract End Date" value={formatDate(employee.contractEndDate)} />
+        )}
+        {probationActive && (
+          <DetailField label="Probation End Date" value={formatDate(employee.probationEndsAt)} />
+        )}
         <DetailField label="Employment Type" value={formatType(employee?.employmentType)} />
-        <DetailField label="System Role" value={currentRoleName} />
         {employee?.dateOfBirth && (
           <DetailField label="Date of Birth" value={formatDate(employee.dateOfBirth)} />
         )}

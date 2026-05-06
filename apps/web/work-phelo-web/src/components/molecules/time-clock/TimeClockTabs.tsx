@@ -2,7 +2,7 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 
 interface Props {
   activeTab: 'my' | 'live' | 'records' | 'corrections';
-  isManager: boolean;
+  canManageRecords: boolean;
   isEmployee: boolean;
   pendingCount: number;
   onTabChange: (tab: 'my' | 'live' | 'records' | 'corrections') => void;
@@ -10,14 +10,14 @@ interface Props {
 
 export function TimeClockTabs({
   activeTab,
-  isManager,
+  canManageRecords,
   isEmployee,
   pendingCount,
   onTabChange,
 }: Props) {
   const tabs = [
     ...(isEmployee ? [{ key: 'my', label: 'My Time' }] : []),
-    ...(isManager
+    ...(canManageRecords
       ? [
           { key: 'live', label: 'Live' },
           { key: 'records', label: 'Records' },

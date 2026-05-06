@@ -25,17 +25,15 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
     }
   }, [user, tenantSlug, router]);
 
-  // isManager comes from the employee profile (department head), not from permissions.
-  // Admins (TENANT_ADMIN) bypass permission checks and see requests only — no HR profile.
   const hasHRProfile = user?.role === 'EMPLOYEE';
   const isAdmin = user?.role === 'TENANT_ADMIN';
-  const canApproveLeave = usePermission(Permission.APPROVE_TEAM_LEAVE);
-  // Department head OR explicitly granted approve-leave permission
-  const canSeeRequests = user?.isManager === true || canApproveLeave || isAdmin;
+  const canApproveLeave = usePermission(Permission.APPROVE_LEAVE);
+  const canSeeRequests = canApproveLeave || isAdmin;
 
   // Employees and managers land on their own leave first.
   // Admins have no personal HR profile so they land on requests.
-  const defaultTab: Tab = hasHRProfile ? 'my' : 'requests';
+  const requestId = searchParams.get('requestId');
+  const defaultTab: Tab = requestId ? 'requests' : hasHRProfile ? 'my' : 'requests';
   const tabParam = searchParams.get('tab') as Tab | null;
   const activeTab: Tab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : defaultTab;
 
@@ -48,19 +46,20 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
       <div className="shrink-0">
-        <h1 className="text-xl font-bold text-gray-900">Leave</h1>
-        <p className="text-sm text-gray-400 mt-0.5">Manage your leave requests and balances</p>
+        <h1 className="text-xl font-bold text-gray-900">Leave Management</h1>
       </div>
 
       <LeaveTabs
         activeTab={activeTab}
-        isManager={canSeeRequests}
+        canReviewRequests={canSeeRequests}
         isEmployee={hasHRProfile}
         onTabChange={handleTabChange}
       />
 
       {activeTab === 'my' && hasHRProfile && <MyLeaveTab tenantSlug={tenantSlug} />}
-      {activeTab === 'requests' && canSeeRequests && <LeaveRequestsTab tenantSlug={tenantSlug} />}
+      {activeTab === 'requests' && canSeeRequests && (
+        <LeaveRequestsTab tenantSlug={tenantSlug} canReview={canSeeRequests} />
+      )}
     </div>
   );
 }

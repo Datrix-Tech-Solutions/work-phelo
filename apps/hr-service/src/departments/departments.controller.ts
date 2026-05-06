@@ -26,6 +26,11 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import {
+  assertHrAccess,
+  hasPermissionRule,
+  isCompanyAdminUser,
+} from '../auth/access-scope';
 
 @ApiTags('Departments')
 @Controller('departments')
@@ -61,6 +66,29 @@ export class DepartmentsController {
   })
   findAll(@Req() req: any) {
     return this.departmentsService.findAll(req.user.tenantId);
+  }
+
+  @Get('options')
+  @ApiOperation({
+    summary:
+      'List lightweight department options for forms and selectors in the current tenant',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Department options retrieved successfully',
+  })
+  findOptions(@Req() req: any) {
+    const user = req.user;
+
+    assertHrAccess(
+      isCompanyAdminUser(user) ||
+        hasPermissionRule(user, 'departments:VIEW') ||
+        hasPermissionRule(user, 'employees:VIEW') ||
+        hasPermissionRule(user, 'employees:CREATE') ||
+        hasPermissionRule(user, 'employees:EDIT'),
+    );
+
+    return this.departmentsService.findOptions(user.tenantId);
   }
 
   @Get(':id')

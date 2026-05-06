@@ -14,24 +14,26 @@ export enum Permission {
   VIEW_PERMISSION_SETS = 'view:permission_sets',
   GRANT_PERMISSION = 'grant:permission',
 
-  // ── Company Roles ─────────────────────────────────────────────────────────
-  MANAGE_COMPANY_ROLES = 'manage:company_roles',
-  READ_COMPANY_ROLES = 'read:company_roles',
-
   // ── Employees ─────────────────────────────────────────────────────────────
   CREATE_EMPLOYEE = 'create:employee',
   READ_EMPLOYEES = 'read:employees',
-  READ_TEAM_EMPLOYEES = 'read:team_employees',
   READ_OWN_PROFILE = 'read:own_profile',
   UPDATE_EMPLOYEE = 'update:employee',
   UPDATE_OWN_PROFILE = 'update:own_profile',
   DELETE_EMPLOYEE = 'delete:employee',
   OFFBOARD_EMPLOYEE = 'offboard:employee',
+  SUBMIT_RESIGNATION = 'submit:resignation',
+  WITHDRAW_RESIGNATION = 'withdraw:resignation',
   MANAGE_DOCUMENTS = 'manage:documents',
   EXPORT_EMPLOYEES = 'export:employees',
+  READ_HR_SETTINGS = 'read:hr_settings',
+  MANAGE_HR_SETTINGS = 'manage:hr_settings',
 
   // ── Branches ──────────────────────────────────────────────────────────────
   READ_BRANCHES = 'read:branches',
+  CREATE_BRANCH = 'create:branch',
+  UPDATE_BRANCH = 'update:branch',
+  DELETE_BRANCH = 'delete:branch',
 
   // ── Departments ───────────────────────────────────────────────────────────
   CREATE_DEPARTMENT = 'create:department',
@@ -44,23 +46,20 @@ export enum Permission {
   // ── Leave ─────────────────────────────────────────────────────────────────
   REQUEST_LEAVE = 'request:leave',
   APPROVE_LEAVE = 'approve:leave',
-  APPROVE_TEAM_LEAVE = 'approve:team_leave',
   READ_ALL_LEAVES = 'read:all_leaves',
-  READ_TEAM_LEAVES = 'read:team_leaves',
   READ_OWN_LEAVE = 'read:own_leave',
   MANAGE_LEAVE_TYPES = 'manage:leave_types',
 
   // ── Time Management ───────────────────────────────────────────────────────
   CLOCK_IN_OUT = 'clock:in_out',
   READ_ATTENDANCE = 'read:attendance',
-  READ_TEAM_ATTENDANCE = 'read:team_attendance',
   SUBMIT_TIME_CORRECTION = 'submit:time_correction',
   APPROVE_TIME_CORRECTION = 'approve:time_correction',
-  APPROVE_TEAM_TIME = 'approve:team_time',
   READ_TIMESHEETS = 'read:timesheets',
   APPROVE_TIMESHEET = 'approve:timesheet',
+  READ_SCHEDULES = 'read:schedules',
   MANAGE_SCHEDULES = 'manage:schedules',
-  MANAGE_TEAM_SCHEDULES = 'manage:team_schedules',
+  APPROVE_SHIFT_SWAP = 'approve:shift_swap',
 
   // ── Payroll ───────────────────────────────────────────────────────────────
   READ_PAYROLL = 'read:payroll',
@@ -73,7 +72,7 @@ export enum Permission {
   CONFIGURE_APPRAISAL = 'configure:appraisal',
   CREATE_APPRAISAL = 'create:appraisal',
   READ_APPRAISALS = 'read:appraisals',
-  READ_TEAM_APPRAISALS = 'read:team_appraisals',
+  APPROVE_APPRAISAL = 'approve:appraisal',
   SUBMIT_SELF_ASSESSMENT = 'submit:self_assessment',
   SUBMIT_MANAGER_REVIEW = 'submit:manager_review',
   READ_OWN_REVIEW = 'read:own_review',
@@ -115,53 +114,52 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.VIEW_PERMISSION_SETS]: ['permission-sets:VIEW'],
   [Permission.GRANT_PERMISSION]: ['permission-sets:ASSIGN'],
 
-  // Company Roles
-  [Permission.MANAGE_COMPANY_ROLES]: ['company-roles:CREATE', 'company-roles:EDIT'],
-  [Permission.READ_COMPANY_ROLES]: ['company-roles:VIEW'],
-
   // Employees
   [Permission.CREATE_EMPLOYEE]: ['employees:CREATE'],
   [Permission.READ_EMPLOYEES]: ['employees:VIEW'],
-  [Permission.READ_TEAM_EMPLOYEES]: ['employees:VIEW'],
-  [Permission.READ_OWN_PROFILE]: ['employees:VIEW'],
+  [Permission.READ_OWN_PROFILE]: ['employee-profile:VIEW'],
   [Permission.UPDATE_EMPLOYEE]: ['employees:EDIT'],
-  [Permission.UPDATE_OWN_PROFILE]: ['employees:EDIT'],
+  [Permission.UPDATE_OWN_PROFILE]: ['employee-profile:EDIT'],
   [Permission.DELETE_EMPLOYEE]: ['employees:DELETE'],
   [Permission.OFFBOARD_EMPLOYEE]: ['employees:DELETE'],
+  [Permission.SUBMIT_RESIGNATION]: ['resignations:CREATE'],
+  [Permission.WITHDRAW_RESIGNATION]: ['resignations:DELETE'],
   [Permission.MANAGE_DOCUMENTS]: ['documents:CREATE', 'documents:EDIT'],
   [Permission.EXPORT_EMPLOYEES]: ['employees:EXPORT'],
+  [Permission.READ_HR_SETTINGS]: ['hr-settings:VIEW'],
+  [Permission.MANAGE_HR_SETTINGS]: ['hr-settings:EDIT'],
 
   // Branches
   [Permission.READ_BRANCHES]: ['branches:VIEW'],
+  [Permission.CREATE_BRANCH]: ['branches:CREATE'],
+  [Permission.UPDATE_BRANCH]: ['branches:EDIT'],
+  [Permission.DELETE_BRANCH]: ['branches:DELETE'],
 
   // Departments
   [Permission.CREATE_DEPARTMENT]: ['departments:CREATE'],
   [Permission.READ_DEPARTMENTS]: ['departments:VIEW'],
   [Permission.UPDATE_DEPARTMENT]: ['departments:EDIT'],
   [Permission.DELETE_DEPARTMENT]: ['departments:DELETE'],
-  [Permission.MANAGE_ROLES]: ['company-roles:EDIT'],
-  [Permission.ASSIGN_ROLE]: ['company-roles:ASSIGN'],
+  [Permission.MANAGE_ROLES]: ['permission-sets:EDIT'],
+  [Permission.ASSIGN_ROLE]: ['permission-sets:ASSIGN'],
 
   // Leave
   [Permission.REQUEST_LEAVE]: ['leave:CREATE'],
   [Permission.APPROVE_LEAVE]: ['leave:APPROVE'],
-  [Permission.APPROVE_TEAM_LEAVE]: ['leave:APPROVE'],
   [Permission.READ_ALL_LEAVES]: ['leave:VIEW'],
-  [Permission.READ_TEAM_LEAVES]: ['leave:VIEW'],
   [Permission.READ_OWN_LEAVE]: ['leave:VIEW'],
   [Permission.MANAGE_LEAVE_TYPES]: ['leave:EDIT'],
 
   // Time Management
   [Permission.CLOCK_IN_OUT]: ['attendance:CREATE'],
   [Permission.READ_ATTENDANCE]: ['attendance:VIEW'],
-  [Permission.READ_TEAM_ATTENDANCE]: ['attendance:VIEW'],
   [Permission.SUBMIT_TIME_CORRECTION]: ['time-corrections:CREATE'],
   [Permission.APPROVE_TIME_CORRECTION]: ['time-corrections:APPROVE'],
-  [Permission.APPROVE_TEAM_TIME]: ['time-corrections:APPROVE'],
   [Permission.READ_TIMESHEETS]: ['timesheets:VIEW'],
   [Permission.APPROVE_TIMESHEET]: ['timesheets:APPROVE'],
+  [Permission.READ_SCHEDULES]: ['schedules:VIEW'],
   [Permission.MANAGE_SCHEDULES]: ['schedules:CREATE', 'schedules:EDIT'],
-  [Permission.MANAGE_TEAM_SCHEDULES]: ['schedules:CREATE', 'schedules:EDIT'],
+  [Permission.APPROVE_SHIFT_SWAP]: ['schedules:APPROVE'],
 
   // Payroll
   [Permission.READ_PAYROLL]: ['payroll:VIEW'],
@@ -174,7 +172,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.CONFIGURE_APPRAISAL]: ['appraisals:CREATE'],
   [Permission.CREATE_APPRAISAL]: ['appraisals:CREATE'],
   [Permission.READ_APPRAISALS]: ['appraisals:VIEW'],
-  [Permission.READ_TEAM_APPRAISALS]: ['appraisals:VIEW'],
+  [Permission.APPROVE_APPRAISAL]: ['appraisals:APPROVE'],
   [Permission.SUBMIT_SELF_ASSESSMENT]: ['appraisals:EDIT'],
   [Permission.SUBMIT_MANAGER_REVIEW]: ['appraisals:EDIT'],
   [Permission.READ_OWN_REVIEW]: ['appraisals:VIEW'],
@@ -197,6 +195,70 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.READ_CAMPAIGNS]: ['campaigns:VIEW'],
   [Permission.VIEW_ANALYTICS]: ['analytics:VIEW'],
 };
+
+export const PERMISSION_ACTION_LABELS: Record<string, string> = {
+  VIEW: 'View',
+  CREATE: 'Create',
+  EDIT: 'Edit',
+  DELETE: 'Delete',
+  APPROVE: 'Approve',
+  RUN: 'Run',
+  EXPORT: 'Export',
+  ASSIGN: 'Assign',
+};
+
+export const RESOURCE_ACTIONS: Record<string, string[]> = {
+  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  tenants: ['VIEW', 'EDIT'],
+  'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
+  'audit-logs': ['VIEW'],
+  employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
+  'employee-profile': ['VIEW', 'EDIT'],
+  resignations: ['CREATE', 'DELETE'],
+  departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  branches: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  'hr-settings': ['VIEW', 'EDIT'],
+  leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  attendance: ['VIEW', 'CREATE'],
+  'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
+  timesheets: ['VIEW', 'APPROVE'],
+  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
+  projects: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
+  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
+  assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  documents: ['VIEW', 'CREATE', 'EDIT'],
+  allowances: ['VIEW', 'CREATE', 'EDIT'],
+  'payroll-reports': ['VIEW', 'EXPORT'],
+  'expense-reports': ['VIEW', 'EXPORT'],
+  'platform-settings': ['VIEW', 'EDIT'],
+  subscriptions: ['VIEW', 'EDIT'],
+};
+
+// All seeded resource actions stay in RESOURCE_ACTIONS so hidden or future
+// resources can still round-trip safely when editing existing roles/sets.
+// Only this allowlist controls what the HR permission UI should expose today.
+export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
+  'employees',
+  'employee-profile',
+  'resignations',
+  'departments',
+  'branches',
+  'assets',
+  'documents',
+  'leave',
+  'attendance',
+  'time-corrections',
+  'timesheets',
+  'schedules',
+  'payroll',
+  'appraisals',
+  'hr-settings',
+]);
+
+export function isPermissionUiVisibleResource(resourceName: string): boolean {
+  return PERMISSION_UI_VISIBLE_RESOURCES.has(resourceName);
+}
 
 // ── Role permission matrix integration ────────────────────────────────────────
 //
@@ -297,22 +359,15 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     DELETE: [{ resource: 'assets', action: 'ASSIGN' }], // assign asset to employee
   },
 
-  // resources: 'company-roles', 'permission-sets', 'audit-logs'
+  // resources: 'permission-sets', 'audit-logs'
   management: {
-    CREATE: [
-      { resource: 'company-roles', action: 'CREATE' },
-      { resource: 'permission-sets', action: 'CREATE' },
-    ],
+    CREATE: [{ resource: 'permission-sets', action: 'CREATE' }],
     VIEW: [
-      { resource: 'company-roles', action: 'VIEW' },
       { resource: 'permission-sets', action: 'VIEW' },
       { resource: 'audit-logs', action: 'VIEW' },
     ],
-    EDIT: [
-      { resource: 'company-roles', action: 'EDIT' },
-      { resource: 'permission-sets', action: 'EDIT' },
-    ],
-    DELETE: [{ resource: 'company-roles', action: 'DELETE' }],
+    EDIT: [{ resource: 'permission-sets', action: 'EDIT' }],
+    DELETE: [{ resource: 'permission-sets', action: 'DELETE' }],
   },
 };
 
@@ -327,7 +382,14 @@ export function reverseTransformFeaturePermissions(
 ): Record<string, string[]> {
   const result: Record<string, string[]> = {};
 
+  for (const [resource, actions] of Object.entries(backendPermissions)) {
+    const allowedActions = RESOURCE_ACTIONS[resource];
+    if (!allowedActions) continue;
+    result[resource] = actions.filter((action) => allowedActions.includes(action));
+  }
+
   for (const [featureKey, actionMapping] of Object.entries(FEATURE_PERMISSION_MAPPING)) {
+    if (result[featureKey]) continue;
     for (const [uiAction, backendPerms] of Object.entries(actionMapping)) {
       const hasAny = backendPerms.some(({ resource, action }) =>
         (backendPermissions[resource] ?? []).includes(action),
@@ -352,9 +414,16 @@ export function transformFeaturePermissions(
 ): Record<string, string[]> {
   const result: Record<string, string[]> = {};
 
-  for (const [featureKey, uiActions] of Object.entries(featurePermissions)) {
+  for (const [key, uiActions] of Object.entries(featurePermissions)) {
     if (!uiActions.length) continue;
-    const mapping = FEATURE_PERMISSION_MAPPING[featureKey];
+
+    const allowedResourceActions = RESOURCE_ACTIONS[key];
+    if (allowedResourceActions) {
+      result[key] = uiActions.filter((action) => allowedResourceActions.includes(action));
+      continue;
+    }
+
+    const mapping = FEATURE_PERMISSION_MAPPING[key];
     if (!mapping) continue;
 
     for (const uiAction of uiActions) {

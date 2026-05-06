@@ -70,24 +70,14 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
       ],
     },
   ],
-  [Permission.READ_COMPANY_ROLES]: [
-    { resource: 'company-roles', actions: [PermissionAction.VIEW] },
-  ],
-  [Permission.MANAGE_COMPANY_ROLES]: [
-    {
-      resource: 'company-roles',
-      actions: [
-        PermissionAction.CREATE,
-        PermissionAction.EDIT,
-        PermissionAction.DELETE,
-      ],
-    },
-  ],
   [Permission.ASSIGN_ROLE]: [
-    { resource: 'company-roles', actions: [PermissionAction.ASSIGN] },
+    { resource: 'permission-sets', actions: [PermissionAction.ASSIGN] },
   ],
   [Permission.MANAGE_ROLES]: [
-    { resource: 'company-roles', actions: [PermissionAction.EDIT] },
+    { resource: 'permission-sets', actions: [PermissionAction.EDIT] },
+  ],
+  [Permission.APPROVE_SHIFT_SWAP]: [
+    { resource: 'schedules', actions: [PermissionAction.APPROVE] },
   ],
 };
 

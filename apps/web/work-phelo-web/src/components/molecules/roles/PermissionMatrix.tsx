@@ -3,29 +3,12 @@
 import { useState } from 'react';
 import { ChevronDown, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  PERMISSION_ACTION_LABELS,
+  RESOURCE_ACTIONS,
+  isPermissionUiVisibleResource,
+} from '@/lib/permissionMap';
 import { useAuthStore } from '@/store/auth.store';
-
-export const ACTIONS = [
-  { key: 'CREATE', label: 'Create' },
-  { key: 'VIEW', label: 'Read' },
-  { key: 'EDIT', label: 'Update' },
-  { key: 'DELETE', label: 'Delete' },
-];
-
-// featureKey matches the keys in user.featureConfig.hr
-// 'management' has no toggle — always available
-export const HR_FEATURES = [
-  { key: 'departments', label: 'Department Management' },
-  { key: 'branches', label: 'Branch Management' },
-  { key: 'employees', label: 'Employee Management' },
-  { key: 'leave', label: 'Leave Management', deleteLabel: 'Approve' },
-  { key: 'appraisal', label: 'Appraisal Management', deleteLabel: 'Approve' },
-  { key: 'timeclock', label: 'Time Management' },
-  { key: 'projects', label: 'Project Management', deleteLabel: 'Assign' },
-  { key: 'payroll', label: 'Payroll Management', deleteLabel: 'Approve' },
-  { key: 'assets', label: 'Asset Management', deleteLabel: 'Assign' },
-  { key: 'management', label: 'HR Management' },
-];
 
 export type FeaturePermissions = Record<string, string[]>;
 
@@ -42,25 +25,90 @@ interface PermissionMatrixProps {
   readOnly?: boolean;
 }
 
+type ResourceGroup = {
+  label: string;
+  resources: string[];
+};
+
+const RESOURCE_GROUPS: ResourceGroup[] = [
+  {
+    label: 'Access Management',
+    resources: ['users', 'permission-sets', 'audit-logs'],
+  },
+  {
+    label: 'People',
+    resources: [
+      'employees',
+      'employee-profile',
+      'resignations',
+      'departments',
+      'branches',
+      'documents',
+    ],
+  },
+  {
+    label: 'Leave and Time',
+    resources: ['leave', 'attendance', 'time-corrections', 'timesheets', 'schedules'],
+  },
+  {
+    label: 'Work and Assets',
+    resources: ['projects', 'assets'],
+  },
+  {
+    label: 'Payroll and Performance',
+    resources: ['payroll', 'allowances', 'appraisals', 'hr-settings'],
+  },
+];
+
+const RESOURCE_FEATURE_KEYS: Record<string, string> = {
+  employees: 'employees',
+  'employee-profile': 'employees',
+  resignations: 'employees',
+  departments: 'departments',
+  branches: 'branches',
+  documents: 'employees',
+  leave: 'leave',
+  attendance: 'timeclock',
+  'time-corrections': 'timeclock',
+  timesheets: 'timeclock',
+  schedules: 'scheduling',
+  projects: 'projects',
+  assets: 'assets',
+  payroll: 'payroll',
+  allowances: 'payroll',
+  appraisals: 'appraisal',
+  'hr-settings': 'management',
+};
+
 const EMPTY_HR_FEATURES: Record<string, boolean> = {};
+
+function formatResourceName(name: string) {
+  return name.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 export function PermissionMatrix({ value, onChange, readOnly = false }: PermissionMatrixProps) {
   const [expanded, setExpanded] = useState(true);
   const hrFeatures = useAuthStore((s) => s.user?.featureConfig?.hr ?? EMPTY_HR_FEATURES);
+  const visibleResourceGroups = RESOURCE_GROUPS.map((group) => ({
+    ...group,
+    resources: group.resources.filter((resourceName) =>
+      isPermissionUiVisibleResource(resourceName),
+    ),
+  })).filter((group) => group.resources.length > 0);
 
-  const isLocked = (featureKey: string) => {
-    if (featureKey === 'management') return false;
-    // Locked when the tenant has the feature explicitly disabled
+  const isLocked = (resourceName: string) => {
+    const featureKey = RESOURCE_FEATURE_KEYS[resourceName];
+    if (!featureKey || featureKey === 'management') return false;
     return featureKey in hrFeatures && hrFeatures[featureKey] === false;
   };
 
-  const toggle = (featureKey: string, actionKey: string) => {
+  const toggle = (resourceName: string, action: string) => {
     if (readOnly || !onChange) return;
-    const current = value[featureKey] ?? [];
-    const next = current.includes(actionKey)
-      ? current.filter((a) => a !== actionKey)
-      : [...current, actionKey];
-    onChange({ ...value, [featureKey]: next });
+    const current = value[resourceName] ?? [];
+    const next = current.includes(action)
+      ? current.filter((existingAction) => existingAction !== action)
+      : [...current, action];
+    onChange({ ...value, [resourceName]: next });
   };
 
   return (
@@ -68,7 +116,6 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: Permissi
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Access Levels</p>
 
       <div className="border border-gray-200 rounded-xl overflow-hidden">
-        {/* Module header */}
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -80,55 +127,64 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: Permissi
               !expanded && '-rotate-90',
             )}
           />
-          <span className="text-sm font-semibold text-gray-700">Human Resource</span>
+          <span className="text-sm font-semibold text-gray-700">Resource Permissions</span>
         </button>
 
         {expanded && (
           <div className="divide-y divide-gray-100">
-            {HR_FEATURES.map((feature) => {
-              const locked = isLocked(feature.key);
-              const granted = value[feature.key] ?? [];
+            {visibleResourceGroups.map((group) => (
+              <div key={group.label} className="px-4 py-3.5">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  {group.label}
+                </p>
 
-              return (
-                <div key={feature.key} className="px-4 py-3.5">
-                  <p className="text-sm font-semibold text-gray-800 mb-2.5">{feature.label}</p>
+                <div className="flex flex-col gap-3">
+                  {group.resources.map((resourceName) => {
+                    const actions = RESOURCE_ACTIONS[resourceName] ?? [];
+                    const locked = isLocked(resourceName);
+                    const granted = value[resourceName] ?? [];
 
-                  {locked ? (
-                    <div className="flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-100 text-gray-400">
-                      <Lock className="w-4 h-4" />
-                      <span className="text-sm">Upgrade to unlock</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-6">
-                      {ACTIONS.map((action) => {
-                        const label =
-                          action.key === 'DELETE'
-                            ? (feature.deleteLabel ?? action.label)
-                            : action.label;
-                        return (
-                          <label
-                            key={action.key}
-                            className={cn(
-                              'flex items-center gap-1.5 select-none',
-                              readOnly ? 'cursor-default' : 'cursor-pointer',
-                            )}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={granted.includes(action.key)}
-                              disabled={readOnly}
-                              onChange={() => toggle(feature.key, action.key)}
-                              className="w-4 h-4 accent-brand rounded cursor-pointer disabled:cursor-default"
-                            />
-                            <span className="text-sm text-gray-600">{label}</span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
+                    return (
+                      <div key={resourceName} className="rounded-lg border border-gray-100 p-3">
+                        <p className="text-sm font-semibold text-gray-800 mb-2.5">
+                          {formatResourceName(resourceName)}
+                        </p>
+
+                        {locked ? (
+                          <div className="flex items-center justify-center gap-2 py-3 rounded-lg bg-gray-100 text-gray-400">
+                            <Lock className="w-4 h-4" />
+                            <span className="text-sm">Upgrade to unlock</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-x-5 gap-y-2 flex-wrap">
+                            {actions.map((action) => (
+                              <label
+                                key={action}
+                                className={cn(
+                                  'flex items-center gap-1.5 select-none',
+                                  readOnly ? 'cursor-default' : 'cursor-pointer',
+                                )}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={granted.includes(action)}
+                                  disabled={readOnly}
+                                  onChange={() => toggle(resourceName, action)}
+                                  className="w-4 h-4 accent-brand rounded cursor-pointer disabled:cursor-default"
+                                />
+                                <span className="text-sm text-gray-600">
+                                  {PERMISSION_ACTION_LABELS[action] ?? action}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>

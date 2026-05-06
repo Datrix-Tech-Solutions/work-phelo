@@ -16,6 +16,7 @@ interface LeaveRequestDetailPanelProps {
   onClose: () => void;
   tenantSlug: string;
   request: LeaveRequest | null;
+  canReview: boolean;
 }
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
@@ -46,6 +47,7 @@ export function LeaveRequestDetailPanel({
   isOpen,
   onClose,
   request,
+  canReview,
 }: LeaveRequestDetailPanelProps) {
   const toast = useToast();
   const [reviewNote, setReviewNote] = useState('');
@@ -97,7 +99,7 @@ export function LeaveRequestDetailPanel({
         title="Leave Request"
         description={`Submitted by ${request.employeeName}`}
         footer={
-          isPending_ ? (
+          isPending_ && canReview ? (
             <div className="flex items-center gap-3">
               <Button
                 variant="danger"
@@ -210,7 +212,7 @@ export function LeaveRequestDetailPanel({
         )}
 
         {/* Reviewer note — only editable when pending, read-only when already reviewed */}
-        {isPending_ ? (
+        {isPending_ && canReview ? (
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
               Note for Employee{' '}

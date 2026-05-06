@@ -1,14 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { useCreateBranch, useUpdateBranch } from '@/hooks';
+import { useCreateBranch, useUpdateBranch, useBranches } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import type { Branch, Employee } from '@/types/hr';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
@@ -35,68 +36,53 @@ interface BranchFormPanelProps {
   employees: Employee[];
 }
 
-export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFormPanelProps) {
+function BranchFormInner({ onClose, branch, employees }: Omit<BranchFormPanelProps, 'isOpen'>) {
   const isEditMode = !!branch;
 
   const toast = useToast();
   const [successBranch, setSuccessBranch] = useState<string | null>(null);
+  const [headOfficeConfirmOpen, setHeadOfficeConfirmOpen] = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<
+    Parameters<ReturnType<typeof useCreateBranch>['mutate']>[0] | null
+  >(null);
+
+  const { data: branches = [] } = useBranches();
 
   const form = useForm<BranchForm>({
-    defaultValues: {
-      name: '',
-      code: '',
-      address: '',
-      city: '',
-      region: '',
-      country: '',
-      phone: '',
-      email: '',
-      managerId: '',
-      isHeadOffice: false,
-    },
+    defaultValues: branch
+      ? {
+          name: branch.name,
+          code: branch.code ?? '',
+          address: branch.address ?? '',
+          city: branch.city ?? '',
+          region: branch.region ?? '',
+          country: branch.country ?? '',
+          phone: branch.phone ?? '',
+          email: branch.email ?? '',
+          managerId: branch.managerId ?? '',
+          isHeadOffice: branch.isHeadOffice,
+        }
+      : {
+          name: '',
+          code: '',
+          address: '',
+          city: '',
+          region: '',
+          country: '',
+          phone: '',
+          email: '',
+          managerId: '',
+          isHeadOffice: false,
+        },
   });
-
-  // Populate form when editing, reset when creating
-  useEffect(() => {
-    if (isOpen) {
-      form.reset(
-        branch
-          ? {
-              name: branch.name,
-              code: branch.code ?? '',
-              address: branch.address ?? '',
-              city: branch.city ?? '',
-              region: branch.region ?? '',
-              country: branch.country ?? '',
-              phone: branch.phone ?? '',
-              email: branch.email ?? '',
-              managerId: branch.managerId ?? '',
-              isHeadOffice: branch.isHeadOffice,
-            }
-          : {
-              name: '',
-              code: '',
-              address: '',
-              city: '',
-              region: '',
-              country: '',
-              phone: '',
-              email: '',
-              managerId: '',
-              isHeadOffice: false,
-            },
-      );
-    }
-  }, [isOpen, branch, form]);
 
   const { mutate: createBranch, isPending: isCreating } = useCreateBranch();
   const { mutate: updateBranch, isPending: isUpdating } = useUpdateBranch();
   const isPending = isCreating || isUpdating;
-
-  const handleClose = () => {
-    form.reset();
-    onClose();
-  };
+  const existingHeadOffice = branches.find(
+    (existingBranch) => existingBranch.isHeadOffice && existingBranch.id !== branch?.id,
+  );
+  const headOfficeLocked = isEditMode && !!existingHeadOffice && !branch?.isHeadOffice;
 
   const onSubmit = form.handleSubmit((data) => {
     const payload = {
@@ -117,21 +103,59 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
         {
           onSuccess: () => {
             toast.success('Branch updated');
-            handleClose();
+            onClose();
           },
           onError: (err) => toast.error(extractError(err, 'Failed to update branch')),
         },
       );
     } else {
+      const existingHeadOffice = branches?.find((b) => b.isHeadOffice);
+      if (data.isHeadOffice && existingHeadOffice) {
+        setPendingPayload(payload);
+        setHeadOfficeConfirmOpen(true);
+        return;
+      }
       createBranch(payload, {
         onSuccess: () => {
           setSuccessBranch(data.name);
-          handleClose();
+          onClose();
         },
         onError: (err) => toast.error(extractError(err, 'Failed to create branch')),
       });
     }
   });
+
+  const handleConfirmChangeHeadOffice = () => {
+    if (!pendingPayload) return;
+    const existingHeadOffice = branches?.find((b) => b.isHeadOffice);
+    const doCreate = () => {
+      createBranch(pendingPayload, {
+        onSuccess: () => {
+          setHeadOfficeConfirmOpen(false);
+          setPendingPayload(null);
+          setSuccessBranch((pendingPayload as { name: string }).name);
+          onClose();
+        },
+        onError: (err) => {
+          toast.error(extractError(err, 'Failed to create branch'));
+          setHeadOfficeConfirmOpen(false);
+          setPendingPayload(null);
+        },
+      });
+    };
+
+    if (existingHeadOffice) {
+      updateBranch(
+        { id: existingHeadOffice.id, isHeadOffice: false },
+        {
+          onSuccess: doCreate,
+          onError: (err) => toast.error(extractError(err, 'Failed to update existing head office')),
+        },
+      );
+    } else {
+      doCreate();
+    }
+  };
 
   const managerOptions = [
     { value: '', label: 'No manager assigned' },
@@ -142,8 +166,34 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
     })),
   ];
 
+  const existingHeadOfficeName = branches?.find((b) => b.isHeadOffice)?.name;
+
   return (
     <>
+      <Modal
+        isOpen={headOfficeConfirmOpen}
+        onClose={() => setHeadOfficeConfirmOpen(false)}
+        title="Head Office Already Assigned"
+        description={`"${existingHeadOfficeName}" is currently your head office. Would you like to reassign it to this new branch, or keep the current one?`}
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setHeadOfficeConfirmOpen(false)}
+              disabled={isCreating}
+            >
+              Keep Current
+            </Button>
+            <Button
+              isLoading={isCreating}
+              loadingText="Creating…"
+              onClick={handleConfirmChangeHeadOffice}
+            >
+              Change Head Office
+            </Button>
+          </>
+        }
+      />
       <SuccessModal
         isOpen={!!successBranch}
         onClose={() => setSuccessBranch(null)}
@@ -151,8 +201,8 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
         message={`"${successBranch}" has been added to your organisation.`}
       />
       <SidePanel
-        isOpen={isOpen}
-        onClose={handleClose}
+        isOpen
+        onClose={onClose}
         title={isEditMode ? 'Edit Branch' : 'New Branch'}
         description={
           isEditMode
@@ -161,7 +211,7 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
         }
         footer={
           <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={handleClose}>
+            <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <Button
@@ -259,16 +309,41 @@ export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFo
             type="checkbox"
             id="isHeadOffice"
             {...form.register('isHeadOffice')}
+            disabled={headOfficeLocked}
             className="w-4 h-4 rounded accent-brand"
           />
           <label
             htmlFor="isHeadOffice"
-            className="text-sm font-medium text-gray-700 cursor-pointer"
+            className={`text-sm font-medium ${headOfficeLocked ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700 cursor-pointer'}`}
           >
             This is the Head Office
           </label>
         </div>
+        {headOfficeLocked && (
+          <p className="text-sm text-amber-600">
+            {existingHeadOffice.name} is already marked as the head office. Remove that setting
+            there before assigning another one.
+          </p>
+        )}
       </SidePanel>
     </>
+  );
+}
+
+export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFormPanelProps) {
+  if (!isOpen) {
+    return (
+      <SidePanel isOpen={false} onClose={onClose} title="">
+        {null}
+      </SidePanel>
+    );
+  }
+  return (
+    <BranchFormInner
+      key={branch?.id ?? 'new'}
+      onClose={onClose}
+      branch={branch}
+      employees={employees}
+    />
   );
 }

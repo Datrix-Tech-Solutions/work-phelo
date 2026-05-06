@@ -6,7 +6,6 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateTemplatePanel } from '@/components/organisms/appraisal/CreateTemplatePanel';
-import { TemplatePreviewModal } from '@/components/organisms/appraisal/TemplatePreviewModal';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -25,7 +24,6 @@ export function AppraisalTemplatesList({ tenantSlug }: Props) {
   const [panelOpen, setPanelOpen] = useState(false);
   const [editTemplate, setEditTemplate] = useState<AppraisalTemplate | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<AppraisalTemplate | null>(null);
-  const [previewTarget, setPreviewTarget] = useState<AppraisalTemplate | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['appraisal-templates', tenantSlug, page, search],
@@ -157,17 +155,6 @@ export function AppraisalTemplatesList({ tenantSlug }: Props) {
         tenantSlug={tenantSlug}
         editTemplate={editTemplate}
       />
-
-      {previewTarget && (
-        <TemplatePreviewModal
-          isOpen={!!previewTarget}
-          onClose={() => setPreviewTarget(null)}
-          templateName={previewTarget.name}
-          selfAssessmentWeight={previewTarget.selfAssessmentWeight}
-          managerAssessmentWeight={previewTarget.managerAssessmentWeight}
-          kpis={previewTarget.kpis}
-        />
-      )}
 
       <Modal
         isOpen={!!deleteTarget}

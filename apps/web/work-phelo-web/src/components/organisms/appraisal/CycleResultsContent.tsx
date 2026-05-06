@@ -4,13 +4,14 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
 import { api } from '@/lib/api';
 import { AppraisalCycle, FinalRating, CycleResultItem, CycleResultsSummary } from '@/types/hr';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
+import { RatingDistributionChart } from '@/components/molecules/appraisal/RatingDistributionChart';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
 import { formatDate } from '@/lib/formatters';
+import { cn } from '@/lib/utils';
 
 const ALL_RATINGS: FinalRating[] = [
   'Outstanding',
@@ -20,6 +21,8 @@ const ALL_RATINGS: FinalRating[] = [
   'Needs Improvement',
 ];
 
+type Tab = 'overview' | 'results';
+
 interface Props {
   tenantSlug: string;
   cycleId: string;
@@ -27,7 +30,7 @@ interface Props {
 
 export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   const router = useRouter();
-
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [ratingFilter, setRatingFilter] = useState('');
@@ -87,13 +90,49 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
       width: '2fr',
       render: (r) => <span className="font-medium text-gray-900">{r.employeeName}</span>,
     },
-    { key: 'department', label: 'Department', render: (r) => <span>{r.department}</span> },
-    { key: 'jobTitle', label: 'Job Title', render: (r) => <span>{r.jobTitle}</span> },
-    { key: 'managerName', label: 'Manager', render: (r) => <span>{r.managerName}</span> },
-    { key: 'finalRating', label: 'Rating', render: (r) => <RatingBadge rating={r.finalRating} /> },
+    { key: 'department', label: 'Department', render: (r) => <span>{r.department || '—'}</span> },
+    { key: 'jobTitle', label: 'Job Title', render: (r) => <span>{r.jobTitle || '—'}</span> },
+    { key: 'managerName', label: 'Manager', render: (r) => <span>{r.managerName || '—'}</span> },
+    {
+      key: 'selfScore',
+      label: 'Self (%)',
+      width: '100px',
+      render: (r) => (
+        <span className="text-gray-700">
+          {r.selfScore != null ? `${Math.round(r.selfScore)}%` : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'managerScore',
+      label: 'Manager (%)',
+      width: '120px',
+      render: (r) => (
+        <span className="text-gray-700">
+          {r.managerScore != null ? `${Math.round(r.managerScore)}%` : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'overallScore',
+      label: 'Final (%)',
+      width: '100px',
+      render: (r) => (
+        <span className="font-medium text-gray-900">
+          {r.overallScore != null ? `${Math.round(r.overallScore)}%` : '—'}
+        </span>
+      ),
+    },
+    {
+      key: 'finalRating',
+      label: 'Rating',
+      width: '180px',
+      render: (r) => <RatingBadge rating={r.finalRating} />,
+    },
     {
       key: 'reviewCompletedAt',
       label: 'Completed',
+      width: '120px',
       render: (r) => <span>{formatDate(r.reviewCompletedAt)}</span>,
     },
   ];
@@ -116,29 +155,52 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   return (
     <div className="p-8 flex flex-col gap-6 min-h-full">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-xs text-gray-400 shrink-0">
+      <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link
           href={`/${tenantSlug}/hr/appraisal`}
-          className="flex items-center gap-1 hover:text-gray-600 transition-colors"
+          className="hover:text-gray-600 transition-colors"
         >
-          <ChevronLeft className="w-3.5 h-3.5" />
-          Appraisals
+          Appraisal
         </Link>
-        <span>/</span>
-        <span className="text-gray-700 font-medium">{cycle.title}</span>
+        <span>›</span>
+        <span className="text-gray-600">{cycle.title}</span>
       </nav>
 
       {/* Cycle header */}
       <div className="flex flex-col gap-1 shrink-0">
-        <h1 className="text-xl font-bold text-gray-900">{cycle.title}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-gray-900">{cycle.title}</h1>
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
+            <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+            Completed
+          </span>
+        </div>
         <p className="text-sm text-gray-500">
           {formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}
         </p>
       </div>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-gray-200 shrink-0">
+        {(['overview', 'results'] as Tab[]).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              'px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
+              activeTab === tab
+                ? 'border-brand text-brand'
+                : 'border-transparent text-gray-500 hover:text-gray-700',
+            )}
+          >
+            {tab === 'overview' ? 'Overview' : 'Individual Results'}
+          </button>
+        ))}
+      </div>
+
       {resultsLoading ? (
         <div className="text-sm text-gray-400">Loading results…</div>
-      ) : (
+      ) : activeTab === 'overview' ? (
         <>
           {/* Metric cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
@@ -166,83 +228,54 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-900">Rating Distribution</h2>
             </div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-xs text-gray-500 font-medium border-b border-gray-100">
-                  <th className="px-5 py-3 text-left">Rating</th>
-                  <th className="px-5 py-3 text-left">Employees</th>
-                  <th className="px-5 py-3 text-left">Percentage</th>
-                  <th className="px-5 py-3 text-left w-48">Distribution</th>
-                </tr>
-              </thead>
-              <tbody>
-                {distribution.map(({ rating, count, percentage }) => (
-                  <tr key={rating} className="border-b border-gray-50 last:border-0">
-                    <td className="px-5 py-3">
-                      <RatingBadge rating={rating} />
-                    </td>
-                    <td className="px-5 py-3 font-medium text-gray-900">{count}</td>
-                    <td className="px-5 py-3 text-gray-600">{percentage}%</td>
-                    <td className="px-5 py-3">
-                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden w-36">
-                        <div
-                          className="h-full bg-brand rounded-full transition-all"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Individual results */}
-          <div className="flex flex-col gap-3 flex-1 min-h-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-sm font-semibold text-gray-900 mr-auto">Individual Results</h2>
-              <select
-                value={deptFilter}
-                onChange={(e) => setDeptFilter(e.target.value)}
-                className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
-              >
-                <option value="">All Departments</option>
-                {departments.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={ratingFilter}
-                onChange={(e) => setRatingFilter(e.target.value)}
-                className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
-              >
-                <option value="">All Ratings</option>
-                {ALL_RATINGS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <DataTable<CycleResultItem>
-              columns={columns}
-              data={filtered}
-              isLoading={false}
-              searchPlaceholder="Search employee…"
-              onSearch={setSearch}
-              onRowClick={(row) =>
-                router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/results/${row.id}`)
-              }
-              emptyMessage="No results match your filters"
-              currentPage={1}
-              totalPages={1}
-              onPageChange={() => {}}
-            />
+            <RatingDistributionChart data={distribution} />
           </div>
         </>
+      ) : (
+        /* Results tab */
+        <div className="flex flex-col gap-3 flex-1 min-h-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+            >
+              <option value="">All Departments</option>
+              {departments.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+            <select
+              value={ratingFilter}
+              onChange={(e) => setRatingFilter(e.target.value)}
+              className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+            >
+              <option value="">All Ratings</option>
+              {ALL_RATINGS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <DataTable<CycleResultItem>
+            columns={columns}
+            data={filtered}
+            isLoading={false}
+            searchPlaceholder="Search employee…"
+            onSearch={setSearch}
+            onRowClick={(row) =>
+              router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/employee/${row.id}`)
+            }
+            emptyMessage="No results match your filters"
+            currentPage={1}
+            totalPages={1}
+            onPageChange={() => {}}
+          />
+        </div>
       )}
     </div>
   );
