@@ -473,30 +473,40 @@ export class LeaveService {
       );
     }
 
-    const request = await this.prisma.leaveRequest.create({
-      data: {
-        tenantId,
-        employeeId,
-        leaveTypeId: dto.leaveTypeId,
-        startDate: start,
-        endDate: end,
-        totalDays,
-        reason: dto.reason,
-        status: 'PENDING',
-      },
-      include: {
-        leaveType: true,
-        employee: { select: { firstName: true, lastName: true } },
-      },
-    });
+    const request = await this.prisma.$transaction(async (tx) => {
+      const reservedBalance = await tx.leaveBalance.updateMany({
+        where: {
+          id: balance.id,
+          remainingDays: { gte: totalDays },
+        },
+        data: {
+          pendingDays: { increment: totalDays },
+          remainingDays: { decrement: totalDays },
+        },
+      });
 
-    // Reserve days as pending
-    await this.prisma.leaveBalance.update({
-      where: { id: balance.id },
-      data: {
-        pendingDays: { increment: totalDays },
-        remainingDays: { decrement: totalDays },
-      },
+      if (reservedBalance.count !== 1) {
+        throw new BadRequestException(
+          'Leave balance changed while processing your request. Please try again.',
+        );
+      }
+
+      return tx.leaveRequest.create({
+        data: {
+          tenantId,
+          employeeId,
+          leaveTypeId: dto.leaveTypeId,
+          startDate: start,
+          endDate: end,
+          totalDays,
+          reason: dto.reason,
+          status: 'PENDING',
+        },
+        include: {
+          leaveType: true,
+          employee: { select: { firstName: true, lastName: true } },
+        },
+      });
     });
 
     const detailLink = this.buildLeaveRequestDetailLink(
@@ -606,52 +616,75 @@ export class LeaveService {
         hasPermissionRule(reviewer, 'leave:APPROVE'),
     );
 
-    const updated = await this.prisma.leaveRequest.update({
-      where: { id: requestId },
-      data: {
-        status: dto.action,
-        ...(dto.action === 'APPROVED'
-          ? { approvedBy: reviewer.id, approvedAt: new Date() }
-          : {
-              rejectedBy: reviewer.id,
-              rejectedAt: new Date(),
-              rejectionNote: dto.note,
-            }),
-      },
-    });
-
-    // Update balance
     const year = request.startDate.getFullYear();
-    const balance = await this.prisma.leaveBalance.findUnique({
-      where: {
-        employeeId_leaveTypeId_year: {
-          employeeId: request.employeeId,
-          leaveTypeId: request.leaveTypeId,
-          year,
-        },
-      },
-    });
+    const { updated, balanceMissing } = await this.prisma.$transaction(
+      async (tx) => {
+        const reviewed = await tx.leaveRequest.updateMany({
+          where: { id: requestId, tenantId, status: 'PENDING' },
+          data: {
+            status: dto.action,
+            ...(dto.action === 'APPROVED'
+              ? { approvedBy: reviewer.id, approvedAt: new Date() }
+              : {
+                  rejectedBy: reviewer.id,
+                  rejectedAt: new Date(),
+                  rejectionNote: dto.note,
+                }),
+          },
+        });
 
-    if (balance) {
-      if (dto.action === 'APPROVED') {
-        await this.prisma.leaveBalance.update({
-          where: { id: balance.id },
-          data: {
-            usedDays: { increment: request.totalDays },
-            pendingDays: { decrement: request.totalDays },
+        if (reviewed.count !== 1) {
+          throw new BadRequestException(
+            'This request has already been reviewed',
+          );
+        }
+
+        const balance = await tx.leaveBalance.findUnique({
+          where: {
+            employeeId_leaveTypeId_year: {
+              employeeId: request.employeeId,
+              leaveTypeId: request.leaveTypeId,
+              year,
+            },
           },
         });
-      } else {
-        // Rejected — restore days
-        await this.prisma.leaveBalance.update({
-          where: { id: balance.id },
-          data: {
-            pendingDays: { decrement: request.totalDays },
-            remainingDays: { increment: request.totalDays },
-          },
+
+        if (balance) {
+          if (dto.action === 'APPROVED') {
+            await tx.leaveBalance.update({
+              where: { id: balance.id },
+              data: {
+                usedDays: { increment: request.totalDays },
+                pendingDays: { decrement: request.totalDays },
+              },
+            });
+          } else {
+            await tx.leaveBalance.update({
+              where: { id: balance.id },
+              data: {
+                pendingDays: { decrement: request.totalDays },
+                remainingDays: { increment: request.totalDays },
+              },
+            });
+          }
+        }
+
+        const updatedRequest = await tx.leaveRequest.findUnique({
+          where: { id: requestId },
         });
-      }
-    } else {
+
+        if (!updatedRequest) {
+          throw new NotFoundException('Leave request not found');
+        }
+
+        return {
+          updated: updatedRequest,
+          balanceMissing: !balance,
+        };
+      },
+    );
+
+    if (balanceMissing) {
       this.logger.warn(
         `Leave balance not found for employee=${request.employeeId} leaveType=${request.leaveTypeId} year=${year} — balance counters not updated for request ${requestId}`,
       );

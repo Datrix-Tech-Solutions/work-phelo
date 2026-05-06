@@ -1,4 +1,4 @@
-import { Controller, Logger } from '@nestjs/common';
+import { Controller, HttpException, Logger } from '@nestjs/common';
 import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import type { Channel, ConsumeMessage } from 'amqplib';
 import { NotificationService } from './notification.service';
@@ -44,17 +44,44 @@ export class NotificationHandler {
     return error instanceof Error ? error.message : String(error);
   }
 
+  private shouldRequeue(error: unknown) {
+    if (error instanceof HttpException) {
+      return false;
+    }
+
+    const code =
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string'
+        ? (error as { code: string }).code
+        : undefined;
+
+    return !['P2002', 'P2003', 'P2014', 'P2025'].includes(code ?? '');
+  }
+
   private settleFailure(
     context: RmqContext,
     pattern: string,
     error: unknown,
     details: string,
   ) {
-    this.logger.error(
-      `[${pattern}] Handler failed | ${details} | error=${this.formatError(error)}`,
-      error instanceof Error ? error.stack : undefined,
+    const channel = context.getChannelRef() as Channel;
+    const message = context.getMessage() as ConsumeMessage;
+
+    if (this.shouldRequeue(error)) {
+      this.logger.error(
+        `[${pattern}] Transient failure — requeueing | ${details} | error=${this.formatError(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+      channel.nack(message, false, true);
+      return;
+    }
+
+    this.logger.warn(
+      `[${pattern}] Permanent failure — acknowledging | ${details} | error=${this.formatError(error)}`,
     );
-    this.ack(context);
+    channel.ack(message);
   }
 
   @EventPattern('notification.email_verification')

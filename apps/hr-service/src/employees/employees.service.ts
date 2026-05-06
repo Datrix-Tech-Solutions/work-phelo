@@ -24,7 +24,7 @@ import {
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
-import { AssetStatus } from '../../prisma/generated/client';
+import { AssetStatus, Prisma } from '../../prisma/generated/client';
 import {
   assertHrAccess,
   getActorEmployee,
@@ -54,6 +54,8 @@ type ResignationNotificationRecipients = {
   approvers: ResignationNotificationRecipient[];
   all: ResignationNotificationRecipient[];
 };
+
+type HrPrismaTx = Prisma.TransactionClient;
 
 @Injectable()
 export class EmployeesService {
@@ -255,6 +257,52 @@ export class EmployeesService {
     throw new ConflictException(
       'Could not allocate a unique employee number. Please retry.',
     );
+  }
+
+  private async upsertOffboardingRecord(
+    tx: HrPrismaTx,
+    tenantId: string,
+    employeeId: string,
+    dto: {
+      reason: OffboardReason;
+      otherReason?: string;
+      lastWorkingDate: string;
+      exitNotes?: string;
+    },
+    employee: { hireDate: Date },
+  ) {
+    if (dto.reason === OffboardReason.OTHER && !dto.otherReason?.trim()) {
+      throw new BadRequestException(
+        'A specific reason is required when "Other" is selected',
+      );
+    }
+
+    const lastWorkingDate = new Date(dto.lastWorkingDate);
+    if (lastWorkingDate < employee.hireDate) {
+      throw new BadRequestException(
+        'Last working date cannot be before the employee hire date',
+      );
+    }
+
+    return tx.offboardingRecord.upsert({
+      where: { employeeId },
+      create: {
+        tenantId,
+        employeeId,
+        reason: dto.reason,
+        otherReason: dto.otherReason,
+        lastWorkingDate,
+        exitNotes: dto.exitNotes,
+        isDraft: true,
+      },
+      update: {
+        reason: dto.reason,
+        otherReason: dto.otherReason,
+        lastWorkingDate,
+        exitNotes: dto.exitNotes,
+        isDraft: true,
+      },
+    });
   }
 
   async create(tenantId: string, dto: CreateEmployeeDto) {
@@ -1039,43 +1087,73 @@ export class EmployeesService {
   ) {
     await this.findById(tenantId, employeeId, actor);
 
-    const resignation = await this.prisma.resignationRecord.findUnique({
-      where: { employeeId },
-    });
+    const { offboarding, resignation } = await this.prisma.$transaction(
+      async (tx) => {
+        const employee = await tx.employee.findFirst({
+          where: { id: employeeId, tenantId },
+          select: { hireDate: true, employmentStatus: true },
+        });
 
-    if (!resignation || resignation.tenantId !== tenantId) {
-      throw new NotFoundException('No resignation found for this employee.');
-    }
+        if (!employee) {
+          throw new NotFoundException('Employee not found');
+        }
 
-    if (resignation.status !== 'PENDING') {
-      throw new BadRequestException(
-        'Only a pending resignation can be used to initiate offboarding.',
-      );
-    }
+        if (
+          employee.employmentStatus !== 'ACTIVE' &&
+          employee.employmentStatus !== 'PROBATION'
+        ) {
+          throw new BadRequestException(
+            'Offboarding can only be initiated for Active or Probation employees',
+          );
+        }
 
-    const offboarding = await this.initiateOffboard(
-      tenantId,
-      employeeId,
-      {
-        reason: OffboardReason.RESIGNATION,
-        lastWorkingDate: resignation.lastWorkingDate.toISOString(),
-        exitNotes: resignation.additionalNotes ?? undefined,
+        const resignation = await tx.resignationRecord.findUnique({
+          where: { employeeId },
+        });
+
+        if (!resignation || resignation.tenantId !== tenantId) {
+          throw new NotFoundException(
+            'No resignation found for this employee.',
+          );
+        }
+
+        if (resignation.status !== 'PENDING') {
+          throw new BadRequestException(
+            'Only a pending resignation can be used to initiate offboarding.',
+          );
+        }
+
+        const offboarding = await this.upsertOffboardingRecord(
+          tx,
+          tenantId,
+          employeeId,
+          {
+            reason: OffboardReason.RESIGNATION,
+            lastWorkingDate: resignation.lastWorkingDate.toISOString(),
+            exitNotes: resignation.additionalNotes ?? undefined,
+          },
+          employee,
+        );
+
+        const updatedResignation = await tx.resignationRecord.update({
+          where: { employeeId },
+          data: {
+            status: 'OFFBOARDING_INITIATED',
+            offboardingInitiatedAt: new Date(),
+            offboardingRecordId: offboarding.id,
+          },
+        });
+
+        return {
+          offboarding,
+          resignation: updatedResignation,
+        };
       },
-      { id: actor.id, email: actor.email },
     );
-
-    const updatedResignation = await this.prisma.resignationRecord.update({
-      where: { employeeId },
-      data: {
-        status: 'OFFBOARDING_INITIATED',
-        offboardingInitiatedAt: new Date(),
-        offboardingRecordId: offboarding.id,
-      },
-    });
 
     return {
       message: 'Offboarding initiated from resignation successfully.',
-      resignation: updatedResignation,
+      resignation,
       offboarding,
     };
   }
@@ -1086,7 +1164,6 @@ export class EmployeesService {
     tenantId: string,
     id: string,
     dto: InitiateOffboardDto,
-    actor: { id: string; email: string },
   ) {
     const employee = await this.findById(tenantId, id);
 
@@ -1099,37 +1176,8 @@ export class EmployeesService {
       );
     }
 
-    if (dto.reason === OffboardReason.OTHER && !dto.otherReason?.trim()) {
-      throw new BadRequestException(
-        'A specific reason is required when "Other" is selected',
-      );
-    }
-
-    const lastWorkingDate = new Date(dto.lastWorkingDate);
-    if (lastWorkingDate < employee.hireDate) {
-      throw new BadRequestException(
-        'Last working date cannot be before the employee hire date',
-      );
-    }
-
-    return this.prisma.offboardingRecord.upsert({
-      where: { employeeId: id },
-      create: {
-        tenantId,
-        employeeId: id,
-        reason: dto.reason,
-        otherReason: dto.otherReason,
-        lastWorkingDate,
-        exitNotes: dto.exitNotes,
-        isDraft: true,
-      },
-      update: {
-        reason: dto.reason,
-        otherReason: dto.otherReason,
-        lastWorkingDate,
-        exitNotes: dto.exitNotes,
-        isDraft: true,
-      },
+    return this.upsertOffboardingRecord(this.prisma, tenantId, id, dto, {
+      hireDate: employee.hireDate,
     });
   }
 
