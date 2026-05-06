@@ -250,10 +250,7 @@ export class EmployeesController {
     @Body() dto: InitiateOffboardDto,
     @Req() req: any,
   ) {
-    return this.employeesService.initiateOffboard(req.user.tenantId, id, dto, {
-      id: req.user.id,
-      email: req.user.email,
-    });
+    return this.employeesService.initiateOffboard(req.user.tenantId, id, dto);
   }
 
   @Get(':id/offboard')

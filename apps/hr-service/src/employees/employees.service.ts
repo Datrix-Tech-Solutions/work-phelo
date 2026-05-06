@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -927,6 +928,22 @@ export class EmployeesService {
       );
     }
 
+    const previousResignationSnapshot = existing
+      ? {
+          lastWorkingDate: existing.lastWorkingDate,
+          reason: existing.reason,
+          additionalNotes: existing.additionalNotes,
+          status: existing.status,
+          submittedAt: existing.submittedAt,
+          withdrawnAt: existing.withdrawnAt,
+          dismissedAt: existing.dismissedAt,
+          dismissedById: existing.dismissedById,
+          dismissedByEmail: existing.dismissedByEmail,
+          offboardingInitiatedAt: existing.offboardingInitiatedAt,
+          offboardingRecordId: existing.offboardingRecordId,
+        }
+      : null;
+
     const resignation = await this.prisma.resignationRecord.upsert({
       where: { employeeId },
       create: {
@@ -966,20 +983,58 @@ export class EmployeesService {
 
     // Delay notifications by 30 minutes — gives the employee a withdrawal window.
     // The processor re-checks status before firing; if withdrawn, it skips silently.
-    await this.resignationQueue.add(
-      RESIGNATION_NOTIFY_JOB,
-      {
-        tenantId,
-        employeeId,
-        employeeFirstName: employee.firstName,
-        employeeLastName: employee.lastName,
-        lastWorkingDate: lastWorkingDate.toISOString(),
-        reason: reasonLabel,
-        additionalNotes: dto.additionalNotes?.trim() || undefined,
-        detailLink,
-      },
-      { delay: RESIGNATION_NOTIFY_DELAY_MS },
-    );
+    try {
+      await this.resignationQueue.add(
+        RESIGNATION_NOTIFY_JOB,
+        {
+          tenantId,
+          employeeId,
+          employeeFirstName: employee.firstName,
+          employeeLastName: employee.lastName,
+          lastWorkingDate: lastWorkingDate.toISOString(),
+          reason: reasonLabel,
+          additionalNotes: dto.additionalNotes?.trim() || undefined,
+          detailLink,
+        },
+        {
+          delay: RESIGNATION_NOTIFY_DELAY_MS,
+          jobId: `resignation-notify:${tenantId}:${employeeId}:${submittedAt.getTime()}`,
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 60_000,
+          },
+          removeOnComplete: true,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to schedule resignation notification for employee ${employeeId}`,
+        error,
+      );
+
+      try {
+        if (previousResignationSnapshot) {
+          await this.prisma.resignationRecord.update({
+            where: { employeeId },
+            data: previousResignationSnapshot,
+          });
+        } else {
+          await this.prisma.resignationRecord.delete({
+            where: { employeeId },
+          });
+        }
+      } catch (rollbackError) {
+        this.logger.error(
+          `Failed to roll back resignation submission after queue scheduling error for employee ${employeeId}`,
+          rollbackError,
+        );
+      }
+
+      throw new ServiceUnavailableException(
+        'Could not submit the resignation right now. Please try again.',
+      );
+    }
 
     return {
       message:
