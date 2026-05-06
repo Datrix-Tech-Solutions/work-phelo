@@ -7,14 +7,61 @@ export class EmailService {
   private readonly apiKey: string;
   private readonly fromEmail: string;
   private readonly appName = 'WorkPhelo ERP';
+  private readonly frontendBaseUrl: URL;
 
   constructor() {
     if (!process.env.RESEND_API_KEY)
       throw new Error('RESEND_API_KEY is required');
     if (!process.env.RESEND_FROM_EMAIL)
       throw new Error('RESEND_FROM_EMAIL is required');
+    if (!process.env.FRONTEND_BASE_URL)
+      throw new Error('FRONTEND_BASE_URL is required');
     this.apiKey = process.env.RESEND_API_KEY;
     this.fromEmail = process.env.RESEND_FROM_EMAIL;
+    this.frontendBaseUrl = new URL(process.env.FRONTEND_BASE_URL);
+  }
+
+  private escapeHtml(value: unknown): string {
+    const normalized =
+      typeof value === 'string'
+        ? value
+        : typeof value === 'number' || typeof value === 'boolean'
+          ? String(value)
+          : '';
+
+    return normalized
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  private escapeHtmlWithBreaks(value: unknown): string {
+    return this.escapeHtml(value).replace(/\r?\n/g, '<br />');
+  }
+
+  private sanitizeUrl(url?: string): string | undefined {
+    if (!url) {
+      return undefined;
+    }
+
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return undefined;
+      }
+
+      if (parsed.origin !== this.frontendBaseUrl.origin) {
+        this.logger.warn(`Blocked email URL with unexpected origin: ${url}`);
+        return undefined;
+      }
+
+      return this.escapeHtml(parsed.toString());
+    } catch {
+      this.logger.warn(`Blocked invalid email URL: ${url}`);
+      return undefined;
+    }
   }
 
   private async send(
@@ -50,16 +97,18 @@ export class EmailService {
     firstName: string,
     otp: string,
   ): Promise<boolean> {
+    const safeFirstName = this.escapeHtml(firstName);
+    const safeOtp = this.escapeHtml(otp);
     return this.send(
       to,
       `${otp} is your ${this.appName} verification code`,
       `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #f97316;">WorkPhelo ERP</h2>
-        <p>Hi ${firstName},</p>
+        <p>Hi ${safeFirstName},</p>
         <p>Your verification code is:</p>
         <div style="background: #f97316; color: white; font-size: 32px; font-weight: bold; text-align: center; padding: 20px; border-radius: 8px; letter-spacing: 8px; margin: 24px 0;">
-          ${otp}
+          ${safeOtp}
         </div>
         <p style="color: #666;">This code expires in 10 minutes. Do not share it with anyone.</p>
       </div>
@@ -73,6 +122,9 @@ export class EmailService {
     tenantName: string,
     acceptInviteUrl: string,
   ): Promise<boolean> {
+    const safeFirstName = this.escapeHtml(firstName);
+    const safeTenantName = this.escapeHtml(tenantName);
+    const safeAcceptInviteUrl = this.sanitizeUrl(acceptInviteUrl);
     return this.send(
       to,
       `You're invited to ${tenantName} on ${this.appName}`,
@@ -109,16 +161,18 @@ export class EmailService {
     <tr>
       <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
 
-        <p>Hi ${firstName},</p>
+        <p>Hi ${safeFirstName},</p>
 
         <p>
-          Welcome to <strong>${tenantName}</strong>. Your HR administrator has set up your account on WorkPhelo.
+          Welcome to <strong>${safeTenantName}</strong>. Your HR administrator has set up your account on WorkPhelo.
         </p>
 
         <p>To get started, click the button below to set your password and log in for the first time.</p>
 
-        <p style="margin:30px 0;">
-          <a href="${acceptInviteUrl}" style="
+        ${
+          safeAcceptInviteUrl
+            ? `<p style="margin:30px 0;">
+          <a href="${safeAcceptInviteUrl}" style="
             background:#1a3557;
             color:#ffffff;
             padding:12px 20px;
@@ -129,7 +183,9 @@ export class EmailService {
           ">
             Set My Password →
           </a>
-        </p>
+        </p>`
+            : ''
+        }
 
         <p style="color:#777;">
           This invitation link will expire. If it expires before you use it, contact your HR administrator and they will send you a new one.
@@ -174,6 +230,9 @@ export class EmailService {
     tenantName: string,
     acceptInviteUrl: string,
   ): Promise<boolean> {
+    const safeFirstName = this.escapeHtml(firstName);
+    const safeTenantName = this.escapeHtml(tenantName);
+    const safeAcceptInviteUrl = this.sanitizeUrl(acceptInviteUrl);
     return this.send(
       to,
       `Welcome to ${tenantName} on ${this.appName}`,
@@ -207,18 +266,20 @@ export class EmailService {
 
     <tr>
       <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
-        <p>Hi ${firstName},</p>
+        <p>Hi ${safeFirstName},</p>
 
         <p>
-          Welcome to <strong>${tenantName}</strong> on WorkPhelo. Your company workspace is ready and your Company Admin account has been created.
+          Welcome to <strong>${safeTenantName}</strong> on WorkPhelo. Your company workspace is ready and your Company Admin account has been created.
         </p>
 
         <p>
           To activate your account, set your password using the button below. Once signed in, you will be able to complete your company setup and manage your team.
         </p>
 
-        <p style="margin:30px 0;">
-          <a href="${acceptInviteUrl}" style="
+        ${
+          safeAcceptInviteUrl
+            ? `<p style="margin:30px 0;">
+          <a href="${safeAcceptInviteUrl}" style="
             background:#1a3557;
             color:#ffffff;
             padding:12px 20px;
@@ -229,7 +290,9 @@ export class EmailService {
           ">
             Activate Company Admin Account →
           </a>
-        </p>
+        </p>`
+            : ''
+        }
 
         <p style="color:#777;">
           This invitation link will expire. If it expires before you use it, contact the platform owner or request a fresh invite.
@@ -289,6 +352,10 @@ export class EmailService {
         year: 'numeric',
       },
     );
+    const safeFirstName = this.escapeHtml(firstName);
+    const safeLastName = this.escapeHtml(lastName);
+    const safeReasonLabel = this.escapeHtml(reasonLabel);
+    const safeFormattedDate = this.escapeHtml(formattedDate);
 
     return this.send(
       to,
@@ -298,14 +365,14 @@ export class EmailService {
         <div style="background: white; padding: 32px; border-radius: 8px; border: 1px solid #e5e7eb;">
           <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
           <h2 style="color: #111827; margin: 0 0 24px 0;">Employment Notice</h2>
-          <p style="color: #374151;">Dear ${firstName} ${lastName},</p>
+          <p style="color: #374151;">Dear ${safeFirstName} ${safeLastName},</p>
           <p style="color: #374151;">
             We are writing to formally notify you that your employment has ended
-            due to: <strong>${reasonLabel}</strong>.
+            due to: <strong>${safeReasonLabel}</strong>.
           </p>
           <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 12px 16px; margin: 24px 0; border-radius: 0 4px 4px 0;">
             <p style="color: #991b1b; margin: 0; font-size: 14px;">
-              Your last working date is <strong>${formattedDate}</strong>.
+              Your last working date is <strong>${safeFormattedDate}</strong>.
             </p>
           </div>
           <p style="color: #374151;">
@@ -342,6 +409,14 @@ export class EmailService {
         year: 'numeric',
       },
     );
+    const safeEmployeeFirstName = this.escapeHtml(employeeFirstName);
+    const safeEmployeeLastName = this.escapeHtml(employeeLastName);
+    const safeReason = reason ? this.escapeHtml(reason) : undefined;
+    const safeAdditionalNotes = additionalNotes
+      ? this.escapeHtmlWithBreaks(additionalNotes)
+      : undefined;
+    const safeDetailLink = this.sanitizeUrl(detailLink);
+    const safeFormattedDate = this.escapeHtml(formattedDate);
 
     return this.send(
       to,
@@ -352,25 +427,25 @@ export class EmailService {
           <h1 style="color: #f97316; margin: 0 0 8px 0;">WorkPhelo ERP</h1>
           <h2 style="color: #111827; margin: 0 0 24px 0;">New Resignation Submitted</h2>
           <p style="color: #374151;">
-            <strong>${employeeFirstName} ${employeeLastName}</strong> has submitted a resignation.
+            <strong>${safeEmployeeFirstName} ${safeEmployeeLastName}</strong> has submitted a resignation.
           </p>
           <p style="color: #374151;">
-            Proposed last working date: <strong>${formattedDate}</strong>
+            Proposed last working date: <strong>${safeFormattedDate}</strong>
           </p>
           ${
-            reason
-              ? `<p style="color: #374151;">Reason: <strong>${reason}</strong></p>`
+            safeReason
+              ? `<p style="color: #374151;">Reason: <strong>${safeReason}</strong></p>`
               : ''
           }
           ${
-            additionalNotes
-              ? `<p style="color: #374151;">Additional notes:<br />${additionalNotes}</p>`
+            safeAdditionalNotes
+              ? `<p style="color: #374151;">Additional notes:<br />${safeAdditionalNotes}</p>`
               : ''
           }
           ${
-            detailLink
+            safeDetailLink
               ? `<p style="margin-top: 24px;">
-                  <a href="${detailLink}" style="
+                  <a href="${safeDetailLink}" style="
                     background:#1a3557;
                     color:#ffffff;
                     padding:12px 20px;
@@ -407,6 +482,11 @@ export class EmailService {
         month: 'long',
         year: 'numeric',
       });
+    const safeEmployeeFirstName = this.escapeHtml(employeeFirstName);
+    const safeEmployeeLastName = this.escapeHtml(employeeLastName);
+    const safeLeaveTypeName = this.escapeHtml(leaveTypeName);
+    const safeReason = reason ? this.escapeHtmlWithBreaks(reason) : undefined;
+    const safeDetailLink = this.sanitizeUrl(detailLink);
 
     return this.send(
       to,
@@ -442,7 +522,7 @@ export class EmailService {
     <tr>
       <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
 
-        <p><strong>${employeeFirstName} ${employeeLastName}</strong> has submitted a leave request.</p>
+        <p><strong>${safeEmployeeFirstName} ${safeEmployeeLastName}</strong> has submitted a leave request.</p>
         <p>Company Admin review is required before this request can be approved or rejected.</p>
 
         <p><strong>Request details:</strong></p>
@@ -450,11 +530,11 @@ export class EmailService {
         <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
           <tr>
             <td style="padding:8px 0; width:160px; font-weight:500;">Employee:</td>
-            <td style="padding:8px 0;">${employeeFirstName} ${employeeLastName}</td>
+            <td style="padding:8px 0;">${safeEmployeeFirstName} ${safeEmployeeLastName}</td>
           </tr>
           <tr>
             <td style="padding:8px 0; font-weight:500;">Leave type:</td>
-            <td style="padding:8px 0;">${leaveTypeName}</td>
+            <td style="padding:8px 0;">${safeLeaveTypeName}</td>
           </tr>
           <tr>
             <td style="padding:8px 0; font-weight:500;">Start date:</td>
@@ -471,20 +551,20 @@ export class EmailService {
         </table>
 
         ${
-          reason
+          safeReason
             ? `
-        <p><strong>Notes from ${employeeFirstName}:</strong></p>
+        <p><strong>Notes from ${safeEmployeeFirstName}:</strong></p>
         <p style="background:#f9f9f9; padding:16px; border-left:4px solid #ff6a00; margin:15px 0; color:#444; line-height:1.5;">
-          ${reason}
+          ${safeReason}
         </p>`
             : ''
         }
 
         ${
-          detailLink
+          safeDetailLink
             ? `
         <p style="margin:24px 0;">
-          <a href="${detailLink}" style="
+          <a href="${safeDetailLink}" style="
             background:#1a3557;
             color:#ffffff;
             padding:12px 20px;
@@ -548,6 +628,10 @@ export class EmailService {
     const heroLabel = isApproved
       ? 'Leave Request Approved'
       : 'Leave Request Not Approved';
+    const safeFirstName = this.escapeHtml(firstName);
+    const safeLeaveTypeName = this.escapeHtml(leaveTypeName);
+    const safeNote = note ? this.escapeHtmlWithBreaks(note) : undefined;
+    const safeHeroLabel = this.escapeHtml(heroLabel);
 
     return this.send(
       to,
@@ -574,7 +658,7 @@ export class EmailService {
       <td style="background:#eef1f4; padding:40px 30px;">
         <table width="100%">
           <tr>
-            <td style="font-size:28px; font-weight:600; color:#555;">${heroLabel}</td>
+            <td style="font-size:28px; font-weight:600; color:#555;">${safeHeroLabel}</td>
           </tr>
         </table>
       </td>
@@ -583,7 +667,7 @@ export class EmailService {
     <tr>
       <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
 
-        <p>Hi ${firstName},</p>
+        <p>Hi ${safeFirstName},</p>
 
         <p style="background:${bgColor}; border:1px solid ${borderColor}; border-radius:6px; padding:16px; color:${accentColor}; font-weight:600; font-size:16px; margin:20px 0;">
           Your leave request has been <strong>${isApproved ? 'Approved' : 'Rejected'}</strong>.
@@ -594,7 +678,7 @@ export class EmailService {
         <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
           <tr>
             <td style="padding:8px 0; width:160px; font-weight:500;">Leave type:</td>
-            <td style="padding:8px 0;">${leaveTypeName}</td>
+            <td style="padding:8px 0;">${safeLeaveTypeName}</td>
           </tr>
           <tr>
             <td style="padding:8px 0; font-weight:500;">Start date:</td>
@@ -611,11 +695,11 @@ export class EmailService {
         </table>
 
         ${
-          note
+          safeNote
             ? `
         <p><strong>Note from your reviewer:</strong></p>
         <p style="background:#f9f9f9; padding:16px; border-left:4px solid #ff6a00; margin:15px 0; color:#444; line-height:1.5;">
-          ${note}
+          ${safeNote}
         </p>`
             : ''
         }
@@ -664,6 +748,9 @@ export class EmailService {
         month: 'long',
         year: 'numeric',
       });
+    const safeEmployeeFirstName = this.escapeHtml(employeeFirstName);
+    const safeEmployeeLastName = this.escapeHtml(employeeLastName);
+    const safeLeaveTypeName = this.escapeHtml(leaveTypeName);
 
     return this.send(
       to,
@@ -699,18 +786,18 @@ export class EmailService {
     <tr>
       <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
 
-        <p><strong>${employeeFirstName} ${employeeLastName}</strong> has cancelled their leave request. No action is required.</p>
+        <p><strong>${safeEmployeeFirstName} ${safeEmployeeLastName}</strong> has cancelled their leave request. No action is required.</p>
 
         <p><strong>Cancelled request details:</strong></p>
 
         <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
           <tr>
             <td style="padding:8px 0; width:160px; font-weight:500;">Employee:</td>
-            <td style="padding:8px 0;">${employeeFirstName} ${employeeLastName}</td>
+            <td style="padding:8px 0;">${safeEmployeeFirstName} ${safeEmployeeLastName}</td>
           </tr>
           <tr>
             <td style="padding:8px 0; font-weight:500;">Leave type:</td>
-            <td style="padding:8px 0;">${leaveTypeName}</td>
+            <td style="padding:8px 0;">${safeLeaveTypeName}</td>
           </tr>
           <tr>
             <td style="padding:8px 0; font-weight:500;">Start date:</td>
@@ -756,21 +843,27 @@ export class EmailService {
     firstName: string,
     resetLink: string,
   ): Promise<boolean> {
+    const safeFirstName = this.escapeHtml(firstName);
+    const safeResetLink = this.sanitizeUrl(resetLink);
     return this.send(
       to,
       `Reset your ${this.appName} password`,
       `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <h2 style="color: #f97316;">WorkPhelo ERP</h2>
-        <p>Hi ${firstName},</p>
+        <p>Hi ${safeFirstName},</p>
         <p>We received a request to reset your password</p>
 
         <p style="font-weight: 600; margin-top: 24px;">Click the button to reset your password</p>
-        <div style="text-align: center; margin: 16px 0 24px;">
-          <a href="${resetLink}" style="background: #f97316; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
+        ${
+          safeResetLink
+            ? `<div style="text-align: center; margin: 16px 0 24px;">
+          <a href="${safeResetLink}" style="background: #f97316; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: bold; display: inline-block;">
             Reset Password
           </a>
-        </div>
+        </div>`
+            : ''
+        }
 
         <p style="color: #6b7280; font-size: 13px; margin-top: 8px;">This code and link expire in <strong>15 minutes</strong>.</p>
         <p style="color: #9ca3af; font-size: 12px; margin-top: 16px;">If you did not request a password reset, you can safely ignore this email.</p>
@@ -797,6 +890,11 @@ export class EmailService {
             hour12: false,
           })
         : '—';
+    const safeRecipientFirstName = this.escapeHtml(recipientFirstName);
+    const safeEmployeeFullName = this.escapeHtml(employeeFullName);
+    const safeAttendanceDate = this.escapeHtml(attendanceDate);
+    const safeReason = this.escapeHtmlWithBreaks(reason);
+    const safeDetailLink = this.sanitizeUrl(detailLink);
 
     return this.send(
       to,
@@ -823,13 +921,13 @@ export class EmailService {
     </tr>
     <tr>
       <td style="padding:30px; color:#555; font-size:15px; line-height:1.6;">
-        <p>Hi ${recipientFirstName},</p>
-        <p><strong>${employeeFullName}</strong> has submitted a time correction request that requires your approval.</p>
+        <p>Hi ${safeRecipientFirstName},</p>
+        <p><strong>${safeEmployeeFullName}</strong> has submitted a time correction request that requires your approval.</p>
         <p><strong>Correction details:</strong></p>
         <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:14px;">
           <tr style="background:#f9fafb;">
             <td style="padding:10px 12px; border:1px solid #e5e7eb; font-weight:600; width:40%;">Date</td>
-            <td style="padding:10px 12px; border:1px solid #e5e7eb;">${attendanceDate}</td>
+            <td style="padding:10px 12px; border:1px solid #e5e7eb;">${safeAttendanceDate}</td>
           </tr>
           <tr>
             <td style="padding:10px 12px; border:1px solid #e5e7eb; font-weight:600;">Requested Clock-In</td>
@@ -841,14 +939,14 @@ export class EmailService {
           </tr>
           <tr>
             <td style="padding:10px 12px; border:1px solid #e5e7eb; font-weight:600;">Reason</td>
-            <td style="padding:10px 12px; border:1px solid #e5e7eb;">${reason}</td>
+            <td style="padding:10px 12px; border:1px solid #e5e7eb;">${safeReason}</td>
           </tr>
         </table>
         ${
-          detailLink
+          safeDetailLink
             ? `
         <p style="margin:24px 0;">
-          <a href="${detailLink}" style="background:#1a3557; color:#ffffff; padding:12px 20px; text-decoration:none; border-radius:6px; display:inline-block; font-weight:500;">
+          <a href="${safeDetailLink}" style="background:#1a3557; color:#ffffff; padding:12px 20px; text-decoration:none; border-radius:6px; display:inline-block; font-weight:500;">
             Review Correction →
           </a>
         </p>`
@@ -877,6 +975,9 @@ export class EmailService {
     employeeFullName: string,
     cycleTitle: string,
   ): Promise<boolean> {
+    const safeManagerFirstName = this.escapeHtml(managerFirstName);
+    const safeEmployeeFullName = this.escapeHtml(employeeFullName);
+    const safeCycleTitle = this.escapeHtml(cycleTitle);
     return this.send(
       to,
       `Self-assessment submitted by ${employeeFullName}`,
@@ -894,8 +995,8 @@ export class EmailService {
       <p style="font-size:28px;font-weight:600;color:#555;margin:0;">Self-Assessment Ready for Review</p>
     </td></tr>
     <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
-      <p>Hi ${managerFirstName},</p>
-      <p><strong>${employeeFullName}</strong> has submitted their self-assessment for the <strong>${cycleTitle}</strong> appraisal cycle and it is now ready for your manager review.</p>
+      <p>Hi ${safeManagerFirstName},</p>
+      <p><strong>${safeEmployeeFullName}</strong> has submitted their self-assessment for the <strong>${safeCycleTitle}</strong> appraisal cycle and it is now ready for your manager review.</p>
       <p>Please log in to WorkPhelo to complete your review.</p>
       <p style="margin-top:30px;">Thank you,</p>
     </td></tr>
@@ -931,8 +1032,10 @@ export class EmailService {
         : 'Self-Assessment Reminder';
     const bodyCopy =
       daysRemaining === 0
-        ? `Your self-assessment for the <strong>${cycleTitle}</strong> appraisal cycle is due today.`
-        : `Your self-assessment for the <strong>${cycleTitle}</strong> appraisal cycle is due in <strong>${daysRemaining} day${daysRemaining === 1 ? '' : 's'}</strong>.`;
+        ? `Your self-assessment for the <strong>${this.escapeHtml(cycleTitle)}</strong> appraisal cycle is due today.`
+        : `Your self-assessment for the <strong>${this.escapeHtml(cycleTitle)}</strong> appraisal cycle is due in <strong>${daysRemaining} day${daysRemaining === 1 ? '' : 's'}</strong>.`;
+    const safeHeadline = this.escapeHtml(headline);
+    const safeEmployeeFirstName = this.escapeHtml(employeeFirstName);
 
     return this.send(
       to,
@@ -950,10 +1053,10 @@ export class EmailService {
       </h2>
     </td></tr>
     <tr><td style="background:#eef1f4;padding:40px 30px;">
-      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${headline}</p>
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${safeHeadline}</p>
     </td></tr>
     <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
-      <p>Hi ${employeeFirstName},</p>
+      <p>Hi ${safeEmployeeFirstName},</p>
       <p>${bodyCopy}</p>
       <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
@@ -997,8 +1100,10 @@ export class EmailService {
         : 'Manager Review Reminder';
     const bodyCopy =
       daysRemaining === 0
-        ? `Your manager review for <strong>${employeeFullName}</strong> in the <strong>${cycleTitle}</strong> appraisal cycle is due today.`
-        : `Your manager review for <strong>${employeeFullName}</strong> in the <strong>${cycleTitle}</strong> appraisal cycle is due in <strong>${daysRemaining} day${daysRemaining === 1 ? '' : 's'}</strong>.`;
+        ? `Your manager review for <strong>${this.escapeHtml(employeeFullName)}</strong> in the <strong>${this.escapeHtml(cycleTitle)}</strong> appraisal cycle is due today.`
+        : `Your manager review for <strong>${this.escapeHtml(employeeFullName)}</strong> in the <strong>${this.escapeHtml(cycleTitle)}</strong> appraisal cycle is due in <strong>${daysRemaining} day${daysRemaining === 1 ? '' : 's'}</strong>.`;
+    const safeHeadline = this.escapeHtml(headline);
+    const safeManagerFirstName = this.escapeHtml(managerFirstName);
 
     return this.send(
       to,
@@ -1016,10 +1121,10 @@ export class EmailService {
       </h2>
     </td></tr>
     <tr><td style="background:#eef1f4;padding:40px 30px;">
-      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${headline}</p>
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${safeHeadline}</p>
     </td></tr>
     <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
-      <p>Hi ${managerFirstName},</p>
+      <p>Hi ${safeManagerFirstName},</p>
       <p>${bodyCopy}</p>
       <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
@@ -1058,6 +1163,9 @@ export class EmailService {
       year: 'numeric',
     });
     const shiftLabel = shiftType.charAt(0) + shiftType.slice(1).toLowerCase();
+    const safeEmployeeFirstName = this.escapeHtml(employeeFirstName);
+    const safeShiftLabel = this.escapeHtml(shiftLabel);
+    const safeScheduleLink = this.sanitizeUrl(scheduleLink);
     return this.send(
       to,
       'Your shift schedule has been published',
@@ -1075,16 +1183,20 @@ export class EmailService {
       <p style="font-size:28px;font-weight:600;color:#555;margin:0;">Your Schedule Has Been Published</p>
     </td></tr>
     <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
-      <p>Hi ${employeeFirstName},</p>
+      <p>Hi ${safeEmployeeFirstName},</p>
       <p>A new shift schedule has been published for you. Here are the details:</p>
       <table width="100%" cellpadding="8" cellspacing="0" style="border:1px solid #eee;border-radius:6px;margin:16px 0;">
         <tr><td style="font-weight:600;color:#333;width:140px;">Effective From</td><td style="color:#555;">${formattedDate}</td></tr>
-        <tr style="background:#f9f9f9;"><td style="font-weight:600;color:#333;">Shift Type</td><td style="color:#555;">${shiftLabel}</td></tr>
+        <tr style="background:#f9f9f9;"><td style="font-weight:600;color:#333;">Shift Type</td><td style="color:#555;">${safeShiftLabel}</td></tr>
         <tr><td style="font-weight:600;color:#333;">Hours</td><td style="color:#555;">${startTime} – ${endTime}</td></tr>
       </table>
-      <p>
-        <a href="${scheduleLink}" style="display:inline-block;padding:12px 24px;background:#0d1b3e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">View My Schedule</a>
-      </p>
+      ${
+        safeScheduleLink
+          ? `<p>
+        <a href="${safeScheduleLink}" style="display:inline-block;padding:12px 24px;background:#0d1b3e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">View My Schedule</a>
+      </p>`
+          : ''
+      }
       <p style="margin-top:30px;">Thank you,</p>
     </td></tr>
     <tr><td style="padding:20px 30px;border-top:1px solid #eee;">
@@ -1106,10 +1218,14 @@ export class EmailService {
     ctaLabel?: string,
     ctaLink?: string,
   ): Promise<boolean> {
+    const safeHeading = this.escapeHtml(heading);
+    const safeFirstName = this.escapeHtml(firstName);
+    const safeCtaLabel = ctaLabel ? this.escapeHtml(ctaLabel) : undefined;
+    const safeCtaLink = this.sanitizeUrl(ctaLink);
     const cta =
-      ctaLabel && ctaLink
+      safeCtaLabel && safeCtaLink
         ? `<p>
-        <a href="${ctaLink}" style="display:inline-block;padding:12px 24px;background:#0d1b3e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">${ctaLabel}</a>
+        <a href="${safeCtaLink}" style="display:inline-block;padding:12px 24px;background:#0d1b3e;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">${safeCtaLabel}</a>
       </p>`
         : '';
 
@@ -1118,7 +1234,7 @@ export class EmailService {
       subject,
       `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8" /><title>${heading}</title></head>
+<head><meta charset="UTF-8" /><title>${safeHeading}</title></head>
 <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
   <table align="center" width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;margin:40px auto;border-radius:8px;overflow:hidden;">
     <tr><td style="padding:20px 30px;">
@@ -1127,10 +1243,10 @@ export class EmailService {
       </h2>
     </td></tr>
     <tr><td style="background:#eef1f4;padding:40px 30px;">
-      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${heading}</p>
+      <p style="font-size:28px;font-weight:600;color:#555;margin:0;">${safeHeading}</p>
     </td></tr>
     <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
-      <p>Hi ${firstName},</p>
+      <p>Hi ${safeFirstName},</p>
       ${bodyHtml}
       ${cta}
       <p style="margin-top:30px;">Thank you,</p>
@@ -1156,21 +1272,26 @@ export class EmailService {
     reason?: string | null,
     scheduleLink?: string,
   ): Promise<boolean> {
+    const safeCounterpartFullName = this.escapeHtml(counterpartFullName);
+    const safeRequesterFullName = this.escapeHtml(requesterFullName);
+    const safeRequesterShiftLabel = this.escapeHtml(requesterShiftLabel);
+    const safeTargetShiftLabel = this.escapeHtml(targetShiftLabel);
+    const safeReason = reason ? this.escapeHtmlWithBreaks(reason) : '';
     const body = [
       recipientRole === 'REQUESTER'
-        ? `<p>Your shift swap request with <strong>${counterpartFullName}</strong> has been submitted and is awaiting their response.</p>`
-        : `<p><strong>${requesterFullName}</strong> has requested a shift swap with you.</p>`,
+        ? `<p>Your shift swap request with <strong>${safeCounterpartFullName}</strong> has been submitted and is awaiting their response.</p>`
+        : `<p><strong>${safeRequesterFullName}</strong> has requested a shift swap with you.</p>`,
       `<table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Their shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeRequesterShiftLabel}</td>
         </tr>
         <tr>
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Swap target</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeTargetShiftLabel}</td>
         </tr>
       </table>`,
-      reason ? `<p><strong>Reason:</strong> ${reason}</p>` : '',
+      safeReason ? `<p><strong>Reason:</strong> ${safeReason}</p>` : '',
       recipientRole === 'COLLEAGUE'
         ? `<p>Please log in to WorkPhelo to accept or decline this request within 48 hours.</p>`
         : '<p>You can track the request status from your schedule screen.</p>',
@@ -1201,19 +1322,24 @@ export class EmailService {
     reason?: string | null,
     reviewLink?: string,
   ): Promise<boolean> {
+    const safeRequesterFullName = this.escapeHtml(requesterFullName);
+    const safeTargetFullName = this.escapeHtml(targetFullName);
+    const safeRequesterShiftLabel = this.escapeHtml(requesterShiftLabel);
+    const safeTargetShiftLabel = this.escapeHtml(targetShiftLabel);
+    const safeReason = reason ? this.escapeHtmlWithBreaks(reason) : '';
     const body = [
-      `<p>A shift swap between <strong>${requesterFullName}</strong> and <strong>${targetFullName}</strong> is awaiting your approval.</p>`,
+      `<p>A shift swap between <strong>${safeRequesterFullName}</strong> and <strong>${safeTargetFullName}</strong> is awaiting your approval.</p>`,
       `<table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Requester shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeRequesterShiftLabel}</td>
         </tr>
         <tr>
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Colleague shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeTargetShiftLabel}</td>
         </tr>
       </table>`,
-      reason ? `<p><strong>Reason:</strong> ${reason}</p>` : '',
+      safeReason ? `<p><strong>Reason:</strong> ${safeReason}</p>` : '',
       '<p>Please review the request in the scheduling section.</p>',
     ].join('');
 
@@ -1234,12 +1360,13 @@ export class EmailService {
     counterpartFullName: string,
     scheduleLink?: string,
   ): Promise<boolean> {
+    const safeCounterpartFullName = this.escapeHtml(counterpartFullName);
     return this.sendShiftSwapEmail(
       to,
       `Shift swap update with ${counterpartFullName}`,
       'Shift Swap Declined',
       firstName,
-      `<p>Your shift swap request with <strong>${counterpartFullName}</strong> was declined. Your original shifts remain unchanged.</p>`,
+      `<p>Your shift swap request with <strong>${safeCounterpartFullName}</strong> was declined. Your original shifts remain unchanged.</p>`,
       scheduleLink ? 'Open Scheduling' : undefined,
       scheduleLink,
     );
@@ -1253,20 +1380,23 @@ export class EmailService {
     targetShiftLabel: string,
     scheduleLink?: string,
   ): Promise<boolean> {
+    const safeCounterpartFullName = this.escapeHtml(counterpartFullName);
+    const safeRequesterShiftLabel = this.escapeHtml(requesterShiftLabel);
+    const safeTargetShiftLabel = this.escapeHtml(targetShiftLabel);
     return this.sendShiftSwapEmail(
       to,
       `Your shift swap with ${counterpartFullName} was approved`,
       'Shift Swap Approved',
       firstName,
-      `<p>Your shift swap with <strong>${counterpartFullName}</strong> was approved.</p>
+      `<p>Your shift swap with <strong>${safeCounterpartFullName}</strong> was approved.</p>
       <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Original requester shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeRequesterShiftLabel}</td>
         </tr>
         <tr>
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Original colleague shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeTargetShiftLabel}</td>
         </tr>
       </table>
       <p>Your schedule has been updated to reflect the approved swap.</p>`,
@@ -1284,21 +1414,25 @@ export class EmailService {
     targetShiftLabel: string,
     scheduleLink?: string,
   ): Promise<boolean> {
+    const safeCounterpartFullName = this.escapeHtml(counterpartFullName);
+    const safeRejectionReason = this.escapeHtmlWithBreaks(rejectionReason);
+    const safeRequesterShiftLabel = this.escapeHtml(requesterShiftLabel);
+    const safeTargetShiftLabel = this.escapeHtml(targetShiftLabel);
     return this.sendShiftSwapEmail(
       to,
       `Your shift swap with ${counterpartFullName} was rejected`,
       'Shift Swap Rejected',
       firstName,
-      `<p>Your shift swap with <strong>${counterpartFullName}</strong> was rejected by the manager.</p>
-      <p><strong>Reason:</strong> ${rejectionReason}</p>
+      `<p>Your shift swap with <strong>${safeCounterpartFullName}</strong> was rejected by the manager.</p>
+      <p><strong>Reason:</strong> ${safeRejectionReason}</p>
       <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Requester shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeRequesterShiftLabel}</td>
         </tr>
         <tr>
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Colleague shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeTargetShiftLabel}</td>
         </tr>
       </table>
       <p>Your original shifts remain unchanged.</p>`,
@@ -1315,20 +1449,23 @@ export class EmailService {
     targetShiftLabel: string,
     scheduleLink?: string,
   ): Promise<boolean> {
+    const safeCounterpartFullName = this.escapeHtml(counterpartFullName);
+    const safeRequesterShiftLabel = this.escapeHtml(requesterShiftLabel);
+    const safeTargetShiftLabel = this.escapeHtml(targetShiftLabel);
     return this.sendShiftSwapEmail(
       to,
       `Your shift swap with ${counterpartFullName} expired`,
       'Shift Swap Expired',
       firstName,
-      `<p>Your shift swap with <strong>${counterpartFullName}</strong> expired without a response within 48 hours.</p>
+      `<p>Your shift swap with <strong>${safeCounterpartFullName}</strong> expired without a response within 48 hours.</p>
       <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Requester shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${requesterShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeRequesterShiftLabel}</td>
         </tr>
         <tr>
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Colleague shift</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${targetShiftLabel}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeTargetShiftLabel}</td>
         </tr>
       </table>
       <p>Your original shifts remain unchanged.</p>`,
@@ -1344,6 +1481,9 @@ export class EmailService {
     finalScore: number,
     finalRating: string,
   ): Promise<boolean> {
+    const safeEmployeeFirstName = this.escapeHtml(employeeFirstName);
+    const safeCycleTitle = this.escapeHtml(cycleTitle);
+    const safeFinalRating = this.escapeHtml(finalRating);
     return this.send(
       to,
       `Your appraisal review is complete — ${cycleTitle}`,
@@ -1361,8 +1501,8 @@ export class EmailService {
       <p style="font-size:28px;font-weight:600;color:#555;margin:0;">Appraisal Review Complete</p>
     </td></tr>
     <tr><td style="padding:30px;color:#555;font-size:15px;line-height:1.6;">
-      <p>Hi ${employeeFirstName},</p>
-      <p>Your manager has completed the review for the <strong>${cycleTitle}</strong> appraisal cycle.</p>
+      <p>Hi ${safeEmployeeFirstName},</p>
+      <p>Your manager has completed the review for the <strong>${safeCycleTitle}</strong> appraisal cycle.</p>
       <table style="width:100%;border-collapse:collapse;margin:15px 0;font-size:14px;">
         <tr style="background:#f9fafb;">
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;width:40%;">Final Score</td>
@@ -1370,7 +1510,7 @@ export class EmailService {
         </tr>
         <tr>
           <td style="padding:10px 12px;border:1px solid #e5e7eb;font-weight:600;">Rating</td>
-          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${finalRating}</td>
+          <td style="padding:10px 12px;border:1px solid #e5e7eb;">${safeFinalRating}</td>
         </tr>
       </table>
       <p>Log in to WorkPhelo to view your full appraisal details.</p>

@@ -24,6 +24,7 @@ import {
 import { LeaveService } from './leave.service';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
+import { QueryLeaveRequestsDto } from './dto/query-leave-requests.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
@@ -34,6 +35,9 @@ import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
 import { RequestUser } from '@work-phelo/types';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & { user: RequestUser };
 
 @ApiTags('Leave')
 @Controller('leave')
@@ -56,7 +60,7 @@ export class LeaveController {
   updateLeaveType(
     @Param('id') id: string,
     @Body() dto: Partial<CreateLeaveTypeDto>,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.leaveService.updateLeaveType(req.user.tenantId, id, dto);
   }
@@ -72,7 +76,7 @@ export class LeaveController {
     status: 403,
     description: 'Default leave types cannot be deleted',
   })
-  deleteLeaveType(@Param('id') id: string, @Req() req: any) {
+  deleteLeaveType(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.leaveService.deleteLeaveType(req.user.tenantId, id);
   }
 
@@ -86,7 +90,7 @@ export class LeaveController {
   @ApiResponse({ status: 201, description: 'Public holiday added' })
   createPublicHoliday(
     @Body() dto: { name: string; date: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.leaveService.createPublicHoliday(req.user.tenantId, dto);
   }
@@ -94,7 +98,7 @@ export class LeaveController {
   @Get('public-holidays')
   @ApiOperation({ summary: 'List all public holidays for the company' })
   @ApiResponse({ status: 200, description: 'Public holidays retrieved' })
-  getPublicHolidays(@Req() req: any) {
+  getPublicHolidays(@Req() req: AuthenticatedRequest) {
     return this.leaveService.getPublicHolidays(req.user.tenantId);
   }
 
@@ -106,7 +110,7 @@ export class LeaveController {
   updatePublicHoliday(
     @Param('id') id: string,
     @Body() dto: { name?: string; date?: string },
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.leaveService.updatePublicHoliday(req.user.tenantId, id, dto);
   }
@@ -116,7 +120,10 @@ export class LeaveController {
   @ApiOperation({ summary: 'Delete a public holiday' })
   @ApiParam({ name: 'id', description: 'Public holiday UUID' })
   @ApiResponse({ status: 200, description: 'Public holiday deleted' })
-  deletePublicHoliday(@Param('id') id: string, @Req() req: any) {
+  deletePublicHoliday(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.leaveService.deletePublicHoliday(req.user.tenantId, id);
   }
 
@@ -127,14 +134,17 @@ export class LeaveController {
   })
   @ApiBody({ type: CreateLeaveTypeDto })
   @ApiResponse({ status: 201, description: 'Leave type created' })
-  createLeaveType(@Body() dto: CreateLeaveTypeDto, @Req() req: any) {
+  createLeaveType(
+    @Body() dto: CreateLeaveTypeDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.leaveService.createLeaveType(req.user.tenantId, dto);
   }
 
   @Get('types')
   @ApiOperation({ summary: 'List all leave types for the tenant' })
   @ApiResponse({ status: 200, description: 'Leave types retrieved' })
-  getLeaveTypes(@Req() req: any) {
+  getLeaveTypes(@Req() req: AuthenticatedRequest) {
     return this.leaveService.getLeaveTypes(req.user.tenantId);
   }
 
@@ -142,7 +152,7 @@ export class LeaveController {
   @RequirePermissions(Permission.READ_OWN_LEAVE)
   @ApiOperation({ summary: 'Get leave balances for the logged-in employee' })
   @ApiResponse({ status: 200, description: 'My leave balances retrieved' })
-  getMyBalances(@Req() req: any) {
+  getMyBalances(@Req() req: AuthenticatedRequest) {
     return this.leaveService.getMyLeaveBalances(req.user.tenantId, req.user.id);
   }
 
@@ -150,7 +160,10 @@ export class LeaveController {
   @ApiOperation({ summary: 'Get leave balances for a specific employee' })
   @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Leave balances retrieved' })
-  getBalances(@Param('employeeId') employeeId: string, @Req() req: any) {
+  getBalances(
+    @Param('employeeId') employeeId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.leaveService.getLeaveBalances(
       req.user.tenantId,
       employeeId,
@@ -166,7 +179,7 @@ export class LeaveController {
       'Backfill leave balances for all employees in the tenant — Admin only',
   })
   @ApiResponse({ status: 200, description: 'Backfill complete' })
-  backfillBalances(@Req() req: any) {
+  backfillBalances(@Req() req: AuthenticatedRequest) {
     return this.leaveService.backfillLeaveBalances(req.user.tenantId);
   }
 
@@ -175,7 +188,10 @@ export class LeaveController {
   @ApiOperation({ summary: 'Initialize leave balances for an employee' })
   @ApiParam({ name: 'employeeId', description: 'Employee UUID' })
   @ApiResponse({ status: 201, description: 'Leave balances initialized' })
-  initializeBalances(@Param('employeeId') employeeId: string, @Req() req: any) {
+  initializeBalances(
+    @Param('employeeId') employeeId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.leaveService.initializeLeaveBalances(
       req.user.tenantId,
       employeeId,
@@ -198,7 +214,10 @@ export class LeaveController {
   })
   @ApiResponse({ status: 201, description: 'Leave request submitted' })
   @ApiResponse({ status: 400, description: 'Insufficient leave balance' })
-  createRequest(@Body() dto: CreateLeaveRequestDto, @Req() req: any) {
+  createRequest(
+    @Body() dto: CreateLeaveRequestDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.leaveService.createRequest(
       req.user.tenantId,
       req.user as RequestUser,
@@ -214,11 +233,14 @@ export class LeaveController {
     enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'],
   })
   @ApiResponse({ status: 200, description: 'Leave requests retrieved' })
-  getRequests(@Query('status') status: string, @Req() req: any) {
+  getRequests(
+    @Query() query: QueryLeaveRequestsDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.leaveService.getRequests(
       req.user.tenantId,
       req.user as RequestUser,
-      { status },
+      query,
     );
   }
 
@@ -227,18 +249,21 @@ export class LeaveController {
   @ApiOperation({ summary: 'Get all leave requests — Admin only' })
   @ApiQuery({ name: 'status', required: false })
   @ApiResponse({ status: 200, description: 'All leave requests retrieved' })
-  getAllRequests(@Query('status') status: string, @Req() req: any) {
+  getAllRequests(
+    @Query() query: QueryLeaveRequestsDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.leaveService.getRequests(
       req.user.tenantId,
       req.user as RequestUser,
-      { status, scope: 'all' },
+      { ...query, scope: 'all' },
     );
   }
 
   @Get('requests/pending-count')
   @ApiOperation({ summary: 'Get pending leave request count' })
   @ApiResponse({ status: 200, description: 'Count returned' })
-  getPendingCount(@Req() req: any) {
+  getPendingCount(@Req() req: AuthenticatedRequest) {
     return this.leaveService.getPendingCount(
       req.user.tenantId,
       req.user as RequestUser,
@@ -248,7 +273,7 @@ export class LeaveController {
   @Get('requests/my')
   @ApiOperation({ summary: "Get the logged-in employee's own leave requests" })
   @ApiResponse({ status: 200, description: 'My leave requests retrieved' })
-  async getMyRequests(@Req() req: any) {
+  async getMyRequests(@Req() req: AuthenticatedRequest) {
     const employee = await this.leaveService.getEmployeeByUserId(
       req.user.tenantId,
       req.user.id,
@@ -269,7 +294,7 @@ export class LeaveController {
   reviewRequest(
     @Param('id') id: string,
     @Body() dto: ReviewLeaveRequestDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.leaveService.reviewRequest(
       req.user.tenantId,
@@ -284,7 +309,7 @@ export class LeaveController {
   @ApiOperation({ summary: 'Cancel a leave request' })
   @ApiParam({ name: 'id', description: 'Leave request UUID' })
   @ApiResponse({ status: 200, description: 'Leave request cancelled' })
-  cancelRequest(@Param('id') id: string, @Req() req: any) {
+  cancelRequest(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.leaveService.cancelRequest(req.user.tenantId, id, req.user.id);
   }
 }
