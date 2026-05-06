@@ -1,15 +1,32 @@
 'use client';
 
 import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { User } from '@/types/auth';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { user, setUser, setLoading, setPermissions } = useAuthStore();
+  const pathname = usePathname();
+
+  const isPublicAuthRoute = Boolean(
+    pathname === '/login' ||
+    pathname === '/platform/login' ||
+    /^\/[^/]+\/login$/.test(pathname) ||
+    pathname.includes('/accept-invite') ||
+    pathname.includes('/reset-password') ||
+    pathname.includes('/verify-account') ||
+    pathname.includes('/forgot-password'),
+  );
 
   useEffect(() => {
     if (user) {
+      setLoading(false);
+      return;
+    }
+
+    if (isPublicAuthRoute) {
       setLoading(false);
       return;
     }
@@ -37,8 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isPublicAuthRoute, setLoading, setPermissions, setUser, user]);
 
   return <>{children}</>;
 }
