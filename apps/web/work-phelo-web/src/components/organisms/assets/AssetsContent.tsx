@@ -28,7 +28,7 @@ import {
 import { useEmployees } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
 import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
-import { SummaryCard } from '@/components/atoms/SummaryCard';
+import { StatCard } from '@/components/molecules/dashboard/StatCard';
 
 const TYPE_LABELS: Record<AssetType, string> = {
   LAPTOP: 'Laptop',
@@ -162,39 +162,34 @@ export function AssetsContent() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-5 gap-3 shrink-0">
-        <SummaryCard
-          label="Total Assets"
+        <StatCard
+          title="Total Assets"
           value={summary.total}
-          icon={Package}
-          iconColor="text-gray-600"
+          icon={<Package className="w-4.5 h-4.5 text-gray-600" />}
           iconBg="bg-gray-100"
         />
-        <SummaryCard
-          label="Assigned"
+        <StatCard
+          title="Assigned"
           value={summary.assigned}
-          icon={UserCheck}
-          iconColor="text-blue-600"
+          icon={<UserCheck className="w-4.5 h-4.5 text-blue-600" />}
           iconBg="bg-blue-50"
         />
-        <SummaryCard
-          label="Available"
+        <StatCard
+          title="Available"
           value={summary.available}
-          icon={CheckCircle}
-          iconColor="text-green-600"
+          icon={<CheckCircle className="w-4.5 h-4.5 text-green-600" />}
           iconBg="bg-green-50"
         />
-        <SummaryCard
-          label="Under Maintenance"
+        <StatCard
+          title="Under Maintenance"
           value={summary.maintenance}
-          icon={Wrench}
-          iconColor="text-yellow-600"
+          icon={<Wrench className="w-4.5 h-4.5 text-yellow-600" />}
           iconBg="bg-yellow-50"
         />
-        <SummaryCard
-          label="Retired"
+        <StatCard
+          title="Retired"
           value={summary.retired}
-          icon={Archive}
-          iconColor="text-red-500"
+          icon={<Archive className="w-4.5 h-4.5 text-red-500" />}
           iconBg="bg-red-50"
         />
       </div>
