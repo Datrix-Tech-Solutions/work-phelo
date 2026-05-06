@@ -31,6 +31,7 @@ export const EventPatterns = {
   AUTH_RESEND_EMPLOYEE_INVITE: 'auth.resend_employee_invite',
   AUTH_PROVISION_EMPLOYEE_INVITE: 'auth.provision_employee_invite',
   AUTH_DELETE_PENDING_EMPLOYEE_INVITE: 'auth.delete_pending_employee_invite',
+  AUTH_DEACTIVATE_EMPLOYEE_ACCESS: 'auth.deactivate_employee_access',
   AUTH_RESOLVE_PERMISSION_RECIPIENTS: 'auth.resolve_permission_recipients',
   AUTH_GET_USER_STATUSES: 'auth.get_user_statuses',
 
@@ -146,6 +147,17 @@ export interface DeletePendingEmployeeInviteCommand {
 
 export interface DeletePendingEmployeeInviteResult {
   deleted: boolean;
+}
+
+export interface DeactivateEmployeeAccessCommand {
+  tenantId: string;
+  userId: string;
+  email: string;
+  reason: string;
+}
+
+export interface DeactivateEmployeeAccessResult {
+  deactivated: boolean;
 }
 
 export interface ResolvePermissionRecipientsCommand {

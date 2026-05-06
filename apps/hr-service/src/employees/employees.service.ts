@@ -392,7 +392,22 @@ export class EmployeesService {
         dto,
         provisionedUser,
       );
+      await this.leaveService.initializeLeaveBalances(tenantId, employee.id);
+      this.logger.log(`Leave balances initialised for ${employee.email}`);
     } catch (err) {
+      if (employee) {
+        try {
+          await this.prisma.employee.delete({
+            where: { id: employee.id },
+          });
+        } catch (rollbackErr) {
+          this.logger.error(
+            `Failed to roll back HR employee ${dto.email} after onboarding setup failed`,
+            rollbackErr,
+          );
+        }
+      }
+
       try {
         await this.rabbitmq.authDeletePendingEmployeeInvite({
           tenantId,
@@ -401,26 +416,12 @@ export class EmployeesService {
         });
       } catch (rollbackErr) {
         this.logger.error(
-          `Failed to roll back auth invite for ${dto.email} after HR employee creation failed`,
+          `Failed to roll back auth invite for ${dto.email} after onboarding setup failed`,
           rollbackErr,
         );
       }
       throw err;
     }
-
-    // Initialise leave balances immediately so the employee can request leave
-    // as soon as their account is active. Uses upsert — safe to call multiple times.
-    void this.leaveService
-      .initializeLeaveBalances(tenantId, employee.id)
-      .then(() =>
-        this.logger.log(`Leave balances initialised for ${employee.email}`),
-      )
-      .catch((err) =>
-        this.logger.error(
-          `Failed to initialise leave balances for ${employee.email}`,
-          err,
-        ),
-      );
 
     return employee;
   }
@@ -1410,10 +1411,11 @@ export class EmployeesService {
       }),
     ]);
 
-    // 2. Revoke auth access (fire-and-forget)
+    // 2. Revoke auth access immediately. If this fails, the recovery cron
+    // will retry for any still-active auth account tied to an offboarded employee.
     if (employee.userId) {
-      void this.rabbitmq
-        .authEmployeeOffboarded({
+      await this.rabbitmq
+        .authDeactivateEmployeeAccess({
           tenantId,
           userId: employee.userId,
           email: employee.email,
@@ -1421,7 +1423,7 @@ export class EmployeesService {
         })
         .catch((err) =>
           this.logger.error(
-            `Failed to emit hr.employee_offboarded for ${employee.email}`,
+            `Failed to deactivate auth access for offboarded employee ${employee.email}`,
             err,
           ),
         );
