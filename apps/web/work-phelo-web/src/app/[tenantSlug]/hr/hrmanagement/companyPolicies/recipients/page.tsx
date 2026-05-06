@@ -1,11 +1,16 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormSection } from '@/components/atoms/FormSection';
 import { cn } from '@/lib/utils';
+import { useCompanyPoliciesSettings, useUpdateCompanyPoliciesSettings } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import type { CompanyPolicyCycleRecipient } from '@/types/hr';
 
-const CYCLE_RECIPIENTS_OPTIONS = [
+const CYCLE_RECIPIENTS_OPTIONS: { value: CompanyPolicyCycleRecipient; label: string }[] = [
   { value: 'all', label: 'All Employees' },
   { value: 'permanent', label: 'Permanent Employees' },
   { value: 'contractual', label: 'Contractual Employees' },
@@ -14,13 +19,18 @@ const CYCLE_RECIPIENTS_OPTIONS = [
 ];
 
 interface RecipientsForm {
-  cycleRecipients: string[];
+  cycleRecipients: CompanyPolicyCycleRecipient[];
 }
 
 export default function CycleRecipientsPage() {
+  const toast = useToast();
+  const { data: settings, isLoading } = useCompanyPoliciesSettings();
+  const { mutate: updateSettings, isPending } = useUpdateCompanyPoliciesSettings();
+
   const {
     control,
     handleSubmit,
+    reset,
     formState: { isDirty },
   } = useForm<RecipientsForm>({
     defaultValues: {
@@ -28,9 +38,20 @@ export default function CycleRecipientsPage() {
     },
   });
 
-  const onSubmit = () => {
-    // TODO: wire up to POST /hr/settings/company-policies when endpoint is ready
+  useEffect(() => {
+    if (settings) {
+      reset({ cycleRecipients: settings.cycleRecipients });
+    }
+  }, [settings, reset]);
+
+  const onSubmit = (data: RecipientsForm) => {
+    updateSettings(data, {
+      onSuccess: () => toast.success('Cycle recipients saved'),
+      onError: (err) => toast.error(extractError(err, 'Failed to save recipients')),
+    });
   };
+
+  if (isLoading) return <div className="p-8 text-sm text-gray-400">Loading...</div>;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 max-w-xl">
@@ -79,7 +100,7 @@ export default function CycleRecipientsPage() {
       </FormSection>
 
       <div>
-        <Button type="submit" disabled={!isDirty}>
+        <Button type="submit" disabled={!isDirty} isLoading={isPending} loadingText="Saving...">
           Save Changes
         </Button>
       </div>
