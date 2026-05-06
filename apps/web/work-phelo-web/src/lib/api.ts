@@ -9,6 +9,18 @@ export const api = axios.create({
 // Routes that should never trigger a token refresh attempt
 const SKIP_REFRESH = ['/auth/refresh', '/auth/admin/login', '/auth/login'];
 
+function isAuthPage(pathname: string): boolean {
+  return (
+    pathname === '/login' ||
+    pathname === '/platform/login' ||
+    /^\/[^/]+\/login$/.test(pathname) ||
+    pathname.includes('/accept-invite') ||
+    pathname.includes('/reset-password') ||
+    pathname.includes('/verify-account') ||
+    pathname.includes('/forgot-password')
+  );
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -23,9 +35,14 @@ api.interceptors.response.use(
         await api.post('/auth/refresh');
         return api(original);
       } catch {
+        const path = window.location.pathname;
+
+        if (isAuthPage(path)) {
+          return Promise.reject(error);
+        }
+
         // Refresh failed — send back to login
         // Derive correct login page from current path
-        const path = window.location.pathname;
         const tenantMatch = path.match(/^\/([^/]+)\//);
         const isPlatform =
           !tenantMatch || tenantMatch[1] === 'platform' || tenantMatch[1] === 'dashboard';
