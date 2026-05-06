@@ -42,7 +42,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
         managerId: editTarget.managerId,
       });
     }
-  }, [editTarget, form]);
+  }, [editTarget, form, isOpen]);
 
   const handleSubmit = async (data: DeptForm) => {
     if (!editTarget) return;

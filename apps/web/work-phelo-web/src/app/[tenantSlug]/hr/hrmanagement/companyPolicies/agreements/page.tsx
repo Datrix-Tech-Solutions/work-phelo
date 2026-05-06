@@ -4,8 +4,17 @@ import { useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { AddAgreementPanel } from '@/components/organisms/companyPolicies/AddAgreementPanel';
+import { AgreementViewModal } from '@/components/organisms/companyPolicies/AgreementViewModal';
+import {
+  useCompanyAgreements,
+  useCreateCompanyAgreement,
+  useDeleteCompanyAgreement,
+} from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import type { CompanyAgreement, CompanyAgreementType, CreateCompanyAgreementDto } from '@/types/hr';
 
-const AGREEMENT_TYPE_LABELS: Record<string, string> = {
+const AGREEMENT_TYPE_LABELS: Record<CompanyAgreementType, string> = {
   NDA: 'Non-Disclosure Agreement',
   EMPLOYMENT_CONTRACT: 'Employment Contract',
   CONFIDENTIALITY: 'Confidentiality Agreement',
@@ -16,36 +25,16 @@ const AGREEMENT_TYPE_LABELS: Record<string, string> = {
   OTHER: 'Other',
 };
 
-interface Agreement {
-  id: string;
-  type: string;
-  title: string;
-  details: string;
-  createdAt: string;
-}
-
-const COLUMNS: Column<Agreement>[] = [
-  {
-    key: 'title',
-    label: 'Title',
-    width: '2fr',
-  },
+const COLUMNS: Column<CompanyAgreement>[] = [
+  { key: 'title', label: 'Title' },
   {
     key: 'type',
     label: 'Type',
-    width: '2fr',
     render: (row) => AGREEMENT_TYPE_LABELS[row.type] ?? row.type,
-  },
-  {
-    key: 'details',
-    label: 'Details',
-    width: '3fr',
-    render: (row) => <span className="line-clamp-2 text-gray-500">{row.details}</span>,
   },
   {
     key: 'createdAt',
     label: 'Created',
-    width: '120px',
     render: (row) =>
       new Date(row.createdAt).toLocaleDateString('en-GB', {
         day: '2-digit',
@@ -58,10 +47,15 @@ const COLUMNS: Column<Agreement>[] = [
 const PAGE_SIZE = 10;
 
 export default function CompanyAgreementsPage() {
+  const toast = useToast();
   const [panelOpen, setPanelOpen] = useState(false);
-  const [agreements, setAgreements] = useState<Agreement[]>([]);
+  const [viewAgreement, setViewAgreement] = useState<CompanyAgreement | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+
+  const { data: agreements = [], isLoading } = useCompanyAgreements();
+  const { mutate: createAgreement, isPending: isCreating } = useCreateCompanyAgreement();
+  const { mutate: deleteAgreement } = useDeleteCompanyAgreement();
 
   const filtered = agreements.filter(
     (a) =>
@@ -71,6 +65,23 @@ export default function CompanyAgreementsPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleCreate = (data: CreateCompanyAgreementDto) => {
+    createAgreement(data, {
+      onSuccess: () => {
+        toast.success('Agreement created');
+        setPanelOpen(false);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to create agreement')),
+    });
+  };
+
+  const handleDelete = (id: string) => {
+    deleteAgreement(id, {
+      onSuccess: () => toast.success('Agreement deleted'),
+      onError: (err) => toast.error(extractError(err, 'Failed to delete agreement')),
+    });
+  };
 
   return (
     <div className="flex flex-col gap-6 h-full">
@@ -84,6 +95,7 @@ export default function CompanyAgreementsPage() {
       <DataTable
         columns={COLUMNS}
         data={paginated}
+        isLoading={isLoading}
         emptyMessage="No agreements found"
         searchPlaceholder="Search by title or type…"
         searchValue={search}
@@ -96,9 +108,13 @@ export default function CompanyAgreementsPage() {
         onPageChange={setPage}
         rowActions={(row) => [
           {
+            label: 'View',
+            onClick: () => setViewAgreement(row),
+          },
+          {
             label: 'Delete',
             danger: true,
-            onClick: () => setAgreements((prev) => prev.filter((a) => a.id !== row.id)),
+            onClick: () => handleDelete(row.id),
           },
         ]}
       />
@@ -106,19 +122,15 @@ export default function CompanyAgreementsPage() {
       <AddAgreementPanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
-        onSubmit={(data) => {
-          setAgreements((prev) => [
-            {
-              id: crypto.randomUUID(),
-              type: data.type,
-              title: data.title,
-              details: data.details,
-              createdAt: new Date().toISOString(),
-            },
-            ...prev,
-          ]);
-          setPanelOpen(false);
-        }}
+        onSubmit={handleCreate}
+        isSubmitting={isCreating}
+      />
+
+      <AgreementViewModal
+        isOpen={!!viewAgreement}
+        agreement={viewAgreement}
+        mode="view"
+        onClose={() => setViewAgreement(null)}
       />
     </div>
   );

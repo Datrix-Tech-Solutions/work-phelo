@@ -19,6 +19,7 @@ interface DatePickerProps {
   placeholder?: string;
   disableFuture?: boolean;
   disablePast?: boolean;
+  minDate?: string; // ISO: YYYY-MM-DD — disables all days before this date
 }
 
 export function DatePicker({
@@ -29,6 +30,7 @@ export function DatePicker({
   placeholder = 'DD/MM/YYYY',
   disableFuture = false,
   disablePast = false,
+  minDate,
 }: DatePickerProps) {
   const today = new Date();
   const parsed = value ? new Date(value) : null;
@@ -67,10 +69,19 @@ export function DatePicker({
 
   const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
+  const minDateNorm = minDate
+    ? (() => {
+        const d = new Date(minDate);
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      })()
+    : null;
+
   const isFutureDay = (day: number) =>
     disableFuture && new Date(viewYear, viewMonth, day) > todayNorm;
   const isPastDay = (day: number) => disablePast && new Date(viewYear, viewMonth, day) < todayNorm;
-  const isDisabledDay = (day: number) => isFutureDay(day) || isPastDay(day);
+  const isBeforeMinDate = (day: number) =>
+    !!minDateNorm && new Date(viewYear, viewMonth, day) < minDateNorm;
+  const isDisabledDay = (day: number) => isFutureDay(day) || isPastDay(day) || isBeforeMinDate(day);
 
   const selectDay = (day: number) => {
     if (isDisabledDay(day)) return;

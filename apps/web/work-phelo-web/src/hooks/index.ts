@@ -17,3 +17,4 @@ export * from './useAppraisals';
 export * from './useRoles';
 export * from './useScheduling';
 export * from './useAssets';
+export * from './useCompanyPolicies';

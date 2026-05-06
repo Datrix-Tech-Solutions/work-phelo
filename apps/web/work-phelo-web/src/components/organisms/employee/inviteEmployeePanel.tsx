@@ -14,6 +14,7 @@ import { Employee, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
 import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useBranchOptions } from '@/hooks/useBranches';
+import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 
 /* ── Types ── */
@@ -41,22 +42,21 @@ interface InviteEmployeePanelProps {
   employees: Employee[];
 }
 
-/* ── Component ── */
+/* ── Inner form (mounts fresh each time the panel opens) ── */
 
-export function InviteEmployeePanel({
-  isOpen,
+function InviteEmployeeForm({
   onClose,
   onSuccess,
   employees,
-}: InviteEmployeePanelProps) {
+}: Omit<InviteEmployeePanelProps, 'isOpen'>) {
   const toast = useToast();
-  const { data: departments = [] } = useDepartmentOptions(isOpen);
-  const { data: branches = [] } = useBranchOptions(isOpen);
+  const { data: departments = [] } = useDepartmentOptions(true);
+  const { data: branches = [] } = useBranchOptions(true);
+  const { data: policiesSettings } = useCompanyPoliciesSettings();
 
   const {
     register,
     handleSubmit,
-    reset,
     control,
     setValue,
     formState: { errors },
@@ -75,27 +75,32 @@ export function InviteEmployeePanel({
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
 
   useEffect(() => {
-    if (employmentTypeValue === 'CONTRACT' || !hireDateValue || probationDateValue) {
+    const probationMonths = policiesSettings?.defaultProbationPeriodMonths;
+    if (
+      employmentTypeValue === 'CONTRACT' ||
+      !hireDateValue ||
+      probationDateValue ||
+      !probationMonths
+    ) {
       return;
     }
 
     const hireDate = new Date(hireDateValue);
     if (isNaN(hireDate.getTime())) return;
 
-    const probationDate = new Date(hireDate.getFullYear(), hireDate.getMonth() + 3, 1);
+    const probationDate = new Date(
+      hireDate.getFullYear(),
+      hireDate.getMonth() + probationMonths,
+      1,
+    );
     const probationMonth = `${probationDate.getFullYear()}-${String(
       probationDate.getMonth() + 1,
     ).padStart(2, '0')}`;
 
     setValue('probationEndsAt', probationMonth);
-  }, [employmentTypeValue, hireDateValue, probationDateValue, setValue]);
+  }, [employmentTypeValue, hireDateValue, probationDateValue, policiesSettings, setValue]);
 
   const { mutate: createEmployee, isPending } = useCreateEmployee();
-
-  const handleClose = () => {
-    onClose();
-    reset();
-  };
 
   const onSubmit = (d: InviteForm) => {
     const normalized = { ...d };
@@ -109,7 +114,6 @@ export function InviteEmployeePanel({
     createEmployee(payload, {
       onSuccess: () => {
         const name = `${d.firstName} ${d.lastName}`;
-        reset();
         onClose();
         onSuccess(name);
       },
@@ -119,13 +123,13 @@ export function InviteEmployeePanel({
 
   return (
     <SidePanel
-      isOpen={isOpen}
-      onClose={handleClose}
+      isOpen
+      onClose={onClose}
       title="Add New Employee"
       description="Add a new employee to onboard them onto WorkPhelo."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
@@ -257,4 +261,22 @@ export function InviteEmployeePanel({
       </div>
     </SidePanel>
   );
+}
+
+/* ── Public wrapper ── */
+
+export function InviteEmployeePanel({
+  isOpen,
+  onClose,
+  onSuccess,
+  employees,
+}: InviteEmployeePanelProps) {
+  if (!isOpen) {
+    return (
+      <SidePanel isOpen={false} onClose={onClose} title="">
+        {null}
+      </SidePanel>
+    );
+  }
+  return <InviteEmployeeForm onClose={onClose} onSuccess={onSuccess} employees={employees} />;
 }

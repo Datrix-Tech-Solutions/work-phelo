@@ -14,6 +14,7 @@ import {
   useWithdrawResignation,
   useDismissResignation,
 } from '@/hooks/hr/useEmployees';
+import { useCompanyPoliciesSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import type { ResignationPayload, ResignationReason } from '@/types/hr';
@@ -87,7 +88,15 @@ export function ResignationPanel({
   onAccept,
 }: ResignationPanelProps) {
   const toast = useToast();
+  const { data: policiesSettings } = useCompanyPoliciesSettings();
   const { data: resignation } = useResignationRecord(employee.id);
+
+  const minLastWorkingDate = (() => {
+    const noticeDays = policiesSettings?.resignationNoticePeriodDays ?? 0;
+    const d = new Date();
+    d.setDate(d.getDate() + noticeDays);
+    return d.toISOString().split('T')[0];
+  })();
   const { mutate: resignEmployee, isPending: isSubmitting } = useResignEmployee(employee.id);
   const { mutate: withdrawResignation, isPending: isWithdrawing } = useWithdrawResignation(
     employee.id,
@@ -400,7 +409,7 @@ export function ResignationPanel({
                   label="Last Working Date"
                   value={field.value}
                   onChange={field.onChange}
-                  disablePast
+                  minDate={minLastWorkingDate}
                   error={errors.lastWorkingDate?.message}
                 />
               )}
