@@ -475,6 +475,7 @@ export class EmailService {
     totalDays: number,
     reason?: string,
     detailLink?: string,
+    platformLink?: string,
   ): Promise<boolean> {
     const fmt = (d: string) =>
       new Date(d).toLocaleDateString('en-GB', {
@@ -487,6 +488,7 @@ export class EmailService {
     const safeLeaveTypeName = this.escapeHtml(leaveTypeName);
     const safeReason = reason ? this.escapeHtmlWithBreaks(reason) : undefined;
     const safeDetailLink = this.sanitizeUrl(detailLink);
+    const safePlatformLink = this.sanitizeUrl(platformLink);
 
     return this.send(
       to,
@@ -576,11 +578,32 @@ export class EmailService {
             Open leave request
           </a>
         </p>`
-            : ''
+            : safePlatformLink
+              ? `
+        <p style="margin:24px 0;">
+          <a href="${safePlatformLink}" style="
+            background:#1a3557;
+            color:#ffffff;
+            padding:12px 20px;
+            text-decoration:none;
+            border-radius:6px;
+            display:inline-block;
+            font-weight:500;
+          ">
+            Open company workspace
+          </a>
+        </p>`
+              : ''
         }
 
         <p style="color:#777; font-size:14px;">
-          Open WorkPhelo to view the request details and follow up as needed.
+          ${
+            safeDetailLink
+              ? 'Open WorkPhelo to view the request details and follow up as needed.'
+              : safePlatformLink
+                ? 'Open WorkPhelo to sign in to your company workspace and follow up as needed.'
+                : 'Open WorkPhelo to view the request details and follow up as needed.'
+          }
         </p>
 
         <p style="margin-top:30px;">Thank you,</p>
@@ -613,6 +636,7 @@ export class EmailService {
     endDate: string,
     totalDays: number,
     note?: string,
+    platformLink?: string,
   ): Promise<boolean> {
     const fmt = (d: string) =>
       new Date(d).toLocaleDateString('en-GB', {
@@ -632,6 +656,7 @@ export class EmailService {
     const safeLeaveTypeName = this.escapeHtml(leaveTypeName);
     const safeNote = note ? this.escapeHtmlWithBreaks(note) : undefined;
     const safeHeroLabel = this.escapeHtml(heroLabel);
+    const safePlatformLink = this.sanitizeUrl(platformLink);
 
     return this.send(
       to,
@@ -704,11 +729,32 @@ export class EmailService {
             : ''
         }
 
+        ${
+          safePlatformLink
+            ? `
+        <p style="margin:24px 0;">
+          <a href="${safePlatformLink}" style="
+            background:#1a3557;
+            color:#ffffff;
+            padding:12px 20px;
+            text-decoration:none;
+            border-radius:6px;
+            display:inline-block;
+            font-weight:500;
+          ">
+            Open company workspace
+          </a>
+        </p>`
+            : ''
+        }
+
         <p style="color:#777; font-size:14px;">
           ${
             isApproved
               ? 'You can view your full leave history and remaining balances at any time by logging in.'
-              : 'Your leave balance has not been affected by this decision. If you have questions, please speak with your manager or HR administrator.'
+              : safePlatformLink
+                ? 'Your leave balance has not been affected by this decision. Sign in to your company workspace if you want to review the request or speak with your manager or HR administrator.'
+                : 'Your leave balance has not been affected by this decision. If you have questions, please speak with your manager or HR administrator.'
           }
         </p>
 
@@ -741,6 +787,7 @@ export class EmailService {
     startDate: string,
     endDate: string,
     totalDays: number,
+    platformLink?: string,
   ): Promise<boolean> {
     const fmt = (d: string) =>
       new Date(d).toLocaleDateString('en-GB', {
@@ -751,6 +798,7 @@ export class EmailService {
     const safeEmployeeFirstName = this.escapeHtml(employeeFirstName);
     const safeEmployeeLastName = this.escapeHtml(employeeLastName);
     const safeLeaveTypeName = this.escapeHtml(leaveTypeName);
+    const safePlatformLink = this.sanitizeUrl(platformLink);
 
     return this.send(
       to,
@@ -813,8 +861,31 @@ export class EmailService {
           </tr>
         </table>
 
+        ${
+          safePlatformLink
+            ? `
+        <p style="margin:24px 0;">
+          <a href="${safePlatformLink}" style="
+            background:#1a3557;
+            color:#ffffff;
+            padding:12px 20px;
+            text-decoration:none;
+            border-radius:6px;
+            display:inline-block;
+            font-weight:500;
+          ">
+            Open company workspace
+          </a>
+        </p>`
+            : ''
+        }
+
         <p style="color:#777; font-size:14px;">
-          The employee's leave balance has been restored and no further action is needed on your part.
+          ${
+            safePlatformLink
+              ? "The employee's leave balance has been restored. You can sign in to your company workspace if you want to review the updated leave records."
+              : "The employee's leave balance has been restored and no further action is needed on your part."
+          }
         </p>
 
         <p style="margin-top:30px;">Thank you,</p>

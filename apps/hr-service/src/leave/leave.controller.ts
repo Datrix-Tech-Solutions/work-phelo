@@ -310,6 +310,10 @@ export class LeaveController {
   @ApiParam({ name: 'id', description: 'Leave request UUID' })
   @ApiResponse({ status: 200, description: 'Leave request cancelled' })
   cancelRequest(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.leaveService.cancelRequest(req.user.tenantId, id, req.user.id);
+    return this.leaveService.cancelRequest(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 }

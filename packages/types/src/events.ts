@@ -275,6 +275,7 @@ export interface LeaveRequestedEvent {
   totalDays: number;
   reason?: string;
   detailLink?: string;
+  platformLink?: string;
 }
 
 export interface LeaveReviewedEvent {
@@ -288,6 +289,7 @@ export interface LeaveReviewedEvent {
   endDate: string;
   totalDays: number;
   note?: string;
+  platformLink?: string;
 }
 
 export interface LeaveCancelledEvent {
@@ -301,6 +303,7 @@ export interface LeaveCancelledEvent {
   startDate: string;
   endDate: string;
   totalDays: number;
+  platformLink?: string;
 }
 
 export interface AppraisalSelfSubmittedEvent {

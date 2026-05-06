@@ -287,6 +287,7 @@ export class NotificationService {
     totalDays: number;
     reason?: string;
     detailLink?: string;
+    platformLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -310,6 +311,7 @@ export class NotificationService {
       data.totalDays,
       data.reason,
       data.detailLink,
+      data.platformLink,
     );
     await this.log({
       userId: data.employeeId,
@@ -333,6 +335,7 @@ export class NotificationService {
     endDate: string;
     totalDays: number;
     note?: string;
+    platformLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -355,6 +358,7 @@ export class NotificationService {
       data.endDate,
       data.totalDays,
       data.note,
+      data.platformLink,
     );
     await this.log({
       userId: data.employeeId,
@@ -377,6 +381,7 @@ export class NotificationService {
     startDate: string;
     endDate: string;
     totalDays: number;
+    platformLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -398,6 +403,7 @@ export class NotificationService {
       data.startDate,
       data.endDate,
       data.totalDays,
+      data.platformLink,
     );
     await this.log({
       userId: data.employeeId,

@@ -579,6 +579,7 @@ export class LeaveService {
       actor.tenantSlug,
       request.id,
     );
+    const platformLink = this.buildTenantWorkspaceLink(actor.tenantSlug);
     const notificationRecipients =
       await this.resolveLeaveNotificationRecipients(tenantId, empRecord);
 
@@ -593,6 +594,7 @@ export class LeaveService {
       totalDays,
       dto.reason,
       detailLink,
+      platformLink,
       notificationRecipients,
     );
 
@@ -761,6 +763,7 @@ export class LeaveService {
       tenantId,
       request.employeeId,
       request.leaveTypeId,
+      reviewer.tenantSlug,
       dto.action,
       request.startDate,
       request.endDate,
@@ -776,6 +779,11 @@ export class LeaveService {
   private buildLeaveRequestDetailLink(tenantSlug: string, requestId: string) {
     const baseUrl = process.env.FRONTEND_BASE_URL!;
     return `${baseUrl}/${tenantSlug}/hr/leave?tab=requests&requestId=${encodeURIComponent(requestId)}`;
+  }
+
+  private buildTenantWorkspaceLink(tenantSlug: string) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/login`;
   }
 
   private buildLeaveRequestAppLink(requestId: string) {
@@ -888,29 +896,45 @@ export class LeaveService {
       }),
     ]);
 
-    const approvers = this.dedupeLeaveRecipients(
+    const rawApprovers = this.dedupeLeaveRecipients(
       permissionRecipients
         .filter((recipient) => recipient.email)
         .filter((recipient) => recipient.userId !== employee.userId)
         .map((recipient) =>
           this.toLeaveNotificationRecipient(recipient, 'APPROVER'),
         ),
-    ).filter(
+    );
+
+    const managerIsApprover = rawApprovers.some((recipient) =>
+      manager
+        ? recipient.userId && manager.userId
+          ? recipient.userId === manager.userId
+          : recipient.email.toLowerCase() === manager.email.toLowerCase()
+        : false,
+    );
+
+    const effectiveManager =
+      manager && managerIsApprover
+        ? { ...manager, source: 'APPROVER' as const }
+        : manager;
+
+    const approvers = rawApprovers.filter(
       (recipient) =>
-        !manager ||
-        (recipient.userId && manager.userId
-          ? recipient.userId !== manager.userId
-          : recipient.email.toLowerCase() !== manager.email.toLowerCase()),
+        !effectiveManager ||
+        (recipient.userId && effectiveManager.userId
+          ? recipient.userId !== effectiveManager.userId
+          : recipient.email.toLowerCase() !==
+            effectiveManager.email.toLowerCase()),
     );
 
     const all = this.dedupeLeaveRecipients(
-      [manager, ...approvers].filter(
+      [effectiveManager, ...approvers].filter(
         (recipient): recipient is LeaveNotificationRecipient =>
           recipient !== null,
       ),
     );
 
-    return { manager, approvers, all };
+    return { manager: effectiveManager, approvers, all };
   }
 
   private async notifyStakeholdersOfLeaveRequest(
@@ -929,6 +953,7 @@ export class LeaveService {
     totalDays: number,
     reason?: string,
     detailLink?: string,
+    platformLink?: string,
     recipientsInput?: LeaveNotificationRecipients,
   ) {
     try {
@@ -955,7 +980,10 @@ export class LeaveService {
             endDate,
             totalDays,
             reason,
-            detailLink,
+            detailLink:
+              recipient.source === 'APPROVER' ? detailLink : undefined,
+            platformLink:
+              recipient.source === 'APPROVER' ? undefined : platformLink,
           }),
         ),
       );
@@ -986,6 +1014,7 @@ export class LeaveService {
     tenantId: string,
     employeeId: string,
     leaveTypeId: string,
+    tenantSlug: string,
     status: 'APPROVED' | 'REJECTED',
     startDate: Date,
     endDate: Date,
@@ -1022,6 +1051,7 @@ export class LeaveService {
         endDate: endDate.toISOString(),
         totalDays,
         note,
+        platformLink: this.buildTenantWorkspaceLink(tenantSlug),
       });
     } catch (err) {
       this.logger.error(
@@ -1031,9 +1061,9 @@ export class LeaveService {
     }
   }
 
-  async cancelRequest(tenantId: string, requestId: string, userId: string) {
+  async cancelRequest(tenantId: string, requestId: string, actor: RequestUser) {
     const empRecord = await this.prisma.employee.findFirst({
-      where: { userId, tenantId },
+      where: { userId: actor.id, tenantId },
     });
     if (!empRecord) throw new NotFoundException('Employee profile not found');
 
@@ -1085,6 +1115,7 @@ export class LeaveService {
       request.startDate.toISOString(),
       request.endDate.toISOString(),
       request.totalDays,
+      this.buildTenantWorkspaceLink(actor.tenantSlug),
       notificationRecipients,
     );
 
@@ -1106,6 +1137,7 @@ export class LeaveService {
     startDate: string,
     endDate: string,
     totalDays: number,
+    platformLink?: string,
     recipientsInput?: LeaveNotificationRecipients,
   ) {
     try {
@@ -1132,6 +1164,7 @@ export class LeaveService {
             startDate,
             endDate,
             totalDays,
+            platformLink,
           }),
         ),
       );
