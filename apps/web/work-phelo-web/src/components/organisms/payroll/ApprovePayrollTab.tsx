@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun } from '@/types/hr';
@@ -37,6 +38,8 @@ function monthLabel(run: PayrollRun) {
 
 export function ApprovePayrollTab() {
   const toast = useToast();
+  const router = useRouter();
+  const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
   const { mutate: returnToDraft, isPending: isRejecting } = useReturnPayrollToDraft();
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
@@ -78,9 +81,16 @@ export function ApprovePayrollTab() {
     {
       key: 'actions',
       label: '',
-      width: '160px',
+      width: '200px',
       render: (row) => (
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => router.push(`/${params.tenantSlug}/hr/payroll/approve/${row.id}`)}
+          >
+            View
+          </Button>
           <Button size="sm" onClick={() => setSelectedRun(row)}>
             Approve
           </Button>

@@ -14,12 +14,14 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import type { InitiateOffboardDto, OffboardReason } from '@/types/hr';
+import type { EmployeeAsset } from '@/types/asset';
 
 interface OffboardEmployeePanelProps {
   isOpen: boolean;
   onClose: () => void;
   employeeId: string;
   employeeName: string;
+  assignedAssets?: EmployeeAsset[];
 }
 
 type ChecklistItem = 'assetReturn' | 'hrClearance' | 'financeClearance' | 'reportingClearance';
@@ -59,6 +61,7 @@ export function OffboardEmployeePanel({
   onClose,
   employeeId,
   employeeName,
+  assignedAssets = [],
 }: OffboardEmployeePanelProps) {
   const toast = useToast();
   const { data: record } = useOffboardingRecord(employeeId);
@@ -249,22 +252,40 @@ export function OffboardEmployeePanel({
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Clearance Checklist
           </p>
-          {CHECKLIST_ITEMS.map(({ field, label }) => (
-            <label key={field} className="flex items-center gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={checklist[field]}
-                onChange={(e) => handleToggle(field, e.target.checked)}
-                disabled={isUpdating}
-                className="w-4 h-4 rounded accent-brand shrink-0"
-              />
-              <span
-                className={`text-sm ${checklist[field] ? 'line-through text-gray-400' : 'text-gray-700'}`}
-              >
-                {label}
-              </span>
-            </label>
-          ))}
+          {CHECKLIST_ITEMS.map(({ field, label }) => {
+            const hasUnreturnedAssets = field === 'assetReturn' && assignedAssets.length > 0;
+            return hasUnreturnedAssets ? (
+              <div key={field} className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  disabled
+                  className="w-4 h-4 rounded shrink-0"
+                />
+                <span className="text-sm text-red-600">
+                  {assignedAssets.length === 1
+                    ? '1 asset still assigned'
+                    : `${assignedAssets.length} assets still assigned`}
+                  . Unassign before offboarding.
+                </span>
+              </div>
+            ) : (
+              <label key={field} className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={checklist[field]}
+                  onChange={(e) => handleToggle(field, e.target.checked)}
+                  disabled={isUpdating}
+                  className="w-4 h-4 rounded accent-brand shrink-0"
+                />
+                <span
+                  className={`text-sm ${checklist[field] ? 'line-through text-gray-400' : 'text-gray-700'}`}
+                >
+                  {label}
+                </span>
+              </label>
+            );
+          })}
           {record && !allDone && (
             <p className="text-xs text-gray-400">
               All four clearance items must be ticked to offboard.

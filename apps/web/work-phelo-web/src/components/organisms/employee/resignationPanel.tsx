@@ -55,7 +55,9 @@ function useWithdrawalCountdown(submittedAt: string) {
   const [remaining, setRemaining] = useState(getRemaining);
 
   useEffect(() => {
-    if (remaining === 0) return;
+    const initial = getRemaining();
+    setRemaining(initial);
+    if (initial === 0) return;
     const id = setInterval(() => {
       const r = getRemaining();
       setRemaining(r);

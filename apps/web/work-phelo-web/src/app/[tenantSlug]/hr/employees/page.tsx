@@ -5,7 +5,7 @@
 import { useState, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, UserCheck, Clock, CalendarOff, UserX } from 'lucide-react';
-import { SummaryCard } from '@/components/atoms/SummaryCard';
+import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
@@ -101,39 +101,34 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
 
       {/* Summary cards */}
       <div className="grid grid-cols-5 gap-3 shrink-0">
-        <SummaryCard
-          label="Total Employees"
+        <StatCard
+          title="Total Employees"
           value={summary.total}
-          icon={Users}
-          iconColor="text-gray-600"
+          icon={<Users className="w-4.5 h-4.5 text-gray-600" />}
           iconBg="bg-gray-100"
         />
-        <SummaryCard
-          label="Permanent Staff"
+        <StatCard
+          title="Permanent Staff"
           value={summary.permanent}
-          icon={UserCheck}
-          iconColor="text-green-600"
+          icon={<UserCheck className="w-4.5 h-4.5 text-green-600" />}
           iconBg="bg-green-50"
         />
-        <SummaryCard
-          label="On Probation"
+        <StatCard
+          title="On Probation"
           value={summary.probation}
-          icon={Clock}
-          iconColor="text-yellow-600"
+          icon={<Clock className="w-4.5 h-4.5 text-yellow-600" />}
           iconBg="bg-yellow-50"
         />
-        <SummaryCard
-          label="On Leave"
+        <StatCard
+          title="On Leave"
           value={summary.onLeave}
-          icon={CalendarOff}
-          iconColor="text-blue-600"
+          icon={<CalendarOff className="w-4.5 h-4.5 text-blue-600" />}
           iconBg="bg-blue-50"
         />
-        <SummaryCard
-          label="Offboarded"
+        <StatCard
+          title="Offboarded"
           value={summary.offboarded}
-          icon={UserX}
-          iconColor="text-red-500"
+          icon={<UserX className="w-4.5 h-4.5 text-red-500" />}
           iconBg="bg-red-50"
         />
       </div>

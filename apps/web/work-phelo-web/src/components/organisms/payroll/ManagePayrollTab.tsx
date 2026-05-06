@@ -10,6 +10,7 @@ import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 import { PayrollItemsPanel } from './PayrollItemsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
+import { PayrollDraftsPanel } from './PayrollDraftsPanel';
 
 function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
@@ -58,6 +59,7 @@ export function ManagePayrollTab() {
     type: 'allowance' | 'deduction';
   } | null>(null);
   const [runPanelOpen, setRunPanelOpen] = useState(false);
+  const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
 
   const payrollRows: PayrollRow[] = useMemo(() => {
     const employees: Employee[] = empData?.data ?? [];
@@ -197,7 +199,7 @@ export function ManagePayrollTab() {
     },
     {
       key: 'employeeSSNIT',
-      label: 'SSNIT(18%)',
+      label: 'SSNIT(5.5%)',
       render: (row) => `GHS ${row.employeeStatutoryContrib.toLocaleString()}`,
     },
     {
@@ -221,7 +223,10 @@ export function ManagePayrollTab() {
 
   return (
     <div className="flex flex-col gap-6 flex-1 min-h-0">
-      <div className="flex items-center justify-end shrink-0">
+      <div className="flex items-center justify-end gap-3 shrink-0">
+        <Button variant="outline" onClick={() => setDraftsPanelOpen(true)}>
+          Drafts
+        </Button>
         <Button onClick={() => setRunPanelOpen(true)}>Run Payroll</Button>
       </div>
 
@@ -289,6 +294,8 @@ export function ManagePayrollTab() {
         totals={totals}
         overrides={overrides}
       />
+
+      <PayrollDraftsPanel isOpen={draftsPanelOpen} onClose={() => setDraftsPanelOpen(false)} />
     </div>
   );
 }

@@ -208,6 +208,7 @@ export default function EmployeeDetailPage({
         onClose={() => setOffboardOpen(false)}
         employeeId={id}
         employeeName={name}
+        assignedAssets={employee.assets ?? []}
       />
 
       <EditEmployeePanel

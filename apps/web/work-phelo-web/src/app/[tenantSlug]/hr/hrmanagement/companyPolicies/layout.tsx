@@ -8,6 +8,7 @@ const TABS = [
   { label: 'Employment & Resignation', slug: 'employment' },
   { label: 'Cycle Recipients', slug: 'recipients' },
   { label: 'Company Agreements', slug: 'agreements' },
+  { label: 'Allowances', slug: 'allowances' },
 ];
 
 export default function CompanyPoliciesLayout({ children }: { children: React.ReactNode }) {
