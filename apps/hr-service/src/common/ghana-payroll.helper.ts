@@ -4,6 +4,8 @@ Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 export const EMPLOYEE_SSNIT_RATE = '0.055';
 export const EMPLOYER_SSNIT_RATE = '0.13';
+export const TIER2_EMPLOYER_RATE = '0.05';
+export const MAX_INSURABLE_EARNINGS = '69000';
 
 const MONTHLY_PAYE_TIERS = [
   { limit: '490', rate: '0' },
@@ -19,17 +21,28 @@ export function calculateSSNIT(basicSalary: string): {
   employeeSSNIT: string;
   employerSSNIT: string;
 } {
-  const basic = new Decimal(basicSalary);
+  const insurable = Decimal.min(
+    new Decimal(basicSalary),
+    new Decimal(MAX_INSURABLE_EARNINGS),
+  );
   return {
-    employeeSSNIT: basic
+    employeeSSNIT: insurable
       .times(EMPLOYEE_SSNIT_RATE)
       .toDecimalPlaces(2)
       .toString(),
-    employerSSNIT: basic
+    employerSSNIT: insurable
       .times(EMPLOYER_SSNIT_RATE)
       .toDecimalPlaces(2)
       .toString(),
   };
+}
+
+export function calculateTier2(basicSalary: string): string {
+  const insurable = Decimal.min(
+    new Decimal(basicSalary),
+    new Decimal(MAX_INSURABLE_EARNINGS),
+  );
+  return insurable.times(TIER2_EMPLOYER_RATE).toDecimalPlaces(2).toString();
 }
 
 export function calculateTier3Contribution(

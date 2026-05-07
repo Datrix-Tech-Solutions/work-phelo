@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, type ChangeEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -14,6 +14,7 @@ import { Employee, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
 import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useBranchOptions } from '@/hooks/useBranches';
+import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 
 /* ── Types ── */
@@ -23,6 +24,7 @@ interface InviteForm {
   lastName: string;
   email: string;
   phone?: string;
+  gender?: string;
   jobTitle: string;
   departmentId?: string;
   branchId?: string;
@@ -41,22 +43,21 @@ interface InviteEmployeePanelProps {
   employees: Employee[];
 }
 
-/* ── Component ── */
+/* ── Inner form (mounts fresh each time the panel opens) ── */
 
-export function InviteEmployeePanel({
-  isOpen,
+function InviteEmployeeForm({
   onClose,
   onSuccess,
   employees,
-}: InviteEmployeePanelProps) {
+}: Omit<InviteEmployeePanelProps, 'isOpen'>) {
   const toast = useToast();
-  const { data: departments = [] } = useDepartmentOptions(isOpen);
-  const { data: branches = [] } = useBranchOptions(isOpen);
+  const { data: departments = [] } = useDepartmentOptions(true);
+  const { data: branches = [] } = useBranchOptions(true);
+  const { data: policiesSettings } = useCompanyPoliciesSettings();
 
   const {
     register,
     handleSubmit,
-    reset,
     control,
     setValue,
     formState: { errors },
@@ -73,29 +74,35 @@ export function InviteEmployeePanel({
   const branchFormValue = useWatch({ control, name: 'branchId' });
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
+  const genderValue = useWatch({ control, name: 'gender' });
 
   useEffect(() => {
-    if (employmentTypeValue === 'CONTRACT' || !hireDateValue || probationDateValue) {
+    const probationMonths = policiesSettings?.defaultProbationPeriodMonths;
+    if (
+      employmentTypeValue === 'CONTRACT' ||
+      !hireDateValue ||
+      probationDateValue ||
+      !probationMonths
+    ) {
       return;
     }
 
     const hireDate = new Date(hireDateValue);
     if (isNaN(hireDate.getTime())) return;
 
-    const probationDate = new Date(hireDate.getFullYear(), hireDate.getMonth() + 3, 1);
+    const probationDate = new Date(
+      hireDate.getFullYear(),
+      hireDate.getMonth() + probationMonths,
+      1,
+    );
     const probationMonth = `${probationDate.getFullYear()}-${String(
       probationDate.getMonth() + 1,
     ).padStart(2, '0')}`;
 
     setValue('probationEndsAt', probationMonth);
-  }, [employmentTypeValue, hireDateValue, probationDateValue, setValue]);
+  }, [employmentTypeValue, hireDateValue, probationDateValue, policiesSettings, setValue]);
 
   const { mutate: createEmployee, isPending } = useCreateEmployee();
-
-  const handleClose = () => {
-    onClose();
-    reset();
-  };
 
   const onSubmit = (d: InviteForm) => {
     const normalized = { ...d };
@@ -109,7 +116,6 @@ export function InviteEmployeePanel({
     createEmployee(payload, {
       onSuccess: () => {
         const name = `${d.firstName} ${d.lastName}`;
-        reset();
         onClose();
         onSuccess(name);
       },
@@ -119,13 +125,13 @@ export function InviteEmployeePanel({
 
   return (
     <SidePanel
-      isOpen={isOpen}
-      onClose={handleClose}
+      isOpen
+      onClose={onClose}
       title="Add New Employee"
       description="Add a new employee to onboard them onto WorkPhelo."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button
@@ -160,6 +166,9 @@ export function InviteEmployeePanel({
           registration={register('email', {
             required: 'Required',
             pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
+            onChange: (e: ChangeEvent<HTMLInputElement>) => {
+              e.target.value = e.target.value.toLowerCase();
+            },
           })}
           error={errors.email}
           type="email"
@@ -170,6 +179,17 @@ export function InviteEmployeePanel({
           placeholder="00 000 0000"
           value={phoneValue}
           onChange={(v) => setValue('phone', v)}
+        />
+        <SearchSelect
+          label="Gender"
+          placeholder="Select gender"
+          value={genderValue}
+          onChange={(v) => setValue('gender', v)}
+          options={[
+            { value: 'MALE', label: 'Male' },
+            { value: 'FEMALE', label: 'Female' },
+            { value: 'OTHER', label: 'Other' },
+          ]}
         />
         <DatePicker
           label="Date of Birth"
@@ -257,4 +277,22 @@ export function InviteEmployeePanel({
       </div>
     </SidePanel>
   );
+}
+
+/* ── Public wrapper ── */
+
+export function InviteEmployeePanel({
+  isOpen,
+  onClose,
+  onSuccess,
+  employees,
+}: InviteEmployeePanelProps) {
+  if (!isOpen) {
+    return (
+      <SidePanel isOpen={false} onClose={onClose} title="">
+        {null}
+      </SidePanel>
+    );
+  }
+  return <InviteEmployeeForm onClose={onClose} onSuccess={onSuccess} employees={employees} />;
 }

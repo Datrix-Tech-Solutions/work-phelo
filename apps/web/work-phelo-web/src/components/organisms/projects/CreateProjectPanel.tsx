@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -9,13 +9,13 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import { CreateProjectDto } from '@/types/hr';
-import { Employee } from '@/types/hr';
+import { EmployeeOption } from '@/types/hr';
 // import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 
 interface CreateProjectPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  employees: Employee[];
+  employees: EmployeeOption[];
   onSubmit: (data: CreateProjectDto) => void;
   isSubmitting?: boolean;
 }
@@ -52,6 +52,10 @@ export function CreateProjectPanel({
       managerId: '',
     },
   });
+
+  useEffect(() => {
+    if (!isOpen) reset();
+  }, [isOpen, reset]);
 
   const handleClose = useCallback(() => {
     reset();

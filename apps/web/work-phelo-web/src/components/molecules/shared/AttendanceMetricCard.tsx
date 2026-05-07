@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Clock, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
 
 interface AttendanceMetricCardProps {
   clockedIn: boolean;
@@ -22,6 +24,9 @@ export function AttendanceMetricCard({
   onClockOut,
   isLoading = false,
 }: AttendanceMetricCardProps) {
+  const [confirmClockIn, setConfirmClockIn] = useState(false);
+  const [confirmClockOut, setConfirmClockOut] = useState(false);
+
   return (
     <div className="bg-white border border-gray-200 rounded-card px-5 py-5 flex flex-col gap-3">
       {/* Header */}
@@ -61,7 +66,7 @@ export function AttendanceMetricCard({
           <Button
             variant="outline"
             size="sm"
-            onClick={onClockOut}
+            onClick={() => setConfirmClockOut(true)}
             disabled={isLoading}
             className="text-orange-600 border-orange-200 hover:bg-orange-50"
           >
@@ -71,7 +76,7 @@ export function AttendanceMetricCard({
           <Button
             variant="primary"
             size="sm"
-            onClick={onClockIn}
+            onClick={() => setConfirmClockIn(true)}
             disabled={isLoading}
             className="bg-brand hover:bg-brand-hover"
           >
@@ -79,6 +84,56 @@ export function AttendanceMetricCard({
           </Button>
         )}
       </div>
+
+      <Modal
+        isOpen={confirmClockIn}
+        onClose={() => setConfirmClockIn(false)}
+        title="Clock In"
+        description="Are you sure you want to clock in?"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setConfirmClockIn(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setConfirmClockIn(false);
+                onClockIn();
+              }}
+              className="bg-brand hover:bg-brand-hover"
+            >
+              Confirm
+            </Button>
+          </>
+        }
+      />
+
+      <Modal
+        isOpen={confirmClockOut}
+        onClose={() => setConfirmClockOut(false)}
+        title="Clock Out"
+        description="Are you sure you want to clock out?"
+        footer={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setConfirmClockOut(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                setConfirmClockOut(false);
+                onClockOut();
+              }}
+              className="bg-brand hover:bg-brand-hover"
+            >
+              Confirm
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }

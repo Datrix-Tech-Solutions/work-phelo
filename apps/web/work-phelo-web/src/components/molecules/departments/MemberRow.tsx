@@ -1,8 +1,8 @@
 import { cn } from '@/lib/utils';
-import { Employee } from '@/types/hr';
+import { EmployeeOption } from '@/types/hr';
 
 interface MemberRowProps {
-  employee: Employee;
+  employee: EmployeeOption;
   checked: boolean;
   alreadyInDept: boolean;
   onToggle: (id: string) => void;

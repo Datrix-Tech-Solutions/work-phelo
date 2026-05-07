@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
-import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
@@ -10,6 +9,26 @@ import { useEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 import { PayrollItemsPanel } from './PayrollItemsPanel';
+import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
+import { PayrollDraftsPanel } from './PayrollDraftsPanel';
+
+function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+  const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
+
+  return (
+    <input
+      type="number"
+      min="0"
+      value={local}
+      placeholder="0.00"
+      onChange={(e) => {
+        setLocal(e.target.value);
+        onChange(e.target.value === '' ? 0 : Number(e.target.value));
+      }}
+      className="w-28 px-3 py-1.5 text-sm focus:outline-none placeholder:text-gray-300"
+    />
+  );
+}
 
 interface PayrollRow {
   id: string;
@@ -29,7 +48,7 @@ interface PayrollRow {
 }
 
 export function ManagePayrollTab() {
-  const { data: empData, isLoading } = useEmployees();
+  const { data: empData, isLoading } = useEmployees({ limit: 100 });
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
@@ -39,6 +58,8 @@ export function ManagePayrollTab() {
     rowName: string;
     type: 'allowance' | 'deduction';
   } | null>(null);
+  const [runPanelOpen, setRunPanelOpen] = useState(false);
+  const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
 
   const payrollRows: PayrollRow[] = useMemo(() => {
     const employees: Employee[] = empData?.data ?? [];
@@ -95,6 +116,20 @@ export function ManagePayrollTab() {
     [filteredData],
   );
 
+  const overrides = useMemo(() => {
+    const result: Record<string, EmployeeOverride> = {};
+    Object.entries(basicMap).forEach(([id, val]) => {
+      result[id] = { ...result[id], basicSalary: val };
+    });
+    Object.entries(allowancesMap).forEach(([id, items]) => {
+      result[id] = { ...result[id], totalAllowances: items.reduce((s, a) => s + a.amount, 0) };
+    });
+    Object.entries(deductionsMap).forEach(([id, items]) => {
+      result[id] = { ...result[id], otherDeductions: items.reduce((s, d) => s + d.amount, 0) };
+    });
+    return result;
+  }, [basicMap, allowancesMap, deductionsMap]);
+
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
   };
@@ -130,12 +165,7 @@ export function ManagePayrollTab() {
       key: 'basicSalary',
       label: 'Basic Salary',
       render: (row) => (
-        <input
-          type="number"
-          value={row.basicSalary}
-          onChange={(e) => handleBasicChange(row.id, Number(e.target.value))}
-          className="w-28 px-3 py-1.5 border border-gray-200 rounded-input text-sm focus:outline-none focus:border-brand"
-        />
+        <BasicSalaryCell value={row.basicSalary} onChange={(n) => handleBasicChange(row.id, n)} />
       ),
     },
     {
@@ -144,12 +174,9 @@ export function ManagePayrollTab() {
       render: (row) => (
         <button
           onClick={() => setPanel({ rowId: row.id, rowName: row.employeeName, type: 'allowance' })}
-          className="text-left min-w-24"
+          className="text-sm font-medium text-gray-900 hover:text-brand transition-colors"
         >
-          <p className="text-sm font-medium text-gray-900">
-            {row.allowances > 0 ? `GHS ${row.allowances.toLocaleString()}` : '—'}
-          </p>
-          <p className="text-xs text-brand">Edit</p>
+          {row.allowances > 0 ? `GHS ${row.allowances.toLocaleString()}` : '—'}
         </button>
       ),
     },
@@ -159,12 +186,9 @@ export function ManagePayrollTab() {
       render: (row) => (
         <button
           onClick={() => setPanel({ rowId: row.id, rowName: row.employeeName, type: 'deduction' })}
-          className="text-left min-w-24"
+          className="text-sm font-medium text-gray-900 hover:text-brand transition-colors"
         >
-          <p className="text-sm font-medium text-gray-900">
-            {row.deductions > 0 ? `GHS ${row.deductions.toLocaleString()}` : '—'}
-          </p>
-          <p className="text-xs text-brand">Edit</p>
+          {row.deductions > 0 ? `GHS ${row.deductions.toLocaleString()}` : '—'}
         </button>
       ),
     },
@@ -175,7 +199,7 @@ export function ManagePayrollTab() {
     },
     {
       key: 'employeeSSNIT',
-      label: 'SSNIT',
+      label: 'SSNIT(5.5%)',
       render: (row) => `GHS ${row.employeeStatutoryContrib.toLocaleString()}`,
     },
     {
@@ -195,20 +219,17 @@ export function ManagePayrollTab() {
         <span className="font-semibold text-emerald-600">GHS {row.netSalary.toLocaleString()}</span>
       ),
     },
-    {
-      key: 'actions',
-      label: '',
-      width: '72px',
-      render: () => (
-        <Button variant="outline" size="sm">
-          Save
-        </Button>
-      ),
-    },
   ];
 
   return (
     <div className="flex flex-col gap-6 flex-1 min-h-0">
+      <div className="flex items-center justify-end gap-3 shrink-0">
+        <Button variant="outline" onClick={() => setDraftsPanelOpen(true)}>
+          Drafts
+        </Button>
+        <Button onClick={() => setRunPanelOpen(true)}>Run Payroll</Button>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
         <MetricCard
           title="Total Gross"
@@ -241,19 +262,16 @@ export function ManagePayrollTab() {
           variant="highlight"
         />
       </div>
-
-      <SectionCard title="Payroll Management">
-        <DataTable
-          columns={columns}
-          data={filteredData}
-          isLoading={isLoading}
-          searchPlaceholder="Search employee name..."
-          onSearch={setSearchQuery}
-          currentPage={1}
-          totalPages={1}
-          onPageChange={() => {}}
-        />
-      </SectionCard>
+      <DataTable
+        columns={columns}
+        data={filteredData}
+        isLoading={isLoading}
+        searchPlaceholder="Search employee name..."
+        onSearch={setSearchQuery}
+        currentPage={1}
+        totalPages={1}
+        onPageChange={() => {}}
+      />
 
       <PayrollItemsPanel
         isOpen={!!panel}
@@ -269,6 +287,15 @@ export function ManagePayrollTab() {
         }
         onSave={handlePanelSave}
       />
+
+      <RunPayrollPanel
+        isOpen={runPanelOpen}
+        onClose={() => setRunPanelOpen(false)}
+        totals={totals}
+        overrides={overrides}
+      />
+
+      <PayrollDraftsPanel isOpen={draftsPanelOpen} onClose={() => setDraftsPanelOpen(false)} />
     </div>
   );
 }

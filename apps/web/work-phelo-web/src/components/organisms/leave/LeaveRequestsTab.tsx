@@ -7,7 +7,7 @@ import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { LeaveRequestDetailPanel } from '@/components/organisms/leave/LeaveRequestDetailPanel';
-import { useEmployees } from '@/hooks/hr/useEmployees';
+import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useLeaveTypes, useLeaveRequests } from '@/hooks/useLeave';
 import { useDepartments } from '@/hooks/useDepartments';
 import { formatDate } from '@/lib/formatters';
@@ -45,8 +45,8 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
     ? departmentsRaw
     : ((departmentsRaw as { data?: { id: string; name: string }[] } | undefined)?.data ?? []);
 
-  const { data: employeesData, isLoading: employeesLoading } = useEmployees();
-  const totalEmployees = employeesData?.total ?? null;
+  const { data: allEmployeeOptions, isLoading: employeesLoading } = useEmployeeOptions();
+  const totalEmployees = allEmployeeOptions?.length ?? null;
 
   const { data: reqList = [], isLoading: reqLoading } = useLeaveRequests();
   const requestIdFromQuery = searchParams.get('requestId');
