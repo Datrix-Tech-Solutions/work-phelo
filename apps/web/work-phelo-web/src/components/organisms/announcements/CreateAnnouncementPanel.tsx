@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -27,15 +27,15 @@ export function CreateAnnouncementPanel({ isOpen, onClose }: Props) {
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     reset,
     formState: { errors },
   } = useForm<AnnouncementForm>({
     defaultValues: { notifyEmail: false },
   });
 
-  const expiresAtValue = watch('expiresAt');
-  const notifyEmail = watch('notifyEmail');
+  const expiresAtValue = useWatch({ control, name: 'expiresAt' });
+  const notifyEmail = useWatch({ control, name: 'notifyEmail' });
 
   const handleClose = () => {
     reset();

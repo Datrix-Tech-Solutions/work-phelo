@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { useCreateBranch, useUpdateBranch, useBranches } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
-import type { Branch, Employee } from '@/types/hr';
+import type { Branch, EmployeeOption } from '@/types/hr';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 
 interface BranchForm {
@@ -33,7 +33,7 @@ interface BranchFormPanelProps {
 
   /** Pass a Branch to edit, omit for create mode */
   branch?: Branch | null;
-  employees: Employee[];
+  employees: EmployeeOption[];
 }
 
 function BranchFormInner({ onClose, branch, employees }: Omit<BranchFormPanelProps, 'isOpen'>) {

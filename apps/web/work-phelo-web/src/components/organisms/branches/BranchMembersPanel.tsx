@@ -7,14 +7,14 @@ import { Button } from '@/components/atoms/Button';
 import { useToast } from '@/hooks/useToast';
 import { useUpdateEmployee } from '@/hooks';
 import { cn } from '@/lib/utils';
-import type { Branch, Employee } from '@/types/hr';
+import type { Branch, EmployeeOption } from '@/types/hr';
 import { Icons } from '@/components/atoms/icons';
 
 interface BranchMembersPanelProps {
   isOpen: boolean;
   onClose: () => void;
   branch: Branch | null;
-  employees: Employee[];
+  employees: EmployeeOption[];
 }
 
 export function BranchMembersPanel({
@@ -112,7 +112,7 @@ export function BranchMembersPanel({
         ) : (
           filtered.map((emp) => {
             const checked = selectedIds.has(emp.id);
-            const alreadyInBranch = emp.branchId === branch?.id;
+            const alreadyInBranch = emp.branch?.id === branch?.id;
             const initials = `${emp.firstName[0]}${emp.lastName[0]}`.toUpperCase();
 
             return (

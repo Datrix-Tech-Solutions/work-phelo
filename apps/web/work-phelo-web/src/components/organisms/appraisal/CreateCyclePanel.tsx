@@ -526,7 +526,7 @@ function EmployeeSelect({
     .filter(
       (emp) =>
         departmentIds.length === 0 ||
-        (emp.departmentId != null && departmentIds.includes(emp.departmentId)),
+        (emp.department?.id != null && departmentIds.includes(emp.department.id)),
     )
     .filter(
       (emp) => employmentStatuses.length === 0 || employmentStatuses.includes(emp.employmentStatus),
