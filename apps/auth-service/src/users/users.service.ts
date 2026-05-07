@@ -287,7 +287,7 @@ export class UsersService {
       permissions,
     };
 
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '8h' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
       { sub: updated.id, type: 'refresh' },
       { expiresIn: '7d' },

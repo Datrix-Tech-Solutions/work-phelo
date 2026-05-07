@@ -31,7 +31,7 @@ export function setAccessTokenCookie(res: Response, accessToken: string) {
     httpOnly: true,
     secure: COOKIE_SECURE,
     sameSite: SAME_SITE,
-    maxAge: 8 * 60 * 60 * 1000, // 8 hours
+    maxAge: 15 * 60 * 1000, // 15 minutes
     path: '/',
   });
 }
