@@ -7,12 +7,15 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { useCreateAnnouncement } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 interface AnnouncementForm {
   title: string;
-  message: string;
+  body: string;
   expiresAt?: string;
-  notifyEmail: boolean;
+  sendEmail: boolean;
 }
 
 interface Props {
@@ -22,32 +25,48 @@ interface Props {
 
 export function CreateAnnouncementPanel({ isOpen, onClose }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const toast = useToast();
+  const { mutate: createAnnouncement, isPending } = useCreateAnnouncement();
 
   const {
     register,
     handleSubmit,
     setValue,
     control,
+    getValues,
     reset,
     formState: { errors },
   } = useForm<AnnouncementForm>({
-    defaultValues: { notifyEmail: false },
+    defaultValues: { sendEmail: false },
   });
 
   const expiresAtValue = useWatch({ control, name: 'expiresAt' });
-  const notifyEmail = useWatch({ control, name: 'notifyEmail' });
+  const sendEmail = useWatch({ control, name: 'sendEmail' });
 
   const handleClose = () => {
     reset();
+    setConfirmOpen(false);
     onClose();
   };
 
   const onSendClick = handleSubmit(() => setConfirmOpen(true));
 
   const onConfirmSend = () => {
-    // TODO: wire up mutation
-    setConfirmOpen(false);
-    handleClose();
+    const formValues = getValues();
+    const payload = {
+      title: formValues.title,
+      body: formValues.body,
+      sendEmail: formValues.sendEmail,
+      ...(formValues.expiresAt ? { expiresAt: formValues.expiresAt } : {}),
+    };
+
+    createAnnouncement(payload, {
+      onSuccess: () => {
+        toast.success('Announcement created');
+        handleClose();
+      },
+      onError: (err: unknown) => toast.error(extractError(err, 'Failed to create announcement')),
+    });
   };
 
   return (
@@ -62,7 +81,9 @@ export function CreateAnnouncementPanel({ isOpen, onClose }: Props) {
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={onSendClick}>Send Message</Button>
+            <Button isLoading={isPending} loadingText="Sending..." onClick={onSendClick}>
+              Send Message
+            </Button>
           </div>
         }
       >
@@ -75,8 +96,8 @@ export function CreateAnnouncementPanel({ isOpen, onClose }: Props) {
           />
           <FormField
             label="Message"
-            registration={register('message', { required: 'Required' })}
-            error={errors.message}
+            registration={register('body', { required: 'Required' })}
+            error={errors.body}
             type="textarea"
             rows={6}
             placeholder="Write your announcement here…"
@@ -89,9 +110,9 @@ export function CreateAnnouncementPanel({ isOpen, onClose }: Props) {
           />
           <label className="flex items-start gap-3 cursor-pointer group">
             <div className="relative mt-0.5 shrink-0">
-              <input type="checkbox" className="sr-only peer" {...register('notifyEmail')} />
+              <input type="checkbox" className="sr-only peer" {...register('sendEmail')} />
               <div className="w-5 h-5 rounded border-2 border-gray-300 bg-white peer-checked:bg-brand peer-checked:border-brand transition-colors group-hover:border-gray-400 flex items-center justify-center">
-                {notifyEmail && (
+                {sendEmail && (
                   <svg
                     className="w-3 h-3 text-white"
                     fill="none"
@@ -116,15 +137,17 @@ export function CreateAnnouncementPanel({ isOpen, onClose }: Props) {
 
       <Modal
         isOpen={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
+        onClose={() => !isPending && setConfirmOpen(false)}
         title="Send Announcement?"
         description="This announcement will be sent to all employees in your organisation. Are you sure you want to proceed?"
         footer={
           <>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={isPending}>
               Cancel
             </Button>
-            <Button onClick={onConfirmSend}>Send</Button>
+            <Button isLoading={isPending} loadingText="Sending..." onClick={onConfirmSend}>
+              Send
+            </Button>
           </>
         }
       />

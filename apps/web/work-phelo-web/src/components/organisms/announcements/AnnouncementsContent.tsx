@@ -1,20 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Megaphone } from 'lucide-react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { CreateAnnouncementPanel } from '@/components/organisms/announcements/CreateAnnouncementPanel';
+import { useAnnouncementsPage } from '@/hooks';
+import type { Announcement } from '@/types/hr';
 
-interface Announcement {
+interface AnnouncementRow {
   id: string;
   title: string;
   message: string;
-  expiresAt: string;
+  expiresAt?: string | null;
   notifyEmail: boolean;
 }
 
-const COLUMNS: Column<Announcement>[] = [
+const COLUMNS: Column<AnnouncementRow>[] = [
   {
     key: 'title',
     label: 'Title',
@@ -33,11 +35,13 @@ const COLUMNS: Column<Announcement>[] = [
     width: '1fr',
     render: (row) => (
       <span className="text-gray-600">
-        {new Date(row.expiresAt).toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        })}
+        {row.expiresAt
+          ? new Date(row.expiresAt).toLocaleDateString('en-GB', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })
+          : 'No expiry'}
       </span>
     ),
   },
@@ -59,13 +63,23 @@ export function AnnouncementsContent() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  const announcements: Announcement[] = []; // TODO: replace with useAnnouncements hook
+  const { items, meta, isLoading } = useAnnouncementsPage({
+    page,
+    limit: 10,
+    search: search || undefined,
+    view: 'all',
+  });
 
-  const filtered = announcements.filter(
-    (a) =>
-      !search ||
-      a.title.toLowerCase().includes(search.toLowerCase()) ||
-      a.message.toLowerCase().includes(search.toLowerCase()),
+  const rows = useMemo<AnnouncementRow[]>(
+    () =>
+      items.map((announcement: Announcement) => ({
+        id: announcement.id,
+        title: announcement.title,
+        message: announcement.body,
+        expiresAt: announcement.expiresAt,
+        notifyEmail: announcement.sendEmail,
+      })),
+    [items],
   );
 
   return (
@@ -74,14 +88,15 @@ export function AnnouncementsContent() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Announcements</h1>
           <p className="text-sm text-gray-400 mt-0.5">
-            {filtered.length} announcement{filtered.length !== 1 ? 's' : ''}
+            {meta.total} announcement{meta.total !== 1 ? 's' : ''}
           </p>
         </div>
       </div>
 
       <DataTable
         columns={COLUMNS}
-        data={filtered}
+        data={rows}
+        isLoading={isLoading}
         emptyMessage="No announcements yet"
         emptyImage={
           <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center">
@@ -90,10 +105,13 @@ export function AnnouncementsContent() {
         }
         searchPlaceholder="Search announcements…"
         searchValue={search}
-        onSearch={setSearch}
+        onSearch={(value) => {
+          setSearch(value);
+          setPage(1);
+        }}
         actionButton={{ label: '+ New Announcement', onClick: () => setPanelOpen(true) }}
         currentPage={page}
-        totalPages={Math.max(1, Math.ceil(filtered.length / 10))}
+        totalPages={Math.max(1, meta.totalPages)}
         onPageChange={setPage}
       />
 
