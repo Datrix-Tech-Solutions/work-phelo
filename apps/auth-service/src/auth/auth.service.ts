@@ -27,6 +27,7 @@ import { SendSmsOtpDto } from './dto/send-sms-otp.dto';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { RequestUser } from '@work-phelo/types';
 import { generateSecureToken } from '../common/otp.helper';
+import { normalizeEmail } from '../common/email.helper';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MINUTES = 30;
@@ -201,6 +202,7 @@ export class AuthService {
 
   // ── Login ───────────────────────────────────────────────────────────────
   async login(dto: LoginDto, ipAddress?: string, userAgent?: string) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
     });
@@ -209,12 +211,21 @@ export class AuthService {
       throw new ForbiddenException('Tenant account is not active');
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
 
-    if (!user || !user.password) {
+    if (!user) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (!user.password) {
+      throw new ForbiddenException(
+        'Please accept your invite and set your password first.',
+      );
     }
 
     // Check lockout before verifying password
@@ -307,8 +318,12 @@ export class AuthService {
     ipAddress?: string,
     userAgent?: string,
   ) {
+    const normalizedEmail = normalizeEmail(email);
     const user = await this.prisma.user.findFirst({
-      where: { email, role: 'SUPER_ADMIN' },
+      where: {
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+        role: 'SUPER_ADMIN',
+      },
       include: { tenant: true },
     });
 
@@ -359,13 +374,17 @@ export class AuthService {
 
   // ── Email Verification ──────────────────────────────────────────────────
   async verifyEmail(dto: VerifyEmailDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
     if (!user) throw new NotFoundException('User not found');
 
@@ -395,6 +414,7 @@ export class AuthService {
   }
 
   async resendVerification(dto: ResendVerificationDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
     });
@@ -405,7 +425,10 @@ export class AuthService {
       };
 
     const user = await this.prisma.user.findFirst({
-      where: { tenantId: tenant.id, email: dto.email },
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
       include: { tenant: true },
     });
     if (!user)
@@ -457,6 +480,17 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
+    if (
+      storedToken.user.status !== 'ACTIVE' ||
+      storedToken.user.tenant.status !== 'ACTIVE'
+    ) {
+      await this.prisma.refreshToken.update({
+        where: { id: storedToken.id },
+        data: { isRevoked: true },
+      });
+      throw new UnauthorizedException('User or tenant is no longer active');
+    }
+
     await this.prisma.refreshToken.update({
       where: { id: storedToken.id },
       data: { isRevoked: true },
@@ -488,6 +522,7 @@ export class AuthService {
 
   // ── Password Reset ──────────────────────────────────────────────────────
   async forgotPassword(dto: ForgotPasswordDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     // Scope lookup to the tenant — prevents cross-tenant OTP token pollution
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: dto.tenantSlug },
@@ -501,8 +536,11 @@ export class AuthService {
       };
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
 
     if (!user) {
@@ -620,13 +658,18 @@ export class AuthService {
         );
       }
 
+      const normalizedEmail = normalizeEmail(dto.email);
+
       const tenant = await this.prisma.tenant.findUnique({
         where: { slug: dto.tenantSlug },
       });
       if (!tenant) throw new NotFoundException('Tenant not found');
 
-      const user = await this.prisma.user.findUnique({
-        where: { tenantId_email: { tenantId: tenant.id, email: dto.email } },
+      const user = await this.prisma.user.findFirst({
+        where: {
+          tenantId: tenant.id,
+          email: { equals: normalizedEmail, mode: 'insensitive' },
+        },
       });
       if (!user)
         throw new BadRequestException('Invalid or expired reset token');
@@ -635,7 +678,6 @@ export class AuthService {
         where: {
           userId: user.id,
           type: 'PASSWORD_RESET',
-          code: dto.otpCode,
           usedAt: null,
         },
         orderBy: { createdAt: 'desc' },
@@ -900,6 +942,7 @@ export class AuthService {
     provider: 'GOOGLE' | 'MICROSOFT',
     tenantSlug: string,
   ) {
+    const normalizedEmail = normalizeEmail(profile.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug },
     });
@@ -919,8 +962,11 @@ export class AuthService {
       return { accessToken, refreshToken };
     }
 
-    const user = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: tenant.id, email: profile.email } },
+    const user = await this.prisma.user.findFirst({
+      where: {
+        tenantId: tenant.id,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
 
     if (!user)
@@ -933,7 +979,7 @@ export class AuthService {
         userId: user.id,
         provider,
         providerId: profile.id,
-        email: profile.email,
+        email: normalizedEmail,
       },
     });
 
@@ -952,4 +998,3 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 }
-// Mon Apr  6 16:41:02 GMT 2026

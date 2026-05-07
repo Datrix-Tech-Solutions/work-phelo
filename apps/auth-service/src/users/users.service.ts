@@ -17,6 +17,7 @@ import * as bcrypt from 'bcrypt';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { AuditService } from '../audit/audit.service';
 import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
+import { normalizeEmail } from '../common/email.helper';
 
 @Injectable()
 export class UsersService {
@@ -30,6 +31,7 @@ export class UsersService {
   ) {}
 
   async invite(tenantId: string, dto: InviteUserDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
     });
@@ -38,14 +40,17 @@ export class UsersService {
     // Block superadmin email
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
     if (!superAdminEmail) throw new Error('SUPER_ADMIN_EMAIL is required');
-    if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
+    if (normalizedEmail === normalizeEmail(superAdminEmail)) {
       throw new ForbiddenException(
         'This email is reserved for the platform owner.',
       );
     }
 
-    const existing = await this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email: dto.email } },
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        email: { equals: normalizedEmail, mode: 'insensitive' },
+      },
     });
     if (existing)
       throw new ConflictException('A user with this email already exists.');
@@ -73,7 +78,7 @@ export class UsersService {
     const user = await this.prisma.user.create({
       data: {
         tenantId,
-        email: dto.email,
+        email: normalizedEmail,
         firstName: dto.firstName,
         lastName: dto.lastName,
         phone: dto.phone,
@@ -167,7 +172,12 @@ export class UsersService {
           where: { id: dto.userId, tenantId },
         })
       : await this.prisma.user.findUnique({
-          where: { tenantId_email: { tenantId, email: dto.email } },
+          where: {
+            tenantId_email: {
+              tenantId,
+              email: normalizeEmail(dto.email),
+            },
+          },
         });
 
     if (!user) {
@@ -387,8 +397,11 @@ export class UsersService {
   }
 
   async findByEmail(tenantId: string, email: string) {
-    return this.prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email } },
+    return this.prisma.user.findFirst({
+      where: {
+        tenantId,
+        email: { equals: normalizeEmail(email), mode: 'insensitive' },
+      },
     });
   }
 
