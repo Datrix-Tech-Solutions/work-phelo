@@ -7,7 +7,7 @@ import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { ProjectCard } from '@/components/molecules/ProjectCard';
 import { CreateProjectPanel } from '@/components/organisms/projects/CreateProjectPanel';
-import { useEmployees } from '@/hooks/hr/useEmployees';
+import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { Project, CreateProjectDto } from '@/types/hr';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -42,8 +42,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
   const [statusFilter, setStatusFilter] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
 
-  const { data: empData } = useEmployees();
-  const employees = empData?.data ?? [];
+  const { data: employees = [] } = useEmployeeOptions();
 
   const filtered = useMemo(() => {
     return DUMMY_PROJECTS.filter((p) => {

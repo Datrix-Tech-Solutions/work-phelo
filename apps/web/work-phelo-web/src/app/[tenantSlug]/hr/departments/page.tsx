@@ -4,7 +4,7 @@
 
 import { use, useState } from 'react';
 import { useDepartments, useUpdateDepartment, useDeleteDepartment } from '@/hooks/useDepartments';
-import { useEmployees, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useEmployeeOptions, useUpdateEmployee } from '@/hooks/hr/useEmployees';
 import { Department } from '@/types/hr';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
@@ -35,8 +35,7 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
 
   // Data fetching
   const { data: departments = [], isLoading } = useDepartments();
-  const { data: empResult } = useEmployees({ limit: 500 });
-  const employees = empResult?.data ?? [];
+  const { data: employees = [] } = useEmployeeOptions();
 
   // Mutations
   const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();

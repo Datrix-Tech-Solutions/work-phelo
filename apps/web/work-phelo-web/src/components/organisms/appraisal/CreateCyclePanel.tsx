@@ -14,7 +14,7 @@ import {
   useAppraisalTemplates,
   useAppraisalSettings,
 } from '@/hooks';
-import { useDepartments, useEmployees, usePermissionSets } from '@/hooks';
+import { useDepartments, useEmployeeOptions, usePermissionSets } from '@/hooks';
 import type { PermissionSet } from '@/types/roles';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
@@ -509,8 +509,7 @@ function EmployeeSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
-  const { data } = useEmployees({ limit: 500 });
-  const employees = data?.data ?? [];
+  const { data: employees = [] } = useEmployeeOptions();
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

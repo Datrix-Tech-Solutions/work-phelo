@@ -25,7 +25,7 @@ import {
   useUnassignAsset,
   useUpdateAsset,
 } from '@/hooks/useAssets';
-import { useEmployees } from '@/hooks/hr/useEmployees';
+import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
 import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
@@ -80,8 +80,8 @@ export function AssetsContent() {
     }),
     [assets],
   );
-  const { data: employeesResult } = useEmployees({ limit: 200 });
-  const employees = (employeesResult?.data ?? []).filter((employee) =>
+  const { data: allEmployeeOptions = [] } = useEmployeeOptions();
+  const employees = allEmployeeOptions.filter((employee) =>
     ['ACTIVE', 'PROBATION'].includes(employee.employmentStatus),
   );
   const { mutate: createAsset } = useCreateAsset();

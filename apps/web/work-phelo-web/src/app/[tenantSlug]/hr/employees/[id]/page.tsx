@@ -6,7 +6,7 @@ import { use, useState } from 'react';
 import axios from 'axios';
 import {
   useEmployee,
-  useEmployees,
+  useEmployeeOptions,
   useResendEmployeeInvite,
   useUpdateEmployee,
   useResignationRecord,
@@ -36,6 +36,8 @@ import { BankingComplianceSection } from '@/components/molecules/employees/banki
 import { EmergencyContactSection } from '@/components/molecules/employees/emergencyContactSection';
 import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
 
+const NOTIFY_DELAY_MS = 30 * 60 * 1000;
+
 export default function EmployeeDetailPage({
   params,
 }: {
@@ -51,14 +53,13 @@ export default function EmployeeDetailPage({
   const [resignOpen, setResignOpen] = useState(false);
 
   // Data fetching
-  const NOTIFY_DELAY_MS = 30 * 60 * 1000;
-
   const { data: employee, isLoading, error } = useEmployee(id);
   const { data: resignationRecord } = useResignationRecord(id);
   const hrIsNotified =
     resignationRecord?.status === 'PENDING' &&
+    // eslint-disable-next-line react-hooks/purity
     Date.now() - new Date(resignationRecord.submittedAt).getTime() >= NOTIFY_DELAY_MS;
-  const { data: allHrResult } = useEmployees();
+  const { data: allHrResult = [] } = useEmployeeOptions();
   const { data: availableAssets = [] } = useAvailableAssets();
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
@@ -67,7 +68,7 @@ export default function EmployeeDetailPage({
   const { data: permissionSets = [] } = usePermissionSets({
     enabled: canGrantPermission,
   });
-  const allHrEmployees = allHrResult?.data ?? [];
+  const allHrEmployees = allHrResult;
 
   const toast = useToast();
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
