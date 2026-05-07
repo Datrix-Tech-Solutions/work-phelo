@@ -91,7 +91,7 @@ export class AuthService {
         featureConfig: user.featureConfig,
         permissions: user.permissions ?? [],
       },
-      { expiresIn: '8h' },
+      { expiresIn: '15m' },
     );
   }
 
@@ -119,7 +119,7 @@ export class AuthService {
         (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
       permissions,
     };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '8h' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
       { sub: user.id, type: 'refresh', jti: randomUUID() },
       { expiresIn: '7d' },
@@ -279,7 +279,7 @@ export class AuthService {
     return {
       accessToken,
       refreshToken,
-      expiresIn: 28_800,
+      expiresIn: 900,
       user: {
         id: user.id,
         email: user.email,
