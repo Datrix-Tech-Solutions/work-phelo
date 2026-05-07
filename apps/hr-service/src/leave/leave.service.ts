@@ -14,6 +14,7 @@ import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
+import { Gender, LeaveType } from '../../prisma/generated/client';
 import {
   assertHrAccess,
   getActorEmployee,
@@ -22,7 +23,16 @@ import {
   isEmployeeSelfServiceUser,
 } from '../auth/access-scope';
 
-const DEFAULT_LEAVE_TYPES = [
+type DefaultLeaveTypeDefinition = {
+  name: string;
+  daysAllowed: number;
+  isPaid: boolean;
+  requiresApproval: boolean;
+  isDefault: boolean;
+  applicableGenders?: Gender[];
+};
+
+const DEFAULT_LEAVE_TYPES: DefaultLeaveTypeDefinition[] = [
   {
     name: 'Annual Leave',
     daysAllowed: 21,
@@ -43,6 +53,7 @@ const DEFAULT_LEAVE_TYPES = [
     isPaid: true,
     requiresApproval: true,
     isDefault: true,
+    applicableGenders: ['FEMALE'],
   },
   {
     name: 'Paternity Leave',
@@ -50,6 +61,7 @@ const DEFAULT_LEAVE_TYPES = [
     isPaid: true,
     requiresApproval: true,
     isDefault: true,
+    applicableGenders: ['MALE'],
   },
   {
     name: 'Compassionate Leave',
@@ -83,6 +95,35 @@ export class LeaveService {
     @Inject(forwardRef(() => RabbitMQPublisher))
     private readonly rabbitmq: RabbitMQPublisher,
   ) {}
+
+  private genderLabel(gender: Gender): string {
+    return gender.replace(/_/g, ' ').toLowerCase();
+  }
+
+  private isLeaveTypeApplicableToEmployee(
+    leaveType: Pick<LeaveType, 'applicableTo' | 'applicableGenders'>,
+    employee: {
+      employmentType: (typeof leaveType.applicableTo)[number];
+      gender: Gender | null;
+    },
+  ): boolean {
+    const employmentTypeMatches =
+      leaveType.applicableTo.length === 0 ||
+      leaveType.applicableTo.includes(employee.employmentType);
+
+    if (!employmentTypeMatches) {
+      return false;
+    }
+
+    if (leaveType.applicableGenders.length === 0) {
+      return true;
+    }
+
+    return (
+      employee.gender !== null &&
+      leaveType.applicableGenders.includes(employee.gender)
+    );
+  }
 
   private parseDateOnly(value: string, label: string): Date {
     const parts = value.split('-').map((part) => Number(part));
@@ -124,7 +165,9 @@ export class LeaveService {
     for (const lt of DEFAULT_LEAVE_TYPES) {
       await this.prisma.leaveType.upsert({
         where: { tenantId_name: { tenantId, name: lt.name } },
-        update: {},
+        update: lt.isDefault
+          ? { applicableGenders: lt.applicableGenders ?? [] }
+          : {},
         create: { tenantId, ...lt },
       });
     }
@@ -351,15 +394,16 @@ export class LeaveService {
 
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
-      select: { employmentType: true },
+      select: { employmentType: true, gender: true },
     });
 
     for (const lt of leaveTypes) {
-      // Skip leave types that don't apply to this employee's employment type
       if (
         employee &&
-        lt.applicableTo.length > 0 &&
-        !lt.applicableTo.includes(employee.employmentType)
+        !this.isLeaveTypeApplicableToEmployee(lt, {
+          employmentType: employee.employmentType,
+          gender: employee.gender,
+        })
       ) {
         continue;
       }
@@ -458,7 +502,7 @@ export class LeaveService {
     if (!empRecord) throw new NotFoundException('Employee profile not found');
     const employeeId = empRecord.id;
 
-    // Check leave type eligibility based on employment type
+    // Check leave type eligibility based on employment type and gender
     const leaveType = await this.prisma.leaveType.findFirst({
       where: { id: dto.leaveTypeId, tenantId, isActive: true },
     });
@@ -471,6 +515,20 @@ export class LeaveService {
     ) {
       throw new ForbiddenException(
         `This leave type is not available for your employment type (${empRecord.employmentType.replace('_', ' ').toLowerCase()})`,
+      );
+    }
+    if (leaveType.applicableGenders.length > 0 && empRecord.gender === null) {
+      throw new ForbiddenException(
+        'This leave type is only available to employees with a recorded gender. Please update your profile or contact HR.',
+      );
+    }
+    if (
+      leaveType.applicableGenders.length > 0 &&
+      empRecord.gender !== null &&
+      !leaveType.applicableGenders.includes(empRecord.gender)
+    ) {
+      throw new ForbiddenException(
+        `This leave type is not available for your gender (${this.genderLabel(empRecord.gender)}).`,
       );
     }
     const start = this.parseDateOnly(dto.startDate, 'Start date');
