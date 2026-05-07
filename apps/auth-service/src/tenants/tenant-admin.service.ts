@@ -5,6 +5,7 @@ import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
 import { generateSecureToken } from '../common/otp.helper';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import { syncUserSystemPermissionSet } from '../permissions/system-permission-sets';
+import { normalizeEmail } from '../common/email.helper';
 
 @Injectable()
 export class TenantAdminService {
@@ -16,6 +17,7 @@ export class TenantAdminService {
   ) {}
 
   async updateTenantAdmin(id: string, dto: UpdateTenantAdminDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const tenant = await this.prisma.tenant.findUnique({ where: { id } });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
@@ -37,7 +39,7 @@ export class TenantAdminService {
         data: {
           firstName: dto.firstName,
           lastName: dto.lastName,
-          email: dto.email,
+          email: normalizedEmail,
           ...(shouldResendInvite ? { inviteToken, inviteExpiresAt } : {}),
         },
         select: {
@@ -87,7 +89,7 @@ export class TenantAdminService {
     const user = await this.prisma.user.create({
       data: {
         tenantId: id,
-        email: dto.email,
+        email: normalizedEmail,
         password: '',
         firstName: dto.firstName,
         lastName: dto.lastName,

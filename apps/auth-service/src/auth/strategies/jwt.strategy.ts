@@ -60,7 +60,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       include: { tenant: true },
     });
 
-    if (!user || user.status !== 'ACTIVE') {
+    if (!user || user.status !== 'ACTIVE' || user.tenant.status !== 'ACTIVE') {
       throw new UnauthorizedException('User not found or inactive');
     }
 
