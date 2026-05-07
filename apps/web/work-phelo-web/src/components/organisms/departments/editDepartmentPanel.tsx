@@ -69,7 +69,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
       // Auto-add the new manager as a member of this department
       if (newManagerId) {
         const manager = employees.find((e) => e.id === newManagerId);
-        if (manager && manager.departmentId !== editTarget.id) {
+        if (manager && manager.department?.id !== editTarget.id) {
           updateEmployee({ id: newManagerId, departmentId: editTarget.id });
         }
       }
