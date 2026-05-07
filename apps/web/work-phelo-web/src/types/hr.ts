@@ -239,6 +239,57 @@ export interface CreatePublicHolidayDto {
   date: string;
 }
 
+// ── Announcements ───────────────────────────────────────
+export type AnnouncementAudienceType = 'ALL' | 'DEPARTMENTS' | 'BRANCHES' | 'EMPLOYEES';
+
+export interface Announcement {
+  id: string;
+  tenantId: string;
+  title: string;
+  body: string;
+  audienceType: AnnouncementAudienceType;
+  targetDepartmentIds: string[];
+  targetBranchIds: string[];
+  targetEmployeeIds: string[];
+  sendEmail: boolean;
+  publishedAt: string;
+  expiresAt?: string | null;
+  createdById?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QueryAnnouncementsParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  audienceType?: AnnouncementAudienceType;
+  sendEmail?: boolean;
+  includeExpired?: boolean;
+  view?: 'visible' | 'all';
+}
+
+export interface PaginatedAnnouncementsResponse {
+  items: Announcement[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface CreateAnnouncementPayload {
+  title: string;
+  body: string;
+  audienceType?: AnnouncementAudienceType;
+  departmentIds?: string[];
+  branchIds?: string[];
+  employeeIds?: string[];
+  sendEmail?: boolean;
+  expiresAt?: string;
+}
+
 export type UpdatePublicHolidayDto = Partial<CreatePublicHolidayDto>;
 
 // ── Leave Request ─────────────────────────────────────────

@@ -83,6 +83,8 @@ export enum Permission {
   MANAGE_ASSETS = 'manage:assets',
   READ_ASSETS = 'read:assets',
   ASSIGN_ASSET = 'assign:asset',
+  READ_ANNOUNCEMENTS = 'read:announcements',
+  MANAGE_ANNOUNCEMENTS = 'manage:announcements',
 
   // ── Marketing (Sprint 5) ──────────────────────────────────────────────────
   MANAGE_LEADS = 'manage:leads',
@@ -156,6 +158,8 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.SUBMIT_MANAGER_REVIEW,
     Permission.READ_OWN_REVIEW,
+    Permission.READ_ANNOUNCEMENTS,
+    Permission.MANAGE_ANNOUNCEMENTS,
   ],
 
   Employee: [
@@ -170,5 +174,6 @@ export const COMPANY_ROLE_PERMISSIONS: Record<string, Permission[]> = {
     Permission.READ_OWN_PAYSLIP,
     Permission.SUBMIT_SELF_ASSESSMENT,
     Permission.READ_OWN_REVIEW,
+    Permission.READ_ANNOUNCEMENTS,
   ],
 };

@@ -228,6 +228,15 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.ASSIGN_ASSET]: [
       { resource: 'assets', action: PermissionAction.ASSIGN },
     ],
+    [AppPermission.READ_ANNOUNCEMENTS]: [
+      { resource: 'announcements', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.MANAGE_ANNOUNCEMENTS]: [
+      { resource: 'announcements', action: PermissionAction.VIEW },
+      { resource: 'announcements', action: PermissionAction.CREATE },
+      { resource: 'announcements', action: PermissionAction.EDIT },
+      { resource: 'announcements', action: PermissionAction.DELETE },
+    ],
     [AppPermission.MANAGE_LEADS]: [
       { resource: 'leads', action: PermissionAction.CREATE },
       { resource: 'leads', action: PermissionAction.EDIT },

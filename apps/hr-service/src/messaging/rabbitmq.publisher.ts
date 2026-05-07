@@ -34,6 +34,7 @@ import {
   ShiftSwapApprovedEvent,
   ShiftSwapRejectedEvent,
   ShiftSwapExpiredEvent,
+  AnnouncementPublishedEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -333,6 +334,18 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_EMPLOYEE_TERMINATION,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationAnnouncementPublished(
+    data: AnnouncementPublishedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_ANNOUNCEMENT_PUBLISHED,
       data,
       correlationId,
     );
