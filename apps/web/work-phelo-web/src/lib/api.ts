@@ -9,6 +9,11 @@ export const api = axios.create({
 // Routes that should never trigger a token refresh attempt
 const SKIP_REFRESH = ['/auth/refresh', '/auth/admin/login', '/auth/login'];
 
+// Shared in-flight refresh promise — prevents concurrent 401s from each
+// triggering their own refresh (which would burn the refresh token on the first
+// success and cause all subsequent attempts to fail, logging the user out).
+let refreshPromise: Promise<unknown> | null = null;
+
 function isAuthPage(pathname: string): boolean {
   return (
     pathname === '/login' ||
@@ -21,6 +26,15 @@ function isAuthPage(pathname: string): boolean {
   );
 }
 
+function redirectToLogin() {
+  const path = window.location.pathname;
+  if (isAuthPage(path)) return;
+  const tenantMatch = path.match(/^\/([^/]+)\//);
+  const isPlatform =
+    !tenantMatch || tenantMatch[1] === 'platform' || tenantMatch[1] === 'dashboard';
+  window.location.href = isPlatform ? '/platform/login' : `/${tenantMatch![1]}/login`;
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -31,22 +45,19 @@ api.interceptors.response.use(
 
     if (error.response?.status === 401 && !original._retry && !shouldSkip) {
       original._retry = true;
+
+      // If no refresh is in flight, start one; otherwise reuse the existing promise.
+      if (!refreshPromise) {
+        refreshPromise = api.post('/auth/refresh').finally(() => {
+          refreshPromise = null;
+        });
+      }
+
       try {
-        await api.post('/auth/refresh');
+        await refreshPromise;
         return api(original);
       } catch {
-        const path = window.location.pathname;
-
-        if (isAuthPage(path)) {
-          return Promise.reject(error);
-        }
-
-        // Refresh failed — send back to login
-        // Derive correct login page from current path
-        const tenantMatch = path.match(/^\/([^/]+)\//);
-        const isPlatform =
-          !tenantMatch || tenantMatch[1] === 'platform' || tenantMatch[1] === 'dashboard';
-        window.location.href = isPlatform ? '/platform/login' : `/${tenantMatch![1]}/login`;
+        redirectToLogin();
       }
     }
     return Promise.reject(error);

@@ -10,8 +10,8 @@ import { BranchMembersPanel } from '@/components/organisms/branches/BranchMember
 import { BranchStatus } from '@/components/molecules/branches/BranchStatus';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { useBranches, useDeleteBranch, useUpdateBranch, useEmployees } from '@/hooks';
-import type { Branch, Employee } from '@/types/hr';
+import { useBranches, useDeleteBranch, useUpdateBranch, useEmployeeOptions } from '@/hooks';
+import type { Branch, EmployeeOption } from '@/types/hr';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 
@@ -36,11 +36,10 @@ export function BranchesTable() {
   const [toggleActiveTarget, setToggleActiveTarget] = useState<Branch | null>(null);
 
   const { data: branches = [], isLoading } = useBranches();
-  const { data: empResult } = useEmployees({ limit: 500 });
-  const employees: Employee[] = useMemo(() => empResult?.data ?? [], [empResult?.data]);
+  const { data: employees = [] } = useEmployeeOptions();
 
   const employeeMap = useMemo(() => {
-    const map = new Map<string, Employee>();
+    const map = new Map<string, EmployeeOption>();
     employees.forEach((e) => map.set(e.id, e));
     return map;
   }, [employees]);

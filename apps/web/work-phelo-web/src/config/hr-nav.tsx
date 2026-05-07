@@ -13,6 +13,7 @@ import {
   ClipboardList,
   MonitorSmartphone,
   FileSliders,
+  Megaphone,
 } from 'lucide-react';
 
 /* ── Icons ── */
@@ -28,6 +29,7 @@ const ProjectsIcon = () => <ClipboardList className="w-5 h-5" />;
 const PayrollIcon = () => <CircleDollarSign className="w-5 h-5" />;
 const AssetIcon = () => <MonitorSmartphone className="w-5 h-5" />;
 const ManagementIcon = () => <FileSliders className="w-5 h-5" />;
+const MegaphoneIcon = () => <Megaphone className="w-5 h-5" />;
 
 /* ── Nav groups — all items default enabled & active ── */
 
@@ -154,6 +156,14 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         label: 'HR Management',
         icon: <ManagementIcon />,
         href: 'hrmanagement',
+        enabled: true,
+        active: false,
+      },
+      {
+        key: 'announcements',
+        label: 'Announcements',
+        icon: <MegaphoneIcon />,
+        href: 'announcements',
         enabled: true,
         active: false,
       },

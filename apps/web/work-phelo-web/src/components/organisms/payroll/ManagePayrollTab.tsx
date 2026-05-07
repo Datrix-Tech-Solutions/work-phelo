@@ -48,7 +48,7 @@ interface PayrollRow {
 }
 
 export function ManagePayrollTab() {
-  const { data: empData, isLoading } = useEmployees();
+  const { data: empData, isLoading } = useEmployees({ limit: 100 });
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});

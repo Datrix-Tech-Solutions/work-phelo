@@ -4,12 +4,12 @@
 
 import { useState, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Users, UserCheck, Clock, CalendarOff, UserX } from 'lucide-react';
+import { Users, UserCheck, Clock, CalendarOff } from 'lucide-react';
 import { StatCard } from '@/components/molecules/dashboard/StatCard';
 import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
-import { useEmployees } from '@/hooks/hr/useEmployees';
+import { useEmployees, useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useLeaveRequests } from '@/hooks/useLeave';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
@@ -55,8 +55,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
     departmentId: deptFilter || undefined,
     limit: 100,
   });
-  const { data: allStaffResult } = useEmployees({ limit: 500 });
-  const allStaff = useMemo(() => allStaffResult?.data ?? [], [allStaffResult]);
+  const { data: allStaff = [], isLoading: isStatsLoading } = useEmployeeOptions();
 
   const allEmployees = empResult?.data ?? [];
   // Advanced users can filter for restricted statuses explicitly, but they're hidden by default
@@ -83,7 +82,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
       total: allStaff.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus)).length,
       permanent: allStaff.filter((e) => e.employmentStatus === 'ACTIVE').length,
       probation: allStaff.filter((e) => e.employmentStatus === 'PROBATION').length,
-      onLeave: allStaff.filter((e) => onLeaveEmployeeIds.has(e.id)).length,
+      onLeave: allStaff.filter(
+        (e) => e.employmentStatus === 'ON_LEAVE' || onLeaveEmployeeIds.has(e.id),
+      ).length,
       offboarded: allStaff.filter((e) => e.employmentStatus === 'OFFBOARDED').length,
     }),
     [allStaff, onLeaveEmployeeIds],
@@ -100,37 +101,39 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-5 gap-3 shrink-0">
-        <StatCard
-          title="Total Employees"
-          value={summary.total}
-          icon={<Users className="w-4.5 h-4.5 text-gray-600" />}
-          iconBg="bg-gray-100"
-        />
-        <StatCard
-          title="Permanent Staff"
-          value={summary.permanent}
-          icon={<UserCheck className="w-4.5 h-4.5 text-green-600" />}
-          iconBg="bg-green-50"
-        />
-        <StatCard
-          title="On Probation"
-          value={summary.probation}
-          icon={<Clock className="w-4.5 h-4.5 text-yellow-600" />}
-          iconBg="bg-yellow-50"
-        />
-        <StatCard
-          title="On Leave"
-          value={summary.onLeave}
-          icon={<CalendarOff className="w-4.5 h-4.5 text-blue-600" />}
-          iconBg="bg-blue-50"
-        />
-        <StatCard
-          title="Offboarded"
-          value={summary.offboarded}
-          icon={<UserX className="w-4.5 h-4.5 text-red-500" />}
-          iconBg="bg-red-50"
-        />
+      <div className="grid grid-cols-4 gap-3 shrink-0">
+        {isStatsLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-24 bg-gray-100 rounded-card animate-pulse" />
+          ))
+        ) : (
+          <>
+            <StatCard
+              title="Total Employees"
+              value={summary.total}
+              icon={<Users className="w-4.5 h-4.5 text-gray-600" />}
+              iconBg="bg-gray-100"
+            />
+            <StatCard
+              title="Permanent Staff"
+              value={summary.permanent}
+              icon={<UserCheck className="w-4.5 h-4.5 text-green-600" />}
+              iconBg="bg-green-50"
+            />
+            <StatCard
+              title="On Probation"
+              value={summary.probation}
+              icon={<Clock className="w-4.5 h-4.5 text-yellow-600" />}
+              iconBg="bg-yellow-50"
+            />
+            <StatCard
+              title="On Leave"
+              value={summary.onLeave}
+              icon={<CalendarOff className="w-4.5 h-4.5 text-blue-600" />}
+              iconBg="bg-blue-50"
+            />
+          </>
+        )}
       </div>
 
       {/* Toolbar */}

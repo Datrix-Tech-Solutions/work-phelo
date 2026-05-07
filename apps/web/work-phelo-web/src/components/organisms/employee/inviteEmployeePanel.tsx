@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, type ChangeEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -24,6 +24,7 @@ interface InviteForm {
   lastName: string;
   email: string;
   phone?: string;
+  gender?: string;
   jobTitle: string;
   departmentId?: string;
   branchId?: string;
@@ -73,6 +74,7 @@ function InviteEmployeeForm({
   const branchFormValue = useWatch({ control, name: 'branchId' });
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
+  const genderValue = useWatch({ control, name: 'gender' });
 
   useEffect(() => {
     const probationMonths = policiesSettings?.defaultProbationPeriodMonths;
@@ -164,6 +166,9 @@ function InviteEmployeeForm({
           registration={register('email', {
             required: 'Required',
             pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Invalid email' },
+            onChange: (e: ChangeEvent<HTMLInputElement>) => {
+              e.target.value = e.target.value.toLowerCase();
+            },
           })}
           error={errors.email}
           type="email"
@@ -174,6 +179,17 @@ function InviteEmployeeForm({
           placeholder="00 000 0000"
           value={phoneValue}
           onChange={(v) => setValue('phone', v)}
+        />
+        <SearchSelect
+          label="Gender"
+          placeholder="Select gender"
+          value={genderValue}
+          onChange={(v) => setValue('gender', v)}
+          options={[
+            { value: 'MALE', label: 'Male' },
+            { value: 'FEMALE', label: 'Female' },
+            { value: 'OTHER', label: 'Other' },
+          ]}
         />
         <DatePicker
           label="Date of Birth"

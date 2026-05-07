@@ -47,6 +47,17 @@ export type DocumentType =
   | 'OTHER';
 
 // ── Employee ─────────────────────────────────────────────
+export interface EmployeeOption {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  jobTitle: string;
+  employmentStatus: EmploymentStatus;
+  department?: { id: string; name: string };
+  branch?: { id: string; name: string };
+}
+
 export interface Employee {
   id: string;
   employeeNumber: string;
