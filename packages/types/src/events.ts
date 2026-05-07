@@ -60,6 +60,7 @@ export const EventPatterns = {
   NOTIFY_SHIFT_SWAP_APPROVED: 'notify.shift_swap_approved',
   NOTIFY_SHIFT_SWAP_REJECTED: 'notify.shift_swap_rejected',
   NOTIFY_SHIFT_SWAP_EXPIRED: 'notify.shift_swap_expired',
+  NOTIFY_ANNOUNCEMENT_PUBLISHED: 'notify.announcement_published',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -451,4 +452,22 @@ export interface ShiftSwapExpiredEvent {
   requesterShiftLabel: string;
   targetShiftLabel: string;
   scheduleLink?: string;
+}
+
+export interface AnnouncementRecipientEvent {
+  employeeId: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface AnnouncementPublishedEvent {
+  tenantId: string;
+  announcementId: string;
+  title: string;
+  body: string;
+  publishedAt: string;
+  platformLink?: string;
+  recipients: AnnouncementRecipientEvent[];
 }

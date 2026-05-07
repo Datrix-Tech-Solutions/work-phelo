@@ -26,6 +26,7 @@ import {
   ShiftSwapApprovedEvent,
   ShiftSwapRejectedEvent,
   ShiftSwapExpiredEvent,
+  AnnouncementPublishedEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -584,6 +585,29 @@ export class NotificationHandler {
         'notify.shift_swap_expired',
         err,
         `shiftSwapId=${data.shiftSwapId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.announcement_published')
+  async handleAnnouncementPublished(
+    @Payload() data: WithMeta<AnnouncementPublishedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.announcement_published] Received | announcementId=${data.announcementId} | recipients=${data.recipients.length} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendAnnouncementPublishedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.announcement_published',
+        err,
+        `announcementId=${data.announcementId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }

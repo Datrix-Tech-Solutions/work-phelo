@@ -50,6 +50,7 @@ enum NotificationType {
   SHIFT_SWAP_APPROVED
   SHIFT_SWAP_REJECTED
   SHIFT_SWAP_EXPIRED
+  ANNOUNCEMENT_PUBLISHED
 
   @@schema("notify")
 }

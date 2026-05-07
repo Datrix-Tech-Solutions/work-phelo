@@ -21,7 +21,7 @@ export class DashboardController {
   getMyDashboard(@Req() req: any) {
     return this.dashboardService.getEmployeeDashboard(
       req.user.tenantId,
-      req.user.id,
+      req.user,
     );
   }
 

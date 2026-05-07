@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { NotificationType } from '../../prisma/generated/client';
+import { NotificationType, Prisma } from '../../prisma/generated/client';
 import { InviteUserKind } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../channels/email.service';
@@ -273,6 +273,49 @@ export class NotificationService {
       subject: `Resignation submitted by ${data.employeeFirstName} ${data.employeeLastName}`,
       status: success ? 'SENT' : 'FAILED',
     });
+  }
+
+  async sendAnnouncementPublishedNotification(data: {
+    tenantId: string;
+    announcementId: string;
+    title: string;
+    body: string;
+    publishedAt: string;
+    platformLink?: string;
+    recipients: {
+      employeeId: string;
+      userId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+    }[];
+  }) {
+    await Promise.all(
+      data.recipients.map(async (recipient) => {
+        const success = await this.email.sendAnnouncementPublishedNotification(
+          recipient.email,
+          recipient.firstName,
+          data.title,
+          data.body,
+          data.publishedAt,
+          data.platformLink,
+        );
+
+        await this.log({
+          userId: recipient.userId,
+          tenantId: data.tenantId,
+          type: 'ANNOUNCEMENT_PUBLISHED',
+          channel: 'EMAIL',
+          recipient: recipient.email,
+          subject: data.title,
+          status: success ? 'SENT' : 'FAILED',
+          metadata: {
+            announcementId: data.announcementId,
+            employeeId: recipient.employeeId,
+          },
+        });
+      }),
+    );
   }
 
   async sendLeaveRequestedNotification(data: {
@@ -1010,6 +1053,7 @@ export class NotificationService {
     subject?: string;
     status: any;
     error?: string;
+    metadata?: Prisma.InputJsonValue;
   }) {
     try {
       await this.prisma.notificationLog.create({
