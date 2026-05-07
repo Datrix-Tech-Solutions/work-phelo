@@ -14,7 +14,7 @@ import { RabbitMQModule } from '../messaging/rabbitmq.module';
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET,
-      signOptions: { expiresIn: '15m' },
+      signOptions: { expiresIn: '8h' },
     }),
     TenantsModule,
     RabbitMQModule,
