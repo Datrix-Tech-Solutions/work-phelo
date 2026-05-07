@@ -40,6 +40,11 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
 import { RequestUser } from '@work-phelo/types';
+import {
+  assertHrAccess,
+  hasPermissionRule,
+  isCompanyAdminUser,
+} from '../auth/access-scope';
 
 @ApiTags('Employees')
 @Controller('employees')
@@ -48,6 +53,35 @@ import { RequestUser } from '@work-phelo/types';
 @ApiBearerAuth('access-token')
 export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
+
+  private assertEmployeeOptionsAccess(user: RequestUser) {
+    assertHrAccess(
+      isCompanyAdminUser(user) ||
+        hasPermissionRule(user, 'employees:VIEW') ||
+        hasPermissionRule(user, 'employees:CREATE') ||
+        hasPermissionRule(user, 'employees:EDIT') ||
+        hasPermissionRule(user, 'departments:CREATE') ||
+        hasPermissionRule(user, 'departments:EDIT') ||
+        hasPermissionRule(user, 'branches:CREATE') ||
+        hasPermissionRule(user, 'branches:EDIT') ||
+        hasPermissionRule(user, 'assets:VIEW') ||
+        hasPermissionRule(user, 'assets:CREATE') ||
+        hasPermissionRule(user, 'assets:EDIT') ||
+        hasPermissionRule(user, 'assets:ASSIGN') ||
+        hasPermissionRule(user, 'projects:VIEW') ||
+        hasPermissionRule(user, 'projects:CREATE') ||
+        hasPermissionRule(user, 'projects:EDIT') ||
+        hasPermissionRule(user, 'projects:ASSIGN') ||
+        hasPermissionRule(user, 'appraisals:VIEW') ||
+        hasPermissionRule(user, 'appraisals:CREATE') ||
+        hasPermissionRule(user, 'appraisals:EDIT') ||
+        hasPermissionRule(user, 'appraisals:APPROVE') ||
+        hasPermissionRule(user, 'schedules:VIEW') ||
+        hasPermissionRule(user, 'schedules:CREATE') ||
+        hasPermissionRule(user, 'schedules:EDIT') ||
+        hasPermissionRule(user, 'schedules:APPROVE'),
+    );
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -103,6 +137,21 @@ export class EmployeesController {
       query,
       req.user as RequestUser,
     );
+  }
+
+  @Get('options')
+  @ApiOperation({
+    summary:
+      'List lightweight employee options for selectors in the current tenant',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Employee options retrieved successfully',
+  })
+  findOptions(@Req() req: any) {
+    const user = req.user as RequestUser;
+    this.assertEmployeeOptionsAccess(user);
+    return this.employeesService.findOptions(user.tenantId);
   }
 
   @Get('me')

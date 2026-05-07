@@ -25,7 +25,11 @@ import {
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
-import { AssetStatus, Prisma } from '../../prisma/generated/client';
+import {
+  AssetStatus,
+  EmploymentStatus,
+  Prisma,
+} from '../../prisma/generated/client';
 import {
   assertHrAccess,
   getActorEmployee,
@@ -498,6 +502,26 @@ export class EmployeesService {
       employees: employeesWithStatus,
       meta: buildMeta(page, take, total),
     };
+  }
+
+  async findOptions(tenantId: string) {
+    return this.prisma.employee.findMany({
+      where: {
+        tenantId,
+        employmentStatus: { not: EmploymentStatus.OFFBOARDED },
+      },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        jobTitle: true,
+        employmentStatus: true,
+        department: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+    });
   }
 
   async findById(tenantId: string, id: string, actor?: RequestUser) {
