@@ -363,6 +363,8 @@ export interface PayrollRun {
   totalGross: string;
   totalNet: string;
   totalSSNIT: string;
+  totalTier1: string;
+  totalTier2: string;
   totalTier3: string;
   totalPAYE: string;
   runBy: string;
@@ -402,6 +404,8 @@ export interface PayrollItem {
   grossSalary: string;
   employeeSSNIT: string;
   employerSSNIT: string;
+  tier1Contribution: string;
+  tier2Contribution: string;
   tier3Employee: string;
   taxableIncome: string;
   payeTax: string;

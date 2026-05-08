@@ -61,8 +61,18 @@ const columns: Column<PayrollItem>[] = [
   },
   {
     key: 'employeeSSNIT',
-    label: 'SSNIT',
+    label: 'Employee Total (5.5%)',
     render: (row) => fmt(row.employeeSSNIT),
+  },
+  {
+    key: 'tier1Contribution',
+    label: 'Tier 1 Employee (0.5%)',
+    render: (row) => fmt(row.tier1Contribution),
+  },
+  {
+    key: 'tier2Contribution',
+    label: 'Tier 2 Employee (5%)',
+    render: (row) => fmt(row.tier2Contribution),
   },
   {
     key: 'payeTax',

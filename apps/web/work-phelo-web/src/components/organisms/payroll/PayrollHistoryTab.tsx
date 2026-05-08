@@ -51,14 +51,14 @@ export function PayrollHistoryTab() {
       render: (row) => fmt(row.totalGross),
     },
     {
-      key: 'totalAllowances',
-      label: 'Total Allowances',
-      render: () => <span className="text-gray-400">—</span>,
+      key: 'totalTier1',
+      label: 'Total Tier 1 Employee',
+      render: (row) => fmt(row.totalTier1),
     },
     {
-      key: 'totalSSNIT',
-      label: 'Total SSNIT',
-      render: (row) => fmt(row.totalSSNIT),
+      key: 'totalTier2',
+      label: 'Total Tier 2 Employee',
+      render: (row) => fmt(row.totalTier2),
     },
     {
       key: 'totalPAYE',
@@ -66,9 +66,9 @@ export function PayrollHistoryTab() {
       render: (row) => fmt(row.totalPAYE),
     },
     {
-      key: 'employerCost',
-      label: 'Employer Cost',
-      render: () => <span className="text-gray-400">—</span>,
+      key: 'totalSSNIT',
+      label: 'Total SSNIT',
+      render: (row) => fmt(row.totalSSNIT),
     },
     {
       key: 'status',

@@ -45,6 +45,7 @@ export interface PayrollResult {
   employeeStatutoryContrib: number;
   employerStatutoryContrib: number;
 
+  tier1Contribution?: number;
   tier2Contribution?: number;
   tier2FundName?: string;
 
@@ -70,9 +71,9 @@ export class PayrollValidationError extends Error {
 const PAYROLL_CONFIG = {
   GH: {
     currency: 'GHS' as const,
-    tier1EmployeeRate: 0.055,
+    tier1EmployeeRate: 0.005,
     tier1EmployerRate: 0.13,
-    tier2EmployerRate: 0.05,
+    tier2EmployeeRate: 0.05,
     maxInsurableEarnings: 69_000, // SSNIT contribution cap per month
   },
   NG: {
@@ -297,6 +298,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
 
   let employeeStatutoryContrib = 0;
   let employerStatutoryContrib = 0;
+  let tier1Contribution: number | undefined;
   let tier2Contribution: number | undefined;
   let tier2FundName: string | undefined;
   let voluntaryPensionEmployee: number | undefined;
@@ -310,14 +312,15 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       const cfg = PAYROLL_CONFIG.GH;
       const insurable = Math.min(basicSalary, cfg.maxInsurableEarnings);
 
-      // Tier 1 — SSNIT (employee 5.5%, employer 13%)
-      employeeStatutoryContrib = Math.round(insurable * cfg.tier1EmployeeRate);
+      // Tier 1 — SSNIT (employee 0.5%, employer 13%)
+      const tier1Employee = Math.round(insurable * cfg.tier1EmployeeRate);
       employerStatutoryContrib = Math.round(insurable * cfg.tier1EmployerRate);
+      tier1Contribution = tier1Employee;
 
-      // Tier 2 — mandatory occupational pension, employer only (5%)
-      // Separate from and additional to Tier 1 employer SSNIT.
-      tier2Contribution = Math.round(insurable * cfg.tier2EmployerRate);
+      // Tier 2 — employee occupational pension (5%)
+      tier2Contribution = Math.round(insurable * cfg.tier2EmployeeRate);
       tier2FundName = ghanaPension.tier2FundName;
+      employeeStatutoryContrib = tier1Employee + tier2Contribution;
 
       // Tier 3 — voluntary provident fund (both sides tax-deductible for employee)
       const pfEmployee = Math.round(basicSalary * (ghanaPension.providentFundEmployeeRate ?? 0));
@@ -390,10 +393,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
 
   const netSalary = Math.round(taxableIncome - paye);
   const totalEmployerCost = Math.round(
-    grossSalary +
-      employerStatutoryContrib +
-      (tier2Contribution ?? 0) +
-      (voluntaryPensionEmployer ?? 0),
+    grossSalary + employerStatutoryContrib + (voluntaryPensionEmployer ?? 0),
   );
 
   return {
@@ -403,6 +403,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     grossSalary: Math.round(grossSalary),
     employeeStatutoryContrib,
     employerStatutoryContrib,
+    tier1Contribution,
     tier2Contribution,
     tier2FundName,
     voluntaryPensionEmployee,
@@ -434,11 +435,11 @@ export const COUNTRY_META: Record<
     label: 'Ghana',
     flag: '🇬🇭',
     statutoryLabel: 'SSNIT Tier 1',
-    employeeRate: '5.5%',
+    employeeRate: '0.5%',
     employerRate: '13%',
-    tier2Label: 'Tier 2 (occupational)',
+    tier2Label: 'Tier 2 employee (5%)',
     voluntaryLabel: 'Tier 3 (provident fund)',
-    note: 'Max insurable: GHS 69,000/month · Tier 2 is an additional 5% employer obligation',
+    note: 'Max insurable: GHS 69,000/month · Tier 2 is a 5% employee deduction on the payroll breakdown',
   },
   NG: {
     label: 'Nigeria',

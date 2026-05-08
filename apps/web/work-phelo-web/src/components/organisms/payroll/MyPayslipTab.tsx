@@ -146,8 +146,16 @@ export function MyPayslipTab() {
                 value={`GHS ${breakdown.grossSalary.toLocaleString()}`}
               />
               <DetailField
-                label="Employee SSNIT (5.5%)"
+                label="Employee Total (5.5%)"
                 value={`GHS ${breakdown.employeeStatutoryContrib.toLocaleString()}`}
+              />
+              <DetailField
+                label="Tier 1 Employee (0.5%)"
+                value={`GHS ${(breakdown.tier1Contribution ?? 0).toLocaleString()}`}
+              />
+              <DetailField
+                label="Tier 2 Employee (5%)"
+                value={`GHS ${(breakdown.tier2Contribution ?? 0).toLocaleString()}`}
               />
               <DetailField
                 label="Taxable Income"
@@ -164,7 +172,7 @@ export function MyPayslipTab() {
           <SectionCard title="Employer Contributions">
             <div className="grid grid-cols-2 gap-x-8 gap-y-6">
               <DetailField
-                label="Employer SSNIT (13%)"
+                label="Employer Tier 1 (13%)"
                 value={`GHS ${breakdown.employerStatutoryContrib.toLocaleString()}`}
               />
               <DetailField

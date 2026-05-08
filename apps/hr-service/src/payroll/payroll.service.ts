@@ -11,6 +11,8 @@ import {
   calculatePayrollGross,
   calculatePayrollNetIncome,
   calculateSSNIT,
+  calculateTier1Employee,
+  calculateTier2,
   calculateTaxableIncome,
   calculateTier3Contribution,
   calculateTotalPayrollDeductions,
@@ -43,6 +45,8 @@ type CalculatedPayrollValues = EditablePayrollValues & {
   grossSalary: string;
   employeeSSNIT: string;
   employerSSNIT: string;
+  tier1Contribution: string;
+  tier2Contribution: string;
   tier3Employee: string;
   taxableIncome: string;
   payeTax: string;
@@ -96,6 +100,8 @@ export class PayrollService {
       values.otherDeductions,
     );
     const { employeeSSNIT, employerSSNIT } = calculateSSNIT(values.basicSalary);
+    const tier1Contribution = calculateTier1Employee(values.basicSalary);
+    const tier2Contribution = calculateTier2(values.basicSalary);
     const tier3Employee =
       settings.tier3Enabled && settings.tier3Rate
         ? calculateTier3Contribution(values.basicSalary, settings.tier3Rate)
@@ -123,6 +129,8 @@ export class PayrollService {
       grossSalary,
       employeeSSNIT,
       employerSSNIT,
+      tier1Contribution,
+      tier2Contribution,
       tier3Employee,
       taxableIncome,
       payeTax,
@@ -166,6 +174,8 @@ export class PayrollService {
       netSalary: { toString(): string } | string | number;
       employeeSSNIT: { toString(): string } | string | number;
       employerSSNIT: { toString(): string } | string | number;
+      tier1Contribution: { toString(): string } | string | number;
+      tier2Contribution: { toString(): string } | string | number;
       tier3Employee: { toString(): string } | string | number;
       payeTax: { toString(): string } | string | number;
     }>,
@@ -177,6 +187,8 @@ export class PayrollService {
         acc.totalSSNIT = acc.totalSSNIT
           .plus(item.employeeSSNIT.toString())
           .plus(item.employerSSNIT.toString());
+        acc.totalTier1 = acc.totalTier1.plus(item.tier1Contribution.toString());
+        acc.totalTier2 = acc.totalTier2.plus(item.tier2Contribution.toString());
         acc.totalTier3 = acc.totalTier3.plus(item.tier3Employee.toString());
         acc.totalPAYE = acc.totalPAYE.plus(item.payeTax.toString());
         return acc;
@@ -185,6 +197,8 @@ export class PayrollService {
         totalGross: new Decimal(0),
         totalNet: new Decimal(0),
         totalSSNIT: new Decimal(0),
+        totalTier1: new Decimal(0),
+        totalTier2: new Decimal(0),
         totalTier3: new Decimal(0),
         totalPAYE: new Decimal(0),
       },
@@ -257,6 +271,8 @@ export class PayrollService {
         totalGross: totals.totalGross.toString(),
         totalNet: totals.totalNet.toString(),
         totalSSNIT: totals.totalSSNIT.toString(),
+        totalTier1: totals.totalTier1.toString(),
+        totalTier2: totals.totalTier2.toString(),
         totalTier3: totals.totalTier3.toString(),
         totalPAYE: totals.totalPAYE.toString(),
         runBy,
@@ -286,6 +302,8 @@ export class PayrollService {
         totalGross: totals.totalGross.toString(),
         totalNet: totals.totalNet.toString(),
         totalSSNIT: totals.totalSSNIT.toString(),
+        totalTier1: totals.totalTier1.toString(),
+        totalTier2: totals.totalTier2.toString(),
         totalTier3: totals.totalTier3.toString(),
         totalPAYE: totals.totalPAYE.toString(),
         runBy,
@@ -376,6 +394,8 @@ export class PayrollService {
           totalGross: totals.totalGross.toString(),
           totalNet: totals.totalNet.toString(),
           totalSSNIT: totals.totalSSNIT.toString(),
+          totalTier1: totals.totalTier1.toString(),
+          totalTier2: totals.totalTier2.toString(),
           totalTier3: totals.totalTier3.toString(),
           totalPAYE: totals.totalPAYE.toString(),
         },
