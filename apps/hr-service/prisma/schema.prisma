@@ -776,6 +776,8 @@ model PayrollRun {
   totalGross   Decimal       @db.Decimal(15, 2)
   totalNet     Decimal       @db.Decimal(15, 2)
   totalSSNIT   Decimal       @db.Decimal(15, 2)
+  totalTier1   Decimal       @db.Decimal(15, 2) @default(0)
+  totalTier2   Decimal       @db.Decimal(15, 2) @default(0)
   totalTier3   Decimal       @db.Decimal(15, 2) @default(0)
   totalPAYE    Decimal       @db.Decimal(15, 2)
   runBy        String
@@ -812,6 +814,8 @@ model PayrollItem {
   grossSalary     Decimal    @db.Decimal(15, 2)
   employeeSSNIT   Decimal    @db.Decimal(15, 2)
   employerSSNIT   Decimal    @db.Decimal(15, 2)
+  tier1Contribution Decimal  @db.Decimal(15, 2) @default(0)
+  tier2Contribution Decimal  @db.Decimal(15, 2) @default(0)
   tier3Employee   Decimal    @db.Decimal(15, 2) @default(0)
   taxableIncome   Decimal    @db.Decimal(15, 2) @default(0)
   payeTax         Decimal    @db.Decimal(15, 2)

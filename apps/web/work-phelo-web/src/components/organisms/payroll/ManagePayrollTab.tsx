@@ -39,7 +39,8 @@ interface PayrollRow {
   deductions: number;
   grossSalary: number;
   employeeStatutoryContrib: number;
-  employerStatutoryContrib: number;
+  tier1Contribution: number;
+  tier2Contribution: number;
   taxableIncome: number;
   paye: number;
   netSalary: number;
@@ -87,7 +88,8 @@ export function ManagePayrollTab() {
 
         grossSalary: calc.grossSalary,
         employeeStatutoryContrib: calc.employeeStatutoryContrib,
-        employerStatutoryContrib: calc.employerStatutoryContrib,
+        tier1Contribution: calc.employerStatutoryContrib,
+        tier2Contribution: calc.tier2Contribution ?? 0,
         taxableIncome: calc.taxableIncome,
         paye: calc.paye,
         netSalary: calc.netSalary,
@@ -201,8 +203,18 @@ export function ManagePayrollTab() {
     },
     {
       key: 'employeeSSNIT',
-      label: 'SSNIT(5.5%)',
+      label: 'Employee Total (5.5%)',
       render: (row) => `GHS ${row.employeeStatutoryContrib.toLocaleString()}`,
+    },
+    {
+      key: 'tier1Contribution',
+      label: 'Tier 1 Employee (0.5%)',
+      render: (row) => `GHS ${row.tier1Contribution.toLocaleString()}`,
+    },
+    {
+      key: 'tier2Contribution',
+      label: 'Tier 2 Employee (5%)',
+      render: (row) => `GHS ${row.tier2Contribution.toLocaleString()}`,
     },
     {
       key: 'taxableIncome',
