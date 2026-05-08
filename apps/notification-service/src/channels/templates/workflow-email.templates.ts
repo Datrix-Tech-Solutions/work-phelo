@@ -41,13 +41,19 @@ export function renderLeaveRequestedTemplate(input: {
   reason?: string;
   detailLink?: string;
   platformLink?: string;
+  autoApproved?: boolean;
 }): string {
+  const autoApproved = input.autoApproved === true;
   return renderStandardEmail({
-    title: 'Leave Request',
-    heading: 'New Leave Request',
+    title: autoApproved ? 'Leave Request Auto-Approved' : 'Leave Request',
+    heading: autoApproved ? 'Leave Request Auto-Approved' : 'New Leave Request',
     bodyHtml: `
       <p><strong>${input.employeeFirstName} ${input.employeeLastName}</strong> has submitted a leave request.</p>
-      <p>Company Admin review is required before this request can be approved or rejected.</p>
+      <p>${
+        autoApproved
+          ? 'This leave type does not require manual review, so the request has already been approved automatically.'
+          : 'Company Admin review is required before this request can be approved or rejected.'
+      }</p>
       <p><strong>Request details:</strong></p>
       <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
         <tr>
@@ -81,7 +87,7 @@ export function renderLeaveRequestedTemplate(input: {
       }
       ${
         input.detailLink
-          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open leave request', input.detailLink)}</p>`
+          ? `<p style="margin:24px 0;">${renderPrimaryButton(autoApproved ? 'View leave details' : 'Open leave request', input.detailLink)}</p>`
           : input.platformLink
             ? `<p style="margin:24px 0;">${renderPrimaryButton('Open company workspace', input.platformLink)}</p>`
             : ''
@@ -89,10 +95,16 @@ export function renderLeaveRequestedTemplate(input: {
       <p style="color:#777; font-size:14px;">
         ${
           input.detailLink
-            ? 'Open WorkPhelo to view the request details and follow up as needed.'
-            : input.platformLink
-              ? 'Open WorkPhelo to sign in to your company workspace and follow up as needed.'
+            ? autoApproved
+              ? 'Open WorkPhelo to view the approved request and updated leave records.'
               : 'Open WorkPhelo to view the request details and follow up as needed.'
+            : input.platformLink
+              ? autoApproved
+                ? 'Open WorkPhelo to sign in to your company workspace and review the approved leave request.'
+                : 'Open WorkPhelo to sign in to your company workspace and follow up as needed.'
+              : autoApproved
+                ? 'Open WorkPhelo to review the approved leave request and updated leave records.'
+                : 'Open WorkPhelo to view the request details and follow up as needed.'
         }
       </p>
       <p style="margin-top:30px;">Thank you,</p>

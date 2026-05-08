@@ -87,6 +87,8 @@ export enum Permission {
   MANAGE_ASSETS = 'manage:assets',
   READ_ASSETS = 'read:assets',
   ASSIGN_ASSET = 'assign:asset',
+  READ_ANNOUNCEMENTS = 'read:announcements',
+  MANAGE_ANNOUNCEMENTS = 'manage:announcements',
 
   // ── Marketing ─────────────────────────────────────────────────────────────
   MANAGE_LEADS = 'manage:leads',
@@ -187,6 +189,12 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.MANAGE_ASSETS]: ['assets:CREATE', 'assets:EDIT'],
   [Permission.READ_ASSETS]: ['assets:VIEW'],
   [Permission.ASSIGN_ASSET]: ['assets:ASSIGN'],
+  [Permission.READ_ANNOUNCEMENTS]: ['announcements:VIEW'],
+  [Permission.MANAGE_ANNOUNCEMENTS]: [
+    'announcements:CREATE',
+    'announcements:EDIT',
+    'announcements:DELETE',
+  ],
 
   // Marketing
   [Permission.MANAGE_LEADS]: ['leads:CREATE', 'leads:EDIT'],
@@ -227,6 +235,7 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
   appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
   assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  announcements: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   documents: ['VIEW', 'CREATE', 'EDIT'],
   allowances: ['VIEW', 'CREATE', 'EDIT'],
   'payroll-reports': ['VIEW', 'EXPORT'],
@@ -239,12 +248,16 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
 // resources can still round-trip safely when editing existing roles/sets.
 // Only this allowlist controls what the HR permission UI should expose today.
 export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
+  'users',
+  'permission-sets',
+  'audit-logs',
   'employees',
-  'employee-profile',
   'resignations',
   'departments',
   'branches',
+  'projects',
   'assets',
+  'announcements',
   'documents',
   'leave',
   'attendance',

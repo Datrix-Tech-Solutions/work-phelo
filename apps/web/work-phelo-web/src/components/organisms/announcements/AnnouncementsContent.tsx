@@ -6,6 +6,8 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { CreateAnnouncementPanel } from '@/components/organisms/announcements/CreateAnnouncementPanel';
 import { useAnnouncementsPage } from '@/hooks';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import type { Announcement } from '@/types/hr';
 
 interface AnnouncementRow {
@@ -62,12 +64,15 @@ export function AnnouncementsContent() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const canReadAnnouncements = usePermission(Permission.READ_ANNOUNCEMENTS);
+  const canManageAnnouncements = usePermission(Permission.MANAGE_ANNOUNCEMENTS);
+  const canAccessAnnouncements = canReadAnnouncements || canManageAnnouncements;
 
   const { items, meta, isLoading } = useAnnouncementsPage({
     page,
     limit: 10,
     search: search || undefined,
-    view: 'all',
+    view: canManageAnnouncements ? 'all' : 'visible',
   });
 
   const rows = useMemo<AnnouncementRow[]>(
@@ -109,13 +114,19 @@ export function AnnouncementsContent() {
           setSearch(value);
           setPage(1);
         }}
-        actionButton={{ label: '+ New Announcement', onClick: () => setPanelOpen(true) }}
+        actionButton={
+          canManageAnnouncements
+            ? { label: '+ New Announcement', onClick: () => setPanelOpen(true) }
+            : undefined
+        }
         currentPage={page}
         totalPages={Math.max(1, meta.totalPages)}
         onPageChange={setPage}
       />
 
-      <CreateAnnouncementPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+      {canAccessAnnouncements && canManageAnnouncements && (
+        <CreateAnnouncementPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+      )}
     </>
   );
 }

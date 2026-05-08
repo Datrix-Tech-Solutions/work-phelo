@@ -331,6 +331,7 @@ export class NotificationService {
     reason?: string;
     detailLink?: string;
     platformLink?: string;
+    autoApproved?: boolean;
   }) {
     if (
       await this.isDuplicate(
@@ -355,6 +356,7 @@ export class NotificationService {
       data.reason,
       data.detailLink,
       data.platformLink,
+      data.autoApproved,
     );
     await this.log({
       userId: data.employeeId,
@@ -362,7 +364,9 @@ export class NotificationService {
       type: 'LEAVE_REQUESTED',
       channel: 'EMAIL',
       recipient: data.managerEmail,
-      subject: `Leave request from ${data.employeeFirstName} ${data.employeeLastName}`,
+      subject: data.autoApproved
+        ? `Leave auto-approved for ${data.employeeFirstName} ${data.employeeLastName}`
+        : `Leave request from ${data.employeeFirstName} ${data.employeeLastName}`,
       status: success ? 'SENT' : 'FAILED',
     });
   }
