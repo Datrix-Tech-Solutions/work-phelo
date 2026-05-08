@@ -9,6 +9,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import {
   Employee,
+  EmployeeOption,
   UpdateEmployeePayload,
   EmploymentType,
   EmploymentStatus,
@@ -23,7 +24,7 @@ interface EditEmployeePanelProps {
   isOpen: boolean;
   onClose: () => void;
   employee: Employee;
-  employees?: Employee[];
+  employees?: EmployeeOption[];
   name: string;
   onSave: (data: UpdateEmployeePayload) => void;
   isUpdating: boolean;

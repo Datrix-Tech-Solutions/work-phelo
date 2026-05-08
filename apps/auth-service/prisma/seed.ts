@@ -1,6 +1,10 @@
 import { PrismaClient } from '../prisma/generated/client';
 import * as bcrypt from 'bcrypt';
 import { seedResources } from './seed-resources';
+import {
+  seedSystemPermissionSets,
+  syncUserSystemPermissionSet,
+} from '../src/permissions/system-permission-sets';
 
 const prisma = new PrismaClient();
 
@@ -8,98 +12,12 @@ async function hash(pw: string) {
   return bcrypt.hash(pw, 12);
 }
 
-const EMPLOYEE_SET: Record<string, string[]> = {
-  'employee-profile': ['VIEW', 'EDIT'],
-  leave: ['VIEW', 'CREATE'],
-  attendance: ['CREATE'],
-  'time-corrections': ['CREATE'],
-  assets: ['VIEW'],
-  projects: ['VIEW'],
-  payroll: ['VIEW'],
-  appraisals: ['VIEW', 'EDIT'],
-};
-
-const COMPANY_ADMIN_SET: Record<string, string[]> = {
-  users: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  'company-roles': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  'permission-sets': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
-  'audit-logs': ['VIEW'],
-  employees: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'EXPORT'],
-  'employee-profile': ['VIEW', 'EDIT'],
-  departments: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  branches: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
-  leave: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
-  attendance: ['VIEW', 'CREATE'],
-  'time-corrections': ['VIEW', 'CREATE', 'APPROVE'],
-  timesheets: ['VIEW', 'APPROVE'],
-  schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
-  projects: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
-  payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
-  assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
-  appraisals: ['VIEW', 'CREATE', 'EDIT', 'APPROVE'],
-  documents: ['VIEW', 'CREATE', 'EDIT'],
-};
-
-async function seedTenantPermissionSets(
-  tenantId: string,
-  resources: Record<string, string>,
-) {
-  const sets = [
-    { name: 'Company Admin Set', perms: COMPANY_ADMIN_SET, isSystem: true },
-    { name: 'Employee Set', perms: EMPLOYEE_SET, isSystem: true },
-  ];
-
-  const createdSets: Record<string, string> = {};
-
-  for (const set of sets) {
-    const permSetResources: { resourceId: string; action: any }[] = [];
-    for (const [resourceName, actions] of Object.entries(set.perms)) {
-      const resourceId = resources[resourceName];
-      if (!resourceId) continue;
-      for (const action of actions) {
-        permSetResources.push({ resourceId, action });
-      }
-    }
-
-    const existing = await prisma.permissionSet.findUnique({
-      where: { tenantId_name: { tenantId, name: set.name } },
-    });
-
-    if (existing) {
-      // Re-sync resources in case the set was created empty or perms changed
-      await prisma.permissionSetResource.deleteMany({
-        where: { permissionSetId: existing.id },
-      });
-      if (permSetResources.length > 0) {
-        await prisma.permissionSetResource.createMany({
-          data: permSetResources.map((r) => ({
-            permissionSetId: existing.id,
-            resourceId: r.resourceId,
-            action: r.action,
-          })),
-        });
-      }
-      createdSets[set.name] = existing.id;
-      continue;
-    }
-
-    const created = await prisma.permissionSet.create({
-      data: {
-        tenantId,
-        name: set.name,
-        isSystem: set.isSystem,
-        resources: { create: permSetResources },
-      },
-    });
-    createdSets[set.name] = created.id;
-  }
-
-  return createdSets;
-}
-
 // ── Platform seed — runs in all environments ───────────────────────────────
 
-async function seedPlatform(resources: Record<string, string>) {
+async function seedPlatform(
+  _resources: Record<string, string>,
+  options: { isProd: boolean },
+) {
   console.log('\nCreating Datrix internal tenant...');
   const datrixTenant = await prisma.tenant.upsert({
     where: { slug: 'datrix-internal' },
@@ -137,26 +55,81 @@ async function seedPlatform(resources: Record<string, string>) {
     );
   }
 
-  await prisma.user.upsert({
-    where: {
-      tenantId_email: { tenantId: datrixTenant.id, email: superAdminEmail },
+  const existingSuperAdmins = await prisma.user.findMany({
+    where: { role: 'SUPER_ADMIN' },
+    select: {
+      id: true,
+      email: true,
+      tenantId: true,
     },
-    update: {},
-    create: {
-      tenantId: datrixTenant.id,
-      email: superAdminEmail,
-      password: await hash(superAdminPassword),
-      firstName: 'Super',
-      lastName: 'Admin',
-      role: 'SUPER_ADMIN',
-      status: 'ACTIVE',
-      emailVerifiedAt: new Date(),
-    },
+    orderBy: { createdAt: 'asc' },
   });
+
+  if (options.isProd && existingSuperAdmins.length > 1) {
+    throw new Error(
+      [
+        'Production seed aborted: multiple SUPER_ADMIN users already exist.',
+        'Expected exactly one SUPER_ADMIN under the datrix-internal tenant.',
+        'Please clean up duplicate super-admin accounts before rerunning the seed.',
+        `Found: ${existingSuperAdmins.map((user) => `${user.email} (${user.tenantId})`).join(', ')}`,
+      ].join(' '),
+    );
+  }
+
+  const hashedSuperAdminPassword = await hash(superAdminPassword);
+  const existingSuperAdmin = existingSuperAdmins[0];
+
+  if (existingSuperAdmin) {
+    await prisma.user.update({
+      where: { id: existingSuperAdmin.id },
+      data: {
+        tenantId: datrixTenant.id,
+        email: superAdminEmail,
+        password: hashedSuperAdminPassword,
+        firstName: 'Super',
+        lastName: 'Admin',
+        role: 'SUPER_ADMIN',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    });
+  } else {
+    await prisma.user.create({
+      data: {
+        tenantId: datrixTenant.id,
+        email: superAdminEmail,
+        password: hashedSuperAdminPassword,
+        firstName: 'Super',
+        lastName: 'Admin',
+        role: 'SUPER_ADMIN',
+        status: 'ACTIVE',
+        emailVerifiedAt: new Date(),
+      },
+    });
+  }
 
   console.log(`  SuperAdmin: ${superAdminEmail}`);
 
-  await seedTenantPermissionSets(datrixTenant.id, resources);
+  const datrixSets = await seedSystemPermissionSets(prisma, datrixTenant.id);
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: datrixTenant.id,
+    userId: (
+      await prisma.user.findUniqueOrThrow({
+        where: {
+          tenantId_email: {
+            tenantId: datrixTenant.id,
+            email: superAdminEmail,
+          },
+        },
+        select: { id: true },
+      })
+    ).id,
+    role: 'SUPER_ADMIN',
+    grantedBy: 'seed-system',
+    seededSetIds: datrixSets,
+  });
 }
 
 // ── Demo seed — dev and staging only ──────────────────────────────────────
@@ -191,20 +164,7 @@ async function seedDemo(resources: Record<string, string>) {
     },
   });
 
-  const acmeAdminRole = await prisma.companyRole.upsert({
-    where: {
-      tenantId_name: { tenantId: acmeTenant.id, name: 'Company Admin' },
-    },
-    update: {},
-    create: { tenantId: acmeTenant.id, name: 'Company Admin', isSystem: true },
-  });
-  const acmeEmployeeRole = await prisma.companyRole.upsert({
-    where: { tenantId_name: { tenantId: acmeTenant.id, name: 'Employee' } },
-    update: {},
-    create: { tenantId: acmeTenant.id, name: 'Employee', isSystem: true },
-  });
-
-  const acmeSets = await seedTenantPermissionSets(acmeTenant.id, resources);
+  const acmeSets = await seedSystemPermissionSets(prisma, acmeTenant.id);
 
   const acmeAdmin = await prisma.user.upsert({
     where: {
@@ -223,6 +183,13 @@ async function seedDemo(resources: Record<string, string>) {
       phone: '+233244111001',
     },
   });
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: acmeTenant.id,
+    userId: acmeAdmin.id,
+    role: acmeAdmin.role,
+    grantedBy: acmeAdmin.id,
+    seededSetIds: acmeSets,
+  });
 
   const acmeManager = await prisma.user.upsert({
     where: {
@@ -239,11 +206,17 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Kwame',
       lastName: 'Asante',
       role: 'EMPLOYEE',
-      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111002',
     },
+  });
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: acmeTenant.id,
+    userId: acmeManager.id,
+    role: acmeManager.role,
+    grantedBy: acmeAdmin.id,
+    seededSetIds: acmeSets,
   });
 
   const acmeEmp1 = await prisma.user.upsert({
@@ -261,29 +234,18 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Kofi',
       lastName: 'Boateng',
       role: 'EMPLOYEE',
-      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111003',
     },
   });
-
-  if (acmeSets['Employee Set']) {
-    await prisma.userPermissionSet.upsert({
-      where: {
-        userId_permissionSetId: {
-          userId: acmeEmp1.id,
-          permissionSetId: acmeSets['Employee Set'],
-        },
-      },
-      update: {},
-      create: {
-        userId: acmeEmp1.id,
-        permissionSetId: acmeSets['Employee Set'],
-        grantedBy: acmeAdmin.id,
-      },
-    });
-  }
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: acmeTenant.id,
+    userId: acmeEmp1.id,
+    role: acmeEmp1.role,
+    grantedBy: acmeAdmin.id,
+    seededSetIds: acmeSets,
+  });
 
   const acmeEmp2 = await prisma.user.upsert({
     where: {
@@ -300,14 +262,20 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Ama',
       lastName: 'Owusu',
       role: 'EMPLOYEE',
-      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111004',
     },
   });
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: acmeTenant.id,
+    userId: acmeEmp2.id,
+    role: acmeEmp2.role,
+    grantedBy: acmeAdmin.id,
+    seededSetIds: acmeSets,
+  });
 
-  await prisma.user.upsert({
+  const acmeAccountant = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: acmeTenant.id,
@@ -322,14 +290,20 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Yaw',
       lastName: 'Darko',
       role: 'EMPLOYEE',
-      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111005',
     },
   });
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: acmeTenant.id,
+    userId: acmeAccountant.id,
+    role: acmeAccountant.role,
+    grantedBy: acmeAdmin.id,
+    seededSetIds: acmeSets,
+  });
 
-  await prisma.user.upsert({
+  const acmeNewUser = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: acmeTenant.id,
@@ -344,15 +318,21 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'New',
       lastName: 'User',
       role: 'EMPLOYEE',
-      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       forcePasswordReset: true,
       phone: '+233244111010',
     },
   });
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: acmeTenant.id,
+    userId: acmeNewUser.id,
+    role: acmeNewUser.role,
+    grantedBy: acmeAdmin.id,
+    seededSetIds: acmeSets,
+  });
 
-  await prisma.user.upsert({
+  const acmeMfaUser = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: acmeTenant.id,
@@ -367,14 +347,20 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Mfa',
       lastName: 'User',
       role: 'EMPLOYEE',
-      companyRoleId: acmeEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244111011',
     },
   });
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: acmeTenant.id,
+    userId: acmeMfaUser.id,
+    role: acmeMfaUser.role,
+    grantedBy: acmeAdmin.id,
+    seededSetIds: acmeSets,
+  });
 
-  await prisma.user.upsert({
+  const acmeInvitedUser = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: acmeTenant.id,
@@ -388,52 +374,19 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Invited',
       lastName: 'Employee',
       role: 'EMPLOYEE',
-      companyRoleId: acmeEmployeeRole.id,
       status: 'PENDING_VERIFICATION',
       forcePasswordReset: true,
       inviteToken: 'demo-invite-token-acme-ghana-2026',
       inviteExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     },
   });
-
-  // Assign Employee Set to all remaining acme employees that don't have it yet
-  if (acmeSets['Employee Set']) {
-    const acmeEmployeesWithoutSet = [acmeEmp2.id];
-    // accountant, newuser, mfa.user, invited — fetch their IDs
-    const extraAcmeEmps = await prisma.user.findMany({
-      where: {
-        tenantId: acmeTenant.id,
-        email: {
-          in: [
-            'accountant@acmeghana.com',
-            'newuser@acmeghana.com',
-            'mfa.user@acmeghana.com',
-            'invited@acmeghana.com',
-          ],
-        },
-      },
-      select: { id: true },
-    });
-    for (const emp of [
-      ...acmeEmployeesWithoutSet.map((id) => ({ id })),
-      ...extraAcmeEmps,
-    ]) {
-      await prisma.userPermissionSet.upsert({
-        where: {
-          userId_permissionSetId: {
-            userId: emp.id,
-            permissionSetId: acmeSets['Employee Set'],
-          },
-        },
-        update: {},
-        create: {
-          userId: emp.id,
-          permissionSetId: acmeSets['Employee Set'],
-          grantedBy: acmeAdmin.id,
-        },
-      });
-    }
-  }
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: acmeTenant.id,
+    userId: acmeInvitedUser.id,
+    role: acmeInvitedUser.role,
+    grantedBy: acmeAdmin.id,
+    seededSetIds: acmeSets,
+  });
 
   console.log('  admin@acmeghana.com / Admin123! (TENANT_ADMIN)');
   console.log('  hr.manager@acmeghana.com / Manager123!');
@@ -472,27 +425,7 @@ async function seedDemo(resources: Record<string, string>) {
     },
   });
 
-  const stellarAdminRole = await prisma.companyRole.upsert({
-    where: {
-      tenantId_name: { tenantId: stellarTenant.id, name: 'Company Admin' },
-    },
-    update: {},
-    create: {
-      tenantId: stellarTenant.id,
-      name: 'Company Admin',
-      isSystem: true,
-    },
-  });
-  const stellarEmployeeRole = await prisma.companyRole.upsert({
-    where: { tenantId_name: { tenantId: stellarTenant.id, name: 'Employee' } },
-    update: {},
-    create: { tenantId: stellarTenant.id, name: 'Employee', isSystem: true },
-  });
-
-  const stellarSets = await seedTenantPermissionSets(
-    stellarTenant.id,
-    resources,
-  );
+  const stellarSets = await seedSystemPermissionSets(prisma, stellarTenant.id);
 
   const stellarAdmin = await prisma.user.upsert({
     where: {
@@ -514,6 +447,13 @@ async function seedDemo(resources: Record<string, string>) {
       phone: '+233244222001',
     },
   });
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: stellarTenant.id,
+    userId: stellarAdmin.id,
+    role: stellarAdmin.role,
+    grantedBy: stellarAdmin.id,
+    seededSetIds: stellarSets,
+  });
 
   const stellarManager = await prisma.user.upsert({
     where: {
@@ -530,11 +470,17 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Nana',
       lastName: 'Osei',
       role: 'EMPLOYEE',
-      companyRoleId: stellarEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244222002',
     },
+  });
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: stellarTenant.id,
+    userId: stellarManager.id,
+    role: stellarManager.role,
+    grantedBy: stellarAdmin.id,
+    seededSetIds: stellarSets,
   });
 
   const stellarEmployee = await prisma.user.upsert({
@@ -552,29 +498,18 @@ async function seedDemo(resources: Record<string, string>) {
       firstName: 'Adjoa',
       lastName: 'Boakye',
       role: 'EMPLOYEE',
-      companyRoleId: stellarEmployeeRole.id,
       status: 'ACTIVE',
       emailVerifiedAt: new Date(),
       phone: '+233244222003',
     },
   });
-
-  if (stellarSets['Employee Set']) {
-    await prisma.userPermissionSet.upsert({
-      where: {
-        userId_permissionSetId: {
-          userId: stellarEmployee.id,
-          permissionSetId: stellarSets['Employee Set'],
-        },
-      },
-      update: {},
-      create: {
-        userId: stellarEmployee.id,
-        permissionSetId: stellarSets['Employee Set'],
-        grantedBy: stellarAdmin.id,
-      },
-    });
-  }
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: stellarTenant.id,
+    userId: stellarEmployee.id,
+    role: stellarEmployee.role,
+    grantedBy: stellarAdmin.id,
+    seededSetIds: stellarSets,
+  });
 
   console.log('  admin@stellartech.com.gh / Admin123!');
   console.log('  manager@stellartech.com.gh / Manager123!');
@@ -607,7 +542,7 @@ async function seedDemo(resources: Record<string, string>) {
       },
     },
   });
-  await prisma.user.upsert({
+  const pendingAdmin = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: pendingTenant.id,
@@ -624,6 +559,14 @@ async function seedDemo(resources: Record<string, string>) {
       role: 'TENANT_ADMIN',
       status: 'PENDING_VERIFICATION',
     },
+  });
+  const pendingSets = await seedSystemPermissionSets(prisma, pendingTenant.id);
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: pendingTenant.id,
+    userId: pendingAdmin.id,
+    role: pendingAdmin.role,
+    grantedBy: pendingAdmin.id,
+    seededSetIds: pendingSets,
   });
   console.log('  PENDING — approve via: PATCH /tenants/{id}/approve');
 
@@ -654,7 +597,7 @@ async function seedDemo(resources: Record<string, string>) {
       },
     },
   });
-  await prisma.user.upsert({
+  const suspendedAdmin = await prisma.user.upsert({
     where: {
       tenantId_email: {
         tenantId: suspendedTenant.id,
@@ -673,6 +616,17 @@ async function seedDemo(resources: Record<string, string>) {
       emailVerifiedAt: new Date(),
     },
   });
+  const suspendedSets = await seedSystemPermissionSets(
+    prisma,
+    suspendedTenant.id,
+  );
+  await syncUserSystemPermissionSet(prisma, {
+    tenantId: suspendedTenant.id,
+    userId: suspendedAdmin.id,
+    role: suspendedAdmin.role,
+    grantedBy: suspendedAdmin.id,
+    seededSetIds: suspendedSets,
+  });
   console.log('  SUSPENDED — login returns 403');
 }
 
@@ -687,7 +641,7 @@ async function main() {
   console.log('Seeding platform resources...');
   const resources = await seedResources();
 
-  await seedPlatform(resources);
+  await seedPlatform(resources, { isProd });
 
   if (!isProd) {
     console.log('\nSeeding demo tenants (non-production)...');

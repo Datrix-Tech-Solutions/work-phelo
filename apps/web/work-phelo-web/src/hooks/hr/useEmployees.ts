@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
   Employee,
+  EmployeeOption,
   EmployeeAllowance,
   EmployeeDocument,
   CreateEmployeePayload,
@@ -28,6 +29,16 @@ export function useEmployees(query?: EmployeeQuery) {
         data: res.data.employees,
         total: res.data.meta.total,
       };
+    },
+  });
+}
+
+export function useEmployeeOptions() {
+  return useQuery({
+    queryKey: ['employee-options'],
+    queryFn: async () => {
+      const res = await api.get<EmployeeOption[]>('/hr/employees/options');
+      return res.data;
     },
   });
 }

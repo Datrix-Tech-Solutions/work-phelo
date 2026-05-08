@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
+import { SYSTEM_ACTOR_EMAIL, SYSTEM_ACTOR_ID } from '../common/system-actor';
 
 @Injectable()
 export class EmployeeStatusCronService {
@@ -25,8 +26,8 @@ export class EmployeeStatusCronService {
         data: {
           employmentStatus: 'ACTIVE',
           statusChangedAt: now,
-          statusChangedById: 'system-cron',
-          statusChangedByEmail: 'system-cron',
+          statusChangedById: SYSTEM_ACTOR_ID,
+          statusChangedByEmail: SYSTEM_ACTOR_EMAIL,
         },
       });
 

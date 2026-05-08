@@ -31,6 +31,7 @@ export const EventPatterns = {
   AUTH_RESEND_EMPLOYEE_INVITE: 'auth.resend_employee_invite',
   AUTH_PROVISION_EMPLOYEE_INVITE: 'auth.provision_employee_invite',
   AUTH_DELETE_PENDING_EMPLOYEE_INVITE: 'auth.delete_pending_employee_invite',
+  AUTH_DEACTIVATE_EMPLOYEE_ACCESS: 'auth.deactivate_employee_access',
   AUTH_RESOLVE_PERMISSION_RECIPIENTS: 'auth.resolve_permission_recipients',
   AUTH_GET_USER_STATUSES: 'auth.get_user_statuses',
 
@@ -59,6 +60,7 @@ export const EventPatterns = {
   NOTIFY_SHIFT_SWAP_APPROVED: 'notify.shift_swap_approved',
   NOTIFY_SHIFT_SWAP_REJECTED: 'notify.shift_swap_rejected',
   NOTIFY_SHIFT_SWAP_EXPIRED: 'notify.shift_swap_expired',
+  NOTIFY_ANNOUNCEMENT_PUBLISHED: 'notify.announcement_published',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -146,6 +148,17 @@ export interface DeletePendingEmployeeInviteCommand {
 
 export interface DeletePendingEmployeeInviteResult {
   deleted: boolean;
+}
+
+export interface DeactivateEmployeeAccessCommand {
+  tenantId: string;
+  userId: string;
+  email: string;
+  reason: string;
+}
+
+export interface DeactivateEmployeeAccessResult {
+  deactivated: boolean;
 }
 
 export interface ResolvePermissionRecipientsCommand {
@@ -263,6 +276,8 @@ export interface LeaveRequestedEvent {
   totalDays: number;
   reason?: string;
   detailLink?: string;
+  platformLink?: string;
+  autoApproved?: boolean;
 }
 
 export interface LeaveReviewedEvent {
@@ -276,6 +291,7 @@ export interface LeaveReviewedEvent {
   endDate: string;
   totalDays: number;
   note?: string;
+  platformLink?: string;
 }
 
 export interface LeaveCancelledEvent {
@@ -289,6 +305,7 @@ export interface LeaveCancelledEvent {
   startDate: string;
   endDate: string;
   totalDays: number;
+  platformLink?: string;
 }
 
 export interface AppraisalSelfSubmittedEvent {
@@ -436,4 +453,22 @@ export interface ShiftSwapExpiredEvent {
   requesterShiftLabel: string;
   targetShiftLabel: string;
   scheduleLink?: string;
+}
+
+export interface AnnouncementRecipientEvent {
+  employeeId: string;
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface AnnouncementPublishedEvent {
+  tenantId: string;
+  announcementId: string;
+  title: string;
+  body: string;
+  publishedAt: string;
+  platformLink?: string;
+  recipients: AnnouncementRecipientEvent[];
 }

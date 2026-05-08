@@ -8,7 +8,10 @@ export class SmsService {
   private readonly baseUrl = 'https://api.ng.termii.com/api';
 
   constructor() {
-    this.apiKey = process.env.TERMII_API_KEY || '';
+    if (!process.env.TERMII_API_KEY) {
+      throw new Error('TERMII_API_KEY is required');
+    }
+    this.apiKey = process.env.TERMII_API_KEY;
     this.senderId = process.env.TERMII_SENDER_ID || 'WorkPhelo';
   }
 

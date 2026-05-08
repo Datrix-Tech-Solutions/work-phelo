@@ -1,8 +1,10 @@
 export const notificationRequiredEnvVars = [
   'DATABASE_URL',
   'RABBITMQ_URL',
+  'FRONTEND_BASE_URL',
   'RESEND_API_KEY',
   'RESEND_FROM_EMAIL',
+  'TERMII_API_KEY',
 ] as const;
 
 export function assertNotificationRuntimeEnv(): void {

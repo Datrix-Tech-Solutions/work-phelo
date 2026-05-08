@@ -61,6 +61,8 @@ export default function HRLayout({
   const canReadAssets = usePermission(Permission.READ_ASSETS);
   const canManageAssets = usePermission(Permission.MANAGE_ASSETS);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canReadAnnouncements = usePermission(Permission.READ_ANNOUNCEMENTS);
+  const canManageAnnouncements = usePermission(Permission.MANAGE_ANNOUNCEMENTS);
   const canAccessLeave = canReadOwnLeave || canReadAllLeaves || canRequestLeave || canApproveLeave;
   const canAccessAppraisal =
     canReadOwnReview ||
@@ -79,13 +81,12 @@ export default function HRLayout({
     canRunPayroll ||
     canApprovePayroll ||
     canManagePayrollSettings;
-  const canAccessAssets = canReadAssets || canManageAssets || canAssignAsset;
-
   // Feature toggles from the user's tenant config
   const hrFeatures = user?.featureConfig?.hr ?? {};
 
   // Only dashboard and management are always active (no toggle exists for them)
-  const coreKeys = new Set(['dashboard', 'management']);
+  // announcements is also core — it is permission-gated, not feature-toggled
+  const coreKeys = new Set(['dashboard', 'management', 'announcements']);
   const navAccess: Record<string, boolean> = {
     dashboard: true,
     departments: canReadDepartments,
@@ -97,8 +98,9 @@ export default function HRLayout({
     scheduling: canAccessScheduling,
     projects: canAccessProjects,
     payroll: canAccessPayroll,
-    assets: canManageAssets,
+    assets: canReadAssets || canManageAssets || canAssignAsset,
     management: hasAnyManagementAccess,
+    announcements: canReadAnnouncements || canManageAnnouncements,
   };
 
   const groups = HR_NAV_GROUPS.map((group) => ({

@@ -1,4 +1,9 @@
-import { Controller, HttpException, Logger } from '@nestjs/common';
+import {
+  Controller,
+  HttpException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   Ctx,
   EventPattern,
@@ -154,7 +159,7 @@ export class EventsHandler {
       select: { id: true },
     });
     if (!employee) {
-      throw new Error(`No employee record found for ${email}`);
+      throw new NotFoundException(`No employee record found for ${email}`);
     }
 
     await this.prisma.employee.update({

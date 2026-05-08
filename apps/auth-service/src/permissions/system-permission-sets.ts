@@ -31,6 +31,7 @@ const EMPLOYEE_SET: PermissionResourceMap = {
   'time-corrections': [PermissionAction.CREATE],
   schedules: [PermissionAction.VIEW],
   assets: [PermissionAction.VIEW],
+  announcements: [PermissionAction.VIEW],
   payroll: [PermissionAction.VIEW],
   appraisals: [PermissionAction.VIEW, PermissionAction.EDIT],
 };
@@ -102,6 +103,12 @@ const COMPANY_ADMIN_SET: PermissionResourceMap = {
     PermissionAction.CREATE,
     PermissionAction.EDIT,
     PermissionAction.APPROVE,
+  ],
+  announcements: [
+    PermissionAction.VIEW,
+    PermissionAction.CREATE,
+    PermissionAction.EDIT,
+    PermissionAction.DELETE,
   ],
   documents: [
     PermissionAction.VIEW,

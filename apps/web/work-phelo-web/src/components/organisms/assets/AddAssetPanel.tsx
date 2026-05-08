@@ -11,6 +11,7 @@ import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 interface AssetForm {
   name: string;
   type: string;
+  customType?: string;
   serialNumber?: string;
   purchaseDate?: string;
   purchaseCost?: string;
@@ -47,7 +48,12 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
   };
 
   const handleFormSubmit = (data: AssetForm) => {
-    onSubmit(data);
+    const payload = { ...data };
+    if (payload.type === 'OTHER' && payload.customType) {
+      payload.type = payload.customType;
+    }
+    delete payload.customType;
+    onSubmit(payload);
     reset({ currency: 'GHS' });
   };
 
@@ -82,7 +88,10 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
           label="Asset Type"
           placeholder="Select type"
           value={typeValue}
-          onChange={(v) => setValue('type', v)}
+          onChange={(v) => {
+            setValue('type', v);
+            if (v !== 'OTHER') setValue('customType', undefined);
+          }}
           options={[
             { value: 'LAPTOP', label: 'Laptop' },
             { value: 'PHONE', label: 'Phone' },
@@ -95,6 +104,14 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
             { value: 'OTHER', label: 'Other' },
           ]}
         />
+        {typeValue === 'OTHER' && (
+          <FormField
+            label="Specify asset type"
+            registration={register('customType', { required: 'Please specify the asset type' })}
+            error={errors.customType}
+            placeholder="eg; Projector"
+          />
+        )}
 
         <FormField
           label="Serial Number"

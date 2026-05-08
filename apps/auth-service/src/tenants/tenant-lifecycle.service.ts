@@ -11,6 +11,7 @@ import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { generateSecureToken } from '../common/otp.helper';
+import { normalizeEmail } from '../common/email.helper';
 import { WorkspaceUrl } from '../common/workspace-url.helper';
 import {
   COMPANY_ROLE_PERMISSIONS,
@@ -227,6 +228,15 @@ const PERMISSION_TO_RESOURCE_ACTIONS: Record<AppPermission, ResourceAction[]> =
     [AppPermission.ASSIGN_ASSET]: [
       { resource: 'assets', action: PermissionAction.ASSIGN },
     ],
+    [AppPermission.READ_ANNOUNCEMENTS]: [
+      { resource: 'announcements', action: PermissionAction.VIEW },
+    ],
+    [AppPermission.MANAGE_ANNOUNCEMENTS]: [
+      { resource: 'announcements', action: PermissionAction.VIEW },
+      { resource: 'announcements', action: PermissionAction.CREATE },
+      { resource: 'announcements', action: PermissionAction.EDIT },
+      { resource: 'announcements', action: PermissionAction.DELETE },
+    ],
     [AppPermission.MANAGE_LEADS]: [
       { resource: 'leads', action: PermissionAction.CREATE },
       { resource: 'leads', action: PermissionAction.EDIT },
@@ -262,20 +272,21 @@ export class TenantLifecycleService {
   ) {}
 
   async register(dto: CreateTenantDto) {
+    const normalizedEmail = normalizeEmail(dto.email);
     const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
     if (!superAdminEmail) throw new Error('SUPER_ADMIN_EMAIL is required');
-    if (dto.email.toLowerCase() === superAdminEmail.toLowerCase()) {
+    if (normalizedEmail === normalizeEmail(superAdminEmail)) {
       throw new ForbiddenException(
         'This email address cannot be used to register a company',
       );
     }
 
     const existingTenant = await this.prisma.tenant.findFirst({
-      where: { OR: [{ email: dto.email }, { slug: dto.slug }] },
+      where: { OR: [{ email: normalizedEmail }, { slug: dto.slug }] },
     });
     if (existingTenant) {
       throw new ConflictException(
-        existingTenant.email === dto.email
+        existingTenant.email === normalizedEmail
           ? 'A company with this email already exists'
           : 'This company slug is already taken',
       );
@@ -285,7 +296,7 @@ export class TenantLifecycleService {
       data: {
         name: dto.name,
         slug: dto.slug,
-        email: dto.email,
+        email: normalizedEmail,
         phone: dto.phone,
         country: dto.country || 'GH',
         industry: dto.industry,
@@ -300,7 +311,7 @@ export class TenantLifecycleService {
     const user = await this.prisma.user.create({
       data: {
         tenantId: tenant.id,
-        email: dto.email,
+        email: normalizedEmail,
         password: '',
         firstName: dto.firstName,
         lastName: dto.lastName,

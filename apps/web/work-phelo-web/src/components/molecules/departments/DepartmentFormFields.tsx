@@ -3,17 +3,17 @@
 import { UseFormReturn } from 'react-hook-form';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { Employee } from '@/types/hr';
+import { EmployeeOption } from '@/types/hr';
 
 export interface DeptForm {
   name: string;
   description?: string;
-  managerId?: string; // Keep this for consistency
+  managerId?: string;
 }
 
 interface DepartmentFormFieldsProps {
   form: UseFormReturn<DeptForm>;
-  employees: Employee[];
+  employees: EmployeeOption[];
 }
 
 export function DepartmentFormFields({ form, employees }: DepartmentFormFieldsProps) {

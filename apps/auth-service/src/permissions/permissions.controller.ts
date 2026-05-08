@@ -30,10 +30,15 @@ import {
   UpdatePermissionSetDto,
   PermissionAction,
 } from './dto/grant-permission.dto';
+import { QueryPermissionRecipientsDto } from './dto/query-permission-recipients.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { RequestUser } from '@work-phelo/types';
+import { Request } from 'express';
+
+type AuthenticatedRequest = Request & { user: RequestUser };
 
 @ApiTags('Permissions')
 @Controller('permissions')
@@ -63,7 +68,10 @@ export class PermissionsController {
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  getUserPermissions(@Param('userId') userId: string, @Req() req: any) {
+  getUserPermissions(
+    @Param('userId') userId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.getUserPermissions(
       req.user.tenantId,
       userId,
@@ -96,19 +104,16 @@ export class PermissionsController {
     example: true,
   })
   getPermissionRecipients(
-    @Query('resource') resource: string,
-    @Query('action') action: PermissionAction,
-    @Query('includeTenantAdmins') includeTenantAdmins: string,
-    @Query('activeOnly') activeOnly: string,
-    @Req() req: any,
+    @Query() query: QueryPermissionRecipientsDto,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.permissionsService.getPermissionRecipients(
       req.user.tenantId,
-      resource,
-      action,
+      query.resource,
+      query.action,
       {
-        includeTenantAdmins: includeTenantAdmins === 'true',
-        activeOnly: activeOnly !== 'false',
+        includeTenantAdmins: query.includeTenantAdmins ?? false,
+        activeOnly: query.activeOnly ?? true,
       },
     );
   }
@@ -121,7 +126,10 @@ export class PermissionsController {
   @ApiParam({ name: 'userId', description: 'User UUID' })
   @ApiResponse({ status: 200, description: 'Permission history retrieved' })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  getPermissionHistory(@Param('userId') userId: string, @Req() req: any) {
+  getPermissionHistory(
+    @Param('userId') userId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.getPermissionHistory(
       req.user.tenantId,
       userId,
@@ -149,7 +157,7 @@ export class PermissionsController {
       },
     },
   })
-  grant(@Body() dto: GrantPermissionDto, @Req() req: any) {
+  grant(@Body() dto: GrantPermissionDto, @Req() req: AuthenticatedRequest) {
     return this.permissionsService.grant(req.user.id, req.user.tenantId, dto);
   }
 
@@ -170,7 +178,7 @@ export class PermissionsController {
       },
     },
   })
-  revoke(@Body() dto: RevokePermissionDto, @Req() req: any) {
+  revoke(@Body() dto: RevokePermissionDto, @Req() req: AuthenticatedRequest) {
     return this.permissionsService.revoke(req.user.id, req.user.tenantId, dto);
   }
 
@@ -178,7 +186,7 @@ export class PermissionsController {
   @RequirePermissions(Permission.VIEW_PERMISSION_SETS)
   @ApiOperation({ summary: 'List all permission sets in tenant' })
   @ApiResponse({ status: 200, description: 'Permission sets retrieved' })
-  getPermissionSets(@Req() req: any) {
+  getPermissionSets(@Req() req: AuthenticatedRequest) {
     return this.permissionsService.getPermissionSets(req.user.tenantId);
   }
 
@@ -188,7 +196,10 @@ export class PermissionsController {
   @ApiParam({ name: 'id', description: 'Permission set UUID' })
   @ApiResponse({ status: 200, description: 'Permission set members retrieved' })
   @ApiResponse({ status: 404, description: 'Permission set not found' })
-  getPermissionSetMembers(@Param('id') id: string, @Req() req: any) {
+  getPermissionSetMembers(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.getPermissionSetMembers(
       req.user.tenantId,
       id,
@@ -220,7 +231,10 @@ export class PermissionsController {
     description: 'Set name already exists or invalid resources',
   })
   @ApiResponse({ status: 401, description: 'Missing or invalid token' })
-  createSet(@Body() dto: CreatePermissionSetDto, @Req() req: any) {
+  createSet(
+    @Body() dto: CreatePermissionSetDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.createPermissionSet(req.user.tenantId, dto);
   }
 
@@ -249,7 +263,7 @@ export class PermissionsController {
   updateSet(
     @Param('id') id: string,
     @Body() dto: UpdatePermissionSetDto,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.permissionsService.updatePermissionSet(
       req.user.tenantId,
@@ -265,7 +279,7 @@ export class PermissionsController {
   @ApiResponse({ status: 200, description: 'Permission set deleted' })
   @ApiResponse({ status: 403, description: 'System sets cannot be deleted' })
   @ApiResponse({ status: 404, description: 'Permission set not found' })
-  deleteSet(@Param('id') id: string, @Req() req: any) {
+  deleteSet(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.permissionsService.deletePermissionSet(req.user.tenantId, id);
   }
 
@@ -282,7 +296,10 @@ export class PermissionsController {
     },
   })
   @ApiResponse({ status: 200, description: 'Permission set assigned' })
-  assignSet(@Body() dto: AssignPermissionSetDto, @Req() req: any) {
+  assignSet(
+    @Body() dto: AssignPermissionSetDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
     return this.permissionsService.assignPermissionSet(
       req.user.id,
       req.user.tenantId,
@@ -301,7 +318,7 @@ export class PermissionsController {
   removeSet(
     @Param('userId') userId: string,
     @Param('permissionSetId') permissionSetId: string,
-    @Req() req: any,
+    @Req() req: AuthenticatedRequest,
   ) {
     return this.permissionsService.removePermissionSet(
       req.user.tenantId,

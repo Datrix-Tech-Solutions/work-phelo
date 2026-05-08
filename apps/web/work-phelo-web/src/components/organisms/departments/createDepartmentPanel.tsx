@@ -9,13 +9,13 @@ import {
   DeptForm,
 } from '@/components/molecules/departments/DepartmentFormFields';
 import { useCreateDepartment } from '@/hooks/useDepartments';
-import { Employee } from '@/types/hr';
+import { EmployeeOption } from '@/types/hr';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   tenantSlug: string;
-  employees: Employee[];
+  employees: EmployeeOption[];
   onSuccess?: (name: string) => void;
 }
 

@@ -4,14 +4,14 @@ import { useState, useMemo } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { MemberRow } from '@/components/molecules/departments/MemberRow';
-import type { Employee } from '@/types/hr';
+import type { EmployeeOption } from '@/types/hr';
 import { Icons } from '@/components/atoms/icons';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   department: { id: string; name: string } | null;
-  employees: Employee[];
+  employees: EmployeeOption[];
   onAddMembers: (departmentId: string, employeeIds: string[]) => Promise<void>;
 }
 
@@ -90,9 +90,7 @@ export function AddMembersPanel({ isOpen, onClose, department, employees, onAddM
               key={emp.id}
               employee={emp}
               checked={selectedIds.has(emp.id)}
-              alreadyInDept={
-                emp.departmentId === department?.id || emp.department?.id === department?.id
-              }
+              alreadyInDept={emp.department?.id === department?.id}
               onToggle={toggleEmployee}
             />
           ))

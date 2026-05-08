@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import type { Department, Employee } from '@/types/hr';
+import type { Department, EmployeeOption } from '@/types/hr';
 
 interface DepartmentsTableProps {
   departments: Department[];
-  employees: Employee[];
+  employees: EmployeeOption[];
   isLoading: boolean;
   canCreate: boolean;
   canUpdate: boolean;

@@ -7,7 +7,7 @@ import {
   IsEnum,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { EmploymentType } from '../../../prisma/generated/client';
+import { EmploymentType, Gender } from '../../../prisma/generated/client';
 
 export class CreateLeaveTypeDto {
   @ApiProperty({
@@ -64,4 +64,15 @@ export class CreateLeaveTypeDto {
   @IsOptional()
   @IsEnum(EmploymentType, { each: true })
   applicableTo?: EmploymentType[];
+
+  @ApiPropertyOptional({
+    description:
+      'Genders eligible for this leave. Empty array means all genders are eligible.',
+    enum: Gender,
+    isArray: true,
+    example: ['FEMALE'],
+  })
+  @IsOptional()
+  @IsEnum(Gender, { each: true })
+  applicableGenders?: Gender[];
 }

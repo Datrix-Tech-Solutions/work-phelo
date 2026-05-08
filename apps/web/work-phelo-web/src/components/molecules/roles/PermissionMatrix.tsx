@@ -37,14 +37,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
   },
   {
     label: 'People',
-    resources: [
-      'employees',
-      'employee-profile',
-      'resignations',
-      'departments',
-      'branches',
-      'documents',
-    ],
+    resources: ['employees', 'resignations', 'departments', 'branches', 'documents'],
   },
   {
     label: 'Leave and Time',
@@ -52,7 +45,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
   },
   {
     label: 'Work and Assets',
-    resources: ['projects', 'assets'],
+    resources: ['projects', 'assets', 'announcements'],
   },
   {
     label: 'Payroll and Performance',
@@ -62,7 +55,6 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
 
 const RESOURCE_FEATURE_KEYS: Record<string, string> = {
   employees: 'employees',
-  'employee-profile': 'employees',
   resignations: 'employees',
   departments: 'departments',
   branches: 'branches',
@@ -74,6 +66,7 @@ const RESOURCE_FEATURE_KEYS: Record<string, string> = {
   schedules: 'scheduling',
   projects: 'projects',
   assets: 'assets',
+  announcements: 'management',
   payroll: 'payroll',
   allowances: 'payroll',
   appraisals: 'appraisal',

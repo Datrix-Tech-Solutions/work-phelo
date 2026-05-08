@@ -3,6 +3,7 @@ export type Country = 'GH' | 'NG' | 'KE';
 export interface AllowanceItem {
   name: string;
   amount: number;
+  type?: string;
 }
 
 export interface GhanaPensionConfig {
@@ -72,7 +73,7 @@ const PAYROLL_CONFIG = {
     tier1EmployeeRate: 0.055,
     tier1EmployerRate: 0.13,
     tier2EmployerRate: 0.05,
-    maxInsurableEarnings: 69_000,
+    maxInsurableEarnings: 69_000, // SSNIT contribution cap per month
   },
   NG: {
     currency: 'NGN' as const,

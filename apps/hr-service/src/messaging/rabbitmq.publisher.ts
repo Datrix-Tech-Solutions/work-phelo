@@ -6,6 +6,8 @@ import {
   WithMeta,
   InviteEmployeeEvent,
   EmployeeOffboardedEvent,
+  DeactivateEmployeeAccessCommand,
+  DeactivateEmployeeAccessResult,
   ResendEmployeeInviteEvent,
   ProvisionEmployeeInviteCommand,
   ProvisionEmployeeInviteResult,
@@ -32,11 +34,15 @@ import {
   ShiftSwapApprovedEvent,
   ShiftSwapRejectedEvent,
   ShiftSwapExpiredEvent,
+  AnnouncementPublishedEvent,
 } from '@work-phelo/types';
 
 @Injectable()
 export class RabbitMQPublisher {
   private readonly logger = new Logger(RabbitMQPublisher.name);
+  private readonly rmqTimeoutMs = Number(
+    process.env.RABBITMQ_RPC_TIMEOUT_MS ?? 10000,
+  );
 
   constructor(
     @Inject('NOTIFICATION_SERVICE')
@@ -120,9 +126,18 @@ export class RabbitMQPublisher {
     );
 
     return new Promise((resolve, reject) => {
-      client.emit(pattern, envelope).subscribe({
-        complete: () => resolve(),
+      let settled = false;
+      const subscription = client.emit(pattern, envelope).subscribe({
+        complete: () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve();
+        },
         error: (err) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           this.logger.error(
             `Failed to publish ${pattern} | corrId=${envelope._meta.correlationId}`,
             err,
@@ -130,6 +145,18 @@ export class RabbitMQPublisher {
           reject(err instanceof Error ? err : new Error(String(err)));
         },
       });
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        subscription.unsubscribe();
+        const error = new Error(
+          `Timed out publishing ${pattern} after ${this.rmqTimeoutMs}ms`,
+        );
+        this.logger.error(
+          `${error.message} | corrId=${envelope._meta.correlationId}`,
+        );
+        reject(error);
+      }, this.rmqTimeoutMs);
     });
   }
 
@@ -153,16 +180,50 @@ export class RabbitMQPublisher {
     );
 
     return new Promise<TResult>((resolve, reject) => {
-      client.send<TResult, WithMeta<T>>(pattern, envelope).subscribe({
-        next: (result) => resolve(result),
-        error: (err) => {
-          this.logger.error(
-            `Failed to request ${pattern} | corrId=${envelope._meta.correlationId}`,
-            err,
-          );
-          reject(this.normalizeRpcError(err));
-        },
-      });
+      let settled = false;
+      const subscription = client
+        .send<TResult, WithMeta<T>>(pattern, envelope)
+        .subscribe({
+          next: (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(result);
+            subscription.unsubscribe();
+          },
+          error: (err) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            this.logger.error(
+              `Failed to request ${pattern} | corrId=${envelope._meta.correlationId}`,
+              err,
+            );
+            reject(this.normalizeRpcError(err));
+          },
+          complete: () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            reject(
+              new Error(
+                `Request ${pattern} completed without a response payload`,
+              ),
+            );
+          },
+        });
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        subscription.unsubscribe();
+        const error = new Error(
+          `Timed out requesting ${pattern} after ${this.rmqTimeoutMs}ms`,
+        );
+        this.logger.error(
+          `${error.message} | corrId=${envelope._meta.correlationId}`,
+        );
+        reject(error);
+      }, this.rmqTimeoutMs);
     });
   }
 
@@ -228,6 +289,18 @@ export class RabbitMQPublisher {
     );
   }
 
+  authDeactivateEmployeeAccess(
+    data: DeactivateEmployeeAccessCommand,
+    correlationId?: string,
+  ): Promise<DeactivateEmployeeAccessResult> {
+    return this.request(
+      this.authClient,
+      EventPatterns.AUTH_DEACTIVATE_EMPLOYEE_ACCESS,
+      data,
+      correlationId,
+    );
+  }
+
   authResolvePermissionRecipients(
     data: ResolvePermissionRecipientsCommand,
     correlationId?: string,
@@ -261,6 +334,18 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_EMPLOYEE_TERMINATION,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationAnnouncementPublished(
+    data: AnnouncementPublishedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_ANNOUNCEMENT_PUBLISHED,
       data,
       correlationId,
     );

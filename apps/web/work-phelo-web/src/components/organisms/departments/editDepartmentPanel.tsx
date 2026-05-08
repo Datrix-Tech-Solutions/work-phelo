@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { useEmployees, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useEmployeeOptions, useUpdateEmployee } from '@/hooks/hr/useEmployees';
 
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -30,8 +30,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
   const { mutateAsync: updateDepartmentAsync, isPending } = useUpdateDepartment();
   const { mutate: updateEmployee } = useUpdateEmployee();
 
-  const { data: empResult } = useEmployees({ limit: 100 });
-  const employees = empResult?.data ?? [];
+  const { data: employees = [] } = useEmployeeOptions();
   const { data: departments = [] } = useDepartments();
 
   useEffect(() => {
@@ -70,7 +69,7 @@ export function EditDepartmentPanel({ isOpen, onClose, editTarget }: Props) {
       // Auto-add the new manager as a member of this department
       if (newManagerId) {
         const manager = employees.find((e) => e.id === newManagerId);
-        if (manager && manager.departmentId !== editTarget.id) {
+        if (manager && manager.department?.id !== editTarget.id) {
           updateEmployee({ id: newManagerId, departmentId: editTarget.id });
         }
       }
