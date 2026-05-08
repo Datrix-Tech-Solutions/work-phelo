@@ -277,6 +277,7 @@ export interface LeaveRequestedEvent {
   reason?: string;
   detailLink?: string;
   platformLink?: string;
+  autoApproved?: boolean;
 }
 
 export interface LeaveReviewedEvent {

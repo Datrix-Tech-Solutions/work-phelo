@@ -252,10 +252,13 @@ export class EmailService {
     reason?: string,
     detailLink?: string,
     platformLink?: string,
+    autoApproved?: boolean,
   ): Promise<boolean> {
     return this.send(
       to,
-      `Leave request from ${employeeFirstName} ${employeeLastName}`,
+      autoApproved
+        ? `Leave auto-approved for ${employeeFirstName} ${employeeLastName}`
+        : `Leave request from ${employeeFirstName} ${employeeLastName}`,
       renderLeaveRequestedTemplate({
         employeeFirstName: this.escapeHtml(employeeFirstName),
         employeeLastName: this.escapeHtml(employeeLastName),
@@ -266,6 +269,7 @@ export class EmailService {
         reason: reason ? this.escapeHtmlWithBreaks(reason) : undefined,
         detailLink: this.sanitizeUrl(detailLink),
         platformLink: this.sanitizeUrl(platformLink),
+        autoApproved,
       }),
     );
   }

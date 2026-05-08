@@ -597,19 +597,31 @@ export class LeaveService {
       );
     }
 
+    const shouldAutoApprove = !leaveType.requiresApproval;
     const request = await this.prisma.$transaction(async (tx) => {
-      const reservedBalance = await tx.leaveBalance.updateMany({
-        where: {
-          id: balance.id,
-          remainingDays: { gte: totalDays },
-        },
-        data: {
-          pendingDays: { increment: totalDays },
-          remainingDays: { decrement: totalDays },
-        },
-      });
+      const balanceUpdate = shouldAutoApprove
+        ? await tx.leaveBalance.updateMany({
+            where: {
+              id: balance.id,
+              remainingDays: { gte: totalDays },
+            },
+            data: {
+              usedDays: { increment: totalDays },
+              remainingDays: { decrement: totalDays },
+            },
+          })
+        : await tx.leaveBalance.updateMany({
+            where: {
+              id: balance.id,
+              remainingDays: { gte: totalDays },
+            },
+            data: {
+              pendingDays: { increment: totalDays },
+              remainingDays: { decrement: totalDays },
+            },
+          });
 
-      if (reservedBalance.count !== 1) {
+      if (balanceUpdate.count !== 1) {
         throw new BadRequestException(
           'Leave balance changed while processing your request. Please try again.',
         );
@@ -624,7 +636,8 @@ export class LeaveService {
           endDate: end,
           totalDays,
           reason: dto.reason,
-          status: 'PENDING',
+          status: shouldAutoApprove ? 'APPROVED' : 'PENDING',
+          approvedAt: shouldAutoApprove ? new Date() : undefined,
         },
         include: {
           leaveType: true,
@@ -641,6 +654,45 @@ export class LeaveService {
     const notificationRecipients =
       await this.resolveLeaveNotificationRecipients(tenantId, empRecord);
 
+    if (shouldAutoApprove) {
+      void this.notifyEmployeeOfLeaveDecision(
+        tenantId,
+        employeeId,
+        dto.leaveTypeId,
+        actor.tenantSlug,
+        'APPROVED',
+        start,
+        end,
+        totalDays,
+      );
+
+      void this.notifyStakeholdersOfLeaveRequest(
+        tenantId,
+        request.id,
+        empRecord,
+        leaveType.name,
+        dto.startDate,
+        dto.endDate,
+        totalDays,
+        dto.reason,
+        detailLink,
+        platformLink,
+        notificationRecipients,
+        true,
+      );
+
+      return {
+        request,
+        message: 'Leave request submitted and automatically approved.',
+        notificationSummary: {
+          managerNotified: !!notificationRecipients.manager,
+          approverCount: notificationRecipients.approvers.length,
+          employeeNotified: true,
+          autoApproved: true,
+        },
+      };
+    }
+
     // Notify the employee's manager and active leave approvers (fire-and-forget)
     void this.notifyStakeholdersOfLeaveRequest(
       tenantId,
@@ -654,6 +706,7 @@ export class LeaveService {
       detailLink,
       platformLink,
       notificationRecipients,
+      false,
     );
 
     return {
@@ -670,6 +723,8 @@ export class LeaveService {
       notificationSummary: {
         managerNotified: !!notificationRecipients.manager,
         approverCount: notificationRecipients.approvers.length,
+        employeeNotified: false,
+        autoApproved: false,
       },
     };
   }
@@ -1013,6 +1068,7 @@ export class LeaveService {
     detailLink?: string,
     platformLink?: string,
     recipientsInput?: LeaveNotificationRecipients,
+    autoApproved = false,
   ) {
     try {
       const recipients =
@@ -1042,6 +1098,7 @@ export class LeaveService {
               recipient.source === 'APPROVER' ? detailLink : undefined,
             platformLink:
               recipient.source === 'APPROVER' ? undefined : platformLink,
+            autoApproved,
           }),
         ),
       );
@@ -1055,7 +1112,9 @@ export class LeaveService {
             tenantId,
             userId: recipient.userId!,
             type: 'LEAVE_REQUESTED',
-            message: `${employee.firstName} ${employee.lastName} submitted a ${leaveTypeName} request from ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')}.`,
+            message: autoApproved
+              ? `${employee.firstName} ${employee.lastName}'s ${leaveTypeName} request from ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')} was automatically approved.`
+              : `${employee.firstName} ${employee.lastName} submitted a ${leaveTypeName} request from ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')}.`,
             link: this.buildLeaveRequestAppLink(requestId),
           })),
         });

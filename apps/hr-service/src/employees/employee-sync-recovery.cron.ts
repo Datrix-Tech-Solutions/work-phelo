@@ -134,4 +134,50 @@ export class EmployeeSyncRecoveryCronService {
       }
     }
   }
+
+  @Cron(CronExpression.EVERY_30_MINUTES)
+  async reconcilePendingEmployeeInviteRollbacks() {
+    const rollbackTasks = await this.prisma.employeeInviteRollbackTask.findMany(
+      {
+        take: 100,
+        orderBy: { createdAt: 'asc' },
+      },
+    );
+
+    if (rollbackTasks.length === 0) {
+      return;
+    }
+
+    for (const task of rollbackTasks) {
+      try {
+        await this.rabbitmq.authDeletePendingEmployeeInvite({
+          tenantId: task.tenantId,
+          userId: task.userId ?? undefined,
+          email: task.email,
+        });
+
+        await this.prisma.employeeInviteRollbackTask.delete({
+          where: { id: task.id },
+        });
+
+        this.logger.log(
+          `[recovery] Deleted stranded auth invite for ${task.email}`,
+        );
+      } catch (error) {
+        await this.prisma.employeeInviteRollbackTask.update({
+          where: { id: task.id },
+          data: {
+            attemptCount: { increment: 1 },
+            lastError: error instanceof Error ? error.message : String(error),
+            lastAttemptAt: new Date(),
+          },
+        });
+
+        this.logger.error(
+          `[recovery] Failed to delete stranded auth invite for ${task.email}`,
+          error,
+        );
+      }
+    }
+  }
 }

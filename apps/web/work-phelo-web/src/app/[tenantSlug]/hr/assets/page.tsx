@@ -9,15 +9,18 @@ import { AssetsContent } from '@/components/organisms/assets/AssetsContent';
 export default function AssetsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
+  const canReadAssets = usePermission(Permission.READ_ASSETS);
   const canManageAssets = usePermission(Permission.MANAGE_ASSETS);
+  const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canAccessAssets = canReadAssets || canManageAssets || canAssignAsset;
 
   useEffect(() => {
-    if (canManageAssets === false) {
+    if (canAccessAssets === false) {
       router.replace(`/${tenantSlug}/hr`);
     }
-  }, [canManageAssets, tenantSlug, router]);
+  }, [canAccessAssets, tenantSlug, router]);
 
-  if (!canManageAssets) return null;
+  if (!canAccessAssets) return null;
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">

@@ -1000,6 +1000,22 @@ model Announcement {
   @@schema("hr")
 }
 
+model EmployeeInviteRollbackTask {
+  id            String   @id @default(uuid())
+  tenantId      String
+  userId        String?
+  email         String
+  attemptCount  Int      @default(0)
+  lastError     String?
+  lastAttemptAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId, createdAt])
+  @@schema("hr")
+}
+
 model Notification {
   id         String    @id @default(uuid())
   tenantId   String

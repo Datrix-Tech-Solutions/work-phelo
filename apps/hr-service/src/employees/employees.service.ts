@@ -423,6 +423,34 @@ export class EmployeesService {
           `Failed to roll back auth invite for ${dto.email} after onboarding setup failed`,
           rollbackErr,
         );
+        await this.prisma.employeeInviteRollbackTask.upsert({
+          where: {
+            tenantId_email: {
+              tenantId,
+              email: dto.email,
+            },
+          },
+          update: {
+            userId: provisionedUser.userId,
+            attemptCount: { increment: 1 },
+            lastError:
+              rollbackErr instanceof Error
+                ? rollbackErr.message
+                : String(rollbackErr),
+            lastAttemptAt: new Date(),
+          },
+          create: {
+            tenantId,
+            userId: provisionedUser.userId,
+            email: dto.email,
+            attemptCount: 1,
+            lastError:
+              rollbackErr instanceof Error
+                ? rollbackErr.message
+                : String(rollbackErr),
+            lastAttemptAt: new Date(),
+          },
+        });
       }
       throw err;
     }

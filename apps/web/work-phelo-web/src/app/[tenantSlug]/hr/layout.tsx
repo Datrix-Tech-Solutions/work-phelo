@@ -58,7 +58,11 @@ export default function HRLayout({
   const canRunPayroll = usePermission(Permission.RUN_PAYROLL);
   const canApprovePayroll = usePermission(Permission.APPROVE_PAYROLL);
   const canManagePayrollSettings = usePermission(Permission.MANAGE_PAYROLL_SETTINGS);
+  const canReadAssets = usePermission(Permission.READ_ASSETS);
   const canManageAssets = usePermission(Permission.MANAGE_ASSETS);
+  const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
+  const canReadAnnouncements = usePermission(Permission.READ_ANNOUNCEMENTS);
+  const canManageAnnouncements = usePermission(Permission.MANAGE_ANNOUNCEMENTS);
   const canAccessLeave = canReadOwnLeave || canReadAllLeaves || canRequestLeave || canApproveLeave;
   const canAccessAppraisal =
     canReadOwnReview ||
@@ -94,9 +98,9 @@ export default function HRLayout({
     scheduling: canAccessScheduling,
     projects: canAccessProjects,
     payroll: canAccessPayroll,
-    assets: canManageAssets,
+    assets: canReadAssets || canManageAssets || canAssignAsset,
     management: hasAnyManagementAccess,
-    announcements: hasAnyManagementAccess,
+    announcements: canReadAnnouncements || canManageAnnouncements,
   };
 
   const groups = HR_NAV_GROUPS.map((group) => ({
