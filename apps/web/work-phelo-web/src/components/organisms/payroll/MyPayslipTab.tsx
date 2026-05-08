@@ -1,29 +1,14 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
-import { SectionCard } from '@/components/molecules/shared/sectionCard';
-import { DetailField } from '@/components/molecules/shared/DetailField';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useMyPayslips } from '@/hooks/usePayroll';
-import { useMyProfile } from '@/hooks/hr/useEmployees';
-import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
-
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+import { PayrollItem } from '@/types/hr';
+import { payrollMonthLabel, downloadPayslipPDF } from '@/lib/payrollUtils';
+import { useAuthStore } from '@/store/auth.store';
 
 const STATUS_VARIANT = {
   DRAFT: 'warning',
@@ -31,43 +16,74 @@ const STATUS_VARIANT = {
   PAID: 'success',
 } as const;
 
-interface Payslip {
-  id: string;
-  grossPay?: number | null;
-  netPay?: number | null;
-  payrollRun?: { year: number; month: number; status?: string };
+function ghs(value: string | number) {
+  const n = typeof value === 'string' ? parseFloat(value) : value;
+  return `GHS ${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function payslipLabel(p: Payslip) {
+function payslipLabel(p: PayrollItem) {
   if (!p.payrollRun) return '—';
-  return `${MONTH_NAMES[p.payrollRun.month - 1]} ${p.payrollRun.year}`;
+  return payrollMonthLabel(p.payrollRun.month, p.payrollRun.year);
+}
+
+function PayslipRow({
+  label,
+  value,
+  subtle,
+  bold,
+  green,
+}: {
+  label: string;
+  value: string;
+  subtle?: boolean;
+  bold?: boolean;
+  green?: boolean;
+}) {
+  return (
+    <div className={`flex justify-between items-center py-2.5 ${subtle ? 'opacity-60' : ''}`}>
+      <span className={`text-sm ${bold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
+        {label}
+      </span>
+      <span
+        className={`text-sm tabular-nums ${
+          green
+            ? 'font-bold text-emerald-600'
+            : bold
+              ? 'font-semibold text-gray-900'
+              : 'text-gray-800'
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function Divider() {
+  return <div className="border-t border-gray-100 my-1" />;
 }
 
 export function MyPayslipTab() {
   const { data: payslipsRaw } = useMyPayslips();
-  const { data: employee } = useMyProfile();
+  const companyName = useAuthStore((s) => s.user?.tenantName ?? '');
 
-  const payslips: Payslip[] = Array.isArray(payslipsRaw) ? payslipsRaw : [];
-  const [selectedIdx, setSelectedIdx] = useState(0);
-  const selected = payslips[selectedIdx] ?? null;
+  const payslips: PayrollItem[] = useMemo(() => {
+    const raw = Array.isArray(payslipsRaw) ? (payslipsRaw as PayrollItem[]) : [];
+    return raw
+      .filter((p) => p.payrollRun?.status === 'APPROVED' || p.payrollRun?.status === 'PAID')
+      .sort((a, b) => {
+        const ay = a.payrollRun?.year ?? 0,
+          by = b.payrollRun?.year ?? 0;
+        const am = a.payrollRun?.month ?? 0,
+          bm = b.payrollRun?.month ?? 0;
+        return by !== ay ? by - ay : bm - am;
+      });
+  }, [payslipsRaw]);
 
-  const netSalary = Number(selected?.netPay) || 0;
-  const grossSalary = Number(selected?.grossPay) || 0;
-  const runStatus = selected?.payrollRun?.status ?? '';
-
-  // Derive detailed breakdown from basic salary if available
-  const breakdown = useMemo(() => {
-    const basic = Number(employee?.basicSalary) || 0;
-    if (!basic || !grossSalary) return null;
-    const allowanceAmount = Math.max(0, grossSalary - basic);
-    const allowances: AllowanceItem[] =
-      allowanceAmount > 0 ? [{ name: 'Allowances', amount: allowanceAmount }] : [];
-    return calculatePayroll({
-      basicSalary: basic,
-      allowances,
-      country: 'GH',
-    });
-  }, [employee?.basicSalary, grossSalary]);
+  const [selectedId, setSelectedId] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const selected: PayrollItem | null =
+    payslips.find((p) => p.id === selectedId) ?? payslips[0] ?? null;
 
   if (payslips.length === 0) {
     return (
@@ -77,110 +93,143 @@ export function MyPayslipTab() {
     );
   }
 
+  const runStatus = selected?.payrollRun?.status ?? '';
   const statusVariant = STATUS_VARIANT[runStatus as keyof typeof STATUS_VARIANT] ?? 'neutral';
+  const canDownload = runStatus === 'APPROVED' || runStatus === 'PAID';
+
+  const tier3Enabled = selected?.payrollRun?.tier3Enabled ?? false;
+  const tier3Label =
+    tier3Enabled && selected?.payrollRun?.tier3Rate
+      ? `Tier 3 (${(parseFloat(selected.payrollRun.tier3Rate) * 100).toFixed(0)}%)`
+      : 'Tier 3';
+
+  const hasOtherDeductions = selected ? parseFloat(selected.otherDeductions) > 0 : false;
+  const hasTier3 = tier3Enabled && selected ? parseFloat(selected.tier3Employee) > 0 : false;
+
+  const transportAmt = selected ? parseFloat(selected.transportAmount) : 0;
+  const otherAllowances = selected ? parseFloat(selected.totalAllowances) - transportAmt : 0;
 
   return (
     <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
       {/* Period selector */}
       <div className="flex items-center justify-between shrink-0">
         <h2 className="text-base font-semibold text-gray-900">My Payslip</h2>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSelectedIdx((i) => Math.max(0, i - 1))}
-            disabled={selectedIdx === 0}
-            className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-
-          <span className="px-4 py-1.5 bg-white border border-gray-200 rounded-input text-sm font-medium text-gray-900 min-w-36 text-center">
-            {selected ? payslipLabel(selected) : '—'}
-          </span>
-
-          <button
-            onClick={() => setSelectedIdx((i) => Math.min(payslips.length - 1, i + 1))}
-            disabled={selectedIdx === payslips.length - 1}
-            className="p-2 hover:bg-gray-100 rounded-full disabled:opacity-30 transition-colors"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-
+        <div className="flex items-center gap-3">
+          <div className="w-52">
+            <SearchSelect
+              placeholder="Select month…"
+              options={payslips.map((p) => ({
+                value: p.id,
+                label: payslipLabel(p),
+                sublabel: p.payrollRun?.status ?? undefined,
+              }))}
+              value={selected?.id ?? ''}
+              onChange={setSelectedId}
+            />
+          </div>
           {runStatus && <Badge variant={statusVariant} label={runStatus} />}
-
-          <Button variant="outline" className="flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            Download
-          </Button>
+          {canDownload && (
+            <Button
+              variant="outline"
+              className="flex items-center gap-2"
+              disabled={downloading}
+              onClick={async () => {
+                if (!selected) return;
+                setDownloading(true);
+                try {
+                  await downloadPayslipPDF(selected, payslipLabel(selected), companyName);
+                } finally {
+                  setDownloading(false);
+                }
+              }}
+            >
+              {downloading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {downloading ? 'Generating…' : 'Download'}
+            </Button>
+          )}
         </div>
       </div>
 
-      {/* Net salary hero */}
-      <div
-        className="rounded-card px-8 py-6 shrink-0"
-        style={{ background: 'linear-gradient(135deg, #0D1F44 0%, #1E3A8A 100%)' }}
-      >
-        <p className="text-sm text-blue-300 mb-1">Net Salary</p>
-        <p className="text-5xl font-bold text-white tabular-nums">
-          GHS {netSalary.toLocaleString()}
-        </p>
-        <p className="text-sm text-blue-300 mt-2">
-          {selected ? payslipLabel(selected) : '—'} · {runStatus || '—'}
-        </p>
-      </div>
-
-      {/* Breakdown — detailed if basic salary available, summary otherwise */}
-      {breakdown ? (
+      {selected && (
         <>
-          <SectionCard title="Payroll Breakdown">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-6">
-              <DetailField
-                label="Basic Salary"
-                value={`GHS ${breakdown.basicSalary.toLocaleString()}`}
-              />
-              <DetailField
-                label="Allowances"
-                value={`GHS ${breakdown.totalAllowances.toLocaleString()}`}
-              />
-              <DetailField
-                label="Gross Salary"
-                value={`GHS ${breakdown.grossSalary.toLocaleString()}`}
-              />
-              <DetailField
-                label="Employee SSNIT (5.5%)"
-                value={`GHS ${breakdown.employeeStatutoryContrib.toLocaleString()}`}
-              />
-              <DetailField
-                label="Taxable Income"
-                value={`GHS ${breakdown.taxableIncome.toLocaleString()}`}
-              />
-              <DetailField label="PAYE Tax" value={`GHS ${breakdown.paye.toLocaleString()}`} />
-              <DetailField
-                label="Net Salary"
-                value={`GHS ${breakdown.netSalary.toLocaleString()}`}
-              />
+          {/* Hero */}
+          <div
+            className="rounded-card px-8 py-4 shrink-0 flex items-center justify-between"
+            style={{ background: 'linear-gradient(135deg, #0D1F44 0%, #1E3A8A 100%)' }}
+          >
+            <div>
+              <p className="text-sm text-blue-300 mb-1">Net Salary</p>
+              <p className="text-4xl font-bold text-white tabular-nums">
+                {ghs(selected.netSalary)}
+              </p>
             </div>
-          </SectionCard>
-
-          <SectionCard title="Employer Contributions">
-            <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-              <DetailField
-                label="Employer SSNIT (13%)"
-                value={`GHS ${breakdown.employerStatutoryContrib.toLocaleString()}`}
-              />
-              <DetailField
-                label="Total Employer Cost"
-                value={`GHS ${breakdown.totalEmployerCost.toLocaleString()}`}
-              />
+            <div className="text-right">
+              <p className="text-sm text-blue-300">{payslipLabel(selected)}</p>
+              {selected.payrollRun?.paidAt && (
+                <p className="text-xs text-blue-400 mt-0.5">
+                  Paid{' '}
+                  {new Date(selected.payrollRun.paidAt).toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: 'short',
+                    year: 'numeric',
+                  })}
+                </p>
+              )}
             </div>
-          </SectionCard>
-        </>
-      ) : (
-        <SectionCard title="Payroll Breakdown">
-          <div className="grid grid-cols-2 gap-x-8 gap-y-6">
-            <DetailField label="Gross Salary" value={`GHS ${grossSalary.toLocaleString()}`} />
-            <DetailField label="Net Salary" value={`GHS ${netSalary.toLocaleString()}`} />
           </div>
-        </SectionCard>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
+            {/* Earnings */}
+            <div className="bg-white border border-gray-200 rounded-card px-6 py-5">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Earnings</p>
+              <PayslipRow label="Basic Salary" value={ghs(selected.basicSalary)} />
+              {transportAmt > 0 && (
+                <PayslipRow label="Transport Allowance" value={ghs(transportAmt)} subtle />
+              )}
+              {otherAllowances > 0 && (
+                <PayslipRow label="Other Allowances" value={ghs(otherAllowances)} subtle />
+              )}
+              {parseFloat(selected.overtimePay) > 0 && (
+                <PayslipRow label="Overtime" value={ghs(selected.overtimePay)} subtle />
+              )}
+              {parseFloat(selected.bonus) > 0 && (
+                <PayslipRow label="Bonus" value={ghs(selected.bonus)} subtle />
+              )}
+              {parseFloat(selected.thirteenthMonth) > 0 && (
+                <PayslipRow label="13th Month" value={ghs(selected.thirteenthMonth)} subtle />
+              )}
+              <Divider />
+              <PayslipRow label="Gross Salary" value={ghs(selected.grossSalary)} bold />
+            </div>
+
+            {/* Deductions */}
+            <div className="bg-white border border-gray-200 rounded-card px-6 py-5">
+              <p className="text-sm font-semibold text-gray-900 mb-2">Deductions</p>
+              <PayslipRow label="Employee SSNIT (5.5%)" value={ghs(selected.employeeSSNIT)} />
+              <PayslipRow label="PAYE Tax" value={ghs(selected.payeTax)} />
+              {hasTier3 && (
+                <PayslipRow label={tier3Label} value={ghs(selected.tier3Employee)} subtle />
+              )}
+              {hasOtherDeductions && (
+                <PayslipRow label="Other Deductions" value={ghs(selected.otherDeductions)} subtle />
+              )}
+              <Divider />
+              <PayslipRow label="Total Deductions" value={ghs(selected.totalDeductions)} bold />
+            </div>
+          </div>
+
+          {/* Net summary */}
+          <div className="bg-white border border-gray-200 rounded-card px-6 py-5 shrink-0">
+            <PayslipRow label="Gross Salary" value={ghs(selected.grossSalary)} />
+            <PayslipRow label="Total Deductions" value={`− ${ghs(selected.totalDeductions)}`} />
+            <Divider />
+            <PayslipRow label="Net Salary" value={ghs(selected.netSalary)} bold green />
+          </div>
+        </>
       )}
     </div>
   );
