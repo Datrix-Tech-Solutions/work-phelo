@@ -11,22 +11,7 @@ import { extractError } from '@/lib/extractError';
 import { ApprovePayrollPanel } from './ApprovePayrollPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-
-const MONTH_NAMES = [
-  '',
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+import { payrollMonthLabel } from '@/lib/payrollUtils';
 
 function fmt(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
@@ -34,7 +19,7 @@ function fmt(value: string | number) {
 }
 
 function monthLabel(run: PayrollRun) {
-  return `${MONTH_NAMES[run.month]} ${run.year}`;
+  return payrollMonthLabel(run.month, run.year);
 }
 
 interface RowMenuProps {

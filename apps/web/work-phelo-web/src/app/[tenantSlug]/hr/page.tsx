@@ -20,7 +20,7 @@ import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
-import { formatTime } from '@/lib/formatters';
+import { formatTime, resolveHolidayUpcomingDate } from '@/lib/formatters';
 
 /* ── Avatar colour picker ── */
 const AVATAR_COLORS = [
@@ -105,11 +105,12 @@ export default function EmployeeDashboardPage({
   );
 
   /* ── Derived: upcoming holidays (future only, first 5) ── */
+  const now = new Date();
   const holidays = (Array.isArray(holidaysRaw) ? holidaysRaw : [])
-    .filter((h: { date: string }) => new Date(h.date) >= new Date())
+    .filter((h: { date: string }) => resolveHolidayUpcomingDate(h.date) >= now)
     .sort(
       (a: { date: string }, b: { date: string }) =>
-        new Date(a.date).getTime() - new Date(b.date).getTime(),
+        resolveHolidayUpcomingDate(a.date).getTime() - resolveHolidayUpcomingDate(b.date).getTime(),
     )
     .slice(0, 5);
 
@@ -211,6 +212,7 @@ export default function EmployeeDashboardPage({
         {/* Left column */}
         <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
           <AnnouncementCard
+            key={announcementIdx}
             announcements={announcements}
             currentIndex={announcementIdx}
             onPrev={prevAnnouncement}

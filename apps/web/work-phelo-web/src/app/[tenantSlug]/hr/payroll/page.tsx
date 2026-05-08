@@ -10,10 +10,11 @@ import { Permission } from '@/lib/permissionMap';
 import { PayrollTabs } from '@/components/molecules/payroll/PayrollTabs';
 import { MyPayslipTab } from '@/components/organisms/payroll/MyPayslipTab';
 import { ManagePayrollTab } from '@/components/organisms/payroll/ManagePayrollTab';
+import { SSNITTab } from '@/components/organisms/payroll/SSNITTab';
 import { ApprovePayrollTab } from '@/components/organisms/payroll/ApprovePayrollTab';
 import { PayrollHistoryTab } from '@/components/organisms/payroll/PayrollHistoryTab';
 
-type Tab = 'payslip' | 'manage' | 'approve' | 'history';
+type Tab = 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history';
 
 export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
@@ -34,6 +35,7 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
     const t = searchParams.get('tab') as Tab | null;
     if (t === 'history' && canApprovePayroll) return 'history';
     if (t === 'approve' && canApprovePayroll) return 'approve';
+    if (t === 'ssnit' && canManagePayroll) return 'ssnit';
     if (t === 'manage' && canManagePayroll) return 'manage';
     return canManagePayroll ? 'manage' : 'payslip';
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -53,6 +55,7 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
       />
       {tab === 'payslip' && <MyPayslipTab />}
       {tab === 'manage' && canManagePayroll && <ManagePayrollTab />}
+      {tab === 'ssnit' && canManagePayroll && <SSNITTab />}
       {tab === 'approve' && canApprovePayroll && <ApprovePayrollTab />}
       {tab === 'history' && canApprovePayroll && <PayrollHistoryTab />}
     </div>

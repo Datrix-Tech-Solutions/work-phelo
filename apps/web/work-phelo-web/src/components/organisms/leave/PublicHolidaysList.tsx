@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { useDeletePublicHoliday } from '@/hooks/usePublicHolidays';
 import { extractError } from '@/lib/extractError';
-import { formatDate } from '@/lib/formatters';
+import { formatHolidayDate } from '@/lib/formatters';
 import { PublicHoliday } from '@/types/hr';
 
 interface Props {
@@ -53,7 +53,7 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
     {
       key: 'date',
       label: 'Date',
-      render: (row) => <span className="text-gray-700">{formatDate(row.date)}</span>,
+      render: (row) => <span className="text-gray-700">{formatHolidayDate(row.date)}</span>,
     },
     {
       key: '_view',

@@ -1,33 +1,118 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { Icons } from '@/components/atoms/icons';
-import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
 import { usePayrollRun } from '@/hooks';
-import { PayrollItem } from '@/types/hr';
-
-const MONTH_NAMES = [
-  '',
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+import { PayrollItem, PayrollRunDetail } from '@/types/hr';
+import {
+  payrollMonthLabel,
+  downloadPayrollBankFormat,
+  downloadPayrollFullFormat,
+  downloadPayrollPDFFormat,
+} from '@/lib/payrollUtils';
 
 function fmt(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
   return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [pendingFormat, setPendingFormat] = useState<'bank' | 'full' | null>(null);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setPendingFormat(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleFileType = async (type: 'csv' | 'pdf') => {
+    const format = pendingFormat!;
+    setPendingFormat(null);
+    setLoading(true);
+    try {
+      if (type === 'csv') {
+        if (format === 'bank') downloadPayrollBankFormat(detail, label);
+        else downloadPayrollFullFormat(detail, label);
+      } else {
+        await downloadPayrollPDFFormat(detail, label, format);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => {
+          if (!loading) {
+            setOpen((v) => !v);
+            setPendingFormat(null);
+          }
+        }}
+        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+        disabled={loading}
+      >
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        Download
+        <Icons.ChevronDown className="w-4 h-4 text-gray-400" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 z-10 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1 overflow-hidden">
+          <button
+            onClick={() => {
+              setOpen(false);
+              setPendingFormat('bank');
+            }}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Bank format
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              setPendingFormat('full');
+            }}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Full format
+          </button>
+        </div>
+      )}
+
+      {pendingFormat && (
+        <div className="absolute right-0 top-full mt-1.5 z-10 w-44 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden">
+          <p className="px-4 pt-3 pb-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+            {pendingFormat === 'bank' ? 'Bank format' : 'Full format'}
+          </p>
+          <button
+            onClick={() => handleFileType('csv')}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            CSV
+          </button>
+          <button
+            onClick={() => handleFileType('pdf')}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            PDF
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const columns: Column<PayrollItem>[] = [
@@ -47,17 +132,17 @@ const columns: Column<PayrollItem>[] = [
   {
     key: 'basicSalary',
     label: 'Basic Salary',
-    render: (row) => fmt(row.basicSalary),
+    render: (row) => `GHS ${fmt(row.basicSalary)}`,
   },
   {
     key: 'totalAllowances',
     label: 'Allowances',
-    render: (row) => fmt(row.totalAllowances),
+    render: (row) => `GHS ${fmt(row.totalAllowances)}`,
   },
   {
     key: 'grossSalary',
     label: 'Gross',
-    render: (row) => fmt(row.grossSalary),
+    render: (row) => `GHS ${fmt(row.grossSalary)}`,
   },
   {
     key: 'employeeSSNIT',
@@ -77,24 +162,13 @@ const columns: Column<PayrollItem>[] = [
   {
     key: 'payeTax',
     label: 'PAYE',
-    render: (row) => fmt(row.payeTax),
+    render: (row) => `GHS ${fmt(row.payeTax)}`,
   },
   {
     key: 'netSalary',
     label: 'Net Salary',
-    render: (row) => <span className="font-semibold text-emerald-600">{fmt(row.netSalary)}</span>,
-  },
-  {
-    key: 'download',
-    label: '',
-    width: '60px',
     render: (row) => (
-      <button
-        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-        title={`Download ${row.employee?.firstName ?? ''} payslip`}
-      >
-        <Download className="w-4 h-4" />
-      </button>
+      <span className="font-semibold text-emerald-600">GHS {fmt(row.netSalary)}</span>
     ),
   },
 ];
@@ -107,7 +181,8 @@ export default function PayrollHistoryDetailPage({
   const { tenantSlug, runId } = use(params);
   const { data: run, isLoading } = usePayrollRun(runId);
 
-  const periodLabel = run ? `${MONTH_NAMES[run.month]} ${run.year}` : '—';
+  const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
+  const fileLabel = periodLabel.replace(' ', '-');
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
@@ -123,11 +198,9 @@ export default function PayrollHistoryDetailPage({
           <span className="text-gray-700 font-medium">{periodLabel}</span>
         </nav>
 
-        <Button>
-          <Download className="w-4 h-4 mr-2" />
-          Download All
-        </Button>
+        {run && <DownloadAllMenu detail={run} label={fileLabel} />}
       </div>
+
       <DataTable
         columns={columns}
         data={run?.items ?? []}
