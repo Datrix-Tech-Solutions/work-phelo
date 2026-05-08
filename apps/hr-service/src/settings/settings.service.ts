@@ -249,6 +249,7 @@ export class SettingsService {
     const config = await this.prisma.tenantConfig.findUnique({
       where: { tenantId },
       select: {
+        payrollTier2FundName: true,
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
@@ -256,6 +257,7 @@ export class SettingsService {
     });
 
     return {
+      payrollTier2FundName: config?.payrollTier2FundName ?? null,
       payrollTier3Enabled:
         config?.payrollTier3Enabled ?? DEFAULT_PAYROLL_TIER3_ENABLED,
       payrollTier3Rate:
@@ -385,6 +387,7 @@ export class SettingsService {
   async updatePayrollSettings(
     tenantId: string,
     payrollSettings: {
+      payrollTier2FundName?: string;
       payrollTier3Enabled?: boolean;
       payrollTier3Rate?: number;
       payrollTier3SchemeName?: string;
@@ -421,11 +424,15 @@ export class SettingsService {
         tenantId,
         adminEmail: adminEmail ?? '',
         adminUserId: adminUserId ?? null,
+        payrollTier2FundName:
+          payrollSettings.payrollTier2FundName?.trim() || null,
         payrollTier3Enabled: tier3Enabled,
         payrollTier3Rate: tier3Enabled ? normalizedTier3Rate : null,
         payrollTier3SchemeName: tier3Enabled ? normalizedTier3SchemeName : null,
       },
       update: {
+        payrollTier2FundName:
+          payrollSettings.payrollTier2FundName?.trim() || null,
         payrollTier3Enabled: tier3Enabled,
         payrollTier3Rate: tier3Enabled ? normalizedTier3Rate : null,
         payrollTier3SchemeName: tier3Enabled ? normalizedTier3SchemeName : null,

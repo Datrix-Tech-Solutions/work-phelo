@@ -20,8 +20,10 @@ export function payrollMonthLabel(month: number, year: number): string {
   return `${MONTH_NAMES[month]} ${year}`;
 }
 
-function fmtNum(value: string | number): string {
+function fmtNum(value: string | number | null | undefined): string {
+  if (value == null) return '—';
   const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(n)) return '—';
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -65,6 +67,7 @@ export async function downloadPayrollPDFFormat(
     ? [
         [
           'Employee',
+          'Employee Number',
           'Basic Salary',
           'Allowances',
           'Gross',
@@ -74,7 +77,7 @@ export async function downloadPayrollPDFFormat(
           'Net Salary',
         ],
       ]
-    : [['Employee', 'Bank Name', 'Account Number', 'Net Salary']];
+    : [['Employee', 'Employee Number', 'Bank Name', 'Account Number', 'Net Salary']];
 
   const body = isFull
     ? detail.items.map((item) => [
@@ -351,7 +354,7 @@ export function downloadPayrollBankFormat(detail: PayrollRunDetail, label: strin
 export function downloadPayrollFullFormat(detail: PayrollRunDetail, label: string): void {
   const headers = [
     'Employee',
-    'Employee #',
+    'Employee Number',
     'Job Title',
     'Basic Salary',
     'Allowances',

@@ -191,6 +191,9 @@ export class PayrollService {
         acc.totalTier2 = acc.totalTier2.plus(item.tier2Contribution.toString());
         acc.totalTier3 = acc.totalTier3.plus(item.tier3Employee.toString());
         acc.totalPAYE = acc.totalPAYE.plus(item.payeTax.toString());
+        acc.totalEmployerCost = acc.totalEmployerCost
+          .plus(item.grossSalary.toString())
+          .plus(item.employerSSNIT.toString());
         return acc;
       },
       {
@@ -201,6 +204,7 @@ export class PayrollService {
         totalTier2: new Decimal(0),
         totalTier3: new Decimal(0),
         totalPAYE: new Decimal(0),
+        totalEmployerCost: new Decimal(0),
       },
     );
   }
@@ -275,6 +279,7 @@ export class PayrollService {
         totalTier2: totals.totalTier2.toString(),
         totalTier3: totals.totalTier3.toString(),
         totalPAYE: totals.totalPAYE.toString(),
+        totalEmployerCost: totals.totalEmployerCost.toString(),
         runBy,
         submittedBy: null,
         submittedAt: null,
@@ -306,6 +311,7 @@ export class PayrollService {
         totalTier2: totals.totalTier2.toString(),
         totalTier3: totals.totalTier3.toString(),
         totalPAYE: totals.totalPAYE.toString(),
+        totalEmployerCost: totals.totalEmployerCost.toString(),
         runBy,
         notes: dto.notes,
         tier3Enabled: settings.tier3Enabled,

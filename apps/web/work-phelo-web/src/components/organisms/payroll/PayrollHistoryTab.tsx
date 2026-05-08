@@ -16,8 +16,10 @@ import {
 } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
 
-function fmt(value: string | number) {
+function fmt(value: string | number | null | undefined) {
+  if (value == null) return '—';
   const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(n)) return '—';
   return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -145,27 +147,27 @@ export function PayrollHistoryTab() {
     {
       key: 'totalGross',
       label: 'Total Gross',
-      render: (row) => `GHS ${fmt(row.totalGross)}`,
+      render: (row) => fmt(row.totalGross),
     },
     {
-      key: 'totalTier1',
-      label: 'Total Tier 1 Employee',
-      render: (row) => fmt(row.totalTier1),
-    },
-    {
-      key: 'totalSSNIT',
-      label: 'Total SSNIT',
-      render: (row) => `GHS ${fmt(row.totalSSNIT)}`,
+      key: 'totalNet',
+      label: 'Total Net Pay',
+      render: (row) => fmt(row.totalNet),
     },
     {
       key: 'totalPAYE',
       label: 'Total PAYE',
-      render: (row) => `GHS ${fmt(row.totalPAYE)}`,
+      render: (row) => fmt(row.totalPAYE),
     },
     {
       key: 'totalSSNIT',
       label: 'Total SSNIT',
       render: (row) => fmt(row.totalSSNIT),
+    },
+    {
+      key: 'totalEmployerCost',
+      label: 'Total Employer Cost',
+      render: (row) => fmt(row.totalEmployerCost),
     },
     {
       key: 'status',

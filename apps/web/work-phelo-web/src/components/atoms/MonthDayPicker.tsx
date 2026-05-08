@@ -43,12 +43,14 @@ export function MonthDayPicker({
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'days' | 'months'>('days');
   const [viewMonth, setViewMonth] = useState(parsed?.month ?? today.getMonth());
+  const [prevValue, setPrevValue] = useState(value);
+
+  if (prevValue !== value) {
+    setPrevValue(value);
+    if (parsed) setViewMonth(parsed.month);
+  }
 
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (parsed) setViewMonth(parsed.month);
-  }, [value]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {

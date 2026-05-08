@@ -367,6 +367,7 @@ export interface PayrollRun {
   totalTier2: string;
   totalTier3: string;
   totalPAYE: string;
+  totalEmployerCost: string;
   runBy: string;
   submittedBy?: string | null;
   submittedAt?: string | null;
@@ -443,12 +444,14 @@ export interface UpdatePayrollItemDto {
 }
 
 export interface PayrollSettings {
+  payrollTier2FundName: string | null;
   payrollTier3Enabled: boolean;
   payrollTier3Rate: number | null;
   payrollTier3SchemeName: string | null;
 }
 
 export interface UpdatePayrollSettingsDto {
+  payrollTier2FundName?: string;
   payrollTier3Enabled?: boolean;
   payrollTier3Rate?: number;
   payrollTier3SchemeName?: string;

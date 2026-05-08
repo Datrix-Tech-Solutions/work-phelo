@@ -11,6 +11,14 @@ import {
 
 export class UpdatePayrollSettingsDto {
   @ApiPropertyOptional({
+    description: 'Display name of the Tier 2 provident fund trustee',
+    example: 'SSNIT Provident Fund',
+  })
+  @IsOptional()
+  @IsString()
+  payrollTier2FundName?: string;
+
+  @ApiPropertyOptional({
     description:
       'Whether Tier 3 employee contributions are enabled for payroll',
     example: true,
