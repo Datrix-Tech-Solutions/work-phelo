@@ -112,7 +112,8 @@ export function ManagePayrollTab() {
           gross: acc.gross + r.grossSalary,
           net: acc.net + r.netSalary,
           paye: acc.paye + r.paye,
-          ssnit: acc.ssnit + r.employeeStatutoryContrib + r.employerStatutoryContrib,
+          ssnit:
+            acc.ssnit + (r.employeeStatutoryContrib - r.tier2Contribution) + r.tier1Contribution,
           employerCost: acc.employerCost + r.totalEmployerCost,
         }),
         { gross: 0, net: 0, paye: 0, ssnit: 0, employerCost: 0 },
@@ -203,19 +204,20 @@ export function ManagePayrollTab() {
     },
     {
       key: 'employeeSSNIT',
-      label: 'Employee Total (5.5%)',
-      render: (row) => `GHS ${row.employeeStatutoryContrib.toLocaleString()}`,
+      label: 'SSNIT (5.5%)',
+      render: (row) =>
+        `GHS ${(row.employeeStatutoryContrib - row.tier2Contribution).toLocaleString()}`,
     },
-    {
-      key: 'tier1Contribution',
-      label: 'Tier 1 Employee (0.5%)',
-      render: (row) => `GHS ${row.tier1Contribution.toLocaleString()}`,
-    },
-    {
-      key: 'tier2Contribution',
-      label: 'Tier 2 Employee (5%)',
-      render: (row) => `GHS ${row.tier2Contribution.toLocaleString()}`,
-    },
+    // {
+    //   key: 'tier1Contribution',
+    //   label: 'Tier 1 Employee (0.5%)',
+    //   render: (row) => `GHS ${row.tier1Contribution.toLocaleString()}`,
+    // },
+    // {
+    //   key: 'tier2Contribution',
+    //   label: 'Tier 2 Employee (5%)',
+    //   render: (row) => `GHS ${row.tier2Contribution.toLocaleString()}`,
+    // },
     {
       key: 'taxableIncome',
       label: 'Taxable Income',

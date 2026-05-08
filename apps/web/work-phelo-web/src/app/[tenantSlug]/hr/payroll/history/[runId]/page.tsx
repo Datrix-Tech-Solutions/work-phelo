@@ -14,8 +14,10 @@ import {
   downloadPayrollPDFFormat,
 } from '@/lib/payrollUtils';
 
-function fmt(value: string | number) {
+function fmt(value: string | number | null | undefined) {
+  if (value == null) return '—';
   const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(n)) return '—';
   return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -149,16 +151,7 @@ const columns: Column<PayrollItem>[] = [
     label: 'Employee Total (5.5%)',
     render: (row) => fmt(row.employeeSSNIT),
   },
-  {
-    key: 'tier1Contribution',
-    label: 'Tier 1 Employee (0.5%)',
-    render: (row) => fmt(row.tier1Contribution),
-  },
-  {
-    key: 'tier2Contribution',
-    label: 'Tier 2 Employee (5%)',
-    render: (row) => fmt(row.tier2Contribution),
-  },
+
   {
     key: 'payeTax',
     label: 'PAYE',

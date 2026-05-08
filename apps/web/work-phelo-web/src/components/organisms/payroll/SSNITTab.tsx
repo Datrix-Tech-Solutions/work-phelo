@@ -6,7 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Column, DataTable } from '../shared/DataTable';
-import { usePayrollRuns, usePayrollRun, useEmployees } from '@/hooks';
+import { usePayrollRuns, usePayrollRun, useEmployees, usePayrollSettings } from '@/hooks';
 import { PayrollItem } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 
@@ -60,6 +60,10 @@ function buildRows(items: PayrollItem[], ssnitMap: Record<string, string>): SSNI
 export function SSNITTab() {
   const { data: runs = [], isLoading: runsLoading } = usePayrollRuns();
   const { data: empData } = useEmployees({ limit: 200 });
+  const { data: payrollSettings } = usePayrollSettings();
+  const tier2Label = payrollSettings?.payrollTier2FundName
+    ? `${payrollSettings.payrollTier2FundName} (5%)`
+    : 'Tier 2 — Separate Fund (5%)';
   const [selectedRunId, setSelectedRunId] = useState('');
 
   const availableRuns = useMemo(
@@ -111,13 +115,13 @@ export function SSNITTab() {
     const run = availableRuns.find((r) => r.id === runId);
     const headers = [
       'Employee',
-      'Employee #',
-      'SSNIT #',
+      'Employee Number',
+      'SSNIT Number',
       'Insurable Earnings',
       'Employee SSNIT (5.5%)',
       'Employer SSNIT (13%)',
       'Total Tier 1 (18.5%)',
-      'Tier 2 (5%)',
+      tier2Label,
       ...(tier3Enabled ? [tier3Label] : []),
     ];
     const csvRows = rows.map((r) => [
@@ -155,7 +159,7 @@ export function SSNITTab() {
     },
     {
       key: 'ssnitNumber',
-      label: 'SSNIT #',
+      label: 'SSNIT Number',
       render: (row) =>
         row.ssnitNumber ? (
           <span className="font-mono text-sm text-gray-700">{row.ssnitNumber}</span>
@@ -188,7 +192,7 @@ export function SSNITTab() {
     },
     {
       key: 'tier2',
-      label: 'Tier 2 (5%)',
+      label: tier2Label,
       render: (row) => fmt(row.tier2),
     },
     ...(tier3Enabled
@@ -249,11 +253,7 @@ export function SSNITTab() {
           value={fmt(totals.totalTier1)}
           variant="success"
         />
-        <MetricCard
-          title="Tier 2 — Separate Fund (5%)"
-          value={fmt(totals.tier2)}
-          variant="warning"
-        />
+        <MetricCard title={tier2Label} value={fmt(totals.tier2)} variant="warning" />
       </div>
 
       <DataTable

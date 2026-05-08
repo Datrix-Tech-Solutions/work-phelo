@@ -24,11 +24,12 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
     }
   }, [user, tenantSlug, router]);
   const hasHRProfile = user?.role === 'EMPLOYEE';
+  const canReadAppraisals = usePermission(Permission.READ_APPRAISALS);
+  const canApproveAppraisal = usePermission(Permission.APPROVE_APPRAISAL);
+  const canCreateAppraisal = usePermission(Permission.CREATE_APPRAISAL);
+  const canConfigureAppraisal = usePermission(Permission.CONFIGURE_APPRAISAL);
   const canViewAppraisals =
-    usePermission(Permission.READ_APPRAISALS) ||
-    usePermission(Permission.APPROVE_APPRAISAL) ||
-    usePermission(Permission.CREATE_APPRAISAL) ||
-    usePermission(Permission.CONFIGURE_APPRAISAL);
+    canReadAppraisals || canApproveAppraisal || canCreateAppraisal || canConfigureAppraisal;
 
   const { data: teamData } = useTeamAppraisals();
   const isManager = (teamData?.length ?? 0) > 0;

@@ -510,6 +510,7 @@ export class EmployeesService {
           avatarUrl: true,
           userId: true,
           basicSalary: true,
+          ssnit: true,
           department: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
         },

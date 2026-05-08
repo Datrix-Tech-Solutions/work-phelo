@@ -14,8 +14,10 @@ import { extractError } from '@/lib/extractError';
 import { PayrollItem } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 
-function fmt(value: string | number) {
+function fmt(value: string | number | null | undefined) {
+  if (value == null) return '—';
   const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(n)) return '—';
   return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 

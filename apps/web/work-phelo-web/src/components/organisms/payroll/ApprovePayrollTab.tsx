@@ -13,8 +13,10 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 
-function fmt(value: string | number) {
+function fmt(value: string | number | null | undefined) {
+  if (value == null) return '—';
   const n = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(n)) return '—';
   return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
@@ -107,14 +109,9 @@ export function ApprovePayrollTab() {
       render: (row) => fmt(row.totalGross),
     },
     {
-      key: 'totalTier1',
-      label: 'Total Tier 1 Employee',
-      render: (row) => fmt(row.totalTier1),
-    },
-    {
-      key: 'totalTier2',
-      label: 'Total Tier 2 Employee',
-      render: (row) => fmt(row.totalTier2),
+      key: 'totalNet',
+      label: 'Total Net Pay',
+      render: (row) => fmt(row.totalNet),
     },
     {
       key: 'totalPAYE',
@@ -125,6 +122,11 @@ export function ApprovePayrollTab() {
       key: 'totalSSNIT',
       label: 'Total SSNIT',
       render: (row) => fmt(row.totalSSNIT),
+    },
+    {
+      key: 'totalEmployerCost',
+      label: 'Total Employer Cost',
+      render: (row) => fmt(row.totalEmployerCost),
     },
     {
       key: 'actions',

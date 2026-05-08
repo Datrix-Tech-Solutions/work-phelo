@@ -780,6 +780,7 @@ model PayrollRun {
   totalTier2   Decimal       @db.Decimal(15, 2) @default(0)
   totalTier3   Decimal       @db.Decimal(15, 2) @default(0)
   totalPAYE    Decimal       @db.Decimal(15, 2)
+  totalEmployerCost Decimal  @db.Decimal(15, 2) @default(0)
   runBy        String
   submittedBy  String?
   submittedAt  DateTime?
@@ -1055,6 +1056,7 @@ model TenantConfig {
   defaultProbationPeriodMonths Int?
   resignationNoticePeriodDays Int      @default(30)
   lateArrivalThresholdMinutes Int      @default(0)
+  payrollTier2FundName        String?
   payrollTier3Enabled         Boolean  @default(false)
   payrollTier3Rate            Decimal? @db.Decimal(5, 2)
   payrollTier3SchemeName      String?
