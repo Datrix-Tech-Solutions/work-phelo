@@ -8,22 +8,7 @@ import { PayrollRun } from '@/types/hr';
 import { useApprovePayroll } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-
-const MONTH_NAMES = [
-  '',
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+import { payrollMonthLabel } from '@/lib/payrollUtils';
 
 function fmt(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
@@ -41,7 +26,7 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
   const { mutate: approve, isPending } = useApprovePayroll();
 
   const isOpen = run !== null;
-  const periodLabel = run ? `${MONTH_NAMES[run.month]} ${run.year}` : '';
+  const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '';
 
   const handleClose = () => {
     setShowConfirm(false);

@@ -1,7 +1,7 @@
 'use client';
 
 import { Calendar } from 'lucide-react';
-import { formatDate } from '@/lib/formatters';
+import { formatHolidayDate } from '@/lib/formatters';
 
 interface Holiday {
   id: string;
@@ -29,7 +29,7 @@ export function UpcomingHolidaysCard({ holidays }: UpcomingHolidaysCardProps) {
                 <Calendar className="w-4 h-4 text-gray-500" />
               </div>
               <div>
-                <p className="text-xs text-gray-400">{formatDate(h.date)}</p>
+                <p className="text-xs text-gray-400">{formatHolidayDate(h.date, true)}</p>
                 <p className="text-sm font-semibold text-gray-900">{h.name}</p>
               </div>
             </div>

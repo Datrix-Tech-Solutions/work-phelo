@@ -12,22 +12,7 @@ import { usePayrollRun, useApprovePayroll, useReturnPayrollToDraft } from '@/hoo
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { PayrollItem } from '@/types/hr';
-
-const MONTH_NAMES = [
-  '',
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+import { payrollMonthLabel } from '@/lib/payrollUtils';
 
 function fmt(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
@@ -97,7 +82,7 @@ export default function ApprovePayrollDetailPage({
   const [showRejectModal, setShowRejectModal] = useState(false);
 
   const isPending = isApproving || isRejecting;
-  const periodLabel = run ? `${MONTH_NAMES[run.month]} ${run.year}` : '—';
+  const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
   const backHref = `/${tenantSlug}/hr/payroll?tab=approve`;
 
   const handleApprove = async () => {

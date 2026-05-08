@@ -35,6 +35,58 @@ export function formatDateRange(start: string, end: string): string {
 }
 
 /**
+ * Parse a holiday date string (MM-DD or legacy YYYY-MM-DD) into zero-based month and day.
+ */
+function parseHolidayParts(date: string): { month: number; day: number } {
+  if (date.length === 5 && date[2] === '-') {
+    return { month: parseInt(date.slice(0, 2), 10) - 1, day: parseInt(date.slice(3), 10) };
+  }
+  const d = new Date(date);
+  return { month: d.getMonth(), day: d.getDate() };
+}
+
+/**
+ * Resolve the year for a recurring holiday: current year if not yet passed, next year otherwise.
+ */
+function resolveYear(month: number, day: number): number {
+  const today = new Date();
+  const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const candidate = new Date(today.getFullYear(), month, day);
+  return candidate >= todayNorm ? today.getFullYear() : today.getFullYear() + 1;
+}
+
+/**
+ * Format a holiday date as "25 December" (no year) or "25 December 2026" (with computed year).
+ */
+export function formatHolidayDate(date: string, withYear = false): string {
+  const isSpecific = date.length === 10;
+  const { month, day } = parseHolidayParts(date);
+  if (withYear || isSpecific) {
+    const year = isSpecific ? new Date(date).getFullYear() : resolveYear(month, day);
+    return new Date(year, month, day).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  }
+  return new Date(2000, month, day).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
+/**
+ * Returns the next upcoming Date for a holiday (for sorting and filtering on the dashboard).
+ */
+export function resolveHolidayUpcomingDate(date: string): Date {
+  if (date.length === 5 && date[2] === '-') {
+    const { month, day } = parseHolidayParts(date);
+    return new Date(resolveYear(month, day), month, day);
+  }
+  return new Date(date);
+}
+
+/**
  * Returns a time-of-day greeting string.
  */
 export function getGreeting(): string {

@@ -10,7 +10,7 @@ import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 import { PayrollItemsPanel } from './PayrollItemsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
-import { PayrollDraftsPanel } from './PayrollDraftsPanel';
+import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
 
 function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
@@ -65,7 +65,9 @@ export function ManagePayrollTab() {
     const employees: Employee[] = empData?.data ?? [];
     return employees.map((e) => {
       const basic = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
-      const allowances = allowancesMap[e.id] ?? [];
+      const savedAllowances: AllowanceItem[] =
+        e.allowances?.map((a) => ({ name: a.type as string, amount: Number(a.amount) })) ?? [];
+      const allowances = allowancesMap[e.id] ?? savedAllowances;
       const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
       const deductionItems = deductionsMap[e.id] ?? [];
       const otherDeductions = deductionItems.reduce((sum, d) => sum + d.amount, 0);
@@ -108,7 +110,7 @@ export function ManagePayrollTab() {
           gross: acc.gross + r.grossSalary,
           net: acc.net + r.netSalary,
           paye: acc.paye + r.paye,
-          ssnit: acc.ssnit + r.employeeStatutoryContrib,
+          ssnit: acc.ssnit + r.employeeStatutoryContrib + r.employerStatutoryContrib,
           employerCost: acc.employerCost + r.totalEmployerCost,
         }),
         { gross: 0, net: 0, paye: 0, ssnit: 0, employerCost: 0 },
@@ -250,7 +252,7 @@ export function ManagePayrollTab() {
           variant="warning"
         />
         <MetricCard
-          title="Total SSNIT"
+          title="Total SSNIT (18.5%)"
           value={`GHS ${totals.ssnit.toLocaleString()}`}
           icon={TrendingUp}
           variant="highlight"
@@ -281,7 +283,14 @@ export function ManagePayrollTab() {
         items={
           panel
             ? panel.type === 'allowance'
-              ? (allowancesMap[panel.rowId] ?? [])
+              ? (allowancesMap[panel.rowId] ??
+                empData?.data
+                  ?.find((e) => e.id === panel.rowId)
+                  ?.allowances?.map((a) => ({
+                    name: a.type as string,
+                    amount: Number(a.amount),
+                  })) ??
+                [])
               : (deductionsMap[panel.rowId] ?? [])
             : []
         }
@@ -295,7 +304,15 @@ export function ManagePayrollTab() {
         overrides={overrides}
       />
 
-      <PayrollDraftsPanel isOpen={draftsPanelOpen} onClose={() => setDraftsPanelOpen(false)} />
+      <PayrollDraftsPanel
+        isOpen={draftsPanelOpen}
+        onClose={() => setDraftsPanelOpen(false)}
+        onLoad={({ basicMap, allowancesMap, deductionsMap }: DraftLoadData) => {
+          setBasicMap(basicMap);
+          setAllowancesMap(allowancesMap);
+          setDeductionsMap(deductionsMap);
+        }}
+      />
     </div>
   );
 }

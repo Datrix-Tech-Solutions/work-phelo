@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useCallback } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { MonthDayPicker } from '@/components/atoms/MonthDayPicker';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { useToast } from '@/hooks/useToast';
 import { PublicHoliday } from '@/types/hr';
 import { useCreatePublicHoliday, useUpdatePublicHoliday } from '@/hooks';
+import { cn } from '@/lib/utils';
 
 interface CreatePublicHolidayPanelProps {
   isOpen: boolean;
@@ -17,10 +19,18 @@ interface CreatePublicHolidayPanelProps {
   editHoliday?: PublicHoliday;
 }
 
+type HolidayType = 'recurring' | 'specific';
+
 type FormValues = {
   name: string;
   date: string;
+  holidayType: HolidayType;
 };
+
+function detectType(date: string | undefined): HolidayType {
+  if (!date) return 'recurring';
+  return date.length === 5 && date[2] === '-' ? 'recurring' : 'specific';
+}
 
 export function CreatePublicHolidayPanel({
   isOpen,
@@ -39,28 +49,36 @@ export function CreatePublicHolidayPanel({
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
-    defaultValues: { name: '', date: '' },
+    defaultValues: { name: '', date: '', holidayType: 'recurring' },
   });
+
+  const holidayType = useWatch({ control, name: 'holidayType' });
 
   useEffect(() => {
     if (editHoliday) {
-      reset({ name: editHoliday.name, date: editHoliday.date });
+      reset({
+        name: editHoliday.name,
+        date: editHoliday.date,
+        holidayType: detectType(editHoliday.date),
+      });
     } else {
-      reset({ name: '', date: '' });
+      reset({ name: '', date: '', holidayType: 'recurring' });
     }
   }, [editHoliday, reset]);
 
   const handleClose = useCallback(() => {
-    reset({ name: '', date: '' });
+    reset({ name: '', date: '', holidayType: 'recurring' });
     onClose();
   }, [reset, onClose]);
 
   const onSubmit = (values: FormValues) => {
+    const payload = { name: values.name, date: values.date };
     if (isEditing) {
       update(
-        { id: editHoliday!.id, name: values.name, date: values.date },
+        { id: editHoliday!.id, ...payload },
         {
           onSuccess: () => {
             toast.success('Holiday updated');
@@ -74,20 +92,17 @@ export function CreatePublicHolidayPanel({
         },
       );
     } else {
-      create(
-        { name: values.name, date: values.date },
-        {
-          onSuccess: () => {
-            toast.success('Holiday added');
-            handleClose();
-          },
-          onError: (err: unknown) =>
-            toast.error(
-              (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-                'Something went wrong',
-            ),
+      create(payload, {
+        onSuccess: () => {
+          toast.success('Holiday added');
+          handleClose();
         },
-      );
+        onError: (err: unknown) =>
+          toast.error(
+            (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+              'Something went wrong',
+          ),
+      });
     }
   };
 
@@ -115,18 +130,60 @@ export function CreatePublicHolidayPanel({
         placeholder="e.g. Christmas Day"
       />
 
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-bold text-gray-900">Holiday Type</label>
+        <Controller
+          name="holidayType"
+          control={control}
+          render={({ field }) => (
+            <div className="flex rounded-input border border-gray-300 overflow-hidden">
+              {(['recurring', 'specific'] as HolidayType[]).map((type) => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => {
+                    field.onChange(type);
+                    setValue('date', '');
+                  }}
+                  className={cn(
+                    'flex-1 py-2.5 text-sm font-medium transition-colors',
+                    field.value === type ? 'bg-brand text-white' : 'text-gray-600 hover:bg-gray-50',
+                  )}
+                >
+                  {type === 'recurring' ? 'Recurring yearly' : 'Specific year'}
+                </button>
+              ))}
+            </div>
+          )}
+        />
+        <p className="text-xs text-gray-400">
+          {holidayType === 'recurring'
+            ? 'Repeats on the same day every year (e.g. Christmas, Independence Day).'
+            : 'Falls on a different date each year (e.g. Easter, Eid).'}
+        </p>
+      </div>
+
       <Controller
         name="date"
         control={control}
         rules={{ required: 'Date is required' }}
-        render={({ field }) => (
-          <DatePicker
-            label="Date"
-            value={field.value}
-            onChange={field.onChange}
-            error={errors.date?.message}
-          />
-        )}
+        render={({ field }) =>
+          holidayType === 'recurring' ? (
+            <MonthDayPicker
+              label="Date"
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.date?.message}
+            />
+          ) : (
+            <DatePicker
+              label="Date"
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.date?.message}
+            />
+          )
+        }
       />
     </SidePanel>
   );
