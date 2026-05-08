@@ -10,6 +10,7 @@
     "check-types": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
+    "@types/node": "^20.19.40",
     "typescript": "^5.4.0"
   }
 }
