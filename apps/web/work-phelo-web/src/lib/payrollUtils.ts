@@ -42,20 +42,30 @@ export async function downloadPayrollPDFFormat(
   detail: PayrollRunDetail,
   label: string,
   format: 'bank' | 'full' = 'full',
+  companyName = '',
 ): Promise<void> {
   const { default: jsPDF } = await import('jspdf');
   const { autoTable } = await import('jspdf-autotable');
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
 
+  let headerY = 16;
+  if (companyName) {
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text(companyName, 14, headerY);
+    headerY += 7;
+  }
+
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text('Payroll Report', 14, 16);
+  doc.text('Payroll Report', 14, headerY);
+  headerY += 7;
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 100, 100);
-  doc.text(label, 14, 23);
+  doc.text(label, 14, headerY);
   doc.setTextColor(0, 0, 0);
 
   const sum = (key: keyof (typeof detail.items)[0]) =>
@@ -77,7 +87,7 @@ export async function downloadPayrollPDFFormat(
           'Net Salary',
         ],
       ]
-    : [['Employee', 'Employee Number', 'Bank Name', 'Account Number', 'Net Salary']];
+    : [['Employee', 'Employee Number', 'Bank Name', 'Bank Branch', 'Account Number', 'Net Salary']];
 
   const body = isFull
     ? detail.items.map((item) => [
@@ -95,6 +105,7 @@ export async function downloadPayrollPDFFormat(
         item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
         item.employee?.employeeNumber ?? '',
         item.employee?.bankName ?? '',
+        item.employee?.bankBranch ?? '',
         item.employee?.bankAccountNumber ?? '',
         fmtNum(item.netSalary),
       ]);
@@ -113,11 +124,11 @@ export async function downloadPayrollPDFFormat(
           sum('netSalary'),
         ],
       ]
-    : [['TOTAL', '', '', '', sum('netSalary')]];
+    : [['TOTAL', '', '', '', '', sum('netSalary')]];
 
   // numeric column indices (all columns except Employee and Employee #)
-  const numericCols = isFull ? [2, 3, 4, 5, 6, 7, 8] : [4];
-  const lastCol = isFull ? 8 : 4;
+  const numericCols = isFull ? [2, 3, 4, 5, 6, 7, 8] : [5];
+  const lastCol = isFull ? 8 : 5;
 
   const colStyles = Object.fromEntries(
     numericCols.map((i) => [
@@ -130,7 +141,7 @@ export async function downloadPayrollPDFFormat(
   );
 
   autoTable(doc, {
-    startY: 30,
+    startY: companyName ? 37 : 30,
     head,
     body,
     foot,
@@ -339,19 +350,36 @@ export async function downloadPayslipPDF(
   doc.save(`payslip-${name}-${label}.pdf`);
 }
 
-export function downloadPayrollBankFormat(detail: PayrollRunDetail, label: string): void {
-  const headers = ['Employee', 'Employee #', 'Bank Name', 'Account Number', 'Net Salary'];
+export function downloadPayrollBankFormat(
+  detail: PayrollRunDetail,
+  label: string,
+  companyName = '',
+): void {
+  const headers = [
+    'Employee',
+    'Employee Number',
+    'Bank Name',
+    'Bank Branch',
+    'Account Number',
+    'Net Salary',
+  ];
   const rows = detail.items.map((item) => [
     item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
     item.employee?.employeeNumber ?? '',
     item.employee?.bankName ?? '',
+    item.employee?.bankBranch ?? '',
     item.employee?.bankAccountNumber ?? '',
     fmtNum(item.netSalary),
   ]);
-  triggerCSV(`payroll-bank-${label}.csv`, [headers, ...rows]);
+  const meta = companyName ? [[companyName], [`Payroll Report — ${label}`], []] : [];
+  triggerCSV(`payroll-bank-${label}.csv`, [...meta, headers, ...rows]);
 }
 
-export function downloadPayrollFullFormat(detail: PayrollRunDetail, label: string): void {
+export function downloadPayrollFullFormat(
+  detail: PayrollRunDetail,
+  label: string,
+  companyName = '',
+): void {
   const headers = [
     'Employee',
     'Employee Number',
@@ -378,5 +406,6 @@ export function downloadPayrollFullFormat(detail: PayrollRunDetail, label: strin
     fmtNum(item.otherDeductions),
     fmtNum(item.netSalary),
   ]);
-  triggerCSV(`payroll-full-${label}.csv`, [headers, ...rows]);
+  const meta = companyName ? [[companyName], [`Payroll Report — ${label}`], []] : [];
+  triggerCSV(`payroll-full-${label}.csv`, [...meta, headers, ...rows]);
 }

@@ -20,7 +20,6 @@ function fmt(value: string | number) {
 export interface DraftLoadData {
   basicMap: Record<string, number>;
   allowancesMap: Record<string, AllowanceItem[]>;
-  deductionsMap: Record<string, AllowanceItem[]>;
 }
 
 function DraftItem({ run, onLoad }: { run: PayrollRun; onLoad: (data: DraftLoadData) => void }) {
@@ -41,7 +40,6 @@ function DraftItem({ run, onLoad }: { run: PayrollRun; onLoad: (data: DraftLoadD
 
       const basicMap: Record<string, number> = {};
       const allowancesMap: Record<string, AllowanceItem[]> = {};
-      const deductionsMap: Record<string, AllowanceItem[]> = {};
 
       for (const item of detail.items) {
         basicMap[item.employeeId] = parseFloat(item.basicSalary);
@@ -49,13 +47,9 @@ function DraftItem({ run, onLoad }: { run: PayrollRun; onLoad: (data: DraftLoadD
         if (totalAllowances > 0) {
           allowancesMap[item.employeeId] = [{ name: 'Allowances', amount: totalAllowances }];
         }
-        const otherDeductions = parseFloat(item.otherDeductions);
-        if (otherDeductions > 0) {
-          deductionsMap[item.employeeId] = [{ name: 'Other Deductions', amount: otherDeductions }];
-        }
       }
 
-      onLoad({ basicMap, allowancesMap, deductionsMap });
+      onLoad({ basicMap, allowancesMap });
       toast.success(`${payrollMonthLabel(run.month, run.year)} loaded into payroll table`);
     } catch (err) {
       toast.error(extractError(err, 'Failed to load draft'));

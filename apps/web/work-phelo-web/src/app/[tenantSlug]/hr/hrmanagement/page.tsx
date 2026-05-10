@@ -9,8 +9,13 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
   const { tenantSlug } = use(params);
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { canManageLeaveTypes, canConfigureAppraisal, canAccessRoles, hasAnyManagementAccess } =
-    useHrManagementAccess();
+  const {
+    canManageLeaveTypes,
+    canConfigureAppraisal,
+    canAccessRoles,
+    canViewAuditLogs,
+    hasAnyManagementAccess,
+  } = useHrManagementAccess();
 
   useEffect(() => {
     if (user === null) return;
@@ -32,11 +37,17 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
 
     if (canAccessRoles) {
       router.replace(`/${tenantSlug}/hr/hrmanagement/roles`);
+      return;
+    }
+
+    if (canViewAuditLogs) {
+      router.replace(`/${tenantSlug}/hr/hrmanagement/audit-logs`);
     }
   }, [
     canAccessRoles,
     canConfigureAppraisal,
     canManageLeaveTypes,
+    canViewAuditLogs,
     hasAnyManagementAccess,
     router,
     tenantSlug,

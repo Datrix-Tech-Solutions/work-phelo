@@ -15,6 +15,7 @@ import {
   downloadPayrollPDFFormat,
 } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/store/auth.store';
 
 function fmt(value: string | number | null | undefined) {
   if (value == null) return '—';
@@ -29,6 +30,7 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const companyName = useAuthStore((s) => s.user?.tenantName ?? '');
   const label = payrollMonthLabel(run.month, run.year).replace(' ', '-');
 
   useEffect(() => {
@@ -58,10 +60,10 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
     try {
       const detail = await fetchDetail();
       if (type === 'csv') {
-        if (format === 'bank') downloadPayrollBankFormat(detail, label);
-        else downloadPayrollFullFormat(detail, label);
+        if (format === 'bank') downloadPayrollBankFormat(detail, label, companyName);
+        else downloadPayrollFullFormat(detail, label, companyName);
       } else {
-        await downloadPayrollPDFFormat(detail, label, format);
+        await downloadPayrollPDFFormat(detail, label, format, companyName);
       }
     } finally {
       setLoading(false);
