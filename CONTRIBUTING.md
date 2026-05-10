@@ -1,6 +1,6 @@
 # Contributing to WorkPhelo
 
-This document covers everything you need to know to contribute to WorkPhelovfrom setting up your environment to making your first PR.
+This document covers everything you need to know to contribute to WorkPhelo, from setting up your environment to making your first PR.
 
 ---
 
@@ -14,7 +14,7 @@ This document covers everything you need to know to contribute to WorkPhelovfrom
 | `fix/*`     | Bug fixes             | No               |
 | `docs/*`    | Documentation only    | No               |
 
-**Never push directly to `main`,`prod` or `dev`.** Always branch off `dev` and open a PR
+**Never push directly to `main` or `dev`.** Always branch off `dev` and open a PR.
 
 ---
 
@@ -182,7 +182,7 @@ Fix all errors locally before pushing — the pipeline runs these same checks.
 
 ## Environment Variables
 
-Never commit `.env` files. Each service has a `.env.example` — copy it and fill in your values.
+Never commit `.env` files. The web app includes an `.env.example`; backend services use local `.env` files. Confirm expected values with the team before starting.
 
 Required variables per service:
 
@@ -190,11 +190,10 @@ Required variables per service:
 
 ```
 DATABASE_URL=
-JWT_ACCESS_SECRET=
-JWT_REFRESH_SECRET=
 RABBITMQ_URL=
-RESEND_API_KEY=
-FRONTEND_BASE_URL=
+JWT_SECRET=
+ALLOWED_ORIGINS=
+SUPER_ADMIN_EMAIL=
 ```
 
 **hr-service:**
@@ -202,13 +201,44 @@ FRONTEND_BASE_URL=
 ```
 DATABASE_URL=
 RABBITMQ_URL=
+ALLOWED_ORIGINS=
+FRONTEND_BASE_URL=
+```
+
+**api-gateway:**
+
+```
+PORT=
+AUTH_SERVICE_URL=
+HR_SERVICE_URL=
+ALLOWED_ORIGINS=
+```
+
+**notification-service:**
+
+```
+DATABASE_URL=
+RABBITMQ_URL=
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=
+TERMII_API_KEY=
+TERMII_SENDER_ID=
 ```
 
 **web (Next.js):**
 
 ```
-NEXT_PUBLIC_API_URL=https://workphelo.com/api/v1
+NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
 ```
+
+---
+
+## Source Tree Hygiene
+
+- Keep `src/` folders TS-only. Generated `.js`, `.d.ts`, and `.map` files belong in `dist/`.
+- Use the canonical shared config files in `packages/config/src/` such as `permissions.ts`, `modules.config.ts`, and `queues.config.ts`.
+- If a build or codegen step writes into `src/`, fix the tool config instead of committing the output.
+- Run `npm run check:generated-artifacts` before committing if you touched build or codegen settings.
 
 ---
 
@@ -233,7 +263,7 @@ npx prisma generate
 
 ## Deployment
 
-Deployment is fully automated via GitHub Actions on every push to `dev` and `prod`.
+Deployment is fully automated via GitHub Actions on every push to `dev`.
 
 ### How the pipeline works
 
