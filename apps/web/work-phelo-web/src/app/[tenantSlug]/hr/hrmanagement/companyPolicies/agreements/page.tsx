@@ -8,11 +8,17 @@ import { AgreementViewModal } from '@/components/organisms/companyPolicies/Agree
 import {
   useCompanyAgreements,
   useCreateCompanyAgreement,
+  useUpdateCompanyAgreement,
   useDeleteCompanyAgreement,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { CompanyAgreement, CompanyAgreementType, CreateCompanyAgreementDto } from '@/types/hr';
+import type {
+  CompanyAgreement,
+  CompanyAgreementType,
+  CreateCompanyAgreementDto,
+  UpdateCompanyAgreementDto,
+} from '@/types/hr';
 
 const AGREEMENT_TYPE_LABELS: Record<CompanyAgreementType, string> = {
   NDA: 'Non-Disclosure Agreement',
@@ -49,12 +55,14 @@ const PAGE_SIZE = 10;
 export default function CompanyAgreementsPage() {
   const toast = useToast();
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editAgreement, setEditAgreement] = useState<CompanyAgreement | null>(null);
   const [viewAgreement, setViewAgreement] = useState<CompanyAgreement | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const { data: agreements = [], isLoading } = useCompanyAgreements();
   const { mutate: createAgreement, isPending: isCreating } = useCreateCompanyAgreement();
+  const { mutate: updateAgreement, isPending: isUpdating } = useUpdateCompanyAgreement();
   const { mutate: deleteAgreement } = useDeleteCompanyAgreement();
 
   const filtered = agreements.filter(
@@ -74,6 +82,20 @@ export default function CompanyAgreementsPage() {
       },
       onError: (err) => toast.error(extractError(err, 'Failed to create agreement')),
     });
+  };
+
+  const handleUpdate = (data: UpdateCompanyAgreementDto) => {
+    if (!editAgreement) return;
+    updateAgreement(
+      { id: editAgreement.id, ...data },
+      {
+        onSuccess: () => {
+          toast.success('Agreement updated');
+          setEditAgreement(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to update agreement')),
+      },
+    );
   };
 
   const handleDelete = (id: string) => {
@@ -112,6 +134,10 @@ export default function CompanyAgreementsPage() {
             onClick: () => setViewAgreement(row),
           },
           {
+            label: 'Edit',
+            onClick: () => setEditAgreement(row),
+          },
+          {
             label: 'Delete',
             danger: true,
             onClick: () => handleDelete(row.id),
@@ -124,6 +150,14 @@ export default function CompanyAgreementsPage() {
         onClose={() => setPanelOpen(false)}
         onSubmit={handleCreate}
         isSubmitting={isCreating}
+      />
+
+      <AddAgreementPanel
+        isOpen={!!editAgreement}
+        onClose={() => setEditAgreement(null)}
+        onSubmit={handleUpdate}
+        isSubmitting={isUpdating}
+        agreement={editAgreement}
       />
 
       <AgreementViewModal

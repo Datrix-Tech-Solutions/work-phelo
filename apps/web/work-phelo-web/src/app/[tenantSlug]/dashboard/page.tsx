@@ -66,6 +66,7 @@ export default function TenantDashboardPage({
 
   const firstName = user?.firstName ?? 'User';
   const tenantName = user?.tenantName ?? '';
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN';
   const initials = firstName.slice(0, 2).toUpperCase();
 
   /* ── Fetch users for employee count ── */
@@ -108,9 +109,11 @@ export default function TenantDashboardPage({
         {/* Welcome banner */}
         <div className="bg-brand mx-6 mt-6 rounded-card px-8 py-6 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-orange-400 mb-1">{tenantName}</p>
-            <h1 className="text-2xl font-bold text-white">
-              {getGreeting()}, {firstName}
+            {!isTenantAdmin && (
+              <p className="text-sm font-medium text-orange-400 mb-1">{tenantName}</p>
+            )}
+            <h1 className="text-xl font-bold text-white">
+              {getGreeting()}, {isTenantAdmin ? tenantName : firstName}
             </h1>
           </div>
           <div className="flex items-center gap-0">

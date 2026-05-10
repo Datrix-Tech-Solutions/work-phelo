@@ -43,7 +43,8 @@ export interface AuditLog {
   resource: string;
   action: string;
   createdAt: string;
-  changes?: { after?: Record<string, unknown> };
+  performedBy?: string;
+  changes?: { before?: Record<string, unknown>; after?: Record<string, unknown> };
 }
 
 export interface AuditData {

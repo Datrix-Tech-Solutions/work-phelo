@@ -9,6 +9,7 @@ import { useEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 import { PayrollItemsPanel } from './PayrollItemsPanel';
+import { DeductionsPanel, DeductionItem } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
 
@@ -53,12 +54,14 @@ export function ManagePayrollTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
-  const [deductionsMap, setDeductionsMap] = useState<Record<string, AllowanceItem[]>>({});
-  const [panel, setPanel] = useState<{
-    rowId: string;
-    rowName: string;
-    type: 'allowance' | 'deduction';
-  } | null>(null);
+  const [deductionsMap, setDeductionsMap] = useState<Record<string, DeductionItem[]>>({});
+
+  const [allowancePanel, setAllowancePanel] = useState<{ rowId: string; rowName: string } | null>(
+    null,
+  );
+  const [deductionPanel, setDeductionPanel] = useState<{ rowId: string; rowName: string } | null>(
+    null,
+  );
   const [runPanelOpen, setRunPanelOpen] = useState(false);
   const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
 
@@ -71,7 +74,9 @@ export function ManagePayrollTab() {
       const allowances = allowancesMap[e.id] ?? savedAllowances;
       const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
       const deductionItems = deductionsMap[e.id] ?? [];
-      const otherDeductions = deductionItems.reduce((sum, d) => sum + d.amount, 0);
+      const otherDeductions = deductionItems
+        .filter((d) => d.amountPaid < d.totalAmount)
+        .reduce((sum, d) => sum + d.monthlyRate, 0);
       const calc = calculatePayroll({
         basicSalary: basic,
         allowances,
@@ -85,7 +90,6 @@ export function ManagePayrollTab() {
         basicSalary: basic,
         allowances: totalAllowances,
         deductions: otherDeductions,
-
         grossSalary: calc.grossSalary,
         employeeStatutoryContrib: calc.employeeStatutoryContrib,
         tier1Contribution: calc.employerStatutoryContrib,
@@ -130,22 +134,18 @@ export function ManagePayrollTab() {
       result[id] = { ...result[id], totalAllowances: items.reduce((s, a) => s + a.amount, 0) };
     });
     Object.entries(deductionsMap).forEach(([id, items]) => {
-      result[id] = { ...result[id], otherDeductions: items.reduce((s, d) => s + d.amount, 0) };
+      result[id] = {
+        ...result[id],
+        otherDeductions: items
+          .filter((d) => d.amountPaid < d.totalAmount)
+          .reduce((s, d) => s + d.monthlyRate, 0),
+      };
     });
     return result;
   }, [basicMap, allowancesMap, deductionsMap]);
 
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
-  };
-
-  const handlePanelSave = (items: AllowanceItem[]) => {
-    if (!panel) return;
-    if (panel.type === 'allowance') {
-      setAllowancesMap((prev) => ({ ...prev, [panel.rowId]: items }));
-    } else {
-      setDeductionsMap((prev) => ({ ...prev, [panel.rowId]: items }));
-    }
   };
 
   const columns: Column<PayrollRow>[] = [
@@ -165,7 +165,6 @@ export function ManagePayrollTab() {
         </div>
       ),
     },
-
     {
       key: 'basicSalary',
       label: 'Basic Salary',
@@ -178,7 +177,7 @@ export function ManagePayrollTab() {
       label: 'Allowances',
       render: (row) => (
         <button
-          onClick={() => setPanel({ rowId: row.id, rowName: row.employeeName, type: 'allowance' })}
+          onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
           className="text-sm font-medium text-gray-900 hover:text-brand transition-colors"
         >
           {row.allowances > 0 ? `GHS ${row.allowances.toLocaleString()}` : '—'}
@@ -190,7 +189,7 @@ export function ManagePayrollTab() {
       label: 'Deductions',
       render: (row) => (
         <button
-          onClick={() => setPanel({ rowId: row.id, rowName: row.employeeName, type: 'deduction' })}
+          onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
           className="text-sm font-medium text-gray-900 hover:text-brand transition-colors"
         >
           {row.deductions > 0 ? `GHS ${row.deductions.toLocaleString()}` : '—'}
@@ -208,16 +207,6 @@ export function ManagePayrollTab() {
       render: (row) =>
         `GHS ${(row.employeeStatutoryContrib - row.tier2Contribution).toLocaleString()}`,
     },
-    // {
-    //   key: 'tier1Contribution',
-    //   label: 'Tier 1 Employee (0.5%)',
-    //   render: (row) => `GHS ${row.tier1Contribution.toLocaleString()}`,
-    // },
-    // {
-    //   key: 'tier2Contribution',
-    //   label: 'Tier 2 Employee (5%)',
-    //   render: (row) => `GHS ${row.tier2Contribution.toLocaleString()}`,
-    // },
     {
       key: 'taxableIncome',
       label: 'Taxable Income',
@@ -278,6 +267,7 @@ export function ManagePayrollTab() {
           variant="highlight"
         />
       </div>
+
       <DataTable
         columns={columns}
         data={filteredData}
@@ -290,25 +280,37 @@ export function ManagePayrollTab() {
       />
 
       <PayrollItemsPanel
-        isOpen={!!panel}
-        onClose={() => setPanel(null)}
-        type={panel?.type ?? 'allowance'}
-        employeeName={panel?.rowName ?? ''}
+        isOpen={!!allowancePanel}
+        onClose={() => setAllowancePanel(null)}
+        type="allowance"
+        employeeName={allowancePanel?.rowName ?? ''}
         items={
-          panel
-            ? panel.type === 'allowance'
-              ? (allowancesMap[panel.rowId] ??
-                empData?.data
-                  ?.find((e) => e.id === panel.rowId)
-                  ?.allowances?.map((a) => ({
-                    name: a.type as string,
-                    amount: Number(a.amount),
-                  })) ??
-                [])
-              : (deductionsMap[panel.rowId] ?? [])
+          allowancePanel
+            ? (allowancesMap[allowancePanel.rowId] ??
+              empData?.data
+                ?.find((e) => e.id === allowancePanel.rowId)
+                ?.allowances?.map((a) => ({
+                  name: a.type as string,
+                  amount: Number(a.amount),
+                })) ??
+              [])
             : []
         }
-        onSave={handlePanelSave}
+        onSave={(items) => {
+          if (!allowancePanel) return;
+          setAllowancesMap((prev) => ({ ...prev, [allowancePanel.rowId]: items }));
+        }}
+      />
+
+      <DeductionsPanel
+        isOpen={!!deductionPanel}
+        onClose={() => setDeductionPanel(null)}
+        employeeName={deductionPanel?.rowName ?? ''}
+        items={deductionPanel ? (deductionsMap[deductionPanel.rowId] ?? []) : []}
+        onSave={(items) => {
+          if (!deductionPanel) return;
+          setDeductionsMap((prev) => ({ ...prev, [deductionPanel.rowId]: items }));
+        }}
       />
 
       <RunPayrollPanel
@@ -321,10 +323,9 @@ export function ManagePayrollTab() {
       <PayrollDraftsPanel
         isOpen={draftsPanelOpen}
         onClose={() => setDraftsPanelOpen(false)}
-        onLoad={({ basicMap, allowancesMap, deductionsMap }: DraftLoadData) => {
+        onLoad={({ basicMap, allowancesMap }: DraftLoadData) => {
           setBasicMap(basicMap);
           setAllowancesMap(allowancesMap);
-          setDeductionsMap(deductionsMap);
         }}
       />
     </div>

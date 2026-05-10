@@ -56,8 +56,13 @@ export default function HRManagementLayout({ children }: { children: React.React
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const base = `/${params.tenantSlug}/hr/hrmanagement`;
-  const { canManageLeaveTypes, canConfigureAppraisal, canAccessRoles, hasAnyManagementAccess } =
-    useHrManagementAccess();
+  const {
+    canManageLeaveTypes,
+    canConfigureAppraisal,
+    canAccessRoles,
+    canViewAuditLogs,
+    hasAnyManagementAccess,
+  } = useHrManagementAccess();
 
   useEffect(() => {
     if (user !== null && !hasAnyManagementAccess) {
@@ -88,13 +93,16 @@ export default function HRManagementLayout({ children }: { children: React.React
     {
       tabs: [{ label: 'Company Policies', href: `${base}/companyPolicies` }],
     },
+    {
+      tabs: canViewAuditLogs ? [{ label: 'Audit Trail', href: `${base}/audit-logs` }] : [],
+    },
   ].filter((group) => group.tabs.length > 0);
 
   return (
     <div className="h-full flex flex-col">
       {/* Page header */}
       <div className="px-8 pt-8 pb-5 bg-white shrink-0">
-        <h1 className="text-xl font-semibold text-gray-900">HR Management</h1>
+        <h1 className="text-xl font-semibold text-gray-900">HR Settings</h1>
         <p className="text-sm text-gray-500 mt-0.5">
           Configure leave types, appraisal templates, cycles, and roles
         </p>

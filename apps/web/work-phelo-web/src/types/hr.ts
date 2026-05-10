@@ -387,6 +387,7 @@ export interface PayrollRunEmployeeSummary {
   employeeNumber: string;
   jobTitle: string;
   bankName?: string | null;
+  bankBranch?: string | null;
   bankAccountNumber?: string | null;
 }
 
@@ -912,6 +913,12 @@ export interface CreateCompanyAgreementDto {
   type: CompanyAgreementType;
   title: string;
   details: string;
+}
+
+export interface UpdateCompanyAgreementDto {
+  type?: CompanyAgreementType;
+  title?: string;
+  details?: string;
 }
 
 export interface CreateAppraisalKpiDto {

@@ -153,7 +153,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
     items: [
       {
         key: 'management',
-        label: 'HR Management',
+        label: 'HR Settings',
         icon: <ManagementIcon />,
         href: 'hrmanagement',
         enabled: true,

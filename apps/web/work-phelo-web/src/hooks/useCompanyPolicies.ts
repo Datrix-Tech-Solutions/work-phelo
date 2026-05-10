@@ -4,6 +4,7 @@ import type {
   CompanyAgreement,
   CompanyPoliciesSettings,
   CreateCompanyAgreementDto,
+  UpdateCompanyAgreementDto,
   UpdateCompanyPoliciesDto,
 } from '@/types/hr';
 
@@ -58,6 +59,22 @@ export function useCreateCompanyAgreement() {
   return useMutation({
     mutationFn: async (payload: CreateCompanyAgreementDto) => {
       const res = await api.post<CompanyAgreement>('/hr/company-agreements', payload);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: companyPoliciesKeys.agreements(),
+      });
+    },
+  });
+}
+
+export function useUpdateCompanyAgreement() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: UpdateCompanyAgreementDto & { id: string }) => {
+      const res = await api.patch<CompanyAgreement>(`/hr/company-agreements/${id}`, payload);
       return res.data;
     },
     onSuccess: () => {

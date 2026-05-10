@@ -7,6 +7,7 @@ import { Icons } from '@/components/atoms/icons';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
 import { usePayrollRun } from '@/hooks';
 import { PayrollItem, PayrollRunDetail } from '@/types/hr';
+import { useAuthStore } from '@/store/auth.store';
 import {
   payrollMonthLabel,
   downloadPayrollBankFormat,
@@ -26,6 +27,7 @@ function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: s
   const [pendingFormat, setPendingFormat] = useState<'bank' | 'full' | null>(null);
   const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const companyName = useAuthStore((s) => s.user?.tenantName ?? '');
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -44,10 +46,10 @@ function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: s
     setLoading(true);
     try {
       if (type === 'csv') {
-        if (format === 'bank') downloadPayrollBankFormat(detail, label);
-        else downloadPayrollFullFormat(detail, label);
+        if (format === 'bank') downloadPayrollBankFormat(detail, label, companyName);
+        else downloadPayrollFullFormat(detail, label, companyName);
       } else {
-        await downloadPayrollPDFFormat(detail, label, format);
+        await downloadPayrollPDFFormat(detail, label, format, companyName);
       }
     } finally {
       setLoading(false);
@@ -134,35 +136,38 @@ const columns: Column<PayrollItem>[] = [
   {
     key: 'basicSalary',
     label: 'Basic Salary',
-    render: (row) => `GHS ${fmt(row.basicSalary)}`,
+    render: (row) => fmt(row.basicSalary),
   },
   {
     key: 'totalAllowances',
     label: 'Allowances',
-    render: (row) => `GHS ${fmt(row.totalAllowances)}`,
+    render: (row) => fmt(row.totalAllowances),
   },
   {
     key: 'grossSalary',
     label: 'Gross',
-    render: (row) => `GHS ${fmt(row.grossSalary)}`,
+    render: (row) => fmt(row.grossSalary),
   },
   {
     key: 'employeeSSNIT',
     label: 'Employee Total (5.5%)',
     render: (row) => fmt(row.employeeSSNIT),
   },
-
   {
     key: 'payeTax',
     label: 'PAYE',
-    render: (row) => `GHS ${fmt(row.payeTax)}`,
+    render: (row) => fmt(row.payeTax),
   },
+  {
+    key: 'otherDeductions',
+    label: 'Deductions',
+    render: (row) => fmt(row.otherDeductions),
+  },
+
   {
     key: 'netSalary',
     label: 'Net Salary',
-    render: (row) => (
-      <span className="font-semibold text-emerald-600">GHS {fmt(row.netSalary)}</span>
-    ),
+    render: (row) => <span className="font-semibold text-emerald-600">{fmt(row.netSalary)}</span>,
   },
 ];
 
