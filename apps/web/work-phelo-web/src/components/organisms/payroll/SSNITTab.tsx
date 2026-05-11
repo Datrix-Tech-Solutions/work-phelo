@@ -59,7 +59,7 @@ function buildRows(items: PayrollItem[], ssnitMap: Record<string, string>): SSNI
 
 export function SSNITTab() {
   const { data: runs = [], isLoading: runsLoading } = usePayrollRuns();
-  const { data: empData } = useEmployees({ limit: 200 });
+  const { data: empData } = useEmployees({ limit: 100 });
   const { data: payrollSettings } = usePayrollSettings();
   const tier2Label = payrollSettings?.payrollTier2FundName
     ? `${payrollSettings.payrollTier2FundName} (5%)`

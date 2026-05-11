@@ -6,6 +6,8 @@ interface QuickActionsCardProps {
   onPayslips: () => void;
   onAssets: () => void;
   onLeave: () => void;
+  onSchedules: () => void;
+  onProjects: () => void;
 }
 
 interface ActionButtonProps {
@@ -29,11 +31,17 @@ function ActionButton({ icon, label, color, onClick }: ActionButtonProps) {
   );
 }
 
-export function QuickActionsCard({ onPayslips, onAssets, onLeave }: QuickActionsCardProps) {
+export function QuickActionsCard({
+  onPayslips,
+  onAssets,
+  onLeave,
+  onSchedules,
+  onProjects,
+}: QuickActionsCardProps) {
   return (
     <div className="bg-white border border-gray-200 rounded-card p-5 shrink-0">
       <h2 className="text-base font-bold text-gray-900 mb-4">Quick Actions</h2>
-      <div className="flex items-start justify-around">
+      <div className="flex flex-wrap items-start justify-around gap-y-4">
         <ActionButton
           icon={<ModuleIcons.payroll className="w-6 h-6" />}
           label="My Payslips"
@@ -51,6 +59,18 @@ export function QuickActionsCard({ onPayslips, onAssets, onLeave }: QuickActions
           label="My Leave"
           color={moduleColor('leave')}
           onClick={onLeave}
+        />
+        <ActionButton
+          icon={<ModuleIcons.scheduling className="w-6 h-6" />}
+          label="My Schedules"
+          color={moduleColor('scheduling')}
+          onClick={onSchedules}
+        />
+        <ActionButton
+          icon={<ModuleIcons.projects className="w-6 h-6" />}
+          label="My Projects"
+          color={moduleColor('projects')}
+          onClick={onProjects}
         />
       </div>
     </div>

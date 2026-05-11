@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { MoreVertical } from 'lucide-react';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun } from '@/types/hr';
-import { usePayrollRuns, useReturnPayrollToDraft } from '@/hooks';
+import { usePayrollRuns, useRejectPayroll } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { ApprovePayrollPanel } from './ApprovePayrollPanel';
@@ -91,9 +91,10 @@ export function ApprovePayrollTab() {
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
-  const { mutate: returnToDraft, isPending: isRejecting } = useReturnPayrollToDraft();
+  const { mutate: rejectPayroll, isPending: isRejecting } = useRejectPayroll();
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [rejectRun, setRejectRun] = useState<PayrollRun | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
 
   const pending = runs.filter((r) => r.status === 'PENDING_APPROVAL');
 
@@ -158,27 +159,43 @@ export function ApprovePayrollTab() {
 
       <Modal
         isOpen={rejectRun !== null}
-        onClose={() => !isRejecting && setRejectRun(null)}
+        onClose={() => {
+          if (isRejecting) return;
+          setRejectRun(null);
+          setRejectionReason('');
+        }}
         title="Reject Payroll"
         hideClose={isRejecting}
         footer={
           <>
-            <Button variant="outline" onClick={() => setRejectRun(null)} disabled={isRejecting}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectRun(null);
+                setRejectionReason('');
+              }}
+              disabled={isRejecting}
+            >
               Cancel
             </Button>
             <Button
               variant="danger"
               isLoading={isRejecting}
               loadingText="Rejecting…"
+              disabled={!rejectionReason.trim()}
               onClick={() => {
                 if (!rejectRun) return;
-                returnToDraft(rejectRun.id, {
-                  onSuccess: () => {
-                    toast.success(`${monthLabel(rejectRun)} payroll returned to draft`);
-                    setRejectRun(null);
+                rejectPayroll(
+                  { id: rejectRun.id, reason: rejectionReason.trim() },
+                  {
+                    onSuccess: () => {
+                      toast.success(`${monthLabel(rejectRun)} payroll rejected`);
+                      setRejectRun(null);
+                      setRejectionReason('');
+                    },
+                    onError: (err) => toast.error(extractError(err, 'Failed to reject payroll')),
                   },
-                  onError: (err) => toast.error(extractError(err, 'Failed to reject payroll')),
-                });
+                );
               }}
             >
               Reject Payroll
@@ -186,14 +203,27 @@ export function ApprovePayrollTab() {
           </>
         }
       >
-        <p className="text-sm text-gray-600 leading-relaxed mt-2">
-          You are about to reject the payroll for{' '}
-          <span className="font-medium text-gray-900">
-            {rejectRun ? monthLabel(rejectRun) : ''}
-          </span>
-          . It will be returned to draft and the payroll manager will need to resubmit. This action
-          cannot be undone.
-        </p>
+        <div className="flex flex-col gap-4 mt-2">
+          <p className="text-sm text-gray-600 leading-relaxed">
+            You are about to reject the payroll for{' '}
+            <span className="font-medium text-gray-900">
+              {rejectRun ? monthLabel(rejectRun) : ''}
+            </span>
+            . The payroll manager will be notified and can revise and resubmit.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-gray-900">
+              Reason for rejection <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              rows={4}
+              placeholder="Explain why this payroll is being rejected…"
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
+            />
+          </div>
+        </div>
       </Modal>
     </div>
   );

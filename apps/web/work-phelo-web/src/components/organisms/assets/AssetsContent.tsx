@@ -258,8 +258,12 @@ export function AssetsContent() {
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">
-          <p className="text-sm font-medium text-gray-900">Loading assets...</p>
+        <div className="flex flex-col items-center justify-center flex-1 gap-4">
+          <div className="relative w-8 h-8">
+            <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
+            <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
+          </div>
+          <p className="text-sm text-gray-500 font-medium">Loading...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">

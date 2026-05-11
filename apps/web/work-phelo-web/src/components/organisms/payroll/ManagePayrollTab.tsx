@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
@@ -9,7 +9,7 @@ import { useEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 import { PayrollItemsPanel } from './PayrollItemsPanel';
-import { DeductionsPanel, DeductionItem } from './DeductionsPanel';
+import { DeductionsPanel } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
 
@@ -26,7 +26,7 @@ function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: num
         setLocal(e.target.value);
         onChange(e.target.value === '' ? 0 : Number(e.target.value));
       }}
-      className="w-28 px-3 py-1.5 text-sm focus:outline-none placeholder:text-gray-300"
+      className="w-28 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 cursor-text hover:border-brand/50 hover:bg-white focus:outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10 placeholder:text-gray-300 transition-colors"
     />
   );
 }
@@ -54,7 +54,7 @@ export function ManagePayrollTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
-  const [deductionsMap, setDeductionsMap] = useState<Record<string, DeductionItem[]>>({});
+  const [deductionsTotalsMap, setDeductionsTotalsMap] = useState<Record<string, number>>({});
 
   const [allowancePanel, setAllowancePanel] = useState<{ rowId: string; rowName: string } | null>(
     null,
@@ -65,18 +65,30 @@ export function ManagePayrollTab() {
   const [runPanelOpen, setRunPanelOpen] = useState(false);
   const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
 
+  // Initialise deduction totals from employee profile data
+  const profileDeductionTotals = useMemo(() => {
+    const map: Record<string, number> = {};
+    (empData?.data ?? []).forEach((e) => {
+      if (e.deductions) {
+        map[e.id] = e.deductions
+          .filter((d) => d.amountPaid < d.totalAmount)
+          .reduce((sum, d) => sum + d.monthlyRate, 0);
+      }
+    });
+    return map;
+  }, [empData]);
+
   const payrollRows: PayrollRow[] = useMemo(() => {
-    const employees: Employee[] = empData?.data ?? [];
+    const employees: Employee[] = (empData?.data ?? []).filter(
+      (e) => e.userStatus !== 'PENDING_VERIFICATION',
+    );
     return employees.map((e) => {
       const basic = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
       const savedAllowances: AllowanceItem[] =
         e.allowances?.map((a) => ({ name: a.type as string, amount: Number(a.amount) })) ?? [];
       const allowances = allowancesMap[e.id] ?? savedAllowances;
       const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
-      const deductionItems = deductionsMap[e.id] ?? [];
-      const otherDeductions = deductionItems
-        .filter((d) => d.amountPaid < d.totalAmount)
-        .reduce((sum, d) => sum + d.monthlyRate, 0);
+      const otherDeductions = deductionsTotalsMap[e.id] ?? profileDeductionTotals[e.id] ?? 0;
       const calc = calculatePayroll({
         basicSalary: basic,
         allowances,
@@ -101,7 +113,7 @@ export function ManagePayrollTab() {
         department: e.department?.name,
       };
     });
-  }, [empData, basicMap, allowancesMap, deductionsMap]);
+  }, [empData, basicMap, allowancesMap, deductionsTotalsMap, profileDeductionTotals]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery) return payrollRows;
@@ -131,18 +143,13 @@ export function ManagePayrollTab() {
       result[id] = { ...result[id], basicSalary: val };
     });
     Object.entries(allowancesMap).forEach(([id, items]) => {
-      result[id] = { ...result[id], totalAllowances: items.reduce((s, a) => s + a.amount, 0) };
-    });
-    Object.entries(deductionsMap).forEach(([id, items]) => {
       result[id] = {
         ...result[id],
-        otherDeductions: items
-          .filter((d) => d.amountPaid < d.totalAmount)
-          .reduce((s, d) => s + d.monthlyRate, 0),
+        allowanceItems: items.map((a) => ({ name: a.name, amount: a.amount })),
       };
     });
     return result;
-  }, [basicMap, allowancesMap, deductionsMap]);
+  }, [basicMap, allowancesMap]);
 
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
@@ -178,9 +185,14 @@ export function ManagePayrollTab() {
       render: (row) => (
         <button
           onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
-          className="text-sm font-medium text-gray-900 hover:text-brand transition-colors"
+          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.allowances > 0 ? `GHS ${row.allowances.toLocaleString()}` : '—'}
+          {row.allowances > 0 ? (
+            `GHS ${row.allowances.toLocaleString()}`
+          ) : (
+            <span className="text-gray-400">Add</span>
+          )}
+          <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
     },
@@ -190,9 +202,14 @@ export function ManagePayrollTab() {
       render: (row) => (
         <button
           onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
-          className="text-sm font-medium text-gray-900 hover:text-brand transition-colors"
+          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.deductions > 0 ? `GHS ${row.deductions.toLocaleString()}` : '—'}
+          {row.deductions > 0 ? (
+            `GHS ${row.deductions.toLocaleString()}`
+          ) : (
+            <span className="text-gray-400">Add</span>
+          )}
+          <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
     },
@@ -305,11 +322,11 @@ export function ManagePayrollTab() {
       <DeductionsPanel
         isOpen={!!deductionPanel}
         onClose={() => setDeductionPanel(null)}
+        employeeId={deductionPanel?.rowId ?? ''}
         employeeName={deductionPanel?.rowName ?? ''}
-        items={deductionPanel ? (deductionsMap[deductionPanel.rowId] ?? []) : []}
-        onSave={(items) => {
+        onActiveTotal={(total) => {
           if (!deductionPanel) return;
-          setDeductionsMap((prev) => ({ ...prev, [deductionPanel.rowId]: items }));
+          setDeductionsTotalsMap((prev) => ({ ...prev, [deductionPanel.rowId]: total }));
         }}
       />
 

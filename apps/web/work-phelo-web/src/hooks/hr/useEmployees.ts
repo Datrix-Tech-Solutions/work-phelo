@@ -4,10 +4,13 @@ import {
   Employee,
   EmployeeOption,
   EmployeeAllowance,
+  EmployeeDeduction,
   EmployeeDocument,
   CreateEmployeePayload,
   UpdateEmployeePayload,
   AddAllowancePayload,
+  CreateDeductionPayload,
+  UpdateDeductionPayload,
   UploadDocumentPayload,
   EmployeeQuery,
   OffboardingRecord,
@@ -249,6 +252,64 @@ export function useUploadDocument(employeeId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+    },
+  });
+}
+
+export function useEmployeeDeductions(employeeId: string) {
+  return useQuery({
+    queryKey: ['employees', employeeId, 'deductions'],
+    queryFn: async () => {
+      const res = await api.get<EmployeeDeduction[]>(`/hr/employees/${employeeId}/deductions`);
+      return res.data;
+    },
+    enabled: !!employeeId,
+  });
+}
+
+export function useCreateDeduction(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateDeductionPayload) => {
+      const res = await api.post<EmployeeDeduction>(
+        `/hr/employees/${employeeId}/deductions`,
+        payload,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'deductions'] });
+    },
+  });
+}
+
+export function useUpdateDeduction(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      deductionId,
+      ...payload
+    }: UpdateDeductionPayload & { deductionId: string }) => {
+      const res = await api.patch<EmployeeDeduction>(
+        `/hr/employees/${employeeId}/deductions/${deductionId}`,
+        payload,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'deductions'] });
+    },
+  });
+}
+
+export function useDeleteDeduction(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (deductionId: string) => {
+      await api.delete(`/hr/employees/${employeeId}/deductions/${deductionId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'deductions'] });
     },
   });
 }

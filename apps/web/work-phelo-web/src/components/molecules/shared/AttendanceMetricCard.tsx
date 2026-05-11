@@ -28,7 +28,7 @@ export function AttendanceMetricCard({
   const [confirmClockOut, setConfirmClockOut] = useState(false);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-card px-5 py-5 flex flex-col gap-3">
+    <div className="bg-white border border-gray-200 rounded-card px-5 py-5 flex flex-col shadow-sm">
       {/* Header */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-gray-500 font-medium">
@@ -42,23 +42,23 @@ export function AttendanceMetricCard({
       </div>
 
       {/* Content */}
-      <div className="flex items-end justify-between min-h-13">
+      <div className="flex items-end justify-between gap-3 min-h-13">
         {isDone ? (
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-0.5 min-w-0">
             <p className="text-sm font-semibold text-green-600">All done for today!</p>
             {hoursWorked && <p className="text-xs text-gray-400">{hoursWorked} hours worked</p>}
           </div>
         ) : clockedIn ? (
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-gray-700 min-w-0">
             Clocked in at <span className="font-semibold text-gray-900">{clockInTime}</span>
           </p>
         ) : (
-          <p className="text-sm text-gray-400">You haven&apos;t clocked in yet</p>
+          <p className="text-sm text-gray-400 min-w-0">You haven&apos;t clocked in yet</p>
         )}
 
         {/* Action Button */}
         {isDone ? (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-full border border-green-200">
+          <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-full border border-green-200">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Completed
           </span>
@@ -68,7 +68,7 @@ export function AttendanceMetricCard({
             size="sm"
             onClick={() => setConfirmClockOut(true)}
             disabled={isLoading}
-            className="text-orange-600 border-orange-200 hover:bg-orange-50"
+            className="shrink-0 text-orange-600 border-orange-200 hover:bg-orange-50"
           >
             Clock Out
           </Button>
@@ -78,7 +78,7 @@ export function AttendanceMetricCard({
             size="sm"
             onClick={() => setConfirmClockIn(true)}
             disabled={isLoading}
-            className="bg-brand hover:bg-brand-hover"
+            className="shrink-0 bg-brand hover:bg-brand-hover"
           >
             Clock In
           </Button>

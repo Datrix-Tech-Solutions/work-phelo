@@ -121,6 +121,23 @@ export function useReturnPayrollToDraft() {
   });
 }
 
+export function useRejectPayroll() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res = await api.patch<PayrollRun>(`/hr/payroll/${id}/reject`, {
+        rejectionReason: reason,
+      });
+      return res.data;
+    },
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['payroll'] });
+      queryClient.invalidateQueries({ queryKey: ['payroll', id] });
+    },
+  });
+}
+
 export function useMarkPayrollPaid() {
   const queryClient = useQueryClient();
 

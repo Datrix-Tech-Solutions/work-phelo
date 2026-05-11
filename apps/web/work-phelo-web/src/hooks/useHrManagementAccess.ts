@@ -7,10 +7,17 @@ export function useHrManagementAccess() {
   const canManageRoles = usePermission(Permission.MANAGE_ROLES);
   const canAssignRoles = usePermission(Permission.ASSIGN_ROLE);
   const canViewAuditLogs = usePermission(Permission.VIEW_AUDIT_LOGS);
+  const canReadDepartments = usePermission(Permission.READ_DEPARTMENTS);
+  const canReadBranches = usePermission(Permission.READ_BRANCHES);
 
   const canAccessRoles = canManageRoles || canAssignRoles;
   const hasAnyManagementAccess =
-    canManageLeaveTypes || canConfigureAppraisal || canAccessRoles || canViewAuditLogs;
+    canManageLeaveTypes ||
+    canConfigureAppraisal ||
+    canAccessRoles ||
+    canViewAuditLogs ||
+    canReadDepartments ||
+    canReadBranches;
 
   return {
     canManageLeaveTypes,
@@ -19,6 +26,8 @@ export function useHrManagementAccess() {
     canAssignRoles,
     canAccessRoles,
     canViewAuditLogs,
+    canReadDepartments,
+    canReadBranches,
     hasAnyManagementAccess,
   };
 }
