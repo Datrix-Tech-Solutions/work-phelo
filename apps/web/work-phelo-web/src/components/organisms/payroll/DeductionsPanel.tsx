@@ -5,22 +5,24 @@ import { Plus, CheckCircle2, Clock } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { inputClass } from '@/lib/utils';
+import {
+  useEmployeeDeductions,
+  useCreateDeduction,
+  useUpdateDeduction,
+  useDeleteDeduction,
+} from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import { EmployeeDeduction } from '@/types/hr';
 
-export interface DeductionItem {
-  id: string;
-  name: string;
-  totalAmount: number;
-  monthlyRate: number;
-  amountPaid: number;
-  startDate: string;
-}
+export type { EmployeeDeduction as DeductionItem };
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  employeeId: string;
   employeeName: string;
-  items: DeductionItem[];
-  onSave: (items: DeductionItem[]) => void;
+  onActiveTotal?: (total: number) => void;
 }
 
 interface FormState {
@@ -47,10 +49,12 @@ function DeductionCard({
   item,
   onEdit,
   onDelete,
+  isDeleting,
 }: {
-  item: DeductionItem;
-  onEdit: (item: DeductionItem) => void;
+  item: EmployeeDeduction;
+  onEdit: (item: EmployeeDeduction) => void;
   onDelete: (id: string) => void;
+  isDeleting: boolean;
 }) {
   const balance = Math.max(0, item.totalAmount - item.amountPaid);
   const isCompleted = balance === 0;
@@ -123,7 +127,8 @@ function DeductionCard({
           </button>
           <button
             onClick={() => onDelete(item.id)}
-            className="text-xs text-red-500 hover:text-red-600 font-medium transition-colors"
+            disabled={isDeleting}
+            className="text-xs text-red-500 hover:text-red-600 font-medium transition-colors disabled:opacity-50"
           >
             Remove
           </button>
@@ -133,12 +138,24 @@ function DeductionCard({
   );
 }
 
-function DeductionsPanelContent({ employeeName, items, onSave, onClose }: Omit<Props, 'isOpen'>) {
-  const [deductions, setDeductions] = useState<DeductionItem[]>(items);
-  const [showForm, setShowForm] = useState(items.length === 0);
+function DeductionsPanelContent({
+  employeeId,
+  employeeName,
+  onClose,
+  onActiveTotal,
+}: Omit<Props, 'isOpen'>) {
+  const toast = useToast();
+  const { data: deductions = [], isLoading } = useEmployeeDeductions(employeeId);
+  const { mutate: createDeduction, isPending: isCreating } = useCreateDeduction(employeeId);
+  const { mutate: updateDeduction, isPending: isUpdating } = useUpdateDeduction(employeeId);
+  const { mutate: deleteDeduction, isPending: isDeleting } = useDeleteDeduction(employeeId);
+
+  const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Partial<FormState>>({});
+
+  const isMutating = isCreating || isUpdating;
 
   const activeMonthlyTotal = deductions
     .filter((d) => d.amountPaid < d.totalAmount)
@@ -157,40 +174,49 @@ function DeductionsPanelContent({ employeeName, items, onSave, onClose }: Omit<P
 
   const handleSubmitForm = () => {
     if (!validate()) return;
+
+    const payload = {
+      name: form.name.trim(),
+      totalAmount: Number(form.totalAmount),
+      monthlyRate: Number(form.monthlyRate),
+      startDate: form.startDate,
+    };
+
     if (editingId) {
-      setDeductions((prev) =>
-        prev.map((d) =>
-          d.id === editingId
-            ? {
-                ...d,
-                name: form.name.trim(),
-                totalAmount: Number(form.totalAmount),
-                monthlyRate: Number(form.monthlyRate),
-                startDate: form.startDate,
-              }
-            : d,
-        ),
-      );
-      setEditingId(null);
-    } else {
-      setDeductions((prev) => [
-        ...prev,
+      updateDeduction(
+        { deductionId: editingId, ...payload },
         {
-          id: crypto.randomUUID(),
-          name: form.name.trim(),
-          totalAmount: Number(form.totalAmount),
-          monthlyRate: Number(form.monthlyRate),
-          amountPaid: 0,
-          startDate: form.startDate,
+          onSuccess: (updated) => {
+            toast.success('Deduction updated');
+            onActiveTotal?.(
+              deductions
+                .map((d) => (d.id === editingId ? updated : d))
+                .filter((d) => d.amountPaid < d.totalAmount)
+                .reduce((s, d) => s + d.monthlyRate, 0),
+            );
+            resetForm();
+          },
+          onError: (err) => toast.error(extractError(err, 'Failed to update deduction')),
         },
-      ]);
+      );
+    } else {
+      createDeduction(payload, {
+        onSuccess: (created) => {
+          toast.success('Deduction added');
+          const updated = [...deductions, created];
+          onActiveTotal?.(
+            updated
+              .filter((d) => d.amountPaid < d.totalAmount)
+              .reduce((s, d) => s + d.monthlyRate, 0),
+          );
+          resetForm();
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to add deduction')),
+      });
     }
-    setForm(emptyForm());
-    setErrors({});
-    setShowForm(false);
   };
 
-  const handleEdit = (item: DeductionItem) => {
+  const handleEdit = (item: EmployeeDeduction) => {
     setEditingId(item.id);
     setForm({
       name: item.name,
@@ -201,11 +227,26 @@ function DeductionsPanelContent({ employeeName, items, onSave, onClose }: Omit<P
     setShowForm(true);
   };
 
-  const handleCancelForm = () => {
+  const handleDelete = (id: string) => {
+    deleteDeduction(id, {
+      onSuccess: () => {
+        toast.success('Deduction removed');
+        const remaining = deductions.filter((d) => d.id !== id);
+        onActiveTotal?.(
+          remaining
+            .filter((d) => d.amountPaid < d.totalAmount)
+            .reduce((s, d) => s + d.monthlyRate, 0),
+        );
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to remove deduction')),
+    });
+  };
+
+  const resetForm = () => {
     setForm(emptyForm());
     setErrors({});
     setEditingId(null);
-    setShowForm(deductions.length === 0);
+    setShowForm(false);
   };
 
   const previewMonths =
@@ -214,122 +255,128 @@ function DeductionsPanelContent({ employeeName, items, onSave, onClose }: Omit<P
       : null;
 
   return (
-    <SidePanel
-      isOpen
-      onClose={onClose}
-      title="Deductions"
-      description={employeeName}
-      footer={
-        <div className="flex justify-end gap-3">
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => {
-              onSave(deductions);
-              onClose();
-            }}
-          >
-            Save
-          </Button>
-        </div>
-      }
-    >
+    <SidePanel isOpen onClose={onClose} title="Deductions" description={employeeName}>
       <div className="flex flex-col gap-4">
-        {activeMonthlyTotal > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 bg-brand/5 rounded-xl border border-brand/10">
-            <span className="text-sm font-medium text-gray-600">This month&apos;s deduction</span>
-            <span className="text-sm font-semibold text-brand">{fmtAmt(activeMonthlyTotal)}</span>
-          </div>
-        )}
-
-        {deductions.map((item) => (
-          <DeductionCard
-            key={item.id}
-            item={item}
-            onEdit={handleEdit}
-            onDelete={(id) => setDeductions((prev) => prev.filter((d) => d.id !== id))}
-          />
-        ))}
-
-        {showForm ? (
-          <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4 bg-gray-50">
-            <p className="text-sm font-semibold text-gray-700">
-              {editingId ? 'Edit Deduction' : 'New Deduction'}
-            </p>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">Name</label>
-              <input
-                type="text"
-                placeholder="e.g. Staff Loan"
-                value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                className={inputClass(errors.name)}
-              />
-              {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+        {isLoading ? (
+          <div className="flex flex-col items-center gap-4 py-12">
+            <div className="relative w-8 h-8">
+              <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
+              <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
             </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-gray-500">Total Amount</label>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  min="0"
-                  value={form.totalAmount}
-                  onChange={(e) => setForm((p) => ({ ...p, totalAmount: e.target.value }))}
-                  className={inputClass(errors.totalAmount)}
-                />
-                {errors.totalAmount && <p className="text-xs text-red-500">{errors.totalAmount}</p>}
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-medium text-gray-500">Monthly Rate</label>
-                <input
-                  type="number"
-                  placeholder="0.00"
-                  min="0"
-                  value={form.monthlyRate}
-                  onChange={(e) => setForm((p) => ({ ...p, monthlyRate: e.target.value }))}
-                  className={inputClass(errors.monthlyRate)}
-                />
-                {errors.monthlyRate && <p className="text-xs text-red-500">{errors.monthlyRate}</p>}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-500">Start Date</label>
-              <input
-                type="date"
-                value={form.startDate}
-                onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
-                className={inputClass(undefined)}
-              />
-            </div>
-
-            {previewMonths !== null && previewMonths > 0 && (
-              <p className="text-xs text-gray-400">
-                ~{previewMonths} month{previewMonths !== 1 ? 's' : ''} to clear at this rate
-              </p>
-            )}
-
-            <div className="flex gap-2 justify-end pt-1">
-              <Button size="sm" variant="outline" onClick={handleCancelForm}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleSubmitForm}>
-                {editingId ? 'Update' : 'Add'}
-              </Button>
-            </div>
+            <p className="text-sm text-gray-500 font-medium">Loading...</p>
           </div>
         ) : (
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 text-sm text-brand hover:text-brand/80 transition-colors py-1"
-          >
-            <Plus className="w-4 h-4" />
-            Add Deduction
-          </button>
+          <>
+            {activeMonthlyTotal > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 bg-brand/5 rounded-xl border border-brand/10">
+                <span className="text-sm font-medium text-gray-600">
+                  This month&apos;s deduction
+                </span>
+                <span className="text-sm font-semibold text-brand">
+                  {fmtAmt(activeMonthlyTotal)}
+                </span>
+              </div>
+            )}
+
+            {deductions.map((item) => (
+              <DeductionCard
+                key={item.id}
+                item={item}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                isDeleting={isDeleting}
+              />
+            ))}
+
+            {showForm ? (
+              <div className="flex flex-col gap-3 rounded-xl border border-gray-200 p-4 bg-gray-50">
+                <p className="text-sm font-semibold text-gray-700">
+                  {editingId ? 'Edit Deduction' : 'New Deduction'}
+                </p>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-500">Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Staff Loan"
+                    value={form.name}
+                    onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                    className={inputClass(errors.name)}
+                  />
+                  {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-gray-500">Total Amount</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      value={form.totalAmount}
+                      onChange={(e) => setForm((p) => ({ ...p, totalAmount: e.target.value }))}
+                      className={inputClass(errors.totalAmount)}
+                    />
+                    {errors.totalAmount && (
+                      <p className="text-xs text-red-500">{errors.totalAmount}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-gray-500">Monthly Rate</label>
+                    <input
+                      type="number"
+                      placeholder="0.00"
+                      min="0"
+                      value={form.monthlyRate}
+                      onChange={(e) => setForm((p) => ({ ...p, monthlyRate: e.target.value }))}
+                      className={inputClass(errors.monthlyRate)}
+                    />
+                    {errors.monthlyRate && (
+                      <p className="text-xs text-red-500">{errors.monthlyRate}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-gray-500">Start Date</label>
+                  <input
+                    type="date"
+                    value={form.startDate}
+                    onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))}
+                    className={inputClass(undefined)}
+                  />
+                </div>
+
+                {previewMonths !== null && previewMonths > 0 && (
+                  <p className="text-xs text-gray-400">
+                    ~{previewMonths} month{previewMonths !== 1 ? 's' : ''} to clear at this rate
+                  </p>
+                )}
+
+                <div className="flex gap-2 justify-end pt-1">
+                  <Button size="sm" variant="outline" onClick={resetForm} disabled={isMutating}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleSubmitForm}
+                    isLoading={isMutating}
+                    loadingText="Saving…"
+                  >
+                    {editingId ? 'Update' : 'Add'}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowForm(true)}
+                className="flex items-center gap-2 text-sm text-brand hover:text-brand/80 transition-colors py-1"
+              >
+                <Plus className="w-4 h-4" />
+                Add Deduction
+              </button>
+            )}
+          </>
         )}
       </div>
     </SidePanel>
@@ -344,5 +391,5 @@ export function DeductionsPanel({ isOpen, ...props }: Props) {
       </SidePanel>
     );
   }
-  return <DeductionsPanelContent key={`${props.employeeName}-${props.items.length}`} {...props} />;
+  return <DeductionsPanelContent key={props.employeeId} {...props} />;
 }

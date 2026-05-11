@@ -1,52 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormSection } from '@/components/atoms/FormSection';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import {
-  AddAllowancePanel,
-  CompanyAllowance,
-  AllowanceFormValues,
-} from '@/components/organisms/companyPolicies/AddAllowancePanel';
 import { usePayrollSettings, useUpdatePayrollSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { inputClass } from '@/lib/utils';
-import type { AllowanceType } from '@/types/hr';
-
-const ALLOWANCE_TYPE_LABELS: Record<AllowanceType, string> = {
-  TRANSPORT: 'Transport',
-  HOUSING: 'Housing',
-  MEDICAL: 'Medical',
-  OTHER: 'Other',
-};
-
-const ALLOWANCE_COLUMNS: Column<CompanyAllowance>[] = [
-  { key: 'name', label: 'Name' },
-  {
-    key: 'type',
-    label: 'Type',
-    render: (row) => ALLOWANCE_TYPE_LABELS[row.type] ?? row.type,
-  },
-  {
-    key: 'description',
-    label: 'Description',
-    render: (row) => row.description || <span className="text-gray-400">—</span>,
-  },
-  {
-    key: 'createdAt',
-    label: 'Created',
-    render: (row) =>
-      new Date(row.createdAt).toLocaleDateString('en-GB', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      }),
-  },
-];
 
 interface FinancesForm {
   payrollTier2FundName: string;
@@ -59,10 +21,6 @@ export default function FinancesPage() {
   const toast = useToast();
   const { data: settings, isLoading } = usePayrollSettings();
   const { mutate: updateSettings, isPending } = useUpdatePayrollSettings();
-
-  const [allowances, setAllowances] = useState<CompanyAllowance[]>([]);
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [selectedAllowance, setSelectedAllowance] = useState<CompanyAllowance | null>(null);
 
   const {
     register,
@@ -115,21 +73,6 @@ export default function FinancesPage() {
         onError: (err) => toast.error(extractError(err, 'Failed to save settings')),
       },
     );
-  };
-
-  const handleAllowanceSubmit = (data: AllowanceFormValues) => {
-    if (selectedAllowance) {
-      setAllowances((prev) =>
-        prev.map((a) => (a.id === selectedAllowance.id ? { ...a, ...data } : a)),
-      );
-    } else {
-      setAllowances((prev) => [
-        { id: crypto.randomUUID(), ...data, createdAt: new Date().toISOString() },
-        ...prev,
-      ]);
-    }
-    setPanelOpen(false);
-    setSelectedAllowance(null);
   };
 
   if (isLoading) return <div className="text-sm text-gray-400">Loading…</div>;
@@ -218,59 +161,6 @@ export default function FinancesPage() {
           </Button>
         </div>
       </form>
-
-      {/* Divider */}
-      <div className="border-t border-gray-100" />
-
-      {/* Allowance Types */}
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">
-              Allowance Types
-            </h3>
-            <p className="text-sm text-gray-500 mt-1">
-              Define allowance types that can be assigned to employees.
-            </p>
-          </div>
-          <Button size="sm" onClick={() => setPanelOpen(true)}>
-            + Add Allowance
-          </Button>
-        </div>
-
-        <DataTable
-          columns={ALLOWANCE_COLUMNS}
-          data={allowances}
-          emptyMessage="No allowances defined yet"
-          currentPage={1}
-          totalPages={1}
-          onPageChange={() => {}}
-          rowActions={(row) => [
-            {
-              label: 'Edit',
-              onClick: () => {
-                setSelectedAllowance(row);
-                setPanelOpen(true);
-              },
-            },
-            {
-              label: 'Delete',
-              danger: true,
-              onClick: () => setAllowances((prev) => prev.filter((a) => a.id !== row.id)),
-            },
-          ]}
-        />
-      </div>
-
-      <AddAllowancePanel
-        isOpen={panelOpen}
-        onClose={() => {
-          setPanelOpen(false);
-          setSelectedAllowance(null);
-        }}
-        allowance={selectedAllowance}
-        onSubmit={handleAllowanceSubmit}
-      />
     </div>
   );
 }

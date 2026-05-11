@@ -80,14 +80,14 @@ export default function CycleRecipientsPage() {
                       className={cn(
                         'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors',
                         i > 0 && 'border-t border-gray-100',
-                        checked ? 'bg-orange-50' : 'bg-white hover:bg-gray-50',
+                        checked ? 'bg-blue-50' : 'bg-white hover:bg-gray-50',
                       )}
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={toggle}
-                        className="w-4 h-4 rounded accent-orange-500 cursor-pointer"
+                        className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
                       />
                       <span className="text-sm text-gray-900">{opt.label}</span>
                     </label>

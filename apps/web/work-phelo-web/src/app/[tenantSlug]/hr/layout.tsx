@@ -29,8 +29,6 @@ export default function HRLayout({
   const [activeTab, setActiveTab] = useState('portal');
 
   const { hasAnyManagementAccess } = useHrManagementAccess();
-  const canReadDepartments = usePermission(Permission.READ_DEPARTMENTS);
-  const canReadBranches = usePermission(Permission.READ_BRANCHES);
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
@@ -89,8 +87,7 @@ export default function HRLayout({
   const coreKeys = new Set(['dashboard', 'management', 'announcements']);
   const navAccess: Record<string, boolean> = {
     dashboard: true,
-    departments: canReadDepartments,
-    branches: canReadBranches,
+
     employees: canReadEmployees || canReadOwnProfile,
     leave: canAccessLeave,
     appraisal: canAccessAppraisal,

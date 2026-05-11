@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
 import { useLeaveTypes, useCreateLeaveRequest } from '@/hooks/useLeave';
 import { usePublicHolidays } from '@/hooks/usePublicHolidays';
-import { useMyProfile } from '@/hooks';
+import { useMyProfile, useEmployeeOptions } from '@/hooks';
 import { CreateLeaveRequestDto, LeaveBalance, PublicHoliday } from '@/types/hr';
 import { FileUpload } from '@/components/atoms/FileUpload';
 import { LeaveBalanceBar } from '@/components/molecules/leave/LeaveBalanceBar';
@@ -28,6 +28,7 @@ type FormValues = {
   startDate: string;
   endDate: string;
   reason: string;
+  careOfEmployeeId?: string;
 };
 
 /* ── Working days calculator ── */
@@ -55,6 +56,19 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const { data: leaveTypes = [] } = useLeaveTypes(tenantSlug);
   const { data: holidays = [] } = usePublicHolidays();
   const { data: myProfile } = useMyProfile();
+  const { data: allEmployees = [] } = useEmployeeOptions();
+
+  const careOfOptions = useMemo(
+    () =>
+      allEmployees
+        .filter((e) => e.employmentStatus !== 'ON_LEAVE' && e.id !== myProfile?.id)
+        .map((e) => ({
+          value: e.id,
+          label: `${e.firstName} ${e.lastName}`,
+          sublabel: e.jobTitle,
+        })),
+    [allEmployees, myProfile?.id],
+  );
 
   const visibleLeaveTypes = useMemo(() => {
     const gender = myProfile?.gender;
@@ -91,6 +105,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const leaveTypeId = useWatch({ control, name: 'leaveTypeId' });
   const startDate = useWatch({ control, name: 'startDate' });
   const endDate = useWatch({ control, name: 'endDate' });
+  // TODO: include careOfEmployeeId in payload once backend supports it
 
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((t) => t.id === leaveTypeId),
@@ -243,6 +258,29 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
           placeholder="Add a note for your manager"
           rows={3}
           className={inputClass(undefined, 'resize-none')}
+        />
+      </div>
+
+      {/* Care of */}
+      <div className="flex flex-col gap-4">
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Care of</p>
+          <p className="text-xs text-gray-500 mt-1">
+            Assign a colleague to cover your responsibilities while you are away.
+          </p>
+        </div>
+        <Controller
+          name="careOfEmployeeId"
+          control={control}
+          render={({ field }) => (
+            <SearchSelect
+              label="Cover Person (optional)"
+              placeholder="Select a colleague"
+              options={careOfOptions}
+              value={field.value ?? ''}
+              onChange={field.onChange}
+            />
+          )}
         />
       </div>
 

@@ -61,6 +61,8 @@ export default function HRManagementLayout({ children }: { children: React.React
     canConfigureAppraisal,
     canAccessRoles,
     canViewAuditLogs,
+    canReadDepartments,
+    canReadBranches,
     hasAnyManagementAccess,
   } = useHrManagementAccess();
 
@@ -71,6 +73,12 @@ export default function HRManagementLayout({ children }: { children: React.React
   }, [hasAnyManagementAccess, params.tenantSlug, router, user]);
 
   const groups: TabGroup[] = [
+    {
+      tabs: [
+        ...(canReadDepartments ? [{ label: 'Departments', href: `${base}/departments` }] : []),
+        ...(canReadBranches ? [{ label: 'Branches', href: `${base}/branches` }] : []),
+      ],
+    },
     {
       tabs: canManageLeaveTypes
         ? [

@@ -102,6 +102,7 @@ export interface Employee {
   createdAt?: string;
   assets?: import('@/types/asset').EmployeeAsset[];
   allowances?: EmployeeAllowance[];
+  deductions?: EmployeeDeduction[];
   offboarding?: OffboardingRecord;
 }
 
@@ -113,6 +114,32 @@ export interface EmployeeAllowance {
   description?: string;
   effectiveFrom: string;
   createdAt: string;
+}
+
+export interface EmployeeDeduction {
+  id: string;
+  employeeId: string;
+  name: string;
+  totalAmount: number;
+  monthlyRate: number;
+  amountPaid: number;
+  startDate: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateDeductionPayload {
+  name: string;
+  totalAmount: number;
+  monthlyRate: number;
+  startDate: string;
+}
+
+export interface UpdateDeductionPayload {
+  name?: string;
+  totalAmount?: number;
+  monthlyRate?: number;
+  startDate?: string;
 }
 
 export interface EmployeeDocument {
@@ -352,7 +379,7 @@ export interface LeaveBalance {
 }
 
 // ── Payroll ───────────────────────────────────────────────
-export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID' | 'REJECTED';
 
 export interface PayrollRun {
   id: string;
@@ -374,6 +401,8 @@ export interface PayrollRun {
   approvedBy?: string;
   approvedAt?: string;
   paidAt?: string;
+  rejectedAt?: string;
+  rejectionReason?: string | null;
   tier3Enabled: boolean;
   tier3Rate?: string | null;
   tier3SchemeName?: string | null;
@@ -391,6 +420,13 @@ export interface PayrollRunEmployeeSummary {
   bankAccountNumber?: string | null;
 }
 
+export interface PayrollItemAllowance {
+  id: string;
+  payrollItemId: string;
+  name: string;
+  amount: string;
+}
+
 export interface PayrollItem {
   id: string;
   tenantId: string;
@@ -398,6 +434,7 @@ export interface PayrollItem {
   employeeId: string;
   basicSalary: string;
   totalAllowances: string;
+  allowanceItems?: PayrollItemAllowance[];
   transportAmount: string;
   otherDeductions: string;
   overtimePay: string;
@@ -439,6 +476,7 @@ export interface RunPayrollDto {
 
 export interface UpdatePayrollItemDto {
   basicSalary?: number;
+  allowanceItems?: { name: string; amount: number }[];
   totalAllowances?: number;
   transportAmount?: number;
   otherDeductions?: number;

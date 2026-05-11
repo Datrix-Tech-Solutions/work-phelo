@@ -32,8 +32,7 @@ const YEARS = Array.from({ length: 3 }, (_, i) => {
 
 export interface EmployeeOverride {
   basicSalary?: number;
-  totalAllowances?: number;
-  otherDeductions?: number;
+  allowanceItems?: { name: string; amount: number }[];
 }
 
 interface Totals {

@@ -34,24 +34,24 @@ export function BirthdaysCard({
               onClick={onScrollLeft}
               className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
             >
-              <ChevronLeft className="w-4 h-4 text-gray-600" />
+              <ChevronLeft className="w-4 h-4 text-gray-400" />
             </button>
             <button
               onClick={onScrollRight}
               className="p-1.5 rounded-full hover:bg-gray-100 transition-colors"
             >
-              <ChevronRight className="w-4 h-4 text-gray-600" />
+              <ChevronRight className="w-4 h-4 text-gray-400" />
             </button>
           </div>
         )}
       </div>
 
       {/* Divider */}
-      <div className="h-px bg-gray-100 -mx-5 mt-4 mb-5 shrink-0" />
+      <div className="h-px bg-gray-10 -mx-5 mt-0 mb-5 shrink-0" />
 
       {/* Content */}
       {birthdays.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
+        <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
           <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
             <PartyPopper className="w-6 h-6 text-gray-400" />
           </div>

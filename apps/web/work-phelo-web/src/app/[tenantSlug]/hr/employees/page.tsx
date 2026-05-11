@@ -59,10 +59,11 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
 
   const allEmployees = empResult?.data ?? [];
   // Advanced users can filter for restricted statuses explicitly, but they're hidden by default
-  const employees =
+  const employees = (
     canViewAllStatuses && statusFilter
       ? allEmployees
-      : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus));
+      : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus))
+  ).filter((e) => !typeFilter || e.employmentType === typeFilter);
 
   const { data: departments = [], isError: deptsError } = useDepartmentOptions();
 
@@ -154,7 +155,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           onChange={setStatusFilter}
           placeholder="All Statuses"
           options={[
-            { value: 'ACTIVE', label: 'Active' },
+            { value: 'ACTIVE', label: 'Permanent Staff' },
             { value: 'PROBATION', label: 'Probation' },
             ...(canViewAllStatuses
               ? [

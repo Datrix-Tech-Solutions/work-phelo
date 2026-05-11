@@ -3,8 +3,6 @@ import { NavGroup } from '@/components/organisms/shared/Sidebar';
 import {
   LayoutDashboard,
   CircleDollarSign,
-  Building,
-  Network,
   Users,
   CalendarRange,
   Trophy,
@@ -18,8 +16,6 @@ import {
 
 /* ── Icons ── */
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
-const DepartmentsIcon = () => <Building className="w-5 h-5" />;
-const BranchesIcon = () => <Network className="w-5 h-5" />;
 const EmployeesIcon = () => <Users className="w-5 h-5" />;
 const LeaveIcon = () => <CalendarRange className="w-5 h-5" />;
 const AppraisalIcon = () => <Trophy className="w-5 h-5" />;
@@ -52,22 +48,6 @@ export const HR_NAV_GROUPS: NavGroup[] = [
     label: 'People Management',
     items: [
       {
-        key: 'departments',
-        label: 'Departments',
-        icon: <DepartmentsIcon />,
-        href: 'departments',
-        enabled: true,
-        active: false,
-      },
-      {
-        key: 'branches',
-        label: 'Branches',
-        icon: <BranchesIcon />,
-        href: 'branches',
-        enabled: true,
-        active: false,
-      },
-      {
         key: 'employees',
         label: 'Employees',
         icon: <EmployeesIcon />,
@@ -88,6 +68,22 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         label: 'Appraisal',
         icon: <AppraisalIcon />,
         href: 'appraisal',
+        enabled: true,
+        active: false,
+      },
+      {
+        key: 'assets',
+        label: 'Asset Management',
+        icon: <AssetIcon />,
+        href: 'assets',
+        enabled: true,
+        active: false,
+      },
+      {
+        key: 'announcements',
+        label: 'Announcements',
+        icon: <MegaphoneIcon />,
+        href: 'announcements',
         enabled: true,
         active: false,
       },
@@ -135,19 +131,7 @@ export const HR_NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
-  {
-    label: 'Assets & Resources',
-    items: [
-      {
-        key: 'assets',
-        label: 'Asset Management',
-        icon: <AssetIcon />,
-        href: 'assets',
-        enabled: true,
-        active: false,
-      },
-    ],
-  },
+
   {
     label: 'Management',
     items: [
@@ -156,14 +140,6 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         label: 'HR Settings',
         icon: <ManagementIcon />,
         href: 'hrmanagement',
-        enabled: true,
-        active: false,
-      },
-      {
-        key: 'announcements',
-        label: 'Announcements',
-        icon: <MegaphoneIcon />,
-        href: 'announcements',
         enabled: true,
         active: false,
       },

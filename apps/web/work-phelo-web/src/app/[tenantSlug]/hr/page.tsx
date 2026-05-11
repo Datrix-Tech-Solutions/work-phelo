@@ -176,12 +176,6 @@ export default function EmployeeDashboardPage({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [myLeaveOpen, setMyLeaveOpen] = useState(false);
 
-  /* ── Announcement pagination ── */
-  const [announcementIdx, setAnnouncementIdx] = useState(0);
-  const prevAnnouncement = () => setAnnouncementIdx((i) => Math.max(0, i - 1));
-  const nextAnnouncement = () =>
-    setAnnouncementIdx((i) => Math.min(Math.max(announcements.length - 1, 0), i + 1));
-
   /* ── Birthday scroll ── */
   const birthdayRef = useRef<HTMLDivElement>(null);
   const scrollBirthdays = (dir: 'left' | 'right') => {
@@ -192,8 +186,10 @@ export default function EmployeeDashboardPage({
 
   /* ── Render ── */
   return (
-    <div className="p-6 flex flex-col gap-4 h-full overflow-hidden">
-      <DashboardWelcomeBanner tenantName={tenantName} fullName={fullName} />
+    <div className="p-6 flex flex-col gap-6 h-full overflow-y-auto">
+      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-2 bg-gray-50">
+        <DashboardWelcomeBanner tenantName={tenantName} fullName={fullName} />
+      </div>
 
       <DashboardStatCards
         annualBalance={annualBalance}
@@ -208,30 +204,26 @@ export default function EmployeeDashboardPage({
         onClockOut={handleClockOut}
       />
 
-      <div className="grid grid-cols-[3fr_2fr] gap-4 flex-1 min-h-0 overflow-hidden">
+      <div className="grid grid-cols-[3fr_2fr] gap-4">
         {/* Left column */}
-        <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
-          <AnnouncementCard
-            key={announcementIdx}
-            announcements={announcements}
-            currentIndex={announcementIdx}
-            onPrev={prevAnnouncement}
-            onNext={nextAnnouncement}
+        <div className="flex flex-col gap-4">
+          <AnnouncementCard announcements={announcements} />
+        </div>
+
+        {/* Right column */}
+        <div className="flex flex-col gap-4">
+          <QuickActionsCard
+            onPayslips={() => setPayslipsOpen(true)}
+            onAssets={() => setAssetsOpen(true)}
+            onLeave={() => setMyLeaveOpen(true)}
+            onSchedules={() => {}}
+            onProjects={() => {}}
           />
           <BirthdaysCard
             birthdays={birthdays}
             scrollRef={birthdayRef}
             onScrollLeft={() => scrollBirthdays('left')}
             onScrollRight={() => scrollBirthdays('right')}
-          />
-        </div>
-
-        {/* Right column */}
-        <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
-          <QuickActionsCard
-            onPayslips={() => setPayslipsOpen(true)}
-            onAssets={() => setAssetsOpen(true)}
-            onLeave={() => setMyLeaveOpen(true)}
           />
           <UpcomingHolidaysCard holidays={holidays} />
         </div>
