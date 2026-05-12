@@ -1,21 +1,21 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Download, Loader2 } from 'lucide-react';
-import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useMyPayslips } from '@/hooks/usePayroll';
 import { PayrollItem } from '@/types/hr';
-import { payrollMonthLabel, downloadPayslipPDF } from '@/lib/payrollUtils';
+import {
+  payrollMonthLabel,
+  downloadPayslipPDF,
+  PayslipCompanyInfo,
+  PayslipEmployeeInfo,
+  PayslipYTD,
+} from '@/lib/payrollUtils';
 import { useAuthStore } from '@/store/auth.store';
+import { useTenant, useMyProfile, useBranches } from '@/hooks';
 import { TaxReturnsPanel } from './TaxReturnsPanel';
-
-const STATUS_VARIANT = {
-  DRAFT: 'warning',
-  APPROVED: 'info',
-  PAID: 'success',
-} as const;
 
 function ghs(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
@@ -66,7 +66,37 @@ function Divider() {
 
 export function MyPayslipTab() {
   const { data: payslipsRaw } = useMyPayslips();
-  const companyName = useAuthStore((s) => s.user?.tenantName ?? '');
+  const user = useAuthStore((s) => s.user);
+  const { data: tenantData } = useTenant(user?.tenantId ?? '');
+  const { data: myProfile } = useMyProfile();
+  const { data: branches = [] } = useBranches();
+  const employeeBranch = myProfile?.branch ?? branches.find((b) => b.id === myProfile?.branchId);
+
+  const companyInfo: PayslipCompanyInfo = {
+    name: user?.tenantName ?? '',
+    email: tenantData?.email,
+    phone: tenantData?.phone,
+  };
+
+  const employeeInfo: PayslipEmployeeInfo | undefined = myProfile
+    ? {
+        firstName: myProfile.firstName,
+        lastName: myProfile.lastName,
+        employeeNumber: myProfile.employeeNumber,
+        jobTitle: myProfile.jobTitle,
+        department: myProfile.department?.name,
+        tinNumber: myProfile.tinNumber,
+        ssnit: myProfile.ssnit,
+        branchName: employeeBranch?.name,
+        branchAddress: employeeBranch?.address,
+        branchCity: employeeBranch?.city,
+        branchRegion: employeeBranch?.region,
+        branchCountry: employeeBranch?.country,
+        bankName: myProfile.bankName,
+        bankBranch: myProfile.bankBranch,
+        bankAccountNumber: myProfile.bankAccountNumber,
+      }
+    : undefined;
 
   const payslips: PayrollItem[] = useMemo(() => {
     const raw = Array.isArray(payslipsRaw) ? (payslipsRaw as PayrollItem[]) : [];
@@ -80,6 +110,23 @@ export function MyPayslipTab() {
         return by !== ay ? by - ay : bm - am;
       });
   }, [payslipsRaw]);
+
+  const calcYTD = useCallback(
+    (p: PayrollItem): PayslipYTD | undefined => {
+      if (!p.payrollRun) return undefined;
+      const { year, month } = p.payrollRun;
+      const ytdSlips = payslips.filter(
+        (s) => s.payrollRun?.year === year && s.payrollRun.month <= month,
+      );
+      return {
+        grossEarnings: ytdSlips.reduce((s, x) => s + parseFloat(x.grossSalary), 0),
+        ssnitContribution: ytdSlips.reduce((s, x) => s + parseFloat(x.employeeSSNIT), 0),
+        payeTax: ytdSlips.reduce((s, x) => s + parseFloat(x.payeTax), 0),
+        netPay: ytdSlips.reduce((s, x) => s + parseFloat(x.netSalary), 0),
+      };
+    },
+    [payslips],
+  );
 
   const [selectedId, setSelectedId] = useState('');
   const [downloading, setDownloading] = useState(false);
@@ -96,7 +143,6 @@ export function MyPayslipTab() {
   }
 
   const runStatus = selected?.payrollRun?.status ?? '';
-  const statusVariant = STATUS_VARIANT[runStatus as keyof typeof STATUS_VARIANT] ?? 'neutral';
   const canDownload = runStatus === 'APPROVED' || runStatus === 'PAID';
 
   const tier3Enabled = selected?.payrollRun?.tier3Enabled ?? false;
@@ -133,7 +179,6 @@ export function MyPayslipTab() {
                 onChange={setSelectedId}
               />
             </div>
-            {runStatus && <Badge variant={statusVariant} label={runStatus} />}
             {canDownload && (
               <Button
                 variant="outline"
@@ -143,7 +188,13 @@ export function MyPayslipTab() {
                   if (!selected) return;
                   setDownloading(true);
                   try {
-                    await downloadPayslipPDF(selected, payslipLabel(selected), companyName);
+                    await downloadPayslipPDF(
+                      selected,
+                      payslipLabel(selected),
+                      companyInfo,
+                      employeeInfo,
+                      calcYTD(selected),
+                    );
                   } finally {
                     setDownloading(false);
                   }

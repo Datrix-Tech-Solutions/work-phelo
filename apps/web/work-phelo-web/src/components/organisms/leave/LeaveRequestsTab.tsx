@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { StatCard } from '@/components/molecules/shared/StatCard';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { LeaveRequestDetailPanel } from '@/components/organisms/leave/LeaveRequestDetailPanel';

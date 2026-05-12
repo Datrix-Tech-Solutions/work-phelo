@@ -7,6 +7,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 interface AssetForm {
   name: string;
@@ -27,6 +28,8 @@ interface Props {
 }
 
 export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
+  const { currency: tenantCurrency } = useTenantConfig();
+
   const {
     register,
     handleSubmit,
@@ -34,7 +37,7 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
     control,
     setValue,
     formState: { errors },
-  } = useForm<AssetForm>({ defaultValues: { currency: 'GHS' } });
+  } = useForm<AssetForm>({ defaultValues: { currency: tenantCurrency } });
 
   const typeValue = useWatch({ control, name: 'type' });
   const conditionValue = useWatch({ control, name: 'condition' });
@@ -43,7 +46,7 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
   const currencyValue = useWatch({ control, name: 'currency' });
 
   const handleClose = () => {
-    reset({ currency: 'GHS' });
+    reset({ currency: tenantCurrency });
     onClose();
   };
 
@@ -54,7 +57,7 @@ export function AddAssetPanel({ isOpen, onClose, onSubmit }: Props) {
     }
     delete payload.customType;
     onSubmit(payload);
-    reset({ currency: 'GHS' });
+    reset({ currency: tenantCurrency });
   };
 
   return (

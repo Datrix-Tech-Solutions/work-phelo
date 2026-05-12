@@ -22,7 +22,7 @@ function ManagementTabs({ groups }: { groups: TabGroup[] }) {
   const pathname = usePathname();
 
   return (
-    <div className="flex items-end gap-1 px-8 border-b border-gray-200 bg-white">
+    <div className="flex items-end gap-1 px-8 border-b border-gray-200 bg-white overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
       {groups.map((group, gi) => (
         <div key={gi} className="flex items-end">
           {/* Divider between groups */}
@@ -107,20 +107,20 @@ export default function HRManagementLayout({ children }: { children: React.React
   ].filter((group) => group.tabs.length > 0);
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Page header */}
-      <div className="px-8 pt-8 pb-5 bg-white shrink-0">
-        <h1 className="text-xl font-semibold text-gray-900">HR Settings</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Configure leave types, appraisal templates, cycles, and roles
-        </p>
+    <div className="flex flex-col">
+      {/* Sticky header + tabs */}
+      <div className="sticky top-0 z-10 bg-white">
+        <div className="px-8 pt-8 pb-5">
+          <h1 className="text-xl font-semibold text-gray-900">HR Settings</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Configure leave types, appraisal templates, cycles, and roles
+          </p>
+        </div>
+        <ManagementTabs groups={groups} />
       </div>
 
-      {/* Tabs */}
-      <ManagementTabs groups={groups} />
-
       {/* Content */}
-      <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      <main className="p-8">{children}</main>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { useCreateBranch, useUpdateBranch, useBranches } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import type { Branch, EmployeeOption } from '@/types/hr';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { COUNTRY_OPTIONS } from '@/lib/CompanyOptions';
 
 interface BranchForm {
   name: string;
@@ -257,10 +258,18 @@ function BranchFormInner({ onClose, branch, employees }: Omit<BranchFormPanelPro
                 placeholder="e.g. Greater Accra"
               />
             </div>
-            <FormField
-              label="Country"
-              registration={form.register('country')}
-              placeholder="e.g. Ghana"
+            <Controller
+              control={form.control}
+              name="country"
+              render={({ field }) => (
+                <SearchSelect
+                  label="Country"
+                  placeholder="Select country"
+                  options={COUNTRY_OPTIONS}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
             />
           </div>
         </div>
