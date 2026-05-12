@@ -118,6 +118,7 @@ export class EmployeesController {
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({
     summary: 'List all employees — supports filtering and search',
   })
@@ -164,6 +165,7 @@ export class EmployeesController {
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({ summary: 'Get an employee by ID' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Employee retrieved successfully' })
@@ -177,6 +179,7 @@ export class EmployeesController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
   @ApiOperation({ summary: 'Update an employee profile' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: UpdateEmployeeDto })

@@ -142,6 +142,7 @@ export class LeaveController {
   }
 
   @Get('types')
+  @RequirePermissions(Permission.READ_OWN_LEAVE)
   @ApiOperation({ summary: 'List all leave types for the tenant' })
   @ApiResponse({ status: 200, description: 'Leave types retrieved' })
   getLeaveTypes(@Req() req: AuthenticatedRequest) {
@@ -261,6 +262,7 @@ export class LeaveController {
   }
 
   @Get('requests/pending-count')
+  @RequirePermissions(Permission.APPROVE_LEAVE)
   @ApiOperation({ summary: 'Get pending leave request count' })
   @ApiResponse({ status: 200, description: 'Count returned' })
   getPendingCount(@Req() req: AuthenticatedRequest) {
