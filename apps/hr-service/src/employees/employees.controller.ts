@@ -68,14 +68,10 @@ export class EmployeesController {
         hasPermissionRule(user, 'assets:CREATE') ||
         hasPermissionRule(user, 'assets:EDIT') ||
         hasPermissionRule(user, 'assets:ASSIGN') ||
-        hasPermissionRule(user, 'projects:VIEW') ||
-        hasPermissionRule(user, 'projects:CREATE') ||
-        hasPermissionRule(user, 'projects:EDIT') ||
-        hasPermissionRule(user, 'projects:ASSIGN') ||
         hasPermissionRule(user, 'appraisals:VIEW') ||
         hasPermissionRule(user, 'appraisals:CREATE') ||
-        hasPermissionRule(user, 'appraisals:EDIT') ||
-        hasPermissionRule(user, 'appraisals:APPROVE') ||
+        hasPermissionRule(user, 'appraisal-settings:EDIT') ||
+        hasPermissionRule(user, 'appraisal-reviews:EDIT') ||
         hasPermissionRule(user, 'schedules:VIEW') ||
         hasPermissionRule(user, 'schedules:CREATE') ||
         hasPermissionRule(user, 'schedules:EDIT') ||

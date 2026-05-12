@@ -333,6 +333,7 @@ export class AppraisalsController {
   }
 
   @Get('team')
+  @RequirePermissions(Permission.SUBMIT_MANAGER_REVIEW)
   @ApiOperation({ summary: "Get manager's team appraisals for review" })
   @ApiResponse({ status: 200, description: 'Team appraisals retrieved' })
   getTeamAppraisals(@Req() req: AuthenticatedRequest) {
@@ -347,7 +348,11 @@ export class AppraisalsController {
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
   @ApiResponse({ status: 200, description: 'Appraisal retrieved' })
   getAppraisal(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.appraisalsService.getAppraisal(req.user.tenantId, id);
+    return this.appraisalsService.getAppraisal(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Patch(':id/self-assessment')

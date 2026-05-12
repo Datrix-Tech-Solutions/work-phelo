@@ -8,7 +8,6 @@ import {
   Trophy,
   Timer,
   CalendarCheck,
-  ClipboardList,
   MonitorSmartphone,
   FileSliders,
   Megaphone,
@@ -21,7 +20,6 @@ const LeaveIcon = () => <CalendarRange className="w-5 h-5" />;
 const AppraisalIcon = () => <Trophy className="w-5 h-5" />;
 const TimeClockIcon = () => <Timer className="w-5 h-5" />;
 const SchedulingIcon = () => <CalendarCheck className="w-5 h-5" />;
-const ProjectsIcon = () => <ClipboardList className="w-5 h-5" />;
 const PayrollIcon = () => <CircleDollarSign className="w-5 h-5" />;
 const AssetIcon = () => <MonitorSmartphone className="w-5 h-5" />;
 const ManagementIcon = () => <FileSliders className="w-5 h-5" />;
@@ -105,14 +103,6 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         label: 'Smart Scheduling',
         icon: <SchedulingIcon />,
         href: 'scheduling',
-        enabled: true,
-        active: false,
-      },
-      {
-        key: 'projects',
-        label: 'Project & Tasks',
-        icon: <ProjectsIcon />,
-        href: 'projects',
         enabled: true,
         active: false,
       },

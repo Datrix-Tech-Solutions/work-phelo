@@ -54,6 +54,7 @@ export class UsersController {
         lastName: 'Hire',
         phone: '+233244555100',
         role: 'EMPLOYEE',
+        permissionSetIds: ['9f45a607-5d5d-4d8d-bd8d-0caaf6bb13d2'],
       },
     },
   })
@@ -62,7 +63,7 @@ export class UsersController {
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   @ApiResponse({ status: 409, description: 'User already exists in tenant' })
   invite(@Body() dto: InviteUserDto, @Req() req: any) {
-    return this.usersService.invite(req.user.tenantId, dto);
+    return this.usersService.invite(req.user.tenantId, dto, req.user.id);
   }
 
   @Post('assign-admin')
@@ -96,10 +97,14 @@ export class UsersController {
   ) {
     const tenantId = dto.tenantId;
     const { tenantId: _, ...inviteDto } = dto;
-    return this.usersService.invite(tenantId, {
-      ...inviteDto,
-      role: 'TENANT_ADMIN',
-    } as any);
+    return this.usersService.invite(
+      tenantId,
+      {
+        ...inviteDto,
+        role: 'TENANT_ADMIN',
+      } as any,
+      req.user.id,
+    );
   }
 
   @Post('set-password')

@@ -19,7 +19,6 @@ All frontend requests go through this gateway at port **4000**.
 | \`/api/v1/auth/*\` | Auth endpoints | 4001 |
 | \`/api/v1/auth/tenants/*\` | Tenant management | 4001 |
 | \`/api/v1/auth/users/*\` | User management | 4001 |
-| \`/api/v1/auth/company-roles/*\` | Company roles | 4001 |
 | \`/api/v1/auth/permissions/*\` | Permissions | 4001 |
 | \`/api/hr/employees/*\` | Employees | 4002 |
 | \`/api/hr/departments/*\` | Departments | 4002 |

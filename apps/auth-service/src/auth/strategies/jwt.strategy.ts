@@ -32,7 +32,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         include: { resource: true },
       }),
       this.prisma.userPermissionSet.findMany({
-        where: { userId },
+        where: {
+          userId,
+          permissionSet: { isActive: true },
+        },
         include: {
           permissionSet: {
             include: { resources: { include: { resource: true } } },

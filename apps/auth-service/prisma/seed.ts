@@ -2,6 +2,8 @@ import { PrismaClient } from '../prisma/generated/client';
 import * as bcrypt from 'bcrypt';
 import { seedResources } from './seed-resources';
 import {
+  backfillSystemPermissionState,
+  seedDefaultPermissionTemplates,
   seedSystemPermissionSets,
   syncUserSystemPermissionSet,
 } from '../src/permissions/system-permission-sets';
@@ -113,6 +115,7 @@ async function seedPlatform(
   console.log(`  SuperAdmin: ${superAdminEmail}`);
 
   const datrixSets = await seedSystemPermissionSets(prisma, datrixTenant.id);
+  await seedDefaultPermissionTemplates(prisma, datrixTenant.id);
   await syncUserSystemPermissionSet(prisma, {
     tenantId: datrixTenant.id,
     userId: (
@@ -165,6 +168,7 @@ async function seedDemo(resources: Record<string, string>) {
   });
 
   const acmeSets = await seedSystemPermissionSets(prisma, acmeTenant.id);
+  await seedDefaultPermissionTemplates(prisma, acmeTenant.id);
 
   const acmeAdmin = await prisma.user.upsert({
     where: {
@@ -426,6 +430,7 @@ async function seedDemo(resources: Record<string, string>) {
   });
 
   const stellarSets = await seedSystemPermissionSets(prisma, stellarTenant.id);
+  await seedDefaultPermissionTemplates(prisma, stellarTenant.id);
 
   const stellarAdmin = await prisma.user.upsert({
     where: {
@@ -561,6 +566,7 @@ async function seedDemo(resources: Record<string, string>) {
     },
   });
   const pendingSets = await seedSystemPermissionSets(prisma, pendingTenant.id);
+  await seedDefaultPermissionTemplates(prisma, pendingTenant.id);
   await syncUserSystemPermissionSet(prisma, {
     tenantId: pendingTenant.id,
     userId: pendingAdmin.id,
@@ -620,6 +626,7 @@ async function seedDemo(resources: Record<string, string>) {
     prisma,
     suspendedTenant.id,
   );
+  await seedDefaultPermissionTemplates(prisma, suspendedTenant.id);
   await syncUserSystemPermissionSet(prisma, {
     tenantId: suspendedTenant.id,
     userId: suspendedAdmin.id,
@@ -649,6 +656,8 @@ async function main() {
   } else {
     console.log('\nProduction environment — skipping demo tenants.');
   }
+
+  await backfillSystemPermissionState(prisma);
 
   console.log('\n' + '='.repeat(65));
   console.log(' SEED COMPLETE');

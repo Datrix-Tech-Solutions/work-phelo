@@ -25,6 +25,9 @@ jobs:
       - name: Type checks
         run: npm run check-types
 
+      - name: RBAC alignment
+        run: npm run check-rbac
+
       - name: Build
         run: npm run build
 

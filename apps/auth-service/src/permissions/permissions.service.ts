@@ -235,6 +235,9 @@ export class PermissionsService {
       where: { id, tenantId, isActive: true },
     });
     if (!set) throw new NotFoundException('Permission set not found');
+    if (set.isSystem) {
+      throw new ForbiddenException('System permission sets cannot be edited');
+    }
 
     if (dto.resources.length > 0) {
       const uniqueResourceIds = [
@@ -435,11 +438,21 @@ export class PermissionsService {
       where: { id: dto.permissionSetId, tenantId },
     });
     if (!set) throw new NotFoundException('Permission set not found');
+    if (set.isSystem) {
+      throw new ForbiddenException(
+        'System permission sets cannot be assigned through the tenant permission management flow',
+      );
+    }
 
     const user = await this.prisma.user.findFirst({
       where: { id: dto.userId, tenantId },
     });
     if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'EMPLOYEE') {
+      throw new ForbiddenException(
+        'Permission sets can only be assigned to employee users',
+      );
+    }
 
     return this.prisma.userPermissionSet.upsert({
       where: {
@@ -512,7 +525,10 @@ export class PermissionsService {
 
     // Permission set permissions
     const setAssignments = await this.prisma.userPermissionSet.findMany({
-      where: { userId },
+      where: {
+        userId,
+        permissionSet: { isActive: true },
+      },
       include: {
         permissionSet: {
           include: {

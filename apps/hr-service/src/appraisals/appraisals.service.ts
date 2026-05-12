@@ -1071,7 +1071,8 @@ export class AppraisalsService {
     dto: CreateAppraisalKpiDto,
   ) {
     assertHrAccess(
-      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'appraisals:EDIT'),
+      isCompanyAdminUser(actor) ||
+        hasPermissionRule(actor, 'appraisal-settings:EDIT'),
     );
 
     const cycle = await this.prisma.appraisalCycle.findFirst({
@@ -1102,7 +1103,8 @@ export class AppraisalsService {
     dto: Partial<CreateAppraisalKpiDto>,
   ) {
     assertHrAccess(
-      isCompanyAdminUser(actor) || hasPermissionRule(actor, 'appraisals:EDIT'),
+      isCompanyAdminUser(actor) ||
+        hasPermissionRule(actor, 'appraisal-settings:EDIT'),
     );
 
     const kpi = await this.prisma.appraisalKpi.findFirst({
@@ -1293,7 +1295,11 @@ export class AppraisalsService {
     const where: any = { tenantId, cycleId };
 
     if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(hasPermissionRule(actor, 'appraisals:VIEW'));
+      assertHrAccess(
+        hasPermissionRule(actor, 'appraisals:VIEW') ||
+          hasPermissionRule(actor, 'appraisals:CREATE') ||
+          hasPermissionRule(actor, 'appraisal-settings:EDIT'),
+      );
     }
 
     return this.prisma.appraisal.findMany({
@@ -1312,13 +1318,22 @@ export class AppraisalsService {
     });
   }
 
-  async getAppraisal(tenantId: string, appraisalId: string) {
+  async getAppraisal(
+    tenantId: string,
+    appraisalId: string,
+    actor: RequestUser,
+  ) {
     const bands = await this.loadPerformanceBands(tenantId);
     const appraisal = await this.prisma.appraisal.findFirst({
       where: { id: appraisalId, tenantId },
       include: {
         employee: {
-          select: { firstName: true, lastName: true, jobTitle: true },
+          select: {
+            firstName: true,
+            lastName: true,
+            jobTitle: true,
+            userId: true,
+          },
         },
         cycle: {
           select: {
@@ -1337,6 +1352,27 @@ export class AppraisalsService {
     });
 
     if (!appraisal) throw new NotFoundException('Appraisal not found');
+
+    if (!isCompanyAdminUser(actor)) {
+      const canViewAll =
+        hasPermissionRule(actor, 'appraisals:VIEW') ||
+        hasPermissionRule(actor, 'appraisals:CREATE') ||
+        hasPermissionRule(actor, 'appraisal-settings:EDIT');
+      const canViewOwn =
+        hasPermissionRule(actor, 'self-appraisals:VIEW') &&
+        appraisal.employee.userId === actor.id;
+
+      let canReviewAsManager = false;
+      if (hasPermissionRule(actor, 'appraisal-reviews:EDIT')) {
+        const actorEmployee = await this.prisma.employee.findFirst({
+          where: { tenantId, userId: actor.id },
+          select: { id: true },
+        });
+        canReviewAsManager = actorEmployee?.id === appraisal.managerId;
+      }
+
+      assertHrAccess(canViewAll || canViewOwn || canReviewAsManager);
+    }
 
     const overallStatus = deriveOverallStatus(appraisal);
 
@@ -1383,9 +1419,15 @@ export class AppraisalsService {
             finalizedAt: appraisal.completedAt?.toISOString(),
           }
         : null;
+    const employee = {
+      firstName: appraisal.employee.firstName,
+      lastName: appraisal.employee.lastName,
+      jobTitle: appraisal.employee.jobTitle,
+    };
 
     return {
       ...appraisal,
+      employee,
       overallStatus,
       selfResponse,
       managerResponse,
@@ -1603,7 +1645,7 @@ export class AppraisalsService {
 
     assertHrAccess(
       isCompanyAdminUser(reviewer) ||
-        hasPermissionRule(reviewer, 'appraisals:EDIT'),
+        hasPermissionRule(reviewer, 'appraisal-reviews:EDIT'),
     );
 
     let managerScore = dto.score ?? 0;
