@@ -202,7 +202,7 @@ export interface CreateEmployeePayload {
   email: string;
   phone?: string;
   gender?: Gender;
-  dateOfBirth?: string;
+  dateOfBirth: string;
   maritalStatus?: MaritalStatus;
   nationality?: string;
   address?: string;

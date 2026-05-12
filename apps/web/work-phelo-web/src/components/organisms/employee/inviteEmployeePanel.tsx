@@ -16,6 +16,7 @@ import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useBranchOptions } from '@/hooks/useBranches';
 import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
+import { isAtLeastMinimumEmployeeAge, MIN_EMPLOYEE_AGE } from '@/lib/employeeAge';
 
 /* ── Types ── */
 
@@ -31,7 +32,7 @@ interface InviteForm {
   managerId?: string;
   employmentType: string;
   hireDate: string;
-  dateOfBirth?: string;
+  dateOfBirth: string;
   probationEndsAt?: string;
   contractEndDate?: string;
 }
@@ -60,9 +61,11 @@ function InviteEmployeeForm({
     handleSubmit,
     control,
     setValue,
+    setError,
+    clearErrors,
     formState: { errors },
   } = useForm<InviteForm>({
-    defaultValues: { employmentType: 'FULL_TIME', phone: '' },
+    defaultValues: { employmentType: 'FULL_TIME', phone: '', dateOfBirth: '' },
   });
 
   const phoneValue = useWatch({ control, name: 'phone' });
@@ -105,6 +108,21 @@ function InviteEmployeeForm({
   const { mutate: createEmployee, isPending } = useCreateEmployee();
 
   const onSubmit = (d: InviteForm) => {
+    if (!d.dateOfBirth) {
+      setError('dateOfBirth', { type: 'required', message: 'Required' });
+      return;
+    }
+
+    if (!isAtLeastMinimumEmployeeAge(d.dateOfBirth)) {
+      setError('dateOfBirth', {
+        type: 'validate',
+        message: `Employee must be at least ${MIN_EMPLOYEE_AGE} years old`,
+      });
+      return;
+    }
+
+    clearErrors('dateOfBirth');
+
     const normalized = { ...d };
     if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
     if (normalized.contractEndDate?.length === 7) normalized.contractEndDate += '-01';
@@ -194,7 +212,11 @@ function InviteEmployeeForm({
         <DatePicker
           label="Date of Birth"
           value={dobValue}
-          onChange={(v) => setValue('dateOfBirth', v)}
+          onChange={(v) => {
+            setValue('dateOfBirth', v);
+            clearErrors('dateOfBirth');
+          }}
+          error={errors.dateOfBirth?.message}
           disableFuture
         />
       </div>

@@ -282,6 +282,29 @@ export class EmployeesService {
     }
   }
 
+  private assertMinimumEmployeeAge(dateOfBirth: string) {
+    const dob = new Date(dateOfBirth);
+
+    if (Number.isNaN(dob.getTime())) {
+      throw new BadRequestException('Invalid date of birth.');
+    }
+
+    const today = new Date();
+    let age = today.getUTCFullYear() - dob.getUTCFullYear();
+    const monthDelta = today.getUTCMonth() - dob.getUTCMonth();
+
+    if (
+      monthDelta < 0 ||
+      (monthDelta === 0 && today.getUTCDate() < dob.getUTCDate())
+    ) {
+      age -= 1;
+    }
+
+    if (age < 18) {
+      throw new BadRequestException('Employees must be at least 18 years old.');
+    }
+  }
+
   private async upsertOffboardingRecord(
     tx: HrPrismaTx,
     tenantId: string,
@@ -362,6 +385,8 @@ export class EmployeesService {
     if (dto.managerId) {
       await this.assertValidManagerAssignment(tenantId, dto.managerId);
     }
+
+    this.assertMinimumEmployeeAge(dto.dateOfBirth);
 
     this.validateEmploymentDates({
       hireDate: new Date(dto.hireDate),
@@ -767,6 +792,10 @@ export class EmployeesService {
 
     if (rest.managerId) {
       await this.assertValidManagerAssignment(tenantId, rest.managerId, id);
+    }
+
+    if (dateOfBirth) {
+      this.assertMinimumEmployeeAge(dateOfBirth);
     }
 
     this.validateEmploymentDates({

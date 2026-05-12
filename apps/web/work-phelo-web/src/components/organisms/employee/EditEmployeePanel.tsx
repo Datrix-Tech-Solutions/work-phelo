@@ -19,6 +19,7 @@ import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useBranchOptions } from '@/hooks/useBranches';
+import { isAtLeastMinimumEmployeeAge, MIN_EMPLOYEE_AGE } from '@/lib/employeeAge';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;
@@ -108,6 +109,15 @@ export function EditEmployeePanel({
             isLoading={isUpdating}
             loadingText="Saving…"
             onClick={editForm.handleSubmit((data) => {
+              if (data.dateOfBirth && !isAtLeastMinimumEmployeeAge(data.dateOfBirth)) {
+                editForm.setError('dateOfBirth', {
+                  type: 'validate',
+                  message: `Employee must be at least ${MIN_EMPLOYEE_AGE} years old`,
+                });
+                return;
+              }
+
+              editForm.clearErrors('dateOfBirth');
               const dateFields = ['dateOfBirth'] as const;
               for (const field of dateFields) {
                 if (!data[field]) data[field] = undefined;
@@ -152,7 +162,11 @@ export function EditEmployeePanel({
         <DatePicker
           label="Date of Birth"
           value={editDobValue}
-          onChange={(v) => editForm.setValue('dateOfBirth', v)}
+          onChange={(v) => {
+            editForm.setValue('dateOfBirth', v);
+            editForm.clearErrors('dateOfBirth');
+          }}
+          error={editForm.formState.errors.dateOfBirth?.message}
           disableFuture
         />
         <SearchSelect
