@@ -38,6 +38,7 @@ type ResourceGroup = {
   resources: string[];
   resourceLabels?: Record<string, string>;
   resourceActions?: Record<string, string[]>;
+  actionLabels?: Record<string, Record<string, string>>;
   virtualResources?: VirtualResource[];
 };
 
@@ -48,6 +49,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
     resources: ['employees', 'leave', 'appraisals', 'assets', 'announcements'],
     resourceActions: {
       appraisals: ['VIEW', 'EDIT', 'APPROVE'],
+      leave: ['VIEW', 'CREATE', 'APPROVE'],
     },
     resourceLabels: {
       appraisals: 'Appraisals',
@@ -95,6 +97,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
       'departments',
       'branches',
       'appraisals',
+      'leave',
       'hr-settings',
       'permission-sets',
       'audit-logs',
@@ -102,9 +105,15 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
     resourceLabels: {
       appraisals: 'Appraisal Cycle Configuration',
       'permission-sets': 'Roles & Permissions',
+      leave: 'Leave Types & Public Holidays',
+      'hr-settings': 'Company Policies',
     },
     resourceActions: {
       appraisals: ['VIEW', 'CREATE'],
+      leave: ['EDIT'],
+    },
+    actionLabels: {
+      leave: { EDIT: 'Create' },
     },
   },
 ];
@@ -279,7 +288,9 @@ export function PermissionMatrix({ value, onChange, readOnly = false }: Permissi
                                   className="w-4 h-4 accent-brand rounded cursor-pointer disabled:cursor-default"
                                 />
                                 <span className="text-sm text-gray-600">
-                                  {PERMISSION_ACTION_LABELS[action] ?? action}
+                                  {group.actionLabels?.[resourceName]?.[action] ??
+                                    PERMISSION_ACTION_LABELS[action] ??
+                                    action}
                                 </span>
                               </label>
                             ))}

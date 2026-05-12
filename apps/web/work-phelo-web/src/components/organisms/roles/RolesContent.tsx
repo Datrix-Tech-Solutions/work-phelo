@@ -160,13 +160,11 @@ export function RolesContent() {
           totalPages={totalPages}
           onPageChange={setPage}
           rowActions={(row) => [
+            { label: 'Manage Members', onClick: () => setMembersTarget(row) },
+            { label: 'Edit', onClick: () => setEditTarget(row) },
             ...(row.isSystem
               ? []
-              : [
-                  { label: 'Manage Members', onClick: () => setMembersTarget(row) },
-                  { label: 'Edit', onClick: () => setEditTarget(row) },
-                  { label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) },
-                ]),
+              : [{ label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) }]),
           ]}
         />
       </div>

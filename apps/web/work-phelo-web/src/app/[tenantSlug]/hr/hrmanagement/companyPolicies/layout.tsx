@@ -1,8 +1,11 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useParams } from 'next/navigation';
+import { usePathname, useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
+import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 
 const TABS = [
   { label: 'Employment & Resignation', slug: 'employment' },
@@ -14,7 +17,20 @@ const TABS = [
 export default function CompanyPoliciesLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const params = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const { canReadHrSettings } = useHrManagementAccess();
   const base = `/${params.tenantSlug}/hr/hrmanagement/companyPolicies`;
+
+  useEffect(() => {
+    if (user !== null && !canReadHrSettings) {
+      router.replace(`/${user.tenantSlug}/hr`);
+    }
+  }, [canReadHrSettings, router, user]);
+
+  if (user !== null && !canReadHrSettings) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col gap-6">
