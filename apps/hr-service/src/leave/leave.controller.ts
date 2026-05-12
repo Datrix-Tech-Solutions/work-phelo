@@ -273,6 +273,7 @@ export class LeaveController {
   }
 
   @Get('requests/my')
+  @RequirePermissions(Permission.READ_OWN_LEAVE)
   @ApiOperation({ summary: "Get the logged-in employee's own leave requests" })
   @ApiResponse({ status: 200, description: 'My leave requests retrieved' })
   async getMyRequests(@Req() req: AuthenticatedRequest) {
