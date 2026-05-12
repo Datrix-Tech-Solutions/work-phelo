@@ -26,6 +26,7 @@ import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { QueryLeaveRequestsDto } from './dto/query-leave-requests.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
+import { UpdateLeaveRequestSupportingDocumentDto } from './dto/update-leave-request-supporting-document.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -206,10 +207,13 @@ export class LeaveController {
   @ApiBody({
     schema: {
       example: {
-        name: 'Annual Leave',
-        defaultDays: 21,
-        isPaid: true,
-        description: 'Yearly annual leave',
+        leaveTypeId: 'leave-type-123',
+        startDate: '2026-06-01',
+        endDate: '2026-06-05',
+        reason: 'Medical recovery leave',
+        supportingDocumentName: 'Medical Report - May 2026',
+        supportingDocumentUrl:
+          'https://storage.example.com/leave-docs/medical-report-123.pdf',
       },
     },
   })
@@ -300,6 +304,31 @@ export class LeaveController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.leaveService.reviewRequest(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+      dto,
+    );
+  }
+
+  @Patch('requests/:id/supporting-document')
+  @RequirePermissions(Permission.REQUEST_LEAVE)
+  @ApiOperation({
+    summary:
+      'Attach or replace the supporting document for a pending leave request',
+  })
+  @ApiParam({ name: 'id', description: 'Leave request UUID' })
+  @ApiBody({ type: UpdateLeaveRequestSupportingDocumentDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Supporting document updated for the leave request',
+  })
+  updateSupportingDocument(
+    @Param('id') id: string,
+    @Body() dto: UpdateLeaveRequestSupportingDocumentDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.leaveService.updateRequestSupportingDocument(
       req.user.tenantId,
       id,
       req.user as RequestUser,

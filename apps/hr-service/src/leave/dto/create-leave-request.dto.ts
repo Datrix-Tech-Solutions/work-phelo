@@ -21,4 +21,22 @@ export class CreateLeaveRequestDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional supporting document name. Some leave types require this document before the request can be approved.',
+    example: 'Medical Report - May 2026',
+  })
+  @IsOptional()
+  @IsString()
+  supportingDocumentName?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional supporting document URL. Some leave types require this document before the request can be approved.',
+    example: 'https://storage.example.com/leave-docs/medical-report-123.pdf',
+  })
+  @IsOptional()
+  @IsString()
+  supportingDocumentUrl?: string;
 }

@@ -548,6 +548,7 @@ model LeaveType {
   isCarryOver      Boolean          @default(false)
   maxCarryOverDays Int?
   requiresApproval Boolean          @default(true)
+  requiresSupportingDocument Boolean @default(false)
   isPaid           Boolean          @default(true)
   isActive         Boolean          @default(true)
   isDefault        Boolean          @default(false)
@@ -590,6 +591,8 @@ model LeaveRequest {
   endDate      DateTime
   totalDays    Int
   reason       String?
+  supportingDocumentName String?
+  supportingDocumentUrl  String?
   status       LeaveRequestStatus @default(PENDING)
   approvedBy   String?
   approvedAt   DateTime?

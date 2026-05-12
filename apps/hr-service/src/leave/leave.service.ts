@@ -14,6 +14,7 @@ import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
+import { UpdateLeaveRequestSupportingDocumentDto } from './dto/update-leave-request-supporting-document.dto';
 import { Gender, LeaveType } from '../../prisma/generated/client';
 import {
   assertHrAccess,
@@ -28,6 +29,7 @@ type DefaultLeaveTypeDefinition = {
   daysAllowed: number;
   isPaid: boolean;
   requiresApproval: boolean;
+  requiresSupportingDocument?: boolean;
   isDefault: boolean;
   applicableGenders?: Gender[];
 };
@@ -44,7 +46,8 @@ const DEFAULT_LEAVE_TYPES: DefaultLeaveTypeDefinition[] = [
     name: 'Sick Leave',
     daysAllowed: 14,
     isPaid: true,
-    requiresApproval: false,
+    requiresApproval: true,
+    requiresSupportingDocument: true,
     isDefault: true,
   },
   {
@@ -166,7 +169,12 @@ export class LeaveService {
       await this.prisma.leaveType.upsert({
         where: { tenantId_name: { tenantId, name: lt.name } },
         update: lt.isDefault
-          ? { applicableGenders: lt.applicableGenders ?? [] }
+          ? {
+              applicableGenders: lt.applicableGenders ?? [],
+              requiresApproval: true,
+              requiresSupportingDocument:
+                lt.requiresSupportingDocument ?? false,
+            }
           : {},
         create: { tenantId, ...lt },
       });
@@ -182,7 +190,11 @@ export class LeaveService {
       throw new ConflictException('A leave type with this name already exists');
     }
     const leaveType = await this.prisma.leaveType.create({
-      data: { tenantId, ...dto },
+      data: {
+        tenantId,
+        ...dto,
+        requiresApproval: true,
+      },
     });
 
     // Backfill leave balances for all existing active employees so they
@@ -216,7 +228,10 @@ export class LeaveService {
 
     const updated = await this.prisma.leaveType.update({
       where: { id },
-      data: dto,
+      data: {
+        ...dto,
+        requiresApproval: true,
+      },
     });
 
     // When daysAllowed changes, update all existing balance records for the
@@ -531,6 +546,8 @@ export class LeaveService {
         `This leave type is not available for your gender (${this.genderLabel(empRecord.gender)}).`,
       );
     }
+    const supportingDocumentName = dto.supportingDocumentName?.trim();
+    const supportingDocumentUrl = dto.supportingDocumentUrl?.trim();
     const start = this.parseDateOnly(dto.startDate, 'Start date');
     const end = this.parseDateOnly(dto.endDate, 'End date');
 
@@ -597,29 +614,17 @@ export class LeaveService {
       );
     }
 
-    const shouldAutoApprove = !leaveType.requiresApproval;
     const request = await this.prisma.$transaction(async (tx) => {
-      const balanceUpdate = shouldAutoApprove
-        ? await tx.leaveBalance.updateMany({
-            where: {
-              id: balance.id,
-              remainingDays: { gte: totalDays },
-            },
-            data: {
-              usedDays: { increment: totalDays },
-              remainingDays: { decrement: totalDays },
-            },
-          })
-        : await tx.leaveBalance.updateMany({
-            where: {
-              id: balance.id,
-              remainingDays: { gte: totalDays },
-            },
-            data: {
-              pendingDays: { increment: totalDays },
-              remainingDays: { decrement: totalDays },
-            },
-          });
+      const balanceUpdate = await tx.leaveBalance.updateMany({
+        where: {
+          id: balance.id,
+          remainingDays: { gte: totalDays },
+        },
+        data: {
+          pendingDays: { increment: totalDays },
+          remainingDays: { decrement: totalDays },
+        },
+      });
 
       if (balanceUpdate.count !== 1) {
         throw new BadRequestException(
@@ -636,8 +641,9 @@ export class LeaveService {
           endDate: end,
           totalDays,
           reason: dto.reason,
-          status: shouldAutoApprove ? 'APPROVED' : 'PENDING',
-          approvedAt: shouldAutoApprove ? new Date() : undefined,
+          supportingDocumentName,
+          supportingDocumentUrl,
+          status: 'PENDING',
         },
         include: {
           leaveType: true,
@@ -653,45 +659,6 @@ export class LeaveService {
     const platformLink = this.buildTenantWorkspaceLink(actor.tenantSlug);
     const notificationRecipients =
       await this.resolveLeaveNotificationRecipients(tenantId, empRecord);
-
-    if (shouldAutoApprove) {
-      void this.notifyEmployeeOfLeaveDecision(
-        tenantId,
-        employeeId,
-        dto.leaveTypeId,
-        actor.tenantSlug,
-        'APPROVED',
-        start,
-        end,
-        totalDays,
-      );
-
-      void this.notifyStakeholdersOfLeaveRequest(
-        tenantId,
-        request.id,
-        empRecord,
-        leaveType.name,
-        dto.startDate,
-        dto.endDate,
-        totalDays,
-        dto.reason,
-        detailLink,
-        platformLink,
-        notificationRecipients,
-        true,
-      );
-
-      return {
-        request,
-        message: 'Leave request submitted and automatically approved.',
-        notificationSummary: {
-          managerNotified: !!notificationRecipients.manager,
-          approverCount: notificationRecipients.approvers.length,
-          employeeNotified: true,
-          autoApproved: true,
-        },
-      };
-    }
 
     // Notify the employee's manager and active leave approvers (fire-and-forget)
     void this.notifyStakeholdersOfLeaveRequest(
@@ -786,7 +753,12 @@ export class LeaveService {
   ) {
     const request = await this.prisma.leaveRequest.findFirst({
       where: { id: requestId, tenantId },
-      include: { employee: { select: { id: true } } },
+      include: {
+        employee: { select: { id: true } },
+        leaveType: {
+          select: { requiresSupportingDocument: true },
+        },
+      },
     });
 
     if (!request) throw new NotFoundException('Leave request not found');
@@ -798,6 +770,16 @@ export class LeaveService {
       isCompanyAdminUser(reviewer) ||
         hasPermissionRule(reviewer, 'leave:APPROVE'),
     );
+
+    if (
+      dto.action === 'APPROVED' &&
+      request.leaveType.requiresSupportingDocument &&
+      (!request.supportingDocumentName || !request.supportingDocumentUrl)
+    ) {
+      throw new BadRequestException(
+        'A supporting document is required before this leave request can be approved.',
+      );
+    }
 
     const year = request.startDate.getFullYear();
     const { updated, balanceMissing } = await this.prisma.$transaction(
@@ -887,6 +869,56 @@ export class LeaveService {
     );
 
     return updated;
+  }
+
+  async updateRequestSupportingDocument(
+    tenantId: string,
+    requestId: string,
+    actor: RequestUser,
+    dto: UpdateLeaveRequestSupportingDocumentDto,
+  ) {
+    const empRecord = await this.prisma.employee.findFirst({
+      where: { userId: actor.id, tenantId },
+    });
+    if (!empRecord) throw new NotFoundException('Employee profile not found');
+
+    const request = await this.prisma.leaveRequest.findFirst({
+      where: { id: requestId, tenantId, employeeId: empRecord.id },
+      include: {
+        leaveType: { select: { requiresSupportingDocument: true } },
+      },
+    });
+
+    if (!request) throw new NotFoundException('Leave request not found');
+    if (request.status !== 'PENDING') {
+      throw new BadRequestException(
+        'Only pending leave requests can have supporting documents updated',
+      );
+    }
+
+    const supportingDocumentName = dto.supportingDocumentName.trim();
+    const supportingDocumentUrl = dto.supportingDocumentUrl.trim();
+
+    if (!supportingDocumentName || !supportingDocumentUrl) {
+      throw new BadRequestException(
+        'Supporting document name and URL are required.',
+      );
+    }
+
+    const updated = await this.prisma.leaveRequest.update({
+      where: { id: requestId },
+      data: {
+        supportingDocumentName,
+        supportingDocumentUrl,
+      },
+    });
+
+    return {
+      message: request.leaveType.requiresSupportingDocument
+        ? 'Supporting document attached. The request can now be reviewed for approval.'
+        : 'Supporting document attached to the leave request.',
+      request: updated,
+    };
   }
 
   // ── Private notification helpers ─────────────────────────────────────────
