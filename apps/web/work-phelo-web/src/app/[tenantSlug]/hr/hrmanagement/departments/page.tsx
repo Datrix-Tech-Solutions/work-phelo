@@ -1,12 +1,15 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useDepartments, useUpdateDepartment, useDeleteDepartment } from '@/hooks/useDepartments';
 import { useEmployeeOptions, useUpdateEmployee } from '@/hooks/hr/useEmployees';
 import { Department } from '@/types/hr';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
+import { useAuthStore } from '@/store/auth.store';
+import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 import { extractError } from '@/lib/extractError';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -18,7 +21,16 @@ import { AddMembersPanel } from '@/components/organisms/departments/addMembersPa
 
 export default function DepartmentsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const { canReadDepartments } = useHrManagementAccess();
   const toast = useToast();
+
+  useEffect(() => {
+    if (user !== null && !canReadDepartments) {
+      router.replace(`/${tenantSlug}/hr`);
+    }
+  }, [canReadDepartments, router, tenantSlug, user]);
 
   const canCreate = usePermission(Permission.CREATE_DEPARTMENT);
   const canUpdate = usePermission(Permission.UPDATE_DEPARTMENT);
@@ -79,6 +91,10 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
       onError: (err) => toast.error(extractError(err, 'Failed to delete department')),
     });
   };
+
+  if (user !== null && !canReadDepartments) {
+    return null;
+  }
 
   return (
     <div className="flex flex-col gap-6 h-full">
