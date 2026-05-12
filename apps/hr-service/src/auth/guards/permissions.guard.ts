@@ -30,7 +30,7 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'employees', actions: ['DELETE'] },
   ],
   [Permission.OFFBOARD_EMPLOYEE]: [
-    { resource: 'employees', actions: ['DELETE'] },
+    { resource: 'offboarding', actions: ['EDIT'] },
   ],
   [Permission.SUBMIT_RESIGNATION]: [
     { resource: 'resignations', actions: ['CREATE'] },
@@ -70,11 +70,13 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   ],
 
   // ── Leave ─────────────────────────────────────────────────────────────────
-  [Permission.REQUEST_LEAVE]: [{ resource: 'leave', actions: ['CREATE'] }],
+  [Permission.REQUEST_LEAVE]: [{ resource: 'leave-self', actions: ['CREATE'] }],
   [Permission.APPROVE_LEAVE]: [{ resource: 'leave', actions: ['APPROVE'] }],
   [Permission.READ_ALL_LEAVES]: [{ resource: 'leave', actions: ['VIEW'] }],
-  [Permission.READ_OWN_LEAVE]: [{ resource: 'leave', actions: ['VIEW'] }],
-  [Permission.MANAGE_LEAVE_TYPES]: [{ resource: 'leave', actions: ['EDIT'] }],
+  [Permission.READ_OWN_LEAVE]: [{ resource: 'leave-self', actions: ['VIEW'] }],
+  [Permission.MANAGE_LEAVE_TYPES]: [
+    { resource: 'leave-settings', actions: ['EDIT'] },
+  ],
 
   // ── Time Management ───────────────────────────────────────────────────────
   [Permission.CLOCK_IN_OUT]: [{ resource: 'attendance', actions: ['CREATE'] }],
@@ -118,26 +120,30 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.READ_PAYROLL]: [{ resource: 'payroll', actions: ['VIEW'] }],
   [Permission.RUN_PAYROLL]: [{ resource: 'payroll', actions: ['RUN'] }],
   [Permission.APPROVE_PAYROLL]: [{ resource: 'payroll', actions: ['APPROVE'] }],
-  [Permission.READ_OWN_PAYSLIP]: [{ resource: 'payroll', actions: ['VIEW'] }],
+  [Permission.READ_OWN_PAYSLIP]: [
+    { resource: 'payslip-self', actions: ['VIEW'] },
+  ],
   [Permission.MANAGE_PAYROLL_SETTINGS]: [
     { resource: 'payroll', actions: ['EDIT'] },
   ],
 
   // ── Appraisals ────────────────────────────────────────────────────────────
   [Permission.CONFIGURE_APPRAISAL]: [
-    { resource: 'appraisals', actions: ['CREATE'] },
+    { resource: 'appraisal-settings', actions: ['EDIT'] },
   ],
   [Permission.CREATE_APPRAISAL]: [
     { resource: 'appraisals', actions: ['CREATE'] },
   ],
   [Permission.READ_APPRAISALS]: [{ resource: 'appraisals', actions: ['VIEW'] }],
   [Permission.SUBMIT_SELF_ASSESSMENT]: [
-    { resource: 'appraisals', actions: ['EDIT'] },
+    { resource: 'self-appraisals', actions: ['EDIT'] },
   ],
   [Permission.SUBMIT_MANAGER_REVIEW]: [
-    { resource: 'appraisals', actions: ['EDIT'] },
+    { resource: 'appraisal-reviews', actions: ['EDIT'] },
   ],
-  [Permission.READ_OWN_REVIEW]: [{ resource: 'appraisals', actions: ['VIEW'] }],
+  [Permission.READ_OWN_REVIEW]: [
+    { resource: 'self-appraisals', actions: ['VIEW'] },
+  ],
 };
 
 @Injectable()

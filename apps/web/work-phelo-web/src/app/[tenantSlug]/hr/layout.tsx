@@ -8,7 +8,7 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
 import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission, usePermissionRule } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
 import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';
@@ -44,13 +44,9 @@ export default function HRLayout({
   const canReadAttendance = usePermission(Permission.READ_ATTENDANCE);
   const canSubmitTimeCorrection = usePermission(Permission.SUBMIT_TIME_CORRECTION);
   const canApproveTimeCorrection = usePermission(Permission.APPROVE_TIME_CORRECTION);
-  const canReadSchedules = usePermission(Permission.READ_SCHEDULES);
+  const canReadSchedules = usePermissionRule('schedules:VIEW');
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
   const canApproveShiftSwap = usePermission(Permission.APPROVE_SHIFT_SWAP);
-  const canReadProjects = usePermission(Permission.READ_PROJECTS);
-  const canCreateProject = usePermission(Permission.CREATE_PROJECT);
-  const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
-  const canAssignProject = usePermission(Permission.ASSIGN_PROJECT);
   const canReadOwnPayslip = usePermission(Permission.READ_OWN_PAYSLIP);
   const canReadPayroll = usePermission(Permission.READ_PAYROLL);
   const canRunPayroll = usePermission(Permission.RUN_PAYROLL);
@@ -71,8 +67,6 @@ export default function HRLayout({
   const canAccessTimeClock =
     canClockInOut || canReadAttendance || canSubmitTimeCorrection || canApproveTimeCorrection;
   const canAccessScheduling = canReadSchedules || canManageSchedules || canApproveShiftSwap;
-  const canAccessProjects =
-    canReadProjects || canCreateProject || canUpdateProject || canAssignProject;
   const canAccessPayroll =
     canReadOwnPayslip ||
     canReadPayroll ||
@@ -93,7 +87,6 @@ export default function HRLayout({
     appraisal: canAccessAppraisal,
     timeclock: canAccessTimeClock,
     scheduling: canAccessScheduling,
-    projects: canAccessProjects,
     payroll: canAccessPayroll,
     assets: canReadAssets || canManageAssets || canAssignAsset,
     management: hasAnyManagementAccess,

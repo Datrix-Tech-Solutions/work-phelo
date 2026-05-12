@@ -244,7 +244,7 @@ export default function EmployeeDetailPage({
           userId={employee.userId}
           availableSets={customPermissionSets}
           assignedSets={assignedSets.map((set) => ({ id: set.id, name: set.name }))}
-          baseSetName="Employee Set"
+          baseSetName={null}
           onAssign={handleAssignPermissionSet}
           onRemove={handleRemovePermissionSet}
           isAssigning={isAssigningPermissionSet}

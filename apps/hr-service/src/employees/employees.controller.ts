@@ -68,14 +68,10 @@ export class EmployeesController {
         hasPermissionRule(user, 'assets:CREATE') ||
         hasPermissionRule(user, 'assets:EDIT') ||
         hasPermissionRule(user, 'assets:ASSIGN') ||
-        hasPermissionRule(user, 'projects:VIEW') ||
-        hasPermissionRule(user, 'projects:CREATE') ||
-        hasPermissionRule(user, 'projects:EDIT') ||
-        hasPermissionRule(user, 'projects:ASSIGN') ||
         hasPermissionRule(user, 'appraisals:VIEW') ||
         hasPermissionRule(user, 'appraisals:CREATE') ||
-        hasPermissionRule(user, 'appraisals:EDIT') ||
-        hasPermissionRule(user, 'appraisals:APPROVE') ||
+        hasPermissionRule(user, 'appraisal-settings:EDIT') ||
+        hasPermissionRule(user, 'appraisal-reviews:EDIT') ||
         hasPermissionRule(user, 'schedules:VIEW') ||
         hasPermissionRule(user, 'schedules:CREATE') ||
         hasPermissionRule(user, 'schedules:EDIT') ||
@@ -118,6 +114,7 @@ export class EmployeesController {
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({
     summary: 'List all employees — supports filtering and search',
   })
@@ -164,6 +161,7 @@ export class EmployeesController {
   }
 
   @Get(':id')
+  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({ summary: 'Get an employee by ID' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Employee retrieved successfully' })
@@ -177,6 +175,7 @@ export class EmployeesController {
   }
 
   @Patch(':id')
+  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
   @ApiOperation({ summary: 'Update an employee profile' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: UpdateEmployeeDto })

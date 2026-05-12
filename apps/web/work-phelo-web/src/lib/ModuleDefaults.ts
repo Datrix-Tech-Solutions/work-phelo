@@ -44,11 +44,6 @@ export const DEFAULT_MODULES: Module[] = [
         description: 'Shift and workforce scheduling',
       },
       {
-        key: 'projects',
-        label: 'Project & Tasks',
-        description: 'Projects and task tracking',
-      },
-      {
         key: 'payroll',
         label: 'Payroll',
         description: 'Process and manage payroll',

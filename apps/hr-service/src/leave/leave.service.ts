@@ -351,7 +351,7 @@ export class LeaveService {
       return { count };
     }
 
-    if (hasPermissionRule(actor, 'leave:VIEW')) {
+    if (hasPermissionRule(actor, 'leave:APPROVE')) {
       const count = await this.prisma.leaveRequest.count({ where });
       return { count };
     }
@@ -744,7 +744,9 @@ export class LeaveService {
 
     if (filters.scope === 'all') {
       assertHrAccess(
-        isCompanyAdminUser(actor) || hasPermissionRule(actor, 'leave:VIEW'),
+        isCompanyAdminUser(actor) ||
+          hasPermissionRule(actor, 'leave:VIEW') ||
+          hasPermissionRule(actor, 'leave:APPROVE'),
       );
     } else if (isCompanyAdminUser(actor)) {
       // company-wide access

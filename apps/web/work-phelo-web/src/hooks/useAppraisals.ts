@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import type {
   AppraisalCycle,
   AppraisalKpi,
@@ -307,12 +309,15 @@ export function useMyAppraisals() {
 }
 
 export function useTeamAppraisals() {
+  const canReviewTeam = usePermission(Permission.SUBMIT_MANAGER_REVIEW);
+
   return useQuery<TeamAppraisalRecord[]>({
     queryKey: ['team-appraisals'],
     queryFn: async () => {
       const res = await api.get('/hr/appraisals/team');
       return unpackListResponse<TeamAppraisalRecord>(res.data);
     },
+    enabled: canReviewTeam,
   });
 }
 

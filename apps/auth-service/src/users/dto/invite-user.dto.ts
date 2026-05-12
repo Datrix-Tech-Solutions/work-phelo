@@ -4,6 +4,9 @@ import {
   IsOptional,
   IsEnum,
   MaxLength,
+  IsArray,
+  IsUUID,
+  ArrayUnique,
 } from 'class-validator';
 
 export enum UserSystemRole {
@@ -32,4 +35,10 @@ export class InviteUserDto {
   @IsOptional()
   @IsEnum(UserSystemRole)
   role?: UserSystemRole;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  permissionSetIds?: string[];
 }
