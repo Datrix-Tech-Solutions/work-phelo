@@ -400,6 +400,8 @@ export interface PayrollRun {
   submittedAt?: string | null;
   approvedBy?: string;
   approvedAt?: string;
+  approvalNote?: string | null;
+  returnToDraftNote?: string | null;
   paidAt?: string;
   rejectedAt?: string;
   rejectionReason?: string | null;
@@ -466,6 +468,10 @@ export interface PayrollItem {
 
 export interface PayrollRunDetail extends PayrollRun {
   items: PayrollItem[];
+}
+
+export interface PayrollDecisionDto {
+  note: string;
 }
 
 export interface RunPayrollDto {

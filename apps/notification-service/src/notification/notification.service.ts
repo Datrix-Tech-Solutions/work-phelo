@@ -318,6 +318,136 @@ export class NotificationService {
     );
   }
 
+  async sendPayrollApprovalRequestedNotification(data: {
+    tenantId: string;
+    payrollRunId: string;
+    month: number;
+    year: number;
+    submittedByName: string;
+    totalGross: string;
+    totalNet: string;
+    notes?: string;
+    reviewLink?: string;
+    recipients: {
+      userId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      source: 'APPROVER' | 'TENANT_ADMIN_ESCALATION';
+    }[];
+  }) {
+    await Promise.all(
+      data.recipients.map(async (recipient) => {
+        if (
+          await this.isDuplicate(
+            recipient.email,
+            NotificationType.PAYROLL_APPROVAL_REQUESTED,
+            data.tenantId,
+          )
+        ) {
+          this.logger.warn(
+            `Duplicate PAYROLL_APPROVAL_REQUESTED suppressed for ${recipient.email}`,
+          );
+          return;
+        }
+
+        const success =
+          await this.email.sendPayrollApprovalRequestedNotification(
+            recipient.email,
+            recipient.firstName,
+            data.month,
+            data.year,
+            data.submittedByName,
+            data.totalGross,
+            data.totalNet,
+            data.notes,
+            data.reviewLink,
+            recipient.source === 'TENANT_ADMIN_ESCALATION',
+          );
+
+        await this.log({
+          userId: recipient.userId,
+          tenantId: data.tenantId,
+          type: 'PAYROLL_APPROVAL_REQUESTED',
+          channel: 'EMAIL',
+          recipient: recipient.email,
+          subject: `Payroll approval required — ${data.month}/${data.year}`,
+          status: success ? 'SENT' : 'FAILED',
+          metadata: {
+            payrollRunId: data.payrollRunId,
+            recipientSource: recipient.source,
+          },
+        });
+      }),
+    );
+  }
+
+  async sendPayrollDecisionNotification(data: {
+    tenantId: string;
+    payrollRunId: string;
+    month: number;
+    year: number;
+    decision: 'APPROVED' | 'RETURNED_TO_DRAFT';
+    reviewerName: string;
+    decisionNote: string;
+    totalGross: string;
+    totalNet: string;
+    detailLink?: string;
+    recipients: {
+      userId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+    }[];
+  }) {
+    await Promise.all(
+      data.recipients.map(async (recipient) => {
+        if (
+          await this.isDuplicate(
+            recipient.email,
+            NotificationType.PAYROLL_DECISION,
+            data.tenantId,
+          )
+        ) {
+          this.logger.warn(
+            `Duplicate PAYROLL_DECISION suppressed for ${recipient.email}`,
+          );
+          return;
+        }
+
+        const success = await this.email.sendPayrollDecisionNotification(
+          recipient.email,
+          recipient.firstName,
+          data.month,
+          data.year,
+          data.decision,
+          data.reviewerName,
+          data.decisionNote,
+          data.totalGross,
+          data.totalNet,
+          data.detailLink,
+        );
+
+        await this.log({
+          userId: recipient.userId,
+          tenantId: data.tenantId,
+          type: 'PAYROLL_DECISION',
+          channel: 'EMAIL',
+          recipient: recipient.email,
+          subject:
+            data.decision === 'APPROVED'
+              ? `Payroll approved — ${data.month}/${data.year}`
+              : `Payroll returned to draft — ${data.month}/${data.year}`,
+          status: success ? 'SENT' : 'FAILED',
+          metadata: {
+            payrollRunId: data.payrollRunId,
+            decision: data.decision,
+          },
+        });
+      }),
+    );
+  }
+
   async sendLeaveRequestedNotification(data: {
     tenantId: string;
     employeeId: string;

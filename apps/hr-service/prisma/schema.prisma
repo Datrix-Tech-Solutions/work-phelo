@@ -789,6 +789,8 @@ model PayrollRun {
   submittedAt  DateTime?
   approvedBy   String?
   approvedAt   DateTime?
+  approvalNote String?
+  returnToDraftNote String?
   paidAt       DateTime?
   notes        String?
   tier3Enabled Boolean       @default(false)

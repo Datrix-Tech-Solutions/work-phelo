@@ -92,6 +92,8 @@ export default function ApprovePayrollDetailPage({
 
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [approvalNote, setApprovalNote] = useState('');
+  const [returnNote, setReturnNote] = useState('');
 
   const isPending = isApproving || isRejecting;
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
@@ -99,7 +101,7 @@ export default function ApprovePayrollDetailPage({
 
   const handleApprove = async () => {
     try {
-      await approvePayroll(runId);
+      await approvePayroll({ id: runId, note: approvalNote.trim() });
       toast.success(`${periodLabel} payroll approved`);
       router.push(backHref);
     } catch (err) {
@@ -109,7 +111,7 @@ export default function ApprovePayrollDetailPage({
 
   const handleReject = async () => {
     try {
-      await returnToDraft(runId);
+      await returnToDraft({ id: runId, note: returnNote.trim() });
       toast.success(`${periodLabel} payroll returned to draft`);
       router.push(backHref);
     } catch (err) {
@@ -132,7 +134,10 @@ export default function ApprovePayrollDetailPage({
           <Button variant="outline" onClick={() => setShowRejectModal(true)} disabled={isPending}>
             Reject
           </Button>
-          <Button onClick={() => setShowApproveModal(true)} disabled={isPending}>
+          <Button
+            onClick={() => setShowApproveModal(true)}
+            disabled={isPending || !approvalNote.trim()}
+          >
             Approve Payroll
           </Button>
         </div>
@@ -151,6 +156,19 @@ export default function ApprovePayrollDetailPage({
           totalPages={1}
           onPageChange={() => {}}
         />
+
+        <div className="rounded-2xl border border-gray-100 bg-white p-5 flex flex-col gap-2">
+          <label className="text-sm font-bold text-gray-900">
+            Approval Note <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            rows={4}
+            placeholder="Explain why this payroll is being approved…"
+            value={approvalNote}
+            onChange={(e) => setApprovalNote(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
+          />
+        </div>
       </SectionCard>
 
       {/* Approve confirmation */}
@@ -168,7 +186,12 @@ export default function ApprovePayrollDetailPage({
             >
               Cancel
             </Button>
-            <Button onClick={handleApprove} isLoading={isApproving} loadingText="Approving…">
+            <Button
+              onClick={handleApprove}
+              isLoading={isApproving}
+              loadingText="Approving…"
+              disabled={!approvalNote.trim()}
+            >
               Approve Payroll
             </Button>
           </>
@@ -179,6 +202,11 @@ export default function ApprovePayrollDetailPage({
           <span className="font-medium text-gray-900">{periodLabel}</span>. Once approved, payslips
           will be finalised and the payroll will be marked as ready for payment.
         </p>
+        {approvalNote.trim() && (
+          <p className="text-sm text-gray-500 leading-relaxed mt-3">
+            Approval note: <span className="text-gray-700">{approvalNote.trim()}</span>
+          </p>
+        )}
       </Modal>
 
       {/* Reject confirmation */}
@@ -201,6 +229,7 @@ export default function ApprovePayrollDetailPage({
               onClick={handleReject}
               isLoading={isRejecting}
               loadingText="Rejecting…"
+              disabled={!returnNote.trim()}
             >
               Reject Payroll
             </Button>
@@ -212,6 +241,18 @@ export default function ApprovePayrollDetailPage({
           <span className="font-medium text-gray-900">{periodLabel}</span>. It will be returned to
           draft and the payroll manager will need to resubmit.
         </p>
+        <div className="flex flex-col gap-1.5 mt-4">
+          <label className="text-sm font-bold text-gray-900">
+            Return Note <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            rows={4}
+            placeholder="Explain why this payroll is being returned to draft…"
+            value={returnNote}
+            onChange={(e) => setReturnNote(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
+          />
+        </div>
       </Modal>
     </div>
   );

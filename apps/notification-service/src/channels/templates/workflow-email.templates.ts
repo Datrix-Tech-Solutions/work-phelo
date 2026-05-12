@@ -279,6 +279,115 @@ export function renderTimeCorrectionTemplate(input: {
   });
 }
 
+export function renderPayrollApprovalRequestedTemplate(input: {
+  recipientFirstName: string;
+  month: number;
+  year: number;
+  submittedByName: string;
+  totalGross: string;
+  totalNet: string;
+  notes?: string;
+  reviewLink?: string;
+  escalated?: boolean;
+}): string {
+  return renderStandardEmail({
+    title: 'Payroll Approval Required',
+    heading: input.escalated
+      ? 'Payroll Approval Escalated'
+      : 'Payroll Approval Required',
+    bodyHtml: `
+      <p>Hi ${input.recipientFirstName},</p>
+      <p>
+        Payroll for <strong>${input.month}/${input.year}</strong> has been submitted by
+        <strong> ${input.submittedByName}</strong> and is awaiting approval.
+      </p>
+      ${
+        input.escalated
+          ? '<p>No explicit payroll approver is currently configured, so this approval has been escalated to you.</p>'
+          : '<p>Please review the payroll summary and take the necessary approval action.</p>'
+      }
+      <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
+        <tr>
+          <td style="padding:8px 0; width:160px; font-weight:500;">Payroll period:</td>
+          <td style="padding:8px 0;">${input.month}/${input.year}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-weight:500;">Total gross:</td>
+          <td style="padding:8px 0;">${input.totalGross}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-weight:500;">Total net:</td>
+          <td style="padding:8px 0;">${input.totalNet}</td>
+        </tr>
+      </table>
+      ${
+        input.notes
+          ? `<p><strong>Payroll notes:</strong></p>
+      <p style="background:#f9f9f9; padding:16px; border-left:4px solid #ff6a00; margin:15px 0; color:#444; line-height:1.5;">
+        ${input.notes}
+      </p>`
+          : ''
+      }
+      ${
+        input.reviewLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Review payroll', input.reviewLink)}</p>`
+          : ''
+      }
+      <p style="margin-top:30px;">Thank you,</p>
+    `,
+  });
+}
+
+export function renderPayrollDecisionTemplate(input: {
+  recipientFirstName: string;
+  month: number;
+  year: number;
+  decision: 'APPROVED' | 'RETURNED_TO_DRAFT';
+  reviewerName: string;
+  decisionNote: string;
+  totalGross: string;
+  totalNet: string;
+  detailLink?: string;
+}): string {
+  const returnedToDraft = input.decision === 'RETURNED_TO_DRAFT';
+  return renderStandardEmail({
+    title: returnedToDraft ? 'Payroll Returned to Draft' : 'Payroll Approved',
+    heading: returnedToDraft ? 'Payroll Returned to Draft' : 'Payroll Approved',
+    bodyHtml: `
+      <p>Hi ${input.recipientFirstName},</p>
+      <p>
+        Payroll for <strong>${input.month}/${input.year}</strong> was
+        <strong>${returnedToDraft ? ' returned to draft' : ' approved'}</strong>
+        by <strong>${input.reviewerName}</strong>.
+      </p>
+      <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
+        <tr>
+          <td style="padding:8px 0; width:160px; font-weight:500;">Payroll period:</td>
+          <td style="padding:8px 0;">${input.month}/${input.year}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-weight:500;">Total gross:</td>
+          <td style="padding:8px 0;">${input.totalGross}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-weight:500;">Total net:</td>
+          <td style="padding:8px 0;">${input.totalNet}</td>
+        </tr>
+      </table>
+      <p><strong>Reviewer note:</strong></p>
+      <p style="background:#f9f9f9; padding:16px; border-left:4px solid #ff6a00; margin:15px 0; color:#444; line-height:1.5;">
+        ${input.decisionNote}
+      </p>
+      ${
+        input.detailLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open payroll workspace', input.detailLink)}</p>`
+          : ''
+      }
+      <p style="margin-top:30px;">Thank you,</p>
+    `,
+  });
+}
+
 export function renderAppraisalSelfSubmittedTemplate(input: {
   managerFirstName: string;
   employeeFullName: string;

@@ -35,6 +35,8 @@ import {
   ShiftSwapRejectedEvent,
   ShiftSwapExpiredEvent,
   AnnouncementPublishedEvent,
+  PayrollApprovalRequestedEvent,
+  PayrollDecisionEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -538,6 +540,30 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_SHIFT_SWAP_EXPIRED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationPayrollApprovalRequested(
+    data: PayrollApprovalRequestedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_PAYROLL_APPROVAL_REQUESTED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationPayrollDecision(
+    data: PayrollDecisionEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_PAYROLL_DECISION,
       data,
       correlationId,
     );

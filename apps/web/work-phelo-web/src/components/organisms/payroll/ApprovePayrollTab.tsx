@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { MoreVertical } from 'lucide-react';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun } from '@/types/hr';
-import { usePayrollRuns, useRejectPayroll } from '@/hooks';
+import { usePayrollRuns, useReturnPayrollToDraft } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { ApprovePayrollPanel } from './ApprovePayrollPanel';
@@ -91,7 +91,7 @@ export function ApprovePayrollTab() {
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
-  const { mutate: rejectPayroll, isPending: isRejecting } = useRejectPayroll();
+  const { mutate: returnToDraft, isPending: isRejecting } = useReturnPayrollToDraft();
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [rejectRun, setRejectRun] = useState<PayrollRun | null>(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -185,20 +185,21 @@ export function ApprovePayrollTab() {
               disabled={!rejectionReason.trim()}
               onClick={() => {
                 if (!rejectRun) return;
-                rejectPayroll(
-                  { id: rejectRun.id, reason: rejectionReason.trim() },
+                returnToDraft(
+                  { id: rejectRun.id, note: rejectionReason.trim() },
                   {
                     onSuccess: () => {
-                      toast.success(`${monthLabel(rejectRun)} payroll rejected`);
+                      toast.success(`${monthLabel(rejectRun)} payroll returned to draft`);
                       setRejectRun(null);
                       setRejectionReason('');
                     },
-                    onError: (err) => toast.error(extractError(err, 'Failed to reject payroll')),
+                    onError: (err) =>
+                      toast.error(extractError(err, 'Failed to return payroll to draft')),
                   },
                 );
               }}
             >
-              Reject Payroll
+              Return To Draft
             </Button>
           </>
         }
@@ -209,7 +210,8 @@ export function ApprovePayrollTab() {
             <span className="font-medium text-gray-900">
               {rejectRun ? monthLabel(rejectRun) : ''}
             </span>
-            . The payroll manager will be notified and can revise and resubmit.
+            . The payroll manager and payroll stakeholders will be notified and can revise and
+            resubmit.
           </p>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-gray-900">

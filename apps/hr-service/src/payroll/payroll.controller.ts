@@ -21,6 +21,7 @@ import {
 import { PayrollService } from './payroll.service';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
+import { PayrollDecisionDto } from './dto/payroll-decision.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -97,7 +98,7 @@ export class PayrollController {
     return this.payrollService.submitPayrollForApproval(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user as RequestUser,
     );
   }
 
@@ -138,12 +139,18 @@ export class PayrollController {
   @RequirePermissions(Permission.APPROVE_PAYROLL)
   @ApiOperation({ summary: 'Approve a payroll run' })
   @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiBody({ type: PayrollDecisionDto })
   @ApiResponse({ status: 200, description: 'Payroll approved' })
-  approvePayroll(@Param('id') id: string, @Req() req: any) {
+  approvePayroll(
+    @Param('id') id: string,
+    @Body() dto: PayrollDecisionDto,
+    @Req() req: any,
+  ) {
     return this.payrollService.approvePayroll(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user as RequestUser,
+      dto,
     );
   }
 
@@ -153,9 +160,19 @@ export class PayrollController {
     summary: 'Return a pending payroll run to draft for further edits',
   })
   @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiBody({ type: PayrollDecisionDto })
   @ApiResponse({ status: 200, description: 'Payroll returned to draft' })
-  returnPayrollToDraft(@Param('id') id: string, @Req() req: any) {
-    return this.payrollService.returnPayrollToDraft(req.user.tenantId, id);
+  returnPayrollToDraft(
+    @Param('id') id: string,
+    @Body() dto: PayrollDecisionDto,
+    @Req() req: any,
+  ) {
+    return this.payrollService.returnPayrollToDraft(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+      dto,
+    );
   }
 
   @Patch(':id/mark-paid')

@@ -12,6 +12,8 @@ import {
   renderLeaveRequestedTemplate,
   renderLeaveReviewedTemplate,
   renderPasswordResetLinkTemplate,
+  renderPayrollApprovalRequestedTemplate,
+  renderPayrollDecisionTemplate,
   renderResignationSubmittedTemplate,
   renderSchedulePublishedTemplate,
   renderShiftSwapTemplate,
@@ -407,6 +409,66 @@ export class EmailService {
         body: this.escapeHtmlWithBreaks(body),
         publishedAt: this.escapeHtml(this.formatDate(publishedAt)),
         platformLink: this.sanitizeUrl(platformLink),
+      }),
+    );
+  }
+
+  async sendPayrollApprovalRequestedNotification(
+    to: string,
+    firstName: string,
+    month: number,
+    year: number,
+    submittedByName: string,
+    totalGross: string,
+    totalNet: string,
+    notes?: string,
+    reviewLink?: string,
+    escalated?: boolean,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Payroll approval required — ${month}/${year}`,
+      renderPayrollApprovalRequestedTemplate({
+        recipientFirstName: this.escapeHtml(firstName),
+        month,
+        year,
+        submittedByName: this.escapeHtml(submittedByName),
+        totalGross: this.escapeHtml(totalGross),
+        totalNet: this.escapeHtml(totalNet),
+        notes: notes ? this.escapeHtmlWithBreaks(notes) : undefined,
+        reviewLink: this.sanitizeUrl(reviewLink),
+        escalated,
+      }),
+    );
+  }
+
+  async sendPayrollDecisionNotification(
+    to: string,
+    firstName: string,
+    month: number,
+    year: number,
+    decision: 'APPROVED' | 'RETURNED_TO_DRAFT',
+    reviewerName: string,
+    decisionNote: string,
+    totalGross: string,
+    totalNet: string,
+    detailLink?: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      decision === 'APPROVED'
+        ? `Payroll approved — ${month}/${year}`
+        : `Payroll returned to draft — ${month}/${year}`,
+      renderPayrollDecisionTemplate({
+        recipientFirstName: this.escapeHtml(firstName),
+        month,
+        year,
+        decision,
+        reviewerName: this.escapeHtml(reviewerName),
+        decisionNote: this.escapeHtmlWithBreaks(decisionNote),
+        totalGross: this.escapeHtml(totalGross),
+        totalNet: this.escapeHtml(totalNet),
+        detailLink: this.sanitizeUrl(detailLink),
       }),
     );
   }
