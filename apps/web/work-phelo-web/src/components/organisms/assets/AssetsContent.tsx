@@ -28,7 +28,7 @@ import {
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
 import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
-import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { StatCard } from '@/components/molecules/shared/StatCard';
 
 const TYPE_LABELS: Record<AssetType, string> = {
   LAPTOP: 'Laptop',
@@ -152,10 +152,7 @@ export function AssetsContent() {
     <>
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Assets</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            {filtered.length} asset{filtered.length !== 1 ? 's' : ''}
-          </p>
+          <h1 className="text-xl font-bold text-gray-900">Asset Management</h1>
         </div>
         {canCreateAsset && <Button onClick={() => setPanel({ type: 'add' })}>+ Add Asset</Button>}
       </div>

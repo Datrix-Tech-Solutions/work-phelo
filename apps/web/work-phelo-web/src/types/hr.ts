@@ -415,6 +415,10 @@ export interface PayrollRunEmployeeSummary {
   lastName: string;
   employeeNumber: string;
   jobTitle: string;
+  department?: string | null;
+  tinNumber?: string | null;
+  ssnit?: string | null;
+  branchName?: string | null;
   bankName?: string | null;
   bankBranch?: string | null;
   bankAccountNumber?: string | null;

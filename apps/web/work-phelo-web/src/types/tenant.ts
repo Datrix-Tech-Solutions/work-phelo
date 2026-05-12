@@ -7,6 +7,8 @@ export interface Tenant {
   email: string;
   phone?: string;
   country?: string;
+  address?: string;
+  currency?: string;
   industry?: string;
   size?: string;
   status: TenantStatus;
@@ -23,6 +25,8 @@ export interface RegisterTenantPayload {
   lastName: string;
   phone?: string;
   country?: string;
+  address?: string;
+  currency?: string;
   industry?: string;
   size?: string;
 }

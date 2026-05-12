@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PayrollItem } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
@@ -35,12 +34,6 @@ const YEARS = Array.from({ length: 6 }, (_, i) => {
   const y = currentYear - 5 + i + 1;
   return { value: String(y), label: String(y) };
 }).reverse();
-
-const STATUS_VARIANT = {
-  DRAFT: 'warning',
-  APPROVED: 'info',
-  PAID: 'success',
-} as const;
 
 function ghs(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
@@ -130,27 +123,49 @@ export function TaxReturnsPanel({ isOpen, onClose, payslips }: TaxReturnsPanelPr
             No payslips found for the selected range.
           </p>
         ) : (
-          filtered.map((p) => {
-            const run = p.payrollRun!;
-            const label = payrollMonthLabel(run.month, run.year);
-            const statusVariant =
-              STATUS_VARIANT[run.status as keyof typeof STATUS_VARIANT] ?? 'neutral';
-            return (
-              <div
-                key={p.id}
-                className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
-              >
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{label}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Gross: {ghs(p.grossSalary)}</p>
+          <>
+            {filtered.map((p) => {
+              const run = p.payrollRun!;
+              const label = payrollMonthLabel(run.month, run.year);
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">{label}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Gross: {ghs(p.grossSalary)}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-xs text-gray-400">PAYE: {ghs(p.payeTax)}</p>
+                      <p className="text-sm font-bold text-gray-900">{ghs(p.netSalary)}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Badge variant={statusVariant} label={run.status} />
-                  <p className="text-sm font-bold text-gray-900">{ghs(p.netSalary)}</p>
-                </div>
+              );
+            })}
+
+            {/* Totals */}
+            <div className="flex items-center justify-between px-4 py-4 rounded-card bg-gray-50 border border-gray-200">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Total ({filtered.length} months)
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Gross: {ghs(filtered.reduce((s, p) => s + parseFloat(p.grossSalary), 0))}
+                </p>
               </div>
-            );
-          })
+              <div className="text-right">
+                <p className="text-xs text-gray-400">
+                  PAYE: {ghs(filtered.reduce((s, p) => s + parseFloat(p.payeTax), 0))}
+                </p>
+                <p className="text-sm font-bold text-emerald-600">
+                  {ghs(filtered.reduce((s, p) => s + parseFloat(p.netSalary), 0))}
+                </p>
+              </div>
+            </div>
+          </>
         )}
       </div>
     </SidePanel>

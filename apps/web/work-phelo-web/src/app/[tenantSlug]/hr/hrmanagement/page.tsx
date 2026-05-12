@@ -10,6 +10,8 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const {
+    canReadDepartments,
+    canReadBranches,
     canManageLeaveTypes,
     canConfigureAppraisal,
     canAccessRoles,
@@ -22,6 +24,16 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
 
     if (!hasAnyManagementAccess) {
       router.replace(`/${tenantSlug}/hr`);
+      return;
+    }
+
+    if (canReadDepartments) {
+      router.replace(`/${tenantSlug}/hr/hrmanagement/departments`);
+      return;
+    }
+
+    if (canReadBranches) {
+      router.replace(`/${tenantSlug}/hr/hrmanagement/branches`);
       return;
     }
 
@@ -44,6 +56,8 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
       router.replace(`/${tenantSlug}/hr/hrmanagement/audit-logs`);
     }
   }, [
+    canReadDepartments,
+    canReadBranches,
     canAccessRoles,
     canConfigureAppraisal,
     canManageLeaveTypes,

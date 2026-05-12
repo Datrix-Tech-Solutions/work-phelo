@@ -24,6 +24,7 @@ export function EmploymentDetailsSection({ employee, allHrEmployees }: Props) {
     <SectionCard title="Employment Details">
       <div className="grid grid-cols-4 gap-x-6 gap-y-5">
         <DetailField label="Department" value={employee?.department?.name} />
+        <DetailField label="Branch" value={employee?.branch?.name} />
         <DetailField label="Job Title" value={employee?.jobTitle} />
         <DetailField label="Reporting Manager" value={managerName} />
         <DetailField label="Date of Hire" value={formatDate(employee?.hireDate)} />

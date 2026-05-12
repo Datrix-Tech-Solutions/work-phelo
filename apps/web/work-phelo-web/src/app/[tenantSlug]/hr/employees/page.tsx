@@ -5,7 +5,7 @@
 import { useState, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, UserCheck, Clock, CalendarOff } from 'lucide-react';
-import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { StatCard } from '@/components/molecules/shared/StatCard';
 import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';

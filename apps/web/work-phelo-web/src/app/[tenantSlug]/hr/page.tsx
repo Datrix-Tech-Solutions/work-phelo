@@ -5,6 +5,7 @@
 import { use, useState, useRef } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { useUpcomingBirthdays, useEmployeeDashboard } from '@/hooks';
+import { useMyProfile, useBranchOptions } from '@/hooks';
 import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/useLeave';
 import { useMyPayslips } from '@/hooks/usePayroll';
 import { usePublicHolidays } from '@/hooks/usePublicHolidays';
@@ -55,6 +56,12 @@ export default function EmployeeDashboardPage({
   const tenantName = user?.tenantName ?? 'Your Company';
 
   /* ── Remote data ── */
+  const { data: myProfile } = useMyProfile();
+  const { data: branchOptions = [] } = useBranchOptions();
+  const department = myProfile?.department?.name;
+  const branch =
+    myProfile?.branch?.name ?? branchOptions.find((b) => b.id === myProfile?.branchId)?.name;
+
   const { data: dashboard, isLoading: isDashboardLoading } = useEmployeeDashboard();
   const { data: balancesRaw } = useLeaveBalances();
   const { data: myLeaveRaw } = useMyLeaveRequests();
@@ -188,7 +195,12 @@ export default function EmployeeDashboardPage({
   return (
     <div className="p-6 flex flex-col gap-6 h-full overflow-y-auto">
       <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-2 bg-gray-50">
-        <DashboardWelcomeBanner tenantName={tenantName} fullName={fullName} />
+        <DashboardWelcomeBanner
+          tenantName={tenantName}
+          fullName={fullName}
+          department={department}
+          branch={branch}
+        />
       </div>
 
       <DashboardStatCards
