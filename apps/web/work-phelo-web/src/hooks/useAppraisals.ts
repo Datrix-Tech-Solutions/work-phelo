@@ -349,3 +349,39 @@ export function useSubmitManagerReview() {
     },
   });
 }
+
+export function useFinalizeAppraisal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) =>
+      api.patch(`/hr/appraisals/${id}/finalize`, { note }).then((r) => r.data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['appraisal', id] });
+      queryClient.invalidateQueries({ queryKey: ['cycle-results'] });
+      queryClient.invalidateQueries({ queryKey: ['cycle-appraisals'] });
+    },
+  });
+}
+
+export function useReopenAppraisal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      reason,
+      target,
+    }: {
+      id: string;
+      reason: string;
+      target?: 'SELF' | 'MANAGER' | 'FULL';
+    }) =>
+      api
+        .patch(`/hr/appraisals/${id}/reopen`, { reason, target: target ?? 'FULL' })
+        .then((r) => r.data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['appraisal', id] });
+      queryClient.invalidateQueries({ queryKey: ['cycle-results'] });
+      queryClient.invalidateQueries({ queryKey: ['cycle-appraisals'] });
+    },
+  });
+}

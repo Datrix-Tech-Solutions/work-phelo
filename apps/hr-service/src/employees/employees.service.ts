@@ -953,7 +953,13 @@ export class EmployeesService {
   }
 
   private buildResignationDetailLink(tenantSlug: string, employeeId: string) {
-    return `/${tenantSlug}/hr/employees/${employeeId}?tab=resignation`;
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/employees/${employeeId}?tab=resignation`;
+  }
+
+  private buildTenantWorkspaceLink(tenantSlug: string) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/login`;
   }
 
   private toResignationNotificationRecipient(
@@ -1545,7 +1551,7 @@ export class EmployeesService {
   async completeOffboard(
     tenantId: string,
     employeeId: string,
-    actor: { id: string; email: string },
+    actor: { id: string; email: string; tenantSlug: string },
   ) {
     await this.findById(tenantId, employeeId);
 
@@ -1629,6 +1635,7 @@ export class EmployeesService {
         lastWorkingDate: record.lastWorkingDate
           ? record.lastWorkingDate.toISOString()
           : new Date().toISOString(),
+        platformLink: this.buildTenantWorkspaceLink(actor.tenantSlug),
       })
       .catch((err) =>
         this.logger.error(

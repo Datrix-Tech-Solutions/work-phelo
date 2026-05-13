@@ -366,6 +366,7 @@ export class EmployeesController {
     return this.employeesService.completeOffboard(req.user.tenantId, id, {
       id: req.user.id,
       email: req.user.email,
+      tenantSlug: req.user.tenantSlug,
     });
   }
 
