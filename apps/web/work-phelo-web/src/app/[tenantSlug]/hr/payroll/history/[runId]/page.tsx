@@ -22,6 +22,33 @@ function fmt(value: string | number | null | undefined) {
   return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function LineItemsCell({
+  items,
+  fallback,
+}: {
+  items: Array<{ name: string; amount: string }> | undefined;
+  fallback: string;
+}) {
+  const active = (items ?? [])
+    .map((item) => ({ name: item.name, amount: parseFloat(item.amount) }))
+    .filter((item) => item.amount > 0);
+
+  if (active.length === 0) {
+    return <span>{fmt(fallback)}</span>;
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {active.map((item, index) => (
+        <div key={`${item.name}-${index}`} className="flex items-center justify-between gap-3">
+          <span className="text-xs text-gray-500 truncate max-w-28">{item.name}</span>
+          <span className="text-xs tabular-nums text-gray-800">{fmt(item.amount)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: string }) {
   const [open, setOpen] = useState(false);
   const [pendingFormat, setPendingFormat] = useState<'bank' | 'full' | null>(null);
@@ -141,7 +168,7 @@ const columns: Column<PayrollItem>[] = [
   {
     key: 'totalAllowances',
     label: 'Allowances',
-    render: (row) => fmt(row.totalAllowances),
+    render: (row) => <LineItemsCell items={row.allowanceItems} fallback={row.totalAllowances} />,
   },
   {
     key: 'grossSalary',
@@ -161,7 +188,7 @@ const columns: Column<PayrollItem>[] = [
   {
     key: 'otherDeductions',
     label: 'Deductions',
-    render: (row) => fmt(row.otherDeductions),
+    render: (row) => <LineItemsCell items={row.deductionItems} fallback={row.otherDeductions} />,
   },
 
   {

@@ -38,9 +38,13 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
     if (t === 'ssnit' && canManagePayroll) return 'ssnit';
     if (t === 'manage' && canManagePayroll) return 'manage';
     return canManagePayroll ? 'manage' : 'payslip';
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, canApprovePayroll, canManagePayroll]);
 
   const [tab, setTab] = useState<Tab>(initialTab);
+
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">

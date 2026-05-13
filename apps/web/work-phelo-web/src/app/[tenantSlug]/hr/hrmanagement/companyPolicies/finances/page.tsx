@@ -12,7 +12,6 @@ import { extractError } from '@/lib/extractError';
 import { inputClass } from '@/lib/utils';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 
 interface FinancesForm {
   payrollTier2FundName: string;
@@ -25,14 +24,14 @@ export default function FinancesPage() {
   const toast = useToast();
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
-  const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
-  const { canReadHrSettings } = useHrManagementAccess();
+  const canReadPayrollSettings = usePermission(Permission.READ_PAYROLL);
+  const canEditPayrollSettings = usePermission(Permission.MANAGE_PAYROLL_SETTINGS);
 
   useEffect(() => {
-    if (!canReadHrSettings && !canManagePayroll) {
+    if (!canReadPayrollSettings) {
       router.replace(`/${params.tenantSlug}/hr`);
     }
-  }, [canReadHrSettings, canManagePayroll, router, params.tenantSlug]);
+  }, [canReadPayrollSettings, router, params.tenantSlug]);
 
   const { data: settings, isLoading } = usePayrollSettings();
   const { mutate: updateSettings, isPending } = useUpdatePayrollSettings();
@@ -58,9 +57,7 @@ export default function FinancesPage() {
         payrollTier2FundName: settings.payrollTier2FundName ?? '',
         payrollTier3Enabled: settings.payrollTier3Enabled,
         payrollTier3Rate:
-          settings.payrollTier3Rate != null
-            ? String(Math.round(settings.payrollTier3Rate * 100))
-            : '',
+          settings.payrollTier3Rate != null ? String(settings.payrollTier3Rate) : '',
         payrollTier3SchemeName: settings.payrollTier3SchemeName ?? '',
       });
     }
@@ -71,7 +68,7 @@ export default function FinancesPage() {
   const onSubmit = (data: FinancesForm) => {
     const rate =
       data.payrollTier3Enabled && data.payrollTier3Rate
-        ? parseFloat(data.payrollTier3Rate) / 100
+        ? parseFloat(data.payrollTier3Rate)
         : undefined;
 
     updateSettings(
@@ -137,7 +134,7 @@ export default function FinancesPage() {
                     {...register('payrollTier3Rate', {
                       required: tier3Enabled ? 'Rate is required when Tier 3 is enabled' : false,
                       min: { value: 0.1, message: 'Rate must be greater than 0' },
-                      max: { value: 100, message: 'Rate cannot exceed 100%' },
+                      max: { value: 16, message: 'Rate cannot exceed 16%' },
                     })}
                     className={inputClass(errors.payrollTier3Rate?.message, 'pr-8')}
                   />
@@ -171,7 +168,12 @@ export default function FinancesPage() {
         </FormSection>
 
         <div>
-          <Button type="submit" disabled={!isDirty} isLoading={isPending} loadingText="Saving…">
+          <Button
+            type="submit"
+            disabled={!isDirty || !canEditPayrollSettings}
+            isLoading={isPending}
+            loadingText="Saving…"
+          >
             Save Changes
           </Button>
         </div>

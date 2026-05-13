@@ -110,6 +110,7 @@ export interface EmployeeAllowance {
   id: string;
   employeeId: string;
   type: AllowanceType;
+  name?: string;
   amount: number;
   description?: string;
   effectiveFrom: string;
@@ -379,7 +380,7 @@ export interface LeaveBalance {
 }
 
 // ── Payroll ───────────────────────────────────────────────
-export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID' | 'REJECTED';
+export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
 
 export interface PayrollRun {
   id: string;
@@ -403,8 +404,6 @@ export interface PayrollRun {
   approvalNote?: string | null;
   returnToDraftNote?: string | null;
   paidAt?: string;
-  rejectedAt?: string;
-  rejectionReason?: string | null;
   tier3Enabled: boolean;
   tier3Rate?: string | null;
   tier3SchemeName?: string | null;
@@ -430,6 +429,15 @@ export interface PayrollItemAllowance {
   id: string;
   payrollItemId: string;
   name: string;
+  type?: string | null;
+  amount: string;
+}
+
+export interface PayrollItemDeduction {
+  id: string;
+  payrollItemId: string;
+  employeeDeductionId?: string | null;
+  name: string;
   amount: string;
 }
 
@@ -443,6 +451,7 @@ export interface PayrollItem {
   allowanceItems?: PayrollItemAllowance[];
   transportAmount: string;
   otherDeductions: string;
+  deductionItems?: PayrollItemDeduction[];
   overtimePay: string;
   bonus: string;
   thirteenthMonth: string;
@@ -486,10 +495,19 @@ export interface RunPayrollDto {
 
 export interface UpdatePayrollItemDto {
   basicSalary?: number;
-  allowanceItems?: { name: string; amount: number }[];
   totalAllowances?: number;
   transportAmount?: number;
   otherDeductions?: number;
+  allowanceItems?: Array<{
+    name: string;
+    type?: string | null;
+    amount: number;
+  }>;
+  deductionItems?: Array<{
+    employeeDeductionId?: string | null;
+    name: string;
+    amount: number;
+  }>;
 }
 
 export interface PayrollSettings {

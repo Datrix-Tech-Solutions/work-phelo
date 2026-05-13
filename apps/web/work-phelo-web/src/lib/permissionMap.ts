@@ -150,7 +150,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.APPROVE_SHIFT_SWAP]: ['schedules:APPROVE'],
 
   // Payroll
-  [Permission.READ_PAYROLL]: ['payroll:VIEW'],
+  [Permission.READ_PAYROLL]: ['payroll:VIEW', 'payroll:RUN', 'payroll:APPROVE', 'payroll:EDIT'],
   [Permission.RUN_PAYROLL]: ['payroll:RUN'],
   [Permission.APPROVE_PAYROLL]: ['payroll:APPROVE'],
   [Permission.READ_OWN_PAYSLIP]: ['payslip-self:VIEW'],

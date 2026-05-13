@@ -27,6 +27,11 @@ import {
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
+import {
+  EmploymentStatus,
+  PayrollItem,
+  Prisma,
+} from '../../prisma/generated/client';
 
 type PayrollSettingsSnapshot = {
   tier3Enabled: boolean;
@@ -39,6 +44,18 @@ type EditablePayrollValues = {
   totalAllowances: string;
   transportAmount: string;
   otherDeductions: string;
+};
+
+type PayrollAllowanceLineItem = {
+  name: string;
+  type?: string | null;
+  amount: string;
+};
+
+type PayrollDeductionLineItem = {
+  employeeDeductionId?: string | null;
+  name: string;
+  amount: string;
 };
 
 type CalculatedPayrollValues = EditablePayrollValues & {
@@ -57,6 +74,11 @@ type CalculatedPayrollValues = EditablePayrollValues & {
   netSalary: string;
 };
 
+type PayrollItemSeed = CalculatedPayrollValues & {
+  allowanceItems: PayrollAllowanceLineItem[];
+  deductionItems: PayrollDeductionLineItem[];
+};
+
 type PayrollNotificationRecipient = {
   userId: string;
   email: string;
@@ -72,6 +94,15 @@ export class PayrollService {
     private readonly notificationsService: NotificationsService,
     private readonly rabbitmq: RabbitMQPublisher,
   ) {}
+
+  private canReadPayroll(actor: RequestUser) {
+    return (
+      hasPermissionRule(actor, 'payroll:VIEW') ||
+      hasPermissionRule(actor, 'payroll:RUN') ||
+      hasPermissionRule(actor, 'payroll:APPROVE') ||
+      hasPermissionRule(actor, 'payroll:EDIT')
+    );
+  }
 
   private getMonthBounds(
     month: number,
@@ -154,32 +185,129 @@ export class PayrollService {
     };
   }
 
-  private buildSeedValuesFromEmployee(employee: {
-    basicSalary: { toString(): string };
-    allowances: Array<{
-      amount: { toString(): string };
-      type: string;
-    }>;
-  }): EditablePayrollValues {
-    const transportAmount = employee.allowances
-      .filter((allowance) => allowance.type === 'TRANSPORT')
-      .reduce(
-        (sum, allowance) => sum.plus(allowance.amount.toString()),
-        new Decimal(0),
-      );
+  private isTransportAllowanceLine(item: {
+    name?: string | null;
+    type?: string | null;
+  }) {
+    return (
+      item.type === 'TRANSPORT' ||
+      `${item.type ?? ''} ${item.name ?? ''}`
+        .toLowerCase()
+        .includes('transport')
+    );
+  }
 
-    const totalAllowances = employee.allowances
-      .filter((allowance) => allowance.type !== 'TRANSPORT')
-      .reduce(
-        (sum, allowance) => sum.plus(allowance.amount.toString()),
-        new Decimal(0),
-      );
+  private sumLineItems(items: Array<{ amount: string }>) {
+    return items.reduce((sum, item) => sum.plus(item.amount), new Decimal(0));
+  }
+
+  private normalizeAllowanceLineItems(
+    items: Array<{ name: string; type?: string | null; amount: number }>,
+  ): PayrollAllowanceLineItem[] {
+    return items
+      .map((item) => ({
+        name: item.name.trim(),
+        type: item.type?.trim() || null,
+        amount: new Decimal(item.amount).toFixed(2),
+      }))
+      .filter((item) => item.name && new Decimal(item.amount).gt(0));
+  }
+
+  private normalizeDeductionLineItems(
+    items: Array<{
+      employeeDeductionId?: string | null;
+      name: string;
+      amount: number;
+    }>,
+  ): PayrollDeductionLineItem[] {
+    return items
+      .map((item) => ({
+        employeeDeductionId: item.employeeDeductionId ?? null,
+        name: item.name.trim(),
+        amount: new Decimal(item.amount).toFixed(2),
+      }))
+      .filter((item) => item.name && new Decimal(item.amount).gt(0));
+  }
+
+  private buildEditableValuesFromLineItems(
+    basicSalary: string,
+    allowanceItems: PayrollAllowanceLineItem[],
+    deductionItems: PayrollDeductionLineItem[],
+  ): EditablePayrollValues {
+    const transportAmount = this.sumLineItems(
+      allowanceItems.filter((item) => this.isTransportAllowanceLine(item)),
+    );
+    const totalAllowances = this.sumLineItems(
+      allowanceItems.filter((item) => !this.isTransportAllowanceLine(item)),
+    );
+    const otherDeductions = this.sumLineItems(deductionItems);
 
     return {
-      basicSalary: employee.basicSalary.toString(),
+      basicSalary,
       totalAllowances: totalAllowances.toString(),
       transportAmount: transportAmount.toString(),
-      otherDeductions: '0',
+      otherDeductions: otherDeductions.toString(),
+    };
+  }
+
+  private buildSeedFromEmployee(
+    employee: {
+      basicSalary: { toString(): string };
+      allowances: Array<{
+        amount: { toString(): string };
+        type: string;
+        name?: string | null;
+      }>;
+      deductions?: Array<{
+        id: string;
+        name: string;
+        totalAmount: { toString(): string };
+        monthlyRate: { toString(): string };
+        amountPaid: { toString(): string };
+        startDate: Date;
+      }>;
+    },
+    deductionCutoff: Date,
+  ): {
+    values: EditablePayrollValues;
+    allowanceItems: PayrollAllowanceLineItem[];
+    deductionItems: PayrollDeductionLineItem[];
+  } {
+    const allowanceItems = employee.allowances
+      .map((allowance) => ({
+        name: allowance.name || allowance.type,
+        type: allowance.type,
+        amount: new Decimal(allowance.amount.toString()).toFixed(2),
+      }))
+      .filter((allowance) => new Decimal(allowance.amount).gt(0));
+
+    const deductionItems = (employee.deductions ?? [])
+      .filter((deduction) => deduction.startDate <= deductionCutoff)
+      .map((deduction) => {
+        const balance = Decimal.max(
+          new Decimal(0),
+          new Decimal(deduction.totalAmount.toString()).minus(
+            deduction.amountPaid.toString(),
+          ),
+        );
+        return {
+          employeeDeductionId: deduction.id,
+          name: deduction.name,
+          amount: Decimal.min(balance, deduction.monthlyRate.toString())
+            .toDecimalPlaces(2)
+            .toString(),
+        };
+      })
+      .filter((deduction) => new Decimal(deduction.amount).gt(0));
+
+    return {
+      values: this.buildEditableValuesFromLineItems(
+        employee.basicSalary.toString(),
+        allowanceItems,
+        deductionItems,
+      ),
+      allowanceItems,
+      deductionItems,
     };
   }
 
@@ -227,7 +355,14 @@ export class PayrollService {
   private async getEditableRunOrThrow(tenantId: string, runId: string) {
     const run = await this.prisma.payrollRun.findFirst({
       where: { id: runId, tenantId },
-      include: { items: true },
+      include: {
+        items: {
+          include: {
+            allowanceItems: true,
+            deductionItems: true,
+          },
+        },
+      },
     });
 
     if (!run) {
@@ -484,7 +619,12 @@ export class PayrollService {
 
     const { start, end } = this.getMonthBounds(dto.month, dto.year);
     const employees = await this.prisma.employee.findMany({
-      where: { tenantId, employmentStatus: 'ACTIVE' },
+      where: {
+        tenantId,
+        employmentStatus: {
+          in: [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION],
+        },
+      },
       include: {
         allowances: {
           where: {
@@ -493,20 +633,27 @@ export class PayrollService {
             OR: [{ effectiveTo: null }, { effectiveTo: { gte: start } }],
           },
         },
+        deductions: {
+          where: {
+            startDate: { lte: end },
+          },
+        },
       },
     });
 
     if (employees.length === 0) {
-      throw new BadRequestException('No active employees found');
+      throw new BadRequestException('No payroll-eligible employees found');
     }
 
     const settings = await this.getPayrollSettingsSnapshot(tenantId);
-    const payrollItems = employees.map((employee) =>
-      this.calculatePayrollItemValues(
-        this.buildSeedValuesFromEmployee(employee),
-        settings,
-      ),
-    );
+    const payrollItems: PayrollItemSeed[] = employees.map((employee) => {
+      const seed = this.buildSeedFromEmployee(employee, end);
+      return {
+        ...this.calculatePayrollItemValues(seed.values, settings),
+        allowanceItems: seed.allowanceItems,
+        deductionItems: seed.deductionItems,
+      };
+    });
     const totals = this.calculateRunTotals(payrollItems);
 
     return this.prisma.payrollRun.upsert({
@@ -535,11 +682,25 @@ export class PayrollService {
         tier3SchemeName: settings.tier3SchemeName,
         items: {
           deleteMany: {},
-          create: payrollItems.map((item, index) => ({
-            tenantId,
-            employeeId: employees[index].id,
-            ...item,
-          })),
+          create: payrollItems.map(
+            ({ allowanceItems, deductionItems, ...item }, index) => ({
+              tenantId,
+              employeeId: employees[index].id,
+              ...item,
+              allowanceItems: {
+                create: allowanceItems.map((allowance) => ({
+                  tenantId,
+                  ...allowance,
+                })),
+              },
+              deductionItems: {
+                create: deductionItems.map((deduction) => ({
+                  tenantId,
+                  ...deduction,
+                })),
+              },
+            }),
+          ),
         },
       },
       create: {
@@ -561,16 +722,32 @@ export class PayrollService {
         tier3Rate: settings.tier3Rate,
         tier3SchemeName: settings.tier3SchemeName,
         items: {
-          create: payrollItems.map((item, index) => ({
-            tenantId,
-            employeeId: employees[index].id,
-            ...item,
-          })),
+          create: payrollItems.map(
+            ({ allowanceItems, deductionItems, ...item }, index) => ({
+              tenantId,
+              employeeId: employees[index].id,
+              ...item,
+              allowanceItems: {
+                create: allowanceItems.map((allowance) => ({
+                  tenantId,
+                  ...allowance,
+                })),
+              },
+              deductionItems: {
+                create: deductionItems.map((deduction) => ({
+                  tenantId,
+                  ...deduction,
+                })),
+              },
+            }),
+          ),
         },
       },
       include: {
         items: {
           include: {
+            allowanceItems: true,
+            deductionItems: true,
             employee: {
               select: {
                 firstName: true,
@@ -603,26 +780,74 @@ export class PayrollService {
       tier3Rate: run.tier3Rate?.toString() ?? null,
       tier3SchemeName: run.tier3SchemeName,
     };
+    const allowanceItems =
+      dto.allowanceItems != null
+        ? this.normalizeAllowanceLineItems(dto.allowanceItems)
+        : currentItem.allowanceItems.map((item) => ({
+            name: item.name,
+            type: item.type,
+            amount: item.amount.toString(),
+          }));
+    const deductionItems =
+      dto.deductionItems != null
+        ? this.normalizeDeductionLineItems(dto.deductionItems)
+        : currentItem.deductionItems.map((item) => ({
+            employeeDeductionId: item.employeeDeductionId,
+            name: item.name,
+            amount: item.amount.toString(),
+          }));
 
     const recalculatedItem = this.calculatePayrollItemValues(
-      {
-        basicSalary:
-          dto.basicSalary != null
-            ? new Decimal(dto.basicSalary).toFixed(2)
-            : currentItem.basicSalary.toString(),
-        totalAllowances:
-          dto.totalAllowances != null
-            ? new Decimal(dto.totalAllowances).toFixed(2)
-            : currentItem.totalAllowances.toString(),
-        transportAmount:
-          dto.transportAmount != null
-            ? new Decimal(dto.transportAmount).toFixed(2)
-            : currentItem.transportAmount.toString(),
-        otherDeductions:
-          dto.otherDeductions != null
-            ? new Decimal(dto.otherDeductions).toFixed(2)
-            : currentItem.otherDeductions.toString(),
-      },
+      dto.allowanceItems != null || dto.deductionItems != null
+        ? this.buildEditableValuesFromLineItems(
+            dto.basicSalary != null
+              ? new Decimal(dto.basicSalary).toFixed(2)
+              : currentItem.basicSalary.toString(),
+            dto.allowanceItems != null
+              ? allowanceItems
+              : [
+                  ...allowanceItems.filter((item) =>
+                    this.isTransportAllowanceLine(item),
+                  ),
+                  {
+                    name: 'Allowances',
+                    type: null,
+                    amount:
+                      dto.totalAllowances != null
+                        ? new Decimal(dto.totalAllowances).toFixed(2)
+                        : currentItem.totalAllowances.toString(),
+                  },
+                ].filter((item) => new Decimal(item.amount).gt(0)),
+            dto.deductionItems != null
+              ? deductionItems
+              : [
+                  {
+                    name: 'Deductions',
+                    amount:
+                      dto.otherDeductions != null
+                        ? new Decimal(dto.otherDeductions).toFixed(2)
+                        : currentItem.otherDeductions.toString(),
+                  },
+                ].filter((item) => new Decimal(item.amount).gt(0)),
+          )
+        : {
+            basicSalary:
+              dto.basicSalary != null
+                ? new Decimal(dto.basicSalary).toFixed(2)
+                : currentItem.basicSalary.toString(),
+            totalAllowances:
+              dto.totalAllowances != null
+                ? new Decimal(dto.totalAllowances).toFixed(2)
+                : currentItem.totalAllowances.toString(),
+            transportAmount:
+              dto.transportAmount != null
+                ? new Decimal(dto.transportAmount).toFixed(2)
+                : currentItem.transportAmount.toString(),
+            otherDeductions:
+              dto.otherDeductions != null
+                ? new Decimal(dto.otherDeductions).toFixed(2)
+                : currentItem.otherDeductions.toString(),
+          },
       settings,
     );
 
@@ -631,6 +856,36 @@ export class PayrollService {
         where: { id: itemId },
         data: recalculatedItem,
       });
+
+      if (dto.allowanceItems != null) {
+        await tx.payrollItemAllowance.deleteMany({
+          where: { payrollItemId: itemId, tenantId },
+        });
+        if (allowanceItems.length > 0) {
+          await tx.payrollItemAllowance.createMany({
+            data: allowanceItems.map((item) => ({
+              tenantId,
+              payrollItemId: itemId,
+              ...item,
+            })),
+          });
+        }
+      }
+
+      if (dto.deductionItems != null) {
+        await tx.payrollItemDeduction.deleteMany({
+          where: { payrollItemId: itemId, tenantId },
+        });
+        if (deductionItems.length > 0) {
+          await tx.payrollItemDeduction.createMany({
+            data: deductionItems.map((item) => ({
+              tenantId,
+              payrollItemId: itemId,
+              ...item,
+            })),
+          });
+        }
+      }
 
       const items = await tx.payrollItem.findMany({
         where: { payrollRunId: runId, tenantId },
@@ -647,6 +902,7 @@ export class PayrollService {
           totalTier2: totals.totalTier2.toString(),
           totalTier3: totals.totalTier3.toString(),
           totalPAYE: totals.totalPAYE.toString(),
+          totalEmployerCost: totals.totalEmployerCost.toString(),
         },
       });
 
@@ -655,6 +911,8 @@ export class PayrollService {
         include: {
           items: {
             include: {
+              allowanceItems: true,
+              deductionItems: true,
               employee: {
                 select: {
                   firstName: true,
@@ -801,23 +1059,86 @@ export class PayrollService {
     };
   }
 
+  private async applyPaidPayrollDeductions(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    items: Array<
+      Pick<PayrollItem, 'employeeId' | 'otherDeductions'> & {
+        deductionItems: Array<{
+          employeeDeductionId: string | null;
+          amount: { toString(): string };
+        }>;
+      }
+    >,
+  ) {
+    for (const item of items) {
+      for (const itemDeduction of item.deductionItems) {
+        if (!itemDeduction.employeeDeductionId) continue;
+
+        const deduction = await tx.employeeDeduction.findFirst({
+          where: {
+            id: itemDeduction.employeeDeductionId,
+            tenantId,
+            employeeId: item.employeeId,
+          },
+        });
+        if (!deduction) continue;
+        const balance = Decimal.max(
+          new Decimal(0),
+          new Decimal(deduction.totalAmount.toString()).minus(
+            deduction.amountPaid.toString(),
+          ),
+        );
+        if (balance.lte(0)) continue;
+
+        const applied = Decimal.min(balance, itemDeduction.amount.toString());
+
+        if (applied.lte(0)) continue;
+
+        await tx.employeeDeduction.update({
+          where: { id: deduction.id },
+          data: {
+            amountPaid: new Decimal(deduction.amountPaid.toString())
+              .plus(applied)
+              .toDecimalPlaces(2)
+              .toString(),
+          },
+        });
+      }
+    }
+  }
+
   async markAsPaid(tenantId: string, id: string) {
     const run = await this.prisma.payrollRun.findFirst({
       where: { id, tenantId },
+      include: {
+        items: {
+          include: {
+            deductionItems: true,
+          },
+        },
+      },
     });
     if (!run) throw new NotFoundException('Payroll run not found');
     if (run.status !== 'APPROVED') {
       throw new BadRequestException('Payroll must be approved first');
     }
-    return this.prisma.payrollRun.update({
-      where: { id },
-      data: { status: 'PAID', paidAt: new Date() },
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedRun = await tx.payrollRun.update({
+        where: { id },
+        data: { status: 'PAID', paidAt: new Date() },
+      });
+
+      await this.applyPaidPayrollDeductions(tx, tenantId, run.items);
+
+      return updatedRun;
     });
   }
 
   async getPayrollRuns(tenantId: string, actor: RequestUser) {
     if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(hasPermissionRule(actor, 'payroll:VIEW'));
+      assertHrAccess(this.canReadPayroll(actor));
     }
 
     return this.prisma.payrollRun.findMany({
@@ -828,7 +1149,7 @@ export class PayrollService {
 
   async getPayrollRunById(tenantId: string, id: string, actor: RequestUser) {
     if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(hasPermissionRule(actor, 'payroll:VIEW'));
+      assertHrAccess(this.canReadPayroll(actor));
     }
 
     const run = await this.prisma.payrollRun.findFirst({
@@ -836,6 +1157,8 @@ export class PayrollService {
       include: {
         items: {
           include: {
+            allowanceItems: true,
+            deductionItems: true,
             employee: {
               select: {
                 firstName: true,
@@ -861,8 +1184,16 @@ export class PayrollService {
     if (!employee) throw new NotFoundException('Employee profile not found');
 
     return this.prisma.payrollItem.findMany({
-      where: { employeeId: employee.id, tenantId },
+      where: {
+        employeeId: employee.id,
+        tenantId,
+        payrollRun: {
+          status: { in: ['APPROVED', 'PAID'] },
+        },
+      },
       include: {
+        allowanceItems: true,
+        deductionItems: true,
         payrollRun: {
           select: {
             month: true,

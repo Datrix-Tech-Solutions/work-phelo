@@ -90,6 +90,11 @@ const PAYROLL_CONFIG = {
   },
 } as const;
 
+function isTransportAllowance(item: AllowanceItem): boolean {
+  const label = `${item.type ?? ''} ${item.name ?? ''}`.toLowerCase();
+  return label.includes('transport');
+}
+
 /* ── Validation ── */
 function validateInput(input: PayrollInput): void {
   const {
@@ -294,6 +299,9 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   } = input;
 
   const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
+  const transportAllowance = allowances
+    .filter(isTransportAllowance)
+    .reduce((sum, a) => sum + a.amount, 0);
   const grossSalary = basicSalary + totalAllowances;
 
   let employeeStatutoryContrib = 0;
@@ -335,7 +343,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax)
       taxableIncome = Math.max(
         0,
-        grossSalary - employeeStatutoryContrib - pfEmployee - otherDeductions,
+        grossSalary - employeeStatutoryContrib - pfEmployee - transportAllowance - otherDeductions,
       );
       paye = calculatePAYE_GH(taxableIncome);
       break;

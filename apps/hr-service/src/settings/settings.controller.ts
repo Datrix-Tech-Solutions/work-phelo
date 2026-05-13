@@ -80,7 +80,7 @@ export class SettingsController {
   }
 
   @Get('payroll')
-  @RequirePermissions(Permission.MANAGE_PAYROLL_SETTINGS)
+  @RequirePermissions(Permission.READ_PAYROLL)
   @ApiOperation({ summary: 'Get payroll settings for the current tenant' })
   @ApiResponse({ status: 200, description: 'Payroll settings retrieved' })
   getPayrollSettings(@Req() req: any) {
