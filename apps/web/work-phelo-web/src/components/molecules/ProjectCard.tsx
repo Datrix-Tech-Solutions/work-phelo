@@ -1,17 +1,6 @@
-import { Project, ProjectStatus } from '@/types/hr';
-import { cn } from '@/lib/utils';
+import { Project } from '@/types/hr';
 import { Users, CalendarDays } from 'lucide-react';
-
-const STATUS_STYLES: Record<
-  ProjectStatus,
-  { dot: string; text: string; bg: string; label: string }
-> = {
-  PLANNING: { dot: 'bg-blue-400', text: 'text-blue-700', bg: 'bg-blue-50', label: 'Planning' },
-  ACTIVE: { dot: 'bg-green-500', text: 'text-green-700', bg: 'bg-green-50', label: 'Active' },
-  ON_HOLD: { dot: 'bg-yellow-400', text: 'text-yellow-700', bg: 'bg-yellow-50', label: 'On Hold' },
-  COMPLETED: { dot: 'bg-gray-400', text: 'text-gray-600', bg: 'bg-gray-100', label: 'Completed' },
-  CANCELLED: { dot: 'bg-red-400', text: 'text-red-600', bg: 'bg-red-50', label: 'Cancelled' },
-};
+import { ProjectStatusBadge } from '@/components/molecules/projects/ProjectStatusBadge';
 
 function formatDate(iso?: string) {
   if (!iso) return '—';
@@ -22,36 +11,14 @@ function formatDate(iso?: string) {
   });
 }
 
-function StatusBadge({ status }: { status: ProjectStatus }) {
-  const s = STATUS_STYLES[status];
-  return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold shrink-0',
-        s.bg,
-        s.text,
-      )}
-    >
-      <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', s.dot)} />
-      {s.label}
-    </span>
-  );
-}
-
 interface ProjectCardProps {
   project: Project;
-  onAddTasks?: () => void;
-  onAssignEmployees?: () => void;
+  onOpen?: () => void;
   onDelete?: () => void;
 }
 
-export function ProjectCard({
-  project,
-  onAddTasks,
-  onAssignEmployees,
-  onDelete,
-}: ProjectCardProps) {
-  const hasActions = !!(onAddTasks || onAssignEmployees || onDelete);
+export function ProjectCard({ project, onOpen, onDelete }: ProjectCardProps) {
+  const hasActions = !!(onOpen || onDelete);
 
   return (
     <div className="bg-white border border-gray-200 rounded-card flex flex-col h-full hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
@@ -68,7 +35,7 @@ export function ProjectCard({
             <p className="text-xs text-gray-400 mt-0.5 truncate">PM: {project.managerName}</p>
           )}
         </div>
-        <StatusBadge status={project.status} />
+        <ProjectStatusBadge status={project.status} />
       </div>
 
       <div className="mx-4 h-px bg-gray-100" />
@@ -120,26 +87,15 @@ export function ProjectCard({
 
           {/* Actions */}
           <div className="flex gap-2 p-4 pt-3">
-            {onAddTasks && (
+            {onOpen && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  onAddTasks();
+                  onOpen();
                 }}
                 className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
               >
-                Add Tasks
-              </button>
-            )}
-            {onAssignEmployees && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAssignEmployees();
-                }}
-                className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
-              >
-                Assign
+                Open
               </button>
             )}
             {onDelete && (

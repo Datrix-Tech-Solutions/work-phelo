@@ -520,6 +520,7 @@ export interface Project {
   managerId?: string;
   managerName?: string;
   assignedCount: number;
+  progress?: number;
   createdAt: string;
 }
 

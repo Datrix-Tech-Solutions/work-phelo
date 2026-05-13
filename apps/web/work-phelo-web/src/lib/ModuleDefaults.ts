@@ -53,6 +53,11 @@ export const DEFAULT_MODULES: Module[] = [
         label: 'Asset Management',
         description: 'Company asset tracking',
       },
+      {
+        key: 'projects',
+        label: 'Projects',
+        description: 'Project and task management',
+      },
     ],
   },
   {
