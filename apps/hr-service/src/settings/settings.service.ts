@@ -440,6 +440,7 @@ export class SettingsService {
         ...(adminEmail ? { adminEmail } : {}),
       },
       select: {
+        payrollTier2FundName: true,
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
@@ -448,6 +449,7 @@ export class SettingsService {
 
     return {
       message: 'Payroll settings updated successfully',
+      payrollTier2FundName: config.payrollTier2FundName,
       payrollTier3Enabled: config.payrollTier3Enabled,
       payrollTier3Rate:
         config.payrollTier3Rate != null

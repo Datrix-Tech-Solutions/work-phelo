@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, XCircle, FileText } from 'lucide-react';
+import { CheckCircle2, RotateCcw, FileText } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { usePayrollRuns } from '@/hooks';
@@ -12,6 +12,7 @@ import { PayrollRun, PayrollRunDetail } from '@/types/hr';
 import { AllowanceItem } from '@/lib/payrollCalculations';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
+import type { DeductionLineItem } from './DeductionsPanel';
 
 function fmt(value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
@@ -22,6 +23,7 @@ function fmt(value: string | number) {
 export interface DraftLoadData {
   basicMap: Record<string, number>;
   allowancesMap: Record<string, AllowanceItem[]>;
+  deductionItemsMap: Record<string, DeductionLineItem[]>;
 }
 
 async function loadRunData(
@@ -38,16 +40,49 @@ async function loadRunData(
 
   const basicMap: Record<string, number> = {};
   const allowancesMap: Record<string, AllowanceItem[]> = {};
+  const deductionItemsMap: Record<string, DeductionLineItem[]> = {};
 
   for (const item of detail.items) {
     basicMap[item.employeeId] = parseFloat(item.basicSalary);
-    const totalAllowances = parseFloat(item.totalAllowances);
-    if (totalAllowances > 0) {
-      allowancesMap[item.employeeId] = [{ name: 'Allowances', amount: totalAllowances }];
+    if (item.allowanceItems?.length) {
+      allowancesMap[item.employeeId] = item.allowanceItems.map((allowance) => ({
+        name: allowance.name,
+        type: allowance.type ?? undefined,
+        amount: parseFloat(allowance.amount),
+      }));
+    } else {
+      const transportAmount = parseFloat(item.transportAmount);
+      const totalAllowances = parseFloat(item.totalAllowances);
+      const allowances: AllowanceItem[] = [];
+      if (transportAmount > 0) {
+        allowances.push({
+          name: 'Transport Allowance',
+          type: 'TRANSPORT',
+          amount: transportAmount,
+        });
+      }
+      if (totalAllowances > 0) {
+        allowances.push({ name: 'Allowances', amount: totalAllowances });
+      }
+      if (allowances.length > 0) {
+        allowancesMap[item.employeeId] = allowances;
+      }
+    }
+
+    if (item.deductionItems?.length) {
+      deductionItemsMap[item.employeeId] = item.deductionItems.map((deduction) => ({
+        employeeDeductionId: deduction.employeeDeductionId ?? null,
+        name: deduction.name,
+        amount: parseFloat(deduction.amount),
+      }));
+    } else if (parseFloat(item.otherDeductions) > 0) {
+      deductionItemsMap[item.employeeId] = [
+        { name: 'Deductions', amount: parseFloat(item.otherDeductions) },
+      ];
     }
   }
 
-  return { basicMap, allowancesMap };
+  return { basicMap, allowancesMap, deductionItemsMap };
 }
 
 function ApprovedRunCard({
@@ -110,7 +145,7 @@ function ApprovedRunCard({
   );
 }
 
-function RejectedRunCard({
+function ReturnedRunCard({
   run,
   onLoad,
 }: {
@@ -137,19 +172,19 @@ function RejectedRunCard({
   return (
     <div className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-red-100 bg-red-50">
       <div className="flex items-start gap-3">
-        <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+        <RotateCcw className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-gray-900">
               {payrollMonthLabel(run.month, run.year)}
             </p>
             <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium bg-red-100 text-red-600">
-              Rejected
+              Returned
             </span>
           </div>
           <p className="text-xs text-gray-500">Gross: {fmt(run.totalGross)}</p>
-          {run.rejectionReason && (
-            <p className="text-xs text-red-500 italic">&quot;{run.rejectionReason}&quot;</p>
+          {run.returnToDraftNote && (
+            <p className="text-xs text-red-500 italic">&quot;{run.returnToDraftNote}&quot;</p>
           )}
         </div>
       </div>
@@ -228,12 +263,12 @@ export function PayrollDraftsPanel({ isOpen, onClose, onLoad }: Props) {
     .sort((a, b) => (b.year !== a.year ? b.year - a.year : b.month - a.month))
     .slice(0, 3);
 
-  const rejected = runs
-    .filter((r) => r.status === 'REJECTED')
+  const returned = runs
+    .filter((r) => r.status === 'DRAFT' && !!r.returnToDraftNote)
     .sort((a, b) => (b.year !== a.year ? b.year - a.year : b.month - a.month));
 
   const drafts = runs
-    .filter((r) => r.status === 'DRAFT')
+    .filter((r) => r.status === 'DRAFT' && !r.returnToDraftNote)
     .sort((a, b) => (b.year !== a.year ? b.year - a.year : b.month - a.month));
 
   const handleLoad = (data: DraftLoadData) => {
@@ -241,7 +276,7 @@ export function PayrollDraftsPanel({ isOpen, onClose, onLoad }: Props) {
     onClose();
   };
 
-  const isEmpty = recentApproved.length === 0 && rejected.length === 0 && drafts.length === 0;
+  const isEmpty = recentApproved.length === 0 && returned.length === 0 && drafts.length === 0;
 
   return (
     <SidePanel
@@ -269,11 +304,11 @@ export function PayrollDraftsPanel({ isOpen, onClose, onLoad }: Props) {
             </div>
           )}
 
-          {rejected.length > 0 && (
+          {returned.length > 0 && (
             <div className="flex flex-col gap-3">
-              <SectionHeader title="Rejected" count={rejected.length} />
-              {rejected.map((run) => (
-                <RejectedRunCard key={run.id} run={run} onLoad={handleLoad} />
+              <SectionHeader title="Returned For Revision" count={returned.length} />
+              {returned.map((run) => (
+                <ReturnedRunCard key={run.id} run={run} onLoad={handleLoad} />
               ))}
             </div>
           )}

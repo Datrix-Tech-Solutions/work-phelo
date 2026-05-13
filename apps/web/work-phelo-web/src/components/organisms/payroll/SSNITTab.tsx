@@ -6,7 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { Column, DataTable } from '../shared/DataTable';
-import { usePayrollRuns, usePayrollRun, useEmployees, usePayrollSettings } from '@/hooks';
+import { usePayrollRuns, usePayrollRun, useAllEmployees, usePayrollSettings } from '@/hooks';
 import { PayrollItem } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 
@@ -59,7 +59,7 @@ function buildRows(items: PayrollItem[], ssnitMap: Record<string, string>): SSNI
 
 export function SSNITTab() {
   const { data: runs = [], isLoading: runsLoading } = usePayrollRuns();
-  const { data: empData } = useEmployees({ limit: 100 });
+  const { data: empData } = useAllEmployees();
   const { data: payrollSettings } = usePayrollSettings();
   const tier2Label = payrollSettings?.payrollTier2FundName
     ? `${payrollSettings.payrollTier2FundName} (5%)`
@@ -108,7 +108,7 @@ export function SSNITTab() {
   const tier3Enabled = runDetail?.tier3Enabled ?? false;
   const tier3Label =
     tier3Enabled && runDetail?.tier3Rate
-      ? `Tier 3 (${(parseFloat(runDetail.tier3Rate) * 100).toFixed(0)}%)`
+      ? `Tier 3 (${parseFloat(runDetail.tier3Rate).toFixed(2).replace(/\.00$/, '')}%)`
       : 'Tier 3';
 
   const handleExport = () => {

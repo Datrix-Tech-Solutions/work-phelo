@@ -32,7 +32,19 @@ const YEARS = Array.from({ length: 3 }, (_, i) => {
 
 export interface EmployeeOverride {
   basicSalary?: number;
-  allowanceItems?: { name: string; amount: number }[];
+  totalAllowances?: number;
+  transportAmount?: number;
+  otherDeductions?: number;
+  allowanceItems?: Array<{
+    name: string;
+    type?: string | null;
+    amount: number;
+  }>;
+  deductionItems?: Array<{
+    employeeDeductionId?: string | null;
+    name: string;
+    amount: number;
+  }>;
 }
 
 interface Totals {
@@ -82,15 +94,13 @@ export function RunPayrollPanel({ isOpen, onClose, totals, overrides }: Props) {
 
       const itemsToUpdate = run.items.filter((item) => overrides[item.employeeId]);
       if (itemsToUpdate.length > 0) {
-        await Promise.all(
-          itemsToUpdate.map((item) =>
-            updateItem({
-              payrollRunId: run.id,
-              itemId: item.id,
-              data: overrides[item.employeeId],
-            }),
-          ),
-        );
+        for (const item of itemsToUpdate) {
+          await updateItem({
+            payrollRunId: run.id,
+            itemId: item.id,
+            data: overrides[item.employeeId],
+          });
+        }
       }
 
       await submitPayroll(run.id);

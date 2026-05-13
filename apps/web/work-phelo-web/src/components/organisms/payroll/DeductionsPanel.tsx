@@ -23,6 +23,13 @@ interface Props {
   employeeId: string;
   employeeName: string;
   onActiveTotal?: (total: number) => void;
+  onActiveItems?: (items: DeductionLineItem[]) => void;
+}
+
+export interface DeductionLineItem {
+  employeeDeductionId?: string | null;
+  name: string;
+  amount: number;
 }
 
 interface FormState {
@@ -43,6 +50,20 @@ function emptyForm(): FormState {
     monthlyRate: '',
     startDate: new Date().toISOString().slice(0, 10),
   };
+}
+
+function getActiveDeductionItems(deductions: EmployeeDeduction[]): DeductionLineItem[] {
+  return deductions
+    .filter((d) => d.amountPaid < d.totalAmount)
+    .map((d) => {
+      const balance = Math.max(0, d.totalAmount - d.amountPaid);
+      return {
+        employeeDeductionId: d.id,
+        name: d.name,
+        amount: Math.min(balance, d.monthlyRate),
+      };
+    })
+    .filter((d) => d.amount > 0);
 }
 
 function DeductionCard({
@@ -143,6 +164,7 @@ function DeductionsPanelContent({
   employeeName,
   onClose,
   onActiveTotal,
+  onActiveItems,
 }: Omit<Props, 'isOpen'>) {
   const toast = useToast();
   const { data: deductions = [], isLoading } = useEmployeeDeductions(employeeId);
@@ -157,9 +179,14 @@ function DeductionsPanelContent({
 
   const isMutating = isCreating || isUpdating;
 
-  const activeMonthlyTotal = deductions
-    .filter((d) => d.amountPaid < d.totalAmount)
-    .reduce((sum, d) => sum + d.monthlyRate, 0);
+  const activeItems = getActiveDeductionItems(deductions);
+  const activeMonthlyTotal = activeItems.reduce((sum, d) => sum + d.amount, 0);
+
+  const notifyActiveDeductions = (next: EmployeeDeduction[]) => {
+    const items = getActiveDeductionItems(next);
+    onActiveItems?.(items);
+    onActiveTotal?.(items.reduce((sum, item) => sum + item.amount, 0));
+  };
 
   const validate = (): boolean => {
     const e: Partial<FormState> = {};
@@ -188,12 +215,7 @@ function DeductionsPanelContent({
         {
           onSuccess: (updated) => {
             toast.success('Deduction updated');
-            onActiveTotal?.(
-              deductions
-                .map((d) => (d.id === editingId ? updated : d))
-                .filter((d) => d.amountPaid < d.totalAmount)
-                .reduce((s, d) => s + d.monthlyRate, 0),
-            );
+            notifyActiveDeductions(deductions.map((d) => (d.id === editingId ? updated : d)));
             resetForm();
           },
           onError: (err) => toast.error(extractError(err, 'Failed to update deduction')),
@@ -203,12 +225,7 @@ function DeductionsPanelContent({
       createDeduction(payload, {
         onSuccess: (created) => {
           toast.success('Deduction added');
-          const updated = [...deductions, created];
-          onActiveTotal?.(
-            updated
-              .filter((d) => d.amountPaid < d.totalAmount)
-              .reduce((s, d) => s + d.monthlyRate, 0),
-          );
+          notifyActiveDeductions([...deductions, created]);
           resetForm();
         },
         onError: (err) => toast.error(extractError(err, 'Failed to add deduction')),
@@ -232,11 +249,7 @@ function DeductionsPanelContent({
       onSuccess: () => {
         toast.success('Deduction removed');
         const remaining = deductions.filter((d) => d.id !== id);
-        onActiveTotal?.(
-          remaining
-            .filter((d) => d.amountPaid < d.totalAmount)
-            .reduce((s, d) => s + d.monthlyRate, 0),
-        );
+        notifyActiveDeductions(remaining);
       },
       onError: (err) => toast.error(extractError(err, 'Failed to remove deduction')),
     });

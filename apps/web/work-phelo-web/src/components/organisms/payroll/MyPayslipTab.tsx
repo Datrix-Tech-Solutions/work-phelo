@@ -64,6 +64,39 @@ function Divider() {
   return <div className="border-t border-gray-100 my-1" />;
 }
 
+function allowanceRows(item: PayrollItem) {
+  if (item.allowanceItems?.length) {
+    return item.allowanceItems
+      .map((allowance) => ({
+        label: allowance.name,
+        amount: parseFloat(allowance.amount),
+      }))
+      .filter((allowance) => allowance.amount > 0);
+  }
+
+  const rows: Array<{ label: string; amount: number }> = [];
+  const transportAmt = parseFloat(item.transportAmount);
+  const nonTransportAllowances = parseFloat(item.totalAllowances);
+  if (transportAmt > 0) rows.push({ label: 'Transport Allowance', amount: transportAmt });
+  if (nonTransportAllowances > 0)
+    rows.push({ label: 'Allowances', amount: nonTransportAllowances });
+  return rows;
+}
+
+function deductionRows(item: PayrollItem) {
+  if (item.deductionItems?.length) {
+    return item.deductionItems
+      .map((deduction) => ({
+        label: deduction.name,
+        amount: parseFloat(deduction.amount),
+      }))
+      .filter((deduction) => deduction.amount > 0);
+  }
+
+  const otherDeductions = parseFloat(item.otherDeductions);
+  return otherDeductions > 0 ? [{ label: 'Deductions', amount: otherDeductions }] : [];
+}
+
 export function MyPayslipTab() {
   const { data: payslipsRaw } = useMyPayslips();
   const user = useAuthStore((s) => s.user);
@@ -147,14 +180,12 @@ export function MyPayslipTab() {
   const tier3Enabled = selected?.payrollRun?.tier3Enabled ?? false;
   const tier3Label =
     tier3Enabled && selected?.payrollRun?.tier3Rate
-      ? `Tier 3 (${(parseFloat(selected.payrollRun.tier3Rate) * 100).toFixed(0)}%)`
+      ? `Tier 3 (${parseFloat(selected.payrollRun.tier3Rate).toFixed(2).replace(/\.00$/, '')}%)`
       : 'Tier 3';
 
-  const hasOtherDeductions = selected ? parseFloat(selected.otherDeductions) > 0 : false;
   const hasTier3 = tier3Enabled && selected ? parseFloat(selected.tier3Employee) > 0 : false;
-
-  const transportAmt = selected ? parseFloat(selected.transportAmount) : 0;
-  const otherAllowances = selected ? parseFloat(selected.totalAllowances) - transportAmt : 0;
+  const selectedAllowanceRows = selected ? allowanceRows(selected) : [];
+  const selectedDeductionRows = selected ? deductionRows(selected) : [];
 
   return (
     <>
@@ -243,12 +274,14 @@ export function MyPayslipTab() {
               <div className="bg-white border border-gray-200 rounded-card px-6 py-5">
                 <p className="text-sm font-semibold text-gray-900 mb-2">Earnings</p>
                 <PayslipRow label="Basic Salary" value={ghs(selected.basicSalary)} />
-                {transportAmt > 0 && (
-                  <PayslipRow label="Transport Allowance" value={ghs(transportAmt)} subtle />
-                )}
-                {otherAllowances > 0 && (
-                  <PayslipRow label="Other Allowances" value={ghs(otherAllowances)} subtle />
-                )}
+                {selectedAllowanceRows.map((row, index) => (
+                  <PayslipRow
+                    key={`${row.label}-${index}`}
+                    label={row.label}
+                    value={ghs(row.amount)}
+                    subtle
+                  />
+                ))}
                 {parseFloat(selected.overtimePay) > 0 && (
                   <PayslipRow label="Overtime" value={ghs(selected.overtimePay)} subtle />
                 )}
@@ -270,13 +303,14 @@ export function MyPayslipTab() {
                 {hasTier3 && (
                   <PayslipRow label={tier3Label} value={ghs(selected.tier3Employee)} subtle />
                 )}
-                {hasOtherDeductions && (
+                {selectedDeductionRows.map((row, index) => (
                   <PayslipRow
-                    label="Other Deductions"
-                    value={ghs(selected.otherDeductions)}
+                    key={`${row.label}-${index}`}
+                    label={row.label}
+                    value={ghs(row.amount)}
                     subtle
                   />
-                )}
+                ))}
                 <Divider />
                 <PayslipRow label="Total Deductions" value={ghs(selected.totalDeductions)} bold />
               </div>

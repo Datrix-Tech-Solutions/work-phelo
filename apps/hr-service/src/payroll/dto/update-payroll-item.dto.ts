@@ -1,6 +1,54 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsArray,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+
+export class PayrollAllowanceLineItemDto {
+  @ApiPropertyOptional({ example: 'Transport Allowance' })
+  @IsString()
+  @MaxLength(100)
+  name!: string;
+
+  @ApiPropertyOptional({ example: 'TRANSPORT' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  type?: string;
+
+  @ApiPropertyOptional({ example: 250, minimum: 0 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amount!: number;
+}
+
+export class PayrollDeductionLineItemDto {
+  @ApiPropertyOptional({
+    description:
+      'Source employee deduction ID when the line item comes from an employee balance',
+  })
+  @IsOptional()
+  @IsString()
+  employeeDeductionId?: string;
+
+  @ApiPropertyOptional({ example: 'Staff Loan' })
+  @IsString()
+  @MaxLength(100)
+  name!: string;
+
+  @ApiPropertyOptional({ example: 250, minimum: 0 })
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amount!: number;
+}
 
 export class UpdatePayrollItemDto {
   @ApiPropertyOptional({
@@ -46,4 +94,26 @@ export class UpdatePayrollItemDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   otherDeductions?: number;
+
+  @ApiPropertyOptional({
+    type: [PayrollAllowanceLineItemDto],
+    description:
+      'Optional itemized allowance snapshot. If provided, totals are derived from these line items.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PayrollAllowanceLineItemDto)
+  allowanceItems?: PayrollAllowanceLineItemDto[];
+
+  @ApiPropertyOptional({
+    type: [PayrollDeductionLineItemDto],
+    description:
+      'Optional itemized deduction snapshot. If provided, totals are derived from these line items.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PayrollDeductionLineItemDto)
+  deductionItems?: PayrollDeductionLineItemDto[];
 }

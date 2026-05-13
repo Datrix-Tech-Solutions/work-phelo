@@ -347,6 +347,7 @@ model Employee {
   managedAppraisals     Appraisal[]               @relation("AppraisalManager")
   documents             EmployeeDocument[]
   allowances            EmployeeAllowance[]
+  deductions            EmployeeDeduction[]
   assignedAssets        Asset[]                   @relation("AssignedAssets")
   assetAssignments      AssetAssignment[]         @relation("EmployeeAssetAssignments")
   offboarding           OffboardingRecord?
@@ -537,6 +538,24 @@ model EmployeeAllowance {
 
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
+  @@schema("hr")
+}
+
+model EmployeeDeduction {
+  id          String   @id @default(uuid())
+  tenantId    String
+  employeeId  String
+  name        String
+  totalAmount Decimal  @db.Decimal(15, 2)
+  monthlyRate Decimal  @db.Decimal(15, 2)
+  amountPaid  Decimal  @default(0) @db.Decimal(15, 2)
+  startDate   DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, employeeId])
   @@schema("hr")
 }
 
@@ -835,10 +854,42 @@ model PayrollItem {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  payrollRun PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  employee   Employee   @relation(fields: [employeeId], references: [id])
+  payrollRun     PayrollRun             @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee       Employee               @relation(fields: [employeeId], references: [id])
+  allowanceItems PayrollItemAllowance[]
+  deductionItems PayrollItemDeduction[]
 
   @@unique([payrollRunId, employeeId])
+  @@schema("hr")
+}
+
+model PayrollItemAllowance {
+  id            String   @id @default(uuid())
+  tenantId      String
+  payrollItemId String
+  name          String
+  type          String?
+  amount        Decimal  @db.Decimal(15, 2)
+  createdAt     DateTime @default(now())
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, payrollItemId])
+  @@schema("hr")
+}
+
+model PayrollItemDeduction {
+  id                  String   @id @default(uuid())
+  tenantId            String
+  payrollItemId       String
+  employeeDeductionId String?
+  name                String
+  amount              Decimal  @db.Decimal(15, 2)
+  createdAt           DateTime @default(now())
+
+  payrollItem PayrollItem @relation(fields: [payrollItemId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, payrollItemId])
   @@schema("hr")
 }
 
@@ -946,9 +997,9 @@ model Appraisal {
   managerStatus      ReviewStatus @default(PENDING)
   managerSubmittedAt DateTime?
 
-  finalScore   Float?
-  finalComment String?
-  completedAt  DateTime?
+  finalScore       Float?
+  finalComment     String?
+  completedAt      DateTime?
   finalizedBy      String?
   finalizedAt      DateTime?
   finalizationNote String?
@@ -956,12 +1007,12 @@ model Appraisal {
   reopenedBy       String?
   reopenReason     String?
   revisionNumber   Int       @default(1)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  cycle        AppraisalCycle         @relation(fields: [cycleId], references: [id])
-  employee     Employee               @relation("AppraisalEmployee", fields: [employeeId], references: [id])
-  manager      Employee?              @relation("AppraisalManager", fields: [managerId], references: [id])
+  cycle        AppraisalCycle             @relation(fields: [cycleId], references: [id])
+  employee     Employee                   @relation("AppraisalEmployee", fields: [employeeId], references: [id])
+  manager      Employee?                  @relation("AppraisalManager", fields: [managerId], references: [id])
   kpiScores    AppraisalKpiScore[]
   reminderLogs AppraisalReminderLog[]
   revisionLogs AppraisalRevisionHistory[]
