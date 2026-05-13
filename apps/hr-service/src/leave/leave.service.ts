@@ -13,7 +13,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
+import { CreatePublicHolidayDto } from './dto/create-public-holiday.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
+import { UpdatePublicHolidayDto } from './dto/update-public-holiday.dto';
 import { UpdateLeaveRequestSupportingDocumentDto } from './dto/update-leave-request-supporting-document.dto';
 import { Gender, LeaveType } from '../../prisma/generated/client';
 import {
@@ -23,6 +25,7 @@ import {
   isCompanyAdminUser,
   isEmployeeSelfServiceUser,
 } from '../auth/access-scope';
+import { getSeededPublicHolidaysForLocation } from './public-holiday.catalog';
 
 type DefaultLeaveTypeDefinition = {
   name: string;
@@ -87,6 +90,11 @@ type LeaveNotificationRecipients = {
   manager: LeaveNotificationRecipient | null;
   approvers: LeaveNotificationRecipient[];
   all: LeaveNotificationRecipient[];
+};
+
+type HolidayLocation = {
+  countryScope: string;
+  regionScope: string;
 };
 
 @Injectable()
@@ -161,6 +169,252 @@ export class LeaveService {
     const month = String(value.getMonth() + 1).padStart(2, '0');
     const day = String(value.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private normalizeLocationValue(value: string | null | undefined): string {
+    return value?.trim().toLowerCase() ?? '';
+  }
+
+  private addMonths(date: Date, months: number) {
+    const value = new Date(date);
+    value.setHours(0, 0, 0, 0);
+    value.setMonth(value.getMonth() + months);
+    return value;
+  }
+
+  private rangesOverlap(
+    leftStart: Date,
+    leftEnd: Date,
+    rightStart: Date,
+    rightEnd: Date,
+  ) {
+    return leftStart <= rightEnd && leftEnd >= rightStart;
+  }
+
+  private matchesHolidayLocation(
+    holiday: { countryScope: string; regionScope: string },
+    location: HolidayLocation,
+  ) {
+    const countryScope = this.normalizeLocationValue(holiday.countryScope);
+    const regionScope = this.normalizeLocationValue(holiday.regionScope);
+
+    if (countryScope && countryScope !== location.countryScope) {
+      return false;
+    }
+
+    if (regionScope && regionScope !== location.regionScope) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private deriveObservedDate(
+    date: Date,
+    occupiedObservedDates: Set<string>,
+  ): { observedDate: Date; isObservedShifted: boolean } {
+    const observedDate = new Date(date);
+    observedDate.setHours(0, 0, 0, 0);
+
+    if (observedDate.getDay() !== 0 && observedDate.getDay() !== 6) {
+      occupiedObservedDates.add(this.formatDateOnly(observedDate));
+      return {
+        observedDate,
+        isObservedShifted: false,
+      };
+    }
+
+    while (
+      observedDate.getDay() === 0 ||
+      observedDate.getDay() === 6 ||
+      occupiedObservedDates.has(this.formatDateOnly(observedDate))
+    ) {
+      observedDate.setDate(observedDate.getDate() + 1);
+    }
+
+    occupiedObservedDates.add(this.formatDateOnly(observedDate));
+    return {
+      observedDate,
+      isObservedShifted: true,
+    };
+  }
+
+  private async resolveEmployeeHolidayLocation(
+    tenantId: string,
+    employeeId: string,
+  ): Promise<HolidayLocation> {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      select: {
+        nationality: true,
+        region: true,
+        branch: {
+          select: {
+            country: true,
+            region: true,
+          },
+        },
+      },
+    });
+
+    if (!employee) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    return {
+      countryScope: this.normalizeLocationValue(
+        employee.branch?.country ?? employee.nationality,
+      ),
+      regionScope: this.normalizeLocationValue(
+        employee.branch?.region ?? employee.region,
+      ),
+    };
+  }
+
+  private async ensurePublicHolidaysSeededForLocation(
+    tenantId: string,
+    location: HolidayLocation,
+    years: number[],
+  ) {
+    if (!location.countryScope) {
+      return;
+    }
+
+    const uniqueYears = Array.from(new Set(years));
+
+    for (const year of uniqueYears) {
+      const holidays = getSeededPublicHolidaysForLocation(
+        location.countryScope,
+        location.regionScope,
+        year,
+        (value) => this.formatDateOnly(value),
+      );
+
+      for (const holiday of holidays) {
+        await this.prisma.publicHoliday.upsert({
+          where: {
+            tenantId_name_date_countryScope_regionScope: {
+              tenantId,
+              name: holiday.name,
+              date: holiday.date,
+              countryScope: holiday.countryScope,
+              regionScope: holiday.regionScope,
+            },
+          },
+          update: {
+            observedDate: holiday.observedDate,
+            isObservedShifted: holiday.isObservedShifted,
+            source: holiday.source,
+          },
+          create: {
+            tenantId,
+            name: holiday.name,
+            date: holiday.date,
+            observedDate: holiday.observedDate,
+            countryScope: holiday.countryScope,
+            regionScope: holiday.regionScope,
+            isObservedShifted: holiday.isObservedShifted,
+            source: holiday.source,
+          },
+        });
+      }
+    }
+  }
+
+  async ensurePublicHolidaysSeededForEmployee(
+    tenantId: string,
+    employeeId: string,
+    years: number[],
+  ) {
+    const location = await this.resolveEmployeeHolidayLocation(
+      tenantId,
+      employeeId,
+    );
+    await this.ensurePublicHolidaysSeededForLocation(tenantId, location, years);
+  }
+
+  private async getApplicableHolidayDates(
+    tenantId: string,
+    startDate: Date,
+    endDate: Date,
+    location: HolidayLocation,
+  ) {
+    const holidays = await this.prisma.publicHoliday.findMany({
+      where: {
+        tenantId,
+        OR: [
+          {
+            date: { gte: startDate, lte: endDate },
+          },
+          {
+            observedDate: { gte: startDate, lte: endDate },
+          },
+        ],
+      },
+      select: {
+        date: true,
+        observedDate: true,
+        countryScope: true,
+        regionScope: true,
+      },
+    });
+
+    return new Set(
+      holidays
+        .filter((holiday) => this.matchesHolidayLocation(holiday, location))
+        .map((holiday) => this.formatDateOnly(holiday.observedDate)),
+    );
+  }
+
+  private async calculateWorkingDayBreakdown(
+    tenantId: string,
+    startDate: Date,
+    endDate: Date,
+    location: HolidayLocation,
+  ) {
+    const holidayDates = await this.getApplicableHolidayDates(
+      tenantId,
+      startDate,
+      endDate,
+      location,
+    );
+
+    const breakdown = new Map<number, number>();
+    let totalDays = 0;
+    const current = new Date(startDate);
+    current.setHours(0, 0, 0, 0);
+
+    while (current <= endDate) {
+      const dayOfWeek = current.getDay();
+      const dateStr = this.formatDateOnly(current);
+
+      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDates.has(dateStr)) {
+        const year = current.getFullYear();
+        breakdown.set(year, (breakdown.get(year) ?? 0) + 1);
+        totalDays += 1;
+      }
+
+      current.setDate(current.getDate() + 1);
+    }
+
+    return {
+      totalDays,
+      yearlyBreakdown: breakdown,
+    };
+  }
+
+  private validateSupportingDocumentFields(
+    supportingDocumentName?: string,
+    supportingDocumentUrl?: string,
+  ) {
+    const hasName = Boolean(supportingDocumentName);
+    const hasUrl = Boolean(supportingDocumentUrl);
+
+    if (hasName !== hasUrl) {
+      throw new BadRequestException(
+        'Supporting document name and URL must be provided together.',
+      );
+    }
   }
 
   // ── Seed default leave types for new tenant ───────────────────────────────
@@ -282,15 +536,57 @@ export class LeaveService {
   }
 
   // ── Public Holidays ───────────────────────────────────────────────────────
-  async createPublicHoliday(
-    tenantId: string,
-    dto: { name: string; date: string },
-  ) {
+  async createPublicHoliday(tenantId: string, dto: CreatePublicHolidayDto) {
+    const name = dto.name.trim();
+    const date = this.parseDateOnly(dto.date, 'Public holiday date');
+    const countryScope = this.normalizeLocationValue(dto.countryScope);
+    const regionScope = this.normalizeLocationValue(dto.regionScope);
+
+    const existingObservedDates = new Set<string>();
+    const siblingHolidays = await this.prisma.publicHoliday.findMany({
+      where: {
+        tenantId,
+        countryScope,
+        regionScope,
+        OR: [
+          {
+            date: {
+              gte: new Date(date.getFullYear(), 0, 1),
+              lte: new Date(date.getFullYear(), 11, 31),
+            },
+          },
+          {
+            observedDate: {
+              gte: new Date(date.getFullYear(), 0, 1),
+              lte: new Date(date.getFullYear(), 11, 31),
+            },
+          },
+        ],
+      },
+      select: {
+        observedDate: true,
+      },
+    });
+
+    for (const holiday of siblingHolidays) {
+      existingObservedDates.add(this.formatDateOnly(holiday.observedDate));
+    }
+
+    const { observedDate, isObservedShifted } = this.deriveObservedDate(
+      date,
+      existingObservedDates,
+    );
+
     return this.prisma.publicHoliday.create({
       data: {
         tenantId,
-        name: dto.name,
-        date: this.parseDateOnly(dto.date, 'Public holiday date'),
+        name,
+        date,
+        observedDate,
+        countryScope,
+        regionScope,
+        isObservedShifted,
+        source: 'MANUAL',
       },
     });
   }
@@ -298,26 +594,79 @@ export class LeaveService {
   async getPublicHolidays(tenantId: string) {
     return this.prisma.publicHoliday.findMany({
       where: { tenantId },
-      orderBy: { date: 'asc' },
+      orderBy: [{ observedDate: 'asc' }, { name: 'asc' }],
     });
   }
 
   async updatePublicHoliday(
     tenantId: string,
     id: string,
-    dto: { name?: string; date?: string },
+    dto: UpdatePublicHolidayDto,
   ) {
     const holiday = await this.prisma.publicHoliday.findFirst({
       where: { id, tenantId },
     });
     if (!holiday) throw new NotFoundException('Public holiday not found');
+
+    const name = dto.name?.trim() ?? holiday.name;
+    const date = dto.date
+      ? this.parseDateOnly(dto.date, 'Public holiday date')
+      : holiday.date;
+    const countryScope =
+      dto.countryScope !== undefined
+        ? this.normalizeLocationValue(dto.countryScope)
+        : holiday.countryScope;
+    const regionScope =
+      dto.regionScope !== undefined
+        ? this.normalizeLocationValue(dto.regionScope)
+        : holiday.regionScope;
+
+    const existingObservedDates = new Set<string>();
+    const siblingHolidays = await this.prisma.publicHoliday.findMany({
+      where: {
+        tenantId,
+        countryScope,
+        regionScope,
+        id: { not: id },
+        OR: [
+          {
+            date: {
+              gte: new Date(date.getFullYear(), 0, 1),
+              lte: new Date(date.getFullYear(), 11, 31),
+            },
+          },
+          {
+            observedDate: {
+              gte: new Date(date.getFullYear(), 0, 1),
+              lte: new Date(date.getFullYear(), 11, 31),
+            },
+          },
+        ],
+      },
+      select: {
+        observedDate: true,
+      },
+    });
+
+    for (const sibling of siblingHolidays) {
+      existingObservedDates.add(this.formatDateOnly(sibling.observedDate));
+    }
+
+    const { observedDate, isObservedShifted } = this.deriveObservedDate(
+      date,
+      existingObservedDates,
+    );
+
     return this.prisma.publicHoliday.update({
       where: { id },
       data: {
-        name: dto.name,
-        date: dto.date
-          ? this.parseDateOnly(dto.date, 'Public holiday date')
-          : undefined,
+        name,
+        date,
+        observedDate,
+        countryScope,
+        regionScope,
+        isObservedShifted,
+        source: holiday.source ?? 'MANUAL',
       },
     });
   }
@@ -329,33 +678,6 @@ export class LeaveService {
     if (!holiday) throw new NotFoundException('Public holiday not found');
     await this.prisma.publicHoliday.delete({ where: { id } });
     return { message: 'Public holiday deleted successfully' };
-  }
-
-  private async countWorkingDays(
-    tenantId: string,
-    startDate: Date,
-    endDate: Date,
-  ): Promise<number> {
-    const holidays = await this.prisma.publicHoliday.findMany({
-      where: {
-        tenantId,
-        date: { gte: startDate, lte: endDate },
-      },
-    });
-    const holidayDates = new Set(
-      holidays.map((h) => this.formatDateOnly(h.date)),
-    );
-    let count = 0;
-    const current = new Date(startDate);
-    while (current <= endDate) {
-      const dayOfWeek = current.getDay();
-      const dateStr = this.formatDateOnly(current);
-      if (dayOfWeek !== 0 && dayOfWeek !== 6 && !holidayDates.has(dateStr)) {
-        count++;
-      }
-      current.setDate(current.getDate() + 1);
-    }
-    return count;
   }
 
   async getPendingCount(tenantId: string, actor: RequestUser) {
@@ -513,8 +835,28 @@ export class LeaveService {
   ) {
     const empRecord = await this.prisma.employee.findFirst({
       where: { userId: actor.id, tenantId },
+      select: {
+        id: true,
+        userId: true,
+        firstName: true,
+        lastName: true,
+        employmentType: true,
+        employmentStatus: true,
+        gender: true,
+        hireDate: true,
+        managerId: true,
+        departmentId: true,
+      },
     });
     if (!empRecord) throw new NotFoundException('Employee profile not found');
+    if (
+      empRecord.employmentStatus !== 'ACTIVE' &&
+      empRecord.employmentStatus !== 'PROBATION'
+    ) {
+      throw new ForbiddenException(
+        'Only active or probationary employees can submit leave requests.',
+      );
+    }
     const employeeId = empRecord.id;
 
     // Check leave type eligibility based on employment type and gender
@@ -548,11 +890,45 @@ export class LeaveService {
     }
     const supportingDocumentName = dto.supportingDocumentName?.trim();
     const supportingDocumentUrl = dto.supportingDocumentUrl?.trim();
+    this.validateSupportingDocumentFields(
+      supportingDocumentName,
+      supportingDocumentUrl,
+    );
     const start = this.parseDateOnly(dto.startDate, 'Start date');
     const end = this.parseDateOnly(dto.endDate, 'End date');
+    const coverageNote = dto.coverageNote?.trim();
 
     if (end < start)
       throw new BadRequestException('End date must be after start date');
+    if (start < empRecord.hireDate) {
+      throw new BadRequestException(
+        'Leave cannot start before the employee hire date.',
+      );
+    }
+
+    let coverageEmployeeId: string | undefined;
+    if (dto.coverageEmployeeId) {
+      if (dto.coverageEmployeeId === employeeId) {
+        throw new BadRequestException(
+          'You cannot assign yourself as your own leave cover.',
+        );
+      }
+
+      const coverageEmployee = await this.prisma.employee.findFirst({
+        where: {
+          id: dto.coverageEmployeeId,
+          tenantId,
+          employmentStatus: { in: ['ACTIVE', 'PROBATION'] },
+        },
+        select: { id: true },
+      });
+
+      if (!coverageEmployee) {
+        throw new NotFoundException('Selected coverage employee was not found');
+      }
+
+      coverageEmployeeId = coverageEmployee.id;
+    }
 
     const overlappingRequest = await this.prisma.leaveRequest.findFirst({
       where: {
@@ -576,24 +952,36 @@ export class LeaveService {
       );
     }
 
-    const totalDays = await this.countWorkingDays(tenantId, start, end);
+    const location = await this.resolveEmployeeHolidayLocation(
+      tenantId,
+      employeeId,
+    );
+    const years = [];
+    for (let year = start.getFullYear(); year <= end.getFullYear(); year += 1) {
+      years.push(year);
+    }
+    await this.ensurePublicHolidaysSeededForLocation(tenantId, location, years);
 
-    const year = start.getFullYear();
-    let balance = await this.prisma.leaveBalance.findUnique({
-      where: {
-        employeeId_leaveTypeId_year: {
-          employeeId,
-          leaveTypeId: dto.leaveTypeId,
-          year,
-        },
-      },
-    });
+    const { totalDays, yearlyBreakdown } =
+      await this.calculateWorkingDayBreakdown(tenantId, start, end, location);
 
-    if (!balance) {
-      // Self-heal: first access after a year rollover or a missed init event.
-      // Initialise balances for this year and try once more.
-      await this.initializeLeaveBalances(tenantId, employeeId, year);
-      balance = await this.prisma.leaveBalance.findUnique({
+    if (totalDays <= 0) {
+      throw new BadRequestException(
+        'The selected leave period does not contain any working days.',
+      );
+    }
+
+    const balancesByYear = new Map<
+      number,
+      { id: string; remainingDays: number }
+    >();
+
+    for (const year of years) {
+      if (!yearlyBreakdown.has(year)) {
+        continue;
+      }
+
+      let balance = await this.prisma.leaveBalance.findUnique({
         where: {
           employeeId_leaveTypeId_year: {
             employeeId,
@@ -602,34 +990,58 @@ export class LeaveService {
           },
         },
       });
-    }
 
-    if (!balance)
-      throw new BadRequestException(
-        'No leave balance found for this leave type',
-      );
-    if (balance.remainingDays < totalDays) {
-      throw new BadRequestException(
-        `Insufficient leave balance. Available: ${balance.remainingDays} days, Requested: ${totalDays} days`,
-      );
+      if (!balance) {
+        await this.initializeLeaveBalances(tenantId, employeeId, year);
+        balance = await this.prisma.leaveBalance.findUnique({
+          where: {
+            employeeId_leaveTypeId_year: {
+              employeeId,
+              leaveTypeId: dto.leaveTypeId,
+              year,
+            },
+          },
+        });
+      }
+
+      if (!balance) {
+        throw new BadRequestException(
+          `No leave balance found for this leave type in ${year}.`,
+        );
+      }
+
+      const requestedDays = yearlyBreakdown.get(year) ?? 0;
+      if (balance.remainingDays < requestedDays) {
+        throw new BadRequestException(
+          `Insufficient leave balance for ${year}. Available: ${balance.remainingDays} days, Requested: ${requestedDays} days.`,
+        );
+      }
+
+      balancesByYear.set(year, {
+        id: balance.id,
+        remainingDays: balance.remainingDays,
+      });
     }
 
     const request = await this.prisma.$transaction(async (tx) => {
-      const balanceUpdate = await tx.leaveBalance.updateMany({
-        where: {
-          id: balance.id,
-          remainingDays: { gte: totalDays },
-        },
-        data: {
-          pendingDays: { increment: totalDays },
-          remainingDays: { decrement: totalDays },
-        },
-      });
+      for (const [year, balance] of balancesByYear.entries()) {
+        const requestedDays = yearlyBreakdown.get(year) ?? 0;
+        const balanceUpdate = await tx.leaveBalance.updateMany({
+          where: {
+            id: balance.id,
+            remainingDays: { gte: requestedDays },
+          },
+          data: {
+            pendingDays: { increment: requestedDays },
+            remainingDays: { decrement: requestedDays },
+          },
+        });
 
-      if (balanceUpdate.count !== 1) {
-        throw new BadRequestException(
-          'Leave balance changed while processing your request. Please try again.',
-        );
+        if (balanceUpdate.count !== 1) {
+          throw new BadRequestException(
+            'Leave balance changed while processing your request. Please try again.',
+          );
+        }
       }
 
       return tx.leaveRequest.create({
@@ -637,10 +1049,12 @@ export class LeaveService {
           tenantId,
           employeeId,
           leaveTypeId: dto.leaveTypeId,
+          coverageEmployeeId,
           startDate: start,
           endDate: end,
           totalDays,
           reason: dto.reason,
+          coverageNote,
           supportingDocumentName,
           supportingDocumentUrl,
           status: 'PENDING',
@@ -648,6 +1062,13 @@ export class LeaveService {
         include: {
           leaveType: true,
           employee: { select: { firstName: true, lastName: true } },
+          coverageEmployee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
         },
       });
     });
@@ -740,6 +1161,14 @@ export class LeaveService {
             avatarUrl: true,
           },
         },
+        coverageEmployee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            employeeNumber: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -781,7 +1210,26 @@ export class LeaveService {
       );
     }
 
-    const year = request.startDate.getFullYear();
+    const location = await this.resolveEmployeeHolidayLocation(
+      tenantId,
+      request.employeeId,
+    );
+    const years = [];
+    for (
+      let year = request.startDate.getFullYear();
+      year <= request.endDate.getFullYear();
+      year += 1
+    ) {
+      years.push(year);
+    }
+    await this.ensurePublicHolidaysSeededForLocation(tenantId, location, years);
+    const { yearlyBreakdown } = await this.calculateWorkingDayBreakdown(
+      tenantId,
+      request.startDate,
+      request.endDate,
+      location,
+    );
+
     const { updated, balanceMissing } = await this.prisma.$transaction(
       async (tx) => {
         const reviewed = await tx.leaveRequest.updateMany({
@@ -804,31 +1252,38 @@ export class LeaveService {
           );
         }
 
-        const balance = await tx.leaveBalance.findUnique({
-          where: {
-            employeeId_leaveTypeId_year: {
-              employeeId: request.employeeId,
-              leaveTypeId: request.leaveTypeId,
-              year,
-            },
-          },
-        });
+        let anyBalanceMissing = false;
 
-        if (balance) {
+        for (const [year, affectedDays] of yearlyBreakdown.entries()) {
+          const balance = await tx.leaveBalance.findUnique({
+            where: {
+              employeeId_leaveTypeId_year: {
+                employeeId: request.employeeId,
+                leaveTypeId: request.leaveTypeId,
+                year,
+              },
+            },
+          });
+
+          if (!balance) {
+            anyBalanceMissing = true;
+            continue;
+          }
+
           if (dto.action === 'APPROVED') {
             await tx.leaveBalance.update({
               where: { id: balance.id },
               data: {
-                usedDays: { increment: request.totalDays },
-                pendingDays: { decrement: request.totalDays },
+                usedDays: { increment: affectedDays },
+                pendingDays: { decrement: affectedDays },
               },
             });
           } else {
             await tx.leaveBalance.update({
               where: { id: balance.id },
               data: {
-                pendingDays: { decrement: request.totalDays },
-                remainingDays: { increment: request.totalDays },
+                pendingDays: { decrement: affectedDays },
+                remainingDays: { increment: affectedDays },
               },
             });
           }
@@ -844,14 +1299,14 @@ export class LeaveService {
 
         return {
           updated: updatedRequest,
-          balanceMissing: !balance,
+          balanceMissing: anyBalanceMissing,
         };
       },
     );
 
     if (balanceMissing) {
       this.logger.warn(
-        `Leave balance not found for employee=${request.employeeId} leaveType=${request.leaveTypeId} year=${year} — balance counters not updated for request ${requestId}`,
+        `Leave balance not found for employee=${request.employeeId} leaveType=${request.leaveTypeId} on one or more leave years — balance counters not fully updated for request ${requestId}`,
       );
     }
 
@@ -1233,19 +1688,39 @@ export class LeaveService {
       data: { status: 'CANCELLED' },
     });
 
-    // Restore balance
-    const year = request.startDate.getFullYear();
-    await this.prisma.leaveBalance.updateMany({
-      where: {
-        employeeId: request.employeeId,
-        leaveTypeId: request.leaveTypeId,
-        year,
-      },
-      data: {
-        pendingDays: { decrement: request.totalDays },
-        remainingDays: { increment: request.totalDays },
-      },
-    });
+    const location = await this.resolveEmployeeHolidayLocation(
+      tenantId,
+      request.employeeId,
+    );
+    const years = [];
+    for (
+      let year = request.startDate.getFullYear();
+      year <= request.endDate.getFullYear();
+      year += 1
+    ) {
+      years.push(year);
+    }
+    await this.ensurePublicHolidaysSeededForLocation(tenantId, location, years);
+    const { yearlyBreakdown } = await this.calculateWorkingDayBreakdown(
+      tenantId,
+      request.startDate,
+      request.endDate,
+      location,
+    );
+
+    for (const [year, affectedDays] of yearlyBreakdown.entries()) {
+      await this.prisma.leaveBalance.updateMany({
+        where: {
+          employeeId: request.employeeId,
+          leaveTypeId: request.leaveTypeId,
+          year,
+        },
+        data: {
+          pendingDays: { decrement: affectedDays },
+          remainingDays: { increment: affectedDays },
+        },
+      });
+    }
 
     const notificationRecipients =
       await this.resolveLeaveNotificationRecipients(tenantId, empRecord);

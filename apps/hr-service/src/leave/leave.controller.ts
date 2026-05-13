@@ -24,8 +24,10 @@ import {
 import { LeaveService } from './leave.service';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
+import { CreatePublicHolidayDto } from './dto/create-public-holiday.dto';
 import { QueryLeaveRequestsDto } from './dto/query-leave-requests.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
+import { UpdatePublicHolidayDto } from './dto/update-public-holiday.dto';
 import { UpdateLeaveRequestSupportingDocumentDto } from './dto/update-leave-request-supporting-document.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
@@ -85,12 +87,10 @@ export class LeaveController {
   @HttpCode(HttpStatus.CREATED)
   @RequirePermissions(Permission.MANAGE_LEAVE_TYPES)
   @ApiOperation({ summary: 'Add a public holiday' })
-  @ApiBody({
-    schema: { example: { name: 'Independence Day', date: '2026-03-06' } },
-  })
+  @ApiBody({ type: CreatePublicHolidayDto })
   @ApiResponse({ status: 201, description: 'Public holiday added' })
   createPublicHoliday(
-    @Body() dto: { name: string; date: string },
+    @Body() dto: CreatePublicHolidayDto,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.leaveService.createPublicHoliday(req.user.tenantId, dto);
@@ -110,7 +110,7 @@ export class LeaveController {
   @ApiResponse({ status: 200, description: 'Public holiday updated' })
   updatePublicHoliday(
     @Param('id') id: string,
-    @Body() dto: { name?: string; date?: string },
+    @Body() dto: UpdatePublicHolidayDto,
     @Req() req: AuthenticatedRequest,
   ) {
     return this.leaveService.updatePublicHoliday(req.user.tenantId, id, dto);
@@ -211,6 +211,8 @@ export class LeaveController {
         startDate: '2026-06-01',
         endDate: '2026-06-05',
         reason: 'Medical recovery leave',
+        coverageEmployeeId: 'employee-456',
+        coverageNote: 'Cover payroll inbox and urgent approvals.',
         supportingDocumentName: 'Medical Report - May 2026',
         supportingDocumentUrl:
           'https://storage.example.com/leave-docs/medical-report-123.pdf',

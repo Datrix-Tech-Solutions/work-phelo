@@ -168,7 +168,8 @@ export class CreateEmployeeDto {
   hireDate!: string;
 
   @ApiPropertyOptional({
-    description: 'End date of probation period',
+    description:
+      'End date of probation period. If omitted, the tenant default probation period is used when configured.',
     example: '2026-04-05',
   })
   @IsOptional()

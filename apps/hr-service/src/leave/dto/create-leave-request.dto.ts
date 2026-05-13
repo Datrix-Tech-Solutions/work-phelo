@@ -1,4 +1,4 @@
-import { IsString, IsDateString, IsOptional } from 'class-validator';
+import { IsString, IsDateString, IsOptional, IsUUID } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateLeaveRequestDto {
@@ -21,6 +21,24 @@ export class CreateLeaveRequestDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional employee who will cover responsibilities during this leave period.',
+    example: 'c10f6f65-0c36-4b0f-9a56-f7cfbc2f2d90',
+  })
+  @IsOptional()
+  @IsUUID()
+  coverageEmployeeId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional note describing the handover or coverage expectations for the selected employee.',
+    example: 'Handle payroll reconciliations and urgent finance approvals.',
+  })
+  @IsOptional()
+  @IsString()
+  coverageNote?: string;
 
   @ApiPropertyOptional({
     description:
