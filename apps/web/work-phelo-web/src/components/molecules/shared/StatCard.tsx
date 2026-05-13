@@ -21,7 +21,7 @@ export function StatCard({ title, value, icon, iconBg, className }: StatCardProp
         <div className={cn('p-2 rounded-lg', iconBg ?? 'bg-gray-100 text-brand')}>{icon}</div>
       </div>
       <span className="text-xl font-medium text-gray-800">
-        {value == null || value === 0 ? '—' : value}
+        {value == null || value === 0 ? '-' : value}
       </span>
     </div>
   );

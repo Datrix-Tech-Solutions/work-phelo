@@ -19,7 +19,9 @@ export function useBranchOptions(enabled = true) {
     queryKey: ['branch-options'],
     queryFn: async () => {
       const res = await api.get<BranchOption[]>('/hr/branches/options');
-      return res.data;
+      return Array.isArray(res.data)
+        ? res.data
+        : ((res.data as { data: BranchOption[] })?.data ?? []);
     },
     enabled,
   });

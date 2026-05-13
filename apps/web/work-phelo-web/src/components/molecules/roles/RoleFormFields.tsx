@@ -29,7 +29,7 @@ export function RoleFormFields({ register, errors }: RoleFormFieldsProps) {
         <textarea
           {...register('description')}
           placeholder="Briefly describe what this role can do"
-          rows={3}
+          rows={5}
           className={inputClass(undefined, 'resize-none')}
         />
       </div>

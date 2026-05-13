@@ -5,7 +5,7 @@
 import { useState, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, UserCheck, Clock, CalendarOff } from 'lucide-react';
-import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { StatCard } from '@/components/molecules/shared/StatCard';
 import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
@@ -27,7 +27,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const { tenantSlug } = use(params);
   const router = useRouter();
   const canInvite = usePermission(Permission.CREATE_EMPLOYEE);
-  const canViewDetail = usePermission(Permission.READ_EMPLOYEES);
+  const canViewDetail = usePermission(Permission.UPDATE_EMPLOYEE);
   const canViewAllStatuses = usePermission(Permission.READ_EMPLOYEES);
 
   const [search, setSearch] = useState('');

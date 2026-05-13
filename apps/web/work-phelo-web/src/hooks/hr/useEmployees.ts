@@ -93,6 +93,8 @@ export function useUpdateEmployee() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['employees'] });
       queryClient.invalidateQueries({ queryKey: ['employees', id] });
+      queryClient.invalidateQueries({ queryKey: ['employees', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['employee-options'] });
       queryClient.invalidateQueries({ queryKey: ['departments'] });
     },
   });

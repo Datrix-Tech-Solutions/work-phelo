@@ -20,6 +20,7 @@ import { MonthPicker } from '@/components/atoms/endDatePicker';
 import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useBranchOptions } from '@/hooks/useBranches';
 import { isAtLeastMinimumEmployeeAge, MIN_EMPLOYEE_AGE } from '@/lib/employeeAge';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;
@@ -44,8 +45,9 @@ export function EditEmployeePanel({
   const { reset } = editForm;
   const { data: departments = [] } = useDepartmentOptions(isOpen);
   const { data: branches = [] } = useBranchOptions(isOpen);
+  const { currency: tenantCurrency } = useTenantConfig();
 
-  const [salaryCurrency, setSalaryCurrency] = useState('GHS');
+  const [salaryCurrency, setSalaryCurrency] = useState(tenantCurrency);
 
   // Watch values for controlled components
   const editDobValue = useWatch({ control: editForm.control, name: 'dateOfBirth' });

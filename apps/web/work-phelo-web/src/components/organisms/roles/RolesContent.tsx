@@ -8,16 +8,10 @@ import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
-  CreatePermissionSetPanel,
-  PermissionSetSubmitValues,
-} from '@/components/organisms/roles/CreatePermissionSetPanel';
-import {
   usePermissionSets,
   usePermissionSetMembers,
   useAssignPermissionSet,
   useRemovePermissionSet,
-  useCreatePermissionSet,
-  useUpdatePermissionSet,
 } from '@/hooks/useRoles';
 import { useCurrentTenantUsers } from '@/hooks/useTenants';
 import { useToast } from '@/hooks/useToast';
@@ -25,13 +19,14 @@ import type { PermissionSet } from '@/types/roles';
 import { api } from '@/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { PermissionSetMembersPanel } from '@/components/organisms/roles/PermissionSetMembersPanel';
+import { useParams, useRouter } from 'next/navigation';
 
 export function RolesContent() {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const params = useParams<{ tenantSlug: string }>();
 
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<PermissionSet | null>(null);
   const [membersTarget, setMembersTarget] = useState<PermissionSet | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<PermissionSet | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -48,8 +43,6 @@ export function RolesContent() {
 
   const { mutate: assignPermissionSet, isPending: isAssigningMember } = useAssignPermissionSet();
   const { mutate: removePermissionSet, isPending: isRemovingMember } = useRemovePermissionSet();
-  const { mutate: createSet, isPending: isCreating } = useCreatePermissionSet();
-  const { mutate: updateSet, isPending: isSaving } = useUpdatePermissionSet();
 
   const PAGE_SIZE = 10;
   const filtered = sets.filter((s) =>
@@ -62,6 +55,7 @@ export function RolesContent() {
     {
       key: 'name',
       label: 'Permission Set',
+      width: '200px',
       render: (row) => (
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
@@ -96,26 +90,14 @@ export function RolesContent() {
     {
       key: 'description',
       label: 'Description',
+      className: 'overflow-hidden pr-4',
       render: (row) => (
-        <span className="text-sm text-gray-500 truncate">
+        <span className="text-sm text-gray-500 block truncate">
           {row.description || <span className="text-gray-300 italic">No description</span>}
         </span>
       ),
     },
   ];
-
-  const handleCreate = (values: PermissionSetSubmitValues) => {
-    createSet(
-      { name: values.name, description: values.description, resources: values.resources },
-      {
-        onSuccess: () => {
-          toast.success('Permission set created');
-          setPanelOpen(false);
-        },
-        onError: (err) => toast.error(extractError(err, 'Failed to create permission set')),
-      },
-    );
-  };
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -142,7 +124,9 @@ export function RolesContent() {
               Manage permission sets and control what each set can access
             </p>
           </div>
-          <Button onClick={() => setPanelOpen(true)}>+ New Permission Set</Button>
+          <Button onClick={() => router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/new`)}>
+            + New Permission Set
+          </Button>
         </div>
 
         <DataTable
@@ -161,47 +145,17 @@ export function RolesContent() {
           onPageChange={setPage}
           rowActions={(row) => [
             { label: 'Manage Members', onClick: () => setMembersTarget(row) },
-            { label: 'Edit', onClick: () => setEditTarget(row) },
+            {
+              label: 'Edit',
+              onClick: () =>
+                router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/${row.id}/edit`),
+            },
             ...(row.isSystem
               ? []
               : [{ label: 'Delete', danger: true, onClick: () => setDeleteTarget(row) }]),
           ]}
         />
       </div>
-
-      <CreatePermissionSetPanel
-        isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        onSubmit={handleCreate}
-        isSubmitting={isCreating}
-      />
-
-      {editTarget && (
-        <CreatePermissionSetPanel
-          key={editTarget.id}
-          isOpen={!!editTarget}
-          onClose={() => setEditTarget(null)}
-          editTarget={editTarget}
-          onSubmit={(values) => {
-            updateSet(
-              {
-                id: editTarget.id,
-                name: values.name,
-                description: values.description,
-                resources: values.resources,
-              },
-              {
-                onSuccess: () => {
-                  toast.success('Permission set updated');
-                  setEditTarget(null);
-                },
-                onError: (err) => toast.error(extractError(err, 'Failed to update permission set')),
-              },
-            );
-          }}
-          isSubmitting={isSaving}
-        />
-      )}
 
       {membersTarget && (
         <PermissionSetMembersPanel

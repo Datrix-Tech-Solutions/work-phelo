@@ -61,19 +61,20 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: false,
       },
-      {
-        key: 'appraisal',
-        label: 'Appraisal',
-        icon: <AppraisalIcon />,
-        href: 'appraisal',
-        enabled: true,
-        active: false,
-      },
+
       {
         key: 'assets',
         label: 'Asset Management',
         icon: <AssetIcon />,
         href: 'assets',
+        enabled: true,
+        active: false,
+      },
+      {
+        key: 'payroll',
+        label: 'Payroll',
+        icon: <PayrollIcon />,
+        href: 'payroll',
         enabled: true,
         active: false,
       },
@@ -106,20 +107,19 @@ export const HR_NAV_GROUPS: NavGroup[] = [
         enabled: true,
         active: false,
       },
-    ],
-  },
-  {
-    label: 'Payroll and Compensation',
-    items: [
       {
-        key: 'payroll',
-        label: 'Payroll',
-        icon: <PayrollIcon />,
-        href: 'payroll',
+        key: 'appraisal',
+        label: 'Appraisal',
+        icon: <AppraisalIcon />,
+        href: 'appraisal',
         enabled: true,
         active: false,
       },
     ],
+  },
+  {
+    label: 'Payroll and Compensation',
+    items: [],
   },
 
   {
