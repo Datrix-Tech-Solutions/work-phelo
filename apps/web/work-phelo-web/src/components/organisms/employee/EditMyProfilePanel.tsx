@@ -9,6 +9,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { Employee, UpdateEmployeePayload, Gender, MaritalStatus } from '@/types/hr';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
+import { isAtLeastMinimumEmployeeAge, MIN_EMPLOYEE_AGE } from '@/lib/employeeAge';
 
 interface EditMyProfilePanelProps {
   isOpen: boolean;
@@ -72,6 +73,15 @@ export function EditMyProfilePanel({
             isLoading={isUpdating}
             loadingText="Saving…"
             onClick={form.handleSubmit((data) => {
+              if (data.dateOfBirth && !isAtLeastMinimumEmployeeAge(data.dateOfBirth)) {
+                form.setError('dateOfBirth', {
+                  type: 'validate',
+                  message: `Employee must be at least ${MIN_EMPLOYEE_AGE} years old`,
+                });
+                return;
+              }
+
+              form.clearErrors('dateOfBirth');
               const dateFields = ['dateOfBirth'] as const;
               for (const field of dateFields) {
                 if (!data[field]) data[field] = undefined;
@@ -116,7 +126,11 @@ export function EditMyProfilePanel({
         <DatePicker
           label="Date of Birth"
           value={dobValue}
-          onChange={(v) => form.setValue('dateOfBirth', v)}
+          onChange={(v) => {
+            form.setValue('dateOfBirth', v);
+            form.clearErrors('dateOfBirth');
+          }}
+          error={form.formState.errors.dateOfBirth?.message}
           disableFuture
         />
         <SearchSelect

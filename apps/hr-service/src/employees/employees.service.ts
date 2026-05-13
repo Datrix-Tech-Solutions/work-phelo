@@ -282,6 +282,60 @@ export class EmployeesService {
     }
   }
 
+  private addMonths(date: Date, months: number) {
+    const value = new Date(date);
+    value.setHours(0, 0, 0, 0);
+    value.setMonth(value.getMonth() + months);
+    return value;
+  }
+
+  private async resolveProbationEndDate(
+    tenantId: string,
+    hireDate: string,
+    probationEndsAt?: string,
+  ) {
+    if (probationEndsAt) {
+      return new Date(probationEndsAt);
+    }
+
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { defaultProbationPeriodMonths: true },
+    });
+
+    if (!config?.defaultProbationPeriodMonths) {
+      return undefined;
+    }
+
+    return this.addMonths(
+      new Date(hireDate),
+      config.defaultProbationPeriodMonths,
+    );
+  }
+
+  private assertMinimumEmployeeAge(dateOfBirth: string) {
+    const dob = new Date(dateOfBirth);
+
+    if (Number.isNaN(dob.getTime())) {
+      throw new BadRequestException('Invalid date of birth.');
+    }
+
+    const today = new Date();
+    let age = today.getUTCFullYear() - dob.getUTCFullYear();
+    const monthDelta = today.getUTCMonth() - dob.getUTCMonth();
+
+    if (
+      monthDelta < 0 ||
+      (monthDelta === 0 && today.getUTCDate() < dob.getUTCDate())
+    ) {
+      age -= 1;
+    }
+
+    if (age < 18) {
+      throw new BadRequestException('Employees must be at least 18 years old.');
+    }
+  }
+
   private async upsertOffboardingRecord(
     tx: HrPrismaTx,
     tenantId: string,
@@ -363,11 +417,17 @@ export class EmployeesService {
       await this.assertValidManagerAssignment(tenantId, dto.managerId);
     }
 
+    const resolvedProbationEndsAt = await this.resolveProbationEndDate(
+      tenantId,
+      dto.hireDate,
+      dto.probationEndsAt,
+    );
+
+    this.assertMinimumEmployeeAge(dto.dateOfBirth);
+
     this.validateEmploymentDates({
       hireDate: new Date(dto.hireDate),
-      probationEndsAt: dto.probationEndsAt
-        ? new Date(dto.probationEndsAt)
-        : undefined,
+      probationEndsAt: resolvedProbationEndsAt,
       contractEndDate: dto.contractEndDate
         ? new Date(dto.contractEndDate)
         : undefined,
@@ -393,10 +453,20 @@ export class EmployeesService {
     try {
       employee = await this.createEmployeeWithUniqueNumber(
         tenantId,
-        dto,
+        {
+          ...dto,
+          probationEndsAt: resolvedProbationEndsAt
+            ? resolvedProbationEndsAt.toISOString()
+            : undefined,
+        },
         provisionedUser,
       );
       await this.leaveService.initializeLeaveBalances(tenantId, employee.id);
+      await this.leaveService.ensurePublicHolidaysSeededForEmployee(
+        tenantId,
+        employee.id,
+        [employee.hireDate.getFullYear(), employee.hireDate.getFullYear() + 1],
+      );
       this.logger.log(`Leave balances initialised for ${employee.email}`);
     } catch (err) {
       if (employee) {
@@ -769,6 +839,10 @@ export class EmployeesService {
       await this.assertValidManagerAssignment(tenantId, rest.managerId, id);
     }
 
+    if (dateOfBirth) {
+      this.assertMinimumEmployeeAge(dateOfBirth);
+    }
+
     this.validateEmploymentDates({
       hireDate: existing.hireDate,
       probationEndsAt: probationEndsAt
@@ -783,7 +857,7 @@ export class EmployeesService {
     const statusChanged =
       employmentStatus && employmentStatus !== existing.employmentStatus;
 
-    return this.prisma.employee.update({
+    const updated = await this.prisma.employee.update({
       where: { id },
       data: {
         ...rest,
@@ -803,6 +877,21 @@ export class EmployeesService {
       },
       include: { department: true, branch: true },
     });
+
+    const locationChanged =
+      rest.branchId !== undefined ||
+      rest.nationality !== undefined ||
+      rest.region !== undefined;
+
+    if (locationChanged) {
+      await this.leaveService.ensurePublicHolidaysSeededForEmployee(
+        tenantId,
+        updated.id,
+        [new Date().getFullYear(), new Date().getFullYear() + 1],
+      );
+    }
+
+    return updated;
   }
 
   private async getTenantResignationConfig(tenantId: string) {

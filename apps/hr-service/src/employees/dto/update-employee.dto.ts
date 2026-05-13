@@ -41,7 +41,7 @@ export class UpdateEmployeeDto {
   gender?: Gender;
 
   @ApiPropertyOptional({
-    description: 'Updated birth date',
+    description: 'Updated birth date. Employees must be at least 18 years old.',
     example: '1990-05-18',
   })
   @IsOptional()

@@ -6,6 +6,7 @@ import {
   PayrollRunDetail,
   PayrollSettings,
   RunPayrollDto,
+  PayrollDecisionDto,
   UpdatePayrollItemDto,
   UpdatePayrollSettingsDto,
 } from '@/types/hr';
@@ -96,12 +97,15 @@ export function useApprovePayroll() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await api.patch(`/hr/payroll/${id}/approve`);
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await api.patch(`/hr/payroll/${id}/approve`, {
+        note,
+      } satisfies PayrollDecisionDto);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['payroll'] });
+      queryClient.invalidateQueries({ queryKey: ['payroll', id] });
     },
   });
 }
@@ -110,25 +114,10 @@ export function useReturnPayrollToDraft() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await api.patch<PayrollRun>(`/hr/payroll/${id}/return-to-draft`);
-      return res.data;
-    },
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['payroll'] });
-      queryClient.invalidateQueries({ queryKey: ['payroll', id] });
-    },
-  });
-}
-
-export function useRejectPayroll() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      const res = await api.patch<PayrollRun>(`/hr/payroll/${id}/reject`, {
-        rejectionReason: reason,
-      });
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await api.patch<PayrollRun>(`/hr/payroll/${id}/return-to-draft`, {
+        note,
+      } satisfies PayrollDecisionDto);
       return res.data;
     },
     onSuccess: (_, { id }) => {
@@ -136,6 +125,10 @@ export function useRejectPayroll() {
       queryClient.invalidateQueries({ queryKey: ['payroll', id] });
     },
   });
+}
+
+export function useRejectPayroll() {
+  return useReturnPayrollToDraft();
 }
 
 export function useMarkPayrollPaid() {

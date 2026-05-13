@@ -23,6 +23,7 @@ interface Props {
 export function ApprovePayrollPanel({ run, onClose }: Props) {
   const toast = useToast();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [approvalNote, setApprovalNote] = useState('');
   const { mutate: approve, isPending } = useApprovePayroll();
 
   const isOpen = run !== null;
@@ -30,19 +31,24 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
 
   const handleClose = () => {
     setShowConfirm(false);
+    setApprovalNote('');
     onClose();
   };
 
   const handleConfirm = () => {
-    if (!run) return;
-    approve(run.id, {
-      onSuccess: () => {
-        toast.success(`${periodLabel} payroll approved`);
-        setShowConfirm(false);
-        onClose();
+    if (!run || !approvalNote.trim()) return;
+    approve(
+      { id: run.id, note: approvalNote.trim() },
+      {
+        onSuccess: () => {
+          toast.success(`${periodLabel} payroll approved`);
+          setShowConfirm(false);
+          setApprovalNote('');
+          onClose();
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to approve payroll')),
       },
-      onError: (err) => toast.error(extractError(err, 'Failed to approve payroll')),
-    });
+    );
   };
 
   return (
@@ -57,7 +63,9 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
             <Button variant="outline" onClick={handleClose} disabled={isPending}>
               Cancel
             </Button>
-            <Button onClick={() => setShowConfirm(true)}>Approve Payroll</Button>
+            <Button disabled={!approvalNote.trim()} onClick={() => setShowConfirm(true)}>
+              Approve Payroll
+            </Button>
           </div>
         }
       >
@@ -76,6 +84,17 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
                 </p>
               </div>
             )}
+
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs text-gray-500">Approval Note</p>
+              <textarea
+                rows={4}
+                value={approvalNote}
+                onChange={(e) => setApprovalNote(e.target.value)}
+                placeholder="Explain why this payroll is being approved…"
+                className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
+              />
+            </div>
 
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5 flex flex-col gap-4">
               <p className="text-sm font-medium text-gray-600">Payroll Summary</p>
@@ -108,7 +127,12 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
             <Button variant="outline" onClick={() => setShowConfirm(false)} disabled={isPending}>
               Cancel
             </Button>
-            <Button onClick={handleConfirm} isLoading={isPending} loadingText="Approving…">
+            <Button
+              onClick={handleConfirm}
+              isLoading={isPending}
+              loadingText="Approving…"
+              disabled={!approvalNote.trim()}
+            >
               Approve Payroll
             </Button>
           </>
@@ -122,6 +146,11 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
           <span className="font-semibold text-orange-500">{run ? fmt(run.totalGross) : '—'}</span>.
           This action cannot be undone once approved.
         </p>
+        {approvalNote.trim() && (
+          <p className="text-sm text-gray-500 leading-relaxed mt-3">
+            Approval note: <span className="text-gray-700">{approvalNote.trim()}</span>
+          </p>
+        )}
       </Modal>
     </>
   );

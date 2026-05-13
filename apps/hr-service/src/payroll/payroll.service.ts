@@ -19,11 +19,14 @@ import {
 } from '../common/ghana-payroll.helper';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
+import { PayrollDecisionDto } from './dto/payroll-decision.dto';
 import {
   assertHrAccess,
   hasPermissionRule,
   isCompanyAdminUser,
 } from '../auth/access-scope';
+import { NotificationsService } from '../notifications/notifications.service';
+import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 
 type PayrollSettingsSnapshot = {
   tier3Enabled: boolean;
@@ -54,9 +57,21 @@ type CalculatedPayrollValues = EditablePayrollValues & {
   netSalary: string;
 };
 
+type PayrollNotificationRecipient = {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  source: 'APPROVER' | 'TENANT_ADMIN_ESCALATION' | 'STAKEHOLDER';
+};
+
 @Injectable()
 export class PayrollService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notificationsService: NotificationsService,
+    private readonly rabbitmq: RabbitMQPublisher,
+  ) {}
 
   private getMonthBounds(
     month: number,
@@ -224,6 +239,234 @@ export class PayrollService {
     }
 
     return run;
+  }
+
+  private buildPayrollApprovalLink(tenantSlug: string, runId: string) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/payroll/approve/${encodeURIComponent(runId)}`;
+  }
+
+  private buildPayrollWorkspaceLink(
+    tenantSlug: string,
+    tab: 'approve' | 'manage' = 'manage',
+  ) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/payroll?tab=${tab}`;
+  }
+
+  private dedupePayrollRecipients(
+    recipients: PayrollNotificationRecipient[],
+  ): PayrollNotificationRecipient[] {
+    const seen = new Set<string>();
+    return recipients.filter((recipient) => {
+      const key = recipient.userId || recipient.email.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
+  private async resolvePayrollApprovalRecipients(
+    tenantId: string,
+    excludingUserId?: string,
+  ): Promise<PayrollNotificationRecipient[]> {
+    const explicitApprovers =
+      await this.rabbitmq.authResolvePermissionRecipients({
+        tenantId,
+        resource: 'payroll',
+        action: 'APPROVE',
+        activeOnly: true,
+      });
+
+    const approvers = this.dedupePayrollRecipients(
+      explicitApprovers
+        .filter((recipient) => recipient.email)
+        .filter((recipient) => recipient.userId !== excludingUserId)
+        .map((recipient) => ({
+          userId: recipient.userId,
+          email: recipient.email,
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+          source: 'APPROVER' as const,
+        })),
+    );
+
+    if (approvers.length > 0) {
+      return approvers;
+    }
+
+    const escalatedRecipients =
+      await this.rabbitmq.authResolvePermissionRecipients({
+        tenantId,
+        resource: 'payroll',
+        action: 'APPROVE',
+        includeTenantAdmins: true,
+        activeOnly: true,
+      });
+
+    return this.dedupePayrollRecipients(
+      escalatedRecipients
+        .filter((recipient) => recipient.role === 'TENANT_ADMIN')
+        .filter((recipient) => recipient.userId !== excludingUserId)
+        .map((recipient) => ({
+          userId: recipient.userId,
+          email: recipient.email,
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+          source: 'TENANT_ADMIN_ESCALATION' as const,
+        })),
+    );
+  }
+
+  private async resolvePayrollStakeholders(
+    tenantId: string,
+    excludingUserIds: string[] = [],
+  ): Promise<PayrollNotificationRecipient[]> {
+    const recipients = await this.rabbitmq.authResolvePermissionRecipients({
+      tenantId,
+      resource: 'payroll',
+      action: 'RUN',
+      activeOnly: true,
+    });
+
+    return this.dedupePayrollRecipients(
+      recipients
+        .filter((recipient) => recipient.email)
+        .filter((recipient) => !excludingUserIds.includes(recipient.userId))
+        .map((recipient) => ({
+          userId: recipient.userId,
+          email: recipient.email,
+          firstName: recipient.firstName,
+          lastName: recipient.lastName,
+          source: 'STAKEHOLDER' as const,
+        })),
+    );
+  }
+
+  private async notifyPayrollApprovalRequested(
+    tenantId: string,
+    actor: RequestUser,
+    run: {
+      id: string;
+      month: number;
+      year: number;
+      totalGross: { toString(): string };
+      totalNet: { toString(): string };
+      notes: string | null;
+    },
+  ) {
+    const recipients = await this.resolvePayrollApprovalRecipients(
+      tenantId,
+      actor.id,
+    );
+
+    if (recipients.length === 0) {
+      return { recipientCount: 0, escalated: false };
+    }
+
+    const reviewLink = this.buildPayrollApprovalLink(actor.tenantSlug, run.id);
+    const periodLabel = `${run.month}/${run.year}`;
+    const submittedByName = actor.firstName?.trim() || actor.email;
+    const escalated = recipients.some(
+      (recipient) => recipient.source === 'TENANT_ADMIN_ESCALATION',
+    );
+
+    await this.notificationsService.createMany(
+      recipients.map((recipient) => ({
+        tenantId,
+        userId: recipient.userId,
+        type: 'PAYROLL_APPROVAL_REQUESTED',
+        message:
+          recipient.source === 'TENANT_ADMIN_ESCALATION'
+            ? `Payroll for ${periodLabel} is awaiting approval and has been escalated to you because no explicit payroll approver is configured.`
+            : `Payroll for ${periodLabel} is awaiting your approval. Submitted by ${submittedByName}.`,
+        link: `/hr/payroll/approve/${encodeURIComponent(run.id)}`,
+      })),
+    );
+
+    await this.rabbitmq.notificationPayrollApprovalRequested({
+      tenantId,
+      payrollRunId: run.id,
+      month: run.month,
+      year: run.year,
+      submittedByName,
+      totalGross: run.totalGross.toString(),
+      totalNet: run.totalNet.toString(),
+      notes: run.notes ?? undefined,
+      reviewLink,
+      recipients: recipients.map((recipient) => ({
+        userId: recipient.userId,
+        email: recipient.email,
+        firstName: recipient.firstName,
+        lastName: recipient.lastName,
+        source: recipient.source as 'APPROVER' | 'TENANT_ADMIN_ESCALATION',
+      })),
+    });
+
+    return { recipientCount: recipients.length, escalated };
+  }
+
+  private async notifyPayrollDecision(
+    tenantId: string,
+    actor: RequestUser,
+    run: {
+      id: string;
+      month: number;
+      year: number;
+      totalGross: { toString(): string };
+      totalNet: { toString(): string };
+    },
+    decision: 'APPROVED' | 'RETURNED_TO_DRAFT',
+    note: string,
+  ) {
+    const recipients = await this.resolvePayrollStakeholders(tenantId, [
+      actor.id,
+    ]);
+
+    if (recipients.length === 0) {
+      return { recipientCount: 0 };
+    }
+
+    const reviewerName = actor.firstName?.trim() || actor.email;
+    const workspaceLink = this.buildPayrollWorkspaceLink(
+      actor.tenantSlug,
+      'manage',
+    );
+    const periodLabel = `${run.month}/${run.year}`;
+
+    await this.notificationsService.createMany(
+      recipients.map((recipient) => ({
+        tenantId,
+        userId: recipient.userId,
+        type: 'PAYROLL_DECISION',
+        message:
+          decision === 'APPROVED'
+            ? `Payroll for ${periodLabel} was approved by ${reviewerName}. Note: ${note}`
+            : `Payroll for ${periodLabel} was returned to draft by ${reviewerName}. Note: ${note}`,
+        link: '/hr/payroll?tab=manage',
+      })),
+    );
+
+    await this.rabbitmq.notificationPayrollDecision({
+      tenantId,
+      payrollRunId: run.id,
+      month: run.month,
+      year: run.year,
+      decision,
+      reviewerName,
+      decisionNote: note,
+      totalGross: run.totalGross.toString(),
+      totalNet: run.totalNet.toString(),
+      detailLink: workspaceLink,
+      recipients: recipients.map((recipient) => ({
+        userId: recipient.userId,
+        email: recipient.email,
+        firstName: recipient.firstName,
+        lastName: recipient.lastName,
+      })),
+    });
+
+    return { recipientCount: recipients.length };
   }
 
   async runPayroll(tenantId: string, runBy: string, dto: RunPayrollDto) {
@@ -430,7 +673,7 @@ export class PayrollService {
   async submitPayrollForApproval(
     tenantId: string,
     runId: string,
-    submittedBy: string,
+    actor: RequestUser,
   ) {
     const run = await this.getEditableRunOrThrow(tenantId, runId);
 
@@ -440,17 +683,37 @@ export class PayrollService {
       );
     }
 
-    return this.prisma.payrollRun.update({
+    const submittedRun = await this.prisma.payrollRun.update({
       where: { id: runId },
       data: {
         status: 'PENDING_APPROVAL',
-        submittedBy,
+        submittedBy: actor.id,
         submittedAt: new Date(),
+        approvedBy: null,
+        approvedAt: null,
+        approvalNote: null,
+        returnToDraftNote: null,
       },
     });
+
+    const notificationSummary = await this.notifyPayrollApprovalRequested(
+      tenantId,
+      actor,
+      submittedRun,
+    );
+
+    return {
+      ...submittedRun,
+      notificationSummary,
+    };
   }
 
-  async returnPayrollToDraft(tenantId: string, id: string) {
+  async returnPayrollToDraft(
+    tenantId: string,
+    id: string,
+    actor: RequestUser,
+    dto: PayrollDecisionDto,
+  ) {
     const run = await this.prisma.payrollRun.findFirst({
       where: { id, tenantId },
     });
@@ -461,17 +724,44 @@ export class PayrollService {
       );
     }
 
-    return this.prisma.payrollRun.update({
+    const note = dto.note.trim();
+    if (!note) {
+      throw new BadRequestException(
+        'A reviewer note is required when returning payroll to draft.',
+      );
+    }
+
+    const updatedRun = await this.prisma.payrollRun.update({
       where: { id },
       data: {
         status: 'DRAFT',
         approvedBy: null,
         approvedAt: null,
+        approvalNote: null,
+        returnToDraftNote: note,
       },
     });
+
+    const notificationSummary = await this.notifyPayrollDecision(
+      tenantId,
+      actor,
+      updatedRun,
+      'RETURNED_TO_DRAFT',
+      note,
+    );
+
+    return {
+      ...updatedRun,
+      notificationSummary,
+    };
   }
 
-  async approvePayroll(tenantId: string, id: string, approvedBy: string) {
+  async approvePayroll(
+    tenantId: string,
+    id: string,
+    actor: RequestUser,
+    dto: PayrollDecisionDto,
+  ) {
     const run = await this.prisma.payrollRun.findFirst({
       where: { id, tenantId },
     });
@@ -479,10 +769,36 @@ export class PayrollService {
     if (run.status !== 'PENDING_APPROVAL') {
       throw new BadRequestException('Payroll is not pending approval');
     }
-    return this.prisma.payrollRun.update({
+    const note = dto.note.trim();
+    if (!note) {
+      throw new BadRequestException(
+        'A reviewer note is required when approving payroll.',
+      );
+    }
+
+    const updatedRun = await this.prisma.payrollRun.update({
       where: { id },
-      data: { status: 'APPROVED', approvedBy, approvedAt: new Date() },
+      data: {
+        status: 'APPROVED',
+        approvedBy: actor.id,
+        approvedAt: new Date(),
+        approvalNote: note,
+        returnToDraftNote: null,
+      },
     });
+
+    const notificationSummary = await this.notifyPayrollDecision(
+      tenantId,
+      actor,
+      updatedRun,
+      'APPROVED',
+      note,
+    );
+
+    return {
+      ...updatedRun,
+      notificationSummary,
+    };
   }
 
   async markAsPaid(tenantId: string, id: string) {
