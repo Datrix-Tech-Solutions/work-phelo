@@ -160,6 +160,22 @@ export class EmployeesController {
     return this.employeesService.findByUserId(req.user.tenantId, req.user.id);
   }
 
+  @Patch('me')
+  @RequirePermissions(Permission.UPDATE_OWN_PROFILE)
+  @ApiOperation({
+    summary: 'Update the employee profile of the logged-in user',
+  })
+  @ApiBody({ type: UpdateEmployeeDto })
+  @ApiResponse({ status: 200, description: 'Employee profile updated' })
+  @ApiResponse({ status: 404, description: 'Employee profile not found' })
+  updateMyProfile(@Body() dto: UpdateEmployeeDto, @Req() req: any) {
+    return this.employeesService.updateMyProfile(
+      req.user.tenantId,
+      dto,
+      req.user as RequestUser,
+    );
+  }
+
   @Get(':id')
   @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({ summary: 'Get an employee by ID' })

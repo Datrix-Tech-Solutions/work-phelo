@@ -3,7 +3,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMyProfile, useUpdateEmployee, useResignationRecord } from '@/hooks/hr/useEmployees';
+import { useMyProfile, useUpdateMyProfile, useResignationRecord } from '@/hooks/hr/useEmployees';
 import { useUserPermissions } from '@/hooks/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -36,7 +36,7 @@ export default function MyProfilePage() {
   const toast = useToast();
 
   const { data: employee, isLoading } = useMyProfile();
-  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { mutate: updateMyProfile, isPending: isUpdating } = useUpdateMyProfile();
   const { data: resignationRecord } = useResignationRecord(employee?.id ?? '');
 
   const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
@@ -45,16 +45,13 @@ export default function MyProfilePage() {
 
   const handleSave = (data: UpdateEmployeePayload) => {
     if (!employee) return;
-    updateEmployee(
-      { id: employee.id, ...data },
-      {
-        onSuccess: () => {
-          toast.success('Profile updated successfully');
-          setEditOpen(false);
-        },
-        onError: (err) => toast.error(extractError(err, 'Failed to update profile')),
+    updateMyProfile(data, {
+      onSuccess: () => {
+        toast.success('Profile updated successfully');
+        setEditOpen(false);
       },
-    );
+      onError: (err) => toast.error(extractError(err, 'Failed to update profile')),
+    });
   };
 
   if (isLoading) return <EmployeeDetailSkeleton />;

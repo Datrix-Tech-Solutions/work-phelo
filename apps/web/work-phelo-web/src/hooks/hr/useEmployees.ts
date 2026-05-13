@@ -100,6 +100,22 @@ export function useUpdateEmployee() {
   });
 }
 
+export function useUpdateMyProfile() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (payload: UpdateEmployeePayload) => {
+      const res = await api.patch<Employee>('/hr/employees/me', payload);
+      return res.data;
+    },
+    onSuccess: (employee) => {
+      queryClient.invalidateQueries({ queryKey: ['employees', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['employees', employee.id] });
+      queryClient.invalidateQueries({ queryKey: ['employee-options'] });
+    },
+  });
+}
+
 export function useOffboardingRecord(employeeId: string) {
   return useQuery({
     queryKey: ['employees', employeeId, 'offboarding'],
