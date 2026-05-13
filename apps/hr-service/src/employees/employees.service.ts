@@ -709,6 +709,7 @@ export class EmployeesService {
       where: { userId, tenantId },
       include: {
         department: true,
+        branch: true,
         allowances: true,
         resignation: true,
       },

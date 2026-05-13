@@ -78,7 +78,7 @@ export default function HRLayout({
 
   // Only dashboard and management are always active (no toggle exists for them)
   // announcements is also core — it is permission-gated, not feature-toggled
-  const coreKeys = new Set(['dashboard', 'management', 'announcements']);
+  const coreKeys = new Set(['dashboard', 'management']);
   const navAccess: Record<string, boolean> = {
     dashboard: true,
 

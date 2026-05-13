@@ -1,17 +1,24 @@
 'use client';
 
 import { useState } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PayrollItem } from '@/types/hr';
-import { payrollMonthLabel } from '@/lib/payrollUtils';
+import {
+  payrollMonthLabel,
+  downloadP9FormPDF,
+  PayslipCompanyInfo,
+  PayslipEmployeeInfo,
+} from '@/lib/payrollUtils';
 
 interface TaxReturnsPanelProps {
   isOpen: boolean;
   onClose: () => void;
   payslips: PayrollItem[];
+  companyInfo?: PayslipCompanyInfo;
+  employeeInfo?: PayslipEmployeeInfo;
 }
 
 const MONTHS = [
@@ -40,11 +47,18 @@ function ghs(value: string | number) {
   return `GHS ${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-export function TaxReturnsPanel({ isOpen, onClose, payslips }: TaxReturnsPanelProps) {
+export function TaxReturnsPanel({
+  isOpen,
+  onClose,
+  payslips,
+  companyInfo,
+  employeeInfo,
+}: TaxReturnsPanelProps) {
   const [startMonth, setStartMonth] = useState('1');
   const [startYear, setStartYear] = useState(String(currentYear));
   const [endMonth, setEndMonth] = useState(String(new Date().getMonth() + 1));
   const [endYear, setEndYear] = useState(String(currentYear));
+  const [downloading, setDownloading] = useState(false);
 
   const startVal = Number(startYear) * 12 + Number(startMonth);
   const endVal = Number(endYear) * 12 + Number(endMonth);
@@ -66,19 +80,79 @@ export function TaxReturnsPanel({ isOpen, onClose, payslips }: TaxReturnsPanelPr
       description="Select a date range to view payslips for that period."
       width="w-[520px]"
       footer={
-        <div className="flex items-center justify-end gap-3">
-          <Button variant="outline" size="sm" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            disabled
-            className="flex items-center gap-2 bg-brand hover:bg-brand-hover"
-          >
-            <Download className="w-4 h-4" />
-            Download
-          </Button>
+        <div className="flex flex-col gap-4">
+          {filtered.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                {filtered.length} month{filtered.length !== 1 ? 's' : ''} total
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-400">Gross</span>
+                  <span className="text-xs text-gray-700">
+                    {ghs(filtered.reduce((s, p) => s + parseFloat(p.grossSalary), 0))}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-400">SSNIT</span>
+                  <span className="text-xs text-gray-700">
+                    {ghs(filtered.reduce((s, p) => s + parseFloat(p.employeeSSNIT), 0))}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-400">Taxable</span>
+                  <span className="text-xs text-gray-700">
+                    {ghs(filtered.reduce((s, p) => s + parseFloat(p.taxableIncome), 0))}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-gray-400">PAYE</span>
+                  <span className="text-xs text-gray-700">
+                    {ghs(filtered.reduce((s, p) => s + parseFloat(p.payeTax), 0))}
+                  </span>
+                </div>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-gray-100">
+                <span className="text-xs font-semibold text-gray-600">Net</span>
+                <span className="text-sm font-bold text-gray-900">
+                  {ghs(filtered.reduce((s, p) => s + parseFloat(p.netSalary), 0))}
+                </span>
+              </div>
+            </div>
+          )}
+          <div className="flex items-center justify-end gap-3">
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={filtered.length === 0 || !rangeValid || downloading}
+              className="flex items-center gap-2 bg-brand hover:bg-brand-hover"
+              onClick={async () => {
+                if (filtered.length === 0) return;
+                const year = Number(endYear);
+                setDownloading(true);
+                try {
+                  await downloadP9FormPDF(
+                    filtered,
+                    year,
+                    companyInfo ?? { name: '' },
+                    employeeInfo,
+                  );
+                } finally {
+                  setDownloading(false);
+                }
+              }}
+            >
+              {downloading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+              {downloading ? 'Generating…' : 'P9 Form'}
+            </Button>
+          </div>
         </div>
       }
     >
@@ -130,41 +204,34 @@ export function TaxReturnsPanel({ isOpen, onClose, payslips }: TaxReturnsPanelPr
               return (
                 <div
                   key={p.id}
-                  className="flex items-center justify-between px-4 py-4 border border-gray-200 rounded-card bg-white"
+                  className="px-4 py-3 border border-gray-200 rounded-card bg-white flex flex-col gap-2"
                 >
-                  <div>
-                    <p className="text-sm font-semibold text-gray-900">{label}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">Gross: {ghs(p.grossSalary)}</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="text-right">
-                      <p className="text-xs text-gray-400">PAYE: {ghs(p.payeTax)}</p>
-                      <p className="text-sm font-bold text-gray-900">{ghs(p.netSalary)}</p>
+                  <p className="text-sm font-semibold text-gray-900">{label}</p>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-400">Gross</span>
+                      <span className="text-xs text-gray-700">{ghs(p.grossSalary)}</span>
                     </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-400">SSNIT</span>
+                      <span className="text-xs text-gray-700">{ghs(p.employeeSSNIT)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-400">Taxable</span>
+                      <span className="text-xs text-gray-700">{ghs(p.taxableIncome)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-xs text-gray-400">PAYE</span>
+                      <span className="text-xs text-gray-700">{ghs(p.payeTax)}</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-gray-100">
+                    <span className="text-xs font-medium text-gray-500">Net</span>
+                    <span className="text-sm font-bold text-gray-900">{ghs(p.netSalary)}</span>
                   </div>
                 </div>
               );
             })}
-
-            {/* Totals */}
-            <div className="flex items-center justify-between px-4 py-4 rounded-card bg-gray-50 border border-gray-200">
-              <div>
-                <p className="text-sm font-semibold text-gray-900">
-                  Total ({filtered.length} months)
-                </p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Gross: {ghs(filtered.reduce((s, p) => s + parseFloat(p.grossSalary), 0))}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-400">
-                  PAYE: {ghs(filtered.reduce((s, p) => s + parseFloat(p.payeTax), 0))}
-                </p>
-                <p className="text-sm font-bold text-emerald-600">
-                  {ghs(filtered.reduce((s, p) => s + parseFloat(p.netSalary), 0))}
-                </p>
-              </div>
-            </div>
           </>
         )}
       </div>

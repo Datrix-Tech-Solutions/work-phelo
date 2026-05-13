@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
+import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/atoms/Button';
 import { FormSection } from '@/components/atoms/FormSection';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -9,6 +10,9 @@ import { usePayrollSettings, useUpdatePayrollSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { inputClass } from '@/lib/utils';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
+import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 
 interface FinancesForm {
   payrollTier2FundName: string;
@@ -19,6 +23,17 @@ interface FinancesForm {
 
 export default function FinancesPage() {
   const toast = useToast();
+  const router = useRouter();
+  const params = useParams<{ tenantSlug: string }>();
+  const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
+  const { canReadHrSettings } = useHrManagementAccess();
+
+  useEffect(() => {
+    if (!canReadHrSettings && !canManagePayroll) {
+      router.replace(`/${params.tenantSlug}/hr`);
+    }
+  }, [canReadHrSettings, canManagePayroll, router, params.tenantSlug]);
+
   const { data: settings, isLoading } = usePayrollSettings();
   const { mutate: updateSettings, isPending } = useUpdatePayrollSettings();
 
