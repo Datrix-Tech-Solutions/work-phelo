@@ -1,13 +1,13 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
-import { Download, Printer } from 'lucide-react';
 import { useAppraisal, useAppraisalCycles, useCycleResults } from '@/hooks';
 import { cn } from '@/lib/utils';
-import { formatDate } from '@/lib/formatters';
 import { FinalRating } from '@/types/hr';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
 
 interface KpiScoreRow {
   kpiId: string;
@@ -35,21 +35,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function Avatar({ name }: { name: string }) {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase();
-  return (
-    <div className="w-28 h-28 rounded-full bg-gray-200 flex items-center justify-center text-3xl font-bold text-gray-500 shrink-0">
-      {initials}
-    </div>
-  );
-}
-
 function ScoreCard({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
@@ -59,26 +44,15 @@ function ScoreCard({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
-function ProfileRow({ label, value }: { label: string; value?: React.ReactNode }) {
-  return (
-    <div className="flex items-start gap-2">
-      <span className="text-sm text-gray-400 w-36 shrink-0">{label}</span>
-      <span className="text-sm font-semibold text-gray-800">{value || '—'}</span>
-    </div>
-  );
-}
-
-function weighted(score: number, maxScore: number, weight: number): number {
-  if (!maxScore) return 0;
-  return (score / maxScore) * weight;
-}
-
 export default function EmployeeAppraisalDetailPage({
   params,
 }: {
   params: Promise<{ tenantSlug: string; cycleId: string; employeeAppraisalId: string }>;
 }) {
   const { tenantSlug, cycleId, employeeAppraisalId } = use(params);
+
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   const { data: appraisal, isLoading } = useAppraisal(employeeAppraisalId);
   const { data: cycles = [] } = useAppraisalCycles();
@@ -95,7 +69,7 @@ export default function EmployeeAppraisalDetailPage({
   const managerMap = new Map(managerKpis.map((k: KpiScoreRow) => [k.kpiId, k]));
 
   const appraisalHref = `/${tenantSlug}/hr/appraisal`;
-  const cycleHref = `/${tenantSlug}/hr/appraisal/cycles/${cycleId}/results`;
+  const cycleHref = `/${tenantSlug}/hr/appraisal/cycles/${cycleId}?tab=results`;
 
   if (isLoading) {
     return (
@@ -136,142 +110,175 @@ export default function EmployeeAppraisalDetailPage({
 
       {/* Header card */}
       <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex items-start justify-between gap-6">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3 flex-wrap">
             <h2 className="text-xl font-bold text-gray-900">{employeeName}</h2>
             <StatusBadge status={appraisal.overallStatus} />
           </div>
-          <p className="text-sm text-gray-500">Cycle Progress</p>
+          <div className="flex items-center gap-4 text-sm text-gray-500">
+            <span>{cycleTitle}</span>
+            {resultItem?.department && (
+              <>
+                <span className="text-gray-300">·</span>
+                <span>{resultItem.department}</span>
+              </>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-3 shrink-0">
-          <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-            <Download className="w-4 h-4" />
-            Export CSV
-          </button>
-          <button className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-            <Printer className="w-4 h-4" />
-            Print Appraisal Summary
-          </button>
+          <Button variant="outline" onClick={() => setRejectOpen(true)}>
+            Reject
+          </Button>
+          <Button variant="primary">Approve</Button>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="grid grid-cols-[300px_1fr] gap-6 items-start">
-        {/* Left: Employee profile card */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col items-center gap-5">
-          <Avatar name={employeeName || 'E'} />
-          <div className="text-center">
-            <p className="text-base font-bold text-gray-900">{employeeName}</p>
-            <p className="text-sm text-gray-500">{resultItem?.jobTitle || '—'}</p>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {/* Section header */}
+        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <h3 className="text-sm font-semibold text-gray-700">Assessment Results</h3>
+        </div>
+
+        {/* Score grid */}
+        <div className="grid grid-cols-4 gap-6 px-6 py-5 border-b border-gray-100">
+          <ScoreCard
+            label="Self Assessment Score"
+            value={resultItem?.selfScore != null ? `${Math.round(resultItem.selfScore)}%` : '—'}
+          />
+          <ScoreCard
+            label="Manager Assessment Score"
+            value={
+              resultItem?.managerScore != null ? `${Math.round(resultItem.managerScore)}%` : '—'
+            }
+          />
+          <ScoreCard
+            label="Final Combined Score"
+            value={
+              resultItem?.overallScore != null ? `${Math.round(resultItem.overallScore)}%` : '—'
+            }
+          />
+          <ScoreCard
+            label="Performance Band"
+            value={<RatingBadge rating={resultItem?.finalRating as FinalRating} />}
+          />
+        </div>
+
+        {/* KPI table */}
+        <div className="px-6 py-4">
+          <h3 className="text-base font-semibold text-gray-900">KPI Breakdown</h3>
+        </div>
+
+        <div className="px-6 pb-6">
+          {selfKpis.length > 0 ? (
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-gray-200">
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">KPI</th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">Employee</th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">Manager</th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">Weight</th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">
+                    Employee Comment
+                  </th>
+                  <th className="text-left py-3 font-semibold text-gray-700">Manager Comment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selfKpis.map((self: KpiScoreRow) => {
+                  const mgr = managerMap.get(self.kpiId);
+                  return (
+                    <tr key={self.kpiId} className="border-b border-gray-100 last:border-0">
+                      <td className="py-4 pr-4 text-gray-900">{self.title}</td>
+                      <td className="py-4 pr-4 text-gray-700">
+                        {self.score}/{self.maxScore}
+                      </td>
+                      <td className="py-4 pr-4 text-gray-700">
+                        {mgr ? `${mgr.score}/${mgr.maxScore}` : '—'}
+                      </td>
+                      <td className="py-4 pr-4 text-gray-700">{self.weight}%</td>
+                      <td className="py-4 pr-4 text-gray-500">{self.comment ?? '—'}</td>
+                      <td className="py-4 text-gray-500">{mgr?.comment ?? '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          ) : (
+            <p className="py-8 text-sm text-gray-400 text-center">No KPI data available yet.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Overall score + comment cards */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500">Overall Self-Assessment Score</span>
+            <span className="text-base font-bold text-gray-900">
+              {appraisal.selfResponse?.score != null
+                ? `${Math.round(appraisal.selfResponse.score)}%`
+                : '—'}
+            </span>
           </div>
-          <div className="w-full border-t border-gray-100 pt-4 flex flex-col gap-3">
-            <ProfileRow
-              label="Email Address:"
-              value={
-                <span className="font-normal text-gray-600">
-                  {appraisal?.employee?.email ?? '—'}
-                </span>
-              }
-            />
-            <ProfileRow label="Manager:" value={resultItem?.managerName} />
-            <ProfileRow label="Cycle:" value={cycleTitle} />
-            <ProfileRow label="Department:" value={resultItem?.department} />
-            <ProfileRow
-              label="Review Completed:"
-              value={resultItem?.reviewCompletedAt ? formatDate(resultItem.reviewCompletedAt) : '—'}
-            />
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-semibold text-gray-900">Overall Comment</p>
+            <p className="text-sm text-gray-500">{appraisal.selfResponse?.comment ?? '—'}</p>
           </div>
         </div>
 
-        {/* Right: Employment details + KPI table */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          {/* Section header */}
-          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-700">Employment Details</h3>
+        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500">Overall Manager Assessment Score</span>
+            <span className="text-base font-bold text-gray-900">
+              {appraisal.managerResponse?.score != null
+                ? `${Math.round(appraisal.managerResponse.score)}%`
+                : '—'}
+            </span>
           </div>
-
-          {/* Score grid */}
-          <div className="grid grid-cols-4 gap-6 px-6 py-5 border-b border-gray-100">
-            <ScoreCard
-              label="Self Assessment Score"
-              value={resultItem?.selfScore != null ? `${Math.round(resultItem.selfScore)}%` : '—'}
-            />
-            <ScoreCard
-              label="Manager Assessment Score"
-              value={
-                resultItem?.managerScore != null ? `${Math.round(resultItem.managerScore)}%` : '—'
-              }
-            />
-            <ScoreCard
-              label="Final Combined Score"
-              value={
-                resultItem?.overallScore != null ? `${Math.round(resultItem.overallScore)}%` : '—'
-              }
-            />
-            <ScoreCard
-              label="Performance Band"
-              value={<RatingBadge rating={resultItem?.finalRating as FinalRating} />}
-            />
-          </div>
-
-          {/* KPI table */}
-          <div className="px-6 py-4">
-            <h3 className="text-base font-semibold text-gray-900">KPI Breakdown</h3>
-          </div>
-
-          <div className="px-6 pb-6">
-            {selfKpis.length > 0 ? (
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-3 pr-4 font-semibold text-gray-700 w-2/5">
-                      KPI Title
-                    </th>
-                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">Self Score</th>
-                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">
-                      Self Weighted
-                    </th>
-                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">
-                      Manager Score
-                    </th>
-                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">
-                      Manager Weighted
-                    </th>
-                    <th className="text-left py-3 font-semibold text-gray-700">Final KPI</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selfKpis.map((self: KpiScoreRow) => {
-                    const mgr = managerMap.get(self.kpiId);
-                    const selfW = weighted(self.score, self.maxScore, self.weight);
-                    const mgrW = mgr ? weighted(mgr.score, mgr.maxScore, mgr.weight) : null;
-                    return (
-                      <tr key={self.kpiId} className="border-b border-gray-100 last:border-0">
-                        <td className="py-4 pr-4 text-gray-900">{self.title}</td>
-                        <td className="py-4 pr-4 text-gray-700">
-                          {self.score}/{self.maxScore}
-                        </td>
-                        <td className="py-4 pr-4 text-gray-700">{selfW.toFixed(2)}</td>
-                        <td className="py-4 pr-4 text-gray-700">
-                          {mgr ? `${mgr.score}/${mgr.maxScore}` : '—'}
-                        </td>
-                        <td className="py-4 pr-4 text-gray-700">
-                          {mgrW != null ? mgrW.toFixed(2) : '—'}
-                        </td>
-                        <td className="py-4 font-medium text-gray-900">
-                          {mgrW != null ? (selfW + mgrW).toFixed(2) : selfW.toFixed(2)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <p className="py-8 text-sm text-gray-400 text-center">No KPI data available yet.</p>
-            )}
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-semibold text-gray-900">Overall Manager Comment</p>
+            <p className="text-sm text-gray-500">{appraisal.managerResponse?.comment ?? '—'}</p>
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={rejectOpen}
+        onClose={() => {
+          setRejectOpen(false);
+          setRejectReason('');
+        }}
+        title="Reject Assessment"
+        description="You are about to reject the assessment submitted. This action will reactivate the appraisal form for the respective employees."
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectOpen(false);
+                setRejectReason('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button variant="danger" disabled={!rejectReason.trim()}>
+              Confirm Rejection
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700">Rejection Note</label>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Enter reason…"
+            rows={4}
+            className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

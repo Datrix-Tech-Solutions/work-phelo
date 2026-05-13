@@ -150,7 +150,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
               onClick={() =>
                 router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
               }
-              className="text-sm font-medium text-gray-700 hover:text-brand transition-colors"
+              className="px-2 py-1.5 text-sm font-medium text-gray-700 hover:text-brand transition-colors"
             >
               View Assessment
             </button>
@@ -161,7 +161,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
             onClick={() =>
               router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`)
             }
-            className="px-4 py-1.5 rounded-full border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="px-2 py-1.5 text-sm font-medium text-gray-700 hover:text-brand transition-colors"
           >
             Start
           </button>
@@ -204,6 +204,14 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={onPageChange}
+        onRowClick={(r) => {
+          const status = deriveStatus(r.overallStatus, r.selfAssessmentDeadline);
+          if (status === 'Completed') {
+            router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`);
+          } else {
+            router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`);
+          }
+        }}
       />
     </div>
   );

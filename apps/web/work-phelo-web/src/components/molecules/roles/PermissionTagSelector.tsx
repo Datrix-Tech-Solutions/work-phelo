@@ -25,9 +25,9 @@ export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
       { key: 'offboard_employee', label: 'Offboard Employee' },
       { key: 'edit_all_employees', label: 'Edit All Employees' },
       { key: 'approve_leave', label: 'Approve Leave' },
-      { key: 'view_announcements', label: 'View Announcements' },
       { key: 'create_announcements', label: 'Create Announcements' },
       { key: 'view_all_assets', label: 'View All Assets' },
+      { key: 'manage_assets', label: 'Manage Assets' },
       { key: 'review_appraisals', label: 'Review Appraisals' },
       { key: 'approve_appraisals', label: 'Approve Appraisals' },
       { key: 'manage_payroll', label: 'Manage Payroll' },
@@ -71,6 +71,8 @@ export const SELF_SERVICE_RESOURCES: Array<{ resource: string; action: string }>
   { resource: 'resignations', action: 'CREATE' },
   { resource: 'resignations', action: 'DELETE' },
   { resource: 'attendance', action: 'CREATE' },
+  { resource: 'announcements', action: 'VIEW' },
+  { resource: 'schedules', action: 'VIEW' },
 ];
 
 // null = UI-only tag, not yet linked to backend permissions
@@ -86,13 +88,18 @@ export const PERMISSION_TAG_MAPPING: Record<
   offboard_employee: [{ resource: 'offboarding', action: 'EDIT' }],
   edit_all_employees: [{ resource: 'employees', action: 'EDIT' }],
   approve_leave: [{ resource: 'leave', action: 'APPROVE' }],
-  view_announcements: [{ resource: 'announcements', action: 'VIEW' }],
   create_announcements: [
     { resource: 'announcements', action: 'CREATE' },
     { resource: 'announcements', action: 'EDIT' },
     { resource: 'announcements', action: 'DELETE' },
   ],
   view_all_assets: [{ resource: 'assets', action: 'VIEW' }],
+  manage_assets: [
+    { resource: 'assets', action: 'VIEW' },
+    { resource: 'assets', action: 'CREATE' },
+    { resource: 'assets', action: 'EDIT' },
+    { resource: 'assets', action: 'ASSIGN' },
+  ],
   review_appraisals: [
     { resource: 'appraisals', action: 'VIEW' },
     { resource: 'appraisal-reviews', action: 'EDIT' },
