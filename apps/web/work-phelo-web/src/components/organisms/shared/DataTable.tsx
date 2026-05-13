@@ -238,7 +238,7 @@ export function DataTable<T extends { id: string | number }>({
                 onClick={() => onRowClick?.(row)}
                 className={cn(
                   'grid px-4 py-3.5 items-center text-sm text-gray-700 border-b border-gray-100 last:border-b-0',
-                  'hover:bg-gray-50 transition-colors',
+                  'hover:bg-gray-200 transition-colors',
                   onRowClick && 'cursor-pointer',
                 )}
                 style={{

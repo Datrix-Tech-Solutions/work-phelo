@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { api } from '@/lib/api';
 import { AppraisalCycle, FinalRating, CycleResultItem, CycleResultsSummary } from '@/types/hr';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
@@ -30,7 +30,10 @@ interface Props {
 
 export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(
+    searchParams.get('tab') === 'results' ? 'results' : 'overview',
+  );
   const [search, setSearch] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [ratingFilter, setRatingFilter] = useState('');
