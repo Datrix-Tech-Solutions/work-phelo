@@ -52,7 +52,9 @@ export class TenantLifecycleService {
         slug: dto.slug,
         email: normalizedEmail,
         phone: dto.phone,
+        address: dto.address,
         country: dto.country || 'GH',
+        currency: dto.currency || 'GHS',
         industry: dto.industry,
         size: dto.size,
         status: 'PENDING',
@@ -146,7 +148,9 @@ export class TenantLifecycleService {
         slug: t.slug,
         email: t.email,
         phone: t.phone,
+        address: t.address,
         country: t.country,
+        currency: t.currency,
         industry: t.industry,
         size: t.size,
         status: t.status,
@@ -223,6 +227,8 @@ export class TenantLifecycleService {
         ...(dto.industry !== undefined && { industry: dto.industry }),
         ...(dto.country !== undefined && { country: dto.country }),
         ...(dto.phone !== undefined && { phone: dto.phone }),
+        ...(dto.address !== undefined && { address: dto.address }),
+        ...(dto.currency !== undefined && { currency: dto.currency }),
       },
     });
 
