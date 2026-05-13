@@ -3,7 +3,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useMyProfile, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useMyProfile, useUpdateMyProfile } from '@/hooks/hr/useEmployees';
 import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { TopNav } from '@/components/organisms/shared/TopNav';
@@ -25,21 +25,18 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: employee, isLoading } = useMyProfile();
-  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { mutate: updateMyProfile, isPending: isUpdating } = useUpdateMyProfile();
   const toast = useToast();
 
   const handleSave = (data: UpdateEmployeePayload) => {
     if (!employee) return;
-    updateEmployee(
-      { id: employee.id, ...data },
-      {
-        onSuccess: () => {
-          toast.success('Profile updated successfully');
-          setEditOpen(false);
-        },
-        onError: () => toast.error('Failed to update profile'),
+    updateMyProfile(data, {
+      onSuccess: () => {
+        toast.success('Profile updated successfully');
+        setEditOpen(false);
       },
-    );
+      onError: () => toast.error('Failed to update profile'),
+    });
   };
 
   return (

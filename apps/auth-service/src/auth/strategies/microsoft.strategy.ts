@@ -1,14 +1,15 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-microsoft';
 
 @Injectable()
 export class MicrosoftStrategy extends PassportStrategy(Strategy, 'microsoft') {
-  constructor() {
+  constructor(configService: ConfigService) {
     super({
-      clientID: process.env.MICROSOFT_CLIENT_ID,
-      clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-      callbackURL: process.env.MICROSOFT_CALLBACK_URL,
+      clientID: configService.getOrThrow<string>('MICROSOFT_CLIENT_ID'),
+      clientSecret: configService.getOrThrow<string>('MICROSOFT_CLIENT_SECRET'),
+      callbackURL: configService.getOrThrow<string>('MICROSOFT_CALLBACK_URL'),
       scope: ['user.read'],
       passReqToCallback: true,
     });

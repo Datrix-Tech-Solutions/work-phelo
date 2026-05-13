@@ -744,6 +744,20 @@ export class EmployeesService {
     );
   }
 
+  async updateMyProfile(
+    tenantId: string,
+    dto: UpdateEmployeeDto,
+    actor: RequestUser,
+  ) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId: actor.id, tenantId },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Employee profile not found');
+
+    return this.update(tenantId, employee.id, dto, actor);
+  }
+
   async update(
     tenantId: string,
     id: string,

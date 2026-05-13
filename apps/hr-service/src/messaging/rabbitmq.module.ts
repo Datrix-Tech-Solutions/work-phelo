@@ -1,6 +1,7 @@
 import { LeaveModule } from '../leave/leave.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { Module, forwardRef } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { RabbitMQPublisher } from './rabbitmq.publisher';
 import { EventsHandler } from './events.handler';
@@ -9,34 +10,42 @@ import { EventsHandler } from './events.handler';
   imports: [
     forwardRef(() => LeaveModule),
     PrismaModule,
-    ClientsModule.register([
+    ClientsModule.registerAsync([
       {
         name: 'NOTIFICATION_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: [process.env.RABBITMQ_URL as string],
-          queue: 'notification_queue',
-          queueOptions: {
-            durable: true,
-            arguments: {
-              'x-message-ttl': 3600000,
+        imports: [ConfigModule],
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.getOrThrow<string>('RABBITMQ_URL')],
+            queue: 'notification_queue',
+            queueOptions: {
+              durable: true,
+              arguments: {
+                'x-message-ttl': 3600000,
+              },
             },
           },
-        },
+        }),
       },
       {
         name: 'AUTH_SERVICE',
-        transport: Transport.RMQ,
-        options: {
-          urls: [process.env.RABBITMQ_URL as string],
-          queue: 'auth_queue',
-          queueOptions: {
-            durable: true,
-            arguments: {
-              'x-message-ttl': 3600000,
+        imports: [ConfigModule],
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          transport: Transport.RMQ,
+          options: {
+            urls: [configService.getOrThrow<string>('RABBITMQ_URL')],
+            queue: 'auth_queue',
+            queueOptions: {
+              durable: true,
+              arguments: {
+                'x-message-ttl': 3600000,
+              },
             },
           },
-        },
+        }),
       },
     ]),
   ],
