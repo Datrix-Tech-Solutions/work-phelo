@@ -141,6 +141,9 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.SUBMIT_MANAGER_REVIEW]: [
     { resource: 'appraisal-reviews', actions: ['EDIT'] },
   ],
+  [Permission.FINALIZE_APPRAISAL]: [
+    { resource: 'appraisals', actions: ['APPROVE'] },
+  ],
   [Permission.READ_OWN_REVIEW]: [
     { resource: 'self-appraisals', actions: ['VIEW'] },
   ],

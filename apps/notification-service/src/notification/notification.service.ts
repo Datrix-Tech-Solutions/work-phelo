@@ -665,11 +665,13 @@ export class NotificationService {
   async sendAppraisalSelfSubmittedNotification(data: {
     tenantId: string;
     appraisalId: string;
+    cycleId?: string;
     cycleTitle: string;
     employeeFirstName: string;
     employeeLastName: string;
     managerEmail: string;
     managerFirstName: string;
+    managerReviewLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -689,6 +691,7 @@ export class NotificationService {
       data.managerFirstName,
       `${data.employeeFirstName} ${data.employeeLastName}`,
       data.cycleTitle,
+      data.managerReviewLink,
     );
 
     await this.log({
@@ -702,6 +705,46 @@ export class NotificationService {
     });
   }
 
+  async sendAppraisalCycleStartedNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleId: string;
+    cycleTitle: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    selfAssessmentLink: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.APPRAISAL_CYCLE_STARTED,
+        data.tenantId,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_CYCLE_STARTED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalCycleStartedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.cycleTitle,
+      data.selfAssessmentLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_CYCLE_STARTED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Appraisal cycle started — ${data.cycleTitle}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendAppraisalManagerReviewedNotification(data: {
     tenantId: string;
     appraisalId: string;
@@ -710,6 +753,7 @@ export class NotificationService {
     employeeFirstName: string;
     finalScore: number;
     finalRating: string;
+    platformLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -730,6 +774,7 @@ export class NotificationService {
       data.cycleTitle,
       data.finalScore,
       data.finalRating,
+      data.platformLink,
     );
 
     await this.log({
@@ -752,6 +797,7 @@ export class NotificationService {
     employeeFirstName: string;
     deadline: string;
     daysRemaining: number;
+    selfAssessmentLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -772,6 +818,7 @@ export class NotificationService {
       data.cycleTitle,
       data.deadline,
       data.daysRemaining,
+      data.selfAssessmentLink,
     );
 
     await this.log({
@@ -799,6 +846,7 @@ export class NotificationService {
     employeeLastName: string;
     deadline: string;
     daysRemaining: number;
+    managerReviewLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -820,6 +868,7 @@ export class NotificationService {
       data.cycleTitle,
       data.deadline,
       data.daysRemaining,
+      data.managerReviewLink,
     );
 
     await this.log({

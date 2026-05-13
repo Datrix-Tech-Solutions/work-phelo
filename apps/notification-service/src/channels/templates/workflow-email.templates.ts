@@ -392,6 +392,7 @@ export function renderAppraisalSelfSubmittedTemplate(input: {
   managerFirstName: string;
   employeeFullName: string;
   cycleTitle: string;
+  managerReviewLink?: string;
 }): string {
   return renderStandardEmail({
     title: 'Self-Assessment Submitted',
@@ -399,7 +400,32 @@ export function renderAppraisalSelfSubmittedTemplate(input: {
     bodyHtml: `
       <p>Hi ${input.managerFirstName},</p>
       <p><strong>${input.employeeFullName}</strong> has submitted their self-assessment for the <strong>${input.cycleTitle}</strong> appraisal cycle and it is now ready for your manager review.</p>
-      <p>Please log in to WorkPhelo to complete your review.</p>
+      ${
+        input.managerReviewLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open manager review', input.managerReviewLink)}</p>`
+          : '<p>Please log in to WorkPhelo to complete your review.</p>'
+      }
+      <p style="margin-top:30px;">Thank you,</p>
+    `,
+  });
+}
+
+export function renderAppraisalCycleStartedTemplate(input: {
+  employeeFirstName: string;
+  cycleTitle: string;
+  selfAssessmentLink?: string;
+}): string {
+  return renderStandardEmail({
+    title: 'Appraisal Cycle Started',
+    heading: 'Your Appraisal Cycle Is Now Active',
+    bodyHtml: `
+      <p>Hi ${input.employeeFirstName},</p>
+      <p>The <strong>${input.cycleTitle}</strong> appraisal cycle has started. Please complete your self-assessment before the deadline.</p>
+      ${
+        input.selfAssessmentLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Start self-assessment', input.selfAssessmentLink)}</p>`
+          : '<p>Please log in to WorkPhelo to start your self-assessment.</p>'
+      }
       <p style="margin-top:30px;">Thank you,</p>
     `,
   });
@@ -446,6 +472,7 @@ export function renderAppraisalSelfReminderTemplate(input: {
   employeeFirstName: string;
   bodyCopy: string;
   deadlineLabel: string;
+  selfAssessmentLink?: string;
 }): string {
   return renderStandardEmail({
     title: 'Self-Assessment Reminder',
@@ -459,7 +486,11 @@ export function renderAppraisalSelfReminderTemplate(input: {
           <td style="padding:10px 12px;border:1px solid #e5e7eb;">${input.deadlineLabel}</td>
         </tr>
       </table>
-      <p>Please log in to WorkPhelo to complete your appraisal submission.</p>
+      ${
+        input.selfAssessmentLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open self-assessment', input.selfAssessmentLink)}</p>`
+          : '<p>Please log in to WorkPhelo to complete your appraisal submission.</p>'
+      }
       <p style="margin-top:30px;">Thank you,</p>
     `,
   });
@@ -470,6 +501,7 @@ export function renderAppraisalManagerReminderTemplate(input: {
   managerFirstName: string;
   bodyCopy: string;
   deadlineLabel: string;
+  managerReviewLink?: string;
 }): string {
   return renderStandardEmail({
     title: 'Manager Review Reminder',
@@ -483,7 +515,11 @@ export function renderAppraisalManagerReminderTemplate(input: {
           <td style="padding:10px 12px;border:1px solid #e5e7eb;">${input.deadlineLabel}</td>
         </tr>
       </table>
-      <p>Please log in to WorkPhelo to complete the manager review.</p>
+      ${
+        input.managerReviewLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open manager review', input.managerReviewLink)}</p>`
+          : '<p>Please log in to WorkPhelo to complete the manager review.</p>'
+      }
       <p style="margin-top:30px;">Thank you,</p>
     `,
   });
@@ -546,6 +582,7 @@ export function renderAppraisalManagerReviewedTemplate(input: {
   cycleTitle: string;
   finalScore: number;
   finalRating: string;
+  platformLink?: string;
 }): string {
   return renderStandardEmail({
     title: 'Appraisal Complete',
@@ -563,7 +600,11 @@ export function renderAppraisalManagerReviewedTemplate(input: {
           <td style="padding:10px 12px;border:1px solid #e5e7eb;">${input.finalRating}</td>
         </tr>
       </table>
-      <p>Log in to WorkPhelo to view your full appraisal details.</p>
+      ${
+        input.platformLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('View appraisal result', input.platformLink)}</p>`
+          : '<p>Log in to WorkPhelo to view your full appraisal details.</p>'
+      }
       <p style="margin-top:30px;">Thank you,</p>
     `,
   });

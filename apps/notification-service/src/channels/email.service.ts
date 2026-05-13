@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import {
+  renderAppraisalCycleStartedTemplate,
   renderAppraisalManagerReminderTemplate,
   renderAppraisalManagerReviewedTemplate,
   renderAppraisalSelfReminderTemplate,
@@ -380,6 +381,7 @@ export class EmailService {
     managerFirstName: string,
     employeeFullName: string,
     cycleTitle: string,
+    managerReviewLink?: string,
   ): Promise<boolean> {
     return this.send(
       to,
@@ -388,6 +390,24 @@ export class EmailService {
         managerFirstName: this.escapeHtml(managerFirstName),
         employeeFullName: this.escapeHtml(employeeFullName),
         cycleTitle: this.escapeHtml(cycleTitle),
+        managerReviewLink: this.sanitizeUrl(managerReviewLink),
+      }),
+    );
+  }
+
+  async sendAppraisalCycleStartedNotification(
+    to: string,
+    employeeFirstName: string,
+    cycleTitle: string,
+    selfAssessmentLink?: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Appraisal cycle started — ${cycleTitle}`,
+      renderAppraisalCycleStartedTemplate({
+        employeeFirstName: this.escapeHtml(employeeFirstName),
+        cycleTitle: this.escapeHtml(cycleTitle),
+        selfAssessmentLink: this.sanitizeUrl(selfAssessmentLink),
       }),
     );
   }
@@ -479,6 +499,7 @@ export class EmailService {
     cycleTitle: string,
     deadline: string,
     daysRemaining: number,
+    selfAssessmentLink?: string,
   ): Promise<boolean> {
     const heading =
       daysRemaining === 0
@@ -500,6 +521,7 @@ export class EmailService {
         employeeFirstName: this.escapeHtml(employeeFirstName),
         bodyCopy,
         deadlineLabel: this.formatDateOnly(deadline),
+        selfAssessmentLink: this.sanitizeUrl(selfAssessmentLink),
       }),
     );
   }
@@ -511,6 +533,7 @@ export class EmailService {
     cycleTitle: string,
     deadline: string,
     daysRemaining: number,
+    managerReviewLink?: string,
   ): Promise<boolean> {
     const heading =
       daysRemaining === 0
@@ -531,6 +554,7 @@ export class EmailService {
         managerFirstName: this.escapeHtml(managerFirstName),
         bodyCopy,
         deadlineLabel: this.formatDateOnly(deadline),
+        managerReviewLink: this.sanitizeUrl(managerReviewLink),
       }),
     );
   }
@@ -805,6 +829,7 @@ export class EmailService {
     cycleTitle: string,
     finalScore: number,
     finalRating: string,
+    platformLink?: string,
   ): Promise<boolean> {
     return this.send(
       to,
@@ -814,6 +839,7 @@ export class EmailService {
         cycleTitle: this.escapeHtml(cycleTitle),
         finalScore,
         finalRating: this.escapeHtml(finalRating),
+        platformLink: this.sanitizeUrl(platformLink),
       }),
     );
   }

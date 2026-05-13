@@ -49,6 +49,7 @@ export const EventPatterns = {
   NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
   NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
   NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
+  NOTIFY_APPRAISAL_CYCLE_STARTED: 'notify.appraisal_cycle_started',
   NOTIFY_APPRAISAL_SELF_SUBMITTED: 'notify.appraisal_self_submitted',
   NOTIFY_APPRAISAL_MANAGER_REVIEWED: 'notify.appraisal_manager_reviewed',
   NOTIFY_APPRAISAL_SELF_REMINDER: 'notify.appraisal_self_reminder',
@@ -313,22 +314,36 @@ export interface LeaveCancelledEvent {
 export interface AppraisalSelfSubmittedEvent {
   tenantId: string;
   appraisalId: string;
+  cycleId?: string;
   cycleTitle: string;
   employeeFirstName: string;
   employeeLastName: string;
   /** Manager's email — null if employee has no manager */
   managerEmail: string | null;
   managerFirstName: string | null;
+  managerReviewLink?: string;
 }
 
 export interface AppraisalManagerReviewedEvent {
   tenantId: string;
   appraisalId: string;
+  cycleId?: string;
   cycleTitle: string;
   employeeEmail: string;
   employeeFirstName: string;
   finalScore: number;
   finalRating: string;
+  platformLink?: string;
+}
+
+export interface AppraisalCycleStartedEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleId: string;
+  cycleTitle: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  selfAssessmentLink: string;
 }
 
 export interface AppraisalSelfReminderEvent {
@@ -340,6 +355,7 @@ export interface AppraisalSelfReminderEvent {
   employeeFirstName: string;
   deadline: string;
   daysRemaining: number;
+  selfAssessmentLink?: string;
 }
 
 export interface AppraisalManagerReminderEvent {
@@ -353,6 +369,7 @@ export interface AppraisalManagerReminderEvent {
   employeeLastName: string;
   deadline: string;
   daysRemaining: number;
+  managerReviewLink?: string;
 }
 
 export interface TimeCorrectionSubmittedEvent {

@@ -23,6 +23,7 @@ import {
   LeaveReviewedEvent,
   LeaveCancelledEvent,
   TimeCorrectionSubmittedEvent,
+  AppraisalCycleStartedEvent,
   AppraisalSelfSubmittedEvent,
   AppraisalManagerReviewedEvent,
   AppraisalSelfReminderEvent,
@@ -408,6 +409,18 @@ export class RabbitMQPublisher {
     return this.publish(
       this.notificationClient,
       EventPatterns.NOTIFY_TIME_CORRECTION_SUBMITTED,
+      data,
+      correlationId,
+    );
+  }
+
+  notificationAppraisalCycleStarted(
+    data: AppraisalCycleStartedEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFY_APPRAISAL_CYCLE_STARTED,
       data,
       correlationId,
     );

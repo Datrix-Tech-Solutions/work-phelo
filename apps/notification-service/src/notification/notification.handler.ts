@@ -15,6 +15,7 @@ import {
   LeaveReviewedEvent,
   LeaveCancelledEvent,
   TimeCorrectionSubmittedEvent,
+  AppraisalCycleStartedEvent,
   AppraisalSelfSubmittedEvent,
   AppraisalManagerReviewedEvent,
   AppraisalSelfReminderEvent,
@@ -367,6 +368,29 @@ export class NotificationHandler {
       this.settleFailure(
         context,
         'notify.appraisal_self_submitted',
+        err,
+        `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.appraisal_cycle_started')
+  async handleAppraisalCycleStarted(
+    @Payload() data: WithMeta<AppraisalCycleStartedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.appraisal_cycle_started] Received | employeeEmail=${data.employeeEmail} | cycleId=${data.cycleId} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendAppraisalCycleStartedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.appraisal_cycle_started',
         err,
         `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
       );

@@ -77,6 +77,7 @@ enum PayrollStatus {
 enum AppraisalStatus {
   DRAFT
   IN_PROGRESS
+  PENDING_FINALIZATION
   COMPLETED
   CANCELLED
 
@@ -948,6 +949,13 @@ model Appraisal {
   finalScore   Float?
   finalComment String?
   completedAt  DateTime?
+  finalizedBy      String?
+  finalizedAt      DateTime?
+  finalizationNote String?
+  reopenedAt       DateTime?
+  reopenedBy       String?
+  reopenReason     String?
+  revisionNumber   Int       @default(1)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -956,8 +964,32 @@ model Appraisal {
   manager      Employee?              @relation("AppraisalManager", fields: [managerId], references: [id])
   kpiScores    AppraisalKpiScore[]
   reminderLogs AppraisalReminderLog[]
+  revisionLogs AppraisalRevisionHistory[]
 
   @@unique([cycleId, employeeId])
+  @@schema("hr")
+}
+
+model AppraisalRevisionHistory {
+  id                    String           @id @default(uuid())
+  tenantId              String
+  appraisalId           String
+  revisionNumber        Int
+  action                String
+  target                String?
+  actorId               String
+  note                  String?
+  previousStatus        AppraisalStatus?
+  previousSelfStatus    ReviewStatus?
+  previousManagerStatus ReviewStatus?
+  previousSelfScore     Float?
+  previousManagerScore  Float?
+  previousFinalScore    Float?
+  createdAt             DateTime         @default(now())
+
+  appraisal Appraisal @relation(fields: [appraisalId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, appraisalId])
   @@schema("hr")
 }
 

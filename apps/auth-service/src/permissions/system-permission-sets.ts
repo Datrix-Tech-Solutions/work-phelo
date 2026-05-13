@@ -125,7 +125,11 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
           PermissionAction.APPROVE,
         ],
         'payslip-self': [PermissionAction.VIEW],
-        appraisals: [PermissionAction.VIEW, PermissionAction.CREATE],
+        appraisals: [
+          PermissionAction.VIEW,
+          PermissionAction.CREATE,
+          PermissionAction.APPROVE,
+        ],
         'appraisal-settings': [PermissionAction.EDIT],
         'self-appraisals': [PermissionAction.VIEW, PermissionAction.EDIT],
         'appraisal-reviews': [PermissionAction.EDIT],
