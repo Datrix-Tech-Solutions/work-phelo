@@ -251,6 +251,7 @@ export interface EmployeeTerminationEvent {
   lastName: string;
   reason: string;
   lastWorkingDate: string;
+  platformLink?: string;
 }
 
 export interface ResignationSubmittedEvent {

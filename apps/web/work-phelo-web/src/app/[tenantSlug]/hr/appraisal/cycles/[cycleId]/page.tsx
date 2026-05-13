@@ -8,10 +8,24 @@ import { CycleResultsContent } from '@/components/organisms/appraisal/CycleResul
 function CycleDetailRouter({ tenantSlug, cycleId }: { tenantSlug: string; cycleId: string }) {
   const { data: raw, isLoading } = useCycleAppraisals(cycleId);
 
-  const appraisals: { selfStatus?: string; managerStatus?: string }[] = useMemo(() => {
+  const appraisals: {
+    selfStatus?: string;
+    managerStatus?: string;
+    status?: string;
+    finalScore?: number | null;
+  }[] = useMemo(() => {
     if (Array.isArray(raw)) return raw;
     if (raw && typeof raw === 'object' && Array.isArray((raw as Record<string, unknown>).data))
-      return (raw as { data: { selfStatus?: string; managerStatus?: string }[] }).data;
+      return (
+        raw as {
+          data: {
+            selfStatus?: string;
+            managerStatus?: string;
+            status?: string;
+            finalScore?: number | null;
+          }[];
+        }
+      ).data;
     return [];
   }, [raw]);
 
@@ -20,11 +34,10 @@ function CycleDetailRouter({ tenantSlug, cycleId }: { tenantSlug: string; cycleI
   }
 
   const total = appraisals.length;
-  const selfCompleted = appraisals.filter((a) => a.selfStatus === 'SUBMITTED').length;
-  const managerCompleted = appraisals.filter((a) => a.managerStatus === 'SUBMITTED').length;
-  const rate = total > 0 ? Math.round(((selfCompleted + managerCompleted) / (total * 2)) * 100) : 0;
+  const allFinalized =
+    total > 0 && appraisals.every((a) => a.status === 'COMPLETED' || a.finalScore != null);
 
-  if (rate >= 100) {
+  if (allFinalized) {
     return <CycleResultsContent tenantSlug={tenantSlug} cycleId={cycleId} />;
   }
 

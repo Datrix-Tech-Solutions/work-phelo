@@ -16,10 +16,12 @@ type Tab = 'overview' | 'results';
 
 type AppraisalItem = {
   id: string;
-  employee?: { firstName?: string; lastName?: string };
-  manager?: { firstName?: string; lastName?: string } | null;
+  employeeName?: string | null;
+  managerName?: string | null;
   selfStatus?: string;
   managerStatus?: string;
+  selfScore?: number | null;
+  managerScore?: number | null;
   status?: string;
 };
 
@@ -111,21 +113,13 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
       key: 'employee',
       label: 'Employee',
       width: '2fr',
-      render: (r) => (
-        <span className="font-medium text-gray-900">
-          {r.employee ? `${r.employee.firstName ?? ''} ${r.employee.lastName ?? ''}`.trim() : '—'}
-        </span>
-      ),
+      render: (r) => <span className="font-medium text-gray-900">{r.employeeName || '—'}</span>,
     },
     {
       key: 'manager',
       label: 'Manager',
       width: '2fr',
-      render: (r) => (
-        <span className="text-gray-700">
-          {r.manager ? `${r.manager.firstName ?? ''} ${r.manager.lastName ?? ''}`.trim() : '—'}
-        </span>
-      ),
+      render: (r) => <span className="text-gray-700">{r.managerName || '—'}</span>,
     },
     {
       key: 'selfStatus',
@@ -134,10 +128,30 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
       render: (r) => <ReviewStatus status={r.selfStatus} />,
     },
     {
+      key: 'selfScore',
+      label: 'Employee Score',
+      width: '140px',
+      render: (r) => (
+        <span className="text-gray-700">
+          {r.selfScore != null ? `${Math.round(r.selfScore)}%` : '—'}
+        </span>
+      ),
+    },
+    {
       key: 'managerStatus',
       label: 'Manager Status',
       width: '160px',
       render: (r) => <ReviewStatus status={r.managerStatus} />,
+    },
+    {
+      key: 'managerScore',
+      label: 'Manager Score',
+      width: '140px',
+      render: (r) => (
+        <span className="text-gray-700">
+          {r.managerScore != null ? `${Math.round(r.managerScore)}%` : '—'}
+        </span>
+      ),
     },
   ];
 

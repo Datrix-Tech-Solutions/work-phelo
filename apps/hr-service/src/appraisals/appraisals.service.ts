@@ -1479,7 +1479,7 @@ export class AppraisalsService {
       );
     }
 
-    return this.prisma.appraisal.findMany({
+    const appraisals = await this.prisma.appraisal.findMany({
       where,
       include: {
         employee: {
@@ -1490,9 +1490,21 @@ export class AppraisalsService {
             avatarUrl: true,
           },
         },
+        manager: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
         cycle: { select: { title: true } },
       },
     });
+
+    return appraisals.map((a) => ({
+      ...a,
+      employeeName: buildPersonName(a.employee),
+      managerName: a.manager ? buildPersonName(a.manager) : null,
+    }));
   }
 
   async getAppraisal(

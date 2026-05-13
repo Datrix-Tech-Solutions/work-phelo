@@ -199,6 +199,7 @@ export class NotificationService {
     lastName: string;
     reason: string;
     lastWorkingDate: string;
+    platformLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -218,6 +219,7 @@ export class NotificationService {
       data.lastName,
       data.reason,
       data.lastWorkingDate,
+      data.platformLink,
     );
     await this.log({
       userId: data.employeeId,

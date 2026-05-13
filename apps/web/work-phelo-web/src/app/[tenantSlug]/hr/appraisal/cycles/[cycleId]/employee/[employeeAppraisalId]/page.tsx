@@ -2,10 +2,25 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
-import { useAppraisal, useAppraisalCycles, useCycleResults } from '@/hooks';
+import {
+  useAppraisal,
+  useAppraisalCycles,
+  useCycleResults,
+  useFinalizeAppraisal,
+  useReopenAppraisal,
+} from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 import { cn } from '@/lib/utils';
-import { FinalRating } from '@/types/hr';
+import { FinalRating, DEFAULT_PERFORMANCE_BANDS } from '@/types/hr';
 import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
+
+function deriveRating(score: number): FinalRating {
+  const band = DEFAULT_PERFORMANCE_BANDS.find(
+    (b) => score >= b.minPercent && score <= b.maxPercent,
+  );
+  return band?.rating ?? 'Needs Improvement';
+}
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 
@@ -20,9 +35,10 @@ interface KpiScoreRow {
 
 const STATUS_CONFIG: Record<string, { dot: string; text: string; label: string }> = {
   Finalized: { dot: 'bg-green-500', text: 'text-green-600', label: 'Completed' },
-  ManagerSubmitted: { dot: 'bg-blue-500', text: 'text-blue-600', label: 'In Review' },
+  PendingFinalization: { dot: 'bg-purple-400', text: 'text-purple-600', label: 'Pending Approval' },
+  ManagerSubmitted: { dot: 'bg-purple-400', text: 'text-purple-600', label: 'Pending Approval' },
   SelfSubmitted: { dot: 'bg-amber-400', text: 'text-amber-500', label: 'Pending Manager' },
-  NotStarted: { dot: 'bg-gray-400', text: 'text-gray-500', label: 'Not Started' },
+  NotStarted: { dot: 'bg-blue-500', text: 'text-blue-600', label: 'In Progress' },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -54,6 +70,9 @@ export default function EmployeeAppraisalDetailPage({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
 
+  const { mutate: finalize, isPending: isApproving } = useFinalizeAppraisal();
+  const { mutate: reopen, isPending: isRejecting } = useReopenAppraisal();
+
   const { data: appraisal, isLoading } = useAppraisal(employeeAppraisalId);
   const { data: cycles = [] } = useAppraisalCycles();
   const { data: summary } = useCycleResults(cycleId);
@@ -67,6 +86,17 @@ export default function EmployeeAppraisalDetailPage({
   const selfKpis: KpiScoreRow[] = appraisal?.selfResponse?.kpiScores ?? [];
   const managerKpis: KpiScoreRow[] = appraisal?.managerResponse?.kpiScores ?? [];
   const managerMap = new Map(managerKpis.map((k: KpiScoreRow) => [k.kpiId, k]));
+
+  const isFinalized = appraisal?.overallStatus === 'Finalized';
+  const selfScore = resultItem?.selfScore ?? null;
+  const managerScore = resultItem?.managerScore ?? null;
+  const combinedScore =
+    isFinalized && resultItem?.overallScore != null
+      ? resultItem.overallScore
+      : selfScore != null && managerScore != null
+        ? (selfScore + managerScore) / 2
+        : (selfScore ?? null);
+  const derivedRating = combinedScore != null ? deriveRating(Math.round(combinedScore)) : null;
 
   const appraisalHref = `/${tenantSlug}/hr/appraisal`;
   const cycleHref = `/${tenantSlug}/hr/appraisal/cycles/${cycleId}?tab=results`;
@@ -125,12 +155,36 @@ export default function EmployeeAppraisalDetailPage({
             )}
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <Button variant="outline" onClick={() => setRejectOpen(true)}>
-            Reject
-          </Button>
-          <Button variant="primary">Approve</Button>
-        </div>
+        {!isFinalized && (
+          <div className="flex items-center gap-3 shrink-0">
+            <Button variant="outline" onClick={() => setRejectOpen(true)} disabled={isApproving}>
+              Reject
+            </Button>
+            <Button
+              variant="primary"
+              isLoading={isApproving}
+              loadingText="Approving..."
+              disabled={isRejecting}
+              onClick={() =>
+                finalize(
+                  { id: employeeAppraisalId },
+                  {
+                    onSuccess: () =>
+                      useToastStore
+                        .getState()
+                        .addToast({ message: 'Appraisal approved', type: 'success' }),
+                    onError: (err) =>
+                      useToastStore
+                        .getState()
+                        .addToast({ message: extractError(err), type: 'error' }),
+                  },
+                )
+              }
+            >
+              Approve
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Main content */}
@@ -144,23 +198,27 @@ export default function EmployeeAppraisalDetailPage({
         <div className="grid grid-cols-4 gap-6 px-6 py-5 border-b border-gray-100">
           <ScoreCard
             label="Self Assessment Score"
-            value={resultItem?.selfScore != null ? `${Math.round(resultItem.selfScore)}%` : '—'}
+            value={selfScore != null ? `${Math.round(selfScore)}%` : '—'}
           />
           <ScoreCard
             label="Manager Assessment Score"
-            value={
-              resultItem?.managerScore != null ? `${Math.round(resultItem.managerScore)}%` : '—'
-            }
+            value={managerScore != null ? `${Math.round(managerScore)}%` : '—'}
           />
           <ScoreCard
-            label="Final Combined Score"
-            value={
-              resultItem?.overallScore != null ? `${Math.round(resultItem.overallScore)}%` : '—'
-            }
+            label={isFinalized ? 'Final Combined Score' : 'Projected Combined Score'}
+            value={combinedScore != null ? `${Math.round(combinedScore)}%` : '—'}
           />
           <ScoreCard
             label="Performance Band"
-            value={<RatingBadge rating={resultItem?.finalRating as FinalRating} />}
+            value={
+              isFinalized && resultItem?.finalRating ? (
+                <RatingBadge rating={resultItem.finalRating as FinalRating} />
+              ) : derivedRating ? (
+                <RatingBadge rating={derivedRating} />
+              ) : (
+                '—'
+              )
+            }
           />
         </div>
 
@@ -262,7 +320,30 @@ export default function EmployeeAppraisalDetailPage({
             >
               Cancel
             </Button>
-            <Button variant="danger" disabled={!rejectReason.trim()}>
+            <Button
+              variant="danger"
+              disabled={!rejectReason.trim()}
+              isLoading={isRejecting}
+              loadingText="Rejecting..."
+              onClick={() =>
+                reopen(
+                  { id: employeeAppraisalId, reason: rejectReason.trim(), target: 'FULL' },
+                  {
+                    onSuccess: () => {
+                      setRejectOpen(false);
+                      setRejectReason('');
+                      useToastStore
+                        .getState()
+                        .addToast({ message: 'Appraisal sent back for redo', type: 'success' });
+                    },
+                    onError: (err) =>
+                      useToastStore
+                        .getState()
+                        .addToast({ message: extractError(err), type: 'error' }),
+                  },
+                )
+              }
+            >
               Confirm Rejection
             </Button>
           </div>
