@@ -20,6 +20,7 @@ import { DashboardStatCards } from '@/components/organisms/dashboard/DashboardSt
 import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
+import { MySchedulesPanel } from '@/components/organisms/dashboard/MySchedulesPanel';
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
 import { formatTime, resolveHolidayUpcomingDate } from '@/lib/formatters';
 
@@ -201,6 +202,7 @@ export default function EmployeeDashboardPage({
   const [payslipsOpen, setPayslipsOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [myLeaveOpen, setMyLeaveOpen] = useState(false);
+  const [schedulesOpen, setSchedulesOpen] = useState(false);
 
   const handleOpenMyLeave = () => {
     setMyLeaveOpen(true);
@@ -256,7 +258,7 @@ export default function EmployeeDashboardPage({
             onPayslips={() => setPayslipsOpen(true)}
             onAssets={() => setAssetsOpen(true)}
             onLeave={handleOpenMyLeave}
-            onSchedules={() => {}}
+            onSchedules={() => setSchedulesOpen(true)}
             onProjects={() => {}}
             leaveBadge={leaveBadgeCount}
             projectsBadge={projectsBadgeCount}
@@ -293,6 +295,7 @@ export default function EmployeeDashboardPage({
         payslips={myPayslips}
       />
       <MyAssetsPanel isOpen={assetsOpen} onClose={() => setAssetsOpen(false)} />
+      <MySchedulesPanel isOpen={schedulesOpen} onClose={() => setSchedulesOpen(false)} />
     </div>
   );
 }
