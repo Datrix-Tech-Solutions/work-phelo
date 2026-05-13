@@ -24,6 +24,10 @@ import {
   SubmitResignationDto,
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
+import {
+  CreateEmployeeDeductionDto,
+  UpdateEmployeeDeductionDto,
+} from './dto/employee-deduction.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 import {
   AssetStatus,
@@ -581,6 +585,30 @@ export class EmployeesService {
           userId: true,
           basicSalary: true,
           ssnit: true,
+          allowances: {
+            select: {
+              id: true,
+              employeeId: true,
+              type: true,
+              name: true,
+              amount: true,
+              effectiveFrom: true,
+              createdAt: true,
+            },
+          },
+          deductions: {
+            select: {
+              id: true,
+              employeeId: true,
+              name: true,
+              totalAmount: true,
+              monthlyRate: true,
+              amountPaid: true,
+              startDate: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
           department: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
         },
@@ -631,6 +659,7 @@ export class EmployeesService {
           department: true,
           branch: true,
           allowances: true,
+          deductions: true,
           documents: true,
           leaveBalances: { include: { leaveType: true } },
           offboarding: true,
@@ -711,6 +740,7 @@ export class EmployeesService {
         department: true,
         branch: true,
         allowances: true,
+        deductions: true,
         resignation: true,
       },
     });
@@ -1627,6 +1657,101 @@ export class EmployeesService {
         effectiveFrom: new Date(dto.effectiveFrom),
       },
     });
+  }
+
+  async listDeductions(tenantId: string, employeeId: string) {
+    await this.findById(tenantId, employeeId);
+
+    return this.prisma.employeeDeduction.findMany({
+      where: { tenantId, employeeId },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+  }
+
+  async addDeduction(
+    tenantId: string,
+    employeeId: string,
+    dto: CreateEmployeeDeductionDto,
+  ) {
+    await this.findById(tenantId, employeeId);
+
+    if (dto.monthlyRate > dto.totalAmount) {
+      throw new BadRequestException('Monthly rate cannot exceed total amount');
+    }
+
+    return this.prisma.employeeDeduction.create({
+      data: {
+        tenantId,
+        employeeId,
+        name: dto.name.trim(),
+        totalAmount: dto.totalAmount,
+        monthlyRate: dto.monthlyRate,
+        startDate: new Date(dto.startDate),
+      },
+    });
+  }
+
+  async updateDeduction(
+    tenantId: string,
+    employeeId: string,
+    deductionId: string,
+    dto: UpdateEmployeeDeductionDto,
+  ) {
+    await this.findById(tenantId, employeeId);
+
+    const existing = await this.prisma.employeeDeduction.findFirst({
+      where: { id: deductionId, tenantId, employeeId },
+    });
+    if (!existing) throw new NotFoundException('Deduction not found');
+
+    const totalAmount =
+      dto.totalAmount != null ? dto.totalAmount : Number(existing.totalAmount);
+    const monthlyRate =
+      dto.monthlyRate != null ? dto.monthlyRate : Number(existing.monthlyRate);
+    const amountPaid = Number(existing.amountPaid);
+
+    if (totalAmount < amountPaid) {
+      throw new BadRequestException(
+        'Total amount cannot be lower than the amount already paid',
+      );
+    }
+
+    if (monthlyRate > totalAmount) {
+      throw new BadRequestException('Monthly rate cannot exceed total amount');
+    }
+
+    return this.prisma.employeeDeduction.update({
+      where: { id: deductionId },
+      data: {
+        ...(dto.name != null ? { name: dto.name.trim() } : {}),
+        ...(dto.totalAmount != null ? { totalAmount: dto.totalAmount } : {}),
+        ...(dto.monthlyRate != null ? { monthlyRate: dto.monthlyRate } : {}),
+        ...(dto.startDate != null
+          ? { startDate: new Date(dto.startDate) }
+          : {}),
+      },
+    });
+  }
+
+  async deleteDeduction(
+    tenantId: string,
+    employeeId: string,
+    deductionId: string,
+  ) {
+    await this.findById(tenantId, employeeId);
+
+    const existing = await this.prisma.employeeDeduction.findFirst({
+      where: { id: deductionId, tenantId, employeeId },
+    });
+    if (!existing) throw new NotFoundException('Deduction not found');
+
+    if (Number(existing.amountPaid) > 0) {
+      throw new BadRequestException(
+        'Partially paid deductions cannot be deleted. Set the total amount to the paid amount instead.',
+      );
+    }
+
+    await this.prisma.employeeDeduction.delete({ where: { id: deductionId } });
   }
 
   async uploadDocument(tenantId: string, employeeId: string, dto: any) {

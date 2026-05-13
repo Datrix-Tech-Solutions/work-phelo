@@ -33,6 +33,10 @@ import {
   SubmitResignationDto,
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
+import {
+  CreateEmployeeDeductionDto,
+  UpdateEmployeeDeductionDto,
+} from './dto/employee-deduction.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -396,6 +400,72 @@ export class EmployeesController {
   @ApiResponse({ status: 201, description: 'Allowance added successfully' })
   addAllowance(@Param('id') id: string, @Body() dto: any, @Req() req: any) {
     return this.employeesService.addAllowance(req.user.tenantId, id, dto);
+  }
+
+  @Get(':id/deductions')
+  @RequirePermissions(Permission.RUN_PAYROLL)
+  @ApiOperation({ summary: 'List payroll deductions for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Employee deductions retrieved' })
+  listDeductions(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.listDeductions(req.user.tenantId, id);
+  }
+
+  @Post(':id/deductions')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.RUN_PAYROLL)
+  @ApiOperation({ summary: 'Add a payroll deduction to an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiBody({ type: CreateEmployeeDeductionDto })
+  @ApiResponse({ status: 201, description: 'Deduction added successfully' })
+  addDeduction(
+    @Param('id') id: string,
+    @Body() dto: CreateEmployeeDeductionDto,
+    @Req() req: any,
+  ) {
+    return this.employeesService.addDeduction(req.user.tenantId, id, dto);
+  }
+
+  @Patch(':id/deductions/:deductionId')
+  @RequirePermissions(Permission.RUN_PAYROLL)
+  @ApiOperation({ summary: 'Update a payroll deduction for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'deductionId', description: 'Deduction UUID' })
+  @ApiBody({ type: UpdateEmployeeDeductionDto })
+  @ApiResponse({ status: 200, description: 'Deduction updated successfully' })
+  updateDeduction(
+    @Param('id') id: string,
+    @Param('deductionId') deductionId: string,
+    @Body() dto: UpdateEmployeeDeductionDto,
+    @Req() req: any,
+  ) {
+    return this.employeesService.updateDeduction(
+      req.user.tenantId,
+      id,
+      deductionId,
+      dto,
+    );
+  }
+
+  @Delete(':id/deductions/:deductionId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(Permission.RUN_PAYROLL)
+  @ApiOperation({
+    summary: 'Delete an unpaid payroll deduction for an employee',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'deductionId', description: 'Deduction UUID' })
+  @ApiResponse({ status: 204, description: 'Deduction deleted successfully' })
+  async deleteDeduction(
+    @Param('id') id: string,
+    @Param('deductionId') deductionId: string,
+    @Req() req: any,
+  ) {
+    await this.employeesService.deleteDeduction(
+      req.user.tenantId,
+      id,
+      deductionId,
+    );
   }
 
   @Post(':id/documents')

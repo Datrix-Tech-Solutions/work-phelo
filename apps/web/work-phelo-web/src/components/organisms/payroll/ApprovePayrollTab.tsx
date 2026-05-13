@@ -78,7 +78,7 @@ function RowMenu({ onView, onApprove, onReject }: RowMenuProps) {
             }}
             className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
           >
-            Reject
+            Return To Draft
           </button>
         </div>
       )}
@@ -94,7 +94,7 @@ export function ApprovePayrollTab() {
   const { mutate: returnToDraft, isPending: isRejecting } = useReturnPayrollToDraft();
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [rejectRun, setRejectRun] = useState<PayrollRun | null>(null);
-  const [rejectionReason, setRejectionReason] = useState('');
+  const [returnNote, setReturnNote] = useState('');
 
   const pending = runs.filter((r) => r.status === 'PENDING_APPROVAL');
 
@@ -162,9 +162,9 @@ export function ApprovePayrollTab() {
         onClose={() => {
           if (isRejecting) return;
           setRejectRun(null);
-          setRejectionReason('');
+          setReturnNote('');
         }}
-        title="Reject Payroll"
+        title="Return Payroll To Draft"
         hideClose={isRejecting}
         footer={
           <>
@@ -172,7 +172,7 @@ export function ApprovePayrollTab() {
               variant="outline"
               onClick={() => {
                 setRejectRun(null);
-                setRejectionReason('');
+                setReturnNote('');
               }}
               disabled={isRejecting}
             >
@@ -181,17 +181,17 @@ export function ApprovePayrollTab() {
             <Button
               variant="danger"
               isLoading={isRejecting}
-              loadingText="Rejecting…"
-              disabled={!rejectionReason.trim()}
+              loadingText="Returning…"
+              disabled={!returnNote.trim()}
               onClick={() => {
                 if (!rejectRun) return;
                 returnToDraft(
-                  { id: rejectRun.id, note: rejectionReason.trim() },
+                  { id: rejectRun.id, note: returnNote.trim() },
                   {
                     onSuccess: () => {
                       toast.success(`${monthLabel(rejectRun)} payroll returned to draft`);
                       setRejectRun(null);
-                      setRejectionReason('');
+                      setReturnNote('');
                     },
                     onError: (err) =>
                       toast.error(extractError(err, 'Failed to return payroll to draft')),
@@ -206,7 +206,7 @@ export function ApprovePayrollTab() {
       >
         <div className="flex flex-col gap-4 mt-2">
           <p className="text-sm text-gray-600 leading-relaxed">
-            You are about to reject the payroll for{' '}
+            You are about to return the payroll for{' '}
             <span className="font-medium text-gray-900">
               {rejectRun ? monthLabel(rejectRun) : ''}
             </span>
@@ -215,13 +215,13 @@ export function ApprovePayrollTab() {
           </p>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-gray-900">
-              Reason for rejection <span className="text-red-500">*</span>
+              Return note <span className="text-red-500">*</span>
             </label>
             <textarea
               rows={4}
-              placeholder="Explain why this payroll is being rejected…"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Explain what needs to be corrected before resubmission…"
+              value={returnNote}
+              onChange={(e) => setReturnNote(e.target.value)}
               className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
             />
           </div>

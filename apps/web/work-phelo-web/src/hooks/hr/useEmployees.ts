@@ -20,6 +20,22 @@ import {
   ResignationRecord,
 } from '@/types/hr';
 
+function normalizeDeduction(deduction: EmployeeDeduction): EmployeeDeduction {
+  return {
+    ...deduction,
+    totalAmount: Number(deduction.totalAmount),
+    monthlyRate: Number(deduction.monthlyRate),
+    amountPaid: Number(deduction.amountPaid),
+  };
+}
+
+function normalizeEmployee(employee: Employee): Employee {
+  return {
+    ...employee,
+    deductions: employee.deductions?.map(normalizeDeduction),
+  };
+}
+
 export function useEmployees(query?: EmployeeQuery) {
   return useQuery({
     queryKey: ['employees', query],
@@ -29,8 +45,45 @@ export function useEmployees(query?: EmployeeQuery) {
         { params: query },
       );
       return {
-        data: res.data.employees,
+        data: res.data.employees.map(normalizeEmployee),
         total: res.data.meta.total,
+      };
+    },
+  });
+}
+
+export function useAllEmployees(query?: Omit<EmployeeQuery, 'page' | 'limit'>) {
+  return useQuery({
+    queryKey: ['employees', 'all', query],
+    queryFn: async () => {
+      const pageSize = 100;
+      const firstPage = await api.get<{
+        employees: Employee[];
+        meta: { total: number };
+      }>('/hr/employees', {
+        params: { ...query, page: 1, limit: pageSize },
+      });
+      const total = firstPage.data.meta.total;
+      const totalPages = Math.ceil(total / pageSize);
+
+      if (totalPages <= 1) {
+        return { data: firstPage.data.employees.map(normalizeEmployee), total };
+      }
+
+      const remainingPages = await Promise.all(
+        Array.from({ length: totalPages - 1 }, (_, index) =>
+          api.get<{ employees: Employee[]; meta: { total: number } }>('/hr/employees', {
+            params: { ...query, page: index + 2, limit: pageSize },
+          }),
+        ),
+      );
+
+      return {
+        data: [
+          ...firstPage.data.employees,
+          ...remainingPages.flatMap((res) => res.data.employees),
+        ].map(normalizeEmployee),
+        total,
       };
     },
   });
@@ -279,7 +332,7 @@ export function useEmployeeDeductions(employeeId: string) {
     queryKey: ['employees', employeeId, 'deductions'],
     queryFn: async () => {
       const res = await api.get<EmployeeDeduction[]>(`/hr/employees/${employeeId}/deductions`);
-      return res.data;
+      return res.data.map(normalizeDeduction);
     },
     enabled: !!employeeId,
   });
@@ -293,7 +346,7 @@ export function useCreateDeduction(employeeId: string) {
         `/hr/employees/${employeeId}/deductions`,
         payload,
       );
-      return res.data;
+      return normalizeDeduction(res.data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'deductions'] });
@@ -312,7 +365,7 @@ export function useUpdateDeduction(employeeId: string) {
         `/hr/employees/${employeeId}/deductions/${deductionId}`,
         payload,
       );
-      return res.data;
+      return normalizeDeduction(res.data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees', employeeId, 'deductions'] });

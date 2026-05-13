@@ -109,7 +109,9 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
                 </div>
                 <div className="flex flex-col gap-1 pl-4">
                   <p className="text-xs text-gray-500">Employer Cost</p>
-                  <p className="text-sm font-semibold text-orange-500">—</p>
+                  <p className="text-sm font-semibold text-orange-500">
+                    {fmt(run.totalEmployerCost)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -143,8 +145,10 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
           <span className="font-medium text-gray-900">{periodLabel}</span>. Payslips will be
           distributed to all active employees and the payroll will be marked as approved. The total
           employer cost for this period is{' '}
-          <span className="font-semibold text-orange-500">{run ? fmt(run.totalGross) : '—'}</span>.
-          This action cannot be undone once approved.
+          <span className="font-semibold text-orange-500">
+            {run ? fmt(run.totalEmployerCost) : '—'}
+          </span>
+          . This action cannot be undone once approved.
         </p>
         {approvalNote.trim() && (
           <p className="text-sm text-gray-500 leading-relaxed mt-3">

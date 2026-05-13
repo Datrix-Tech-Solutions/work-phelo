@@ -117,7 +117,9 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   ],
 
   // ── Payroll ───────────────────────────────────────────────────────────────
-  [Permission.READ_PAYROLL]: [{ resource: 'payroll', actions: ['VIEW'] }],
+  [Permission.READ_PAYROLL]: [
+    { resource: 'payroll', actions: ['VIEW', 'RUN', 'APPROVE', 'EDIT'] },
+  ],
   [Permission.RUN_PAYROLL]: [{ resource: 'payroll', actions: ['RUN'] }],
   [Permission.APPROVE_PAYROLL]: [{ resource: 'payroll', actions: ['APPROVE'] }],
   [Permission.READ_OWN_PAYSLIP]: [

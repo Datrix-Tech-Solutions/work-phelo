@@ -5,11 +5,11 @@ import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
-import { useEmployees } from '@/hooks/hr/useEmployees';
+import { useAllEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 import { PayrollItemsPanel } from './PayrollItemsPanel';
-import { DeductionsPanel } from './DeductionsPanel';
+import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
 
@@ -49,14 +49,21 @@ interface PayrollRow {
   department?: string;
 }
 
-const PAYROLL_ELIGIBLE: Employee['employmentStatus'][] = ['ACTIVE', 'PROBATION', 'ON_LEAVE'];
+const PAYROLL_ELIGIBLE: Employee['employmentStatus'][] = ['ACTIVE', 'PROBATION'];
+
+function isTransportAllowance(item: AllowanceItem) {
+  const label = `${item.type ?? ''} ${item.name ?? ''}`.toLowerCase();
+  return label.includes('transport');
+}
 
 export function ManagePayrollTab() {
-  const { data: empData, isLoading } = useEmployees({ limit: 100 });
+  const { data: empData, isLoading } = useAllEmployees();
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
-  const [deductionsTotalsMap, setDeductionsTotalsMap] = useState<Record<string, number>>({});
+  const [deductionItemsMap, setDeductionItemsMap] = useState<Record<string, DeductionLineItem[]>>(
+    {},
+  );
 
   const [allowancePanel, setAllowancePanel] = useState<{ rowId: string; rowName: string } | null>(
     null,
@@ -67,14 +74,22 @@ export function ManagePayrollTab() {
   const [runPanelOpen, setRunPanelOpen] = useState(false);
   const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
 
-  // Initialise deduction totals from employee profile data
-  const profileDeductionTotals = useMemo(() => {
-    const map: Record<string, number> = {};
+  // Initialise deduction line items from employee profile data.
+  const profileDeductionItems = useMemo(() => {
+    const map: Record<string, DeductionLineItem[]> = {};
     (empData?.data ?? []).forEach((e) => {
       if (e.deductions) {
         map[e.id] = e.deductions
           .filter((d) => d.amountPaid < d.totalAmount)
-          .reduce((sum, d) => sum + d.monthlyRate, 0);
+          .map((d) => {
+            const balance = Math.max(0, d.totalAmount - d.amountPaid);
+            return {
+              employeeDeductionId: d.id,
+              name: d.name,
+              amount: Math.min(balance, d.monthlyRate),
+            };
+          })
+          .filter((d) => d.amount > 0);
       }
     });
     return map;
@@ -88,10 +103,15 @@ export function ManagePayrollTab() {
     return employees.map((e) => {
       const basic = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
       const savedAllowances: AllowanceItem[] =
-        e.allowances?.map((a) => ({ name: a.type as string, amount: Number(a.amount) })) ?? [];
+        e.allowances?.map((a) => ({
+          name: a.name ?? (a.type as string),
+          type: a.type,
+          amount: Number(a.amount),
+        })) ?? [];
       const allowances = allowancesMap[e.id] ?? savedAllowances;
       const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
-      const otherDeductions = deductionsTotalsMap[e.id] ?? profileDeductionTotals[e.id] ?? 0;
+      const deductionItems = deductionItemsMap[e.id] ?? profileDeductionItems[e.id] ?? [];
+      const otherDeductions = deductionItems.reduce((sum, d) => sum + d.amount, 0);
       const calc = calculatePayroll({
         basicSalary: basic,
         allowances,
@@ -116,7 +136,7 @@ export function ManagePayrollTab() {
         department: e.department?.name,
       };
     });
-  }, [empData, basicMap, allowancesMap, deductionsTotalsMap, profileDeductionTotals]);
+  }, [empData, basicMap, allowancesMap, deductionItemsMap, profileDeductionItems]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery) return payrollRows;
@@ -146,13 +166,32 @@ export function ManagePayrollTab() {
       result[id] = { ...result[id], basicSalary: val };
     });
     Object.entries(allowancesMap).forEach(([id, items]) => {
+      const totalAllowances = items
+        .filter((item) => !isTransportAllowance(item))
+        .reduce((sum, item) => sum + item.amount, 0);
+      const transportAmount = items
+        .filter(isTransportAllowance)
+        .reduce((sum, item) => sum + item.amount, 0);
       result[id] = {
         ...result[id],
-        allowanceItems: items.map((a) => ({ name: a.name, amount: a.amount })),
+        totalAllowances,
+        transportAmount,
+        allowanceItems: items.map((item) => ({
+          name: item.name,
+          type: item.type ?? null,
+          amount: item.amount,
+        })),
+      };
+    });
+    Object.entries(deductionItemsMap).forEach(([id, items]) => {
+      result[id] = {
+        ...result[id],
+        otherDeductions: items.reduce((sum, item) => sum + item.amount, 0),
+        deductionItems: items,
       };
     });
     return result;
-  }, [basicMap, allowancesMap]);
+  }, [basicMap, allowancesMap, deductionItemsMap]);
 
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
@@ -292,6 +331,11 @@ export function ManagePayrollTab() {
         columns={columns}
         data={filteredData}
         isLoading={isLoading}
+        emptyMessage={
+          payrollRows.length === 0
+            ? 'No payroll-eligible employees found. Employees must be Active or Probation.'
+            : 'No employees match your search.'
+        }
         searchPlaceholder="Search employee name..."
         onSearch={setSearchQuery}
         currentPage={1}
@@ -327,9 +371,9 @@ export function ManagePayrollTab() {
         onClose={() => setDeductionPanel(null)}
         employeeId={deductionPanel?.rowId ?? ''}
         employeeName={deductionPanel?.rowName ?? ''}
-        onActiveTotal={(total) => {
+        onActiveItems={(items) => {
           if (!deductionPanel) return;
-          setDeductionsTotalsMap((prev) => ({ ...prev, [deductionPanel.rowId]: total }));
+          setDeductionItemsMap((prev) => ({ ...prev, [deductionPanel.rowId]: items }));
         }}
       />
 
@@ -343,9 +387,10 @@ export function ManagePayrollTab() {
       <PayrollDraftsPanel
         isOpen={draftsPanelOpen}
         onClose={() => setDraftsPanelOpen(false)}
-        onLoad={({ basicMap, allowancesMap }: DraftLoadData) => {
+        onLoad={({ basicMap, allowancesMap, deductionItemsMap }: DraftLoadData) => {
           setBasicMap(basicMap);
           setAllowancesMap(allowancesMap);
+          setDeductionItemsMap(deductionItemsMap);
         }}
       />
     </div>

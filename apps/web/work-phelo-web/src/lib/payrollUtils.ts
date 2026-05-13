@@ -27,6 +27,43 @@ function fmtNum(value: string | number | null | undefined): string {
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+function payrollAllowanceRows(item: PayrollItem): Array<[string, number]> {
+  if (item.allowanceItems?.length) {
+    return item.allowanceItems
+      .map((allowance) => [allowance.name, parseFloat(allowance.amount)] as [string, number])
+      .filter(([, amount]) => amount > 0);
+  }
+
+  const rows: Array<[string, number]> = [];
+  const transportAmount = parseFloat(item.transportAmount);
+  const nonTransportAllowances = parseFloat(item.totalAllowances);
+  if (transportAmount > 0) rows.push(['Transport Allowance', transportAmount]);
+  if (nonTransportAllowances > 0) rows.push(['Allowances', nonTransportAllowances]);
+  return rows;
+}
+
+function payrollDeductionRows(item: PayrollItem): Array<[string, number]> {
+  if (item.deductionItems?.length) {
+    return item.deductionItems
+      .map((deduction) => [deduction.name, parseFloat(deduction.amount)] as [string, number])
+      .filter(([, amount]) => amount > 0);
+  }
+
+  const otherDeductions = parseFloat(item.otherDeductions);
+  return otherDeductions > 0 ? [['Deductions', otherDeductions]] : [];
+}
+
+function lineItemsSummary(rows: Array<[string, number]>, fallback: string | number): string {
+  if (rows.length === 0) return fmtNum(fallback);
+  return rows.map(([name, amount]) => `${name}: ${fmtNum(amount)}`).join('; ');
+}
+
+function sumLineItems(rows: Array<[string, number]>, fallback: string | number): number {
+  if (rows.length > 0) return rows.reduce((sum, [, amount]) => sum + amount, 0);
+  const value = typeof fallback === 'string' ? parseFloat(fallback) : fallback;
+  return Number.isFinite(value) ? value : 0;
+}
+
 function triggerCSV(filename: string, rows: string[][]): void {
   const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -70,6 +107,20 @@ export async function downloadPayrollPDFFormat(
 
   const sum = (key: keyof (typeof detail.items)[0]) =>
     fmtNum(detail.items.reduce((s, i) => s + parseFloat((i[key] as string) || '0'), 0));
+  const sumAllowances = () =>
+    fmtNum(
+      detail.items.reduce(
+        (s, item) => s + sumLineItems(payrollAllowanceRows(item), parseFloat(item.totalAllowances)),
+        0,
+      ),
+    );
+  const sumDeductions = () =>
+    fmtNum(
+      detail.items.reduce(
+        (s, item) => s + sumLineItems(payrollDeductionRows(item), parseFloat(item.otherDeductions)),
+        0,
+      ),
+    );
 
   const isFull = format === 'full';
 
@@ -83,7 +134,7 @@ export async function downloadPayrollPDFFormat(
           'Gross',
           'Emp. SSNIT',
           'PAYE',
-          'Other Ded.',
+          'Deductions',
           'Net Salary',
         ],
       ]
@@ -94,11 +145,11 @@ export async function downloadPayrollPDFFormat(
         item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
         item.employee?.employeeNumber ?? '',
         fmtNum(item.basicSalary),
-        fmtNum(item.totalAllowances),
+        lineItemsSummary(payrollAllowanceRows(item), item.totalAllowances),
         fmtNum(item.grossSalary),
         fmtNum(item.employeeSSNIT),
         fmtNum(item.payeTax),
-        fmtNum(item.otherDeductions),
+        lineItemsSummary(payrollDeductionRows(item), item.otherDeductions),
         fmtNum(item.netSalary),
       ])
     : detail.items.map((item) => [
@@ -116,11 +167,11 @@ export async function downloadPayrollPDFFormat(
           'TOTAL',
           '',
           sum('basicSalary'),
-          sum('totalAllowances'),
+          sumAllowances(),
           sum('grossSalary'),
           sum('employeeSSNIT'),
           sum('payeTax'),
-          sum('otherDeductions'),
+          sumDeductions(),
           sum('netSalary'),
         ],
       ]
@@ -464,11 +515,10 @@ export async function downloadPayslipPDF(
   const tableW = colW - 2;
   const earningsStartY = y;
 
-  const transportAmt = parseFloat(item.transportAmount);
-  const otherAllowances = parseFloat(item.totalAllowances) - transportAmt;
   const earningsRows: string[][] = [['Basic Salary', fmtNum(item.basicSalary)]];
-  if (transportAmt > 0) earningsRows.push(['Transport Allowance', fmtNum(item.transportAmount)]);
-  if (otherAllowances > 0) earningsRows.push(['Other Allowances', fmtNum(otherAllowances)]);
+  payrollAllowanceRows(item).forEach(([name, amount]) => {
+    earningsRows.push([name, fmtNum(amount)]);
+  });
   if (parseFloat(item.overtimePay) > 0)
     earningsRows.push(['Overtime Pay', fmtNum(item.overtimePay)]);
   if (parseFloat(item.bonus) > 0) earningsRows.push(['Bonus / Incentive', fmtNum(item.bonus)]);
@@ -481,8 +531,9 @@ export async function downloadPayslipPDF(
   ];
   if (parseFloat(item.tier3Employee) > 0)
     deductionRows.push(['Tier 3', fmtNum(item.tier3Employee)]);
-  if (parseFloat(item.otherDeductions) > 0)
-    deductionRows.push(['Other Deductions', fmtNum(item.otherDeductions)]);
+  payrollDeductionRows(item).forEach(([name, amount]) => {
+    deductionRows.push([name, fmtNum(amount)]);
+  });
 
   const tableHeadStyles = {
     fillColor: [13, 31, 68] as [number, number, number],
@@ -689,7 +740,7 @@ export function downloadPayrollFullFormat(
     'Employee SSNIT',
     'Employer SSNIT',
     'PAYE',
-    'Other Deductions',
+    'Deductions',
     'Net Salary',
   ];
   const rows = detail.items.map((item) => [
@@ -697,12 +748,12 @@ export function downloadPayrollFullFormat(
     item.employee?.employeeNumber ?? '',
     item.employee?.jobTitle ?? '',
     fmtNum(item.basicSalary),
-    fmtNum(item.totalAllowances),
+    lineItemsSummary(payrollAllowanceRows(item), item.totalAllowances),
     fmtNum(item.grossSalary),
     fmtNum(item.employeeSSNIT),
     fmtNum(item.employerSSNIT),
     fmtNum(item.payeTax),
-    fmtNum(item.otherDeductions),
+    lineItemsSummary(payrollDeductionRows(item), item.otherDeductions),
     fmtNum(item.netSalary),
   ]);
   const meta = companyName ? [[companyName], [`Payroll Report — ${label}`], []] : [];
