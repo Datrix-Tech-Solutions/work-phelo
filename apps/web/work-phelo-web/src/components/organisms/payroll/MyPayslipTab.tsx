@@ -14,7 +14,7 @@ import {
   PayslipYTD,
 } from '@/lib/payrollUtils';
 import { useAuthStore } from '@/store/auth.store';
-import { useTenant, useMyProfile, useBranches } from '@/hooks';
+import { useTenant, useMyProfile } from '@/hooks';
 import { TaxReturnsPanel } from './TaxReturnsPanel';
 
 function ghs(value: string | number) {
@@ -69,8 +69,7 @@ export function MyPayslipTab() {
   const user = useAuthStore((s) => s.user);
   const { data: tenantData } = useTenant(user?.tenantId ?? '');
   const { data: myProfile } = useMyProfile();
-  const { data: branches = [] } = useBranches();
-  const employeeBranch = myProfile?.branch ?? branches.find((b) => b.id === myProfile?.branchId);
+  const employeeBranch = myProfile?.branch;
 
   const companyInfo: PayslipCompanyInfo = {
     name: user?.tenantName ?? '',
@@ -298,6 +297,8 @@ export function MyPayslipTab() {
         isOpen={taxReturnsOpen}
         onClose={() => setTaxReturnsOpen(false)}
         payslips={payslips}
+        companyInfo={companyInfo}
+        employeeInfo={employeeInfo}
       />
     </>
   );

@@ -44,7 +44,8 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const isAdmin = user?.role === 'TENANT_ADMIN';
   const canManageTime = usePermission(Permission.APPROVE_TIME_CORRECTION);
   const canViewAttendance = usePermission(Permission.READ_ATTENDANCE);
-  const canManageRecords = canManageTime || canViewAttendance || isAdmin;
+  const canManageRecords = canViewAttendance || isAdmin;
+  const canApproveCorrections = canManageTime || isAdmin;
 
   const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>(() =>
     useAuthStore.getState().user?.role === 'TENANT_ADMIN' ? 'live' : 'my',
@@ -92,7 +93,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
     useCorrectionRequests(correctionStatusFilter);
 
   const { data: pendingCorrections = [] } = useCorrectionRequests('PENDING');
-  const pendingCount = canManageRecords ? pendingCorrections.length : 0;
+  const pendingCount = canApproveCorrections ? pendingCorrections.length : 0;
 
   const { mutate: reviewCorrection, isPending: isReviewing } = useReviewCorrectionRequest();
 
@@ -120,6 +121,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
       <TimeClockTabs
         activeTab={activeTab}
         canManageRecords={canManageRecords}
+        canApproveCorrections={canApproveCorrections}
         isEmployee={!isAdmin}
         pendingCount={pendingCount}
         onTabChange={setActiveTab}
@@ -173,7 +175,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
         />
       )}
 
-      {activeTab === 'corrections' && canManageRecords && (
+      {activeTab === 'corrections' && canApproveCorrections && (
         <CorrectionsSection
           corrections={corrections}
           correctionsLoading={correctionsLoading}

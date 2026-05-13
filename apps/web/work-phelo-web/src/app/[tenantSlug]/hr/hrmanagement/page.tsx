@@ -16,6 +16,7 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
     canConfigureAppraisal,
     canAccessRoles,
     canViewAuditLogs,
+    canManagePayroll,
     hasAnyManagementAccess,
   } = useHrManagementAccess();
 
@@ -54,6 +55,11 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
 
     if (canViewAuditLogs) {
       router.replace(`/${tenantSlug}/hr/hrmanagement/audit-logs`);
+      return;
+    }
+
+    if (canManagePayroll) {
+      router.replace(`/${tenantSlug}/hr/hrmanagement/companyPolicies/finances`);
     }
   }, [
     canReadDepartments,
@@ -62,6 +68,7 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
     canConfigureAppraisal,
     canManageLeaveTypes,
     canViewAuditLogs,
+    canManagePayroll,
     hasAnyManagementAccess,
     router,
     tenantSlug,

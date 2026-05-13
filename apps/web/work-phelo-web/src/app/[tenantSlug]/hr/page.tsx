@@ -2,10 +2,10 @@
 
 'use client';
 
-import { use, useState, useRef } from 'react';
+import { use, useMemo, useState, useRef } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { useUpcomingBirthdays, useEmployeeDashboard } from '@/hooks';
-import { useMyProfile, useBranchOptions } from '@/hooks';
+import { useMyProfile } from '@/hooks';
 import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/useLeave';
 import { useMyPayslips } from '@/hooks/usePayroll';
 import { usePublicHolidays } from '@/hooks/usePublicHolidays';
@@ -57,10 +57,8 @@ export default function EmployeeDashboardPage({
 
   /* ── Remote data ── */
   const { data: myProfile } = useMyProfile();
-  const { data: branchOptions = [] } = useBranchOptions();
   const department = myProfile?.department?.name;
-  const branch =
-    myProfile?.branch?.name ?? branchOptions.find((b) => b.id === myProfile?.branchId)?.name;
+  const branch = myProfile?.branch?.name;
 
   const { data: dashboard, isLoading: isDashboardLoading } = useEmployeeDashboard();
   const { data: balancesRaw } = useLeaveBalances();
@@ -77,7 +75,7 @@ export default function EmployeeDashboardPage({
     ) ?? null;
 
   /* ── Derived: my leave requests ── */
-  const myLeave = Array.isArray(myLeaveRaw) ? myLeaveRaw : [];
+  const myLeave = useMemo(() => (Array.isArray(myLeaveRaw) ? myLeaveRaw : []), [myLeaveRaw]);
 
   /* ── Derived: upcoming leave ── */
   const today = new Date().toISOString().slice(0, 10);
@@ -177,11 +175,41 @@ export default function EmployeeDashboardPage({
     });
   };
 
+  /* ── Leave notification badge ── */
+  const [seenLeaveIds, setSeenLeaveIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      return new Set<string>(JSON.parse(localStorage.getItem('dashboard_leave_seen_ids') ?? '[]'));
+    } catch {
+      return new Set();
+    }
+  });
+
+  const leaveBadgeCount = useMemo(
+    () =>
+      myLeave.filter(
+        (r) => (r.status === 'APPROVED' || r.status === 'REJECTED') && !seenLeaveIds.has(r.id),
+      ).length,
+    [myLeave, seenLeaveIds],
+  );
+
+  // projects badge: wire up when the projects page and hook are ready
+  const projectsBadgeCount = 0;
+
   /* ── Panel states ── */
   const [applyLeaveOpen, setApplyLeaveOpen] = useState(false);
   const [payslipsOpen, setPayslipsOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [myLeaveOpen, setMyLeaveOpen] = useState(false);
+
+  const handleOpenMyLeave = () => {
+    setMyLeaveOpen(true);
+    const ids = myLeave
+      .filter((r) => r.status === 'APPROVED' || r.status === 'REJECTED')
+      .map((r) => r.id);
+    setSeenLeaveIds(new Set(ids));
+    localStorage.setItem('dashboard_leave_seen_ids', JSON.stringify(ids));
+  };
 
   /* ── Birthday scroll ── */
   const birthdayRef = useRef<HTMLDivElement>(null);
@@ -227,9 +255,11 @@ export default function EmployeeDashboardPage({
           <QuickActionsCard
             onPayslips={() => setPayslipsOpen(true)}
             onAssets={() => setAssetsOpen(true)}
-            onLeave={() => setMyLeaveOpen(true)}
+            onLeave={handleOpenMyLeave}
             onSchedules={() => {}}
             onProjects={() => {}}
+            leaveBadge={leaveBadgeCount}
+            projectsBadge={projectsBadgeCount}
           />
           <BirthdaysCard
             birthdays={birthdays}
@@ -251,7 +281,10 @@ export default function EmployeeDashboardPage({
       <MyLeavePanel
         isOpen={myLeaveOpen}
         onClose={() => setMyLeaveOpen(false)}
-        onRequestLeave={() => setApplyLeaveOpen(true)}
+        onRequestLeave={() => {
+          setMyLeaveOpen(false);
+          setApplyLeaveOpen(true);
+        }}
         requests={myLeave}
       />
       <MyPayslipsPanel
