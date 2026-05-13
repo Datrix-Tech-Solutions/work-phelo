@@ -237,7 +237,6 @@ export class TimeController {
   }
 
   @Get('schedules')
-  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Get shift schedules' })
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiResponse({ status: 200, description: 'Schedules retrieved' })

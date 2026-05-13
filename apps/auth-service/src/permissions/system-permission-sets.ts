@@ -41,6 +41,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
         'self-appraisals': [PermissionAction.VIEW, PermissionAction.EDIT],
         resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
         announcements: [PermissionAction.VIEW],
+        schedules: [PermissionAction.VIEW],
       },
     },
     {

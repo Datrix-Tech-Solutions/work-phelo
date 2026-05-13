@@ -2720,9 +2720,15 @@ export class TimeService {
   ) {
     const where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
 
-    if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(hasPermissionRule(actor, 'schedules:VIEW'));
-    }
+    const canViewSchedules =
+      isCompanyAdminUser(actor) ||
+      isEmployeeSelfServiceUser(actor) ||
+      hasPermissionRule(actor, 'schedules:VIEW') ||
+      hasPermissionRule(actor, 'schedules:CREATE') ||
+      hasPermissionRule(actor, 'schedules:EDIT') ||
+      hasPermissionRule(actor, 'schedules:APPROVE') ||
+      hasPermissionRule(actor, 'attendance:CREATE');
+    assertHrAccess(canViewSchedules);
 
     return this.prisma.shiftSchedule.findMany({
       where,
