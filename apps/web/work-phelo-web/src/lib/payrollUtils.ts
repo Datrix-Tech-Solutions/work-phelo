@@ -708,3 +708,374 @@ export function downloadPayrollFullFormat(
   const meta = companyName ? [[companyName], [`Payroll Report — ${label}`], []] : [];
   triggerCSV(`payroll-full-${label}.csv`, [...meta, headers, ...rows]);
 }
+
+export async function downloadP9FormPDF(
+  payslips: PayrollItem[],
+  year: number,
+  company: PayslipCompanyInfo,
+  employee?: PayslipEmployeeInfo,
+): Promise<void> {
+  const { default: jsPDF } = await import('jspdf');
+  const { autoTable } = await import('jspdf-autotable');
+
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.width;
+  const pageH = doc.internal.pageSize.height;
+  const M = 10;
+  const cW = pageW - M * 2;
+  let y = M;
+
+  const navy: [number, number, number] = [13, 31, 68];
+  const lastY = () =>
+    (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+
+  const byMonth: Record<number, PayrollItem> = {};
+  payslips
+    .filter((p) => p.payrollRun?.year === year)
+    .forEach((p) => {
+      if (p.payrollRun) byMonth[p.payrollRun.month] = p;
+    });
+
+  const getField = (item: PayrollItem, key: string): string => {
+    return (item as unknown as Record<string, string>)[key] ?? '0';
+  };
+
+  // ── Header ────────────────────────────────────────────────────────────────
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(...navy);
+  doc.text(company.name || 'EMPLOYER', M, y + 7);
+
+  const contactParts: string[] = [];
+  if (company.phone) contactParts.push(company.phone);
+  if (company.email) contactParts.push(company.email);
+  const contactLine = contactParts.join('  |  ');
+  if (contactLine) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(80, 80, 80);
+    doc.text(contactLine, M, y + 13);
+  }
+
+  const rightEdgeX = M + cW;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.setTextColor(...navy);
+  doc.text('P9 FORM', rightEdgeX, y + 7, { align: 'right' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 60, 60);
+  doc.text('EMPLOYEE TAX DEDUCTION CARD', rightEdgeX, y + 13, { align: 'right' });
+  doc.text('Ghana Revenue Authority  |  Income Tax Act, 2000 (Act 592)', rightEdgeX, y + 18, {
+    align: 'right',
+  });
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...navy);
+  doc.text(`Year of Assessment: ${year}`, rightEdgeX, y + 24, { align: 'right' });
+
+  y += 28;
+  doc.setDrawColor(200, 200, 210);
+  doc.setLineWidth(0.3);
+  doc.line(M, y, M + cW, y);
+  y += 4;
+
+  // ── Section header helper ─────────────────────────────────────────────────
+  const sectionHeader = (letter: string, title: string) => {
+    doc.setFillColor(...navy);
+    doc.rect(M, y, cW, 6, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(`${letter}   ${title}`, M + 3, y + 4.5);
+    y += 8;
+  };
+
+  // ── Field drawing helpers ─────────────────────────────────────────────────
+  const drawLabelValue = (
+    label: string,
+    value: string | undefined | null,
+    x: number,
+    fy: number,
+    totalW: number,
+    labelW: number,
+  ) => {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.text(label, x, fy + 4.5);
+    const valX = x + labelW;
+    const valW = totalW - labelW;
+    const val = value ?? '';
+    if (val) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(20, 20, 20);
+      const truncated = (doc.splitTextToSize(val, valW) as string[])[0];
+      doc.text(truncated, valX, fy + 4.5);
+    } else {
+      doc.setDrawColor(140, 140, 140);
+      doc.setLineWidth(0.2);
+      doc.line(valX, fy + 5.5, x + totalW, fy + 5.5);
+    }
+  };
+
+  const fieldH = 7;
+  const halfW = cW / 2 - 2;
+
+  // ── Section A: Employer Details ───────────────────────────────────────────
+  sectionHeader('A', 'EMPLOYER DETAILS');
+  drawLabelValue('Employer Name:', company.name, M, y, halfW, 30);
+  drawLabelValue('Contact:', contactLine || undefined, M + halfW + 4, y, halfW, 22);
+  y += fieldH;
+  drawLabelValue('Employer TIN:', undefined, M, y, halfW, 30);
+  drawLabelValue('GRA District Office:', undefined, M + halfW + 4, y, halfW, 38);
+  y += fieldH + 3;
+
+  // ── Section B: Employee Details ───────────────────────────────────────────
+  sectionHeader('B', 'EMPLOYEE DETAILS');
+  const qW = cW / 4 - 1;
+  const empFullName = employee ? `${employee.firstName} ${employee.lastName}` : undefined;
+  const bankText =
+    employee?.bankName && employee.bankBranch
+      ? `${employee.bankName} (${employee.bankBranch})`
+      : (employee?.bankName ?? undefined);
+
+  drawLabelValue('Name:', empFullName, M, y, qW, 14);
+  drawLabelValue('Employee ID:', employee?.employeeNumber, M + qW + 1, y, qW, 22);
+  drawLabelValue('Job Title:', employee?.jobTitle, M + (qW + 1) * 2, y, qW, 18);
+  drawLabelValue('TIN:', employee?.tinNumber, M + (qW + 1) * 3, y, qW, 10);
+  y += fieldH;
+  drawLabelValue('SSNIT No:', employee?.ssnit, M, y, qW, 18);
+  drawLabelValue('Department:', employee?.department, M + qW + 1, y, qW, 22);
+  drawLabelValue('Bank:', bankText, M + (qW + 1) * 2, y, qW, 14);
+  drawLabelValue('Account No:', employee?.bankAccountNumber, M + (qW + 1) * 3, y, qW, 22);
+  y += fieldH + 3;
+
+  // ── Section C: Monthly Earnings and Deductions ────────────────────────────
+  sectionHeader('C', 'MONTHLY EARNINGS AND DEDUCTIONS (Amount in GHS)');
+
+  const shortMonths = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+  const descColW = 38;
+  const remW = cW - descColW;
+  const mColW = parseFloat((remW / 13).toFixed(2));
+
+  const cellRowDefs = [
+    { key: 'basicSalary', label: 'Basic Salary' },
+    { key: 'grossSalary', label: 'Gross Earnings' },
+    { key: 'employeeSSNIT', label: 'Employee SSNIT (5.5%)' },
+    { key: 'taxableIncome', label: 'Taxable Income' },
+    { key: 'payeTax', label: 'Income Tax (PAYE)' },
+    { key: 'totalDeductions', label: 'Total Deductions' },
+    { key: 'netSalary', label: 'Net Pay' },
+  ];
+
+  const tableBody = cellRowDefs.map(({ key, label }) => {
+    const monthVals = shortMonths.map((_, i) => {
+      const p = byMonth[i + 1];
+      return p ? fmtNum(getField(p, key)) : '';
+    });
+    const rowTotal = shortMonths.reduce((sum, _, i) => {
+      const p = byMonth[i + 1];
+      return sum + (p ? parseFloat(getField(p, key)) || 0 : 0);
+    }, 0);
+    const hasAny = monthVals.some((v) => v !== '');
+    return [label, ...monthVals, hasAny ? fmtNum(rowTotal) : ''];
+  });
+
+  autoTable(doc, {
+    startY: y,
+    head: [['', ...shortMonths, 'Total']],
+    body: tableBody,
+    headStyles: {
+      fillColor: [230, 235, 245] as [number, number, number],
+      textColor: navy,
+      fontSize: 6,
+      fontStyle: 'bold',
+      halign: 'center',
+      cellPadding: 1.5,
+    },
+    bodyStyles: { fontSize: 6, halign: 'right', cellPadding: 1.5 },
+    columnStyles: {
+      0: { halign: 'left', cellWidth: descColW },
+      ...Object.fromEntries(Array.from({ length: 12 }, (_, i) => [i + 1, { cellWidth: mColW }])),
+      13: {
+        cellWidth: mColW,
+        fontStyle: 'bold',
+        fillColor: [230, 235, 245] as [number, number, number],
+        textColor: navy,
+      },
+    },
+    alternateRowStyles: { fillColor: [248, 249, 252] as [number, number, number] },
+    willDrawCell: (data) => {
+      if (data.section === 'body' && data.column.index > 0 && data.cell.raw === '') {
+        const { x, y: cy, height: ch, width: cw } = data.cell;
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.15);
+        doc.line(x + 1, cy + ch - 1.5, x + cw - 1, cy + ch - 1.5);
+      }
+    },
+    margin: { left: M, right: M },
+    tableWidth: cW,
+  });
+
+  y = lastY() + 4;
+
+  if (y > pageH - 55) {
+    doc.addPage();
+    y = M;
+  }
+
+  // ── Section D: Annual Summary ─────────────────────────────────────────────
+  sectionHeader('D', 'ANNUAL SUMMARY');
+
+  const annualTotals = cellRowDefs.map(({ key, label }) => ({
+    label,
+    total: shortMonths.reduce((sum, _, i) => {
+      const p = byMonth[i + 1];
+      return sum + (p ? parseFloat(getField(p, key)) || 0 : 0);
+    }, 0),
+  }));
+
+  const dHalfW = cW / 2 - 4;
+  const dLabelW = 44;
+
+  for (let i = 0; i < annualTotals.length; i += 2) {
+    const left = annualTotals[i];
+    const right = annualTotals[i + 1];
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(60, 60, 60);
+    doc.text(`${left.label}:`, M, y + 4.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(
+      left.total > 0 ? `GHS ${fmtNum(left.total)}` : '—',
+      M + dLabelW + dHalfW - dLabelW,
+      y + 4.5,
+      { align: 'right' },
+    );
+
+    if (right) {
+      const rx = M + dHalfW + 6;
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${right.label}:`, rx, y + 4.5);
+      doc.setFont('helvetica', 'normal');
+      doc.text(
+        right.total > 0 ? `GHS ${fmtNum(right.total)}` : '—',
+        rx + dHalfW - dLabelW + dLabelW,
+        y + 4.5,
+        { align: 'right' },
+      );
+    }
+
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.15);
+    doc.line(M, y + 6.5, M + cW, y + 6.5);
+    y += 8;
+  }
+
+  y += 3;
+
+  if (y > pageH - 45) {
+    doc.addPage();
+    y = M;
+  }
+
+  // ── Section E: Reliefs and Allowances (omitted — not tracked by system) ──
+
+  sectionHeader('E', 'RELIEFS AND ALLOWANCES (For Reference Only)');
+  const reliefs = [
+    'Personal Relief (GHS 1,200)',
+    'Marriage/Responsibility Relief',
+    'Child Education Relief',
+    'Old Age / Disability Relief',
+    'Aged Dependent Relative Relief',
+    'Self-Education Relief',
+  ];
+  const relColW = cW / 3 - 2;
+  for (let i = 0; i < reliefs.length; i += 3) {
+    const row = reliefs.slice(i, i + 3);
+    for (let j = 0; j < row.length; j++) {
+      const rx = M + j * (relColW + 3);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7.5);
+      doc.setTextColor(60, 60, 60);
+      doc.text(`${row[j]}:`, rx, y + 4.5);
+      doc.setDrawColor(140, 140, 140);
+      doc.setLineWidth(0.2);
+      doc.line(rx + relColW - 28, y + 5.5, rx + relColW, y + 5.5);
+    }
+    y += 8;
+  }
+  y += 3;
+
+  if (y > pageH - 35) {
+    doc.addPage();
+    y = M;
+  }
+
+  // ── Section F: Certification and Declaration ──────────────────────────────
+  sectionHeader('F', 'CERTIFICATION AND DECLARATION');
+
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7.5);
+  doc.setTextColor(60, 60, 60);
+  const declaration =
+    'I hereby certify that the information given in this form is correct and complete to the best of my knowledge and belief. This form was prepared in accordance with the provisions of the Income Tax Act, 2000 (Act 592) and submitted to the Ghana Revenue Authority.';
+  const declLines = doc.splitTextToSize(declaration, cW) as string[];
+  doc.text(declLines, M, y + 4);
+  y += declLines.length * 4 + 8;
+
+  const sigW = cW / 3 - 4;
+  const sigs = [
+    { label: "Employer's Signature", sub: 'Name & Designation' },
+    { label: 'Date', sub: '' },
+    { label: 'Official Stamp / Seal', sub: '' },
+  ];
+
+  for (let i = 0; i < sigs.length; i++) {
+    const sx = M + i * (sigW + 6);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(80, 80, 80);
+    doc.text(`${sigs[i].label}:`, sx, y + 4);
+    doc.setDrawColor(120, 120, 120);
+    doc.setLineWidth(0.25);
+    doc.line(sx, y + 10, sx + sigW, y + 10);
+    if (sigs[i].sub) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(6.5);
+      doc.setTextColor(140, 140, 140);
+      doc.text(sigs[i].sub, sx, y + 14);
+    }
+  }
+
+  // ── Footer ────────────────────────────────────────────────────────────────
+  const footY = pageH - 6;
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(6.5);
+  doc.setTextColor(140, 140, 140);
+  doc.text(
+    'GRA Helpline: 0800-900-110 (Toll Free)  |  www.gra.gov.gh  |  This form is for official tax reporting purposes only.',
+    pageW / 2,
+    footY,
+    { align: 'center' },
+  );
+
+  const empSuffix = employee ? `${employee.lastName}-${employee.firstName}` : 'employee';
+  doc.save(`P9-Form-${empSuffix}-${year}.pdf`);
+}

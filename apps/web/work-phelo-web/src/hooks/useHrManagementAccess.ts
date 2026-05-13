@@ -10,6 +10,7 @@ export function useHrManagementAccess() {
   const canReadDepartments = usePermission(Permission.READ_DEPARTMENTS);
   const canReadBranches = usePermission(Permission.READ_BRANCHES);
   const canReadHrSettings = usePermission(Permission.READ_HR_SETTINGS);
+  const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
 
   const canAccessRoles = canViewPermissionSets || canGrantPermissions;
   const hasAnyManagementAccess =
@@ -19,7 +20,8 @@ export function useHrManagementAccess() {
     canViewAuditLogs ||
     canReadDepartments ||
     canReadBranches ||
-    canReadHrSettings;
+    canReadHrSettings ||
+    canManagePayroll;
 
   return {
     canManageLeaveTypes,
@@ -31,6 +33,7 @@ export function useHrManagementAccess() {
     canReadDepartments,
     canReadBranches,
     canReadHrSettings,
+    canManagePayroll,
     hasAnyManagementAccess,
   };
 }

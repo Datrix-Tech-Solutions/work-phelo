@@ -121,18 +121,22 @@ export const PERMISSION_TAG_MAPPING: Record<
     { resource: 'appraisal-settings', action: 'EDIT' },
   ],
   define_roles_permissions: [
+    { resource: 'users', action: 'VIEW' },
+    { resource: 'permission-sets', action: 'VIEW' },
     { resource: 'permission-sets', action: 'CREATE' },
     { resource: 'permission-sets', action: 'EDIT' },
     { resource: 'permission-sets', action: 'DELETE' },
     { resource: 'permission-sets', action: 'ASSIGN' },
   ],
   manage_departments: [
+    { resource: 'departments', action: 'VIEW' },
     { resource: 'departments', action: 'CREATE' },
     { resource: 'departments', action: 'EDIT' },
     { resource: 'departments', action: 'DELETE' },
   ],
   view_all_departments: [{ resource: 'departments', action: 'VIEW' }],
   manage_branches: [
+    { resource: 'branches', action: 'VIEW' },
     { resource: 'branches', action: 'CREATE' },
     { resource: 'branches', action: 'EDIT' },
     { resource: 'branches', action: 'DELETE' },

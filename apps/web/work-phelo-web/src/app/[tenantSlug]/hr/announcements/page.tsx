@@ -9,17 +9,15 @@ import { Permission } from '@/lib/permissionMap';
 export default function AnnouncementsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
-  const canReadAnnouncements = usePermission(Permission.READ_ANNOUNCEMENTS);
   const canManageAnnouncements = usePermission(Permission.MANAGE_ANNOUNCEMENTS);
-  const canAccessAnnouncements = canReadAnnouncements || canManageAnnouncements;
 
   useEffect(() => {
-    if (canAccessAnnouncements === false) {
+    if (canManageAnnouncements === false) {
       router.replace(`/${tenantSlug}/hr`);
     }
-  }, [canAccessAnnouncements, router, tenantSlug]);
+  }, [canManageAnnouncements, router, tenantSlug]);
 
-  if (!canAccessAnnouncements) return null;
+  if (!canManageAnnouncements) return null;
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">

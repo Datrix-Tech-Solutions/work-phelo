@@ -6,6 +6,8 @@ import { usePathname, useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
 import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 const TABS = [
   { label: 'Employment & Resignation', slug: 'employment' },
@@ -20,15 +22,25 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const { canReadHrSettings } = useHrManagementAccess();
+  const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
   const base = `/${params.tenantSlug}/hr/hrmanagement/companyPolicies`;
 
-  useEffect(() => {
-    if (user !== null && !canReadHrSettings) {
-      router.replace(`/${user.tenantSlug}/hr`);
-    }
-  }, [canReadHrSettings, router, user]);
+  const isOnFinances = pathname === `${base}/finances` || pathname.startsWith(`${base}/finances/`);
 
-  if (user !== null && !canReadHrSettings) {
+  useEffect(() => {
+    if (user === null) return;
+    if (!canReadHrSettings && !canManagePayroll) {
+      router.replace(`/${user.tenantSlug}/hr`);
+      return;
+    }
+    // Payroll-only users belong on the finances sub-page
+    if (!canReadHrSettings && canManagePayroll && !isOnFinances) {
+      router.replace(`${base}/finances`);
+    }
+    //HR setting is company policies, it has just been renamed for better understanding.
+  }, [canReadHrSettings, canManagePayroll, isOnFinances, router, user, base]);
+
+  if (user !== null && !canReadHrSettings && !canManagePayroll) {
     return null;
   }
 
@@ -42,7 +54,9 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
       </div>
 
       <div className="flex items-end gap-1 border-b border-gray-200 shrink-0">
-        {TABS.map((tab) => {
+        {TABS.filter((tab) =>
+          tab.slug === 'finances' ? canManagePayroll || canReadHrSettings : canReadHrSettings,
+        ).map((tab) => {
           const href = `${base}/${tab.slug}`;
           const isActive = pathname === href || pathname.startsWith(href + '/');
           return (
