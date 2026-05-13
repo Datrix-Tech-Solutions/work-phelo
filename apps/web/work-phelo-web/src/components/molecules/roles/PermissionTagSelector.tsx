@@ -60,6 +60,7 @@ export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
 
 // Automatically included in every permission set — never shown in the UI
 export const SELF_SERVICE_RESOURCES: Array<{ resource: string; action: string }> = [
+  { resource: 'employees', action: 'VIEW' },
   { resource: 'employee-profile', action: 'VIEW' },
   { resource: 'employee-profile', action: 'EDIT' },
   { resource: 'leave-self', action: 'VIEW' },

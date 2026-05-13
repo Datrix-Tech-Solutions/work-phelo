@@ -49,6 +49,8 @@ interface PayrollRow {
   department?: string;
 }
 
+const PAYROLL_ELIGIBLE: Employee['employmentStatus'][] = ['ACTIVE', 'PROBATION', 'ON_LEAVE'];
+
 export function ManagePayrollTab() {
   const { data: empData, isLoading } = useEmployees({ limit: 100 });
   const [searchQuery, setSearchQuery] = useState('');
@@ -80,7 +82,8 @@ export function ManagePayrollTab() {
 
   const payrollRows: PayrollRow[] = useMemo(() => {
     const employees: Employee[] = (empData?.data ?? []).filter(
-      (e) => e.userStatus !== 'PENDING_VERIFICATION',
+      (e) =>
+        PAYROLL_ELIGIBLE.includes(e.employmentStatus) && e.userStatus !== 'PENDING_VERIFICATION',
     );
     return employees.map((e) => {
       const basic = basicMap[e.id] ?? (Number(e.basicSalary) || 0);

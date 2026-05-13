@@ -23,7 +23,8 @@ type DefaultPermissionTemplateDefinition = {
 };
 
 const ACTIVE_SYSTEM_PERMISSION_SET_NAMES = new Set<SystemPermissionSetName>();
-const BASIC_EMPLOYEE_TEMPLATE_NAME = 'Basic Employee';
+const BASIC_EMPLOYEE_TEMPLATE_NAME = 'Employee';
+const BASIC_EMPLOYEE_LEGACY_NAME = 'Basic Employee';
 const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplateDefinition[] =
   [
     {
@@ -31,6 +32,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
       description:
         'Starter baseline for employee self-service access after invite acceptance.',
       permissions: {
+        employees: [PermissionAction.VIEW],
         'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
         'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
         attendance: [PermissionAction.CREATE],
@@ -366,6 +368,19 @@ export async function seedDefaultPermissionTemplates(
   const resources = await ensurePermissionResources(prisma);
   const seeded: Record<string, string> = {};
 
+  // Migrate "Basic Employee" → "Employee" if the old name still exists
+  const legacyBasicEmployee = await prisma.permissionSet.findUnique({
+    where: { tenantId_name: { tenantId, name: BASIC_EMPLOYEE_LEGACY_NAME } },
+    select: { id: true },
+  });
+  if (legacyBasicEmployee) {
+    await prisma.permissionSet.update({
+      where: { id: legacyBasicEmployee.id },
+      data: { name: BASIC_EMPLOYEE_TEMPLATE_NAME },
+    });
+    log.log(`Renamed "Basic Employee" → "Employee" for tenant ${tenantId}`);
+  }
+
   for (const template of DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS) {
     const entries: { resourceId: string; action: PermissionAction }[] = [];
 
@@ -390,15 +405,39 @@ export async function seedDefaultPermissionTemplates(
     });
 
     if (existing) {
-      if (!existing.isActive || existing.isSystem) {
-        await prisma.permissionSet.update({
-          where: { id: existing.id },
-          data: {
-            isActive: true,
-            isSystem: false,
-            description: template.description,
-          },
+      // Always sync name, description, and active state
+      await prisma.permissionSet.update({
+        where: { id: existing.id },
+        data: {
+          isActive: true,
+          isSystem: false,
+          description: template.description,
+        },
+      });
+
+      // Sync permissions: add any missing resource:action pairs
+      const existingResources = await prisma.permissionSetResource.findMany({
+        where: { permissionSetId: existing.id },
+        select: { resourceId: true, action: true },
+      });
+      const existingKeys = new Set(
+        existingResources.map((r) => `${r.resourceId}:${r.action}`),
+      );
+      const missing = entries.filter(
+        (e) => !existingKeys.has(`${e.resourceId}:${e.action}`),
+      );
+      if (missing.length > 0) {
+        await prisma.permissionSetResource.createMany({
+          data: missing.map((entry) => ({
+            permissionSetId: existing.id,
+            resourceId: entry.resourceId,
+            action: entry.action,
+          })),
+          skipDuplicates: true,
         });
+        log.log(
+          `Added ${missing.length} missing permission(s) to "${template.name}" for tenant ${tenantId}`,
+        );
       }
 
       seeded[template.name] = existing.id;
