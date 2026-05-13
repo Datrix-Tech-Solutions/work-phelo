@@ -8,7 +8,7 @@ export class AppraisalsCronService {
 
   constructor(private readonly appraisalsService: AppraisalsService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron('0 8 * * *')
   async runDailyLifecycleJobs() {
     this.logger.log('Running daily appraisal lifecycle jobs...');
 

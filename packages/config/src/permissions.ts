@@ -71,6 +71,7 @@ export enum Permission {
   READ_APPRAISALS = 'read:appraisals',
   SUBMIT_SELF_ASSESSMENT = 'submit:self_assessment',
   SUBMIT_MANAGER_REVIEW = 'submit:manager_review',
+  FINALIZE_APPRAISAL = 'finalize:appraisal',
   READ_OWN_REVIEW = 'read:own_review',
 
   // ── Assets ────────────────────────────────────────────────────────────────
