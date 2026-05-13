@@ -71,6 +71,7 @@ export enum Permission {
   READ_APPRAISALS = 'read:appraisals',
   SUBMIT_SELF_ASSESSMENT = 'submit:self_assessment',
   SUBMIT_MANAGER_REVIEW = 'submit:manager_review',
+  FINALIZE_APPRAISAL = 'finalize:appraisal',
   READ_OWN_REVIEW = 'read:own_review',
 
   // ── Assets ────────────────────────────────────────────────────────────────
@@ -161,6 +162,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.READ_APPRAISALS]: ['appraisals:VIEW'],
   [Permission.SUBMIT_SELF_ASSESSMENT]: ['self-appraisals:EDIT'],
   [Permission.SUBMIT_MANAGER_REVIEW]: ['appraisal-reviews:EDIT'],
+  [Permission.FINALIZE_APPRAISAL]: ['appraisals:APPROVE'],
   [Permission.READ_OWN_REVIEW]: ['self-appraisals:VIEW'],
 
   // Assets
@@ -208,7 +210,7 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   schedules: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE'],
   payroll: ['VIEW', 'RUN', 'APPROVE', 'EDIT'],
   'payslip-self': ['VIEW'],
-  appraisals: ['VIEW', 'CREATE'],
+  appraisals: ['VIEW', 'CREATE', 'APPROVE'],
   'appraisal-settings': ['EDIT'],
   'self-appraisals': ['VIEW', 'EDIT'],
   'appraisal-reviews': ['EDIT'],
