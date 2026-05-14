@@ -1,20 +1,35 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
-import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
+import { calculatePayroll, AllowanceItem, Country, COUNTRY_META } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
 import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
+
+function toCountryCode(country: string | null): Country {
+  if (country === 'Nigeria') return 'NG';
+  if (country === 'Kenya') return 'KE';
+  return 'GH';
+}
 
 function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
+
+  useEffect(() => {
+    const localNumeric = local === '' ? 0 : Number(local);
+    if (value !== localNumeric) {
+      setLocal(value === 0 ? '' : String(value));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   return (
     <input
@@ -59,6 +74,10 @@ function isTransportAllowance(item: AllowanceItem) {
 
 export function ManagePayrollTab() {
   const { data: empData, isLoading } = useAllEmployees();
+  const { country, currency } = useTenantConfig();
+  const countryCode = toCountryCode(country);
+  const meta = COUNTRY_META[countryCode];
+
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
@@ -75,7 +94,6 @@ export function ManagePayrollTab() {
   const [runPanelOpen, setRunPanelOpen] = useState(false);
   const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
 
-  // Initialise deduction line items from employee profile data.
   const profileDeductionItems = useMemo(() => {
     const map: Record<string, DeductionLineItem[]> = {};
     (empData?.data ?? []).forEach((e) => {
@@ -117,7 +135,7 @@ export function ManagePayrollTab() {
         basicSalary: basic,
         allowances,
         otherDeductions,
-        country: 'GH',
+        country: countryCode,
       });
       return {
         id: e.id,
@@ -137,7 +155,7 @@ export function ManagePayrollTab() {
         department: e.department?.name,
       };
     });
-  }, [empData, basicMap, allowancesMap, deductionItemsMap, profileDeductionItems]);
+  }, [empData, basicMap, allowancesMap, deductionItemsMap, profileDeductionItems, countryCode]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery) return payrollRows;
@@ -152,11 +170,10 @@ export function ManagePayrollTab() {
           gross: acc.gross + r.grossSalary,
           net: acc.net + r.netSalary,
           paye: acc.paye + r.paye,
-          ssnit:
-            acc.ssnit + (r.employeeStatutoryContrib - r.tier2Contribution) + r.tier1Contribution,
+          statutory: acc.statutory + r.employeeStatutoryContrib + r.tier1Contribution,
           employerCost: acc.employerCost + r.totalEmployerCost,
         }),
-        { gross: 0, net: 0, paye: 0, ssnit: 0, employerCost: 0 },
+        { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
       ),
     [filteredData],
   );
@@ -198,6 +215,10 @@ export function ManagePayrollTab() {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
   };
 
+  const fmt = (n: number) => `${currency} ${n.toLocaleString()}`;
+
+  const statutoryColumnLabel = `${meta.statutoryLabel} (${meta.employeeRate})`;
+
   const columns: Column<PayrollRow>[] = [
     {
       key: 'employee',
@@ -230,11 +251,7 @@ export function ManagePayrollTab() {
           onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
           className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.allowances > 0 ? (
-            `GHS ${row.allowances.toLocaleString()}`
-          ) : (
-            <span className="text-gray-400">Add</span>
-          )}
+          {row.allowances > 0 ? fmt(row.allowances) : <span className="text-gray-400">Add</span>}
           <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
@@ -247,11 +264,7 @@ export function ManagePayrollTab() {
           onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
           className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.deductions > 0 ? (
-            `GHS ${row.deductions.toLocaleString()}`
-          ) : (
-            <span className="text-gray-400">Add</span>
-          )}
+          {row.deductions > 0 ? fmt(row.deductions) : <span className="text-gray-400">Add</span>}
           <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
@@ -259,30 +272,27 @@ export function ManagePayrollTab() {
     {
       key: 'grossSalary',
       label: 'Gross',
-      render: (row) => `GHS ${row.grossSalary.toLocaleString()}`,
+      render: (row) => fmt(row.grossSalary),
     },
     {
-      key: 'employeeSSNIT',
-      label: 'SSNIT (5.5%)',
-      render: (row) =>
-        `GHS ${(row.employeeStatutoryContrib - row.tier2Contribution).toLocaleString()}`,
+      key: 'employeeStatutoryContrib',
+      label: statutoryColumnLabel,
+      render: (row) => fmt(row.employeeStatutoryContrib - row.tier2Contribution),
     },
     {
       key: 'taxableIncome',
       label: 'Taxable Income',
-      render: (row) => `GHS ${row.taxableIncome.toLocaleString()}`,
+      render: (row) => fmt(row.taxableIncome),
     },
     {
       key: 'paye',
       label: 'PAYE',
-      render: (row) => `GHS ${row.paye.toLocaleString()}`,
+      render: (row) => fmt(row.paye),
     },
     {
       key: 'netSalary',
       label: 'Net Salary',
-      render: (row) => (
-        <span className="font-semibold text-emerald-600">GHS {row.netSalary.toLocaleString()}</span>
-      ),
+      render: (row) => <span className="font-semibold text-emerald-600">{fmt(row.netSalary)}</span>,
     },
   ];
 
@@ -298,31 +308,31 @@ export function ManagePayrollTab() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
         <MetricCard
           title="Total Gross"
-          value={`GHS ${totals.gross.toLocaleString()}`}
+          value={fmt(totals.gross)}
           icon={TrendingUp}
           variant="highlight"
         />
         <MetricCard
           title="Total Net Pay"
-          value={`GHS ${totals.net.toLocaleString()}`}
+          value={fmt(totals.net)}
           icon={TrendingUp}
           variant="success"
         />
         <MetricCard
           title="Total PAYE"
-          value={`GHS ${totals.paye.toLocaleString()}`}
+          value={fmt(totals.paye)}
           icon={TrendingDown}
           variant="warning"
         />
         <MetricCard
-          title="Total SSNIT (18.5%)"
-          value={`GHS ${totals.ssnit.toLocaleString()}`}
+          title={`Total ${meta.statutoryLabel}`}
+          value={fmt(totals.statutory)}
           icon={TrendingUp}
           variant="highlight"
         />
         <MetricCard
           title="Employer Cost"
-          value={`GHS ${totals.employerCost.toLocaleString()}`}
+          value={fmt(totals.employerCost)}
           icon={TrendingUp}
           variant="highlight"
         />

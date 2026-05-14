@@ -136,13 +136,19 @@ export class EventsHandler {
     tenantId: string,
     adminEmail: string,
     adminUserId?: string,
+    country?: string,
   ) {
     await Promise.all([
       this.leaveService.seedDefaultLeaveTypes(tenantId),
       this.prisma.tenantConfig.upsert({
         where: { tenantId },
-        create: { tenantId, adminEmail, adminUserId },
-        update: { adminEmail, adminUserId },
+        create: {
+          tenantId,
+          adminEmail,
+          adminUserId,
+          country: country ?? 'Ghana',
+        },
+        update: { adminEmail, adminUserId, ...(country ? { country } : {}) },
       }),
     ]);
 
@@ -233,7 +239,7 @@ export class EventsHandler {
     @Payload() data: WithMeta<ProvisionTenantWorkspaceCommand>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, adminEmail, adminUserId, _meta } = data;
+    const { tenantId, adminEmail, adminUserId, country, _meta } = data;
     this.logger.log(
       `[hr.provision_tenant_workspace] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
     );
@@ -242,6 +248,7 @@ export class EventsHandler {
         tenantId,
         adminEmail,
         adminUserId,
+        country,
       );
       this.ack(context);
       return result;

@@ -1154,6 +1154,7 @@ model TenantConfig {
   defaultProbationPeriodMonths Int?
   resignationNoticePeriodDays  Int                            @default(30)
   lateArrivalThresholdMinutes  Int                            @default(0)
+  country                      String                         @default("Ghana")
   payrollTier2FundName         String?
   payrollTier3Enabled          Boolean                        @default(false)
   payrollTier3Rate             Decimal?                       @db.Decimal(5, 2)

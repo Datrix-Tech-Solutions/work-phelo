@@ -9,11 +9,7 @@ import { useApprovePayroll } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
-
-function fmt(value: string | number) {
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 interface Props {
   run: PayrollRun | null;
@@ -22,6 +18,11 @@ interface Props {
 
 export function ApprovePayrollPanel({ run, onClose }: Props) {
   const toast = useToast();
+  const { currency } = useTenantConfig();
+  const fmt = (value: string | number) => {
+    const n = typeof value === 'string' ? parseFloat(value) : value;
+    return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
   const [showConfirm, setShowConfirm] = useState(false);
   const [approvalNote, setApprovalNote] = useState('');
   const { mutate: approve, isPending } = useApprovePayroll();

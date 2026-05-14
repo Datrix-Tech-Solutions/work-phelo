@@ -6,6 +6,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useRunPayroll, useSubmitPayroll, useUpdatePayrollItem } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -60,12 +61,11 @@ interface Props {
   overrides: Record<string, EmployeeOverride>;
 }
 
-function fmt(n: number) {
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 export function RunPayrollPanel({ isOpen, onClose, totals, overrides }: Props) {
   const toast = useToast();
+  const { currency } = useTenantConfig();
+  const fmt = (n: number) =>
+    `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
   const [year, setYear] = useState(String(currentYear));
   const [notes, setNotes] = useState('');

@@ -9,13 +9,10 @@ import { Column, DataTable } from '../shared/DataTable';
 import { usePayrollRuns, usePayrollRun, useAllEmployees, usePayrollSettings } from '@/hooks';
 import { PayrollItem } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 const GH_MAX_INSURABLE = 69_000;
 const TIER2_RATE = 0.05;
-
-function fmt(n: number) {
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function fmtStatus(status: string) {
   return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -61,6 +58,9 @@ export function SSNITTab() {
   const { data: runs = [], isLoading: runsLoading } = usePayrollRuns();
   const { data: empData } = useAllEmployees();
   const { data: payrollSettings } = usePayrollSettings();
+  const { currency } = useTenantConfig();
+  const fmt = (n: number) =>
+    `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const tier2Label = payrollSettings?.payrollTier2FundName
     ? `${payrollSettings.payrollTier2FundName} (5%)`
     : 'Tier 2 — Separate Fund (5%)';
