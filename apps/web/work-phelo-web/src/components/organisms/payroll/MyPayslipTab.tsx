@@ -15,13 +15,8 @@ import {
 } from '@/lib/payrollUtils';
 import { useAuthStore } from '@/store/auth.store';
 import { useTenant, useMyProfile } from '@/hooks';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { TaxReturnsPanel } from './TaxReturnsPanel';
-
-function fmtCurrency(currency: string, value: string | number) {
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  return `${currency} ${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
 
 function payslipLabel(p: PayrollItem) {
   if (!p.payrollRun) return '—';
@@ -103,8 +98,6 @@ export function MyPayslipTab() {
   const user = useAuthStore((s) => s.user);
   const { data: tenantData } = useTenant(user?.tenantId ?? '');
   const { data: myProfile } = useMyProfile();
-  const { currency } = useTenantConfig();
-  const ghs = (value: string | number) => fmtCurrency(currency, value);
   const employeeBranch = myProfile?.branch;
 
   const companyInfo: PayslipCompanyInfo = {
@@ -168,6 +161,11 @@ export function MyPayslipTab() {
   const [taxReturnsOpen, setTaxReturnsOpen] = useState(false);
   const selected: PayrollItem | null =
     payslips.find((p) => p.id === selectedId) ?? payslips[0] ?? null;
+  const selectedPayrollCountry = selected?.payrollRun?.payrollCountry;
+  const selectedPayrollCurrency = selected?.payrollRun?.payrollCurrency;
+  const payrollLabels = getPayrollLabels(selectedPayrollCountry);
+  const money = (value: string | number) =>
+    formatPayrollMoney(value, selectedPayrollCurrency, selectedPayrollCountry);
 
   if (payslips.length === 0) {
     return (
@@ -254,7 +252,7 @@ export function MyPayslipTab() {
               <div>
                 <p className="text-sm text-blue-300 mb-1">Net Salary</p>
                 <p className="text-4xl font-bold text-white tabular-nums">
-                  {ghs(selected.netSalary)}
+                  {money(selected.netSalary)}
                 </p>
               </div>
               <div className="text-right">
@@ -276,55 +274,58 @@ export function MyPayslipTab() {
               {/* Earnings */}
               <div className="bg-white border border-gray-200 rounded-card px-6 py-5">
                 <p className="text-sm font-semibold text-gray-900 mb-2">Earnings</p>
-                <PayslipRow label="Basic Salary" value={ghs(selected.basicSalary)} />
+                <PayslipRow label="Basic Salary" value={money(selected.basicSalary)} />
                 {selectedAllowanceRows.map((row, index) => (
                   <PayslipRow
                     key={`${row.label}-${index}`}
                     label={row.label}
-                    value={ghs(row.amount)}
+                    value={money(row.amount)}
                     subtle
                   />
                 ))}
                 {parseFloat(selected.overtimePay) > 0 && (
-                  <PayslipRow label="Overtime" value={ghs(selected.overtimePay)} subtle />
+                  <PayslipRow label="Overtime" value={money(selected.overtimePay)} subtle />
                 )}
                 {parseFloat(selected.bonus) > 0 && (
-                  <PayslipRow label="Bonus" value={ghs(selected.bonus)} subtle />
+                  <PayslipRow label="Bonus" value={money(selected.bonus)} subtle />
                 )}
                 {parseFloat(selected.thirteenthMonth) > 0 && (
-                  <PayslipRow label="13th Month" value={ghs(selected.thirteenthMonth)} subtle />
+                  <PayslipRow label="13th Month" value={money(selected.thirteenthMonth)} subtle />
                 )}
                 <Divider />
-                <PayslipRow label="Gross Salary" value={ghs(selected.grossSalary)} bold />
+                <PayslipRow label="Gross Salary" value={money(selected.grossSalary)} bold />
               </div>
 
               {/* Deductions */}
               <div className="bg-white border border-gray-200 rounded-card px-6 py-5">
                 <p className="text-sm font-semibold text-gray-900 mb-2">Deductions</p>
-                <PayslipRow label="Employee SSNIT (5.5%)" value={ghs(selected.employeeSSNIT)} />
-                <PayslipRow label="PAYE Tax" value={ghs(selected.payeTax)} />
+                <PayslipRow
+                  label={payrollLabels.employeeLabel}
+                  value={money(selected.employeeSSNIT)}
+                />
+                <PayslipRow label="PAYE Tax" value={money(selected.payeTax)} />
                 {hasTier3 && (
-                  <PayslipRow label={tier3Label} value={ghs(selected.tier3Employee)} subtle />
+                  <PayslipRow label={tier3Label} value={money(selected.tier3Employee)} subtle />
                 )}
                 {selectedDeductionRows.map((row, index) => (
                   <PayslipRow
                     key={`${row.label}-${index}`}
                     label={row.label}
-                    value={ghs(row.amount)}
+                    value={money(row.amount)}
                     subtle
                   />
                 ))}
                 <Divider />
-                <PayslipRow label="Total Deductions" value={ghs(selected.totalDeductions)} bold />
+                <PayslipRow label="Total Deductions" value={money(selected.totalDeductions)} bold />
               </div>
             </div>
 
             {/* Net summary */}
             <div className="bg-white border border-gray-200 rounded-card px-6 py-5 shrink-0">
-              <PayslipRow label="Gross Salary" value={ghs(selected.grossSalary)} />
-              <PayslipRow label="Total Deductions" value={`− ${ghs(selected.totalDeductions)}`} />
+              <PayslipRow label="Gross Salary" value={money(selected.grossSalary)} />
+              <PayslipRow label="Total Deductions" value={`- ${money(selected.totalDeductions)}`} />
               <Divider />
-              <PayslipRow label="Net Salary" value={ghs(selected.netSalary)} bold green />
+              <PayslipRow label="Net Salary" value={money(selected.netSalary)} bold green />
             </div>
           </>
         )}

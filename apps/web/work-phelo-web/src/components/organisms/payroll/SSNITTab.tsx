@@ -9,13 +9,13 @@ import { Column, DataTable } from '../shared/DataTable';
 import { usePayrollRuns, usePayrollRun, useAllEmployees, usePayrollSettings } from '@/hooks';
 import { PayrollItem } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
+import {
+  formatPayrollMoney,
+  getPayrollLabels,
+  normalizePayrollCountry,
+} from '@/lib/payrollDisplay';
 
 const GH_MAX_INSURABLE = 69_000;
-const TIER2_RATE = 0.05;
-
-function fmt(n: number) {
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 function fmtStatus(status: string) {
   return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -35,12 +35,22 @@ interface SSNITRow {
   tier3Employee: number;
 }
 
-function buildRows(items: PayrollItem[], ssnitMap: Record<string, string>): SSNITRow[] {
+function buildRows(
+  items: PayrollItem[],
+  ssnitMap: Record<string, string>,
+  payrollCountry: string,
+): SSNITRow[] {
+  const country = normalizePayrollCountry(payrollCountry);
+
   return items.map((item) => {
     const basic = parseFloat(item.basicSalary);
-    const insurable = Math.min(basic, GH_MAX_INSURABLE);
-    const employeeSSNIT = parseFloat(item.employeeSSNIT);
+    const insurable = country === 'GH' ? Math.min(basic, GH_MAX_INSURABLE) : basic;
+    const employeeStatutory = parseFloat(item.employeeSSNIT);
     const employerSSNIT = parseFloat(item.employerSSNIT);
+    const tier2 = parseFloat(item.tier2Contribution || '0');
+    const employeeSSNIT =
+      country === 'GH' ? Math.max(0, employeeStatutory - tier2) : employeeStatutory;
+
     return {
       id: item.id,
       employeeId: item.employeeId,
@@ -51,7 +61,7 @@ function buildRows(items: PayrollItem[], ssnitMap: Record<string, string>): SSNI
       employeeSSNIT,
       employerSSNIT,
       totalTier1: employeeSSNIT + employerSSNIT,
-      tier2: Math.round(insurable * TIER2_RATE),
+      tier2,
       tier3Employee: parseFloat(item.tier3Employee),
     };
   });
@@ -61,9 +71,6 @@ export function SSNITTab() {
   const { data: runs = [], isLoading: runsLoading } = usePayrollRuns();
   const { data: empData } = useAllEmployees();
   const { data: payrollSettings } = usePayrollSettings();
-  const tier2Label = payrollSettings?.payrollTier2FundName
-    ? `${payrollSettings.payrollTier2FundName} (5%)`
-    : 'Tier 2 — Separate Fund (5%)';
   const [selectedRunId, setSelectedRunId] = useState('');
 
   const availableRuns = useMemo(
@@ -76,6 +83,14 @@ export function SSNITTab() {
 
   const runId = selectedRunId || availableRuns[0]?.id || '';
   const { data: runDetail, isLoading: detailLoading } = usePayrollRun(runId);
+  const payrollCountry = runDetail?.payrollCountry ?? payrollSettings?.payrollCountry ?? 'GH';
+  const payrollCurrency = runDetail?.payrollCurrency ?? payrollSettings?.payrollCurrency;
+  const payrollLabels = getPayrollLabels(payrollCountry);
+  const money = (value: number) => formatPayrollMoney(value, payrollCurrency, payrollCountry);
+  const showTier2 = normalizePayrollCountry(payrollCountry) === 'GH';
+  const tier2Label = payrollSettings?.payrollTier2FundName
+    ? `${payrollSettings.payrollTier2FundName} (5%)`
+    : `${payrollLabels.tier2Label} (5%)`;
 
   const ssnitMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -86,8 +101,8 @@ export function SSNITTab() {
   }, [empData]);
 
   const rows = useMemo(
-    () => (runDetail?.items ? buildRows(runDetail.items, ssnitMap) : []),
-    [runDetail, ssnitMap],
+    () => (runDetail?.items ? buildRows(runDetail.items, ssnitMap, payrollCountry) : []),
+    [runDetail, ssnitMap, payrollCountry],
   );
 
   const totals = useMemo(
@@ -116,12 +131,12 @@ export function SSNITTab() {
     const headers = [
       'Employee',
       'Employee Number',
-      'SSNIT Number',
+      payrollLabels.idLabel,
       'Insurable Earnings',
-      'Employee SSNIT (5.5%)',
-      'Employer SSNIT (13%)',
-      'Total Tier 1 (18.5%)',
-      tier2Label,
+      payrollLabels.employeeLabel,
+      payrollLabels.employerLabel,
+      payrollLabels.totalLabel,
+      ...(showTier2 ? [tier2Label] : []),
       ...(tier3Enabled ? [tier3Label] : []),
     ];
     const csvRows = rows.map((r) => [
@@ -132,7 +147,7 @@ export function SSNITTab() {
       r.employeeSSNIT.toFixed(2),
       r.employerSSNIT.toFixed(2),
       r.totalTier1.toFixed(2),
-      r.tier2.toFixed(2),
+      ...(showTier2 ? [r.tier2.toFixed(2)] : []),
       ...(tier3Enabled ? [r.tier3Employee.toFixed(2)] : []),
     ]);
     const csv = [headers, ...csvRows].map((row) => row.join(',')).join('\n');
@@ -140,7 +155,7 @@ export function SSNITTab() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ssnit-${run ? payrollMonthLabel(run.month, run.year).replace(' ', '-') : 'export'}.csv`;
+    a.download = `${payrollLabels.tabLabel.toLowerCase()}-${run ? payrollMonthLabel(run.month, run.year).replace(' ', '-') : 'export'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -159,7 +174,7 @@ export function SSNITTab() {
     },
     {
       key: 'ssnitNumber',
-      label: 'SSNIT Number',
+      label: payrollLabels.idLabel,
       render: (row) =>
         row.ssnitNumber ? (
           <span className="font-mono text-sm text-gray-700">{row.ssnitNumber}</span>
@@ -173,34 +188,38 @@ export function SSNITTab() {
     {
       key: 'insurableEarnings',
       label: 'Insurable Earnings',
-      render: (row) => fmt(row.insurableEarnings),
+      render: (row) => money(row.insurableEarnings),
     },
     {
       key: 'employeeSSNIT',
-      label: 'Employee (5.5%)',
-      render: (row) => fmt(row.employeeSSNIT),
+      label: payrollLabels.employeeLabel,
+      render: (row) => money(row.employeeSSNIT),
     },
     {
       key: 'employerSSNIT',
-      label: 'Employer (13%)',
-      render: (row) => fmt(row.employerSSNIT),
+      label: payrollLabels.employerLabel,
+      render: (row) => money(row.employerSSNIT),
     },
     {
       key: 'totalTier1',
-      label: 'Total Tier 1',
-      render: (row) => <span className="font-semibold text-gray-900">{fmt(row.totalTier1)}</span>,
+      label: payrollLabels.totalLabel,
+      render: (row) => <span className="font-semibold text-gray-900">{money(row.totalTier1)}</span>,
     },
-    {
-      key: 'tier2',
-      label: tier2Label,
-      render: (row) => fmt(row.tier2),
-    },
+    ...(showTier2
+      ? [
+          {
+            key: 'tier2',
+            label: tier2Label,
+            render: (row: SSNITRow) => money(row.tier2),
+          },
+        ]
+      : []),
     ...(tier3Enabled
       ? [
           {
             key: 'tier3',
             label: tier3Label,
-            render: (row: SSNITRow) => fmt(row.tier3Employee),
+            render: (row: SSNITRow) => money(row.tier3Employee),
           },
         ]
       : []),
@@ -226,7 +245,7 @@ export function SSNITTab() {
           {missingCount > 0 && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 text-xs font-medium rounded-full border border-amber-200">
               <AlertCircle className="w-3.5 h-3.5" />
-              {missingCount} employee{missingCount > 1 ? 's' : ''} missing SSNIT #
+              {missingCount} employee{missingCount > 1 ? 's' : ''} {payrollLabels.missingIdLabel}
             </span>
           )}
         </div>
@@ -239,21 +258,19 @@ export function SSNITTab() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
         <MetricCard
-          title="Employee SSNIT (5.5%)"
-          value={fmt(totals.employeeSSNIT)}
+          title={payrollLabels.employeeLabel}
+          value={money(totals.employeeSSNIT)}
           variant="default"
         />
         <MetricCard
-          title="Employer SSNIT (13%)"
-          value={fmt(totals.employerSSNIT)}
+          title={payrollLabels.employerLabel}
+          value={money(totals.employerSSNIT)}
           variant="highlight"
         />
-        <MetricCard
-          title="Total Remittable (18.5%)"
-          value={fmt(totals.totalTier1)}
-          variant="success"
-        />
-        <MetricCard title={tier2Label} value={fmt(totals.tier2)} variant="warning" />
+        <MetricCard title="Total Remittable" value={money(totals.totalTier1)} variant="success" />
+        {showTier2 && (
+          <MetricCard title={tier2Label} value={money(totals.tier2)} variant="warning" />
+        )}
       </div>
 
       <DataTable

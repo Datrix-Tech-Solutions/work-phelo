@@ -189,6 +189,7 @@ export class TenantLifecycleService {
       adminEmail: tenant.email,
       adminUserId: tenantAdmin?.id,
       country: tenant.country,
+      currency: tenant.currency,
     });
 
     const updated = await this.prisma.tenant.update({

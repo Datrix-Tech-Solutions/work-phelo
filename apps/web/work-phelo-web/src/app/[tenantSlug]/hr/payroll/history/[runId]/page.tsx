@@ -14,13 +14,7 @@ import {
   downloadPayrollFullFormat,
   downloadPayrollPDFFormat,
 } from '@/lib/payrollUtils';
-
-function fmt(value: string | number | null | undefined) {
-  if (value == null) return '—';
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(n)) return '—';
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
 
 function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: string }) {
   const [open, setOpen] = useState(false);
@@ -133,57 +127,6 @@ function totalDeductions(row: PayrollItem): number {
   return parseFloat(row.otherDeductions);
 }
 
-const columns: Column<PayrollItem>[] = [
-  {
-    key: 'employee',
-    label: 'Employee',
-    width: '2fr',
-    render: (row) => (
-      <div>
-        <p className="font-medium text-gray-900">
-          {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
-        </p>
-        {row.employee?.jobTitle && <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>}
-      </div>
-    ),
-  },
-  {
-    key: 'basicSalary',
-    label: 'Basic Salary',
-    render: (row) => fmt(row.basicSalary),
-  },
-  {
-    key: 'totalAllowances',
-    label: 'Allowances',
-    render: (row) => fmt(totalAllowances(row)),
-  },
-  {
-    key: 'otherDeductions',
-    label: 'Deductions',
-    render: (row) => fmt(totalDeductions(row)),
-  },
-  {
-    key: 'grossSalary',
-    label: 'Gross',
-    render: (row) => fmt(row.grossSalary),
-  },
-  {
-    key: 'employeeSSNIT',
-    label: 'Employee SSNIT (5.5%)',
-    render: (row) => fmt(row.employeeSSNIT),
-  },
-  {
-    key: 'payeTax',
-    label: 'PAYE',
-    render: (row) => fmt(row.payeTax),
-  },
-  {
-    key: 'netSalary',
-    label: 'Net Salary',
-    render: (row) => <span className="font-semibold text-emerald-600">{fmt(row.netSalary)}</span>,
-  },
-];
-
 export default function PayrollHistoryDetailPage({
   params,
 }: {
@@ -194,6 +137,44 @@ export default function PayrollHistoryDetailPage({
 
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
   const fileLabel = periodLabel.replace(' ', '-');
+  const payrollLabels = getPayrollLabels(run?.payrollCountry);
+  const money = (value: string | number | null | undefined) =>
+    formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
+
+  const columns: Column<PayrollItem>[] = [
+    {
+      key: 'employee',
+      label: 'Employee',
+      width: '2fr',
+      render: (row) => (
+        <div>
+          <p className="font-medium text-gray-900">
+            {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
+          </p>
+          {row.employee?.jobTitle && (
+            <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>
+          )}
+        </div>
+      ),
+    },
+    { key: 'basicSalary', label: 'Basic Salary', render: (row) => money(row.basicSalary) },
+    { key: 'totalAllowances', label: 'Allowances', render: (row) => money(totalAllowances(row)) },
+    { key: 'otherDeductions', label: 'Deductions', render: (row) => money(totalDeductions(row)) },
+    { key: 'grossSalary', label: 'Gross', render: (row) => money(row.grossSalary) },
+    {
+      key: 'employeeSSNIT',
+      label: payrollLabels.employeeLabel,
+      render: (row) => money(row.employeeSSNIT),
+    },
+    { key: 'payeTax', label: 'PAYE', render: (row) => money(row.payeTax) },
+    {
+      key: 'netSalary',
+      label: 'Net Salary',
+      render: (row) => (
+        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
+      ),
+    },
+  ];
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">

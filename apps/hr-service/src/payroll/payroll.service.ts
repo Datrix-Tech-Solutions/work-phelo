@@ -7,16 +7,9 @@ import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import Decimal from 'decimal.js';
 import {
-  calculateMonthlyPAYE,
-  calculatePayrollGross,
-  calculatePayrollNetIncome,
-  calculateSSNIT,
-  calculateTier1Employee,
-  calculateTier2,
-  calculateTaxableIncome,
-  calculateTier3Contribution,
-  calculateTotalPayrollDeductions,
-} from '../common/ghana-payroll.helper';
+  calculatePayrollForCountry,
+  defaultPayrollCurrency,
+} from '../common/payroll-calculator.helper';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
 import { PayrollDecisionDto } from './dto/payroll-decision.dto';
@@ -29,11 +22,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import {
   EmploymentStatus,
+  PayrollCountry,
   PayrollItem,
   Prisma,
 } from '../../prisma/generated/client';
 
 type PayrollSettingsSnapshot = {
+  payrollCountry: PayrollCountry;
+  payrollCurrency: string;
   tier3Enabled: boolean;
   tier3Rate: string | null;
   tier3SchemeName: string | null;
@@ -119,13 +115,19 @@ export class PayrollService {
     const config = await this.prisma.tenantConfig.findUnique({
       where: { tenantId },
       select: {
+        payrollCountry: true,
+        payrollCurrency: true,
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
       },
     });
 
+    const payrollCountry = config?.payrollCountry ?? PayrollCountry.GH;
     return {
+      payrollCountry,
+      payrollCurrency:
+        config?.payrollCurrency ?? defaultPayrollCurrency(payrollCountry),
       tier3Enabled: config?.payrollTier3Enabled ?? false,
       tier3Rate:
         config?.payrollTier3Rate != null
@@ -139,50 +141,7 @@ export class PayrollService {
     values: EditablePayrollValues,
     settings: PayrollSettingsSnapshot,
   ): CalculatedPayrollValues {
-    const grossSalary = calculatePayrollGross(
-      values.basicSalary,
-      values.totalAllowances,
-      values.transportAmount,
-      values.otherDeductions,
-    );
-    const { employeeSSNIT, employerSSNIT } = calculateSSNIT(values.basicSalary);
-    const tier1Contribution = calculateTier1Employee(values.basicSalary);
-    const tier2Contribution = calculateTier2(values.basicSalary);
-    const tier3Employee =
-      settings.tier3Enabled && settings.tier3Rate
-        ? calculateTier3Contribution(values.basicSalary, settings.tier3Rate)
-        : '0';
-    const taxableIncome = calculateTaxableIncome(
-      grossSalary,
-      employeeSSNIT,
-      values.transportAmount,
-      tier3Employee,
-    );
-    const payeTax = calculateMonthlyPAYE(taxableIncome);
-    const totalDeductions = calculateTotalPayrollDeductions(
-      values.otherDeductions,
-      employeeSSNIT,
-      payeTax,
-      tier3Employee,
-    );
-    const netSalary = calculatePayrollNetIncome(taxableIncome, payeTax);
-
-    return {
-      ...values,
-      overtimePay: '0',
-      bonus: '0',
-      thirteenthMonth: '0',
-      grossSalary,
-      employeeSSNIT,
-      employerSSNIT,
-      tier1Contribution,
-      tier2Contribution,
-      tier3Employee,
-      taxableIncome,
-      payeTax,
-      totalDeductions,
-      netSalary,
-    };
+    return calculatePayrollForCountry(values, settings);
   }
 
   private isTransportAllowanceLine(item: {
@@ -709,6 +668,8 @@ export class PayrollService {
         approvedAt: null,
         paidAt: null,
         notes: dto.notes,
+        payrollCountry: settings.payrollCountry,
+        payrollCurrency: settings.payrollCurrency,
         tier3Enabled: settings.tier3Enabled,
         tier3Rate: settings.tier3Rate,
         tier3SchemeName: settings.tier3SchemeName,
@@ -750,6 +711,8 @@ export class PayrollService {
         totalEmployerCost: totals.totalEmployerCost.toString(),
         runBy,
         notes: dto.notes,
+        payrollCountry: settings.payrollCountry,
+        payrollCurrency: settings.payrollCurrency,
         tier3Enabled: settings.tier3Enabled,
         tier3Rate: settings.tier3Rate,
         tier3SchemeName: settings.tier3SchemeName,
@@ -808,6 +771,8 @@ export class PayrollService {
     }
 
     const settings: PayrollSettingsSnapshot = {
+      payrollCountry: run.payrollCountry,
+      payrollCurrency: run.payrollCurrency,
       tier3Enabled: run.tier3Enabled,
       tier3Rate: run.tier3Rate?.toString() ?? null,
       tier3SchemeName: run.tier3SchemeName,

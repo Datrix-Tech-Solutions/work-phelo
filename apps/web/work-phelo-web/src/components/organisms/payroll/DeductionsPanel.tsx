@@ -10,9 +10,11 @@ import {
   useCreateDeduction,
   useUpdateDeduction,
   useDeleteDeduction,
+  usePayrollSettings,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { EmployeeDeduction } from '@/types/hr';
 
 export type { EmployeeDeduction as DeductionItem };
@@ -37,10 +39,6 @@ interface FormState {
   totalAmount: string;
   monthlyRate: string;
   startDate: string;
-}
-
-function fmtAmt(n: number) {
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function emptyForm(): FormState {
@@ -71,11 +69,15 @@ function DeductionCard({
   onEdit,
   onDelete,
   isDeleting,
+  payrollCurrency,
+  payrollCountry,
 }: {
   item: EmployeeDeduction;
   onEdit: (item: EmployeeDeduction) => void;
   onDelete: (id: string) => void;
   isDeleting: boolean;
+  payrollCurrency?: string;
+  payrollCountry?: string;
 }) {
   const balance = Math.max(0, item.totalAmount - item.amountPaid);
   const isCompleted = balance === 0;
@@ -114,20 +116,26 @@ function DeductionCard({
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
         <div>
           <p className="text-gray-400">Total Amount</p>
-          <p className="font-medium text-gray-700">{fmtAmt(item.totalAmount)}</p>
+          <p className="font-medium text-gray-700">
+            {formatPayrollMoney(item.totalAmount, payrollCurrency, payrollCountry)}
+          </p>
         </div>
         <div>
           <p className="text-gray-400">Monthly Rate</p>
-          <p className="font-semibold text-gray-900">{fmtAmt(item.monthlyRate)}</p>
+          <p className="font-semibold text-gray-900">
+            {formatPayrollMoney(item.monthlyRate, payrollCurrency, payrollCountry)}
+          </p>
         </div>
         <div>
           <p className="text-gray-400">Paid So Far</p>
-          <p className="font-medium text-emerald-600">{fmtAmt(item.amountPaid)}</p>
+          <p className="font-medium text-emerald-600">
+            {formatPayrollMoney(item.amountPaid, payrollCurrency, payrollCountry)}
+          </p>
         </div>
         <div>
           <p className="text-gray-400">Balance</p>
           <p className={`font-semibold ${isCompleted ? 'text-gray-400' : 'text-gray-900'}`}>
-            {fmtAmt(balance)}
+            {formatPayrollMoney(balance, payrollCurrency, payrollCountry)}
           </p>
         </div>
       </div>
@@ -167,6 +175,7 @@ function DeductionsPanelContent({
   onActiveItems,
 }: Omit<Props, 'isOpen'>) {
   const toast = useToast();
+  const { data: payrollSettings } = usePayrollSettings();
   const { data: deductions = [], isLoading } = useEmployeeDeductions(employeeId);
   const { mutate: createDeduction, isPending: isCreating } = useCreateDeduction(employeeId);
   const { mutate: updateDeduction, isPending: isUpdating } = useUpdateDeduction(employeeId);
@@ -181,6 +190,8 @@ function DeductionsPanelContent({
 
   const activeItems = getActiveDeductionItems(deductions);
   const activeMonthlyTotal = activeItems.reduce((sum, d) => sum + d.amount, 0);
+  const payrollCurrency = payrollSettings?.payrollCurrency;
+  const payrollCountry = payrollSettings?.payrollCountry;
 
   const notifyActiveDeductions = (next: EmployeeDeduction[]) => {
     const items = getActiveDeductionItems(next);
@@ -286,7 +297,7 @@ function DeductionsPanelContent({
                   This month&apos;s deduction
                 </span>
                 <span className="text-sm font-semibold text-brand">
-                  {fmtAmt(activeMonthlyTotal)}
+                  {formatPayrollMoney(activeMonthlyTotal, payrollCurrency, payrollCountry)}
                 </span>
               </div>
             )}
@@ -298,6 +309,8 @@ function DeductionsPanelContent({
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 isDeleting={isDeleting}
+                payrollCurrency={payrollCurrency}
+                payrollCountry={payrollCountry}
               />
             ))}
 

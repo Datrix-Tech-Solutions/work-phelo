@@ -13,7 +13,7 @@ import { AllowanceItem } from '@/lib/payrollCalculations';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
 import type { DeductionLineItem } from './DeductionsPanel';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { formatPayrollMoney } from '@/lib/payrollDisplay';
 
 export interface DraftLoadData {
   basicMap: Record<string, number>;
@@ -80,13 +80,8 @@ async function loadRunData(
   return { basicMap, allowancesMap, deductionItemsMap };
 }
 
-function useFmt() {
-  const { currency } = useTenantConfig();
-  return (value: string | number) => {
-    const n = typeof value === 'string' ? parseFloat(value) : value;
-    if (isNaN(n)) return '—';
-    return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+function fmtRunMoney(run: PayrollRun, value: string | number) {
+  return formatPayrollMoney(value, run.payrollCurrency, run.payrollCountry);
 }
 
 function ApprovedRunCard({
@@ -98,7 +93,6 @@ function ApprovedRunCard({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
@@ -123,7 +117,7 @@ function ApprovedRunCard({
             {payrollMonthLabel(run.month, run.year)}
           </p>
           <p className="text-xs text-gray-500">
-            Net Pay: {fmt(run.totalNet)} · Gross: {fmt(run.totalGross)}
+            Net Pay: {fmtRunMoney(run, run.totalNet)} · Gross: {fmtRunMoney(run, run.totalGross)}
           </p>
           {run.approvedAt && (
             <p className="text-xs text-emerald-600">
@@ -159,7 +153,6 @@ function ReturnedRunCard({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
@@ -188,7 +181,7 @@ function ReturnedRunCard({
               Rejected
             </span>
           </div>
-          <p className="text-xs text-gray-500">Gross: {fmt(run.totalGross)}</p>
+          <p className="text-xs text-gray-500">Gross: {fmtRunMoney(run, run.totalGross)}</p>
           {run.returnToDraftNote && (
             <p className="text-xs text-red-500 italic">&quot;{run.returnToDraftNote}&quot;</p>
           )}
@@ -210,7 +203,6 @@ function ReturnedRunCard({
 function DraftRunCard({ run, onLoad }: { run: PayrollRun; onLoad: (data: DraftLoadData) => void }) {
   const toast = useToast();
   const queryClient = useQueryClient();
-  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
@@ -234,7 +226,7 @@ function DraftRunCard({ run, onLoad }: { run: PayrollRun; onLoad: (data: DraftLo
           <p className="text-sm font-semibold text-gray-900">
             {payrollMonthLabel(run.month, run.year)}
           </p>
-          <p className="text-xs text-gray-500">Gross: {fmt(run.totalGross)}</p>
+          <p className="text-xs text-gray-500">Gross: {fmtRunMoney(run, run.totalGross)}</p>
           {run.notes && (
             <p className="text-xs text-gray-400 italic truncate max-w-48">{run.notes}</p>
           )}

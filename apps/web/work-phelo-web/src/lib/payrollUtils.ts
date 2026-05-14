@@ -1,4 +1,5 @@
 import type { PayrollRunDetail, PayrollItem } from '@/types/hr';
+import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
 
 export const MONTH_NAMES = [
   '',
@@ -25,6 +26,14 @@ function fmtNum(value: string | number | null | undefined): string {
   const n = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(n)) return '—';
   return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function payrollCurrencyForItem(item: PayrollItem): string {
+  return resolvePayrollCurrency(item.payrollRun?.payrollCurrency, item.payrollRun?.payrollCountry);
+}
+
+function payrollCurrencyForRun(detail: PayrollRunDetail): string {
+  return resolvePayrollCurrency(detail.payrollCurrency, detail.payrollCountry);
 }
 
 function payrollAllowanceRows(item: PayrollItem): Array<[string, number]> {
@@ -123,6 +132,7 @@ export async function downloadPayrollPDFFormat(
     );
 
   const isFull = format === 'full';
+  const payrollLabels = getPayrollLabels(detail.payrollCountry);
 
   const head = isFull
     ? [
@@ -132,7 +142,7 @@ export async function downloadPayrollPDFFormat(
           'Basic Salary',
           'Allowances',
           'Gross',
-          'Emp. SSNIT',
+          payrollLabels.employeeLabel,
           'PAYE',
           'Deductions',
           'Net Salary',
@@ -329,13 +339,13 @@ function numberToWords(n: number): string {
   return result.trim();
 }
 
-function amountInWords(value: string | number): string {
+function amountInWords(value: string | number, currency: string): string {
   const n = typeof value === 'string' ? parseFloat(value) : value;
   if (isNaN(n) || n < 0) return '';
-  const cedis = Math.floor(n);
-  const pesewas = Math.round((n - cedis) * 100);
-  let words = numberToWords(cedis) + ' Ghana Cedi' + (cedis !== 1 ? 's' : '');
-  if (pesewas > 0) words += ' ' + numberToWords(pesewas) + ' Pesewa' + (pesewas !== 1 ? 's' : '');
+  const whole = Math.floor(n);
+  const fractional = Math.round((n - whole) * 100);
+  let words = `${numberToWords(whole)} ${currency}`;
+  if (fractional > 0) words += ` ${numberToWords(fractional)}/100`;
   return words + ' Only';
 }
 
@@ -366,6 +376,9 @@ export async function downloadPayslipPDF(
   const { autoTable } = await import('jspdf-autotable');
 
   const companyInfo: PayslipCompanyInfo = typeof company === 'string' ? { name: company } : company;
+  const payrollCountry = item.payrollRun?.payrollCountry;
+  const payrollCurrency = payrollCurrencyForItem(item);
+  const payrollLabels = getPayrollLabels(payrollCountry);
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.width;
@@ -480,7 +493,7 @@ export async function downloadPayslipPDF(
       emp?.employeeNumber ?? '—',
     ],
     ['Role:', emp?.jobTitle ?? '—', 'Department:', emp?.department ?? '—'],
-    ['TIN:', emp?.tinNumber ?? '—', 'SSNIT No:', emp?.ssnit ?? '—'],
+    ['TIN:', emp?.tinNumber ?? '—', `${payrollLabels.idLabel}:`, emp?.ssnit ?? '—'],
     ['Bank:', emp?.bankName ?? '—', 'Account No:', emp?.bankAccountNumber ?? '—'],
   ];
   if (emp?.bankBranch) {
@@ -526,7 +539,7 @@ export async function downloadPayslipPDF(
     earningsRows.push(['13th Month', fmtNum(item.thirteenthMonth)]);
 
   const deductionRows: string[][] = [
-    ['Employee SSNIT (5.5%)', fmtNum(item.employeeSSNIT)],
+    [payrollLabels.employeeLabel, fmtNum(item.employeeSSNIT)],
     ['Income Tax (PAYE)', fmtNum(item.payeTax)],
   ];
   if (parseFloat(item.tier3Employee) > 0)
@@ -552,7 +565,7 @@ export async function downloadPayslipPDF(
   // Earnings (left)
   autoTable(doc, {
     startY: earningsStartY,
-    head: [['EARNINGS', 'Amount (GHS)']],
+    head: [['EARNINGS', `Amount (${payrollCurrency})`]],
     body: earningsRows,
     foot: [['GROSS EARNINGS', fmtNum(item.grossSalary)]],
     showFoot: 'lastPage',
@@ -571,7 +584,7 @@ export async function downloadPayslipPDF(
   // Deductions (right)
   autoTable(doc, {
     startY: earningsStartY,
-    head: [['DEDUCTIONS', 'Amount (GHS)']],
+    head: [['DEDUCTIONS', `Amount (${payrollCurrency})`]],
     body: deductionRows,
     foot: [['TOTAL DEDUCTIONS', fmtNum(item.totalDeductions)]],
     showFoot: 'lastPage',
@@ -619,7 +632,7 @@ export async function downloadPayslipPDF(
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(9);
   doc.setTextColor(50, 50, 50);
-  const words = amountInWords(item.netSalary);
+  const words = amountInWords(item.netSalary, payrollCurrency);
   const lines = doc.splitTextToSize(words, wordsW - 10) as string[];
   doc.text(lines.slice(0, 2), M + 5, y + 14);
 
@@ -631,7 +644,9 @@ export async function downloadPayslipPDF(
   doc.text('NET PAY', rightEdge, y + 7, { align: 'right' });
   doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
-  doc.text(`GHS ${fmtNum(item.netSalary)}`, rightEdge, y + 15, { align: 'right' });
+  doc.text(formatPayrollMoney(item.netSalary, payrollCurrency, payrollCountry), rightEdge, y + 15, {
+    align: 'right',
+  });
 
   y += netBarH + 6;
 
@@ -649,15 +664,15 @@ export async function downloadPayslipPDF(
     const ytdRows: [string, string, string, string][] = [
       [
         'YTD Gross Earnings',
-        `GHS ${fmtNum(ytd.grossEarnings)}`,
+        formatPayrollMoney(ytd.grossEarnings, payrollCurrency, payrollCountry),
         'YTD PAYE Tax',
-        `GHS ${fmtNum(ytd.payeTax)}`,
+        formatPayrollMoney(ytd.payeTax, payrollCurrency, payrollCountry),
       ],
       [
-        'YTD SSNIT Contribution',
-        `GHS ${fmtNum(ytd.ssnitContribution)}`,
+        `YTD ${payrollLabels.tabLabel} Contribution`,
+        formatPayrollMoney(ytd.ssnitContribution, payrollCurrency, payrollCountry),
         'YTD Net Pay',
-        `GHS ${fmtNum(ytd.netPay)}`,
+        formatPayrollMoney(ytd.netPay, payrollCurrency, payrollCountry),
       ],
     ];
 
@@ -705,13 +720,14 @@ export function downloadPayrollBankFormat(
   label: string,
   companyName = '',
 ): void {
+  const currency = payrollCurrencyForRun(detail);
   const headers = [
     'Employee',
     'Employee Number',
     'Bank Name',
     'Bank Branch',
     'Account Number',
-    'Net Salary',
+    `Net Salary (${currency})`,
   ];
   const rows = detail.items.map((item) => [
     item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
@@ -730,18 +746,20 @@ export function downloadPayrollFullFormat(
   label: string,
   companyName = '',
 ): void {
+  const payrollLabels = getPayrollLabels(detail.payrollCountry);
+  const currency = payrollCurrencyForRun(detail);
   const headers = [
     'Employee',
     'Employee Number',
     'Job Title',
-    'Basic Salary',
-    'Allowances',
-    'Gross Salary',
-    'Employee SSNIT',
-    'Employer SSNIT',
+    `Basic Salary (${currency})`,
+    `Allowances (${currency})`,
+    `Gross Salary (${currency})`,
+    `${payrollLabels.employeeLabel} (${currency})`,
+    `${payrollLabels.employerLabel} (${currency})`,
     'PAYE',
-    'Deductions',
-    'Net Salary',
+    `Deductions (${currency})`,
+    `Net Salary (${currency})`,
   ];
   const rows = detail.items.map((item) => [
     item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
@@ -786,6 +804,10 @@ export async function downloadP9FormPDF(
     .forEach((p) => {
       if (p.payrollRun) byMonth[p.payrollRun.month] = p;
     });
+  const primaryPayslip = Object.values(byMonth)[0] ?? payslips[0];
+  const payrollCountry = primaryPayslip?.payrollRun?.payrollCountry;
+  const payrollCurrency = primaryPayslip ? payrollCurrencyForItem(primaryPayslip) : 'GHS';
+  const payrollLabels = getPayrollLabels(payrollCountry);
 
   const getField = (item: PayrollItem, key: string): string => {
     return (item as unknown as Record<string, string>)[key] ?? '0';
@@ -817,7 +839,7 @@ export async function downloadP9FormPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(60, 60, 60);
   doc.text('EMPLOYEE TAX DEDUCTION CARD', rightEdgeX, y + 13, { align: 'right' });
-  doc.text('Ghana Revenue Authority  |  Income Tax Act, 2000 (Act 592)', rightEdgeX, y + 18, {
+  doc.text('Employee tax deduction summary', rightEdgeX, y + 18, {
     align: 'right',
   });
   doc.setFont('helvetica', 'bold');
@@ -897,14 +919,14 @@ export async function downloadP9FormPDF(
   drawLabelValue('Job Title:', employee?.jobTitle, M + (qW + 1) * 2, y, qW, 18);
   drawLabelValue('TIN:', employee?.tinNumber, M + (qW + 1) * 3, y, qW, 10);
   y += fieldH;
-  drawLabelValue('SSNIT No:', employee?.ssnit, M, y, qW, 18);
+  drawLabelValue(`${payrollLabels.idLabel}:`, employee?.ssnit, M, y, qW, 18);
   drawLabelValue('Department:', employee?.department, M + qW + 1, y, qW, 22);
   drawLabelValue('Bank:', bankText, M + (qW + 1) * 2, y, qW, 14);
   drawLabelValue('Account No:', employee?.bankAccountNumber, M + (qW + 1) * 3, y, qW, 22);
   y += fieldH + 3;
 
   // ── Section C: Monthly Earnings and Deductions ────────────────────────────
-  sectionHeader('C', 'MONTHLY EARNINGS AND DEDUCTIONS (Amount in GHS)');
+  sectionHeader('C', `MONTHLY EARNINGS AND DEDUCTIONS (Amount in ${payrollCurrency})`);
 
   const shortMonths = [
     'Jan',
@@ -927,7 +949,7 @@ export async function downloadP9FormPDF(
   const cellRowDefs = [
     { key: 'basicSalary', label: 'Basic Salary' },
     { key: 'grossSalary', label: 'Gross Earnings' },
-    { key: 'employeeSSNIT', label: 'Employee SSNIT (5.5%)' },
+    { key: 'employeeSSNIT', label: payrollLabels.employeeLabel },
     { key: 'taxableIncome', label: 'Taxable Income' },
     { key: 'payeTax', label: 'Income Tax (PAYE)' },
     { key: 'totalDeductions', label: 'Total Deductions' },
@@ -1014,7 +1036,7 @@ export async function downloadP9FormPDF(
     doc.text(`${left.label}:`, M, y + 4.5);
     doc.setFont('helvetica', 'normal');
     doc.text(
-      left.total > 0 ? `GHS ${fmtNum(left.total)}` : '—',
+      left.total > 0 ? formatPayrollMoney(left.total, payrollCurrency, payrollCountry) : '—',
       M + dLabelW + dHalfW - dLabelW,
       y + 4.5,
       { align: 'right' },
@@ -1026,7 +1048,7 @@ export async function downloadP9FormPDF(
       doc.text(`${right.label}:`, rx, y + 4.5);
       doc.setFont('helvetica', 'normal');
       doc.text(
-        right.total > 0 ? `GHS ${fmtNum(right.total)}` : '—',
+        right.total > 0 ? formatPayrollMoney(right.total, payrollCurrency, payrollCountry) : '—',
         rx + dHalfW - dLabelW + dLabelW,
         y + 4.5,
         { align: 'right' },
@@ -1050,7 +1072,7 @@ export async function downloadP9FormPDF(
 
   sectionHeader('E', 'RELIEFS AND ALLOWANCES (For Reference Only)');
   const reliefs = [
-    'Personal Relief (GHS 1,200)',
+    `Personal Relief (${payrollCurrency})`,
     'Marriage/Responsibility Relief',
     'Child Education Relief',
     'Old Age / Disability Relief',
@@ -1086,7 +1108,7 @@ export async function downloadP9FormPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(60, 60, 60);
   const declaration =
-    'I hereby certify that the information given in this form is correct and complete to the best of my knowledge and belief. This form was prepared in accordance with the provisions of the Income Tax Act, 2000 (Act 592) and submitted to the Ghana Revenue Authority.';
+    'I hereby certify that the information given in this form is correct and complete to the best of my knowledge and belief.';
   const declLines = doc.splitTextToSize(declaration, cW) as string[];
   doc.text(declLines, M, y + 4);
   y += declLines.length * 4 + 8;

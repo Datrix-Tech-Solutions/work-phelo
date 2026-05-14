@@ -11,9 +11,11 @@ import {
   useAddAllowance,
   useUpdateAllowance,
   useDeleteAllowance,
+  usePayrollSettings,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { EmployeeAllowance, AllowanceType } from '@/types/hr';
 import type { AllowanceItem } from '@/lib/payrollCalculations';
 
@@ -41,10 +43,6 @@ const TYPE_COLOR: Record<string, string> = {
   OTHER: 'bg-gray-100 text-gray-500',
 };
 
-function fmtAmt(n: number) {
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 function toPayrollItems(allowances: EmployeeAllowance[]): AllowanceItem[] {
   return allowances.map((a) => ({
     name: a.name,
@@ -67,11 +65,15 @@ function AllowanceCard({
   onEdit,
   onDelete,
   isDeleting,
+  payrollCurrency,
+  payrollCountry,
 }: {
   item: EmployeeAllowance;
   onEdit: (item: EmployeeAllowance) => void;
   onDelete: (id: string) => void;
   isDeleting: boolean;
+  payrollCurrency?: string;
+  payrollCountry?: string;
 }) {
   const typeColor = TYPE_COLOR[item.type] ?? TYPE_COLOR.OTHER;
   const typeLabel = TYPE_LABEL[item.type] ?? item.type;
@@ -84,7 +86,9 @@ function AllowanceCard({
         >
           {typeLabel}
         </span>
-        <p className="text-sm font-semibold text-gray-900">{fmtAmt(Number(item.amount))}</p>
+        <p className="text-sm font-semibold text-gray-900">
+          {formatPayrollMoney(Number(item.amount), payrollCurrency, payrollCountry)}
+        </p>
       </div>
 
       <div className="flex items-center gap-3 shrink-0">
@@ -121,6 +125,7 @@ function AllowancesPanelContent({
   onItems,
 }: Omit<Props, 'isOpen'>) {
   const toast = useToast();
+  const { data: payrollSettings } = usePayrollSettings();
   const { data: allowances = [], isLoading } = useListAllowances(employeeId);
   const { mutate: addAllowance, isPending: isAdding } = useAddAllowance(employeeId);
   const { mutate: updateAllowance, isPending: isUpdating } = useUpdateAllowance(employeeId);
@@ -133,6 +138,8 @@ function AllowancesPanelContent({
 
   const isMutating = isAdding || isUpdating;
   const totalMonthly = allowances.reduce((sum, a) => sum + Number(a.amount), 0);
+  const payrollCurrency = payrollSettings?.payrollCurrency;
+  const payrollCountry = payrollSettings?.payrollCountry;
 
   const notify = (next: EmployeeAllowance[]) => onItems?.(toPayrollItems(next));
 
@@ -213,7 +220,9 @@ function AllowancesPanelContent({
             {totalMonthly > 0 && (
               <div className="flex items-center justify-between px-4 py-3 bg-brand/5 rounded-xl border border-brand/10">
                 <span className="text-sm font-medium text-gray-600">Total monthly</span>
-                <span className="text-sm font-semibold text-brand">{fmtAmt(totalMonthly)}</span>
+                <span className="text-sm font-semibold text-brand">
+                  {formatPayrollMoney(totalMonthly, payrollCurrency, payrollCountry)}
+                </span>
               </div>
             )}
 
@@ -224,6 +233,8 @@ function AllowancesPanelContent({
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 isDeleting={isDeleting}
+                payrollCurrency={payrollCurrency}
+                payrollCountry={payrollCountry}
               />
             ))}
 

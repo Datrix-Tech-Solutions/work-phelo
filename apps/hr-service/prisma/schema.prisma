@@ -74,6 +74,14 @@ enum PayrollStatus {
   @@schema("hr")
 }
 
+enum PayrollCountry {
+  GH
+  NG
+  KE
+
+  @@schema("hr")
+}
+
 enum AppraisalStatus {
   DRAFT
   IN_PROGRESS
@@ -795,19 +803,19 @@ model ShiftAssignmentOverride {
 // ── Payroll ───────────────────────────────────────────────────────────────
 
 model PayrollRun {
-  id                String        @id @default(uuid())
+  id                String         @id @default(uuid())
   tenantId          String
   month             Int
   year              Int
-  status            PayrollStatus @default(DRAFT)
-  totalGross        Decimal       @db.Decimal(15, 2)
-  totalNet          Decimal       @db.Decimal(15, 2)
-  totalSSNIT        Decimal       @db.Decimal(15, 2)
-  totalTier1        Decimal       @default(0) @db.Decimal(15, 2)
-  totalTier2        Decimal       @default(0) @db.Decimal(15, 2)
-  totalTier3        Decimal       @default(0) @db.Decimal(15, 2)
-  totalPAYE         Decimal       @db.Decimal(15, 2)
-  totalEmployerCost Decimal       @default(0) @db.Decimal(15, 2)
+  status            PayrollStatus  @default(DRAFT)
+  totalGross        Decimal        @db.Decimal(15, 2)
+  totalNet          Decimal        @db.Decimal(15, 2)
+  totalSSNIT        Decimal        @db.Decimal(15, 2)
+  totalTier1        Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier2        Decimal        @default(0) @db.Decimal(15, 2)
+  totalTier3        Decimal        @default(0) @db.Decimal(15, 2)
+  totalPAYE         Decimal        @db.Decimal(15, 2)
+  totalEmployerCost Decimal        @default(0) @db.Decimal(15, 2)
   runBy             String
   submittedBy       String?
   submittedAt       DateTime?
@@ -817,11 +825,13 @@ model PayrollRun {
   returnToDraftNote String?
   paidAt            DateTime?
   notes             String?
-  tier3Enabled      Boolean       @default(false)
-  tier3Rate         Decimal?      @db.Decimal(5, 2)
+  payrollCountry    PayrollCountry @default(GH)
+  payrollCurrency   String         @default("GHS")
+  tier3Enabled      Boolean        @default(false)
+  tier3Rate         Decimal?       @db.Decimal(5, 2)
   tier3SchemeName   String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   items PayrollItem[]
 
@@ -1154,6 +1164,8 @@ model TenantConfig {
   defaultProbationPeriodMonths Int?
   resignationNoticePeriodDays  Int                            @default(30)
   lateArrivalThresholdMinutes  Int                            @default(0)
+  payrollCountry               PayrollCountry                 @default(GH)
+  payrollCurrency              String                         @default("GHS")
   payrollTier2FundName         String?
   payrollTier3Enabled          Boolean                        @default(false)
   payrollTier3Rate             Decimal?                       @db.Decimal(5, 2)

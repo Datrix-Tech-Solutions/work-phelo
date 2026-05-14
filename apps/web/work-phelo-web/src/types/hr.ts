@@ -389,6 +389,7 @@ export interface LeaveBalance {
 
 // ── Payroll ───────────────────────────────────────────────
 export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+export type PayrollCountry = 'GH' | 'NG' | 'KE';
 
 export interface PayrollRun {
   id: string;
@@ -412,6 +413,8 @@ export interface PayrollRun {
   approvalNote?: string | null;
   returnToDraftNote?: string | null;
   paidAt?: string;
+  payrollCountry: PayrollCountry;
+  payrollCurrency: string;
   tier3Enabled: boolean;
   tier3Rate?: string | null;
   tier3SchemeName?: string | null;
@@ -481,6 +484,8 @@ export interface PayrollItem {
     year: number;
     status: PayrollRunStatus;
     paidAt?: string | null;
+    payrollCountry?: PayrollCountry;
+    payrollCurrency?: string;
     tier3Enabled: boolean;
     tier3Rate?: string | null;
     tier3SchemeName?: string | null;
@@ -519,6 +524,8 @@ export interface UpdatePayrollItemDto {
 }
 
 export interface PayrollSettings {
+  payrollCountry: PayrollCountry;
+  payrollCurrency: string;
   payrollTier2FundName: string | null;
   payrollTier3Enabled: boolean;
   payrollTier3Rate: number | null;
@@ -526,6 +533,8 @@ export interface PayrollSettings {
 }
 
 export interface UpdatePayrollSettingsDto {
+  payrollCountry?: PayrollCountry;
+  payrollCurrency?: string;
   payrollTier2FundName?: string;
   payrollTier3Enabled?: boolean;
   payrollTier3Rate?: number;

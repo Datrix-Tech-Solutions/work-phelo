@@ -5,8 +5,10 @@ import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
+import { usePayrollSettings } from '@/hooks';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
-import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
+import { calculatePayroll, AllowanceItem, Country } from '@/lib/payrollCalculations';
+import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
 import { Employee } from '@/types/hr';
 import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
@@ -59,6 +61,7 @@ function isTransportAllowance(item: AllowanceItem) {
 
 export function ManagePayrollTab() {
   const { data: empData, isLoading } = useAllEmployees();
+  const { data: payrollSettings } = usePayrollSettings();
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
@@ -74,6 +77,11 @@ export function ManagePayrollTab() {
   );
   const [runPanelOpen, setRunPanelOpen] = useState(false);
   const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
+  const payrollCountry = (payrollSettings?.payrollCountry ?? 'GH') as Country;
+  const payrollCurrency = resolvePayrollCurrency(payrollSettings?.payrollCurrency, payrollCountry);
+  const payrollLabels = getPayrollLabels(payrollCountry);
+  const money = (value: string | number | null | undefined) =>
+    formatPayrollMoney(value, payrollCurrency, payrollCountry);
 
   // Initialise deduction line items from employee profile data.
   const profileDeductionItems = useMemo(() => {
@@ -117,7 +125,7 @@ export function ManagePayrollTab() {
         basicSalary: basic,
         allowances,
         otherDeductions,
-        country: 'GH',
+        country: payrollCountry,
       });
       return {
         id: e.id,
@@ -137,7 +145,7 @@ export function ManagePayrollTab() {
         department: e.department?.name,
       };
     });
-  }, [empData, basicMap, allowancesMap, deductionItemsMap, profileDeductionItems]);
+  }, [empData, basicMap, allowancesMap, deductionItemsMap, payrollCountry, profileDeductionItems]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery) return payrollRows;
@@ -152,11 +160,10 @@ export function ManagePayrollTab() {
           gross: acc.gross + r.grossSalary,
           net: acc.net + r.netSalary,
           paye: acc.paye + r.paye,
-          ssnit:
-            acc.ssnit + (r.employeeStatutoryContrib - r.tier2Contribution) + r.tier1Contribution,
+          statutory: acc.statutory + r.employeeStatutoryContrib + r.tier1Contribution,
           employerCost: acc.employerCost + r.totalEmployerCost,
         }),
-        { gross: 0, net: 0, paye: 0, ssnit: 0, employerCost: 0 },
+        { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
       ),
     [filteredData],
   );
@@ -230,11 +237,7 @@ export function ManagePayrollTab() {
           onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
           className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.allowances > 0 ? (
-            `GHS ${row.allowances.toLocaleString()}`
-          ) : (
-            <span className="text-gray-400">Add</span>
-          )}
+          {row.allowances > 0 ? money(row.allowances) : <span className="text-gray-400">Add</span>}
           <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
@@ -247,11 +250,7 @@ export function ManagePayrollTab() {
           onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
           className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.deductions > 0 ? (
-            `GHS ${row.deductions.toLocaleString()}`
-          ) : (
-            <span className="text-gray-400">Add</span>
-          )}
+          {row.deductions > 0 ? money(row.deductions) : <span className="text-gray-400">Add</span>}
           <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
@@ -259,29 +258,28 @@ export function ManagePayrollTab() {
     {
       key: 'grossSalary',
       label: 'Gross',
-      render: (row) => `GHS ${row.grossSalary.toLocaleString()}`,
+      render: (row) => money(row.grossSalary),
     },
     {
       key: 'employeeSSNIT',
-      label: 'SSNIT (5.5%)',
-      render: (row) =>
-        `GHS ${(row.employeeStatutoryContrib - row.tier2Contribution).toLocaleString()}`,
+      label: payrollLabels.employeeLabel,
+      render: (row) => money(row.employeeStatutoryContrib),
     },
     {
       key: 'taxableIncome',
       label: 'Taxable Income',
-      render: (row) => `GHS ${row.taxableIncome.toLocaleString()}`,
+      render: (row) => money(row.taxableIncome),
     },
     {
       key: 'paye',
       label: 'PAYE',
-      render: (row) => `GHS ${row.paye.toLocaleString()}`,
+      render: (row) => money(row.paye),
     },
     {
       key: 'netSalary',
       label: 'Net Salary',
       render: (row) => (
-        <span className="font-semibold text-emerald-600">GHS {row.netSalary.toLocaleString()}</span>
+        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
       ),
     },
   ];
@@ -298,31 +296,31 @@ export function ManagePayrollTab() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
         <MetricCard
           title="Total Gross"
-          value={`GHS ${totals.gross.toLocaleString()}`}
+          value={money(totals.gross)}
           icon={TrendingUp}
           variant="highlight"
         />
         <MetricCard
           title="Total Net Pay"
-          value={`GHS ${totals.net.toLocaleString()}`}
+          value={money(totals.net)}
           icon={TrendingUp}
           variant="success"
         />
         <MetricCard
           title="Total PAYE"
-          value={`GHS ${totals.paye.toLocaleString()}`}
+          value={money(totals.paye)}
           icon={TrendingDown}
           variant="warning"
         />
         <MetricCard
-          title="Total SSNIT (18.5%)"
-          value={`GHS ${totals.ssnit.toLocaleString()}`}
+          title={payrollLabels.summaryLabel}
+          value={money(totals.statutory)}
           icon={TrendingUp}
           variant="highlight"
         />
         <MetricCard
           title="Employer Cost"
-          value={`GHS ${totals.employerCost.toLocaleString()}`}
+          value={money(totals.employerCost)}
           icon={TrendingUp}
           variant="highlight"
         />
@@ -371,6 +369,8 @@ export function ManagePayrollTab() {
         onClose={() => setRunPanelOpen(false)}
         totals={totals}
         overrides={overrides}
+        payrollCountry={payrollCountry}
+        payrollCurrency={payrollCurrency}
       />
 
       <PayrollDraftsPanel

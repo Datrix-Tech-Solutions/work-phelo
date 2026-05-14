@@ -12,7 +12,7 @@ import {
   PayslipCompanyInfo,
   PayslipEmployeeInfo,
 } from '@/lib/payrollUtils';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
 
 interface TaxReturnsPanelProps {
   isOpen: boolean;
@@ -50,11 +50,6 @@ export function TaxReturnsPanel({
   companyInfo,
   employeeInfo,
 }: TaxReturnsPanelProps) {
-  const { currency } = useTenantConfig();
-  const ghs = (value: string | number) => {
-    const n = typeof value === 'string' ? parseFloat(value) : value;
-    return `${currency} ${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
   const [startMonth, setStartMonth] = useState('1');
   const [startYear, setStartYear] = useState(String(currentYear));
   const [endMonth, setEndMonth] = useState(String(new Date().getMonth() + 1));
@@ -72,6 +67,10 @@ export function TaxReturnsPanel({
         return val >= startVal && val <= endVal;
       })
     : [];
+  const primaryRun = filtered[0]?.payrollRun;
+  const payrollLabels = getPayrollLabels(primaryRun?.payrollCountry);
+  const money = (value: string | number) =>
+    formatPayrollMoney(value, primaryRun?.payrollCurrency, primaryRun?.payrollCountry);
 
   return (
     <SidePanel
@@ -91,32 +90,32 @@ export function TaxReturnsPanel({
                 <div className="flex justify-between">
                   <span className="text-xs text-gray-400">Gross</span>
                   <span className="text-xs text-gray-700">
-                    {ghs(filtered.reduce((s, p) => s + parseFloat(p.grossSalary), 0))}
+                    {money(filtered.reduce((s, p) => s + parseFloat(p.grossSalary), 0))}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-xs text-gray-400">SSNIT</span>
+                  <span className="text-xs text-gray-400">{payrollLabels.tabLabel}</span>
                   <span className="text-xs text-gray-700">
-                    {ghs(filtered.reduce((s, p) => s + parseFloat(p.employeeSSNIT), 0))}
+                    {money(filtered.reduce((s, p) => s + parseFloat(p.employeeSSNIT), 0))}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs text-gray-400">Taxable</span>
                   <span className="text-xs text-gray-700">
-                    {ghs(filtered.reduce((s, p) => s + parseFloat(p.taxableIncome), 0))}
+                    {money(filtered.reduce((s, p) => s + parseFloat(p.taxableIncome), 0))}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs text-gray-400">PAYE</span>
                   <span className="text-xs text-gray-700">
-                    {ghs(filtered.reduce((s, p) => s + parseFloat(p.payeTax), 0))}
+                    {money(filtered.reduce((s, p) => s + parseFloat(p.payeTax), 0))}
                   </span>
                 </div>
               </div>
               <div className="flex justify-between pt-2 border-t border-gray-100">
                 <span className="text-xs font-semibold text-gray-600">Net</span>
                 <span className="text-sm font-bold text-gray-900">
-                  {ghs(filtered.reduce((s, p) => s + parseFloat(p.netSalary), 0))}
+                  {money(filtered.reduce((s, p) => s + parseFloat(p.netSalary), 0))}
                 </span>
               </div>
             </div>
@@ -202,6 +201,9 @@ export function TaxReturnsPanel({
             {filtered.map((p) => {
               const run = p.payrollRun!;
               const label = payrollMonthLabel(run.month, run.year);
+              const rowLabels = getPayrollLabels(run.payrollCountry);
+              const rowMoney = (value: string | number) =>
+                formatPayrollMoney(value, run.payrollCurrency, run.payrollCountry);
               return (
                 <div
                   key={p.id}
@@ -211,24 +213,24 @@ export function TaxReturnsPanel({
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-400">Gross</span>
-                      <span className="text-xs text-gray-700">{ghs(p.grossSalary)}</span>
+                      <span className="text-xs text-gray-700">{rowMoney(p.grossSalary)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-xs text-gray-400">SSNIT</span>
-                      <span className="text-xs text-gray-700">{ghs(p.employeeSSNIT)}</span>
+                      <span className="text-xs text-gray-400">{rowLabels.tabLabel}</span>
+                      <span className="text-xs text-gray-700">{rowMoney(p.employeeSSNIT)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-400">Taxable</span>
-                      <span className="text-xs text-gray-700">{ghs(p.taxableIncome)}</span>
+                      <span className="text-xs text-gray-700">{rowMoney(p.taxableIncome)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-xs text-gray-400">PAYE</span>
-                      <span className="text-xs text-gray-700">{ghs(p.payeTax)}</span>
+                      <span className="text-xs text-gray-700">{rowMoney(p.payeTax)}</span>
                     </div>
                   </div>
                   <div className="flex justify-between pt-1 border-t border-gray-100">
                     <span className="text-xs font-medium text-gray-500">Net</span>
-                    <span className="text-sm font-bold text-gray-900">{ghs(p.netSalary)}</span>
+                    <span className="text-sm font-bold text-gray-900">{rowMoney(p.netSalary)}</span>
                   </div>
                 </div>
               );
