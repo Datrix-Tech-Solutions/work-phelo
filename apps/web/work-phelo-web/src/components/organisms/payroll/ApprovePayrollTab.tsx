@@ -6,13 +6,14 @@ import { MoreVertical } from 'lucide-react';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun } from '@/types/hr';
 import { usePayrollRuns, useReturnPayrollToDraft } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { ApprovePayrollPanel } from './ApprovePayrollPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
 
 function monthLabel(run: PayrollRun) {
   return payrollMonthLabel(run.month, run.year);
@@ -108,27 +109,32 @@ export function ApprovePayrollTab() {
     {
       key: 'totalGross',
       label: 'Total Gross',
-      render: (row) => fmt(row.totalGross),
+      render: (row) => formatPayrollMoney(row.totalGross, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalNet',
       label: 'Total Net Pay',
-      render: (row) => fmt(row.totalNet),
+      render: (row) => formatPayrollMoney(row.totalNet, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalPAYE',
       label: 'Total PAYE',
-      render: (row) => fmt(row.totalPAYE),
+      render: (row) => formatPayrollMoney(row.totalPAYE, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalSSNIT',
-      label: 'Total SSNIT',
-      render: (row) => fmt(row.totalSSNIT),
+      label: 'Statutory',
+      render: (row) => (
+        <span title={getPayrollLabels(row.payrollCountry).totalLabel}>
+          {formatPayrollMoney(row.totalSSNIT, row.payrollCurrency, row.payrollCountry)}
+        </span>
+      ),
     },
     {
       key: 'totalEmployerCost',
       label: 'Total Employer Cost',
-      render: (row) => fmt(row.totalEmployerCost),
+      render: (row) =>
+        formatPayrollMoney(row.totalEmployerCost, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'actions',

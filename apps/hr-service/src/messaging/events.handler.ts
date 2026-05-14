@@ -15,6 +15,10 @@ import {
 import { LeaveService } from '../leave/leave.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  normalizePayrollCountry,
+  normalizePayrollCurrency,
+} from '../common/payroll-calculator.helper';
+import {
   EventPatterns,
   WithMeta,
   TenantApprovedEvent,
@@ -137,7 +141,11 @@ export class EventsHandler {
     adminEmail: string,
     adminUserId?: string,
     country?: string,
+    currency?: string,
   ) {
+    const payrollCountry = normalizePayrollCountry(country);
+    const payrollCurrency = normalizePayrollCurrency(currency, payrollCountry);
+
     await Promise.all([
       this.leaveService.seedDefaultLeaveTypes(tenantId),
       this.leaveService.seedPublicHolidaysForTenant(tenantId, country),
@@ -147,9 +155,15 @@ export class EventsHandler {
           tenantId,
           adminEmail,
           adminUserId,
-          country: country ?? 'Ghana',
+          payrollCountry,
+          payrollCurrency,
         },
-        update: { adminEmail, adminUserId, ...(country ? { country } : {}) },
+        update: {
+          adminEmail,
+          adminUserId,
+          payrollCountry,
+          payrollCurrency,
+        },
       }),
     ]);
 
@@ -182,7 +196,8 @@ export class EventsHandler {
     @Payload() data: WithMeta<TenantApprovedEvent>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, adminEmail, adminUserId, country, _meta } = data;
+    const { tenantId, adminEmail, adminUserId, country, currency, _meta } =
+      data;
     this.logger.log(
       `[hr.tenant_approved] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
     );
@@ -192,6 +207,7 @@ export class EventsHandler {
         adminEmail,
         adminUserId,
         country,
+        currency,
       );
       this.logger.log(
         `[hr.tenant_approved] Tenant workspace provisioned | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
@@ -245,7 +261,8 @@ export class EventsHandler {
     @Payload() data: WithMeta<ProvisionTenantWorkspaceCommand>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, adminEmail, adminUserId, country, _meta } = data;
+    const { tenantId, adminEmail, adminUserId, country, currency, _meta } =
+      data;
     this.logger.log(
       `[hr.provision_tenant_workspace] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
     );
@@ -255,6 +272,7 @@ export class EventsHandler {
         adminEmail,
         adminUserId,
         country,
+        currency,
       );
       this.ack(context);
       return result;

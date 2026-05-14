@@ -7,7 +7,8 @@ import { Button } from '@/components/atoms/Button';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import type { AllowanceItem } from '@/lib/payrollCalculations';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { usePayrollSettings } from '@/hooks';
+import { formatPayrollMoney } from '@/lib/payrollDisplay';
 
 const COMMON_ALLOWANCES: SearchSelectOption[] = [
   { value: 'Transport Allowance', label: 'Transport Allowance' },
@@ -66,7 +67,7 @@ function PayrollItemsForm({
   items,
   onSave,
 }: Omit<Props, 'isOpen' | 'type'>) {
-  const { currency } = useTenantConfig();
+  const { data: payrollSettings } = usePayrollSettings();
   const [draft, setDraft] = useState<DraftItem[]>(
     items.length > 0 ? items.map(itemToDraft) : [emptyDraft()],
   );
@@ -161,11 +162,11 @@ function PayrollItemsForm({
         <div className="flex justify-between items-center px-4 py-3 bg-gray-50 rounded-xl border border-gray-100 mt-2">
           <span className="text-sm font-medium text-gray-600">Total Allowances</span>
           <span className="text-sm font-semibold text-gray-900">
-            {currency}{' '}
-            {total.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            })}
+            {formatPayrollMoney(
+              total,
+              payrollSettings?.payrollCurrency,
+              payrollSettings?.payrollCountry,
+            )}
           </span>
         </div>
       )}

@@ -12,13 +12,11 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { PayrollItem } from '@/types/hr';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
-
-function fmt(value: string | number | null | undefined) {
-  if (value == null) return '—';
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(n)) return '—';
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import {
+  formatPayrollMoney,
+  getPayrollLabels,
+  normalizePayrollCountry,
+} from '@/lib/payrollDisplay';
 
 function totalAllowances(row: PayrollItem): number {
   if (row.allowanceItems?.length) {
@@ -33,67 +31,6 @@ function totalDeductions(row: PayrollItem): number {
   }
   return parseFloat(row.otherDeductions);
 }
-
-const columns: Column<PayrollItem>[] = [
-  {
-    key: 'employee',
-    label: 'Employee',
-    width: '2fr',
-    render: (row) => (
-      <div>
-        <p className="font-medium text-gray-900">
-          {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
-        </p>
-        {row.employee?.jobTitle && <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>}
-      </div>
-    ),
-  },
-  {
-    key: 'basicSalary',
-    label: 'Basic Salary',
-    render: (row) => fmt(row.basicSalary),
-  },
-  {
-    key: 'totalAllowances',
-    label: 'Allowances',
-    render: (row) => fmt(totalAllowances(row)),
-  },
-  {
-    key: 'otherDeductions',
-    label: 'Deductions',
-    render: (row) => fmt(totalDeductions(row)),
-  },
-  {
-    key: 'grossSalary',
-    label: 'Gross',
-    render: (row) => fmt(row.grossSalary),
-  },
-  {
-    key: 'employeeSSNIT',
-    label: 'Employee SSNIT (5.5%)',
-    render: (row) => fmt(row.employeeSSNIT),
-  },
-  {
-    key: 'tier1Contribution',
-    label: 'Tier 1 (0.5%)',
-    render: (row) => fmt(row.tier1Contribution),
-  },
-  {
-    key: 'tier2Contribution',
-    label: 'Tier 2 (5%)',
-    render: (row) => fmt(row.tier2Contribution),
-  },
-  {
-    key: 'payeTax',
-    label: 'PAYE',
-    render: (row) => fmt(row.payeTax),
-  },
-  {
-    key: 'netSalary',
-    label: 'Net Salary',
-    render: (row) => <span className="font-semibold text-emerald-600">{fmt(row.netSalary)}</span>,
-  },
-];
 
 export default function ApprovePayrollDetailPage({
   params,
@@ -116,6 +53,59 @@ export default function ApprovePayrollDetailPage({
   const isPending = isApproving || isRejecting;
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
   const backHref = `/${tenantSlug}/hr/payroll?tab=approve`;
+  const payrollLabels = getPayrollLabels(run?.payrollCountry);
+  const money = (value: string | number | null | undefined) =>
+    formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
+  const showGhanaTiers = normalizePayrollCountry(run?.payrollCountry) === 'GH';
+
+  const columns: Column<PayrollItem>[] = [
+    {
+      key: 'employee',
+      label: 'Employee',
+      width: '2fr',
+      render: (row) => (
+        <div>
+          <p className="font-medium text-gray-900">
+            {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
+          </p>
+          {row.employee?.jobTitle && (
+            <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>
+          )}
+        </div>
+      ),
+    },
+    { key: 'basicSalary', label: 'Basic Salary', render: (row) => money(row.basicSalary) },
+    { key: 'totalAllowances', label: 'Allowances', render: (row) => money(totalAllowances(row)) },
+    { key: 'otherDeductions', label: 'Deductions', render: (row) => money(totalDeductions(row)) },
+    { key: 'grossSalary', label: 'Gross', render: (row) => money(row.grossSalary) },
+    {
+      key: 'employeeSSNIT',
+      label: payrollLabels.employeeLabel,
+      render: (row) => money(row.employeeSSNIT),
+    },
+    ...(showGhanaTiers
+      ? [
+          {
+            key: 'tier1Contribution',
+            label: 'Tier 1',
+            render: (row: PayrollItem) => money(row.tier1Contribution),
+          },
+          {
+            key: 'tier2Contribution',
+            label: 'Tier 2',
+            render: (row: PayrollItem) => money(row.tier2Contribution),
+          },
+        ]
+      : []),
+    { key: 'payeTax', label: 'PAYE', render: (row) => money(row.payeTax) },
+    {
+      key: 'netSalary',
+      label: 'Net Salary',
+      render: (row) => (
+        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
+      ),
+    },
+  ];
 
   const handleApprove = async () => {
     try {

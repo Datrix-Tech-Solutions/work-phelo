@@ -6,10 +6,11 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { PayrollRun } from '@/types/hr';
 import { useApprovePayroll } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { formatPayrollMoney } from '@/lib/payrollDisplay';
 
 interface Props {
   run: PayrollRun | null;
@@ -29,6 +30,8 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
 
   const isOpen = run !== null;
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '';
+  const money = (value: string | number) =>
+    formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
 
   const handleClose = () => {
     setShowConfirm(false);
@@ -102,16 +105,16 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
               <div className="grid grid-cols-3 gap-0 divide-x divide-gray-200">
                 <div className="flex flex-col gap-1 pr-4">
                   <p className="text-xs text-gray-500">Total Gross</p>
-                  <p className="text-sm font-semibold text-gray-900">{fmt(run.totalGross)}</p>
+                  <p className="text-sm font-semibold text-gray-900">{money(run.totalGross)}</p>
                 </div>
                 <div className="flex flex-col gap-1 px-4">
                   <p className="text-xs text-gray-500">Total PAYE</p>
-                  <p className="text-sm font-semibold text-gray-900">{fmt(run.totalPAYE)}</p>
+                  <p className="text-sm font-semibold text-gray-900">{money(run.totalPAYE)}</p>
                 </div>
                 <div className="flex flex-col gap-1 pl-4">
                   <p className="text-xs text-gray-500">Employer Cost</p>
                   <p className="text-sm font-semibold text-orange-500">
-                    {fmt(run.totalEmployerCost)}
+                    {money(run.totalEmployerCost)}
                   </p>
                 </div>
               </div>
@@ -147,7 +150,7 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
           distributed to all active employees and the payroll will be marked as approved. The total
           employer cost for this period is{' '}
           <span className="font-semibold text-orange-500">
-            {run ? fmt(run.totalEmployerCost) : '—'}
+            {run ? money(run.totalEmployerCost) : '—'}
           </span>
           . This action cannot be undone once approved.
         </p>

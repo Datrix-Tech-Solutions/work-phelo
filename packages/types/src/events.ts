@@ -75,6 +75,7 @@ export interface TenantApprovedEvent {
   adminEmail: string;
   adminUserId?: string;
   country?: string;
+  currency?: string;
 }
 
 export interface EmployeeActivatedEvent {
@@ -88,6 +89,7 @@ export interface ProvisionTenantWorkspaceCommand {
   adminEmail: string;
   adminUserId?: string;
   country?: string;
+  currency?: string;
 }
 
 export interface ProvisionTenantWorkspaceResult {

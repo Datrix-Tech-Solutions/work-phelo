@@ -5,8 +5,10 @@ import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
+import { usePayrollSettings } from '@/hooks';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
-import { calculatePayroll, AllowanceItem, Country, COUNTRY_META } from '@/lib/payrollCalculations';
+import { calculatePayroll, AllowanceItem, Country } from '@/lib/payrollCalculations';
+import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
 import { Employee } from '@/types/hr';
 import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
@@ -74,10 +76,7 @@ function isTransportAllowance(item: AllowanceItem) {
 
 export function ManagePayrollTab() {
   const { data: empData, isLoading } = useAllEmployees();
-  const { country, currency } = useTenantConfig();
-  const countryCode = toCountryCode(country);
-  const meta = COUNTRY_META[countryCode];
-
+  const { data: payrollSettings } = usePayrollSettings();
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
@@ -93,6 +92,12 @@ export function ManagePayrollTab() {
   );
   const [runPanelOpen, setRunPanelOpen] = useState(false);
   const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
+  const payrollCountry = (payrollSettings?.payrollCountry ?? 'GH') as Country;
+  const payrollCurrency = resolvePayrollCurrency(payrollSettings?.payrollCurrency, payrollCountry);
+  const payrollLabels = getPayrollLabels(payrollCountry);
+  const money = (value: string | number | null | undefined) =>
+    formatPayrollMoney(value, payrollCurrency, payrollCountry);
+  const { currency } = useTenantConfig();
 
   const profileDeductionItems = useMemo(() => {
     const map: Record<string, DeductionLineItem[]> = {};
@@ -135,7 +140,7 @@ export function ManagePayrollTab() {
         basicSalary: basic,
         allowances,
         otherDeductions,
-        country: countryCode,
+        country: payrollCountry,
       });
       return {
         id: e.id,
@@ -155,7 +160,7 @@ export function ManagePayrollTab() {
         department: e.department?.name,
       };
     });
-  }, [empData, basicMap, allowancesMap, deductionItemsMap, profileDeductionItems, countryCode]);
+  }, [empData, basicMap, allowancesMap, deductionItemsMap, payrollCountry, profileDeductionItems]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery) return payrollRows;
@@ -217,7 +222,7 @@ export function ManagePayrollTab() {
 
   const fmt = (n: number) => `${currency} ${n.toLocaleString()}`;
 
-  const statutoryColumnLabel = `${meta.statutoryLabel} (${meta.employeeRate})`;
+  const statutoryColumnLabel = payrollLabels.employeeLabel;
 
   const columns: Column<PayrollRow>[] = [
     {
@@ -251,7 +256,7 @@ export function ManagePayrollTab() {
           onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
           className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.allowances > 0 ? fmt(row.allowances) : <span className="text-gray-400">Add</span>}
+          {row.allowances > 0 ? money(row.allowances) : <span className="text-gray-400">Add</span>}
           <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
@@ -264,7 +269,7 @@ export function ManagePayrollTab() {
           onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
           className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.deductions > 0 ? fmt(row.deductions) : <span className="text-gray-400">Add</span>}
+          {row.deductions > 0 ? money(row.deductions) : <span className="text-gray-400">Add</span>}
           <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
@@ -272,27 +277,29 @@ export function ManagePayrollTab() {
     {
       key: 'grossSalary',
       label: 'Gross',
-      render: (row) => fmt(row.grossSalary),
+      render: (row) => money(row.grossSalary),
     },
     {
-      key: 'employeeStatutoryContrib',
-      label: statutoryColumnLabel,
-      render: (row) => fmt(row.employeeStatutoryContrib - row.tier2Contribution),
+      key: 'employeeSSNIT',
+      label: payrollLabels.employeeLabel,
+      render: (row) => money(row.employeeStatutoryContrib),
     },
     {
       key: 'taxableIncome',
       label: 'Taxable Income',
-      render: (row) => fmt(row.taxableIncome),
+      render: (row) => money(row.taxableIncome),
     },
     {
       key: 'paye',
       label: 'PAYE',
-      render: (row) => fmt(row.paye),
+      render: (row) => money(row.paye),
     },
     {
       key: 'netSalary',
       label: 'Net Salary',
-      render: (row) => <span className="font-semibold text-emerald-600">{fmt(row.netSalary)}</span>,
+      render: (row) => (
+        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
+      ),
     },
   ];
 
@@ -308,31 +315,31 @@ export function ManagePayrollTab() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
         <MetricCard
           title="Total Gross"
-          value={fmt(totals.gross)}
+          value={money(totals.gross)}
           icon={TrendingUp}
           variant="highlight"
         />
         <MetricCard
           title="Total Net Pay"
-          value={fmt(totals.net)}
+          value={money(totals.net)}
           icon={TrendingUp}
           variant="success"
         />
         <MetricCard
           title="Total PAYE"
-          value={fmt(totals.paye)}
+          value={money(totals.paye)}
           icon={TrendingDown}
           variant="warning"
         />
         <MetricCard
-          title={`Total ${meta.statutoryLabel}`}
-          value={fmt(totals.statutory)}
+          title={payrollLabels.summaryLabel}
+          value={money(totals.statutory)}
           icon={TrendingUp}
           variant="highlight"
         />
         <MetricCard
           title="Employer Cost"
-          value={fmt(totals.employerCost)}
+          value={money(totals.employerCost)}
           icon={TrendingUp}
           variant="highlight"
         />
@@ -381,6 +388,8 @@ export function ManagePayrollTab() {
         onClose={() => setRunPanelOpen(false)}
         totals={totals}
         overrides={overrides}
+        payrollCountry={payrollCountry}
+        payrollCurrency={payrollCurrency}
       />
 
       <PayrollDraftsPanel

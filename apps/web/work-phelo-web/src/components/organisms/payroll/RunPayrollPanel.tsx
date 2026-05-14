@@ -9,6 +9,7 @@ import { useRunPayroll, useSubmitPayroll, useUpdatePayrollItem } from '@/hooks';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { formatPayrollMoney } from '@/lib/payrollDisplay';
 
 const MONTHS = [
   { value: '1', label: 'January' },
@@ -59,9 +60,18 @@ interface Props {
   onClose: () => void;
   totals: Totals;
   overrides: Record<string, EmployeeOverride>;
+  payrollCountry?: string;
+  payrollCurrency?: string;
 }
 
-export function RunPayrollPanel({ isOpen, onClose, totals, overrides }: Props) {
+export function RunPayrollPanel({
+  isOpen,
+  onClose,
+  totals,
+  overrides,
+  payrollCountry,
+  payrollCurrency,
+}: Props) {
   const toast = useToast();
   const { currency } = useTenantConfig();
   const fmt = (n: number) =>
@@ -77,6 +87,7 @@ export function RunPayrollPanel({ isOpen, onClose, totals, overrides }: Props) {
   const isPending = isRunning || isUpdating || isSubmitting;
 
   const selectedMonthLabel = MONTHS.find((m) => m.value === month)?.label ?? '';
+  const money = (value: number) => formatPayrollMoney(value, payrollCurrency, payrollCountry);
 
   const handleClose = () => {
     setShowConfirm(false);
@@ -151,15 +162,17 @@ export function RunPayrollPanel({ isOpen, onClose, totals, overrides }: Props) {
             <div className="grid grid-cols-3 gap-0 divide-x divide-gray-200">
               <div className="flex flex-col gap-1 pr-4">
                 <p className="text-xs text-gray-500">Total Gross</p>
-                <p className="text-sm font-semibold text-gray-900">{fmt(totals.gross)}</p>
+                <p className="text-sm font-semibold text-gray-900">{money(totals.gross)}</p>
               </div>
               <div className="flex flex-col gap-1 px-4">
                 <p className="text-xs text-gray-500">Total PAYE</p>
-                <p className="text-sm font-semibold text-gray-900">{fmt(totals.paye)}</p>
+                <p className="text-sm font-semibold text-gray-900">{money(totals.paye)}</p>
               </div>
               <div className="flex flex-col gap-1 pl-4">
                 <p className="text-xs text-gray-500">Employer Cost</p>
-                <p className="text-sm font-semibold text-orange-500">{fmt(totals.employerCost)}</p>
+                <p className="text-sm font-semibold text-orange-500">
+                  {money(totals.employerCost)}
+                </p>
               </div>
             </div>
           </div>
@@ -189,7 +202,7 @@ export function RunPayrollPanel({ isOpen, onClose, totals, overrides }: Props) {
           </span>
           . Payslips will be calculated for all active employees and submitted for approval. The
           total employer cost for this period is{' '}
-          <span className="font-semibold text-orange-500">{fmt(totals.employerCost)}</span>. This
+          <span className="font-semibold text-orange-500">{money(totals.employerCost)}</span>. This
           action cannot be undone once submitted.
         </p>
       </Modal>

@@ -8,6 +8,7 @@ import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun, PayrollRunDetail } from '@/types/hr';
 import { usePayrollRuns } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import {
   payrollMonthLabel,
   downloadPayrollBankFormat,
@@ -16,7 +17,7 @@ import {
 } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
 
 function DownloadMenu({ run }: { run: PayrollRun }) {
   const isPaid = run.status === 'PAID';
@@ -156,27 +157,32 @@ export function PayrollHistoryTab() {
     {
       key: 'totalGross',
       label: 'Total Gross',
-      render: (row) => fmt(row.totalGross),
+      render: (row) => formatPayrollMoney(row.totalGross, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalNet',
       label: 'Total Net Pay',
-      render: (row) => fmt(row.totalNet),
+      render: (row) => formatPayrollMoney(row.totalNet, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalPAYE',
       label: 'Total PAYE',
-      render: (row) => fmt(row.totalPAYE),
+      render: (row) => formatPayrollMoney(row.totalPAYE, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalSSNIT',
-      label: 'Total SSNIT',
-      render: (row) => fmt(row.totalSSNIT),
+      label: 'Statutory',
+      render: (row) => (
+        <span title={getPayrollLabels(row.payrollCountry).totalLabel}>
+          {formatPayrollMoney(row.totalSSNIT, row.payrollCurrency, row.payrollCountry)}
+        </span>
+      ),
     },
     {
       key: 'totalEmployerCost',
       label: 'Total Employer Cost',
-      render: (row) => fmt(row.totalEmployerCost),
+      render: (row) =>
+        formatPayrollMoney(row.totalEmployerCost, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'status',

@@ -12,8 +12,15 @@ import { extractError } from '@/lib/extractError';
 import { inputClass } from '@/lib/utils';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import {
+  PAYROLL_COUNTRY_OPTIONS,
+  PayrollCountry,
+  resolvePayrollCurrency,
+} from '@/lib/payrollDisplay';
 
 interface FinancesForm {
+  payrollCountry: PayrollCountry;
+  payrollCurrency: string;
   payrollTier2FundName: string;
   payrollTier3Enabled: boolean;
   payrollTier3Rate: string;
@@ -41,9 +48,12 @@ export default function FinancesPage() {
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { isDirty, errors },
   } = useForm<FinancesForm>({
     defaultValues: {
+      payrollCountry: 'GH',
+      payrollCurrency: 'GHS',
       payrollTier2FundName: '',
       payrollTier3Enabled: false,
       payrollTier3Rate: '',
@@ -54,6 +64,8 @@ export default function FinancesPage() {
   useEffect(() => {
     if (settings) {
       reset({
+        payrollCountry: settings.payrollCountry,
+        payrollCurrency: settings.payrollCurrency,
         payrollTier2FundName: settings.payrollTier2FundName ?? '',
         payrollTier3Enabled: settings.payrollTier3Enabled,
         payrollTier3Rate:
@@ -63,7 +75,9 @@ export default function FinancesPage() {
     }
   }, [settings, reset]);
 
+  const payrollCountry = useWatch({ control, name: 'payrollCountry' });
   const tier3Enabled = useWatch({ control, name: 'payrollTier3Enabled' });
+  const isGhanaPayroll = payrollCountry === 'GH';
 
   const onSubmit = (data: FinancesForm) => {
     const rate =
@@ -73,6 +87,9 @@ export default function FinancesPage() {
 
     updateSettings(
       {
+        payrollCountry: data.payrollCountry,
+        payrollCurrency:
+          data.payrollCurrency.trim() || resolvePayrollCurrency(null, data.payrollCountry),
         payrollTier2FundName: data.payrollTier2FundName.trim() || undefined,
         payrollTier3Enabled: data.payrollTier3Enabled,
         payrollTier3Rate: rate,
@@ -93,14 +110,68 @@ export default function FinancesPage() {
     <div className="flex flex-col gap-10">
       {/* Statutory Contributions */}
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 max-w-xl">
-        <FormSection title="Tier 2 — Provident Fund">
+        <FormSection title="Payroll Country & Currency">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-bold text-gray-900">Payroll Country</label>
+              <select
+                {...register('payrollCountry')}
+                disabled={!canEditPayrollSettings}
+                onChange={(event) => {
+                  const country = event.target.value as PayrollCountry;
+                  setValue('payrollCountry', country, { shouldDirty: true });
+                  setValue('payrollCurrency', resolvePayrollCurrency(null, country), {
+                    shouldDirty: true,
+                  });
+                }}
+                className={inputClass(undefined)}
+              >
+                {PAYROLL_COUNTRY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-bold text-gray-900">Payroll Currency</label>
+              <input
+                type="text"
+                maxLength={3}
+                placeholder={resolvePayrollCurrency(null, payrollCountry)}
+                {...register('payrollCurrency', {
+                  required: 'Payroll currency is required',
+                  setValueAs: (value) =>
+                    String(value ?? '')
+                      .trim()
+                      .toUpperCase(),
+                })}
+                disabled={!canEditPayrollSettings}
+                className={inputClass(errors.payrollCurrency?.message)}
+              />
+              {errors.payrollCurrency && (
+                <p className="text-xs text-red-500">{errors.payrollCurrency.message}</p>
+              )}
+            </div>
+          </div>
+
+          <p className="text-xs text-gray-400 -mt-2">
+            Payroll calculations use this country for statutory deductions and PAYE. Currency is
+            used for payroll displays, payslips, and exports.
+          </p>
+        </FormSection>
+
+        <FormSection title={isGhanaPayroll ? 'Tier 2 — Provident Fund' : 'Statutory Pension'}>
           <FormField
             label="Fund Name"
             registration={register('payrollTier2FundName')}
-            placeholder="e.g. SSNIT Provident Fund"
+            placeholder={isGhanaPayroll ? 'e.g. SSNIT Provident Fund' : 'e.g. Pension provider'}
           />
           <p className="text-xs text-gray-400 -mt-2">
-            The name of your Tier 2 pension fund manager. Shown on payslips and SSNIT reports.
+            {isGhanaPayroll
+              ? 'The name of your Tier 2 pension fund manager. Shown on payslips and statutory reports.'
+              : 'Country-specific employee and employer statutory pension amounts are calculated automatically.'}
           </p>
         </FormSection>
 

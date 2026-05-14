@@ -7,32 +7,9 @@ import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import Decimal from 'decimal.js';
 import {
-  calculateMonthlyPAYE,
-  calculatePayrollGross,
-  calculatePayrollNetIncome,
-  calculateSSNIT,
-  calculateTier1Employee,
-  calculateTier2,
-  calculateTaxableIncome,
-  calculateTier3Contribution,
-  calculateTotalPayrollDeductions,
-} from '../common/ghana-payroll.helper';
-import {
-  calculatePension_NG,
-  calculateMonthlyPAYE_NG,
-  calculatePayrollGross_NG,
-  calculateTaxableIncome_NG,
-  calculatePayrollNetIncome_NG,
-  calculateTotalPayrollDeductions_NG,
-} from '../common/nigeria-payroll.helper';
-import {
-  calculateNSSF_KE,
-  calculateMonthlyPAYE_KE,
-  calculatePayrollGross_KE,
-  calculateTaxableIncome_KE,
-  calculatePayrollNetIncome_KE,
-  calculateTotalPayrollDeductions_KE,
-} from '../common/kenya-payroll.helper';
+  calculatePayrollForCountry,
+  defaultPayrollCurrency,
+} from '../common/payroll-calculator.helper';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
 import { PayrollDecisionDto } from './dto/payroll-decision.dto';
@@ -45,11 +22,14 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import {
   EmploymentStatus,
+  PayrollCountry,
   PayrollItem,
   Prisma,
 } from '../../prisma/generated/client';
 
 type PayrollSettingsSnapshot = {
+  payrollCountry: PayrollCountry;
+  payrollCurrency: string;
   tier3Enabled: boolean;
   tier3Rate: string | null;
   tier3SchemeName: string | null;
@@ -136,21 +116,26 @@ export class PayrollService {
     const config = await this.prisma.tenantConfig.findUnique({
       where: { tenantId },
       select: {
-        country: true,
+        payrollCountry: true,
+        payrollCurrency: true,
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
       },
     });
 
+    const payrollCountry = config?.payrollCountry ?? PayrollCountry.GH;
     return {
-      country: config?.country ?? 'Ghana',
+      payrollCountry,
+      payrollCurrency:
+        config?.payrollCurrency ?? defaultPayrollCurrency(payrollCountry),
       tier3Enabled: config?.payrollTier3Enabled ?? false,
       tier3Rate:
         config?.payrollTier3Rate != null
           ? config.payrollTier3Rate.toString()
           : null,
       tier3SchemeName: config?.payrollTier3SchemeName ?? null,
+      country: payrollCountry,
     };
   }
 
@@ -158,146 +143,7 @@ export class PayrollService {
     values: EditablePayrollValues,
     settings: PayrollSettingsSnapshot,
   ): CalculatedPayrollValues {
-    if (settings.country === 'Nigeria') {
-      return this.calculatePayrollItemValues_NG(values, settings);
-    }
-    if (settings.country === 'Kenya') {
-      return this.calculatePayrollItemValues_KE(values, settings);
-    }
-    return this.calculatePayrollItemValues_GH(values, settings);
-  }
-
-  private calculatePayrollItemValues_GH(
-    values: EditablePayrollValues,
-    settings: PayrollSettingsSnapshot,
-  ): CalculatedPayrollValues {
-    const grossSalary = calculatePayrollGross(
-      values.basicSalary,
-      values.totalAllowances,
-      values.transportAmount,
-      values.otherDeductions,
-    );
-    const { employeeSSNIT, employerSSNIT } = calculateSSNIT(values.basicSalary);
-    const tier1Contribution = calculateTier1Employee(values.basicSalary);
-    const tier2Contribution = calculateTier2(values.basicSalary);
-    const tier3Employee =
-      settings.tier3Enabled && settings.tier3Rate
-        ? calculateTier3Contribution(values.basicSalary, settings.tier3Rate)
-        : '0';
-    const taxableIncome = calculateTaxableIncome(
-      grossSalary,
-      employeeSSNIT,
-      values.transportAmount,
-      tier3Employee,
-    );
-    const payeTax = calculateMonthlyPAYE(taxableIncome);
-    const totalDeductions = calculateTotalPayrollDeductions(
-      values.otherDeductions,
-      employeeSSNIT,
-      payeTax,
-      tier3Employee,
-    );
-    const netSalary = calculatePayrollNetIncome(taxableIncome, payeTax);
-
-    return {
-      ...values,
-      overtimePay: '0',
-      bonus: '0',
-      thirteenthMonth: '0',
-      grossSalary,
-      employeeSSNIT,
-      employerSSNIT,
-      tier1Contribution,
-      tier2Contribution,
-      tier3Employee,
-      taxableIncome,
-      payeTax,
-      totalDeductions,
-      netSalary,
-    };
-  }
-
-  private calculatePayrollItemValues_NG(
-    values: EditablePayrollValues,
-    _settings: PayrollSettingsSnapshot,
-  ): CalculatedPayrollValues {
-    const grossSalary = calculatePayrollGross_NG(
-      values.basicSalary,
-      values.totalAllowances,
-      values.transportAmount,
-      values.otherDeductions,
-    );
-    const { employeePension, employerPension } = calculatePension_NG(
-      values.basicSalary,
-    );
-    const taxableIncome = calculateTaxableIncome_NG(
-      grossSalary,
-      employeePension,
-    );
-    const payeTax = calculateMonthlyPAYE_NG(taxableIncome, grossSalary);
-    const totalDeductions = calculateTotalPayrollDeductions_NG(
-      values.otherDeductions,
-      employeePension,
-      '0',
-      payeTax,
-    );
-    const netSalary = calculatePayrollNetIncome_NG(taxableIncome, payeTax);
-
-    return {
-      ...values,
-      overtimePay: '0',
-      bonus: '0',
-      thirteenthMonth: '0',
-      grossSalary,
-      employeeSSNIT: employeePension,
-      employerSSNIT: employerPension,
-      tier1Contribution: '0',
-      tier2Contribution: '0',
-      tier3Employee: '0',
-      taxableIncome,
-      payeTax,
-      totalDeductions,
-      netSalary,
-    };
-  }
-
-  private calculatePayrollItemValues_KE(
-    values: EditablePayrollValues,
-    _settings: PayrollSettingsSnapshot,
-  ): CalculatedPayrollValues {
-    const grossSalary = calculatePayrollGross_KE(
-      values.basicSalary,
-      values.totalAllowances,
-      values.transportAmount,
-      values.otherDeductions,
-    );
-    const { employeeNSSF, employerNSSF } = calculateNSSF_KE(values.basicSalary);
-    const taxableIncome = calculateTaxableIncome_KE(grossSalary, employeeNSSF);
-    const payeTax = calculateMonthlyPAYE_KE(taxableIncome);
-    const totalDeductions = calculateTotalPayrollDeductions_KE(
-      values.otherDeductions,
-      employeeNSSF,
-      '0',
-      payeTax,
-    );
-    const netSalary = calculatePayrollNetIncome_KE(taxableIncome, payeTax);
-
-    return {
-      ...values,
-      overtimePay: '0',
-      bonus: '0',
-      thirteenthMonth: '0',
-      grossSalary,
-      employeeSSNIT: employeeNSSF,
-      employerSSNIT: employerNSSF,
-      tier1Contribution: '0',
-      tier2Contribution: '0',
-      tier3Employee: '0',
-      taxableIncome,
-      payeTax,
-      totalDeductions,
-      netSalary,
-    };
+    return calculatePayrollForCountry(values, settings);
   }
 
   private isTransportAllowanceLine(item: {
@@ -824,6 +670,8 @@ export class PayrollService {
         approvedAt: null,
         paidAt: null,
         notes: dto.notes,
+        payrollCountry: settings.payrollCountry,
+        payrollCurrency: settings.payrollCurrency,
         tier3Enabled: settings.tier3Enabled,
         tier3Rate: settings.tier3Rate,
         tier3SchemeName: settings.tier3SchemeName,
@@ -865,6 +713,8 @@ export class PayrollService {
         totalEmployerCost: totals.totalEmployerCost.toString(),
         runBy,
         notes: dto.notes,
+        payrollCountry: settings.payrollCountry,
+        payrollCurrency: settings.payrollCurrency,
         tier3Enabled: settings.tier3Enabled,
         tier3Rate: settings.tier3Rate,
         tier3SchemeName: settings.tier3SchemeName,
@@ -924,10 +774,12 @@ export class PayrollService {
 
     const tenantSettings = await this.getPayrollSettingsSnapshot(tenantId);
     const settings: PayrollSettingsSnapshot = {
-      country: tenantSettings.country,
+      payrollCountry: run.payrollCountry,
+      payrollCurrency: run.payrollCurrency,
       tier3Enabled: run.tier3Enabled,
       tier3Rate: run.tier3Rate?.toString() ?? null,
       tier3SchemeName: run.tier3SchemeName,
+      country: run.payrollCountry,
     };
     const allowanceItems =
       dto.allowanceItems != null
