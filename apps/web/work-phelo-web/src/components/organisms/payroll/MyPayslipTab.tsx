@@ -15,11 +15,12 @@ import {
 } from '@/lib/payrollUtils';
 import { useAuthStore } from '@/store/auth.store';
 import { useTenant, useMyProfile } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { TaxReturnsPanel } from './TaxReturnsPanel';
 
-function ghs(value: string | number) {
+function fmtCurrency(currency: string, value: string | number) {
   const n = typeof value === 'string' ? parseFloat(value) : value;
-  return `GHS ${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${currency} ${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function payslipLabel(p: PayrollItem) {
@@ -102,6 +103,8 @@ export function MyPayslipTab() {
   const user = useAuthStore((s) => s.user);
   const { data: tenantData } = useTenant(user?.tenantId ?? '');
   const { data: myProfile } = useMyProfile();
+  const { currency } = useTenantConfig();
+  const ghs = (value: string | number) => fmtCurrency(currency, value);
   const employeeBranch = myProfile?.branch;
 
   const companyInfo: PayslipCompanyInfo = {

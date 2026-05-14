@@ -12,6 +12,7 @@ import {
   PayslipCompanyInfo,
   PayslipEmployeeInfo,
 } from '@/lib/payrollUtils';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 interface TaxReturnsPanelProps {
   isOpen: boolean;
@@ -42,11 +43,6 @@ const YEARS = Array.from({ length: 6 }, (_, i) => {
   return { value: String(y), label: String(y) };
 }).reverse();
 
-function ghs(value: string | number) {
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  return `GHS ${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 export function TaxReturnsPanel({
   isOpen,
   onClose,
@@ -54,6 +50,11 @@ export function TaxReturnsPanel({
   companyInfo,
   employeeInfo,
 }: TaxReturnsPanelProps) {
+  const { currency } = useTenantConfig();
+  const ghs = (value: string | number) => {
+    const n = typeof value === 'string' ? parseFloat(value) : value;
+    return `${currency} ${(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
   const [startMonth, setStartMonth] = useState('1');
   const [startYear, setStartYear] = useState(String(currentYear));
   const [endMonth, setEndMonth] = useState(String(new Date().getMonth() + 1));

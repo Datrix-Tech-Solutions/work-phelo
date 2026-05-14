@@ -250,6 +250,12 @@ export default function EmployeeDashboardPage({
         {/* Left column */}
         <div className="flex flex-col gap-4">
           <AnnouncementCard announcements={announcements} />
+          <BirthdaysCard
+            birthdays={birthdays}
+            scrollRef={birthdayRef}
+            onScrollLeft={() => scrollBirthdays('left')}
+            onScrollRight={() => scrollBirthdays('right')}
+          />
         </div>
 
         {/* Right column */}
@@ -263,12 +269,12 @@ export default function EmployeeDashboardPage({
             leaveBadge={leaveBadgeCount}
             projectsBadge={projectsBadgeCount}
           />
-          <BirthdaysCard
+          {/* <BirthdaysCard
             birthdays={birthdays}
             scrollRef={birthdayRef}
             onScrollLeft={() => scrollBirthdays('left')}
             onScrollRight={() => scrollBirthdays('right')}
-          />
+          /> */}
           <UpcomingHolidaysCard holidays={holidays} />
         </div>
       </div>

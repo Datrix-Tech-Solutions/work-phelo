@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PayrollItem } from '@/types/hr';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 interface MyPayslipsPanelProps {
   isOpen: boolean;
@@ -27,6 +28,7 @@ const MONTH_NAMES = [
 ];
 
 export function MyPayslipsPanel({ isOpen, onClose, payslips }: MyPayslipsPanelProps) {
+  const { currency } = useTenantConfig();
   const [filterMonth, setFilterMonth] = useState('');
   const [filterYear, setFilterYear] = useState('');
 
@@ -110,7 +112,7 @@ export function MyPayslipsPanel({ isOpen, onClose, payslips }: MyPayslipsPanelPr
                     })
                   : '—';
                 const fmt = (v: string) =>
-                  `GHS ${parseFloat(v || '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                  `${currency} ${parseFloat(v || '0').toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                 return (
                   <div
                     key={p.id}
