@@ -71,6 +71,8 @@ export default function EmployeeAppraisalResultPage({
 
   const cycleTitle = appraisal.cycle?.title ?? cycle?.title ?? '';
   const selfKpis: KpiScoreRow[] = appraisal.selfResponse?.kpiScores ?? [];
+  const managerKpis: KpiScoreRow[] = appraisal.managerResponse?.kpiScores ?? [];
+  const managerMap = new Map(managerKpis.map((k: KpiScoreRow) => [k.kpiId, k]));
   const isFinalized = appraisal.overallStatus === 'Finalized';
   const displayScore = isFinalized
     ? appraisal.finalizedAppraisal?.overallScore
@@ -116,23 +118,30 @@ export default function EmployeeAppraisalResultPage({
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 pr-4 font-semibold text-gray-700 w-2/5">KPI</th>
-                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">Score</th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-700 w-1/3">KPI</th>
+                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">Average</th>
                   <th className="text-left py-3 pr-4 font-semibold text-gray-700">Weight</th>
                   <th className="text-left py-3 font-semibold text-gray-700">Comment</th>
                 </tr>
               </thead>
               <tbody>
-                {selfKpis.map((row) => (
-                  <tr key={row.kpiId} className="border-b border-gray-100 last:border-0">
-                    <td className="py-4 pr-4 text-gray-900">{row.title}</td>
-                    <td className="py-4 pr-4 text-gray-700">
-                      {row.score}/{row.maxScore}
-                    </td>
-                    <td className="py-4 pr-4 text-gray-700">{row.weight}%</td>
-                    <td className="py-4 text-gray-500">{row.comment ?? '—'}</td>
-                  </tr>
-                ))}
+                {selfKpis.map((row) => {
+                  const mgr = managerMap.get(row.kpiId);
+                  const selfPct = row.maxScore > 0 ? (row.score / row.maxScore) * 100 : null;
+                  const mgrPct = mgr && mgr.maxScore > 0 ? (mgr.score / mgr.maxScore) * 100 : null;
+                  const avg =
+                    selfPct != null && mgrPct != null ? Math.round((selfPct + mgrPct) / 2) : null;
+                  return (
+                    <tr key={row.kpiId} className="border-b border-gray-100 last:border-0">
+                      <td className="py-4 pr-4 text-gray-900">{row.title}</td>
+                      <td className="py-4 pr-4 font-medium text-gray-900">
+                        {avg != null ? `${avg}%` : '—'}
+                      </td>
+                      <td className="py-4 pr-4 text-gray-700">{row.weight}%</td>
+                      <td className="py-4 text-gray-500">{row.comment ?? '—'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           ) : (

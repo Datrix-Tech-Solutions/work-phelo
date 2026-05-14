@@ -53,7 +53,7 @@ export function RolesContent() {
   const columns: Column<PermissionSet>[] = [
     {
       key: 'name',
-      label: 'Permission Set',
+      label: 'Roles',
       width: '200px',
       render: (row) => (
         <div className="flex items-center gap-2.5">
@@ -107,13 +107,13 @@ export function RolesContent() {
       <div className="flex flex-col gap-6 h-full">
         <div className="flex items-center justify-between shrink-0">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Permission Sets</h2>
+            <h2 className="text-lg font-bold text-gray-900">Roles & Permissions</h2>
             <p className="text-sm text-gray-400 mt-0.5">
-              Manage permission sets and control what each set can access
+              Manage roles and control what each role can access
             </p>
           </div>
           <Button onClick={() => router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/new`)}>
-            + New Permission Set
+            + Create New Role
           </Button>
         </div>
 
@@ -179,7 +179,7 @@ export function RolesContent() {
       <Modal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        title="Delete Permission Set"
+        title="Delete Role"
         description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
         footer={
           <div className="flex justify-end gap-3">

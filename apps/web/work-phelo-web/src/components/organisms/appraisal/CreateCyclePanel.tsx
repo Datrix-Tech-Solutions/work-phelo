@@ -437,7 +437,7 @@ function PermissionSetSelect({
 
   return (
     <div className="flex flex-col gap-1.5 relative" ref={ref}>
-      <label className="text-sm font-medium text-gray-700">Permission Sets</label>
+      <label className="text-sm font-medium text-gray-700">Roles</label>
 
       {selectedSets.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -467,9 +467,7 @@ function PermissionSetSelect({
           open ? 'border-brand ring-1 ring-brand/20' : 'border-gray-300',
         )}
       >
-        <span className="text-gray-900">
-          {allSelected ? 'All permission sets' : 'Add more permission sets…'}
-        </span>
+        <span className="text-gray-900">{allSelected ? 'All roles' : 'Add more roles…'}</span>
         <Icons.ChevronDown
           className={cn('text-gray-400 transition-transform duration-150', open && 'rotate-180')}
         />
@@ -495,7 +493,7 @@ function PermissionSetSelect({
               >
                 {allSelected && <Icons.Check className="w-2.5 h-2.5 text-white" />}
               </span>
-              All Permission Sets
+              All Roles
             </button>
             {sets.map((set: PermissionSet) => {
               const checked = value.includes(set.id);

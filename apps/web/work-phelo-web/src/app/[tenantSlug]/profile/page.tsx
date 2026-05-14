@@ -3,7 +3,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useMyProfile, useUpdateMyProfile } from '@/hooks/hr/useEmployees';
+import { useMyProfile, useUpdateMyProfile, useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { TopNav } from '@/components/organisms/shared/TopNav';
@@ -26,6 +26,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
 
   const { data: employee, isLoading } = useMyProfile();
   const { mutate: updateMyProfile, isPending: isUpdating } = useUpdateMyProfile();
+  const { data: allEmployees = [] } = useEmployeeOptions();
   const toast = useToast();
 
   const handleSave = (data: UpdateEmployeePayload) => {
@@ -72,7 +73,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
 
               {/* Right sections */}
               <div className="flex-1 min-w-0 flex flex-col gap-4">
-                <EmploymentDetailsSection employee={employee} allHrEmployees={[]} />
+                <EmploymentDetailsSection employee={employee} allHrEmployees={allEmployees} />
                 <AccountDetailsSection employee={employee} />
               </div>
             </div>
