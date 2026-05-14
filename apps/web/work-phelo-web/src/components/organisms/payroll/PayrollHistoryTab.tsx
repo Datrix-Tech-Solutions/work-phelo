@@ -8,6 +8,7 @@ import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun, PayrollRunDetail } from '@/types/hr';
 import { usePayrollRuns } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import {
   payrollMonthLabel,
   downloadPayrollBankFormat,
@@ -19,6 +20,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
 
 function DownloadMenu({ run }: { run: PayrollRun }) {
+  const isPaid = run.status === 'PAID';
   const [open, setOpen] = useState(false);
   const [pendingFormat, setPendingFormat] = useState<'bank' | 'full' | null>(null);
   const [loading, setLoading] = useState(false);
@@ -68,13 +70,18 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
     <div ref={ref} className="relative">
       <button
         onClick={() => {
-          if (!loading) {
+          if (!loading && isPaid) {
             setOpen((v) => !v);
             setPendingFormat(null);
           }
         }}
-        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-        title="Download"
+        disabled={!isPaid}
+        title={isPaid ? 'Download' : 'Mark as paid to download'}
+        className={`p-1.5 rounded-lg transition-colors ${
+          isPaid
+            ? 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+            : 'text-gray-200 cursor-not-allowed'
+        }`}
       >
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
       </button>
@@ -129,6 +136,13 @@ export function PayrollHistoryTab() {
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
+  const { currency } = useTenantConfig();
+  const fmt = (value: string | number | null | undefined) => {
+    if (value == null) return '—';
+    const n = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(n)) return '—';
+    return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
 
   const history = runs.filter((r) => r.status === 'APPROVED' || r.status === 'PAID');
 

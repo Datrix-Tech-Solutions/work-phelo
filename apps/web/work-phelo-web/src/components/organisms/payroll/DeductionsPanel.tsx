@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { EmployeeDeduction } from '@/types/hr';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 export type { EmployeeDeduction as DeductionItem };
 
@@ -66,6 +67,7 @@ function getActiveDeductionItems(deductions: EmployeeDeduction[]): DeductionLine
 
 function DeductionCard({
   item,
+  currency,
   onEdit,
   onDelete,
   isDeleting,
@@ -73,6 +75,7 @@ function DeductionCard({
   payrollCountry,
 }: {
   item: EmployeeDeduction;
+  currency: string;
   onEdit: (item: EmployeeDeduction) => void;
   onDelete: (id: string) => void;
   isDeleting: boolean;
@@ -192,6 +195,7 @@ function DeductionsPanelContent({
   const activeMonthlyTotal = activeItems.reduce((sum, d) => sum + d.amount, 0);
   const payrollCurrency = payrollSettings?.payrollCurrency;
   const payrollCountry = payrollSettings?.payrollCountry;
+  const { currency } = useTenantConfig();
 
   const notifyActiveDeductions = (next: EmployeeDeduction[]) => {
     const items = getActiveDeductionItems(next);
@@ -306,6 +310,7 @@ function DeductionsPanelContent({
               <DeductionCard
                 key={item.id}
                 item={item}
+                currency={currency}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 isDeleting={isDeleting}

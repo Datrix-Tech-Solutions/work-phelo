@@ -33,6 +33,7 @@ type PayrollSettingsSnapshot = {
   tier3Enabled: boolean;
   tier3Rate: string | null;
   tier3SchemeName: string | null;
+  country: string;
 };
 
 type EditablePayrollValues = {
@@ -770,6 +771,7 @@ export class PayrollService {
       throw new NotFoundException('Payroll item not found');
     }
 
+    const tenantSettings = await this.getPayrollSettingsSnapshot(tenantId);
     const settings: PayrollSettingsSnapshot = {
       payrollCountry: run.payrollCountry,
       payrollCurrency: run.payrollCurrency,

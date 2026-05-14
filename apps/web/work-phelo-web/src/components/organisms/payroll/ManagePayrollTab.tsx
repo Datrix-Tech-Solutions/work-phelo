@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
@@ -14,9 +14,24 @@ import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
+
+function toCountryCode(country: string | null): Country {
+  if (country === 'Nigeria') return 'NG';
+  if (country === 'Kenya') return 'KE';
+  return 'GH';
+}
 
 function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
+
+  useEffect(() => {
+    const localNumeric = local === '' ? 0 : Number(local);
+    if (value !== localNumeric) {
+      setLocal(value === 0 ? '' : String(value));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   return (
     <input
@@ -82,8 +97,8 @@ export function ManagePayrollTab() {
   const payrollLabels = getPayrollLabels(payrollCountry);
   const money = (value: string | number | null | undefined) =>
     formatPayrollMoney(value, payrollCurrency, payrollCountry);
+  const { currency } = useTenantConfig();
 
-  // Initialise deduction line items from employee profile data.
   const profileDeductionItems = useMemo(() => {
     const map: Record<string, DeductionLineItem[]> = {};
     (empData?.data ?? []).forEach((e) => {
@@ -204,6 +219,10 @@ export function ManagePayrollTab() {
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
   };
+
+  const fmt = (n: number) => `${currency} ${n.toLocaleString()}`;
+
+  const statutoryColumnLabel = payrollLabels.employeeLabel;
 
   const columns: Column<PayrollRow>[] = [
     {

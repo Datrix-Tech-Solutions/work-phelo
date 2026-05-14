@@ -41,7 +41,7 @@ export function renderEmployeeInviteEmailTemplate(input: {
           : ''
       }
       <p style="color:#777;">
-        This invitation link will expire. If it expires before you use it, contact your HR administrator and they will send you a new one.
+        This invitation link will expire in 48 hours. If it expires before you use it, contact your HR administrator and they will send you a new one. Contact 'Workphelo' for assistance.
       </p>
       <hr style="border:none; border-top:1px solid #eee; margin:24px 0;" />
       <p style="color:#555;">Once you're in, you'll be able to:</p>

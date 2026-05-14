@@ -6,6 +6,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useRunPayroll, useSubmitPayroll, useUpdatePayrollItem } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatPayrollMoney } from '@/lib/payrollDisplay';
@@ -72,6 +73,9 @@ export function RunPayrollPanel({
   payrollCurrency,
 }: Props) {
   const toast = useToast();
+  const { currency } = useTenantConfig();
+  const fmt = (n: number) =>
+    `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
   const [year, setYear] = useState(String(currentYear));
   const [notes, setNotes] = useState('');

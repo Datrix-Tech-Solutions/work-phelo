@@ -4,8 +4,11 @@ import { use, useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { Download, Loader2 } from 'lucide-react';
 import { Icons } from '@/components/atoms/icons';
+import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
-import { usePayrollRun } from '@/hooks';
+import { usePayrollRun, useMarkPayrollPaid } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { PayrollItem, PayrollRunDetail } from '@/types/hr';
 import { useAuthStore } from '@/store/auth.store';
 import {
@@ -133,10 +136,20 @@ export default function PayrollHistoryDetailPage({
   params: Promise<{ tenantSlug: string; runId: string }>;
 }) {
   const { tenantSlug, runId } = use(params);
+  const toast = useToast();
   const { data: run, isLoading } = usePayrollRun(runId);
+  const { mutate: markPaid, isPending: isMarkingPaid } = useMarkPayrollPaid();
 
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
   const fileLabel = periodLabel.replace(' ', '-');
+  const isPaid = run?.status === 'PAID';
+
+  const handleMarkPaid = () => {
+    markPaid(runId, {
+      onSuccess: () => toast.success(`${periodLabel} marked as paid`),
+      onError: (err) => toast.error(extractError(err, 'Failed to mark payroll as paid')),
+    });
+  };
   const payrollLabels = getPayrollLabels(run?.payrollCountry);
   const money = (value: string | number | null | undefined) =>
     formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
@@ -190,7 +203,14 @@ export default function PayrollHistoryDetailPage({
           <span className="text-gray-700 font-medium">{periodLabel}</span>
         </nav>
 
-        {run && <DownloadAllMenu detail={run} label={fileLabel} />}
+        {run &&
+          (isPaid ? (
+            <DownloadAllMenu detail={run} label={fileLabel} />
+          ) : (
+            <Button onClick={handleMarkPaid} isLoading={isMarkingPaid} loadingText="Marking…">
+              Mark as Paid
+            </Button>
+          ))}
       </div>
 
       <DataTable

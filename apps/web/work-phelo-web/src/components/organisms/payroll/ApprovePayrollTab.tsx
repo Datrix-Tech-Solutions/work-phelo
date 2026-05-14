@@ -6,6 +6,7 @@ import { MoreVertical } from 'lucide-react';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun } from '@/types/hr';
 import { usePayrollRuns, useReturnPayrollToDraft } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { ApprovePayrollPanel } from './ApprovePayrollPanel';
@@ -86,6 +87,13 @@ export function ApprovePayrollTab() {
   const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
   const { mutate: returnToDraft, isPending: isRejecting } = useReturnPayrollToDraft();
+  const { currency } = useTenantConfig();
+  const fmt = (value: string | number | null | undefined) => {
+    if (value == null) return '—';
+    const n = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(n)) return '—';
+    return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [rejectRun, setRejectRun] = useState<PayrollRun | null>(null);
   const [returnNote, setReturnNote] = useState('');

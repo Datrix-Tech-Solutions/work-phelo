@@ -18,6 +18,7 @@ import { extractError } from '@/lib/extractError';
 import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { EmployeeAllowance, AllowanceType } from '@/types/hr';
 import type { AllowanceItem } from '@/lib/payrollCalculations';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 const ALLOWANCE_TYPE_OPTIONS = [
   { value: 'TRANSPORT' as AllowanceType, label: 'Transport' },
@@ -62,6 +63,7 @@ function emptyForm(): FormState {
 
 function AllowanceCard({
   item,
+  currency,
   onEdit,
   onDelete,
   isDeleting,
@@ -69,6 +71,7 @@ function AllowanceCard({
   payrollCountry,
 }: {
   item: EmployeeAllowance;
+  currency: string;
   onEdit: (item: EmployeeAllowance) => void;
   onDelete: (id: string) => void;
   isDeleting: boolean;
@@ -140,6 +143,7 @@ function AllowancesPanelContent({
   const totalMonthly = allowances.reduce((sum, a) => sum + Number(a.amount), 0);
   const payrollCurrency = payrollSettings?.payrollCurrency;
   const payrollCountry = payrollSettings?.payrollCountry;
+  const { currency } = useTenantConfig();
 
   const notify = (next: EmployeeAllowance[]) => onItems?.(toPayrollItems(next));
 
@@ -230,6 +234,7 @@ function AllowancesPanelContent({
               <AllowanceCard
                 key={item.id}
                 item={item}
+                currency={currency}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 isDeleting={isDeleting}

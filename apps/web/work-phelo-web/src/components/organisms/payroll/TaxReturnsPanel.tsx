@@ -8,7 +8,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PayrollItem } from '@/types/hr';
 import {
   payrollMonthLabel,
-  downloadP9FormPDF,
+  downloadTAXFormPDF,
   PayslipCompanyInfo,
   PayslipEmployeeInfo,
 } from '@/lib/payrollUtils';
@@ -134,7 +134,7 @@ export function TaxReturnsPanel({
                 const year = Number(endYear);
                 setDownloading(true);
                 try {
-                  await downloadP9FormPDF(
+                  await downloadTAXFormPDF(
                     filtered,
                     year,
                     companyInfo ?? { name: '' },
@@ -150,7 +150,7 @@ export function TaxReturnsPanel({
               ) : (
                 <Download className="w-4 h-4" />
               )}
-              {downloading ? 'Generating…' : 'P9 Form'}
+              {downloading ? 'Generating…' : 'TAX Form'}
             </Button>
           </div>
         </div>

@@ -778,7 +778,7 @@ export function downloadPayrollFullFormat(
   triggerCSV(`payroll-full-${label}.csv`, [...meta, headers, ...rows]);
 }
 
-export async function downloadP9FormPDF(
+export async function downloadTAXFormPDF(
   payslips: PayrollItem[],
   year: number,
   company: PayslipCompanyInfo,
@@ -834,7 +834,7 @@ export async function downloadP9FormPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(18);
   doc.setTextColor(...navy);
-  doc.text('P9 FORM', rightEdgeX, y + 7, { align: 'right' });
+  doc.text('TAX FORM', rightEdgeX, y + 7, { align: 'right' });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(60, 60, 60);
@@ -1150,5 +1150,5 @@ export async function downloadP9FormPDF(
   );
 
   const empSuffix = employee ? `${employee.lastName}-${employee.firstName}` : 'employee';
-  doc.save(`P9-Form-${empSuffix}-${year}.pdf`);
+  doc.save(`TAX-Form-${empSuffix}-${year}.pdf`);
 }
