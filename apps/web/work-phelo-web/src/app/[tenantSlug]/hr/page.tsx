@@ -113,10 +113,14 @@ export default function EmployeeDashboardPage({
   /* ── Derived: upcoming holidays (future only, first 5) ── */
   const now = new Date();
   const holidays = (Array.isArray(holidaysRaw) ? holidaysRaw : [])
-    .filter((h: { date: string }) => resolveHolidayUpcomingDate(h.date) >= now)
+    .filter(
+      (h: { date: string; observedDate?: string }) =>
+        resolveHolidayUpcomingDate(h.observedDate ?? h.date) >= now,
+    )
     .sort(
-      (a: { date: string }, b: { date: string }) =>
-        resolveHolidayUpcomingDate(a.date).getTime() - resolveHolidayUpcomingDate(b.date).getTime(),
+      (a: { date: string; observedDate?: string }, b: { date: string; observedDate?: string }) =>
+        resolveHolidayUpcomingDate(a.observedDate ?? a.date).getTime() -
+        resolveHolidayUpcomingDate(b.observedDate ?? b.date).getTime(),
     )
     .slice(0, 5);
 

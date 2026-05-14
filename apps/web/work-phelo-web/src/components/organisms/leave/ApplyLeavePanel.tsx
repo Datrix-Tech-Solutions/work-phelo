@@ -35,7 +35,7 @@ type FormValues = {
 function calcWorkingDays(start: string, end: string, holidays: PublicHoliday[]): number {
   if (!start || !end || end < start) return 0;
 
-  const holidaySet = new Set<string>(holidays.map((h) => h.date.slice(0, 10)));
+  const holidaySet = new Set<string>(holidays.map((h) => (h.observedDate ?? h.date).slice(0, 10)));
 
   let count = 0;
   const cur = new Date(start);

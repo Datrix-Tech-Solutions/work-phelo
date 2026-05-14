@@ -25,7 +25,10 @@ import {
   isCompanyAdminUser,
   isEmployeeSelfServiceUser,
 } from '../auth/access-scope';
-import { getSeededPublicHolidaysForLocation } from './public-holiday.catalog';
+import {
+  getSeededPublicHolidaysForLocation,
+  SeededPublicHoliday,
+} from './public-holiday.catalog';
 
 type DefaultLeaveTypeDefinition = {
   name: string;
@@ -95,6 +98,16 @@ type LeaveNotificationRecipients = {
 type HolidayLocation = {
   countryScope: string;
   regionScope: string;
+};
+
+type NagerDateHoliday = {
+  date?: string;
+  localName?: string;
+  name?: string;
+  countryCode?: string;
+  global?: boolean;
+  counties?: string[] | null;
+  types?: string[];
 };
 
 @Injectable()
@@ -175,6 +188,26 @@ export class LeaveService {
     return value?.trim().toLowerCase() ?? '';
   }
 
+  private normalizeCountryValue(value: string | null | undefined): string {
+    const normalized = this.normalizeLocationValue(value);
+    if (['gh', 'gha', 'ghana', 'republic of ghana'].includes(normalized)) {
+      return 'ghana';
+    }
+    return normalized;
+  }
+
+  private toNagerCountryCode(value: string | null | undefined): string {
+    const normalized = this.normalizeLocationValue(value);
+    if (!normalized) return '';
+    if (['gh', 'gha', 'ghana', 'republic of ghana'].includes(normalized)) {
+      return 'GH';
+    }
+    if (/^[a-z]{2}$/.test(normalized)) {
+      return normalized.toUpperCase();
+    }
+    return '';
+  }
+
   private addMonths(date: Date, months: number) {
     const value = new Date(date);
     value.setHours(0, 0, 0, 0);
@@ -195,7 +228,7 @@ export class LeaveService {
     holiday: { countryScope: string; regionScope: string },
     location: HolidayLocation,
   ) {
-    const countryScope = this.normalizeLocationValue(holiday.countryScope);
+    const countryScope = this.normalizeCountryValue(holiday.countryScope);
     const regionScope = this.normalizeLocationValue(holiday.regionScope);
 
     if (countryScope && countryScope !== location.countryScope) {
@@ -262,7 +295,7 @@ export class LeaveService {
     }
 
     return {
-      countryScope: this.normalizeLocationValue(
+      countryScope: this.normalizeCountryValue(
         employee.branch?.country ?? employee.nationality,
       ),
       regionScope: this.normalizeLocationValue(
@@ -276,18 +309,17 @@ export class LeaveService {
     location: HolidayLocation,
     years: number[],
   ) {
-    if (!location.countryScope) {
+    const countryScope = this.normalizeCountryValue(location.countryScope);
+    if (!countryScope) {
       return;
     }
 
     const uniqueYears = Array.from(new Set(years));
 
     for (const year of uniqueYears) {
-      const holidays = getSeededPublicHolidaysForLocation(
-        location.countryScope,
-        location.regionScope,
+      const holidays = await this.resolveSeededPublicHolidaysForCountry(
+        countryScope,
         year,
-        (value) => this.formatDateOnly(value),
       );
 
       for (const holiday of holidays) {
@@ -331,6 +363,115 @@ export class LeaveService {
       employeeId,
     );
     await this.ensurePublicHolidaysSeededForLocation(tenantId, location, years);
+  }
+
+  async seedPublicHolidaysForTenant(
+    tenantId: string,
+    country: string | null | undefined,
+    years?: number[],
+  ) {
+    const currentYear = new Date().getFullYear();
+    await this.ensurePublicHolidaysSeededForLocation(
+      tenantId,
+      {
+        countryScope: this.normalizeCountryValue(country ?? 'GH'),
+        regionScope: '',
+      },
+      years ?? [currentYear, currentYear + 1],
+    );
+  }
+
+  private async resolveSeededPublicHolidaysForCountry(
+    country: string,
+    year: number,
+  ): Promise<SeededPublicHoliday[]> {
+    const fromApi = await this.fetchNagerPublicHolidays(country, year);
+    if (fromApi.length > 0) {
+      return fromApi;
+    }
+
+    return getSeededPublicHolidaysForLocation(country, '', year, (value) =>
+      this.formatDateOnly(value),
+    );
+  }
+
+  private async fetchNagerPublicHolidays(
+    country: string,
+    year: number,
+  ): Promise<SeededPublicHoliday[]> {
+    const countryCode = this.toNagerCountryCode(country);
+    if (!countryCode) {
+      return [];
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const response = await fetch(
+        `https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`,
+        {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        },
+      );
+
+      if (!response.ok) {
+        this.logger.warn(
+          `Nager.Date holiday fetch failed for ${countryCode}/${year}: ${response.status}`,
+        );
+        return [];
+      }
+
+      const payload = (await response.json()) as unknown;
+      if (!Array.isArray(payload)) {
+        return [];
+      }
+
+      const occupiedObservedDates = new Set<string>();
+      return payload
+        .filter((holiday): holiday is NagerDateHoliday => {
+          if (!holiday || typeof holiday !== 'object') return false;
+          const item = holiday as NagerDateHoliday;
+          return (
+            typeof item.date === 'string' &&
+            Boolean(item.name || item.localName) &&
+            item.global === true &&
+            (item.types?.includes('Public') ?? true)
+          );
+        })
+        .map((holiday) => {
+          const date = this.parseDateOnly(
+            holiday.date!,
+            'Nager.Date public holiday date',
+          );
+          const { observedDate, isObservedShifted } = this.deriveObservedDate(
+            date,
+            occupiedObservedDates,
+          );
+
+          return {
+            name: holiday.name || holiday.localName || 'Public Holiday',
+            date,
+            observedDate,
+            countryScope: this.normalizeCountryValue(
+              holiday.countryCode ?? countryCode,
+            ),
+            regionScope: '',
+            isObservedShifted,
+            source: 'NAGER_DATE',
+          };
+        });
+    } catch (error) {
+      this.logger.warn(
+        `Nager.Date holiday fetch failed for ${countryCode}/${year}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return [];
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   private async getApplicableHolidayDates(
@@ -539,8 +680,23 @@ export class LeaveService {
   async createPublicHoliday(tenantId: string, dto: CreatePublicHolidayDto) {
     const name = dto.name.trim();
     const date = this.parseDateOnly(dto.date, 'Public holiday date');
-    const countryScope = this.normalizeLocationValue(dto.countryScope);
-    const regionScope = this.normalizeLocationValue(dto.regionScope);
+    const countryScope = this.normalizeCountryValue(dto.countryScope);
+    const regionScope = '';
+
+    const duplicate = await this.prisma.publicHoliday.findFirst({
+      where: {
+        tenantId,
+        name: { equals: name, mode: 'insensitive' },
+        date,
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      throw new ConflictException(
+        'A public holiday with this name and date already exists.',
+      );
+    }
 
     const existingObservedDates = new Set<string>();
     const siblingHolidays = await this.prisma.publicHoliday.findMany({
@@ -594,6 +750,18 @@ export class LeaveService {
   async getPublicHolidays(tenantId: string) {
     return this.prisma.publicHoliday.findMany({
       where: { tenantId },
+      select: {
+        id: true,
+        tenantId: true,
+        name: true,
+        date: true,
+        observedDate: true,
+        countryScope: true,
+        regionScope: true,
+        isObservedShifted: true,
+        createdAt: true,
+        updatedAt: true,
+      },
       orderBy: [{ observedDate: 'asc' }, { name: 'asc' }],
     });
   }
@@ -614,12 +782,25 @@ export class LeaveService {
       : holiday.date;
     const countryScope =
       dto.countryScope !== undefined
-        ? this.normalizeLocationValue(dto.countryScope)
+        ? this.normalizeCountryValue(dto.countryScope)
         : holiday.countryScope;
-    const regionScope =
-      dto.regionScope !== undefined
-        ? this.normalizeLocationValue(dto.regionScope)
-        : holiday.regionScope;
+    const regionScope = '';
+
+    const duplicate = await this.prisma.publicHoliday.findFirst({
+      where: {
+        tenantId,
+        id: { not: id },
+        name: { equals: name, mode: 'insensitive' },
+        date,
+      },
+      select: { id: true },
+    });
+
+    if (duplicate) {
+      throw new ConflictException(
+        'A public holiday with this name and date already exists.',
+      );
+    }
 
     const existingObservedDates = new Set<string>();
     const siblingHolidays = await this.prisma.publicHoliday.findMany({
