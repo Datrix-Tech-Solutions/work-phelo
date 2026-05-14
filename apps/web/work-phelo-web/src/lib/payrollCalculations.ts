@@ -399,7 +399,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     }
   }
 
-  const netSalary = Math.round(taxableIncome - paye);
+  const netSalary = Math.round(taxableIncome + transportAllowance - paye);
   const totalEmployerCost = Math.round(
     grossSalary + employerStatutoryContrib + (voluntaryPensionEmployer ?? 0),
   );

@@ -110,10 +110,10 @@ export interface EmployeeAllowance {
   id: string;
   employeeId: string;
   type: AllowanceType;
-  name?: string;
+  name: string;
   amount: number;
-  description?: string;
   effectiveFrom: string;
+  effectiveTo?: string | null;
   createdAt: string;
 }
 
@@ -155,8 +155,11 @@ export interface EmployeeDocument {
 export interface AddAllowancePayload {
   type: AllowanceType;
   amount: number;
-  description?: string;
-  effectiveFrom: string;
+}
+
+export interface UpdateAllowancePayload {
+  type?: AllowanceType;
+  amount?: number;
 }
 
 export interface UploadDocumentPayload {

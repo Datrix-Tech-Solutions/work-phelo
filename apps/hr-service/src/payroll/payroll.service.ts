@@ -622,7 +622,11 @@ export class PayrollService {
       where: {
         tenantId,
         employmentStatus: {
-          in: [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION],
+          in: [
+            EmploymentStatus.ACTIVE,
+            EmploymentStatus.PROBATION,
+            'ON_LEAVE' as EmploymentStatus,
+          ],
         },
       },
       include: {
@@ -645,15 +649,47 @@ export class PayrollService {
       throw new BadRequestException('No payroll-eligible employees found');
     }
 
+    // Exclude employees whose linked user account is still pending verification
+    const userIds = employees
+      .map((e) => e.userId)
+      .filter((id): id is string => id !== null && id !== undefined);
+
+    const verifiedEmployees =
+      userIds.length > 0
+        ? await (async () => {
+            const statusMap = await this.rabbitmq.authGetUserStatuses({
+              tenantId,
+              userIds,
+            });
+            const verifiedIds = new Set(
+              statusMap
+                .filter((s) => s.status !== 'PENDING_VERIFICATION')
+                .map((s) => s.userId),
+            );
+            return employees.filter(
+              (e) =>
+                e.userId === null ||
+                e.userId === undefined ||
+                verifiedIds.has(e.userId),
+            );
+          })()
+        : employees;
+
+    if (verifiedEmployees.length === 0) {
+      throw new BadRequestException('No payroll-eligible employees found');
+    }
+
     const settings = await this.getPayrollSettingsSnapshot(tenantId);
-    const payrollItems: PayrollItemSeed[] = employees.map((employee) => {
-      const seed = this.buildSeedFromEmployee(employee, end);
-      return {
-        ...this.calculatePayrollItemValues(seed.values, settings),
-        allowanceItems: seed.allowanceItems,
-        deductionItems: seed.deductionItems,
-      };
-    });
+    const payrollItems: PayrollItemSeed[] = verifiedEmployees.map(
+      (employee) => {
+        const seed = this.buildSeedFromEmployee(employee, end);
+        return {
+          ...this.calculatePayrollItemValues(seed.values, settings),
+          allowanceItems: seed.allowanceItems,
+          deductionItems: seed.deductionItems,
+        };
+      },
+    );
     const totals = this.calculateRunTotals(payrollItems);
 
     return this.prisma.payrollRun.upsert({
@@ -685,7 +721,7 @@ export class PayrollService {
           create: payrollItems.map(
             ({ allowanceItems, deductionItems, ...item }, index) => ({
               tenantId,
-              employeeId: employees[index].id,
+              employeeId: verifiedEmployees[index].id,
               ...item,
               allowanceItems: {
                 create: allowanceItems.map((allowance) => ({
@@ -725,7 +761,7 @@ export class PayrollService {
           create: payrollItems.map(
             ({ allowanceItems, deductionItems, ...item }, index) => ({
               tenantId,
-              employeeId: employees[index].id,
+              employeeId: verifiedEmployees[index].id,
               ...item,
               allowanceItems: {
                 create: allowanceItems.map((allowance) => ({

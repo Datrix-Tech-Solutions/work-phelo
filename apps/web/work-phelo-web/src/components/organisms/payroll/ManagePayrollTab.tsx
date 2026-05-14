@@ -8,7 +8,7 @@ import { Column, DataTable } from '../shared/DataTable';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
 import { Employee } from '@/types/hr';
-import { PayrollItemsPanel } from './PayrollItemsPanel';
+import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
@@ -49,7 +49,8 @@ interface PayrollRow {
   department?: string;
 }
 
-const PAYROLL_ELIGIBLE: Employee['employmentStatus'][] = ['ACTIVE', 'PROBATION'];
+// Keep in sync with hr-service/src/payroll/payroll.service.ts employee eligibility filter
+const PAYROLL_ELIGIBLE: Employee['employmentStatus'][] = ['ACTIVE', 'PROBATION', 'ON_LEAVE'];
 
 function isTransportAllowance(item: AllowanceItem) {
   const label = `${item.type ?? ''} ${item.name ?? ''}`.toLowerCase();
@@ -343,24 +344,12 @@ export function ManagePayrollTab() {
         onPageChange={() => {}}
       />
 
-      <PayrollItemsPanel
+      <AllowancesPanel
         isOpen={!!allowancePanel}
         onClose={() => setAllowancePanel(null)}
-        type="allowance"
+        employeeId={allowancePanel?.rowId ?? ''}
         employeeName={allowancePanel?.rowName ?? ''}
-        items={
-          allowancePanel
-            ? (allowancesMap[allowancePanel.rowId] ??
-              empData?.data
-                ?.find((e) => e.id === allowancePanel.rowId)
-                ?.allowances?.map((a) => ({
-                  name: a.type as string,
-                  amount: Number(a.amount),
-                })) ??
-              [])
-            : []
-        }
-        onSave={(items) => {
+        onItems={(items) => {
           if (!allowancePanel) return;
           setAllowancesMap((prev) => ({ ...prev, [allowancePanel.rowId]: items }));
         }}

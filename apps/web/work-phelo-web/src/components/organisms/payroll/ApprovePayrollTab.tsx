@@ -78,7 +78,7 @@ function RowMenu({ onView, onApprove, onReject }: RowMenuProps) {
             }}
             className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
           >
-            Return To Draft
+            Reject
           </button>
         </div>
       )}
@@ -164,7 +164,7 @@ export function ApprovePayrollTab() {
           setRejectRun(null);
           setReturnNote('');
         }}
-        title="Return Payroll To Draft"
+        title="Reject Payroll"
         hideClose={isRejecting}
         footer={
           <>
@@ -181,7 +181,7 @@ export function ApprovePayrollTab() {
             <Button
               variant="danger"
               isLoading={isRejecting}
-              loadingText="Returning…"
+              loadingText="Rejecting…"
               disabled={!returnNote.trim()}
               onClick={() => {
                 if (!rejectRun) return;
@@ -189,37 +189,35 @@ export function ApprovePayrollTab() {
                   { id: rejectRun.id, note: returnNote.trim() },
                   {
                     onSuccess: () => {
-                      toast.success(`${monthLabel(rejectRun)} payroll returned to draft`);
+                      toast.success(`${monthLabel(rejectRun)} payroll rejected`);
                       setRejectRun(null);
                       setReturnNote('');
                     },
-                    onError: (err) =>
-                      toast.error(extractError(err, 'Failed to return payroll to draft')),
+                    onError: (err) => toast.error(extractError(err, 'Failed to reject payroll')),
                   },
                 );
               }}
             >
-              Return To Draft
+              Reject Payroll
             </Button>
           </>
         }
       >
         <div className="flex flex-col gap-4 mt-2">
           <p className="text-sm text-gray-600 leading-relaxed">
-            You are about to return the payroll for{' '}
+            You are about to reject the payroll for{' '}
             <span className="font-medium text-gray-900">
               {rejectRun ? monthLabel(rejectRun) : ''}
             </span>
-            . The payroll manager and payroll stakeholders will be notified and can revise and
-            resubmit.
+            . The payroll manager will need to revise and resubmit.
           </p>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-bold text-gray-900">
-              Return note <span className="text-red-500">*</span>
+              Rejection Note <span className="text-red-500">*</span>
             </label>
             <textarea
               rows={4}
-              placeholder="Explain what needs to be corrected before resubmission…"
+              placeholder="Explain why this payroll is being rejected…"
               value={returnNote}
               onChange={(e) => setReturnNote(e.target.value)}
               className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"

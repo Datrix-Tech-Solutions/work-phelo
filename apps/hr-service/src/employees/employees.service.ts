@@ -28,6 +28,10 @@ import {
   CreateEmployeeDeductionDto,
   UpdateEmployeeDeductionDto,
 } from './dto/employee-deduction.dto';
+import {
+  CreateEmployeeAllowanceDto,
+  UpdateEmployeeAllowanceDto,
+} from './dto/employee-allowance.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 import {
   AssetStatus,
@@ -1647,16 +1651,80 @@ export class EmployeesService {
     return { message: 'Offboarding completed successfully', employee };
   }
 
-  async addAllowance(tenantId: string, employeeId: string, dto: any) {
+  async listAllowances(tenantId: string, employeeId: string) {
+    await this.findById(tenantId, employeeId);
+    return this.prisma.employeeAllowance.findMany({
+      where: { tenantId, employeeId },
+      orderBy: [{ effectiveFrom: 'desc' }],
+    });
+  }
+
+  private allowanceNameFromType(type: string): string {
+    const labels: Record<string, string> = {
+      TRANSPORT: 'Transport Allowance',
+      HOUSING: 'Housing Allowance',
+      MEDICAL: 'Medical Allowance',
+      CLOTHING: 'Clothing Allowance',
+      OTHER: 'Other Allowance',
+    };
+    return labels[type] ?? `${type} Allowance`;
+  }
+
+  async addAllowance(
+    tenantId: string,
+    employeeId: string,
+    dto: CreateEmployeeAllowanceDto,
+  ) {
     await this.findById(tenantId, employeeId);
     return this.prisma.employeeAllowance.create({
       data: {
         tenantId,
         employeeId,
-        ...dto,
-        effectiveFrom: new Date(dto.effectiveFrom),
+        name: this.allowanceNameFromType(dto.type),
+        type: dto.type as any,
+        amount: dto.amount,
+        effectiveFrom: new Date(),
       },
     });
+  }
+
+  async updateAllowance(
+    tenantId: string,
+    employeeId: string,
+    allowanceId: string,
+    dto: UpdateEmployeeAllowanceDto,
+  ) {
+    await this.findById(tenantId, employeeId);
+    const existing = await this.prisma.employeeAllowance.findFirst({
+      where: { id: allowanceId, tenantId, employeeId },
+    });
+    if (!existing) throw new NotFoundException('Allowance not found');
+
+    return this.prisma.employeeAllowance.update({
+      where: { id: allowanceId },
+      data: {
+        ...(dto.type != null
+          ? {
+              type: dto.type as any,
+              name: this.allowanceNameFromType(dto.type),
+            }
+          : {}),
+        ...(dto.amount != null ? { amount: dto.amount } : {}),
+      },
+    });
+  }
+
+  async deleteAllowance(
+    tenantId: string,
+    employeeId: string,
+    allowanceId: string,
+  ) {
+    await this.findById(tenantId, employeeId);
+    const existing = await this.prisma.employeeAllowance.findFirst({
+      where: { id: allowanceId, tenantId, employeeId },
+    });
+    if (!existing) throw new NotFoundException('Allowance not found');
+    await this.prisma.employeeAllowance.delete({ where: { id: allowanceId } });
   }
 
   async listDeductions(tenantId: string, employeeId: string) {

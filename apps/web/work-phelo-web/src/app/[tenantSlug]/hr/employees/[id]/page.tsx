@@ -34,6 +34,7 @@ import { EmploymentDetailsSection } from '@/components/molecules/employees/emplo
 import { AssetsSection } from '@/components/molecules/employees/assetSection';
 import { BankingComplianceSection } from '@/components/molecules/employees/bankingComplianceSection';
 import { EmergencyContactSection } from '@/components/molecules/employees/emergencyContactSection';
+import { PayrollSection } from '@/components/molecules/employees/payrollSection';
 import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
 
 const NOTIFY_DELAY_MS = 30 * 60 * 1000;
@@ -191,6 +192,7 @@ export default function EmployeeDetailPage({
           <EmploymentDetailsSection employee={employee} allHrEmployees={allHrEmployees} />
           <BankingComplianceSection employee={employee} />
           <EmergencyContactSection employee={employee} />
+          <PayrollSection employee={employee} />
           <AssetsSection assets={employee.assets || []} />
         </div>
       </div>

@@ -128,6 +128,10 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.MANAGE_PAYROLL_SETTINGS]: [
     { resource: 'payroll', actions: ['EDIT'] },
   ],
+  // Grants access to anyone who can either run or manage payroll (RUN or EDIT)
+  [Permission.WRITE_EMPLOYEE_PAYROLL]: [
+    { resource: 'payroll', actions: ['RUN', 'EDIT'] },
+  ],
 
   // ── Appraisals ────────────────────────────────────────────────────────────
   [Permission.CONFIGURE_APPRAISAL]: [
