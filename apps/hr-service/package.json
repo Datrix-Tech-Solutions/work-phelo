@@ -20,7 +20,8 @@
     "test:cov": "jest -c test/jest.unit.config.js --coverage",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:seed": "ts-node prisma/seed.ts"
+    "db:seed": "ts-node prisma/seed.ts",
+    "backfill:public-holidays": "ts-node src/scripts/backfill-public-holidays.ts"
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",

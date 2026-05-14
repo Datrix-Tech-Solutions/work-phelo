@@ -43,6 +43,15 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
   }, [data, search]);
 
   const { mutate: deleteHoliday, isPending: isDeleting } = useDeletePublicHoliday();
+  const formatScope = (holiday: PublicHoliday) => {
+    if (holiday.countryScope) {
+      return holiday.countryScope
+        .split(/\s+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    }
+    return 'Company-wide';
+  };
 
   const columns: Column<PublicHoliday>[] = [
     {
@@ -52,8 +61,23 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
     },
     {
       key: 'date',
-      label: 'Date',
+      label: 'Official Date',
       render: (row) => <span className="text-gray-700">{formatHolidayDate(row.date)}</span>,
+    },
+    {
+      key: 'observedDate',
+      label: 'Observed',
+      render: (row) => (
+        <div>
+          <span className="text-gray-700">{formatHolidayDate(row.observedDate ?? row.date)}</span>
+          {row.isObservedShifted && <p className="text-xs text-amber-600">shifted from weekend</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'countryScope',
+      label: 'Scope',
+      render: (row) => <span className="text-gray-600">{formatScope(row)}</span>,
     },
     {
       key: '_view',

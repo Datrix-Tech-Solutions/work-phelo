@@ -7,6 +7,7 @@ type HolidaySeedDefinition = {
 };
 
 const GHANA_ALIASES = new Set(['gh', 'gha', 'ghana', 'republic of ghana']);
+const GHANA_SCOPE = 'ghana';
 
 function dateAtMidnight(year: number, monthIndex: number, day: number) {
   const value = new Date(year, monthIndex, day);
@@ -67,7 +68,8 @@ function buildObservedDate(
 }
 
 function normalizeCountry(country: string | null | undefined) {
-  return country?.trim().toLowerCase() ?? '';
+  const normalized = country?.trim().toLowerCase() ?? '';
+  return GHANA_ALIASES.has(normalized) ? GHANA_SCOPE : normalized;
 }
 
 export type SeededPublicHoliday = HolidaySeedDefinition & {
@@ -77,14 +79,13 @@ export type SeededPublicHoliday = HolidaySeedDefinition & {
 
 export function getSeededPublicHolidaysForLocation(
   country: string | null | undefined,
-  region: string | null | undefined,
+  _region: string | null | undefined,
   year: number,
   toDateKey: (value: Date) => string,
 ): SeededPublicHoliday[] {
   const normalizedCountry = normalizeCountry(country);
-  const normalizedRegion = region?.trim().toLowerCase() ?? '';
 
-  if (!GHANA_ALIASES.has(normalizedCountry)) {
+  if (normalizedCountry !== GHANA_SCOPE) {
     return [];
   }
 
@@ -101,78 +102,78 @@ export function getSeededPublicHolidaysForLocation(
     {
       name: "New Year's Day",
       date: dateAtMidnight(year, 0, 1),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: 'Constitution Day',
       date: dateAtMidnight(year, 0, 7),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: 'Independence Day',
       date: dateAtMidnight(year, 2, 6),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: 'Good Friday',
       date: goodFriday,
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: 'Easter Monday',
       date: easterMonday,
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: 'Labour Day',
       date: dateAtMidnight(year, 4, 1),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: "Founders' Day",
       date: dateAtMidnight(year, 7, 4),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: 'Kwame Nkrumah Memorial Day',
       date: dateAtMidnight(year, 8, 21),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: "Farmers' Day",
       date: getFirstFridayOfDecember(year),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: 'Christmas Day',
       date: dateAtMidnight(year, 11, 25),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
     {
       name: 'Boxing Day',
       date: dateAtMidnight(year, 11, 26),
-      countryScope: 'ghana',
-      regionScope: normalizedRegion,
+      countryScope: GHANA_SCOPE,
+      regionScope: '',
       source: 'SYSTEM_GHANA',
     },
   ];

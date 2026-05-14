@@ -294,6 +294,7 @@ export class UsersService {
         tenantId: user.tenantId,
         adminEmail: user.tenant.email,
         adminUserId: user.id,
+        country: user.tenant.country,
       });
     } else {
       await this.rabbitmq.hrLinkEmployeeIdentity({
