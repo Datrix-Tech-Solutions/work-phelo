@@ -126,7 +126,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
       { sub: user.id, type: 'refresh', jti: randomUUID() },
-      { expiresIn: '7d' },
+      { expiresIn: '15m' },
     );
     return { accessToken, refreshToken };
   }
@@ -140,14 +140,14 @@ export class AuthService {
     await this.prisma.refreshToken.upsert({
       where: { token },
       update: {
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
         ipAddress,
         userAgent,
       },
       create: {
         userId,
         token,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
         ipAddress,
         userAgent,
       },
