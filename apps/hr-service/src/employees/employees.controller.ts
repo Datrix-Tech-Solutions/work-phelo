@@ -37,6 +37,10 @@ import {
   CreateEmployeeDeductionDto,
   UpdateEmployeeDeductionDto,
 } from './dto/employee-deduction.dto';
+import {
+  CreateEmployeeAllowanceDto,
+  UpdateEmployeeAllowanceDto,
+} from './dto/employee-allowance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -383,27 +387,72 @@ export class EmployeesController {
     return this.employeesService.resendInvite(req.user.tenantId, id);
   }
 
+  @Get(':id/allowances')
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'List recurring allowances for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Employee allowances retrieved' })
+  listAllowances(@Param('id') id: string, @Req() req: any) {
+    return this.employeesService.listAllowances(req.user.tenantId, id);
+  }
+
   @Post(':id/allowances')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions(Permission.CREATE_EMPLOYEE)
-  @ApiOperation({ summary: 'Add an allowance to an employee' })
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'Add a recurring allowance to an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
-  @ApiBody({
-    schema: {
-      example: {
-        type: 'TRANSPORT',
-        amount: 500,
-        description: 'Monthly transport allowance',
-      },
-    },
-  })
+  @ApiBody({ type: CreateEmployeeAllowanceDto })
   @ApiResponse({ status: 201, description: 'Allowance added successfully' })
-  addAllowance(@Param('id') id: string, @Body() dto: any, @Req() req: any) {
+  addAllowance(
+    @Param('id') id: string,
+    @Body() dto: CreateEmployeeAllowanceDto,
+    @Req() req: any,
+  ) {
     return this.employeesService.addAllowance(req.user.tenantId, id, dto);
   }
 
+  @Patch(':id/allowances/:allowanceId')
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'Update a recurring allowance for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'allowanceId', description: 'Allowance UUID' })
+  @ApiBody({ type: UpdateEmployeeAllowanceDto })
+  @ApiResponse({ status: 200, description: 'Allowance updated successfully' })
+  updateAllowance(
+    @Param('id') id: string,
+    @Param('allowanceId') allowanceId: string,
+    @Body() dto: UpdateEmployeeAllowanceDto,
+    @Req() req: any,
+  ) {
+    return this.employeesService.updateAllowance(
+      req.user.tenantId,
+      id,
+      allowanceId,
+      dto,
+    );
+  }
+
+  @Delete(':id/allowances/:allowanceId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'Delete a recurring allowance for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'allowanceId', description: 'Allowance UUID' })
+  @ApiResponse({ status: 204, description: 'Allowance deleted successfully' })
+  async deleteAllowance(
+    @Param('id') id: string,
+    @Param('allowanceId') allowanceId: string,
+    @Req() req: any,
+  ) {
+    await this.employeesService.deleteAllowance(
+      req.user.tenantId,
+      id,
+      allowanceId,
+    );
+  }
+
   @Get(':id/deductions')
-  @RequirePermissions(Permission.RUN_PAYROLL)
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
   @ApiOperation({ summary: 'List payroll deductions for an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Employee deductions retrieved' })
@@ -413,7 +462,7 @@ export class EmployeesController {
 
   @Post(':id/deductions')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions(Permission.RUN_PAYROLL)
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
   @ApiOperation({ summary: 'Add a payroll deduction to an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: CreateEmployeeDeductionDto })
@@ -427,7 +476,7 @@ export class EmployeesController {
   }
 
   @Patch(':id/deductions/:deductionId')
-  @RequirePermissions(Permission.RUN_PAYROLL)
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
   @ApiOperation({ summary: 'Update a payroll deduction for an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiParam({ name: 'deductionId', description: 'Deduction UUID' })
@@ -449,7 +498,7 @@ export class EmployeesController {
 
   @Delete(':id/deductions/:deductionId')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @RequirePermissions(Permission.RUN_PAYROLL)
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
   @ApiOperation({
     summary: 'Delete an unpaid payroll deduction for an employee',
   })

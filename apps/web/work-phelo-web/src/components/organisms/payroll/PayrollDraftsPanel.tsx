@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, RotateCcw, FileText } from 'lucide-react';
+import { CheckCircle2, XCircle, FileText } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { usePayrollRuns } from '@/hooks';
@@ -172,14 +172,14 @@ function ReturnedRunCard({
   return (
     <div className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-red-100 bg-red-50">
       <div className="flex items-start gap-3">
-        <RotateCcw className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+        <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-gray-900">
               {payrollMonthLabel(run.month, run.year)}
             </p>
             <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium bg-red-100 text-red-600">
-              Returned
+              Rejected
             </span>
           </div>
           <p className="text-xs text-gray-500">Gross: {fmt(run.totalGross)}</p>
@@ -306,7 +306,7 @@ export function PayrollDraftsPanel({ isOpen, onClose, onLoad }: Props) {
 
           {returned.length > 0 && (
             <div className="flex flex-col gap-3">
-              <SectionHeader title="Returned For Revision" count={returned.length} />
+              <SectionHeader title="Rejected" count={returned.length} />
               {returned.map((run) => (
                 <ReturnedRunCard key={run.id} run={run} onLoad={handleLoad} />
               ))}

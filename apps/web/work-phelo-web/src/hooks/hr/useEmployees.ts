@@ -9,6 +9,7 @@ import {
   CreateEmployeePayload,
   UpdateEmployeePayload,
   AddAllowancePayload,
+  UpdateAllowancePayload,
   CreateDeductionPayload,
   UpdateDeductionPayload,
   UploadDocumentPayload,
@@ -295,6 +296,17 @@ export function useResendEmployeeInvite() {
   });
 }
 
+export function useListAllowances(employeeId: string) {
+  return useQuery({
+    queryKey: ['employees', employeeId, 'allowances'],
+    queryFn: async () => {
+      const res = await api.get<EmployeeAllowance[]>(`/hr/employees/${employeeId}/allowances`);
+      return res.data;
+    },
+    enabled: !!employeeId,
+  });
+}
+
 export function useAddAllowance(employeeId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -307,6 +319,49 @@ export function useAddAllowance(employeeId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+      queryClient.invalidateQueries({
+        queryKey: ['employees', employeeId, 'allowances'],
+      });
+    },
+  });
+}
+
+export function useUpdateAllowance(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      allowanceId,
+      payload,
+    }: {
+      allowanceId: string;
+      payload: UpdateAllowancePayload;
+    }) => {
+      const res = await api.patch<EmployeeAllowance>(
+        `/hr/employees/${employeeId}/allowances/${allowanceId}`,
+        payload,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+      queryClient.invalidateQueries({
+        queryKey: ['employees', employeeId, 'allowances'],
+      });
+    },
+  });
+}
+
+export function useDeleteAllowance(employeeId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (allowanceId: string) => {
+      await api.delete(`/hr/employees/${employeeId}/allowances/${allowanceId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['employees', employeeId] });
+      queryClient.invalidateQueries({
+        queryKey: ['employees', employeeId, 'allowances'],
+      });
     },
   });
 }
