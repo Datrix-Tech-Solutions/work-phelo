@@ -323,6 +323,44 @@ export class LeaveService {
       );
 
       for (const holiday of holidays) {
+        const existingHolidayByNameAndDate =
+          await this.prisma.publicHoliday.findFirst({
+            where: {
+              tenantId,
+              name: { equals: holiday.name, mode: 'insensitive' },
+              date: holiday.date,
+            },
+            select: { id: true },
+          });
+
+        const existingHolidayByDate = existingHolidayByNameAndDate
+          ? null
+          : await this.prisma.publicHoliday.findFirst({
+              where: {
+                tenantId,
+                date: holiday.date,
+              },
+              select: { id: true },
+            });
+
+        const existingHoliday =
+          existingHolidayByNameAndDate ?? existingHolidayByDate;
+
+        if (existingHoliday) {
+          await this.prisma.publicHoliday.update({
+            where: { id: existingHoliday.id },
+            data: {
+              name: holiday.name,
+              observedDate: holiday.observedDate,
+              countryScope: holiday.countryScope,
+              regionScope: holiday.regionScope,
+              isObservedShifted: holiday.isObservedShifted,
+              source: holiday.source,
+            },
+          });
+          continue;
+        }
+
         await this.prisma.publicHoliday.upsert({
           where: {
             tenantId_name_date_countryScope_regionScope: {
@@ -377,7 +415,7 @@ export class LeaveService {
         countryScope: this.normalizeCountryValue(country ?? 'GH'),
         regionScope: '',
       },
-      years ?? [currentYear, currentYear + 1],
+      years ?? [currentYear],
     );
   }
 
@@ -423,7 +461,7 @@ export class LeaveService {
         return [];
       }
 
-      const payload = (await response.json()) as unknown;
+      const payload: unknown = await response.json();
       if (!Array.isArray(payload)) {
         return [];
       }
