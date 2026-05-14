@@ -135,6 +135,7 @@ export class PayrollService {
           ? config.payrollTier3Rate.toString()
           : null,
       tier3SchemeName: config?.payrollTier3SchemeName ?? null,
+      country: payrollCountry,
     };
   }
 
@@ -778,6 +779,7 @@ export class PayrollService {
       tier3Enabled: run.tier3Enabled,
       tier3Rate: run.tier3Rate?.toString() ?? null,
       tier3SchemeName: run.tier3SchemeName,
+      country: run.payrollCountry,
     };
     const allowanceItems =
       dto.allowanceItems != null
