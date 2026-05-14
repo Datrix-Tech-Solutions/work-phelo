@@ -64,6 +64,7 @@ export enum Permission {
   APPROVE_PAYROLL = 'approve:payroll',
   READ_OWN_PAYSLIP = 'read:own_payslip',
   MANAGE_PAYROLL_SETTINGS = 'manage:payroll_settings',
+  WRITE_EMPLOYEE_PAYROLL = 'write:employee_payroll',
 
   // ── Appraisal ─────────────────────────────────────────────────────────────
   CONFIGURE_APPRAISAL = 'configure:appraisal',
@@ -155,6 +156,7 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.APPROVE_PAYROLL]: ['payroll:APPROVE'],
   [Permission.READ_OWN_PAYSLIP]: ['payslip-self:VIEW'],
   [Permission.MANAGE_PAYROLL_SETTINGS]: ['payroll:EDIT'],
+  [Permission.WRITE_EMPLOYEE_PAYROLL]: ['payroll:RUN', 'payroll:EDIT'],
 
   // Appraisal
   [Permission.CONFIGURE_APPRAISAL]: ['appraisal-settings:EDIT'],
