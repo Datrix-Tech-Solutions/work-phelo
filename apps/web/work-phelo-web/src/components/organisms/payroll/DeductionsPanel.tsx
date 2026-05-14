@@ -14,6 +14,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { EmployeeDeduction } from '@/types/hr';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 export type { EmployeeDeduction as DeductionItem };
 
@@ -39,8 +40,8 @@ interface FormState {
   startDate: string;
 }
 
-function fmtAmt(n: number) {
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtAmt(currency: string, n: number) {
+  return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function emptyForm(): FormState {
@@ -68,11 +69,13 @@ function getActiveDeductionItems(deductions: EmployeeDeduction[]): DeductionLine
 
 function DeductionCard({
   item,
+  currency,
   onEdit,
   onDelete,
   isDeleting,
 }: {
   item: EmployeeDeduction;
+  currency: string;
   onEdit: (item: EmployeeDeduction) => void;
   onDelete: (id: string) => void;
   isDeleting: boolean;
@@ -114,20 +117,20 @@ function DeductionCard({
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
         <div>
           <p className="text-gray-400">Total Amount</p>
-          <p className="font-medium text-gray-700">{fmtAmt(item.totalAmount)}</p>
+          <p className="font-medium text-gray-700">{fmtAmt(currency, item.totalAmount)}</p>
         </div>
         <div>
           <p className="text-gray-400">Monthly Rate</p>
-          <p className="font-semibold text-gray-900">{fmtAmt(item.monthlyRate)}</p>
+          <p className="font-semibold text-gray-900">{fmtAmt(currency, item.monthlyRate)}</p>
         </div>
         <div>
           <p className="text-gray-400">Paid So Far</p>
-          <p className="font-medium text-emerald-600">{fmtAmt(item.amountPaid)}</p>
+          <p className="font-medium text-emerald-600">{fmtAmt(currency, item.amountPaid)}</p>
         </div>
         <div>
           <p className="text-gray-400">Balance</p>
           <p className={`font-semibold ${isCompleted ? 'text-gray-400' : 'text-gray-900'}`}>
-            {fmtAmt(balance)}
+            {fmtAmt(currency, balance)}
           </p>
         </div>
       </div>
@@ -167,6 +170,7 @@ function DeductionsPanelContent({
   onActiveItems,
 }: Omit<Props, 'isOpen'>) {
   const toast = useToast();
+  const { currency } = useTenantConfig();
   const { data: deductions = [], isLoading } = useEmployeeDeductions(employeeId);
   const { mutate: createDeduction, isPending: isCreating } = useCreateDeduction(employeeId);
   const { mutate: updateDeduction, isPending: isUpdating } = useUpdateDeduction(employeeId);
@@ -286,7 +290,7 @@ function DeductionsPanelContent({
                   This month&apos;s deduction
                 </span>
                 <span className="text-sm font-semibold text-brand">
-                  {fmtAmt(activeMonthlyTotal)}
+                  {fmtAmt(currency, activeMonthlyTotal)}
                 </span>
               </div>
             )}
@@ -295,6 +299,7 @@ function DeductionsPanelContent({
               <DeductionCard
                 key={item.id}
                 item={item}
+                currency={currency}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 isDeleting={isDeleting}

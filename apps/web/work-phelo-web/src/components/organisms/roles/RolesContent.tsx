@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { ShieldCheck, Users } from 'lucide-react';
 import { extractError } from '@/lib/extractError';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import {
@@ -63,17 +62,6 @@ export function RolesContent() {
           </div>
           <span className="font-medium text-gray-900">{row.name}</span>
         </div>
-      ),
-    },
-    {
-      key: 'type',
-      label: 'Type',
-      width: '120px',
-      render: (row) => (
-        <Badge
-          variant={row.isSystem ? 'info' : 'neutral'}
-          label={row.isSystem ? 'System' : 'Custom'}
-        />
       ),
     },
     {

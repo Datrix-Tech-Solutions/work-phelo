@@ -12,13 +12,7 @@ import { ApprovePayrollPanel } from './ApprovePayrollPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
-
-function fmt(value: string | number | null | undefined) {
-  if (value == null) return '—';
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(n)) return '—';
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 function monthLabel(run: PayrollRun) {
   return payrollMonthLabel(run.month, run.year);
@@ -92,6 +86,13 @@ export function ApprovePayrollTab() {
   const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
   const { mutate: returnToDraft, isPending: isRejecting } = useReturnPayrollToDraft();
+  const { currency } = useTenantConfig();
+  const fmt = (value: string | number | null | undefined) => {
+    if (value == null) return '—';
+    const n = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(n)) return '—';
+    return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [rejectRun, setRejectRun] = useState<PayrollRun | null>(null);
   const [returnNote, setReturnNote] = useState('');

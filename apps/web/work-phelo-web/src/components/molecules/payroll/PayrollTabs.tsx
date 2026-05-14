@@ -4,16 +4,31 @@ interface Props {
   activeTab: 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history';
   canManage: boolean;
   canApprove: boolean;
+  canViewHistory: boolean;
+  country?: string;
   onTabChange: (tab: 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history') => void;
 }
 
-export function PayrollTabs({ activeTab, canManage, canApprove, onTabChange }: Props) {
+function contributionsTabLabel(country?: string) {
+  if (country === 'Nigeria') return 'Pension';
+  if (country === 'Kenya') return 'NSSF';
+  return 'SSNIT';
+}
+
+export function PayrollTabs({
+  activeTab,
+  canManage,
+  canApprove,
+  canViewHistory,
+  country,
+  onTabChange,
+}: Props) {
   const tabs = [
     { key: 'payslip', label: 'My Payslip' },
     ...(canManage ? [{ key: 'manage', label: 'Manage Payroll' }] : []),
-    ...(canManage ? [{ key: 'ssnit', label: 'SSNIT' }] : []),
+    ...(canManage ? [{ key: 'ssnit', label: contributionsTabLabel(country) }] : []),
     ...(canApprove ? [{ key: 'approve', label: 'Approve Payroll' }] : []),
-    ...(canApprove ? [{ key: 'history', label: 'History' }] : []),
+    ...(canViewHistory ? [{ key: 'history', label: 'History' }] : []),
   ];
 
   return (

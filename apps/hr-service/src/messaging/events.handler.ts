@@ -143,8 +143,13 @@ export class EventsHandler {
       this.leaveService.seedPublicHolidaysForTenant(tenantId, country),
       this.prisma.tenantConfig.upsert({
         where: { tenantId },
-        create: { tenantId, adminEmail, adminUserId },
-        update: { adminEmail, adminUserId },
+        create: {
+          tenantId,
+          adminEmail,
+          adminUserId,
+          country: country ?? 'Ghana',
+        },
+        update: { adminEmail, adminUserId, ...(country ? { country } : {}) },
       }),
     ]);
 

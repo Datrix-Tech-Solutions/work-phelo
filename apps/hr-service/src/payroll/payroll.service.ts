@@ -17,6 +17,22 @@ import {
   calculateTier3Contribution,
   calculateTotalPayrollDeductions,
 } from '../common/ghana-payroll.helper';
+import {
+  calculatePension_NG,
+  calculateMonthlyPAYE_NG,
+  calculatePayrollGross_NG,
+  calculateTaxableIncome_NG,
+  calculatePayrollNetIncome_NG,
+  calculateTotalPayrollDeductions_NG,
+} from '../common/nigeria-payroll.helper';
+import {
+  calculateNSSF_KE,
+  calculateMonthlyPAYE_KE,
+  calculatePayrollGross_KE,
+  calculateTaxableIncome_KE,
+  calculatePayrollNetIncome_KE,
+  calculateTotalPayrollDeductions_KE,
+} from '../common/kenya-payroll.helper';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
 import { PayrollDecisionDto } from './dto/payroll-decision.dto';
@@ -37,6 +53,7 @@ type PayrollSettingsSnapshot = {
   tier3Enabled: boolean;
   tier3Rate: string | null;
   tier3SchemeName: string | null;
+  country: string;
 };
 
 type EditablePayrollValues = {
@@ -119,6 +136,7 @@ export class PayrollService {
     const config = await this.prisma.tenantConfig.findUnique({
       where: { tenantId },
       select: {
+        country: true,
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
@@ -126,6 +144,7 @@ export class PayrollService {
     });
 
     return {
+      country: config?.country ?? 'Ghana',
       tier3Enabled: config?.payrollTier3Enabled ?? false,
       tier3Rate:
         config?.payrollTier3Rate != null
@@ -136,6 +155,19 @@ export class PayrollService {
   }
 
   private calculatePayrollItemValues(
+    values: EditablePayrollValues,
+    settings: PayrollSettingsSnapshot,
+  ): CalculatedPayrollValues {
+    if (settings.country === 'Nigeria') {
+      return this.calculatePayrollItemValues_NG(values, settings);
+    }
+    if (settings.country === 'Kenya') {
+      return this.calculatePayrollItemValues_KE(values, settings);
+    }
+    return this.calculatePayrollItemValues_GH(values, settings);
+  }
+
+  private calculatePayrollItemValues_GH(
     values: EditablePayrollValues,
     settings: PayrollSettingsSnapshot,
   ): CalculatedPayrollValues {
@@ -178,6 +210,89 @@ export class PayrollService {
       tier1Contribution,
       tier2Contribution,
       tier3Employee,
+      taxableIncome,
+      payeTax,
+      totalDeductions,
+      netSalary,
+    };
+  }
+
+  private calculatePayrollItemValues_NG(
+    values: EditablePayrollValues,
+    _settings: PayrollSettingsSnapshot,
+  ): CalculatedPayrollValues {
+    const grossSalary = calculatePayrollGross_NG(
+      values.basicSalary,
+      values.totalAllowances,
+      values.transportAmount,
+      values.otherDeductions,
+    );
+    const { employeePension, employerPension } = calculatePension_NG(
+      values.basicSalary,
+    );
+    const taxableIncome = calculateTaxableIncome_NG(
+      grossSalary,
+      employeePension,
+    );
+    const payeTax = calculateMonthlyPAYE_NG(taxableIncome, grossSalary);
+    const totalDeductions = calculateTotalPayrollDeductions_NG(
+      values.otherDeductions,
+      employeePension,
+      '0',
+      payeTax,
+    );
+    const netSalary = calculatePayrollNetIncome_NG(taxableIncome, payeTax);
+
+    return {
+      ...values,
+      overtimePay: '0',
+      bonus: '0',
+      thirteenthMonth: '0',
+      grossSalary,
+      employeeSSNIT: employeePension,
+      employerSSNIT: employerPension,
+      tier1Contribution: '0',
+      tier2Contribution: '0',
+      tier3Employee: '0',
+      taxableIncome,
+      payeTax,
+      totalDeductions,
+      netSalary,
+    };
+  }
+
+  private calculatePayrollItemValues_KE(
+    values: EditablePayrollValues,
+    _settings: PayrollSettingsSnapshot,
+  ): CalculatedPayrollValues {
+    const grossSalary = calculatePayrollGross_KE(
+      values.basicSalary,
+      values.totalAllowances,
+      values.transportAmount,
+      values.otherDeductions,
+    );
+    const { employeeNSSF, employerNSSF } = calculateNSSF_KE(values.basicSalary);
+    const taxableIncome = calculateTaxableIncome_KE(grossSalary, employeeNSSF);
+    const payeTax = calculateMonthlyPAYE_KE(taxableIncome);
+    const totalDeductions = calculateTotalPayrollDeductions_KE(
+      values.otherDeductions,
+      employeeNSSF,
+      '0',
+      payeTax,
+    );
+    const netSalary = calculatePayrollNetIncome_KE(taxableIncome, payeTax);
+
+    return {
+      ...values,
+      overtimePay: '0',
+      bonus: '0',
+      thirteenthMonth: '0',
+      grossSalary,
+      employeeSSNIT: employeeNSSF,
+      employerSSNIT: employerNSSF,
+      tier1Contribution: '0',
+      tier2Contribution: '0',
+      tier3Employee: '0',
       taxableIncome,
       payeTax,
       totalDeductions,
@@ -807,7 +922,9 @@ export class PayrollService {
       throw new NotFoundException('Payroll item not found');
     }
 
+    const tenantSettings = await this.getPayrollSettingsSnapshot(tenantId);
     const settings: PayrollSettingsSnapshot = {
+      country: tenantSettings.country,
       tier3Enabled: run.tier3Enabled,
       tier3Rate: run.tier3Rate?.toString() ?? null,
       tier3SchemeName: run.tier3SchemeName,

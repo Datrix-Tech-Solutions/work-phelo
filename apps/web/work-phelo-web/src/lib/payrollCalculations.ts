@@ -225,17 +225,17 @@ function calculatePAYE_GH(taxableIncome: number): number {
   return Math.round(tax);
 }
 
-/** Nigeria PAYE — annual bands divided by 12. */
-function calculatePAYE_NG(annualTaxable: number, rentReliefAnnual = 0): number {
+/** Nigeria PAYE — PITA 2011 annual bands applied to post-CRA taxable income. Returns annual tax. */
+function calculatePAYE_NG(annualTaxable: number): number {
   if (annualTaxable <= 0) return 0;
 
   const bands = [
-    { threshold: 800_000, rate: 0 },
-    { threshold: 3_000_000, rate: 0.15 },
-    { threshold: 12_000_000, rate: 0.18 },
-    { threshold: 25_000_000, rate: 0.21 },
-    { threshold: 50_000_000, rate: 0.23 },
-    { threshold: Infinity, rate: 0.25 },
+    { threshold: 300_000, rate: 0.07 },
+    { threshold: 600_000, rate: 0.11 },
+    { threshold: 1_100_000, rate: 0.15 },
+    { threshold: 1_600_000, rate: 0.19 },
+    { threshold: 3_200_000, rate: 0.21 },
+    { threshold: Infinity, rate: 0.24 },
   ];
 
   let tax = 0,
@@ -247,7 +247,7 @@ function calculatePAYE_NG(annualTaxable: number, rentReliefAnnual = 0): number {
     if (annualTaxable <= band.threshold) break;
   }
 
-  return Math.round(Math.max(0, tax - rentReliefAnnual) / 12);
+  return Math.round(tax);
 }
 
 /** Kenya NSSF — tiered 6% each side. */
@@ -314,6 +314,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   let voluntaryPensionName: string | undefined;
   let paye = 0;
   let taxableIncome = 0;
+  let taxExemptTransport = 0;
 
   switch (country) {
     case 'GH': {
@@ -340,10 +341,11 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         voluntaryPensionName = ghanaPension.providentFundName;
       }
 
-      // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax)
+      // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax); transport is exempt
+      taxExemptTransport = transportAllowance;
       taxableIncome = Math.max(
         0,
-        grossSalary - employeeStatutoryContrib - pfEmployee - transportAllowance - otherDeductions,
+        grossSalary - employeeStatutoryContrib - pfEmployee - taxExemptTransport - otherDeductions,
       );
       paye = calculatePAYE_GH(taxableIncome);
       break;
@@ -363,11 +365,19 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         voluntaryPensionName = nigeriaPension.pfaName;
       }
 
+      // taxableIncome for net salary: transport stays in (taxable in Nigeria)
       taxableIncome = Math.max(
         0,
         grossSalary - employeeStatutoryContrib - volEmployee - otherDeductions,
       );
-      paye = calculatePAYE_NG(taxableIncome * 12, rentRelief * 12);
+      // CRA (Consolidated Relief Allowance) reduces the PAYE tax base only, not take-home
+      const annualGross = grossSalary * 12;
+      const annualCRA = Math.max(200_000, annualGross * 0.01) + annualGross * 0.2;
+      const annualTaxBase = Math.max(0, taxableIncome * 12 - annualCRA);
+      const computedAnnualPAYE = calculatePAYE_NG(annualTaxBase);
+      // Minimum tax: 1% of monthly gross (applies when income is very low)
+      const minimumMonthlyPAYE = Math.round(grossSalary * 0.01);
+      paye = Math.max(Math.round(computedAnnualPAYE / 12), minimumMonthlyPAYE);
       break;
     }
 
@@ -399,7 +409,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     }
   }
 
-  const netSalary = Math.round(taxableIncome + transportAllowance - paye);
+  const netSalary = Math.round(taxableIncome + taxExemptTransport - paye);
   const totalEmployerCost = Math.round(
     grossSalary + employerStatutoryContrib + (voluntaryPensionEmployer ?? 0),
   );

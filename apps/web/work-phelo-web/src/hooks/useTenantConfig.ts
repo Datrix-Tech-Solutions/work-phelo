@@ -9,7 +9,8 @@ export function useTenantConfig() {
   const countryConfig = tenant?.country ? COUNTRY_CONFIG[tenant.country] : null;
 
   return {
-    currency: tenant?.currency ?? countryConfig?.currency ?? 'GHS',
+    country: tenant?.country ?? null,
+    currency: countryConfig?.currency ?? tenant?.currency ?? 'GHS',
     dialCode: countryConfig?.dialCode ?? '+233',
   };
 }
