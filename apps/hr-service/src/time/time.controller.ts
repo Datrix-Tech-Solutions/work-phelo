@@ -154,6 +154,7 @@ export class TimeController {
     return this.timeService.submitTimeCorrection(
       req.user.tenantId,
       req.user.id,
+      req.user.tenantSlug,
       dto,
     );
   }

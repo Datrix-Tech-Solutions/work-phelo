@@ -64,6 +64,7 @@ export enum Permission {
   APPROVE_PAYROLL = 'approve:payroll',
   READ_OWN_PAYSLIP = 'read:own_payslip',
   MANAGE_PAYROLL_SETTINGS = 'manage:payroll_settings',
+  WRITE_EMPLOYEE_PAYROLL = 'write:employee_payroll',
 
   // ── Appraisal ─────────────────────────────────────────────────────────────
   CONFIGURE_APPRAISAL = 'configure:appraisal',

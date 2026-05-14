@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, RotateCcw, FileText } from 'lucide-react';
+import { CheckCircle2, XCircle, FileText } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { usePayrollRuns } from '@/hooks';
@@ -13,12 +13,7 @@ import { AllowanceItem } from '@/lib/payrollCalculations';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
 import type { DeductionLineItem } from './DeductionsPanel';
-
-function fmt(value: string | number) {
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(n)) return '—';
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 export interface DraftLoadData {
   basicMap: Record<string, number>;
@@ -85,6 +80,15 @@ async function loadRunData(
   return { basicMap, allowancesMap, deductionItemsMap };
 }
 
+function useFmt() {
+  const { currency } = useTenantConfig();
+  return (value: string | number) => {
+    const n = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(n)) return '—';
+    return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+}
+
 function ApprovedRunCard({
   run,
   onLoad,
@@ -94,6 +98,7 @@ function ApprovedRunCard({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
@@ -154,6 +159,7 @@ function ReturnedRunCard({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
@@ -172,14 +178,14 @@ function ReturnedRunCard({
   return (
     <div className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-red-100 bg-red-50">
       <div className="flex items-start gap-3">
-        <RotateCcw className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+        <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-semibold text-gray-900">
               {payrollMonthLabel(run.month, run.year)}
             </p>
             <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium bg-red-100 text-red-600">
-              Returned
+              Rejected
             </span>
           </div>
           <p className="text-xs text-gray-500">Gross: {fmt(run.totalGross)}</p>
@@ -204,6 +210,7 @@ function ReturnedRunCard({
 function DraftRunCard({ run, onLoad }: { run: PayrollRun; onLoad: (data: DraftLoadData) => void }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
@@ -306,7 +313,7 @@ export function PayrollDraftsPanel({ isOpen, onClose, onLoad }: Props) {
 
           {returned.length > 0 && (
             <div className="flex flex-col gap-3">
-              <SectionHeader title="Returned For Revision" count={returned.length} />
+              <SectionHeader title="Rejected" count={returned.length} />
               {returned.map((run) => (
                 <ReturnedRunCard key={run.id} run={run} onLoad={handleLoad} />
               ))}

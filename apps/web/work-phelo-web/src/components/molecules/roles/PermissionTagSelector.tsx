@@ -104,7 +104,10 @@ export const PERMISSION_TAG_MAPPING: Record<
     { resource: 'appraisals', action: 'VIEW' },
     { resource: 'appraisal-reviews', action: 'EDIT' },
   ],
-  approve_appraisals: null,
+  approve_appraisals: [
+    { resource: 'appraisals', action: 'VIEW' },
+    { resource: 'appraisals', action: 'APPROVE' },
+  ],
   manage_payroll: [
     { resource: 'payroll', action: 'RUN' },
     { resource: 'payroll', action: 'EDIT' },

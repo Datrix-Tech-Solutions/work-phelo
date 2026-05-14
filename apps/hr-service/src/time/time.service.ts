@@ -128,8 +128,9 @@ export class TimeService {
     }
   }
 
-  private buildTimeCorrectionAppLink(correctionId: string) {
-    return `/hr/time-clock?tab=corrections&correctionId=${encodeURIComponent(correctionId)}`;
+  private buildTimeCorrectionAppLink(tenantSlug: string, correctionId: string) {
+    const base = process.env.FRONTEND_BASE_URL as string;
+    return `${base}/${tenantSlug}/hr/time-clock?tab=corrections&correctionId=${encodeURIComponent(correctionId)}`;
   }
 
   private toTimeApprovalRecipient(
@@ -348,6 +349,7 @@ export class TimeService {
 
   private async notifyStakeholdersOfTimeCorrectionSubmission(
     tenantId: string,
+    tenantSlug: string,
     correction: {
       id: string;
       employeeId: string;
@@ -378,7 +380,10 @@ export class TimeService {
     }
 
     const attendanceDate = correction.date.toISOString().split('T')[0];
-    const detailLink = this.buildTimeCorrectionAppLink(correction.id);
+    const detailLink = this.buildTimeCorrectionAppLink(
+      tenantSlug,
+      correction.id,
+    );
     const employeeFullName = `${employee.firstName} ${employee.lastName}`;
     const inAppMessage = `${employeeFullName} submitted a time correction request for ${attendanceDate}`;
 
@@ -1164,6 +1169,7 @@ export class TimeService {
   async submitTimeCorrection(
     tenantId: string,
     userId: string,
+    tenantSlug: string,
     dto: TimeCorrectionDto,
   ) {
     const employee = await this.prisma.employee.findFirst({
@@ -1195,6 +1201,7 @@ export class TimeService {
 
     void this.notifyStakeholdersOfTimeCorrectionSubmission(
       tenantId,
+      tenantSlug,
       correction,
       employee,
     );

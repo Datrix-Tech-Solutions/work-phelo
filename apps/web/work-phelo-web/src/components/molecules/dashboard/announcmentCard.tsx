@@ -29,7 +29,7 @@ export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
 
   if (announcements.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col gap-3 min-h-48">
+      <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col gap-3 min-h-60">
         <div className="flex items-center gap-2 shrink-0">
           <h2 className="text-base font-bold text-gray-900">General Announcements</h2>
         </div>

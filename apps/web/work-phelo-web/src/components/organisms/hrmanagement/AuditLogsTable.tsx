@@ -5,6 +5,7 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { useAuditLogs } from '@/hooks';
 import { AuditLog } from '@/types/tenant';
+import { cn } from '@/lib/utils';
 
 function formatTimestamp(iso: string) {
   return new Date(iso).toLocaleString('en-GB', {
@@ -20,7 +21,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
-      <span className="text-sm text-gray-800 break-words">{value}</span>
+      <span className="text-sm text-gray-800 wrap-break-word">{value ?? '—'}</span>
     </div>
   );
 }
@@ -53,24 +54,25 @@ export function AuditLogsTable() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AuditLog | null>(null);
 
-  const { data, isLoading } = useAuditLogs();
+  const { data, isLoading } = useAuditLogs(page);
   const logs: AuditLog[] = data?.logs ?? [];
+  const totalPages = data?.meta?.totalPages ?? 1;
 
   const columns: Column<AuditLog>[] = [
     {
       key: 'createdAt',
       label: 'Timestamp',
-      width: '200px',
+      width: '180px',
       render: (row) => (
         <span className="text-gray-700 tabular-nums">{formatTimestamp(row.createdAt)}</span>
       ),
     },
     {
-      key: 'performedBy',
+      key: 'userEmail',
       label: 'User Name',
       render: (row) => (
         <span className="text-gray-700">
-          {row.performedBy ?? <span className="text-gray-400">—</span>}
+          {row.userEmail ?? <span className="text-gray-400">—</span>}
         </span>
       ),
     },
@@ -116,8 +118,9 @@ export function AuditLogsTable() {
         isLoading={isLoading}
         emptyMessage="No audit log entries found"
         currentPage={page}
-        totalPages={1}
+        totalPages={totalPages}
         onPageChange={setPage}
+        onRowClick={(row) => setSelected(row)}
       />
 
       <SidePanel
@@ -130,11 +133,30 @@ export function AuditLogsTable() {
           <>
             <DetailRow label="ID" value={selected.id} />
             <DetailRow label="Timestamp" value={formatTimestamp(selected.createdAt)} />
-            <DetailRow label="User" value={selected.performedBy ?? '—'} />
+            <DetailRow label="User" value={selected.userEmail} />
+            <DetailRow label="Role" value={selected.userRole} />
             <DetailRow label="Module" value={selected.resource} />
+            {selected.resourceId && <DetailRow label="Resource ID" value={selected.resourceId} />}
             <DetailRow label="Action" value={selected.action} />
+            <DetailRow
+              label="Status"
+              value={
+                <span
+                  className={cn(
+                    'font-medium',
+                    selected.status === 'FAILURE' ? 'text-red-500' : 'text-green-600',
+                  )}
+                >
+                  {selected.status ?? 'SUCCESS'}
+                </span>
+              }
+            />
+            {selected.failureReason && (
+              <DetailRow label="Failure Reason" value={selected.failureReason} />
+            )}
             <ChangesBlock label="Before" data={selected.changes?.before} />
             <ChangesBlock label="After" data={selected.changes?.after} />
+            {selected.ipAddress && <DetailRow label="IP Address" value={selected.ipAddress} />}
           </>
         )}
       </SidePanel>

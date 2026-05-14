@@ -36,6 +36,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     if (exception instanceof Prisma.PrismaClientValidationError) {
+      this.logger.error('PrismaClientValidationError', exception.message);
       return response.status(HttpStatus.BAD_REQUEST).json({
         statusCode: HttpStatus.BAD_REQUEST,
         message: 'Invalid request data',

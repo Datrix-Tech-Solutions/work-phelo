@@ -21,7 +21,12 @@ const CYCLE_STATUS_STYLES: Record<CycleStatus, { dot: string; text: string }> = 
   Expired: { dot: 'bg-red-400', text: 'text-red-500' },
 };
 
-type CycleAppraisalItem = { selfStatus?: string; managerStatus?: string };
+type CycleAppraisalItem = {
+  selfStatus?: string;
+  managerStatus?: string;
+  status?: string;
+  finalScore?: number | null;
+};
 
 function useCycleCompletion(cycleId: string) {
   const { data: raw } = useCycleAppraisals(cycleId);
@@ -35,8 +40,12 @@ function useCycleCompletion(cycleId: string) {
   const total = appraisals.length;
   const selfCompleted = appraisals.filter((a) => a.selfStatus === 'SUBMITTED').length;
   const managerCompleted = appraisals.filter((a) => a.managerStatus === 'SUBMITTED').length;
+  const finalized = appraisals.filter(
+    (a) => a.status === 'COMPLETED' || a.finalScore != null,
+  ).length;
   const rate = total > 0 ? Math.round(((selfCompleted + managerCompleted) / (total * 2)) * 100) : 0;
-  return { total, rate };
+  const allFinalized = total > 0 && finalized === total;
+  return { total, rate, allFinalized };
 }
 
 function CompletionCell({ cycleId }: { cycleId: string }) {
@@ -68,8 +77,8 @@ function StatusCell({
   startDate: string;
   endDate: string;
 }) {
-  const { rate, total } = useCycleCompletion(cycleId);
-  const status = deriveCycleStatus(startDate, endDate, rate, total);
+  const { total, allFinalized } = useCycleCompletion(cycleId);
+  const status = deriveCycleStatus(startDate, endDate, total, allFinalized);
   const s = CYCLE_STATUS_STYLES[status];
   return (
     <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text)}>
@@ -82,10 +91,10 @@ function StatusCell({
 function deriveCycleStatus(
   startDate: string,
   endDate: string,
-  completionRate: number,
   totalAppraisals: number,
+  allFinalized: boolean,
 ): CycleStatus {
-  if (completionRate >= 100) return 'Completed';
+  if (allFinalized) return 'Completed';
   const today = new Date().toISOString().slice(0, 10);
   if (endDate < today) return 'Expired';
   if (totalAppraisals > 0) return 'In Progress';

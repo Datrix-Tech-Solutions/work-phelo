@@ -197,6 +197,7 @@ export class EmailService {
     lastName: string,
     reason: string,
     lastWorkingDate: string,
+    platformLink?: string,
   ): Promise<boolean> {
     const reasonLabels: Record<string, string> = {
       TERMINATION: 'Termination',
@@ -215,6 +216,7 @@ export class EmailService {
         lastName: this.escapeHtml(lastName),
         reasonLabel: this.escapeHtml(reasonLabels[reason] ?? reason),
         formattedDate: this.escapeHtml(this.formatDate(lastWorkingDate)),
+        platformLink: this.sanitizeUrl(platformLink),
       }),
     );
   }
