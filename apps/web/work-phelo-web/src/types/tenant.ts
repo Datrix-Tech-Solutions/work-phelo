@@ -45,14 +45,29 @@ export interface TenantUser {
 export interface AuditLog {
   id: string;
   resource: string;
+  resourceId?: string;
   action: string;
-  createdAt: string;
-  performedBy?: string;
+  userId?: string;
+  userEmail?: string;
+  userRole?: string;
   changes?: { before?: Record<string, unknown>; after?: Record<string, unknown> };
+  ipAddress?: string;
+  userAgent?: string;
+  status?: 'SUCCESS' | 'FAILURE';
+  failureReason?: string;
+  createdAt: string;
+}
+
+export interface AuditMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface AuditData {
   logs: AuditLog[];
+  meta: AuditMeta;
 }
 
 // ── Company (SuperAdmin table display model) ─────────────

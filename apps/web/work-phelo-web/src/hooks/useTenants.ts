@@ -139,10 +139,11 @@ export function useTenantAudit(id: string) {
   });
 }
 
-export function useAuditLogs() {
+export function useAuditLogs(page = 1) {
   return useQuery({
-    queryKey: ['audit-logs'],
-    queryFn: () => api.get<AuditData>('/hr/audit-logs').then((r) => r.data),
+    queryKey: ['audit-logs', page],
+    queryFn: () =>
+      api.get<AuditData>('/auth/audit', { params: { page, limit: 50 } }).then((r) => r.data),
   });
 }
 
