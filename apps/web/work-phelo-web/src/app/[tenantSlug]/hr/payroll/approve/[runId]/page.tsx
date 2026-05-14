@@ -20,6 +20,20 @@ function fmt(value: string | number | null | undefined) {
   return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function totalAllowances(row: PayrollItem): number {
+  if (row.allowanceItems?.length) {
+    return row.allowanceItems.reduce((s, a) => s + parseFloat(a.amount), 0);
+  }
+  return parseFloat(row.totalAllowances) + parseFloat(row.transportAmount);
+}
+
+function totalDeductions(row: PayrollItem): number {
+  if (row.deductionItems?.length) {
+    return row.deductionItems.reduce((s, d) => s + parseFloat(d.amount), 0);
+  }
+  return parseFloat(row.otherDeductions);
+}
+
 const columns: Column<PayrollItem>[] = [
   {
     key: 'employee',
@@ -42,7 +56,12 @@ const columns: Column<PayrollItem>[] = [
   {
     key: 'totalAllowances',
     label: 'Allowances',
-    render: (row) => fmt(row.totalAllowances),
+    render: (row) => fmt(totalAllowances(row)),
+  },
+  {
+    key: 'otherDeductions',
+    label: 'Deductions',
+    render: (row) => fmt(totalDeductions(row)),
   },
   {
     key: 'grossSalary',
@@ -51,28 +70,23 @@ const columns: Column<PayrollItem>[] = [
   },
   {
     key: 'employeeSSNIT',
-    label: 'Employee Total (5.5%)',
+    label: 'Employee SSNIT (5.5%)',
     render: (row) => fmt(row.employeeSSNIT),
   },
   {
     key: 'tier1Contribution',
-    label: 'Tier 1 Employee (0.5%)',
+    label: 'Tier 1 (0.5%)',
     render: (row) => fmt(row.tier1Contribution),
   },
   {
     key: 'tier2Contribution',
-    label: 'Tier 2 Employee (5%)',
+    label: 'Tier 2 (5%)',
     render: (row) => fmt(row.tier2Contribution),
   },
   {
     key: 'payeTax',
     label: 'PAYE',
     render: (row) => fmt(row.payeTax),
-  },
-  {
-    key: 'otherDeductions',
-    label: 'Deductions',
-    render: (row) => fmt(row.otherDeductions),
   },
   {
     key: 'netSalary',

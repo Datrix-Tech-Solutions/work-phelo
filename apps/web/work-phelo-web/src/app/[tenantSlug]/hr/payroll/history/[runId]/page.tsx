@@ -119,6 +119,20 @@ function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: s
   );
 }
 
+function totalAllowances(row: PayrollItem): number {
+  if (row.allowanceItems?.length) {
+    return row.allowanceItems.reduce((s, a) => s + parseFloat(a.amount), 0);
+  }
+  return parseFloat(row.totalAllowances) + parseFloat(row.transportAmount);
+}
+
+function totalDeductions(row: PayrollItem): number {
+  if (row.deductionItems?.length) {
+    return row.deductionItems.reduce((s, d) => s + parseFloat(d.amount), 0);
+  }
+  return parseFloat(row.otherDeductions);
+}
+
 const columns: Column<PayrollItem>[] = [
   {
     key: 'employee',
@@ -141,7 +155,12 @@ const columns: Column<PayrollItem>[] = [
   {
     key: 'totalAllowances',
     label: 'Allowances',
-    render: (row) => fmt(row.totalAllowances),
+    render: (row) => fmt(totalAllowances(row)),
+  },
+  {
+    key: 'otherDeductions',
+    label: 'Deductions',
+    render: (row) => fmt(totalDeductions(row)),
   },
   {
     key: 'grossSalary',
@@ -150,7 +169,7 @@ const columns: Column<PayrollItem>[] = [
   },
   {
     key: 'employeeSSNIT',
-    label: 'Employee Total (5.5%)',
+    label: 'Employee SSNIT (5.5%)',
     render: (row) => fmt(row.employeeSSNIT),
   },
   {
@@ -158,12 +177,6 @@ const columns: Column<PayrollItem>[] = [
     label: 'PAYE',
     render: (row) => fmt(row.payeTax),
   },
-  {
-    key: 'otherDeductions',
-    label: 'Deductions',
-    render: (row) => fmt(row.otherDeductions),
-  },
-
   {
     key: 'netSalary',
     label: 'Net Salary',

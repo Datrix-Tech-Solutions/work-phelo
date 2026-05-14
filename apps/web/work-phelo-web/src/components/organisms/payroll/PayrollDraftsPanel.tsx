@@ -13,12 +13,7 @@ import { AllowanceItem } from '@/lib/payrollCalculations';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
 import type { DeductionLineItem } from './DeductionsPanel';
-
-function fmt(value: string | number) {
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(n)) return '—';
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 export interface DraftLoadData {
   basicMap: Record<string, number>;
@@ -85,6 +80,15 @@ async function loadRunData(
   return { basicMap, allowancesMap, deductionItemsMap };
 }
 
+function useFmt() {
+  const { currency } = useTenantConfig();
+  return (value: string | number) => {
+    const n = typeof value === 'string' ? parseFloat(value) : value;
+    if (isNaN(n)) return '—';
+    return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+}
+
 function ApprovedRunCard({
   run,
   onLoad,
@@ -94,6 +98,7 @@ function ApprovedRunCard({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
@@ -154,6 +159,7 @@ function ReturnedRunCard({
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
@@ -204,6 +210,7 @@ function ReturnedRunCard({
 function DraftRunCard({ run, onLoad }: { run: PayrollRun; onLoad: (data: DraftLoadData) => void }) {
   const toast = useToast();
   const queryClient = useQueryClient();
+  const fmt = useFmt();
   const [loading, setLoading] = useState(false);
 
   const handleUse = async () => {
