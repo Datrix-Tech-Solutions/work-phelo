@@ -622,11 +622,7 @@ export class PayrollService {
       where: {
         tenantId,
         employmentStatus: {
-          in: [
-            EmploymentStatus.ACTIVE,
-            EmploymentStatus.PROBATION,
-            'ON_LEAVE' as EmploymentStatus,
-          ],
+          in: [EmploymentStatus.ACTIVE, EmploymentStatus.PROBATION],
         },
       },
       include: {
