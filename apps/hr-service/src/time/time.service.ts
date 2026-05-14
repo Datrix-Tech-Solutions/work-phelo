@@ -2608,10 +2608,22 @@ export class TimeService {
       this.prisma.publicHoliday.findMany({
         where: {
           tenantId,
-          ...(fromDate && { date: { gte: fromDate } }),
-          ...(toDate && { date: { lte: toDate } }),
+          OR: [
+            {
+              date: {
+                ...(fromDate && { gte: fromDate }),
+                ...(toDate && { lte: toDate }),
+              },
+            },
+            {
+              observedDate: {
+                ...(fromDate && { gte: fromDate }),
+                ...(toDate && { lte: toDate }),
+              },
+            },
+          ],
         },
-        orderBy: { date: 'asc' },
+        orderBy: { observedDate: 'asc' },
       }),
       this.prisma.shiftAssignmentOverride.findMany({
         where: {
@@ -2693,7 +2705,7 @@ export class TimeService {
       publicHolidays: publicHolidays.map((h) => ({
         id: h.id,
         name: h.name,
-        date: h.date.toISOString().slice(0, 10),
+        date: h.observedDate.toISOString().slice(0, 10),
       })),
       assignmentOverrides: assignmentOverrides.map((override) => ({
         id: override.id,

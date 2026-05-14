@@ -140,6 +140,7 @@ export class EventsHandler {
   ) {
     await Promise.all([
       this.leaveService.seedDefaultLeaveTypes(tenantId),
+      this.leaveService.seedPublicHolidaysForTenant(tenantId, country),
       this.prisma.tenantConfig.upsert({
         where: { tenantId },
         create: {
@@ -181,12 +182,17 @@ export class EventsHandler {
     @Payload() data: WithMeta<TenantApprovedEvent>,
     @Ctx() context: RmqContext,
   ) {
-    const { tenantId, adminEmail, adminUserId, _meta } = data;
+    const { tenantId, adminEmail, adminUserId, country, _meta } = data;
     this.logger.log(
       `[hr.tenant_approved] Received | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
     );
     try {
-      await this.provisionTenantWorkspace(tenantId, adminEmail, adminUserId);
+      await this.provisionTenantWorkspace(
+        tenantId,
+        adminEmail,
+        adminUserId,
+        country,
+      );
       this.logger.log(
         `[hr.tenant_approved] Tenant workspace provisioned | tenantId=${tenantId} | corrId=${_meta?.correlationId}`,
       );

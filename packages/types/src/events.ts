@@ -74,6 +74,7 @@ export interface TenantApprovedEvent {
   tenantId: string;
   adminEmail: string;
   adminUserId?: string;
+  country?: string;
 }
 
 export interface EmployeeActivatedEvent {

@@ -273,12 +273,17 @@ export interface PublicHoliday {
   tenantId: string;
   name: string;
   date: string;
+  observedDate: string;
+  countryScope: string;
+  regionScope: string;
+  isObservedShifted: boolean;
   createdAt: string;
 }
 
 export interface CreatePublicHolidayDto {
   name: string;
   date: string;
+  countryScope?: string;
 }
 
 // ── Announcements ───────────────────────────────────────

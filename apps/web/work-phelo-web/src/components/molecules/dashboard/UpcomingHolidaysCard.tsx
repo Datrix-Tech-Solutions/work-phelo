@@ -7,6 +7,7 @@ interface Holiday {
   id: string;
   name: string;
   date: string;
+  observedDate?: string;
 }
 
 interface UpcomingHolidaysCardProps {
@@ -29,7 +30,9 @@ export function UpcomingHolidaysCard({ holidays }: UpcomingHolidaysCardProps) {
                 <Calendar className="w-4 h-4 text-gray-500" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs text-gray-400">{formatHolidayDate(h.date, true)}</p>
+                <p className="text-xs text-gray-400">
+                  {formatHolidayDate(h.observedDate ?? h.date, true)}
+                </p>
                 <p className="text-sm font-semibold text-gray-900 truncate">{h.name}</p>
               </div>
             </div>
