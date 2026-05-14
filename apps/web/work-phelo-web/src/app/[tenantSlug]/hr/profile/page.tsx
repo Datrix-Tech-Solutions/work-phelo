@@ -3,7 +3,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useMyProfile, useUpdateMyProfile, useResignationRecord } from '@/hooks/hr/useEmployees';
+import {
+  useMyProfile,
+  useUpdateMyProfile,
+  useResignationRecord,
+  useEmployeeOptions,
+} from '@/hooks/hr/useEmployees';
 import { useUserPermissions } from '@/hooks/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -38,6 +43,7 @@ export default function MyProfilePage() {
   const { data: employee, isLoading } = useMyProfile();
   const { mutate: updateMyProfile, isPending: isUpdating } = useUpdateMyProfile();
   const { data: resignationRecord } = useResignationRecord(employee?.id ?? '');
+  const { data: allEmployees = [] } = useEmployeeOptions();
 
   const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
   const userPerms = userPermsRaw as { permissionSets?: { id: string; name: string }[] } | undefined;
@@ -95,6 +101,28 @@ export default function MyProfilePage() {
 
         {/* Right — detail sections */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">
+          {/* Employment Details */}
+          <SectionCard title="Employment Details">
+            <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+              <DetailField label="Job Title" value={employee.jobTitle} />
+              <DetailField label="Department" value={employee.department?.name} />
+              <DetailField label="Branch" value={employee.branch?.name} />
+              <DetailField
+                label="Reporting Manager"
+                value={
+                  employee.managerId
+                    ? (() => {
+                        const mgr = allEmployees.find((e) => e.id === employee.managerId);
+                        return mgr ? `${mgr.firstName} ${mgr.lastName}` : undefined;
+                      })()
+                    : undefined
+                }
+              />
+              <DetailField label="Employment Type" value={formatEnum(employee.employmentType)} />
+              <DetailField label="Date of Hire" value={formatDate(employee.hireDate)} />
+            </div>
+          </SectionCard>
+
           {/* Personal Information */}
           <SectionCard title="Personal Information">
             <div className="grid grid-cols-3 gap-x-6 gap-y-5">

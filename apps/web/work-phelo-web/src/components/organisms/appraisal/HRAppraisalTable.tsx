@@ -144,11 +144,6 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
       label: 'Cycle Name',
       render: (r) => <span className="font-medium text-gray-900">{r.title}</span>,
     },
-    // {
-    //   key: 'frequency',
-    //   label: 'Frequency',
-    //   render: (r) => <span className="font-medium text-gray-900">{r.frequency ?? '—'}</span>,
-    // },
     {
       key: 'date range',
       label: 'Date range',

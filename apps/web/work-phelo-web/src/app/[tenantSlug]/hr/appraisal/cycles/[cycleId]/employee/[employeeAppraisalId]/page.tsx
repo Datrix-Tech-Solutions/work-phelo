@@ -51,11 +51,19 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function ScoreCard({ label, value }: { label: string; value: React.ReactNode }) {
+function ScoreCard({
+  label,
+  value,
+  large,
+}: {
+  label: string;
+  value: React.ReactNode;
+  large?: boolean;
+}) {
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-gray-400">{label}</span>
-      <div className="text-base font-bold text-gray-900">{value}</div>
+      <div className={cn(large ? 'text-2xl' : 'text-base', 'font-bold text-gray-900')}>{value}</div>
     </div>
   );
 }
@@ -69,6 +77,8 @@ export default function EmployeeAppraisalDetailPage({
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [approveNote, setApproveNote] = useState('');
 
   const { mutate: finalize, isPending: isApproving } = useFinalizeAppraisal();
   const { mutate: reopen, isPending: isRejecting } = useReopenAppraisal();
@@ -155,31 +165,36 @@ export default function EmployeeAppraisalDetailPage({
             )}
           </div>
         </div>
-        {!isFinalized && (
+        {isFinalized ? (
+          <div className="flex items-center gap-8 shrink-0">
+            <ScoreCard
+              large
+              label="Final Combined Score"
+              value={combinedScore != null ? `${Math.round(combinedScore)}%` : '—'}
+            />
+            <ScoreCard
+              large
+              label="Performance Band"
+              value={
+                resultItem?.finalRating ? (
+                  <RatingBadge rating={resultItem.finalRating as FinalRating} />
+                ) : derivedRating ? (
+                  <RatingBadge rating={derivedRating} />
+                ) : (
+                  '—'
+                )
+              }
+            />
+          </div>
+        ) : (
           <div className="flex items-center gap-3 shrink-0">
             <Button variant="outline" onClick={() => setRejectOpen(true)} disabled={isApproving}>
               Reject
             </Button>
             <Button
               variant="primary"
-              isLoading={isApproving}
-              loadingText="Approving..."
-              disabled={isRejecting}
-              onClick={() =>
-                finalize(
-                  { id: employeeAppraisalId },
-                  {
-                    onSuccess: () =>
-                      useToastStore
-                        .getState()
-                        .addToast({ message: 'Appraisal approved', type: 'success' }),
-                    onError: (err) =>
-                      useToastStore
-                        .getState()
-                        .addToast({ message: extractError(err), type: 'error' }),
-                  },
-                )
-              }
+              disabled={isRejecting || isApproving}
+              onClick={() => setApproveOpen(true)}
             >
               Approve
             </Button>
@@ -193,40 +208,7 @@ export default function EmployeeAppraisalDetailPage({
         <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
           <h3 className="text-sm font-semibold text-gray-700">Assessment Results</h3>
         </div>
-
-        {/* Score grid */}
-        <div className="grid grid-cols-4 gap-6 px-6 py-5 border-b border-gray-100">
-          <ScoreCard
-            label="Self Assessment Score"
-            value={selfScore != null ? `${Math.round(selfScore)}%` : '—'}
-          />
-          <ScoreCard
-            label="Manager Assessment Score"
-            value={managerScore != null ? `${Math.round(managerScore)}%` : '—'}
-          />
-          <ScoreCard
-            label={isFinalized ? 'Final Combined Score' : 'Projected Combined Score'}
-            value={combinedScore != null ? `${Math.round(combinedScore)}%` : '—'}
-          />
-          <ScoreCard
-            label="Performance Band"
-            value={
-              isFinalized && resultItem?.finalRating ? (
-                <RatingBadge rating={resultItem.finalRating as FinalRating} />
-              ) : derivedRating ? (
-                <RatingBadge rating={derivedRating} />
-              ) : (
-                '—'
-              )
-            }
-          />
-        </div>
-
         {/* KPI table */}
-        <div className="px-6 py-4">
-          <h3 className="text-base font-semibold text-gray-900">KPI Breakdown</h3>
-        </div>
-
         <div className="px-6 pb-6">
           {selfKpis.length > 0 ? (
             <table className="w-full text-sm border-collapse">
@@ -301,14 +283,21 @@ export default function EmployeeAppraisalDetailPage({
         </div>
       </div>
 
+      {isFinalized && (
+        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-1">
+          <p className="text-sm font-semibold text-gray-900">Overall HR Note</p>
+          <p className="text-sm text-gray-500">{appraisal.finalizedAppraisal?.hrComments ?? '—'}</p>
+        </div>
+      )}
+
       <Modal
         isOpen={rejectOpen}
         onClose={() => {
           setRejectOpen(false);
           setRejectReason('');
         }}
-        title="Reject Assessment"
-        description="You are about to reject the assessment submitted. This action will reactivate the appraisal form for the respective employees."
+        title="Reject Manager Review"
+        description="This will send the manager's review back for revision."
         footer={
           <div className="flex justify-end gap-3">
             <Button
@@ -327,7 +316,7 @@ export default function EmployeeAppraisalDetailPage({
               loadingText="Rejecting..."
               onClick={() =>
                 reopen(
-                  { id: employeeAppraisalId, reason: rejectReason.trim(), target: 'FULL' },
+                  { id: employeeAppraisalId, reason: rejectReason.trim(), target: 'MANAGER' },
                   {
                     onSuccess: () => {
                       setRejectOpen(false);
@@ -355,6 +344,65 @@ export default function EmployeeAppraisalDetailPage({
             value={rejectReason}
             onChange={(e) => setRejectReason(e.target.value)}
             placeholder="Enter reason…"
+            rows={4}
+            className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
+          />
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={approveOpen}
+        onClose={() => {
+          setApproveOpen(false);
+          setApproveNote('');
+        }}
+        title="Approve Appraisal"
+        description="Add an overall message for the employee before finalising."
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setApproveOpen(false);
+                setApproveNote('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              isLoading={isApproving}
+              loadingText="Approving..."
+              onClick={() =>
+                finalize(
+                  { id: employeeAppraisalId, note: approveNote.trim() || undefined },
+                  {
+                    onSuccess: () => {
+                      setApproveOpen(false);
+                      setApproveNote('');
+                      useToastStore
+                        .getState()
+                        .addToast({ message: 'Appraisal approved', type: 'success' });
+                    },
+                    onError: (err) =>
+                      useToastStore
+                        .getState()
+                        .addToast({ message: extractError(err), type: 'error' }),
+                  },
+                )
+              }
+            >
+              Confirm Approval
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700">Overall Message</label>
+          <textarea
+            value={approveNote}
+            onChange={(e) => setApproveNote(e.target.value)}
+            placeholder="Add a message for the employee…"
             rows={4}
             className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
           />

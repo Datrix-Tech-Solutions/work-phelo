@@ -30,7 +30,6 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
   const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
   const canViewDetail = canEditEmployee || canOffboardEmployee;
-  const canViewAllStatuses = usePermission(Permission.READ_EMPLOYEES);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -60,12 +59,16 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const { data: allStaff = [], isLoading: isStatsLoading } = useEmployeeOptions();
 
   const allEmployees = empResult?.data ?? [];
-  // Advanced users can filter for restricted statuses explicitly, but they're hidden by default
-  const employees = (
-    canViewAllStatuses && statusFilter
-      ? allEmployees
-      : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus))
-  ).filter((e) => !typeFilter || e.employmentType === typeFilter);
+  const canViewRestricted = canEditEmployee || canOffboardEmployee;
+  const employees = allEmployees
+    .filter((e) => {
+      if (e.employmentStatus === 'OFFBOARDED')
+        return canViewRestricted && statusFilter === 'OFFBOARDED';
+      if (e.employmentStatus === 'SUSPENDED')
+        return canViewRestricted && statusFilter === 'SUSPENDED';
+      return true;
+    })
+    .filter((e) => !typeFilter || e.employmentType === typeFilter);
 
   const { data: departments = [], isError: deptsError } = useDepartmentOptions();
 
@@ -159,7 +162,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           options={[
             { value: 'ACTIVE', label: 'Permanent Staff' },
             { value: 'PROBATION', label: 'Probation' },
-            ...(canViewAllStatuses
+            ...(canEditEmployee || canOffboardEmployee
               ? [
                   { value: 'SUSPENDED', label: 'Suspended' },
                   { value: 'OFFBOARDED', label: 'Offboarded' },
