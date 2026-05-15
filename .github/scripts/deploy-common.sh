@@ -46,13 +46,13 @@ required_env_vars_for() {
   )
 
   case "$deploy_env" in
-    dev)
-      required+=(DEV_DATABASE_URL)
-      ;;
-    prod)
-      required+=(DATABASE_URL REDIS_PASSWORD)
-      ;;
-  esac
+  dev)
+    required+=(DATABASE_URL)
+    ;;
+  prod)
+    required+=(DATABASE_URL REDIS_PASSWORD)
+    ;;
+esac
 
   printf '%s\n' "${required[@]}"
 }
@@ -84,9 +84,6 @@ validate_required_envs() {
       ;;
   esac
 
-  if [[ "$deploy_env" == "dev" ]]; then
-    export DATABASE_URL="${DEV_DATABASE_URL:-}"
-  fi
 
   validate_database_target "$deploy_env"
 }
@@ -330,12 +327,10 @@ validate_database_target() {
     prod)
       [[ "$db_url" != *"dev"* ]] || die "Prod deployment must not use dev database URL"
       [[ "$db_url" != *"staging"* ]] || die "Prod deployment must not use staging database URL"
-      [[ -z "${DEV_DATABASE_URL:-}" ]] || die "Prod deployment must not receive DEV_DATABASE_URL"
       ;;
     dev)
       [[ "$db_url" != *"prod"* ]] || die "Dev deployment must not use prod database URL"
       [[ "$db_url" != *"production"* ]] || die "Dev deployment must not use production database URL"
-      [[ -z "${PROD_DATABASE_URL:-}" ]] || die "Dev deployment must not receive PROD_DATABASE_URL"
       ;;
   esac
 }
