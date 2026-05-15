@@ -174,11 +174,13 @@ section "Database Seed"
 if docker_compose_exec \
   -e SUPER_ADMIN_EMAIL="${SUPER_ADMIN_EMAIL}" \
   -e SUPER_ADMIN_PASSWORD="${SUPER_ADMIN_PASSWORD}" \
+  -e NODE_ENV=development \
   auth-service \
-  node /app/apps/auth-service/prisma/seed.js; then
+  node /app/apps/auth-service/dist/prisma/seed.js; then
   log "✓ Seed complete"
 else
-  log "⚠ Seed skipped (compiled seed not found or failed)"
+  log "✗ Seed FAILED: database not seeded with super admin user"
+  exit 1
 fi
 
 section "Reachability"
