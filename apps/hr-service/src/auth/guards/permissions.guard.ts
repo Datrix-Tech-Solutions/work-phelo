@@ -106,6 +106,29 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.ASSIGN_ASSET]: [
     { resource: 'assets', actions: ['VIEW', 'ASSIGN'] },
   ],
+
+  // ── Projects & Tasks ────────────────────────────────────────────────────
+  [Permission.CREATE_PROJECT]: [{ resource: 'projects', actions: ['CREATE'] }],
+  [Permission.READ_PROJECTS]: [{ resource: 'projects', actions: ['VIEW'] }],
+  [Permission.UPDATE_PROJECT]: [{ resource: 'projects', actions: ['EDIT'] }],
+  [Permission.DELETE_PROJECT]: [{ resource: 'projects', actions: ['DELETE'] }],
+  [Permission.ASSIGN_PROJECT]: [{ resource: 'projects', actions: ['ASSIGN'] }],
+  [Permission.CREATE_PROJECT_TASK]: [
+    { resource: 'project-tasks', actions: ['CREATE'] },
+  ],
+  [Permission.READ_PROJECT_TASKS]: [
+    { resource: 'project-tasks', actions: ['VIEW'] },
+  ],
+  [Permission.UPDATE_PROJECT_TASK]: [
+    { resource: 'project-tasks', actions: ['EDIT'] },
+  ],
+  [Permission.DELETE_PROJECT_TASK]: [
+    { resource: 'project-tasks', actions: ['DELETE'] },
+  ],
+  [Permission.ASSIGN_PROJECT_TASK]: [
+    { resource: 'project-tasks', actions: ['ASSIGN'] },
+  ],
+
   [Permission.READ_ANNOUNCEMENTS]: [
     { resource: 'announcements', actions: ['VIEW'] },
   ],

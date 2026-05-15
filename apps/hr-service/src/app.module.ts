@@ -23,6 +23,7 @@ import { FeatureGuard } from './auth/guards/feature.guard';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 import { HealthModule } from './health/health.module';
 import { SettingsModule } from './settings/settings.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { SettingsModule } from './settings/settings.module';
     SchedulingModule,
     HealthModule,
     SettingsModule,
+    ProjectsModule,
   ],
   providers: [
     RabbitMQSetupService,

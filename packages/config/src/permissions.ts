@@ -79,6 +79,19 @@ export enum Permission {
   MANAGE_ASSETS = 'manage:assets',
   READ_ASSETS = 'read:assets',
   ASSIGN_ASSET = 'assign:asset',
+
+  // ── Projects & Tasks ────────────────────────────────────────────────────
+  CREATE_PROJECT = 'create:project',
+  READ_PROJECTS = 'read:projects',
+  UPDATE_PROJECT = 'update:project',
+  DELETE_PROJECT = 'delete:project',
+  ASSIGN_PROJECT = 'assign:project',
+  CREATE_PROJECT_TASK = 'create:project_task',
+  READ_PROJECT_TASKS = 'read:project_tasks',
+  UPDATE_PROJECT_TASK = 'update:project_task',
+  DELETE_PROJECT_TASK = 'delete:project_task',
+  ASSIGN_PROJECT_TASK = 'assign:project_task',
+
   READ_ANNOUNCEMENTS = 'read:announcements',
   MANAGE_ANNOUNCEMENTS = 'manage:announcements',
 }
