@@ -54,6 +54,8 @@ COPY --from=builder /app/apps/auth-service/dist ./apps/auth-service/dist
 # The compiled seed expects the same client under dist/prisma/generated/client.
 COPY --from=builder /app/apps/auth-service/prisma/generated/client ./apps/auth-service/prisma/generated/client
 COPY --from=builder /app/apps/auth-service/prisma/generated/client ./apps/auth-service/dist/prisma/generated/client
+COPY --from=builder /app/apps/auth-service/prisma/schema.prisma ./apps/auth-service/prisma/schema.prisma
+COPY --from=builder /app/apps/auth-service/prisma/migrations ./apps/auth-service/prisma/migrations
 WORKDIR /app/apps/auth-service
 EXPOSE 4001
 CMD ["node", "dist/main"]
