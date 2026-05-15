@@ -141,6 +141,20 @@ preflight_runtime_env "$HR_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/hr-service/.env.d
 preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notification-service/.env.dev" "dist/config/runtime-env.js" "notification-service"
 log "✓ Runtime env validation passed"
 
+section "Infrastructure Services"
+docker_compose up -d --no-build redis rabbitmq
+wait_for_container_health redis
+wait_for_container_health rabbitmq
+log "✓ Infrastructure services healthy"
+
+section "Database Migrations"
+docker_compose run --rm auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
+docker_compose run --rm hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
+docker_compose run --rm notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
+docker_compose run --rm subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
+docker_compose run --rm marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" || true
+log "✓ Migrations complete"
+
 section "Deploy"
 docker_compose up -d --remove-orphans --no-build
 log "✓ Compose rollout finished"
@@ -155,14 +169,6 @@ wait_for_container_health subscription-service
 wait_for_container_health marketing-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
-
-section "Database Migrations"
-docker_compose_exec auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
-docker_compose_exec hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
-docker_compose_exec notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
-docker_compose_exec subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
-docker_compose_exec marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" || true
-log "✓ Migrations complete"
 
 section "Database Seed"
 if docker_compose_exec \
