@@ -1201,6 +1201,8 @@ export class PayrollService {
             year: true,
             status: true,
             paidAt: true,
+            payrollCountry: true,
+            payrollCurrency: true,
             tier3Enabled: true,
             tier3Rate: true,
             tier3SchemeName: true,
