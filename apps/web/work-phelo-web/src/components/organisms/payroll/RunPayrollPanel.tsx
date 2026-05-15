@@ -73,9 +73,7 @@ export function RunPayrollPanel({
   payrollCurrency,
 }: Props) {
   const toast = useToast();
-  const { currency } = useTenantConfig();
-  const fmt = (n: number) =>
-    `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  useTenantConfig();
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
   const [year, setYear] = useState(String(currentYear));
   const [notes, setNotes] = useState('');

@@ -35,7 +35,7 @@ interface Props {
 export function ProjectDetailsCard({ project }: Props) {
   return (
     <div className="bg-white border border-gray-200 rounded-card p-6 grid grid-cols-4 gap-6">
-      <DetailField label="Manager" value={project.managerName ?? '—'} />
+      <DetailField label="Project Owner" value={project.managerName ?? '—'} />
       <DetailField label="Start Date" value={formatDate(project.startDate)} />
       <DetailField label="End Date" value={formatDate(project.endDate)} />
       <DetailField label="Budget" value={formatBudget(project.budget)} />

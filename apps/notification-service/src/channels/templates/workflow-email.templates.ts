@@ -290,6 +290,10 @@ export function renderPayrollApprovalRequestedTemplate(input: {
   reviewLink?: string;
   escalated?: boolean;
 }): string {
+  const period = new Date(input.year, input.month - 1).toLocaleString('en-GB', {
+    month: 'long',
+    year: 'numeric',
+  });
   return renderStandardEmail({
     title: 'Payroll Approval Required',
     heading: input.escalated
@@ -298,7 +302,7 @@ export function renderPayrollApprovalRequestedTemplate(input: {
     bodyHtml: `
       <p>Hi ${input.recipientFirstName},</p>
       <p>
-        Payroll for <strong>${input.month}/${input.year}</strong> has been submitted by
+        Payroll for <strong>${period}</strong> has been submitted by
         <strong> ${input.submittedByName}</strong> and is awaiting approval.
       </p>
       ${
@@ -309,7 +313,7 @@ export function renderPayrollApprovalRequestedTemplate(input: {
       <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
         <tr>
           <td style="padding:8px 0; width:160px; font-weight:500;">Payroll period:</td>
-          <td style="padding:8px 0;">${input.month}/${input.year}</td>
+          <td style="padding:8px 0;">${period}</td>
         </tr>
         <tr>
           <td style="padding:8px 0; font-weight:500;">Total gross:</td>
@@ -350,20 +354,24 @@ export function renderPayrollDecisionTemplate(input: {
   detailLink?: string;
 }): string {
   const returnedToDraft = input.decision === 'RETURNED_TO_DRAFT';
+  const period = new Date(input.year, input.month - 1).toLocaleString('en-GB', {
+    month: 'long',
+    year: 'numeric',
+  });
   return renderStandardEmail({
-    title: returnedToDraft ? 'Payroll Returned to Draft' : 'Payroll Approved',
-    heading: returnedToDraft ? 'Payroll Returned to Draft' : 'Payroll Approved',
+    title: returnedToDraft ? 'Payroll Rejected' : 'Payroll Approved',
+    heading: returnedToDraft ? 'Payroll Rejected' : 'Payroll Approved',
     bodyHtml: `
       <p>Hi ${input.recipientFirstName},</p>
       <p>
-        Payroll for <strong>${input.month}/${input.year}</strong> was
-        <strong>${returnedToDraft ? ' returned to draft' : ' approved'}</strong>
+        Payroll for <strong>${period}</strong> was
+        <strong>${returnedToDraft ? ' rejected' : ' approved'}</strong>
         by <strong>${input.reviewerName}</strong>.
       </p>
       <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
         <tr>
           <td style="padding:8px 0; width:160px; font-weight:500;">Payroll period:</td>
-          <td style="padding:8px 0;">${input.month}/${input.year}</td>
+          <td style="padding:8px 0;">${period}</td>
         </tr>
         <tr>
           <td style="padding:8px 0; font-weight:500;">Total gross:</td>
@@ -380,7 +388,7 @@ export function renderPayrollDecisionTemplate(input: {
       </p>
       ${
         input.detailLink
-          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open payroll workspace', input.detailLink)}</p>`
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('View payroll run', input.detailLink)}</p>`
           : ''
       }
       <p style="margin-top:30px;">Thank you,</p>

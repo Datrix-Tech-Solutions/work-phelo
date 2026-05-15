@@ -8,10 +8,18 @@ import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { ProjectCard } from '@/components/molecules/ProjectCard';
 import { CreateProjectPanel } from '@/components/organisms/projects/CreateProjectPanel';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
-import { Project, CreateProjectDto } from '@/types/hr';
+import {
+  useProjects,
+  useMyProjects,
+  useCreateProject,
+  useArchiveProject,
+  usePermission,
+} from '@/hooks';
+import { Permission } from '@/lib/permissionMap';
+import { CreateProjectDto } from '@/types/hr';
 import { StatCard } from '@/components/molecules/shared/StatCard';
-
-const projects: Project[] = [];
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 interface Props {
   tenantSlug: string;
@@ -19,15 +27,23 @@ interface Props {
 
 export function ProjectsContent({ tenantSlug }: Props) {
   const router = useRouter();
-  // const canCreateProject = usePermission(Permission.CREATE_PROJECT);
-  // const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
-  // const canAssignProject = usePermission(Permission.ASSIGN_PROJECT);
+  const toast = useToastStore((s) => s.addToast);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
 
+  const canViewAll = usePermission(Permission.READ_PROJECTS);
+  const canManageProjects = usePermission(Permission.CREATE_PROJECT);
+
+  const { data: allProjectsData = [], isLoading: allLoading } = useProjects();
+  const { data: myProjectsData = [], isLoading: myLoading } = useMyProjects();
+  const projects = canViewAll ? allProjectsData : myProjectsData;
+  const isLoading = canViewAll ? allLoading : myLoading;
+
   const { data: employees = [] } = useEmployeeOptions();
+  const createProject = useCreateProject();
+  const archiveProject = useArchiveProject();
 
   const filtered = useMemo(() => {
     return projects.filter((p) => {
@@ -39,24 +55,35 @@ export function ProjectsContent({ tenantSlug }: Props) {
       }
       return true;
     });
-  }, [search, statusFilter]);
+  }, [projects, search, statusFilter]);
 
-  const metrics = useMemo(() => {
-    const all = projects;
-    return {
-      total: all.length,
-      active: all.filter((p) => p.status === 'ACTIVE').length,
-      completed: all.filter((p) => p.status === 'COMPLETED').length,
-      planning: all.filter((p) => p.status === 'PLANNING').length,
-    };
-  }, []);
+  const metrics = useMemo(
+    () => ({
+      total: projects.length,
+      active: projects.filter((p) => p.status === 'ACTIVE').length,
+      completed: projects.filter((p) => p.status === 'COMPLETED').length,
+      planning: projects.filter((p) => p.status === 'PLANNING').length,
+    }),
+    [projects],
+  );
 
   const hasFilters = !!(search || statusFilter);
 
-  const handleCreate = (data: CreateProjectDto) => {
-    // TODO: POST /hr/projects
-    console.log('Create project:', data);
-    setPanelOpen(false);
+  const handleCreate = async (data: CreateProjectDto) => {
+    try {
+      await createProject.mutateAsync(data);
+      setPanelOpen(false);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await archiveProject.mutateAsync(id);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
   };
 
   return (
@@ -66,7 +93,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Projects & Tasks</h1>
         </div>
-        <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>
+        {canManageProjects && <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>}
       </div>
 
       {/* Metric cards */}
@@ -134,8 +161,14 @@ export function ProjectsContent({ tenantSlug }: Props) {
         )}
       </div>
 
-      {/* Grid or empty state */}
-      {filtered.length === 0 ? (
+      {/* Grid or empty/loading state */}
+      {isLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-52 bg-gray-100 rounded-card animate-pulse" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">
           <p className="text-sm font-medium text-gray-900">No projects found</p>
           <p className="text-xs text-gray-400">
@@ -149,18 +182,21 @@ export function ProjectsContent({ tenantSlug }: Props) {
               key={project.id}
               project={project}
               onOpen={() => router.push(`/${tenantSlug}/hr/projects/${project.id}`)}
-              onDelete={() => console.log('Delete project', project.id)}
+              onDelete={canManageProjects ? () => handleDelete(project.id) : undefined}
             />
           ))}
         </div>
       )}
 
-      <CreateProjectPanel
-        isOpen={panelOpen}
-        onClose={() => setPanelOpen(false)}
-        employees={employees}
-        onSubmit={handleCreate}
-      />
+      {canManageProjects && (
+        <CreateProjectPanel
+          isOpen={panelOpen}
+          onClose={() => setPanelOpen(false)}
+          employees={employees}
+          onSubmit={handleCreate}
+          isSubmitting={createProject.isPending}
+        />
+      )}
     </>
   );
 }

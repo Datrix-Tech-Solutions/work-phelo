@@ -8,16 +8,7 @@ import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { inputClass, cn } from '@/lib/utils';
-
-export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE';
-
-export interface ProjectTask {
-  id: string;
-  name: string;
-  dueDate: string;
-  status: TaskStatus;
-  assignedTo?: string;
-}
+import type { TaskStatus, ProjectTask } from '@/types/hr';
 
 interface TaskEditValues {
   name: string;
@@ -31,6 +22,7 @@ interface Props {
   onClose: () => void;
   onSave: (id: string, values: TaskEditValues & { assignedEmployeeId?: string }) => void;
   isSaving?: boolean;
+  readOnly?: boolean;
 }
 
 const STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -64,15 +56,17 @@ function ReadOnlyField({ label, children }: { label: string; children: React.Rea
   );
 }
 
-export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving }: Props) {
+export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving, readOnly }: Props) {
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(task?.id ?? null);
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | undefined>(undefined);
 
-  // Reset local selections when the task changes. Doing this at render time (rather than
-  // inside a useEffect) avoids cascading renders and satisfies the lint rule.
-  if (task?.id !== currentTaskId) {
-    setCurrentTaskId(task?.id ?? null);
+  // Reset local selections when the task changes. Normalise to null so that
+  // `undefined` (task prop absent) and `null` (no task) compare equal and don't
+  // trigger an infinite setState loop during render.
+  const incomingTaskId = task?.id ?? null;
+  if (incomingTaskId !== currentTaskId) {
+    setCurrentTaskId(incomingTaskId);
     setSelectedEmployeeId(undefined);
     setEmployeeSearch('');
   }
@@ -89,7 +83,7 @@ export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving }: Props
 
   useEffect(() => {
     if (task) {
-      reset({ name: task.name, dueDate: task.dueDate, status: task.status });
+      reset({ name: task.name, dueDate: task.dueDate ?? '', status: task.status });
     }
   }, [task, reset]);
 
@@ -126,15 +120,22 @@ export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving }: Props
   };
 
   const isDone = task?.status === 'DONE';
+  const isReadOnly = readOnly || isDone;
 
   return (
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title={isDone ? 'Task Details' : 'Edit Task'}
-      description={isDone ? 'This task is complete and cannot be edited.' : undefined}
+      title={isReadOnly ? 'Task Details' : 'Edit Task'}
+      description={
+        isDone
+          ? 'This task is complete and cannot be edited.'
+          : readOnly
+            ? 'You can view this task but cannot edit it.'
+            : undefined
+      }
       footer={
-        isDone ? (
+        isReadOnly ? (
           <div className="flex justify-end">
             <Button variant="outline" onClick={handleClose}>
               Close
@@ -152,13 +153,15 @@ export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving }: Props
         )
       }
     >
-      {isDone ? (
+      {isReadOnly ? (
         /* ── Read-only view ── */
         <div className="flex flex-col gap-6">
           <ReadOnlyField label="Task Name">
             <p className="line-through text-gray-400">{task?.name}</p>
           </ReadOnlyField>
-          <ReadOnlyField label="Due Date">{task ? formatDisplay(task.dueDate) : '—'}</ReadOnlyField>
+          <ReadOnlyField label="Due Date">
+            {task?.dueDate ? formatDisplay(task.dueDate) : '—'}
+          </ReadOnlyField>
           <ReadOnlyField label="Status">
             {task && (
               <div className="flex items-center gap-1.5">
@@ -169,7 +172,7 @@ export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving }: Props
               </div>
             )}
           </ReadOnlyField>
-          <ReadOnlyField label="Assigned To">{task?.assignedTo ?? '—'}</ReadOnlyField>
+          <ReadOnlyField label="Assigned To">{task?.assignedEmployeeName ?? '—'}</ReadOnlyField>
         </div>
       ) : (
         /* ── Edit form ── */
@@ -236,10 +239,10 @@ export function EditTaskPanel({ task, isOpen, onClose, onSave, isSaving }: Props
                   Remove
                 </button>
               </div>
-            ) : task?.assignedTo ? (
+            ) : task?.assignedEmployeeName ? (
               <p className="text-sm text-gray-500 px-1">
                 Currently assigned to{' '}
-                <span className="font-medium text-gray-700">{task.assignedTo}</span>
+                <span className="font-medium text-gray-700">{task.assignedEmployeeName}</span>
               </p>
             ) : null}
 

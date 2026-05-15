@@ -292,7 +292,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     basicSalary,
     allowances,
     otherDeductions = 0,
-    rentRelief = 0,
+    // rentRelief = 0,
     ghanaPension = {},
     nigeriaPension = {},
     kenyaPension = {},

@@ -121,8 +121,22 @@ export const PERMISSION_TAG_MAPPING: Record<
     { resource: 'schedules', action: 'CREATE' },
     { resource: 'schedules', action: 'EDIT' },
   ],
-  view_all_projects: null,
-  manage_projects: null,
+  view_all_projects: [
+    { resource: 'projects', action: 'VIEW' },
+    { resource: 'project-tasks', action: 'VIEW' },
+  ],
+  manage_projects: [
+    { resource: 'projects', action: 'VIEW' },
+    { resource: 'projects', action: 'CREATE' },
+    { resource: 'projects', action: 'EDIT' },
+    { resource: 'projects', action: 'DELETE' },
+    { resource: 'projects', action: 'ASSIGN' },
+    { resource: 'project-tasks', action: 'VIEW' },
+    { resource: 'project-tasks', action: 'CREATE' },
+    { resource: 'project-tasks', action: 'EDIT' },
+    { resource: 'project-tasks', action: 'DELETE' },
+    { resource: 'project-tasks', action: 'ASSIGN' },
+  ],
 
   // HR Settings
   manage_leave_holiday: [{ resource: 'leave-settings', action: 'EDIT' }],

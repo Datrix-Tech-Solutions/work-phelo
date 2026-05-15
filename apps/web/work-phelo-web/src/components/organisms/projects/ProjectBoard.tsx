@@ -2,16 +2,17 @@
 
 import { useMemo } from 'react';
 import { Calendar } from 'lucide-react';
-
-type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE';
-
-interface BoardTask {
-  id: string;
-  name: string;
-  dueDate: string;
-  assignedTo?: string;
-  status: TaskStatus;
-}
+import type { TaskStatus, ProjectTask } from '@/types/hr';
+import {
+  useProjectTasks,
+  useUpdateTaskStatus,
+  useProject,
+  useMyProfile,
+  usePermission,
+} from '@/hooks';
+import { Permission } from '@/lib/permissionMap';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 const COLUMNS: { key: TaskStatus; label: string }[] = [
   { key: 'TODO', label: 'TO DO' },
@@ -19,8 +20,6 @@ const COLUMNS: { key: TaskStatus; label: string }[] = [
   { key: 'ON_HOLD', label: 'ON HOLD' },
   { key: 'DONE', label: 'DONE' },
 ];
-
-const TASKS: BoardTask[] = [];
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -35,66 +34,145 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
-function TaskCard({ task }: { task: BoardTask }) {
+function TaskCard({
+  task,
+  onStatusChange,
+  canMove,
+}: {
+  task: ProjectTask;
+  onStatusChange: (taskId: string, status: TaskStatus) => void;
+  canMove: boolean;
+}) {
+  const nextStatus: Record<TaskStatus, TaskStatus | null> = {
+    TODO: 'IN_PROGRESS',
+    IN_PROGRESS: 'DONE',
+    ON_HOLD: 'IN_PROGRESS',
+    DONE: null,
+  };
+
+  const next = nextStatus[task.status];
+
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-3 shadow-sm">
       <p className="text-sm font-semibold text-gray-900 leading-snug">{task.name}</p>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
-          {task.assignedTo ? (
+          {task.assignedEmployeeName ? (
             <>
               <div className="w-7 h-7 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
                 <span className="text-[10px] font-bold text-brand">
-                  {getInitials(task.assignedTo)}
+                  {getInitials(task.assignedEmployeeName)}
                 </span>
               </div>
-              <span className="text-xs text-gray-600 truncate">{task.assignedTo}</span>
+              <span className="text-xs text-gray-600 truncate">{task.assignedEmployeeName}</span>
             </>
           ) : (
             <span className="text-xs text-gray-300">Unassigned</span>
           )}
         </div>
-        <div className="flex items-center gap-1 shrink-0">
-          <Calendar className="w-3.5 h-3.5 text-gray-400" />
-          <span className="text-xs text-gray-500">{formatDate(task.dueDate)}</span>
-        </div>
+        {task.dueDate && (
+          <div className="flex items-center gap-1 shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-xs text-gray-500">{formatDate(task.dueDate)}</span>
+          </div>
+        )}
       </div>
+      {canMove && next && (
+        <button
+          onClick={() => onStatusChange(task.id, next)}
+          className="text-xs text-brand font-medium hover:underline text-left"
+        >
+          Mark as {next === 'IN_PROGRESS' ? 'In Progress' : 'Done'} →
+        </button>
+      )}
     </div>
   );
 }
 
-export function ProjectBoard() {
+interface Props {
+  projectId: string;
+}
+
+export function ProjectBoard({ projectId }: Props) {
+  const toast = useToastStore((s) => s.addToast);
+
+  const canManageProjects = usePermission(Permission.UPDATE_PROJECT_TASK);
+  const { data: myProfile } = useMyProfile();
+  const { data: project } = useProject(projectId);
+  const isProjectManager = !!(
+    project?.managerId &&
+    myProfile?.id &&
+    project.managerId === myProfile.id
+  );
+
+  const { data: tasks = [], isLoading } = useProjectTasks(projectId);
+  const updateStatus = useUpdateTaskStatus();
+
   const grouped = useMemo(() => {
-    const map: Record<TaskStatus, BoardTask[]> = {
+    const map: Record<TaskStatus, ProjectTask[]> = {
       TODO: [],
       IN_PROGRESS: [],
       ON_HOLD: [],
       DONE: [],
     };
-    for (const task of TASKS) {
+    for (const task of tasks) {
       map[task.status].push(task);
     }
     return map;
-  }, []);
+  }, [tasks]);
+
+  const handleStatusChange = async (taskId: string, status: TaskStatus) => {
+    try {
+      await updateStatus.mutateAsync({ taskId, status });
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex gap-5 overflow-x-auto pb-4">
+        {COLUMNS.map((col) => (
+          <div key={col.key} className="flex flex-col gap-3 min-w-55 flex-1">
+            <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="flex gap-5 overflow-x-auto pb-4 min-h-0">
       {COLUMNS.map((col) => {
-        const tasks = grouped[col.key];
+        const colTasks = grouped[col.key];
         return (
-          <div key={col.key} className="flex flex-col gap-3 min-w-[220px] flex-1">
+          <div key={col.key} className="flex flex-col gap-3 min-w-55 flex-1">
             {/* Column header */}
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold tracking-wide text-gray-500">{col.label}</span>
-              <span className="text-xs text-gray-400">{tasks.length}</span>
+              <span className="text-xs text-gray-400">{colTasks.length}</span>
             </div>
 
             {/* Cards */}
             <div className="flex flex-col gap-2">
-              {tasks.length === 0 ? (
+              {colTasks.length === 0 ? (
                 <p className="text-xs text-gray-300 text-center py-8">No tasks</p>
               ) : (
-                tasks.map((task) => <TaskCard key={task.id} task={task} />)
+                colTasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    onStatusChange={handleStatusChange}
+                    canMove={
+                      canManageProjects ||
+                      isProjectManager ||
+                      task.assignedEmployeeId === myProfile?.id
+                    }
+                  />
+                ))
               )}
             </div>
           </div>

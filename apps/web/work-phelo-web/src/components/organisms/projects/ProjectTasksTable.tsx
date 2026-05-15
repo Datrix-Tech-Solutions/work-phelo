@@ -4,11 +4,19 @@ import { useState, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { CreateTaskPanel } from '@/components/organisms/projects/CreateTaskPanel';
+import { EditTaskPanel } from '@/components/organisms/projects/EditTaskPanel';
+import type { ProjectTask, TaskStatus } from '@/types/hr';
 import {
-  EditTaskPanel,
-  ProjectTask,
-  TaskStatus,
-} from '@/components/organisms/projects/EditTaskPanel';
+  useProjectTasks,
+  useCreateProjectTask,
+  useUpdateProjectTask,
+  useProject,
+  useMyProfile,
+  usePermission,
+} from '@/hooks';
+import { Permission } from '@/lib/permissionMap';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 const STATUS_META: Record<TaskStatus, { dot: string; label: string; text: string }> = {
   TODO: { dot: 'bg-gray-400', label: 'To Do', text: 'text-gray-600' },
@@ -29,8 +37,6 @@ function formatDue(dateStr: string) {
   return `Due ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 }
 
-const TASKS: ProjectTask[] = [];
-
 const COLUMNS: Column<ProjectTask>[] = [
   {
     key: 'name',
@@ -45,7 +51,9 @@ const COLUMNS: Column<ProjectTask>[] = [
             <p className={cn('font-medium text-gray-900', isDone && 'line-through text-gray-400')}>
               {row.name}
             </p>
-            <p className="text-xs text-gray-400 mt-0.5">{formatDue(row.dueDate)}</p>
+            {row.dueDate && (
+              <p className="text-xs text-gray-400 mt-0.5">{formatDue(row.dueDate)}</p>
+            )}
           </div>
         </div>
       );
@@ -66,69 +74,143 @@ const COLUMNS: Column<ProjectTask>[] = [
     },
   },
   {
-    key: 'assignedTo',
+    key: 'assignedEmployeeName',
     label: 'Assigned To',
     width: '200px',
     render: (row) =>
-      row.assignedTo ? <span>{row.assignedTo}</span> : <span className="text-gray-300">—</span>,
+      row.assignedEmployeeName ? (
+        <span>{row.assignedEmployeeName}</span>
+      ) : (
+        <span className="text-gray-300">—</span>
+      ),
   },
 ];
 
-export function ProjectTasksTable() {
+interface Props {
+  projectId: string;
+}
+
+export function ProjectTasksTable({ projectId }: Props) {
+  const toast = useToastStore((s) => s.addToast);
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<ProjectTask | null>(null);
+  const [taskReadOnly, setTaskReadOnly] = useState(false);
+
+  const canManageProjects = usePermission(Permission.CREATE_PROJECT_TASK);
+  const { data: myProfile } = useMyProfile();
+  const { data: project } = useProject(projectId);
+  const isProjectManager = !!(
+    project?.managerId &&
+    myProfile?.id &&
+    project.managerId === myProfile.id
+  );
+  const canModify = canManageProjects || isProjectManager;
+
+  const { data: tasks = [], isLoading } = useProjectTasks(projectId);
+  const createTask = useCreateProjectTask();
+  const updateTask = useUpdateProjectTask();
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return TASKS.filter((t) => {
+    return tasks.filter((t) => {
       const matchesStatus = !statusFilter || t.status === statusFilter;
       const matchesSearch =
         !q ||
         t.name.toLowerCase().includes(q) ||
-        (t.assignedTo?.toLowerCase().includes(q) ?? false);
+        (t.assignedEmployeeName?.toLowerCase().includes(q) ?? false);
       return matchesStatus && matchesSearch;
     });
-  }, [search, statusFilter]);
+  }, [tasks, search, statusFilter]);
+
+  const handleCreate = async (values: {
+    name: string;
+    dueDate: string;
+    status: 'TODO';
+    assignedEmployeeId?: string;
+  }) => {
+    try {
+      await createTask.mutateAsync({
+        projectId,
+        data: {
+          name: values.name,
+          dueDate: values.dueDate || undefined,
+          assignedEmployeeId: values.assignedEmployeeId,
+        },
+      });
+      setCreateOpen(false);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
+
+  const handleSave = async (
+    taskId: string,
+    values: { name: string; dueDate: string; status: TaskStatus; assignedEmployeeId?: string },
+  ) => {
+    try {
+      await updateTask.mutateAsync({
+        projectId,
+        taskId,
+        data: {
+          name: values.name,
+          dueDate: values.dueDate || undefined,
+          status: values.status,
+          assignedEmployeeId: values.assignedEmployeeId,
+        },
+      });
+      setSelectedTask(null);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
 
   return (
     <>
       <DataTable
         columns={COLUMNS}
         data={filtered}
+        isLoading={isLoading}
         searchPlaceholder="Search tasks or assignee…"
         searchValue={search}
         onSearch={setSearch}
         filterOptions={STATUS_FILTER_OPTIONS}
         onFilter={setStatusFilter}
-        actionButton={{ label: '+ Create Task', onClick: () => setCreateOpen(true) }}
-        onRowClick={setSelectedTask}
+        actionButton={
+          canModify ? { label: '+ Create Task', onClick: () => setCreateOpen(true) } : undefined
+        }
+        onRowClick={(task) => {
+          setSelectedTask(task);
+          setTaskReadOnly(!canModify && task.assignedEmployeeId !== myProfile?.id);
+        }}
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
         emptyMessage="No tasks found"
       />
 
-      <CreateTaskPanel
-        isOpen={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onCreate={(values) => {
-          // TODO: POST /hr/projects/:id/tasks
-          console.log('Create task', values);
-          setCreateOpen(false);
-        }}
-      />
+      {canModify && (
+        <CreateTaskPanel
+          projectId={projectId}
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
+          onCreate={handleCreate}
+          isCreating={createTask.isPending}
+        />
+      )}
 
       <EditTaskPanel
         task={selectedTask}
         isOpen={!!selectedTask}
-        onClose={() => setSelectedTask(null)}
-        onSave={(id, values) => {
-          // TODO: PATCH /hr/projects/:id/tasks/:taskId
-          console.log('Save task', id, values);
+        onClose={() => {
           setSelectedTask(null);
+          setTaskReadOnly(false);
         }}
+        onSave={handleSave}
+        isSaving={updateTask.isPending}
+        readOnly={taskReadOnly}
       />
     </>
   );

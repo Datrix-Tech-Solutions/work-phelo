@@ -6,8 +6,17 @@ import { Search } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
+import { useProjectMembers } from '@/hooks';
 import { inputClass, cn } from '@/lib/utils';
+
+function getInitials(name: string) {
+  return name
+    .split(' ')
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase();
+}
 
 interface TaskFormValues {
   name: string;
@@ -15,6 +24,7 @@ interface TaskFormValues {
 }
 
 interface Props {
+  projectId: string;
   isOpen: boolean;
   onClose: () => void;
   onCreate: (values: {
@@ -26,11 +36,11 @@ interface Props {
   isCreating?: boolean;
 }
 
-export function CreateTaskPanel({ isOpen, onClose, onCreate, isCreating }: Props) {
+export function CreateTaskPanel({ projectId, isOpen, onClose, onCreate, isCreating }: Props) {
   const [employeeSearch, setEmployeeSearch] = useState('');
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | undefined>(undefined);
 
-  const { data: employees = [], isLoading: loadingEmployees } = useEmployeeOptions();
+  const { data: members = [], isLoading: loadingMembers } = useProjectMembers(projectId);
 
   const {
     register,
@@ -40,24 +50,17 @@ export function CreateTaskPanel({ isOpen, onClose, onCreate, isCreating }: Props
     formState: { errors },
   } = useForm<TaskFormValues>();
 
-  const activeEmployees = useMemo(
-    () => employees.filter((e) => e.employmentStatus === 'ACTIVE'),
-    [employees],
-  );
-
-  const filteredEmployees = useMemo(() => {
+  const filteredMembers = useMemo(() => {
     const q = employeeSearch.toLowerCase();
-    if (!q) return activeEmployees;
-    return activeEmployees.filter(
-      (e) =>
-        `${e.firstName} ${e.lastName}`.toLowerCase().includes(q) ||
-        e.jobTitle?.toLowerCase().includes(q),
+    if (!q) return members;
+    return members.filter(
+      (m) => m.name.toLowerCase().includes(q) || m.jobTitle?.toLowerCase().includes(q),
     );
-  }, [activeEmployees, employeeSearch]);
+  }, [members, employeeSearch]);
 
-  const selectedEmployee = useMemo(
-    () => activeEmployees.find((e) => e.id === selectedEmployeeId),
-    [activeEmployees, selectedEmployeeId],
+  const selectedMember = useMemo(
+    () => members.find((m) => m.employeeId === selectedEmployeeId),
+    [members, selectedEmployeeId],
   );
 
   const handleClose = () => {
@@ -68,7 +71,7 @@ export function CreateTaskPanel({ isOpen, onClose, onCreate, isCreating }: Props
   };
 
   const onSubmit = (values: TaskFormValues) => {
-    onCreate({ ...values, status: 'TODO', assignedEmployeeId: selectedEmployeeId });
+    onCreate({ ...values, status: 'TODO', assignedEmployeeId: selectedMember?.employeeId });
     reset();
     setEmployeeSearch('');
     setSelectedEmployeeId(undefined);
@@ -122,17 +125,14 @@ export function CreateTaskPanel({ isOpen, onClose, onCreate, isCreating }: Props
         <label className="text-sm font-medium text-gray-700">Assign To</label>
 
         {/* Selected pill */}
-        {selectedEmployee && (
+        {selectedMember && (
           <div className="flex items-center gap-2 px-3 py-2 bg-brand/5 border border-brand/20 rounded-lg">
             <div className="w-6 h-6 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
               <span className="text-[10px] font-bold text-brand">
-                {selectedEmployee.firstName[0]}
-                {selectedEmployee.lastName[0]}
+                {getInitials(selectedMember.name)}
               </span>
             </div>
-            <span className="text-sm text-gray-800 flex-1">
-              {selectedEmployee.firstName} {selectedEmployee.lastName}
-            </span>
+            <span className="text-sm text-gray-800 flex-1">{selectedMember.name}</span>
             <button
               type="button"
               onClick={() => setSelectedEmployeeId(undefined)}
@@ -155,22 +155,22 @@ export function CreateTaskPanel({ isOpen, onClose, onCreate, isCreating }: Props
           />
         </div>
 
-        {/* Employee list */}
+        {/* Member list */}
         <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
-          {loadingEmployees ? (
+          {loadingMembers ? (
             Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="h-11 bg-gray-100 rounded-lg animate-pulse" />
             ))
-          ) : filteredEmployees.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-4">No employees found</p>
+          ) : filteredMembers.length === 0 ? (
+            <p className="text-xs text-gray-400 text-center py-4">No members found</p>
           ) : (
-            filteredEmployees.map((emp) => {
-              const isSelected = selectedEmployeeId === emp.id;
+            filteredMembers.map((member) => {
+              const isSelected = selectedEmployeeId === member.employeeId;
               return (
                 <button
-                  key={emp.id}
+                  key={member.employeeId}
                   type="button"
-                  onClick={() => setSelectedEmployeeId(isSelected ? undefined : emp.id)}
+                  onClick={() => setSelectedEmployeeId(isSelected ? undefined : member.employeeId)}
                   className={cn(
                     'flex items-center gap-3 w-full px-3 py-2 rounded-lg text-left transition-colors',
                     isSelected ? 'bg-brand/5 ring-1 ring-brand/20' : 'hover:bg-gray-50',
@@ -178,15 +178,12 @@ export function CreateTaskPanel({ isOpen, onClose, onCreate, isCreating }: Props
                 >
                   <div className="w-7 h-7 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-bold text-brand">
-                      {emp.firstName[0]}
-                      {emp.lastName[0]}
+                      {getInitials(member.name)}
                     </span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {emp.firstName} {emp.lastName}
-                    </p>
-                    <p className="text-xs text-gray-400 truncate">{emp.jobTitle}</p>
+                    <p className="text-sm font-medium text-gray-900 truncate">{member.name}</p>
+                    <p className="text-xs text-gray-400 truncate">{member.jobTitle}</p>
                   </div>
                   {isSelected && (
                     <span className="text-xs font-medium text-brand shrink-0">Selected</span>

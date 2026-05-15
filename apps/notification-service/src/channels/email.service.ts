@@ -480,7 +480,7 @@ export class EmailService {
       to,
       decision === 'APPROVED'
         ? `Payroll approved — ${month}/${year}`
-        : `Payroll returned to draft — ${month}/${year}`,
+        : `Payroll rejected — ${month}/${year}`,
       renderPayrollDecisionTemplate({
         recipientFirstName: this.escapeHtml(firstName),
         month,

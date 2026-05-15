@@ -337,17 +337,34 @@ export class PayrollService {
     return run;
   }
 
+  private async getPayrollCurrency(tenantId: string): Promise<string> {
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { payrollCurrency: true },
+    });
+    return config?.payrollCurrency ?? 'GHS';
+  }
+
+  private formatPayrollAmount(
+    amount: { toString(): string },
+    currency: string,
+  ): string {
+    const num = parseFloat(amount.toString());
+    const formatted = num.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    return `${currency} ${formatted}`;
+  }
+
   private buildPayrollApprovalLink(tenantSlug: string, runId: string) {
     const baseUrl = process.env.FRONTEND_BASE_URL!;
     return `${baseUrl}/${tenantSlug}/hr/payroll/approve/${encodeURIComponent(runId)}`;
   }
 
-  private buildPayrollWorkspaceLink(
-    tenantSlug: string,
-    tab: 'approve' | 'manage' = 'manage',
-  ) {
+  private buildPayrollRunHistoryLink(tenantSlug: string, runId: string) {
     const baseUrl = process.env.FRONTEND_BASE_URL!;
-    return `${baseUrl}/${tenantSlug}/hr/payroll?tab=${tab}`;
+    return `${baseUrl}/${tenantSlug}/hr/payroll/history/${encodeURIComponent(runId)}`;
   }
 
   private dedupePayrollRecipients(
@@ -461,6 +478,7 @@ export class PayrollService {
     }
 
     const reviewLink = this.buildPayrollApprovalLink(actor.tenantSlug, run.id);
+    const currency = await this.getPayrollCurrency(tenantId);
     const periodLabel = `${run.month}/${run.year}`;
     const submittedByName = actor.firstName?.trim() || actor.email;
     const escalated = recipients.some(
@@ -486,8 +504,8 @@ export class PayrollService {
       month: run.month,
       year: run.year,
       submittedByName,
-      totalGross: run.totalGross.toString(),
-      totalNet: run.totalNet.toString(),
+      totalGross: this.formatPayrollAmount(run.totalGross, currency),
+      totalNet: this.formatPayrollAmount(run.totalNet, currency),
       notes: run.notes ?? undefined,
       reviewLink,
       recipients: recipients.map((recipient) => ({
@@ -524,10 +542,11 @@ export class PayrollService {
     }
 
     const reviewerName = actor.firstName?.trim() || actor.email;
-    const workspaceLink = this.buildPayrollWorkspaceLink(
+    const runHistoryLink = this.buildPayrollRunHistoryLink(
       actor.tenantSlug,
-      'manage',
+      run.id,
     );
+    const currency = await this.getPayrollCurrency(tenantId);
     const periodLabel = `${run.month}/${run.year}`;
 
     await this.notificationsService.createMany(
@@ -551,9 +570,9 @@ export class PayrollService {
       decision,
       reviewerName,
       decisionNote: note,
-      totalGross: run.totalGross.toString(),
-      totalNet: run.totalNet.toString(),
-      detailLink: workspaceLink,
+      totalGross: this.formatPayrollAmount(run.totalGross, currency),
+      totalNet: this.formatPayrollAmount(run.totalNet, currency),
+      detailLink: runHistoryLink,
       recipients: recipients.map((recipient) => ({
         userId: recipient.userId,
         email: recipient.email,

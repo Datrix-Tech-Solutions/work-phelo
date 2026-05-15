@@ -286,7 +286,10 @@ export default function EmployeeAppraisalDetailPage({
       {isFinalized && (
         <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-1">
           <p className="text-sm font-semibold text-gray-900">Overall HR Note</p>
-          <p className="text-sm text-gray-500">{appraisal.finalizedAppraisal?.hrComments ?? '—'}</p>
+          <p className="text-sm text-gray-500">
+            {(appraisal.finalizedAppraisal as { finalComment?: string } | null)?.finalComment ??
+              '—'}
+          </p>
         </div>
       )}
 

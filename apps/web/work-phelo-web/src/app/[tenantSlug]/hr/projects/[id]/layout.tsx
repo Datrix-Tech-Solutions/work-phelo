@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProjectBanner } from '@/components/molecules/projects/ProjectBanner';
-import { Project } from '@/types/hr';
+import { useProject } from '@/hooks';
 
 const TAB_ACTIVE =
   'relative text-brand font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand after:rounded-t-full';
@@ -24,7 +24,17 @@ export default function ProjectDetailLayout({
   const base = `/${tenantSlug}/hr/projects`;
   const root = `${base}/${id}`;
 
-  const project = undefined as Project | undefined;
+  const { data: project, isLoading } = useProject(id);
+
+  if (isLoading) {
+    return (
+      <div className="p-8 flex flex-col gap-6 animate-pulse">
+        <div className="h-4 w-48 bg-gray-200 rounded" />
+        <div className="h-24 bg-gray-200 rounded-card" />
+        <div className="h-10 bg-gray-100 rounded" />
+      </div>
+    );
+  }
 
   if (!project) {
     return <div className="p-8 text-sm text-gray-500">Project not found.</div>;

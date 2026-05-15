@@ -1,17 +1,22 @@
 'use client';
 
+import { use } from 'react';
+import { useProject } from '@/hooks';
 import { ProjectDetailsCard } from '@/components/molecules/projects/ProjectDetailsCard';
 import { ProjectMembersTable } from '@/components/organisms/projects/ProjectMembersTable';
-import { Project } from '@/types/hr';
 
-export default function ProjectDetailsPage() {
-  const project = undefined as Project | undefined;
-  if (!project) return null;
+export default function ProjectDetailsPage({
+  params,
+}: {
+  params: Promise<{ tenantSlug: string; id: string }>;
+}) {
+  const { id } = use(params);
+  const { data: project } = useProject(id);
 
   return (
     <div className="flex flex-col gap-6">
-      <ProjectDetailsCard project={project} />
-      <ProjectMembersTable />
+      {project && <ProjectDetailsCard project={project} />}
+      <ProjectMembersTable projectId={id} />
     </div>
   );
 }
