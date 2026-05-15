@@ -50,7 +50,10 @@ COPY --from=builder /app/apps/auth-service/node_modules ./apps/auth-service/node
 RUN npm rebuild bcrypt --update-binary
 # Copy built service (dist includes compiled seed.js and seed-resources.js)
 COPY --from=builder /app/apps/auth-service/dist ./apps/auth-service/dist
-COPY --from=builder /app/apps/auth-service/prisma ./apps/auth-service/prisma
+# Runtime app code expects the generated client under apps/auth-service/prisma/generated/client.
+# The compiled seed expects the same client under dist/prisma/generated/client.
+COPY --from=builder /app/apps/auth-service/prisma/generated/client ./apps/auth-service/prisma/generated/client
+COPY --from=builder /app/apps/auth-service/prisma/generated/client ./apps/auth-service/dist/prisma/generated/client
 WORKDIR /app/apps/auth-service
 EXPOSE 4001
 CMD ["node", "dist/main"]
