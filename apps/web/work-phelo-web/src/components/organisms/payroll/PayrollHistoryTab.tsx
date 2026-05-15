@@ -136,13 +136,7 @@ export function PayrollHistoryTab() {
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
-  const { currency } = useTenantConfig();
-  const fmt = (value: string | number | null | undefined) => {
-    if (value == null) return '—';
-    const n = typeof value === 'string' ? parseFloat(value) : value;
-    if (isNaN(n)) return '—';
-    return `${currency} ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  useTenantConfig();
 
   const history = runs.filter((r) => r.status === 'APPROVED' || r.status === 'PAID');
 

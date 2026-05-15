@@ -63,7 +63,6 @@ function emptyForm(): FormState {
 
 function AllowanceCard({
   item,
-  currency,
   onEdit,
   onDelete,
   isDeleting,

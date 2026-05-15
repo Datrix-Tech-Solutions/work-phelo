@@ -5,7 +5,7 @@ import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
-import { usePayrollSettings } from '@/hooks';
+import { usePayrollSettings, usePayrollRuns } from '@/hooks';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem, Country } from '@/lib/payrollCalculations';
 import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
@@ -70,6 +70,10 @@ function isTransportAllowance(item: AllowanceItem) {
 export function ManagePayrollTab() {
   const { data: empData, isLoading } = useAllEmployees();
   const { data: payrollSettings } = usePayrollSettings();
+  const { data: runs = [] } = usePayrollRuns();
+  const rejectedDraftsCount = runs.filter(
+    (r) => r.status === 'DRAFT' && !!r.returnToDraftNote,
+  ).length;
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
@@ -315,9 +319,16 @@ export function ManagePayrollTab() {
   return (
     <div className="flex flex-col gap-6 flex-1 min-h-0">
       <div className="flex items-center justify-end gap-3 shrink-0">
-        <Button variant="outline" onClick={() => setDraftsPanelOpen(true)}>
-          Drafts
-        </Button>
+        <div className="relative inline-flex">
+          <Button variant="outline" onClick={() => setDraftsPanelOpen(true)}>
+            Drafts
+          </Button>
+          {rejectedDraftsCount > 0 && (
+            <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
+              {rejectedDraftsCount}
+            </span>
+          )}
+        </div>
         <Button onClick={() => setRunPanelOpen(true)}>Run Payroll</Button>
       </div>
 

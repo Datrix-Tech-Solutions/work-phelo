@@ -126,7 +126,7 @@ export class AuthService {
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
       { sub: user.id, type: 'refresh', jti: randomUUID() },
-      { expiresIn: '15m' },
+      { expiresIn: '8h' },
     );
     return { accessToken, refreshToken };
   }
@@ -140,14 +140,14 @@ export class AuthService {
     await this.prisma.refreshToken.upsert({
       where: { token },
       update: {
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
         ipAddress,
         userAgent,
       },
       create: {
         userId,
         token,
-        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
         ipAddress,
         userAgent,
       },
@@ -581,7 +581,7 @@ export class AuthService {
           userId: user.id,
           type: 'PASSWORD_RESET',
           code,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+          expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 15 minutes
         },
       });
       void this.rabbitmq
@@ -603,7 +603,7 @@ export class AuthService {
           userId: user.id,
           type: 'PASSWORD_RESET',
           code: resetToken,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+          expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 15 minutes
         },
       });
       const resetLink = WorkspaceUrl.resetPassword(tenant.slug, resetToken);

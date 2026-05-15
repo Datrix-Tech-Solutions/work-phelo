@@ -19,7 +19,7 @@ export function setAuthCookies(
     httpOnly: true,
     secure: COOKIE_SECURE,
     sameSite: SAME_SITE,
-    maxAge: 15 * 60 * 1000, // 15 minutes
+    maxAge: 8 * 60 * 60 * 1000, // 8 hours
     // Keep the cookie available on page requests so frontend middleware can
     // distinguish "fully signed out" from "access token expired but refreshable".
     path: '/',

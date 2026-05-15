@@ -386,10 +386,16 @@ export class ProjectsService {
       });
 
       const memberSeeds = new Map<string, ProjectMemberRole>();
-      if (actorEmployeeId)
-        memberSeeds.set(actorEmployeeId, ProjectMemberRole.OWNER);
-      if (dto.managerId && !memberSeeds.has(dto.managerId)) {
-        memberSeeds.set(dto.managerId, ProjectMemberRole.MANAGER);
+      // Designated owner (selected in the form) takes OWNER role.
+      if (dto.managerId) {
+        memberSeeds.set(dto.managerId, ProjectMemberRole.OWNER);
+      }
+      // Creator gets OWNER if no one was designated, otherwise MEMBER.
+      if (actorEmployeeId && !memberSeeds.has(actorEmployeeId)) {
+        memberSeeds.set(
+          actorEmployeeId,
+          dto.managerId ? ProjectMemberRole.MEMBER : ProjectMemberRole.OWNER,
+        );
       }
 
       for (const [employeeId, role] of memberSeeds) {
@@ -472,12 +478,12 @@ export class ProjectsService {
           where: {
             projectId_employeeId: { projectId, employeeId: dto.managerId },
           },
-          update: { role: ProjectMemberRole.MANAGER },
+          update: { role: ProjectMemberRole.OWNER },
           create: {
             tenantId,
             projectId,
             employeeId: dto.managerId,
-            role: ProjectMemberRole.MANAGER,
+            role: ProjectMemberRole.OWNER,
           },
         });
       }
@@ -853,6 +859,33 @@ export class ProjectsService {
         });
       }
 
+      if (dto.status === ProjectTaskStatus.IN_PROGRESS) {
+        await tx.project.updateMany({
+          where: { id: projectId, tenantId, status: ProjectStatus.PLANNING },
+          data: { status: ProjectStatus.ACTIVE },
+        });
+      }
+
+      if (dto.status === ProjectTaskStatus.DONE) {
+        const remaining = await tx.projectTask.count({
+          where: {
+            projectId,
+            tenantId,
+            status: { not: ProjectTaskStatus.DONE },
+          },
+        });
+        if (remaining === 0) {
+          await tx.project.updateMany({
+            where: {
+              id: projectId,
+              tenantId,
+              status: { not: ProjectStatus.CANCELLED },
+            },
+            data: { status: ProjectStatus.COMPLETED },
+          });
+        }
+      }
+
       await this.logActivity(
         tx,
         tenantId,
@@ -915,6 +948,37 @@ export class ProjectsService {
           },
         },
       });
+
+      if (status === ProjectTaskStatus.IN_PROGRESS) {
+        await tx.project.updateMany({
+          where: {
+            id: task.projectId,
+            tenantId,
+            status: ProjectStatus.PLANNING,
+          },
+          data: { status: ProjectStatus.ACTIVE },
+        });
+      }
+
+      if (status === ProjectTaskStatus.DONE) {
+        const remaining = await tx.projectTask.count({
+          where: {
+            projectId: task.projectId,
+            tenantId,
+            status: { not: ProjectTaskStatus.DONE },
+          },
+        });
+        if (remaining === 0) {
+          await tx.project.updateMany({
+            where: {
+              id: task.projectId,
+              tenantId,
+              status: { not: ProjectStatus.CANCELLED },
+            },
+            data: { status: ProjectStatus.COMPLETED },
+          });
+        }
+      }
 
       await this.logActivity(
         tx,

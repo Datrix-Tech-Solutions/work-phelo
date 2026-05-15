@@ -67,7 +67,6 @@ function getActiveDeductionItems(deductions: EmployeeDeduction[]): DeductionLine
 
 function DeductionCard({
   item,
-  currency,
   onEdit,
   onDelete,
   isDeleting,

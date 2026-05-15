@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, XCircle, FileText } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { usePayrollRuns } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
@@ -84,42 +85,66 @@ function fmtRunMoney(run: PayrollRun, value: string | number) {
   return formatPayrollMoney(value, run.payrollCurrency, run.payrollCountry);
 }
 
-function ApprovedRunCard({
-  run,
-  onLoad,
-}: {
-  run: PayrollRun;
-  onLoad: (data: DraftLoadData) => void;
-}) {
-  const toast = useToast();
-  const queryClient = useQueryClient();
-  const [loading, setLoading] = useState(false);
+type RunVariant = 'approved' | 'rejected' | 'draft';
 
-  const handleUse = async () => {
-    setLoading(true);
-    try {
-      const data = await loadRunData(run, queryClient);
-      onLoad(data);
-      toast.success(`${payrollMonthLabel(run.month, run.year)} loaded into payroll table`);
-    } catch (err) {
-      toast.error(extractError(err, 'Failed to load payroll run'));
-    } finally {
-      setLoading(false);
-    }
-  };
+function getVariant(run: PayrollRun): RunVariant {
+  if (run.status === 'APPROVED' || run.status === 'PAID') return 'approved';
+  if (run.returnToDraftNote) return 'rejected';
+  return 'draft';
+}
+
+const VARIANT_STYLES: Record<RunVariant, { border: string; bg: string; icon: React.ReactNode }> = {
+  approved: {
+    border: 'border-emerald-100',
+    bg: 'bg-emerald-50',
+    icon: <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />,
+  },
+  rejected: {
+    border: 'border-red-100',
+    bg: 'bg-red-50',
+    icon: <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />,
+  },
+  draft: {
+    border: 'border-gray-100',
+    bg: 'bg-gray-50',
+    icon: <FileText className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />,
+  },
+};
+
+function RunCard({ run, onClick }: { run: PayrollRun; onClick: () => void }) {
+  const variant = getVariant(run);
+  const { border, bg, icon } = VARIANT_STYLES[variant];
 
   return (
-    <div className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-emerald-100 bg-emerald-50">
+    <button
+      onClick={onClick}
+      className={`w-full text-left p-4 rounded-2xl border ${border} ${bg} hover:brightness-95 transition-all`}
+    >
       <div className="flex items-start gap-3">
-        <CheckCircle2 className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-gray-900">
-            {payrollMonthLabel(run.month, run.year)}
-          </p>
+        {icon}
+        <div className="flex flex-col gap-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-gray-900">
+              {payrollMonthLabel(run.month, run.year)}
+            </p>
+            {variant === 'rejected' && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium bg-red-100 text-red-600 shrink-0">
+                Rejected
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-500">
-            Net Pay: {fmtRunMoney(run, run.totalNet)} · Gross: {fmtRunMoney(run, run.totalGross)}
+            Gross: {fmtRunMoney(run, run.totalGross)} · Net: {fmtRunMoney(run, run.totalNet)}
           </p>
-          {run.approvedAt && (
+          {variant === 'rejected' && run.returnToDraftNote && (
+            <p className="text-xs text-red-500 truncate italic">
+              &quot;{run.returnToDraftNote}&quot;
+            </p>
+          )}
+          {variant === 'draft' && run.notes && (
+            <p className="text-xs text-gray-400 truncate italic">{run.notes}</p>
+          )}
+          {variant === 'approved' && run.approvedAt && (
             <p className="text-xs text-emerald-600">
               Approved{' '}
               {new Date(run.approvedAt).toLocaleDateString('en-GB', {
@@ -131,36 +156,31 @@ function ApprovedRunCard({
           )}
         </div>
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={handleUse}
-        isLoading={loading}
-        loadingText="Loading…"
-      >
-        Use Values
-      </Button>
-    </div>
+    </button>
   );
 }
 
-function ReturnedRunCard({
+function RunDetailModal({
   run,
+  onClose,
   onLoad,
 }: {
   run: PayrollRun;
+  onClose: () => void;
   onLoad: (data: DraftLoadData) => void;
 }) {
   const toast = useToast();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
+  const variant = getVariant(run);
+  const period = payrollMonthLabel(run.month, run.year);
 
-  const handleUse = async () => {
+  const handleLoad = async () => {
     setLoading(true);
     try {
       const data = await loadRunData(run, queryClient);
       onLoad(data);
-      toast.success(`${payrollMonthLabel(run.month, run.year)} loaded into payroll table`);
+      toast.success(`${period} loaded into payroll table`);
     } catch (err) {
       toast.error(extractError(err, 'Failed to load payroll run'));
     } finally {
@@ -168,74 +188,68 @@ function ReturnedRunCard({
     }
   };
 
+  const actionLabel = variant === 'rejected' ? 'Revise Payroll' : 'Load into Table';
+
   return (
-    <div className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-red-100 bg-red-50">
-      <div className="flex items-start gap-3">
-        <XCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-gray-900">
-              {payrollMonthLabel(run.month, run.year)}
+    <Modal
+      isOpen
+      onClose={() => !loading && onClose()}
+      title={period}
+      hideClose={loading}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose} disabled={loading}>
+            Close
+          </Button>
+          <Button onClick={handleLoad} isLoading={loading} loadingText="Loading…">
+            {actionLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4 mt-2">
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: 'Total Gross', value: fmtRunMoney(run, run.totalGross) },
+            { label: 'Total Net Pay', value: fmtRunMoney(run, run.totalNet) },
+            { label: 'Total PAYE', value: fmtRunMoney(run, run.totalPAYE) },
+            { label: 'Employer Cost', value: fmtRunMoney(run, run.totalEmployerCost) },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex flex-col gap-0.5 bg-gray-50 rounded-xl px-3 py-2.5">
+              <p className="text-xs text-gray-400">{label}</p>
+              <p className="text-sm font-semibold text-gray-900">{value}</p>
+            </div>
+          ))}
+        </div>
+
+        {variant === 'rejected' && run.returnToDraftNote && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-gray-500">Rejection Note</p>
+            <p className="text-sm text-red-600 leading-relaxed bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
+              {run.returnToDraftNote}
             </p>
-            <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-xs font-medium bg-red-100 text-red-600">
-              Rejected
-            </span>
           </div>
-          <p className="text-xs text-gray-500">Gross: {fmtRunMoney(run, run.totalGross)}</p>
-          {run.returnToDraftNote && (
-            <p className="text-xs text-red-500 italic">&quot;{run.returnToDraftNote}&quot;</p>
-          )}
-        </div>
+        )}
+
+        {variant === 'approved' && run.approvalNote && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-gray-500">Approval Note</p>
+            <p className="text-sm text-emerald-700 leading-relaxed bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2.5">
+              {run.approvalNote}
+            </p>
+          </div>
+        )}
+
+        {variant === 'draft' && run.notes && (
+          <div className="flex flex-col gap-1.5">
+            <p className="text-xs font-medium text-gray-500">Notes</p>
+            <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5">
+              {run.notes}
+            </p>
+          </div>
+        )}
       </div>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={handleUse}
-        isLoading={loading}
-        loadingText="Loading…"
-      >
-        Revise
-      </Button>
-    </div>
-  );
-}
-
-function DraftRunCard({ run, onLoad }: { run: PayrollRun; onLoad: (data: DraftLoadData) => void }) {
-  const toast = useToast();
-  const queryClient = useQueryClient();
-  const [loading, setLoading] = useState(false);
-
-  const handleUse = async () => {
-    setLoading(true);
-    try {
-      const data = await loadRunData(run, queryClient);
-      onLoad(data);
-      toast.success(`${payrollMonthLabel(run.month, run.year)} loaded into payroll table`);
-    } catch (err) {
-      toast.error(extractError(err, 'Failed to load draft'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-gray-100 bg-gray-50">
-      <div className="flex items-start gap-3">
-        <FileText className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-gray-900">
-            {payrollMonthLabel(run.month, run.year)}
-          </p>
-          <p className="text-xs text-gray-500">Gross: {fmtRunMoney(run, run.totalGross)}</p>
-          {run.notes && (
-            <p className="text-xs text-gray-400 italic truncate max-w-48">{run.notes}</p>
-          )}
-        </div>
-      </div>
-      <Button size="sm" onClick={handleUse} isLoading={loading} loadingText="Loading…">
-        Use
-      </Button>
-    </div>
+    </Modal>
   );
 }
 
@@ -256,6 +270,7 @@ interface Props {
 
 export function PayrollDraftsPanel({ isOpen, onClose, onLoad }: Props) {
   const { data: runs = [], isLoading } = usePayrollRuns();
+  const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
 
   const recentApproved = runs
     .filter((r) => r.status === 'APPROVED' || r.status === 'PAID')
@@ -272,56 +287,67 @@ export function PayrollDraftsPanel({ isOpen, onClose, onLoad }: Props) {
 
   const handleLoad = (data: DraftLoadData) => {
     onLoad(data);
+    setSelectedRun(null);
     onClose();
   };
 
   const isEmpty = recentApproved.length === 0 && returned.length === 0 && drafts.length === 0;
 
   return (
-    <SidePanel
-      isOpen={isOpen}
-      onClose={onClose}
-      title="Payroll History"
-      description="Load values from a previous run into the payroll table."
-    >
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <p className="text-sm text-gray-400">Loading…</p>
-        </div>
-      ) : isEmpty ? (
-        <div className="flex items-center justify-center py-12">
-          <p className="text-sm text-gray-400">No payroll runs found.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-6">
-          {recentApproved.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <SectionHeader title="Recent Approved" count={recentApproved.length} />
-              {recentApproved.map((run) => (
-                <ApprovedRunCard key={run.id} run={run} onLoad={handleLoad} />
-              ))}
-            </div>
-          )}
+    <>
+      <SidePanel
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Payroll History"
+        description="Open any run to view its summary and load its values."
+      >
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <p className="text-sm text-gray-400">Loading…</p>
+          </div>
+        ) : isEmpty ? (
+          <div className="flex items-center justify-center py-12">
+            <p className="text-sm text-gray-400">No payroll runs found.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-6">
+            {recentApproved.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <SectionHeader title="Recent Approved" count={recentApproved.length} />
+                {recentApproved.map((run) => (
+                  <RunCard key={run.id} run={run} onClick={() => setSelectedRun(run)} />
+                ))}
+              </div>
+            )}
 
-          {returned.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <SectionHeader title="Rejected" count={returned.length} />
-              {returned.map((run) => (
-                <ReturnedRunCard key={run.id} run={run} onLoad={handleLoad} />
-              ))}
-            </div>
-          )}
+            {returned.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <SectionHeader title="Rejected" count={returned.length} />
+                {returned.map((run) => (
+                  <RunCard key={run.id} run={run} onClick={() => setSelectedRun(run)} />
+                ))}
+              </div>
+            )}
 
-          {drafts.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <SectionHeader title="Drafts" count={drafts.length} />
-              {drafts.map((run) => (
-                <DraftRunCard key={run.id} run={run} onLoad={handleLoad} />
-              ))}
-            </div>
-          )}
-        </div>
+            {drafts.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <SectionHeader title="Drafts" count={drafts.length} />
+                {drafts.map((run) => (
+                  <RunCard key={run.id} run={run} onClick={() => setSelectedRun(run)} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </SidePanel>
+
+      {selectedRun && (
+        <RunDetailModal
+          run={selectedRun}
+          onClose={() => setSelectedRun(null)}
+          onLoad={handleLoad}
+        />
       )}
-    </SidePanel>
+    </>
   );
 }

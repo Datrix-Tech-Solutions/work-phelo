@@ -568,6 +568,77 @@ export interface CreateProjectDto {
   managerId?: string;
 }
 
+export type UpdateProjectDto = Partial<CreateProjectDto> & { status?: ProjectStatus };
+
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE';
+export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type ProjectMemberRole = 'OWNER' | 'MANAGER' | 'MEMBER';
+
+export interface ProjectTask {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  name: string;
+  description?: string | null;
+  status: TaskStatus;
+  priority?: TaskPriority | null;
+  dueDate?: string | null;
+  assignedEmployeeId?: string | null;
+  assignedEmployeeName?: string;
+  completedAt?: string | null;
+  createdByUserId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  employeeId: string;
+  role: ProjectMemberRole;
+  joinedAt: string;
+  name: string;
+  email: string;
+  jobTitle: string;
+  department: string | null;
+}
+
+export interface ProjectDetail extends Project {
+  tasks: ProjectTask[];
+  members: ProjectMember[];
+}
+
+export interface MyTask extends ProjectTask {
+  project: { id: string; name: string; status: ProjectStatus };
+}
+
+export interface ProjectActivity {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  taskId?: string | null;
+  actorUserId: string;
+  actorEmployeeId?: string | null;
+  type: string;
+  message: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface CreateProjectTaskDto {
+  name: string;
+  description?: string;
+  dueDate?: string;
+  priority?: TaskPriority;
+  assignedEmployeeId?: string;
+}
+
+export type UpdateProjectTaskDto = Partial<CreateProjectTaskDto> & { status?: TaskStatus };
+
+export interface AddProjectMemberDto {
+  employeeId: string;
+  role?: ProjectMemberRole;
+}
+
 // ── Dashboard ─────────────────────────────────────────────
 export interface UpcomingBirthday {
   id: string;

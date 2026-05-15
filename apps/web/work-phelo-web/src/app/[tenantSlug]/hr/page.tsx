@@ -4,7 +4,7 @@
 
 import { use, useMemo, useState, useRef } from 'react';
 import { useAuthStore } from '@/store/auth.store';
-import { useUpcomingBirthdays, useEmployeeDashboard } from '@/hooks';
+import { useUpcomingBirthdays, useEmployeeDashboard, useMyTasks } from '@/hooks';
 import { useMyProfile } from '@/hooks';
 import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/useLeave';
 import { useMyPayslips } from '@/hooks/usePayroll';
@@ -21,6 +21,7 @@ import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
 import { MySchedulesPanel } from '@/components/organisms/dashboard/MySchedulesPanel';
+import { MyProjectsPanel } from '@/components/organisms/dashboard/MyProjectsPanel';
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
 import { formatTime, resolveHolidayUpcomingDate } from '@/lib/formatters';
 
@@ -198,8 +199,11 @@ export default function EmployeeDashboardPage({
     [myLeave, seenLeaveIds],
   );
 
-  // projects badge: wire up when the projects page and hook are ready
-  const projectsBadgeCount = 0;
+  const { data: myTasksRaw = [] } = useMyTasks();
+  const projectsBadgeCount = useMemo(
+    () => myTasksRaw.filter((t) => t.status !== 'DONE').length,
+    [myTasksRaw],
+  );
 
   /* ── Panel states ── */
   const [applyLeaveOpen, setApplyLeaveOpen] = useState(false);
@@ -207,6 +211,7 @@ export default function EmployeeDashboardPage({
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [myLeaveOpen, setMyLeaveOpen] = useState(false);
   const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
 
   const handleOpenMyLeave = () => {
     setMyLeaveOpen(true);
@@ -269,7 +274,7 @@ export default function EmployeeDashboardPage({
             onAssets={() => setAssetsOpen(true)}
             onLeave={handleOpenMyLeave}
             onSchedules={() => setSchedulesOpen(true)}
-            onProjects={() => {}}
+            onProjects={() => setProjectsOpen(true)}
             leaveBadge={leaveBadgeCount}
             projectsBadge={projectsBadgeCount}
           />
@@ -306,6 +311,11 @@ export default function EmployeeDashboardPage({
       />
       <MyAssetsPanel isOpen={assetsOpen} onClose={() => setAssetsOpen(false)} />
       <MySchedulesPanel isOpen={schedulesOpen} onClose={() => setSchedulesOpen(false)} />
+      <MyProjectsPanel
+        isOpen={projectsOpen}
+        onClose={() => setProjectsOpen(false)}
+        tenantSlug={tenantSlug}
+      />
     </div>
   );
 }
