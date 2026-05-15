@@ -1,24 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    networks:
-      - app-network
-    ports:
-      - '127.0.0.1:5432:5432'
-    environment:
-      POSTGRES_USER: erp
-      POSTGRES_PASSWORD: erppassword
-      POSTGRES_DB: workphelo
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U erp -d workphelo']
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -66,8 +46,6 @@ services:
     env_file:
       - ../apps/auth-service/.env.dev
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -95,8 +73,6 @@ services:
     env_file:
       - ../apps/hr-service/.env.dev
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -124,8 +100,6 @@ services:
     env_file:
       - ../apps/notification-service/.env.dev
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -153,8 +127,6 @@ services:
     env_file:
       - ../apps/subscription-service/.env.dev
     depends_on:
-      postgres:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     healthcheck:
@@ -180,8 +152,6 @@ services:
     env_file:
       - ../apps/marketing-service/.env.dev
     depends_on:
-      postgres:
-        condition: service_healthy
       rabbitmq:
         condition: service_healthy
     healthcheck:
@@ -265,8 +235,6 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
-    name: workphelo-dev-postgres-data
   redis_data:
     name: workphelo-dev-redis-data
   rabbitmq_data:
