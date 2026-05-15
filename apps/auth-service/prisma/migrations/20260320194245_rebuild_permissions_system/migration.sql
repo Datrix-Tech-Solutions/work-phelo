@@ -12,20 +12,20 @@
 
 */
 -- CreateEnum
-CREATE TYPE "auth"."PermissionAction" AS ENUM ('VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'RUN', 'EXPORT', 'ASSIGN');
+CREATE TYPE "w_auth"."PermissionAction" AS ENUM ('VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'RUN', 'EXPORT', 'ASSIGN');
 
 -- DropForeignKey
-ALTER TABLE "auth"."CompanyRolePermission" DROP CONSTRAINT "CompanyRolePermission_companyRoleId_fkey";
+ALTER TABLE "w_auth"."CompanyRolePermission" DROP CONSTRAINT "CompanyRolePermission_companyRoleId_fkey";
 
 -- DropIndex
-DROP INDEX "auth"."UserPermission_userId_permission_key";
+DROP INDEX "w_auth"."UserPermission_userId_permission_key";
 
 -- AlterTable
-ALTER TABLE "auth"."UserPermission" DROP COLUMN "createdAt",
+ALTER TABLE "w_auth"."UserPermission" DROP COLUMN "createdAt",
 DROP COLUMN "effect",
 DROP COLUMN "permission",
 DROP COLUMN "reason",
-ADD COLUMN     "action" "auth"."PermissionAction" NOT NULL,
+ADD COLUMN     "action" "w_auth"."PermissionAction" NOT NULL,
 ADD COLUMN     "expiresAt" TIMESTAMP(3),
 ADD COLUMN     "grantedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 ADD COLUMN     "isActive" BOOLEAN NOT NULL DEFAULT true,
@@ -34,13 +34,13 @@ ADD COLUMN     "revokedAt" TIMESTAMP(3),
 ADD COLUMN     "revokedBy" TEXT;
 
 -- DropTable
-DROP TABLE "auth"."CompanyRolePermission";
+DROP TABLE "w_auth"."CompanyRolePermission";
 
 -- DropEnum
-DROP TYPE "auth"."PermissionEffect";
+DROP TYPE "w_auth"."PermissionEffect";
 
 -- CreateTable
-CREATE TABLE "auth"."Resource" (
+CREATE TABLE "w_auth"."Resource" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "module" TEXT NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE "auth"."Resource" (
 );
 
 -- CreateTable
-CREATE TABLE "auth"."PermissionSet" (
+CREATE TABLE "w_auth"."PermissionSet" (
     "id" TEXT NOT NULL,
     "tenantId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -66,17 +66,17 @@ CREATE TABLE "auth"."PermissionSet" (
 );
 
 -- CreateTable
-CREATE TABLE "auth"."PermissionSetResource" (
+CREATE TABLE "w_auth"."PermissionSetResource" (
     "id" TEXT NOT NULL,
     "permissionSetId" TEXT NOT NULL,
     "resourceId" TEXT NOT NULL,
-    "action" "auth"."PermissionAction" NOT NULL,
+    "action" "w_auth"."PermissionAction" NOT NULL,
 
     CONSTRAINT "PermissionSetResource_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "auth"."UserPermissionSet" (
+CREATE TABLE "w_auth"."UserPermissionSet" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "permissionSetId" TEXT NOT NULL,
@@ -87,37 +87,37 @@ CREATE TABLE "auth"."UserPermissionSet" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "Resource_name_key" ON "auth"."Resource"("name");
+CREATE UNIQUE INDEX "Resource_name_key" ON "w_auth"."Resource"("name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PermissionSet_tenantId_name_key" ON "auth"."PermissionSet"("tenantId", "name");
+CREATE UNIQUE INDEX "PermissionSet_tenantId_name_key" ON "w_auth"."PermissionSet"("tenantId", "name");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PermissionSetResource_permissionSetId_resourceId_action_key" ON "auth"."PermissionSetResource"("permissionSetId", "resourceId", "action");
+CREATE UNIQUE INDEX "PermissionSetResource_permissionSetId_resourceId_action_key" ON "w_auth"."PermissionSetResource"("permissionSetId", "resourceId", "action");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "UserPermissionSet_userId_permissionSetId_key" ON "auth"."UserPermissionSet"("userId", "permissionSetId");
+CREATE UNIQUE INDEX "UserPermissionSet_userId_permissionSetId_key" ON "w_auth"."UserPermissionSet"("userId", "permissionSetId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "UserPermission_userId_resourceId_action_key" ON "auth"."UserPermission"("userId", "resourceId", "action");
+CREATE UNIQUE INDEX "UserPermission_userId_resourceId_action_key" ON "w_auth"."UserPermission"("userId", "resourceId", "action");
 
 -- AddForeignKey
-ALTER TABLE "auth"."UserPermission" ADD CONSTRAINT "UserPermission_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "auth"."Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."UserPermission" ADD CONSTRAINT "UserPermission_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "w_auth"."Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."UserPermission" ADD CONSTRAINT "UserPermission_resourceId_fkey" FOREIGN KEY ("resourceId") REFERENCES "auth"."Resource"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."UserPermission" ADD CONSTRAINT "UserPermission_resourceId_fkey" FOREIGN KEY ("resourceId") REFERENCES "w_auth"."Resource"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."PermissionSet" ADD CONSTRAINT "PermissionSet_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "auth"."Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."PermissionSet" ADD CONSTRAINT "PermissionSet_tenantId_fkey" FOREIGN KEY ("tenantId") REFERENCES "w_auth"."Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."PermissionSetResource" ADD CONSTRAINT "PermissionSetResource_permissionSetId_fkey" FOREIGN KEY ("permissionSetId") REFERENCES "auth"."PermissionSet"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."PermissionSetResource" ADD CONSTRAINT "PermissionSetResource_permissionSetId_fkey" FOREIGN KEY ("permissionSetId") REFERENCES "w_auth"."PermissionSet"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."PermissionSetResource" ADD CONSTRAINT "PermissionSetResource_resourceId_fkey" FOREIGN KEY ("resourceId") REFERENCES "auth"."Resource"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."PermissionSetResource" ADD CONSTRAINT "PermissionSetResource_resourceId_fkey" FOREIGN KEY ("resourceId") REFERENCES "w_auth"."Resource"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."UserPermissionSet" ADD CONSTRAINT "UserPermissionSet_userId_fkey" FOREIGN KEY ("userId") REFERENCES "auth"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."UserPermissionSet" ADD CONSTRAINT "UserPermissionSet_userId_fkey" FOREIGN KEY ("userId") REFERENCES "w_auth"."User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "auth"."UserPermissionSet" ADD CONSTRAINT "UserPermissionSet_permissionSetId_fkey" FOREIGN KEY ("permissionSetId") REFERENCES "auth"."PermissionSet"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "w_auth"."UserPermissionSet" ADD CONSTRAINT "UserPermissionSet_permissionSetId_fkey" FOREIGN KEY ("permissionSetId") REFERENCES "w_auth"."PermissionSet"("id") ON DELETE CASCADE ON UPDATE CASCADE;
