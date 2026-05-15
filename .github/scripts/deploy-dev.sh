@@ -124,7 +124,7 @@ echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 log "✓ Authenticated with GHCR"
 
 section "Pull Images"
-docker_compose pull postgres redis rabbitmq
+docker_compose pull redis rabbitmq
 ensure_image_available "$API_GATEWAY_IMAGE" "api-gateway" "api-gateway"
 ensure_image_available "$AUTH_SERVICE_IMAGE" "auth-service" "auth-service"
 ensure_image_available "$HR_SERVICE_IMAGE" "hr-service" "hr-service"
@@ -146,7 +146,6 @@ docker_compose up -d --remove-orphans --no-build
 log "✓ Compose rollout finished"
 
 section "Container Health"
-wait_for_container_health postgres
 wait_for_container_health redis
 wait_for_container_health rabbitmq
 wait_for_container_health auth-service
@@ -158,29 +157,8 @@ wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
 section "Database Migrations"
-docker_compose_exec postgres psql -U erp -d workphelo -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS hr; CREATE SCHEMA IF NOT EXISTS notify; CREATE SCHEMA IF NOT EXISTS billing; CREATE SCHEMA IF NOT EXISTS marketing;"
 docker_compose_exec auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
 docker_compose_exec hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
-
-NOTIFY_HAS_TABLES="$(
-  docker_compose_exec postgres psql -U erp -d workphelo -tAc \
-    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='notify' AND table_name NOT IN ('_prisma_migrations')" \
-    | tr -d '[:space:]'
-)"
-NOTIFY_TRACKED="$(
-  docker_compose_exec postgres psql -U erp -d workphelo -tAc \
-    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='notify' AND table_name='_prisma_migrations'" \
-    | tr -d '[:space:]'
-)"
-
-if [[ "${NOTIFY_HAS_TABLES:-0}" != "0" && "${NOTIFY_TRACKED:-0}" == "0" ]]; then
-  log "Untracked notify schema detected; baselining migrations"
-  while IFS= read -r migration; do
-    [[ -n "$migration" ]] || continue
-    docker_compose_exec notification-service sh -c "npx prisma@5.22.0 migrate resolve --applied ${migration} --schema /app/apps/notification-service/prisma/schema.prisma"
-  done < <(docker_compose_exec notification-service sh -c "ls /app/apps/notification-service/prisma/migrations/ | grep -E '^[0-9]'")
-fi
-
 docker_compose_exec notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
 docker_compose_exec subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
 docker_compose_exec marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" || true
