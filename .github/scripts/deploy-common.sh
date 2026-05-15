@@ -24,7 +24,6 @@ required_env_vars_for() {
   local -a required=(
     GHCR_TOKEN
     GHCR_USERNAME
-    DATABASE_URL
     RABBITMQ_URL
     JWT_SECRET
     ALLOWED_ORIGINS
@@ -46,9 +45,14 @@ required_env_vars_for() {
     IMAGE_PREFIX
   )
 
-  if [[ "$deploy_env" == "prod" ]]; then
-    required+=(REDIS_PASSWORD)
-  fi
+  case "$deploy_env" in
+    dev)
+      required+=(DEV_DATABASE_URL)
+      ;;
+    prod)
+      required+=(DATABASE_URL REDIS_PASSWORD)
+      ;;
+  esac
 
   printf '%s\n' "${required[@]}"
 }
@@ -79,6 +83,12 @@ validate_required_envs() {
       die "AUTH_COOKIE_SAME_SITE must be one of: lax, strict, none (got '${AUTH_COOKIE_SAME_SITE}')"
       ;;
   esac
+
+  if [[ "$deploy_env" == "dev" ]]; then
+    export DATABASE_URL="${DEV_DATABASE_URL:-}"
+  fi
+
+  validate_database_target "$deploy_env"
 }
 
 warn_optional_envs() {
@@ -308,4 +318,24 @@ print_service_logs() {
   log ""
   log "Recent logs for ${service_name}:"
   docker_compose logs --no-color --tail 120 "$service_name" || true
+}
+
+validate_database_target() {
+  local deploy_env="$1"
+  local db_url="${DATABASE_URL:-}"
+
+  [[ -n "$db_url" ]] || die "DATABASE_URL is required"
+
+  case "$deploy_env" in
+    prod)
+      [[ "$db_url" != *"dev"* ]] || die "Prod deployment must not use dev database URL"
+      [[ "$db_url" != *"staging"* ]] || die "Prod deployment must not use staging database URL"
+      [[ -z "${DEV_DATABASE_URL:-}" ]] || die "Prod deployment must not receive DEV_DATABASE_URL"
+      ;;
+    dev)
+      [[ "$db_url" != *"prod"* ]] || die "Dev deployment must not use prod database URL"
+      [[ "$db_url" != *"production"* ]] || die "Dev deployment must not use production database URL"
+      [[ -z "${PROD_DATABASE_URL:-}" ]] || die "Dev deployment must not receive PROD_DATABASE_URL"
+      ;;
+  esac
 }
