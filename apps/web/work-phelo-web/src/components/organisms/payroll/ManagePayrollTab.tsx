@@ -14,13 +14,6 @@ import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
-
-function toCountryCode(country: string | null): Country {
-  if (country === 'Nigeria') return 'NG';
-  if (country === 'Kenya') return 'KE';
-  return 'GH';
-}
 
 function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
@@ -97,7 +90,10 @@ export function ManagePayrollTab() {
   const payrollLabels = getPayrollLabels(payrollCountry);
   const money = (value: string | number | null | undefined) =>
     formatPayrollMoney(value, payrollCurrency, payrollCountry);
-  const { currency } = useTenantConfig();
+  const tier3Rate =
+    payrollSettings?.payrollTier3Enabled && payrollSettings.payrollTier3Rate != null
+      ? Number(payrollSettings.payrollTier3Rate) / 100
+      : 0;
 
   const profileDeductionItems = useMemo(() => {
     const map: Record<string, DeductionLineItem[]> = {};
@@ -141,6 +137,14 @@ export function ManagePayrollTab() {
         allowances,
         otherDeductions,
         country: payrollCountry,
+        ...(payrollCountry === 'GH' && tier3Rate > 0
+          ? {
+              ghanaPension: {
+                providentFundEmployeeRate: tier3Rate,
+                providentFundName: payrollSettings?.payrollTier3SchemeName ?? undefined,
+              },
+            }
+          : {}),
       });
       return {
         id: e.id,
@@ -160,7 +164,16 @@ export function ManagePayrollTab() {
         department: e.department?.name,
       };
     });
-  }, [empData, basicMap, allowancesMap, deductionItemsMap, payrollCountry, profileDeductionItems]);
+  }, [
+    empData,
+    basicMap,
+    allowancesMap,
+    deductionItemsMap,
+    payrollCountry,
+    payrollSettings?.payrollTier3SchemeName,
+    profileDeductionItems,
+    tier3Rate,
+  ]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery) return payrollRows;
@@ -219,10 +232,6 @@ export function ManagePayrollTab() {
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
   };
-
-  const fmt = (n: number) => `${currency} ${n.toLocaleString()}`;
-
-  const statutoryColumnLabel = payrollLabels.employeeLabel;
 
   const columns: Column<PayrollRow>[] = [
     {

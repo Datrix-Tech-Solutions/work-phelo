@@ -244,6 +244,57 @@ enum AnnouncementAudienceType {
   @@schema("hr")
 }
 
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+
+  @@schema("hr")
+}
+
+enum ProjectMemberRole {
+  OWNER
+  MANAGER
+  MEMBER
+
+  @@schema("hr")
+}
+
+enum ProjectTaskStatus {
+  TODO
+  IN_PROGRESS
+  ON_HOLD
+  DONE
+
+  @@schema("hr")
+}
+
+enum ProjectTaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+
+  @@schema("hr")
+}
+
+enum ProjectActivityType {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_CANCELLED
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_STATUS_CHANGED
+  TASK_ASSIGNED
+  TASK_DELETED
+
+  @@schema("hr")
+}
+
 // ── Branch ───────────────────────────────────────────────────────────────
 
 model Branch {
@@ -358,11 +409,107 @@ model Employee {
   deductions            EmployeeDeduction[]
   assignedAssets        Asset[]                   @relation("AssignedAssets")
   assetAssignments      AssetAssignment[]         @relation("EmployeeAssetAssignments")
+  managedProjects       Project[]                 @relation("ManagedProjects")
+  projectMemberships    ProjectMember[]
+  assignedProjectTasks  ProjectTask[]             @relation("AssignedProjectTasks")
   offboarding           OffboardingRecord?
   resignation           ResignationRecord?
 
   @@unique([tenantId, employeeNumber])
   @@unique([tenantId, email])
+  @@schema("hr")
+}
+
+// ── Projects & Tasks ─────────────────────────────────────────────────────
+
+model Project {
+  id              String        @id @default(uuid())
+  tenantId        String
+  name            String
+  description     String?
+  status          ProjectStatus @default(PLANNING)
+  startDate       DateTime
+  endDate         DateTime?
+  budget          Decimal?      @db.Decimal(15, 2)
+  managerId       String?
+  createdByUserId String?
+  isArchived      Boolean       @default(false)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  manager    Employee?         @relation("ManagedProjects", fields: [managerId], references: [id])
+  members    ProjectMember[]
+  tasks      ProjectTask[]
+  activities ProjectActivity[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, managerId])
+  @@index([tenantId, createdAt])
+  @@schema("hr")
+}
+
+model ProjectMember {
+  id         String            @id @default(uuid())
+  tenantId   String
+  projectId  String
+  employeeId String
+  role       ProjectMemberRole @default(MEMBER)
+  joinedAt   DateTime          @default(now())
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  project  Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, employeeId])
+  @@index([tenantId, employeeId])
+  @@index([tenantId, projectId])
+  @@schema("hr")
+}
+
+model ProjectTask {
+  id                 String              @id @default(uuid())
+  tenantId           String
+  projectId          String
+  name               String
+  description        String?
+  status             ProjectTaskStatus   @default(TODO)
+  priority           ProjectTaskPriority @default(MEDIUM)
+  dueDate            DateTime?
+  assignedEmployeeId String?
+  createdByUserId    String?
+  completedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedEmployee Employee?         @relation("AssignedProjectTasks", fields: [assignedEmployeeId], references: [id])
+  activities       ProjectActivity[]
+
+  @@index([tenantId, projectId])
+  @@index([tenantId, assignedEmployeeId])
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@schema("hr")
+}
+
+model ProjectActivity {
+  id              String              @id @default(uuid())
+  tenantId        String
+  projectId       String
+  taskId          String?
+  actorUserId     String?
+  actorEmployeeId String?
+  type            ProjectActivityType
+  message         String
+  metadata        Json?
+  createdAt       DateTime            @default(now())
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    ProjectTask? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, projectId, createdAt])
+  @@index([tenantId, taskId])
   @@schema("hr")
 }
 

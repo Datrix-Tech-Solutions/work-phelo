@@ -79,6 +79,19 @@ export enum Permission {
   MANAGE_ASSETS = 'manage:assets',
   READ_ASSETS = 'read:assets',
   ASSIGN_ASSET = 'assign:asset',
+
+  // ── Projects & Tasks ────────────────────────────────────────────────────
+  CREATE_PROJECT = 'create:project',
+  READ_PROJECTS = 'read:projects',
+  UPDATE_PROJECT = 'update:project',
+  DELETE_PROJECT = 'delete:project',
+  ASSIGN_PROJECT = 'assign:project',
+  CREATE_PROJECT_TASK = 'create:project_task',
+  READ_PROJECT_TASKS = 'read:project_tasks',
+  UPDATE_PROJECT_TASK = 'update:project_task',
+  DELETE_PROJECT_TASK = 'delete:project_task',
+  ASSIGN_PROJECT_TASK = 'assign:project_task',
+
   READ_ANNOUNCEMENTS = 'read:announcements',
   MANAGE_ANNOUNCEMENTS = 'manage:announcements',
 }
@@ -171,6 +184,19 @@ export const PERMISSION_MAP: Record<string, string[]> = {
   [Permission.MANAGE_ASSETS]: ['assets:CREATE', 'assets:EDIT'],
   [Permission.READ_ASSETS]: ['assets:VIEW'],
   [Permission.ASSIGN_ASSET]: ['assets:ASSIGN'],
+
+  // Projects & Tasks
+  [Permission.CREATE_PROJECT]: ['projects:CREATE'],
+  [Permission.READ_PROJECTS]: ['projects:VIEW'],
+  [Permission.UPDATE_PROJECT]: ['projects:EDIT'],
+  [Permission.DELETE_PROJECT]: ['projects:DELETE'],
+  [Permission.ASSIGN_PROJECT]: ['projects:ASSIGN'],
+  [Permission.CREATE_PROJECT_TASK]: ['project-tasks:CREATE'],
+  [Permission.READ_PROJECT_TASKS]: ['project-tasks:VIEW'],
+  [Permission.UPDATE_PROJECT_TASK]: ['project-tasks:EDIT'],
+  [Permission.DELETE_PROJECT_TASK]: ['project-tasks:DELETE'],
+  [Permission.ASSIGN_PROJECT_TASK]: ['project-tasks:ASSIGN'],
+
   [Permission.READ_ANNOUNCEMENTS]: ['announcements:VIEW'],
   [Permission.MANAGE_ANNOUNCEMENTS]: [
     'announcements:CREATE',
@@ -217,6 +243,8 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   'self-appraisals': ['VIEW', 'EDIT'],
   'appraisal-reviews': ['EDIT'],
   assets: ['VIEW', 'CREATE', 'EDIT', 'ASSIGN'],
+  projects: ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
+  'project-tasks': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'ASSIGN'],
   announcements: ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
   documents: ['VIEW', 'CREATE', 'EDIT'],
   allowances: ['VIEW', 'CREATE', 'EDIT'],
@@ -256,6 +284,8 @@ export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
   'appraisal-settings',
   'self-appraisals',
   'appraisal-reviews',
+  'projects',
+  'project-tasks',
   'hr-settings',
 ]);
 
@@ -352,6 +382,28 @@ export const FEATURE_PERMISSION_MAPPING: Record<string, FeatureActionMapping> = 
     VIEW: [{ resource: 'assets', action: 'VIEW' }],
     EDIT: [{ resource: 'assets', action: 'EDIT' }],
     DELETE: [{ resource: 'assets', action: 'ASSIGN' }], // assign asset to employee
+  },
+
+  // resources: 'projects', 'project-tasks'
+  projects: {
+    CREATE: [
+      { resource: 'projects', action: 'CREATE' },
+      { resource: 'project-tasks', action: 'CREATE' },
+    ],
+    VIEW: [
+      { resource: 'projects', action: 'VIEW' },
+      { resource: 'project-tasks', action: 'VIEW' },
+    ],
+    EDIT: [
+      { resource: 'projects', action: 'EDIT' },
+      { resource: 'projects', action: 'ASSIGN' },
+      { resource: 'project-tasks', action: 'EDIT' },
+      { resource: 'project-tasks', action: 'ASSIGN' },
+    ],
+    DELETE: [
+      { resource: 'projects', action: 'DELETE' },
+      { resource: 'project-tasks', action: 'DELETE' },
+    ],
   },
 
   // resources: 'permission-sets', 'audit-logs'

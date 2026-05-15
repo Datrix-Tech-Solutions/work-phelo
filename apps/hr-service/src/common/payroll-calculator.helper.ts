@@ -59,13 +59,14 @@ const GHANA = {
 const NIGERIA = {
   employeePensionRate: new Decimal('0.08'),
   employerPensionRate: new Decimal('0.10'),
+  minimumTaxRate: new Decimal('0.01'),
   annualPayeBands: [
-    { threshold: new Decimal('800000'), rate: new Decimal('0') },
-    { threshold: new Decimal('3000000'), rate: new Decimal('0.15') },
-    { threshold: new Decimal('12000000'), rate: new Decimal('0.18') },
-    { threshold: new Decimal('25000000'), rate: new Decimal('0.21') },
-    { threshold: new Decimal('50000000'), rate: new Decimal('0.23') },
-    { threshold: new Decimal('999999999999'), rate: new Decimal('0.25') },
+    { threshold: new Decimal('300000'), rate: new Decimal('0.07') },
+    { threshold: new Decimal('600000'), rate: new Decimal('0.11') },
+    { threshold: new Decimal('1100000'), rate: new Decimal('0.15') },
+    { threshold: new Decimal('1600000'), rate: new Decimal('0.19') },
+    { threshold: new Decimal('3200000'), rate: new Decimal('0.21') },
+    { threshold: new Decimal('999999999999'), rate: new Decimal('0.24') },
   ],
 };
 
@@ -110,8 +111,16 @@ function calculateProgressiveTax(
 
 function calculateNigeriaMonthlyPaye(
   monthlyTaxableIncome: decimal.Decimal,
+  monthlyGrossSalary: decimal.Decimal,
 ): decimal.Decimal {
-  const annualTaxableIncome = monthlyTaxableIncome.times(12);
+  const annualGross = monthlyGrossSalary.times(12);
+  const annualConsolidatedRelief = Decimal.max(
+    new Decimal('200000'),
+    annualGross.times(NIGERIA.minimumTaxRate),
+  ).plus(annualGross.times('0.20'));
+  const annualTaxableIncome = maxZero(
+    monthlyTaxableIncome.times(12).minus(annualConsolidatedRelief),
+  );
   let totalTax = new Decimal(0);
   let previousThreshold = new Decimal(0);
 
@@ -127,7 +136,10 @@ function calculateNigeriaMonthlyPaye(
     previousThreshold = band.threshold;
   }
 
-  return totalTax.div(12);
+  return Decimal.max(
+    totalTax.div(12),
+    monthlyGrossSalary.times(NIGERIA.minimumTaxRate),
+  );
 }
 
 function calculateKenyaNssf(basicSalary: decimal.Decimal): decimal.Decimal {
@@ -195,7 +207,7 @@ export function calculatePayrollForCountry(
       taxableIncome = maxZero(
         grossSalary.minus(employeeStatutory).minus(otherDeductions),
       );
-      payeTax = calculateNigeriaMonthlyPaye(taxableIncome);
+      payeTax = calculateNigeriaMonthlyPaye(taxableIncome, grossSalary);
       break;
     }
 

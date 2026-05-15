@@ -82,6 +82,16 @@ export const RESOURCES = [
     description: 'Manager appraisal review workflows',
   },
   { name: 'assets', module: 'HR', description: 'Company asset management' },
+  {
+    name: 'projects',
+    module: 'HR',
+    description: 'Company projects and project membership',
+  },
+  {
+    name: 'project-tasks',
+    module: 'HR',
+    description: 'Project task assignment and task execution',
+  },
   { name: 'announcements', module: 'HR', description: 'Company announcements' },
   { name: 'documents', module: 'HR', description: 'Employee documents' },
   { name: 'allowances', module: 'HR', description: 'Employee allowances' },

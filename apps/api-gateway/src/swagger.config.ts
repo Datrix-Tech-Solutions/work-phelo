@@ -26,6 +26,7 @@ All frontend requests go through this gateway at port **4000**.
 | \`/api/hr/time/*\` | Time tracking | 4002 |
 | \`/api/hr/payroll/*\` | Payroll | 4002 |
 | \`/api/hr/appraisals/*\` | Appraisals | 4002 |
+| \`/api/hr/projects/*\` | Projects and tasks | 4002 |
 
 ### Public Endpoints (no auth required)
 - \`POST /api/v1/auth/login\`

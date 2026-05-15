@@ -15,7 +15,7 @@ import { PensionTab_NG } from '@/components/organisms/payroll/PensionTab_NG';
 import { NSSFTab_KE } from '@/components/organisms/payroll/NSSFTab_KE';
 import { ApprovePayrollTab } from '@/components/organisms/payroll/ApprovePayrollTab';
 import { PayrollHistoryTab } from '@/components/organisms/payroll/PayrollHistoryTab';
-import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { usePayrollSettings } from '@/hooks';
 
 type Tab = 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history';
 
@@ -23,7 +23,8 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
   const { tenantSlug } = use(params);
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const { country } = useTenantConfig();
+  const { data: payrollSettings } = usePayrollSettings();
+  const payrollCountry = payrollSettings?.payrollCountry ?? 'GH';
 
   useEffect(() => {
     if (user !== null && !user.featureConfig?.hr?.payroll) {
@@ -52,8 +53,8 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
   }, [initialTab]);
 
   function renderContributionsTab() {
-    if (country === 'Nigeria') return <PensionTab_NG />;
-    if (country === 'Kenya') return <NSSFTab_KE />;
+    if (payrollCountry === 'NG') return <PensionTab_NG />;
+    if (payrollCountry === 'KE') return <NSSFTab_KE />;
     return <SSNITTab />;
   }
 
@@ -67,7 +68,7 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
         canManage={canManagePayroll}
         canApprove={canApprovePayroll}
         canViewHistory={canViewHistory}
-        country={country}
+        country={payrollCountry}
         onTabChange={setTab}
       />
       {tab === 'payslip' && <MyPayslipTab />}

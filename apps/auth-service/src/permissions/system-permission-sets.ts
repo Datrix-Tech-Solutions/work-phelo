@@ -64,6 +64,8 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
         appraisals: [PermissionAction.VIEW],
         'appraisal-reviews': [PermissionAction.EDIT],
         assets: [PermissionAction.VIEW],
+        projects: [PermissionAction.VIEW],
+        'project-tasks': [PermissionAction.VIEW, PermissionAction.EDIT],
       },
     },
     {
@@ -137,6 +139,20 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
         assets: [
           PermissionAction.VIEW,
           PermissionAction.EDIT,
+          PermissionAction.ASSIGN,
+        ],
+        projects: [
+          PermissionAction.VIEW,
+          PermissionAction.CREATE,
+          PermissionAction.EDIT,
+          PermissionAction.DELETE,
+          PermissionAction.ASSIGN,
+        ],
+        'project-tasks': [
+          PermissionAction.VIEW,
+          PermissionAction.CREATE,
+          PermissionAction.EDIT,
+          PermissionAction.DELETE,
           PermissionAction.ASSIGN,
         ],
         announcements: [PermissionAction.VIEW, PermissionAction.EDIT],
