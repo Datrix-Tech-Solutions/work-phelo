@@ -629,7 +629,7 @@ export class EmployeesService {
       .filter((id): id is string => Boolean(id));
     const statusMap = await this.getUserStatusMap(tenantId, userIds);
     const employeesWithStatus = employees.map((employee) =>
-      this.withUserStatus(employee, statusMap),
+      this.withUserStatus(this.encryption.maskListFields(employee), statusMap),
     );
 
     return {
@@ -692,7 +692,8 @@ export class EmployeesService {
       }),
     ]);
     if (!employee) throw new NotFoundException('Employee not found');
-    const employeeWithAssets = { ...employee, assignedAssets };
+    const decrypted = this.encryption.decryptEmployeeFields(employee);
+    const employeeWithAssets = { ...decrypted, assignedAssets };
 
     const statusMap = await this.getUserStatusMap(
       tenantId,
@@ -774,7 +775,8 @@ export class EmployeesService {
       }),
     ]);
 
-    const employeeWithAssets = { ...employee, assignedAssets };
+    const decrypted = this.encryption.decryptEmployeeFields(employee);
+    const employeeWithAssets = { ...decrypted, assignedAssets };
     return this.withUserStatus(
       this.mapEmployeeAssets(employeeWithAssets),
       statusMap,
