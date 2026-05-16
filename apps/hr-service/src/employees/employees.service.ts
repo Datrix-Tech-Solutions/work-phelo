@@ -46,6 +46,7 @@ import {
   isEmployeeSelfServiceUser,
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FieldEncryptionService } from '../crypto/field-encryption.service';
 import {
   RESIGNATION_QUEUE,
   RESIGNATION_NOTIFY_JOB,
@@ -79,6 +80,7 @@ export class EmployeesService {
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly leaveService: LeaveService,
     private readonly notificationsService: NotificationsService,
+    private readonly encryption: FieldEncryptionService,
     @InjectQueue(RESIGNATION_QUEUE)
     private readonly resignationQueue: Queue<ResignationNotifyPayload>,
   ) {}
@@ -222,18 +224,19 @@ export class EmployeesService {
             firstName: dto.firstName,
             lastName: dto.lastName,
             email: dto.email,
-            phone: dto.phone,
+            emailHash: this.encryption.hmac(dto.email),
+            phone: this.encryption.encrypt(dto.phone),
             gender: dto.gender,
             dateOfBirth: dto.dateOfBirth
               ? new Date(dto.dateOfBirth)
               : undefined,
             maritalStatus: dto.maritalStatus,
             nationality: dto.nationality,
-            address: dto.address,
+            address: this.encryption.encrypt(dto.address),
             city: dto.city,
             region: dto.region,
-            emergencyName: dto.emergencyName,
-            emergencyPhone: dto.emergencyPhone,
+            emergencyName: this.encryption.encrypt(dto.emergencyName),
+            emergencyPhone: this.encryption.encrypt(dto.emergencyPhone),
             emergencyRelation: dto.emergencyRelation,
             jobTitle: dto.jobTitle,
             employmentType: dto.employmentType,
@@ -245,12 +248,12 @@ export class EmployeesService {
               ? new Date(dto.contractEndDate)
               : undefined,
             basicSalary: dto.basicSalary ?? 0,
-            nationalId: dto.nationalId,
-            bankName: dto.bankName,
-            bankAccountNumber: dto.bankAccountNumber,
-            bankBranch: dto.bankBranch,
-            ssnit: dto.ssnit,
-            tinNumber: dto.tinNumber,
+            nationalId: this.encryption.encrypt(dto.nationalId),
+            bankName: this.encryption.encrypt(dto.bankName),
+            bankAccountNumber: this.encryption.encrypt(dto.bankAccountNumber),
+            bankBranch: this.encryption.encrypt(dto.bankBranch),
+            ssnit: this.encryption.encrypt(dto.ssnit),
+            tinNumber: this.encryption.encrypt(dto.tinNumber),
             ...(dto.departmentId && { departmentId: dto.departmentId }),
             ...(dto.branchId && { branchId: dto.branchId }),
             ...(dto.managerId && { managerId: dto.managerId }),
@@ -475,7 +478,7 @@ export class EmployeesService {
         employee.id,
         [employee.hireDate.getFullYear(), employee.hireDate.getFullYear() + 1],
       );
-      this.logger.log(`Leave balances initialised for ${employee.email}`);
+      this.logger.log(`Leave balances initialised for employee ${employee.id}`);
     } catch (err) {
       if (employee) {
         try {
@@ -533,7 +536,7 @@ export class EmployeesService {
       throw err;
     }
 
-    return employee;
+    return this.encryption.decryptEmployeeFields(employee);
   }
 
   async findAll(
@@ -906,10 +909,12 @@ export class EmployeesService {
     const statusChanged =
       employmentStatus && employmentStatus !== existing.employmentStatus;
 
+    const encryptedRest = this.encryption.encryptEmployeeFields(rest);
+
     const updated = await this.prisma.employee.update({
       where: { id },
       data: {
-        ...rest,
+        ...encryptedRest,
         ...(employmentStatus && { employmentStatus }),
         ...(statusChanged && {
           statusChangedAt: new Date(),
@@ -940,7 +945,7 @@ export class EmployeesService {
       );
     }
 
-    return updated;
+    return this.encryption.decryptEmployeeFields(updated);
   }
 
   private async getTenantResignationConfig(tenantId: string) {
