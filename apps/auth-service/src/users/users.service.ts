@@ -328,12 +328,6 @@ export class UsersService {
       });
     }
 
-    const permissions = await this.resolveEffectivePermissions(
-      updated.id,
-      updated.tenantId,
-      updated.role,
-    );
-
     // Auto-login — issue tokens so frontend redirects straight to dashboard
     const payload = {
       sub: updated.id,
@@ -343,7 +337,7 @@ export class UsersService {
       tenantSlug: updated.tenant.slug,
       tenantName: updated.tenant.name,
       firstName: updated.firstName,
-      permissions,
+      // Permissions omitted — JwtStrategy.validate() fetches them from DB on each request.
     };
 
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
@@ -374,47 +368,6 @@ export class UsersService {
         tenantName: updated.tenant.name,
       },
     };
-  }
-
-  private async resolveEffectivePermissions(
-    userId: string,
-    tenantId: string,
-    role: string,
-  ): Promise<string[]> {
-    if (role !== 'EMPLOYEE') return [];
-
-    const [allDirectPerms, setAssignments] = await Promise.all([
-      this.prisma.userPermission.findMany({
-        where: { tenantId, userId },
-        include: { resource: true },
-      }),
-      this.prisma.userPermissionSet.findMany({
-        where: { userId },
-        include: {
-          permissionSet: {
-            include: { resources: { include: { resource: true } } },
-          },
-        },
-      }),
-    ]);
-
-    const direct = allDirectPerms
-      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-      .map((p) => `${p.resource.name}:${p.action}`);
-
-    const explicitlyRevoked = new Set(
-      allDirectPerms
-        .filter((p) => !p.isActive)
-        .map((p) => `${p.resource.name}:${p.action}`),
-    );
-
-    const fromSets = setAssignments.flatMap((a) =>
-      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-    );
-
-    return [...new Set([...direct, ...fromSets])].filter(
-      (perm) => !explicitlyRevoked.has(perm),
-    );
   }
 
   async resendInvite(tenantId: string, userId: string) {

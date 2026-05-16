@@ -22,7 +22,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
   const pages = getPageNumbers(currentPage, totalPages);
 
   return (
-    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+    <div className="flex items-center justify-between">
       {/* Left: prev + page numbers + next */}
       <div className="flex items-center gap-1">
         <button

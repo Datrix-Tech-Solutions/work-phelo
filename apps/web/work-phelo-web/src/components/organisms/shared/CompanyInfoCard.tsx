@@ -20,6 +20,7 @@ interface CompanyInfoCardProps {
   size?: string;
   industry?: string;
   location?: string;
+  address?: string;
   contact?: string;
   logoUrl?: string;
   admin?: AdminInfo;
@@ -73,6 +74,7 @@ export function CompanyInfoCard({
   size,
   industry,
   location,
+  address,
   contact,
   logoUrl,
   admin,
@@ -91,19 +93,17 @@ export function CompanyInfoCard({
               <p className="text-sm font-semibold text-gray-900 truncate">{name}</p>
               <p className="text-xs text-gray-400 mt-0.5">{slug}</p>
             </div>
-            <button
-              onClick={onEditCompany}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 transition-colors shrink-0"
-            >
+            <Button variant="outline" size="sm" onClick={onEditCompany}>
               <Pencil className="w-3.5 h-3.5" />
               Edit
-            </button>
+            </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3">
             <InfoField label="Size" value={size} />
             <InfoField label="Industry" value={industry} />
             <InfoField label="Location" value={location} />
+            <InfoField label="Address" value={address} />
             <InfoField label="Contact" value={contact} />
           </div>
         </div>
@@ -121,7 +121,7 @@ export function CompanyInfoCard({
         </div>
 
         {admin ? (
-          <div className="grid grid-cols-3 gap-x-6 gap-y-2.5 bg-gray-50 rounded-lg px-4 py-3 border border-gray-100">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 bg-gray-50 rounded-lg px-4 py-3 border border-gray-100">
             <InfoField label="Name" value={admin.name} />
             <div className="flex flex-col gap-0.5">
               <span className="text-xs text-gray-400">Status</span>

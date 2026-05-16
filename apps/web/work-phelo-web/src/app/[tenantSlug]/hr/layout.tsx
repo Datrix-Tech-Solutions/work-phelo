@@ -131,7 +131,7 @@ export default function HRLayout({
       />
       <div className="flex flex-1 min-h-0">
         <Sidebar groups={groups} collapsed={collapsed} />
-        <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
+        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
       </div>
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
