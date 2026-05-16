@@ -383,6 +383,7 @@ model Employee {
   ssnit                String?
   tinNumber            String?
   basicSalary          Decimal          @db.Decimal(15, 2)
+  emailHash            String?
   avatarUrl            String?
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
