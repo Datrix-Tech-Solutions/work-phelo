@@ -89,7 +89,9 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.dev" \
   "REDIS_URL=redis://redis:6379" \
   "JWT_SECRET=${JWT_SECRET}" \
   "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
-  "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}"
+  "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}" \
+  "FIELD_ENCRYPTION_KEY=${HR_FIELD_ENCRYPTION_KEY}" \
+  "FIELD_HMAC_KEY=${HR_FIELD_HMAC_KEY}"
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.dev" \
   "PORT=4004" \
