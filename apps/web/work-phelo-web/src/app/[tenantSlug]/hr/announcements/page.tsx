@@ -20,7 +20,7 @@ export default function AnnouncementsPage({ params }: { params: Promise<{ tenant
   if (!canManageAnnouncements) return null;
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-8 flex flex-col gap-6 flex-1 min-h-0">
       <AnnouncementsContent />
     </div>
   );

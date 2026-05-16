@@ -86,40 +86,42 @@ export function DepartmentsTable({
   ];
 
   return (
-    <DataTable
-      columns={COLUMNS}
-      data={paged}
-      isLoading={isLoading}
-      searchPlaceholder="Search departments..."
-      searchValue={search}
-      onSearch={(q) => {
-        setSearch(q);
-        setPage(1);
-      }}
-      actionButton={canCreate ? { label: 'New Department', onClick: onCreate } : undefined}
-      rowActions={
-        canUpdate || canDelete
-          ? (row) => [
-              ...(canUpdate
-                ? [
-                    { label: 'Edit Department', onClick: () => onEdit(row) },
-                    { label: 'Add Members', onClick: () => onAddMembers(row) },
-                    {
-                      label: row.isActive ? 'Deactivate' : 'Activate',
-                      onClick: () => onToggleActive(row),
-                    },
-                  ]
-                : []),
-              ...(canDelete
-                ? [{ label: 'Delete', onClick: () => onDelete(row), danger: true }]
-                : []),
-            ]
-          : undefined
-      }
-      emptyMessage="No departments found"
-      currentPage={page}
-      totalPages={totalPages}
-      onPageChange={setPage}
-    />
+    <div className="flex flex-col flex-1 min-h-0">
+      <DataTable
+        columns={COLUMNS}
+        data={paged}
+        isLoading={isLoading}
+        searchPlaceholder="Search departments..."
+        searchValue={search}
+        onSearch={(q) => {
+          setSearch(q);
+          setPage(1);
+        }}
+        actionButton={canCreate ? { label: 'New Department', onClick: onCreate } : undefined}
+        rowActions={
+          canUpdate || canDelete
+            ? (row) => [
+                ...(canUpdate
+                  ? [
+                      { label: 'Edit Department', onClick: () => onEdit(row) },
+                      { label: 'Add Members', onClick: () => onAddMembers(row) },
+                      {
+                        label: row.isActive ? 'Deactivate' : 'Activate',
+                        onClick: () => onToggleActive(row),
+                      },
+                    ]
+                  : []),
+                ...(canDelete
+                  ? [{ label: 'Delete', onClick: () => onDelete(row), danger: true }]
+                  : []),
+              ]
+            : undefined
+        }
+        emptyMessage="No departments found"
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      />
+    </div>
   );
 }

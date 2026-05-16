@@ -115,7 +115,7 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
   ];
 
   return (
-    <>
+    <div className="flex flex-col flex-1 min-h-0">
       <DataTable
         columns={columns}
         data={filteredHolidays}
@@ -172,6 +172,6 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
           </div>
         }
       />
-    </>
+    </div>
   );
 }

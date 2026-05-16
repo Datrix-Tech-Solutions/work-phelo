@@ -97,7 +97,11 @@ export default function DepartmentsPage({ params }: { params: Promise<{ tenantSl
   }
 
   return (
-    <div className="flex flex-col gap-6 h-full">
+    <div className="flex flex-col gap-6 flex-1 min-h-0">
+      <div className="shrink-0">
+        <h2 className="text-base font-semibold text-gray-900">Departments</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Manage company departments and their details</p>
+      </div>
       <DepartmentsTable
         departments={departments}
         employees={employees}

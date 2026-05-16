@@ -33,6 +33,7 @@ interface DataTableProps<T extends { id: string | number }> {
   filterOptions?: { value: string; label: string }[];
   onFilter?: (value: string) => void;
   onExport?: () => void;
+  secondaryButton?: { label: React.ReactNode; onClick: () => void };
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
   onRowClick?: (row: T) => void;
@@ -116,6 +117,7 @@ export function DataTable<T extends { id: string | number }>({
   filterOptions,
   onFilter,
   onExport,
+  secondaryButton,
   actionButton,
   rowActions,
   onRowClick,
@@ -123,88 +125,109 @@ export function DataTable<T extends { id: string | number }>({
   totalPages,
   onPageChange,
 }: DataTableProps<T>) {
+  const hasToolbar = !!(
+    onSearch ||
+    (filterOptions && onFilter) ||
+    onExport ||
+    secondaryButton ||
+    actionButton
+  );
+
   return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0 h-full">
-      {/* Toolbar */}
-      <div className="flex items-center gap-3 flex-wrap shrink-0">
-        {onSearch && (
-          <div className="relative flex-1 min-w-52 max-w-sm">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder={searchPlaceholder}
-              value={searchValue ?? undefined}
-              onChange={(e) => onSearch(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
-            />
-          </div>
-        )}
+    <div className="flex flex-col gap-3 flex-1 min-h-0 h-full">
+      {/* Toolbar — outside the card */}
+      {hasToolbar && (
+        <div className="flex items-center gap-3 flex-wrap shrink-0">
+          {onSearch && (
+            <div className="relative flex-1 min-w-52 max-w-sm">
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder={searchPlaceholder}
+                value={searchValue ?? undefined}
+                onChange={(e) => onSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+              />
+            </div>
+          )}
 
-        {filterOptions && onFilter && (
-          <div className="relative">
-            <select
-              onChange={(e) => onFilter(e.target.value)}
-              className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white"
+          {filterOptions && onFilter && (
+            <div className="relative">
+              <select
+                onChange={(e) => onFilter(e.target.value)}
+                className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white"
+              >
+                <option value="">Status</option>
+                {filterOptions.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <Icons.ListFilter className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none h-4 w-4" />
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {onExport && (
+            <button
+              onClick={onExport}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
             >
-              <option value="">Status</option>
-              {filterOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            <Icons.ListFilter className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none h-4 w-4" />
-          </div>
-        )}
+              Export
+              <Icons.Upload className="w-5 h-5" />
+            </button>
+          )}
 
-        <div className="flex-1" />
+          {secondaryButton && (
+            <button
+              onClick={secondaryButton.onClick}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              {secondaryButton.label}
+            </button>
+          )}
 
-        {onExport && (
-          <button
-            onClick={onExport}
-            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Export
-            <Icons.Upload className="w-5 h-5" />
-          </button>
-        )}
+          {actionButton && (
+            <button
+              onClick={actionButton.onClick}
+              className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-input text-sm font-medium hover:bg-brand-hover transition-colors"
+            >
+              {actionButton.label}
+              <Icons.Plus />
+            </button>
+          )}
+        </div>
+      )}
 
-        {actionButton && (
-          <button
-            onClick={actionButton.onClick}
-            className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-input text-sm font-medium hover:bg-brand-hover transition-colors"
-          >
-            {actionButton.label}
-            <Icons.Plus />
-          </button>
-        )}
-      </div>
-
-      {/* Table Container - This is the key part */}
-      <div className="border border-gray-100 rounded-input overflow-hidden flex flex-col flex-1 min-h-0">
+      {/* Table card — header + rows only */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0 pt-3">
         {/* Header */}
-        <div
-          className="grid text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50 px-4 py-3 shrink-0 "
-          style={{
-            gridTemplateColumns: [
-              ...columns.map((c) => c.width ?? '1fr'),
-              ...(rowActions ? ['auto'] : []),
-            ].join(' '),
-          }}
-        >
-          {columns.map((col) => (
-            <span key={col.key} className={col.className}>
-              {col.label}
-            </span>
-          ))}
-          {rowActions && <span />}
+        <div className="relative shrink-0">
+          <div className="absolute inset-y-0 left-4 right-4 bg-gray-100 rounded-lg" />
+          <div
+            className="relative grid text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-3"
+            style={{
+              gridTemplateColumns: [
+                ...columns.map((c) => c.width ?? '1fr'),
+                ...(rowActions ? ['auto'] : []),
+              ].join(' '),
+            }}
+          >
+            {columns.map((col) => (
+              <span key={col.key} className={col.className}>
+                {col.label}
+              </span>
+            ))}
+            {rowActions && <span />}
+          </div>
         </div>
 
         {/* Scrollable Content Area */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           {isLoading ? (
-            /* Loading State with spinning widget */
-            <div className="h-full flex items-center justify-center ">
+            <div className="h-full flex items-center justify-center">
               <div className="flex flex-col items-center gap-4">
                 <div className="relative w-8 h-8">
                   <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
@@ -214,7 +237,6 @@ export function DataTable<T extends { id: string | number }>({
               </div>
             </div>
           ) : data.length === 0 ? (
-            /* Empty State with logo */
             <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
               <div className="flex flex-col items-center gap-5 text-center px-6">
                 {emptyImage ?? (
@@ -231,14 +253,13 @@ export function DataTable<T extends { id: string | number }>({
               </div>
             </div>
           ) : (
-            /* Actual Rows */
             data.map((row) => (
               <div
                 key={row.id}
                 onClick={() => onRowClick?.(row)}
                 className={cn(
-                  'grid px-4 py-3.5 items-center text-sm text-gray-700 border-b border-gray-100 last:border-b-0',
-                  'hover:bg-gray-200 transition-colors',
+                  'grid px-6 py-4 items-center text-sm text-gray-800 border-b border-gray-100 last:border-b-0',
+                  'hover:bg-gray-50 transition-colors',
                   onRowClick && 'cursor-pointer',
                 )}
                 style={{
@@ -292,8 +313,8 @@ export function DataTable<T extends { id: string | number }>({
         </div>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+      {/* Pagination — outside the card */}
+      {totalPages >= 1 && (
         <div className="shrink-0">
           <Pagination
             currentPage={currentPage}

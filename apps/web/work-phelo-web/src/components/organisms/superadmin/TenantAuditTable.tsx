@@ -3,9 +3,10 @@
 import { useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { useAuditLogs } from '@/hooks';
 import { AuditLog } from '@/types/tenant';
 import { cn } from '@/lib/utils';
+
+const PAGE_SIZE = 10;
 
 function formatTimestamp(iso: string) {
   return new Date(iso).toLocaleString('en-GB', {
@@ -34,7 +35,6 @@ function ChangesBlock({
   data: Record<string, unknown> | undefined;
 }) {
   if (!data || Object.keys(data).length === 0) return null;
-
   return (
     <div className="flex flex-col gap-2">
       <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</span>
@@ -50,13 +50,17 @@ function ChangesBlock({
   );
 }
 
-export function AuditLogsTable() {
+interface TenantAuditTableProps {
+  logs: AuditLog[];
+  isLoading?: boolean;
+}
+
+export function TenantAuditTable({ logs, isLoading }: TenantAuditTableProps) {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AuditLog | null>(null);
 
-  const { data, isLoading } = useAuditLogs(page);
-  const logs: AuditLog[] = data?.logs ?? [];
-  const totalPages = data?.meta?.totalPages ?? 1;
+  const totalPages = Math.max(1, Math.ceil(logs.length / PAGE_SIZE));
+  const paginated = logs.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const columns: Column<AuditLog>[] = [
     {
@@ -69,12 +73,8 @@ export function AuditLogsTable() {
     },
     {
       key: 'userEmail',
-      label: 'User Name',
-      render: (row) => (
-        <span className="text-gray-700">
-          {row.userEmail ?? <span className="text-gray-400">—</span>}
-        </span>
-      ),
+      label: 'User',
+      render: (row) => <span className="text-gray-700">{row.userEmail ?? 'Super Admin'}</span>,
     },
     {
       key: 'resource',
@@ -93,8 +93,23 @@ export function AuditLogsTable() {
       ),
     },
     {
+      key: 'status',
+      label: 'Status',
+      width: '100px',
+      render: (row) => (
+        <span
+          className={cn(
+            'text-sm font-medium',
+            row.status === 'FAILURE' ? 'text-red-500' : 'text-green-600',
+          )}
+        >
+          {row.status ?? 'Success'}
+        </span>
+      ),
+    },
+    {
       key: 'view',
-      label: 'View',
+      label: '',
       width: '80px',
       render: (row) => (
         <button
@@ -111,10 +126,10 @@ export function AuditLogsTable() {
   ];
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <>
       <DataTable
         columns={columns}
-        data={logs}
+        data={paginated}
         isLoading={isLoading}
         emptyMessage="No audit log entries found"
         currentPage={page}
@@ -132,11 +147,20 @@ export function AuditLogsTable() {
         {selected && (
           <>
             <DetailRow label="ID" value={selected.id} />
+            <DetailRow
+              label="Description"
+              value={`${selected.userEmail ?? 'Super Admin'} ${selected.action.toLowerCase()}d a ${selected.resource.toLowerCase()} record`}
+            />
             <DetailRow label="Timestamp" value={formatTimestamp(selected.createdAt)} />
-            <DetailRow label="User" value={selected.userEmail} />
-            <DetailRow label="Role" value={selected.userRole} />
+            <DetailRow label="User" value={selected.userEmail ?? 'Super Admin'} />
+            <DetailRow label="Role" value={selected.userRole ?? 'Super Admin'} />
             <DetailRow label="Module" value={selected.resource} />
-            {selected.resourceId && <DetailRow label="Resource ID" value={selected.resourceId} />}
+            {selected.resourceId && (
+              <DetailRow
+                label={`${selected.resource.charAt(0) + selected.resource.slice(1).toLowerCase()} ID`}
+                value={selected.resourceId}
+              />
+            )}
             <DetailRow label="Action" value={selected.action} />
             <DetailRow
               label="Status"
@@ -147,7 +171,7 @@ export function AuditLogsTable() {
                     selected.status === 'FAILURE' ? 'text-red-500' : 'text-green-600',
                   )}
                 >
-                  {selected.status ?? 'SUCCESS'}
+                  {selected.status ?? 'Success'}
                 </span>
               }
             />
@@ -160,6 +184,6 @@ export function AuditLogsTable() {
           </>
         )}
       </SidePanel>
-    </div>
+    </>
   );
 }

@@ -104,17 +104,12 @@ export function RolesContent() {
 
   return (
     <>
-      <div className="flex flex-col gap-6 h-full">
-        <div className="flex items-center justify-between shrink-0">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Roles & Permissions</h2>
-            <p className="text-sm text-gray-400 mt-0.5">
-              Manage roles and control what each role can access
-            </p>
-          </div>
-          <Button onClick={() => router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/new`)}>
-            + Create New Role
-          </Button>
+      <div className="flex flex-col gap-6 flex-1 min-h-0">
+        <div className="shrink-0">
+          <h2 className="text-base font-semibold text-gray-900">Roles & Permissions</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Manage roles and control what each role can access
+          </p>
         </div>
 
         <DataTable
@@ -127,6 +122,10 @@ export function RolesContent() {
           onSearch={(q) => {
             setSearch(q);
             setPage(1);
+          }}
+          actionButton={{
+            label: 'Create New Role',
+            onClick: () => router.push(`/${params.tenantSlug}/hr/hrmanagement/roles/new`),
           }}
           currentPage={page}
           totalPages={totalPages}

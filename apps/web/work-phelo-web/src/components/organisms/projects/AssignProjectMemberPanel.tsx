@@ -28,7 +28,12 @@ export function AssignProjectMemberPanel({
   const { data: employees = [], isLoading } = useEmployeeOptions();
 
   const options = useMemo(
-    () => employees.filter((e) => e.employmentStatus === 'ACTIVE' && !assignedIds.has(e.id)),
+    () =>
+      employees.filter(
+        (e) =>
+          (e.employmentStatus === 'ACTIVE' || e.employmentStatus === 'PROBATION') &&
+          !assignedIds.has(e.id),
+      ),
     [employees, assignedIds],
   );
 
@@ -69,7 +74,7 @@ export function AssignProjectMemberPanel({
       isOpen={isOpen}
       onClose={handleClose}
       title="Assign Member"
-      description="Select one or more active employees to add to this project."
+      description="Select one or more employees to add to this project."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isAssigning}>
@@ -107,7 +112,7 @@ export function AssignProjectMemberPanel({
         </div>
       ) : filtered.length === 0 ? (
         <p className="text-sm text-gray-400 text-center py-8">
-          {search ? 'No employees match your search' : 'No active employees available'}
+          {search ? 'No employees match your search' : 'No available employees'}
         </p>
       ) : (
         <div className="flex flex-col gap-1">

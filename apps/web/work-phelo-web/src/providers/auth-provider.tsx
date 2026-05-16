@@ -36,9 +36,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then(async (res) => {
         const authUser = res.data.user;
 
-        // Permissions for EMPLOYEE users are embedded in the /auth/me response.
         // SUPER_ADMIN and TENANT_ADMIN bypass permission checks — no array needed.
-        if (authUser.role === 'EMPLOYEE') {
+        // All other roles (EMPLOYEE, MANAGER, or any custom role) load permissions from the response.
+        if (authUser.role !== 'SUPER_ADMIN' && authUser.role !== 'TENANT_ADMIN') {
           setPermissions(res.data.permissions ?? []);
 
           // /auth/me does not currently return lastName for employee users.
