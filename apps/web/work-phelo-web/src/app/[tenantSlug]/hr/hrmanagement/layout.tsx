@@ -107,10 +107,10 @@ export default function HRManagementLayout({ children }: { children: React.React
   ].filter((group) => group.tabs.length > 0);
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col flex-1 min-h-0">
       {/* Sticky header + tabs */}
-      <div className="sticky top-0 z-10 bg-white">
-        <div className="px-8 pt-8 pb-5">
+      <div className="shrink-0 bg-white">
+        <div className="px-8 pt-8 pb-2">
           <h1 className="text-xl font-semibold text-gray-900">HR Settings</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Configure leave types, appraisal templates, cycles, and roles
@@ -120,7 +120,9 @@ export default function HRManagementLayout({ children }: { children: React.React
       </div>
 
       {/* Content */}
-      <main className="p-8">{children}</main>
+      <main className="px-8 pt-4 pb-8 flex-1 min-h-0 overflow-hidden bg-gray-50 flex flex-col">
+        {children}
+      </main>
     </div>
   );
 }

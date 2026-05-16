@@ -2,7 +2,6 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
-import { Button } from '@/components/atoms/Button';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
 import { usePayrollSettings, usePayrollRuns } from '@/hooks';
@@ -318,20 +317,6 @@ export function ManagePayrollTab() {
 
   return (
     <div className="flex flex-col gap-6 flex-1 min-h-0">
-      <div className="flex items-center justify-end gap-3 shrink-0">
-        <div className="relative inline-flex">
-          <Button variant="outline" onClick={() => setDraftsPanelOpen(true)}>
-            Drafts
-          </Button>
-          {rejectedDraftsCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
-              {rejectedDraftsCount}
-            </span>
-          )}
-        </div>
-        <Button onClick={() => setRunPanelOpen(true)}>Run Payroll</Button>
-      </div>
-
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
         <MetricCard
           title="Total Gross"
@@ -376,6 +361,20 @@ export function ManagePayrollTab() {
         }
         searchPlaceholder="Search employee name..."
         onSearch={setSearchQuery}
+        secondaryButton={{
+          label: (
+            <span className="relative inline-flex items-center gap-2">
+              Drafts
+              {rejectedDraftsCount > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
+                  {rejectedDraftsCount}
+                </span>
+              )}
+            </span>
+          ),
+          onClick: () => setDraftsPanelOpen(true),
+        }}
+        actionButton={{ label: 'Run Payroll', onClick: () => setRunPanelOpen(true) }}
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}

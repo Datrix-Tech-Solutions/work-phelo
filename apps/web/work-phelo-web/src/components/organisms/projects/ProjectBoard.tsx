@@ -46,7 +46,7 @@ function TaskCard({
   const nextStatus: Record<TaskStatus, TaskStatus | null> = {
     TODO: 'IN_PROGRESS',
     IN_PROGRESS: 'DONE',
-    ON_HOLD: 'IN_PROGRESS',
+    ON_HOLD: null,
     DONE: null,
   };
 
@@ -150,13 +150,11 @@ export function ProjectBoard({ projectId }: Props) {
         const colTasks = grouped[col.key];
         return (
           <div key={col.key} className="flex flex-col gap-3 min-w-55 flex-1">
-            {/* Column header */}
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold tracking-wide text-gray-500">{col.label}</span>
               <span className="text-xs text-gray-400">{colTasks.length}</span>
             </div>
 
-            {/* Cards */}
             <div className="flex flex-col gap-2">
               {colTasks.length === 0 ? (
                 <p className="text-xs text-gray-300 text-center py-8">No tasks</p>

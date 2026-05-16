@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/atoms/Button';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { AddAgreementPanel } from '@/components/organisms/companyPolicies/AddAgreementPanel';
 import { AgreementViewModal } from '@/components/organisms/companyPolicies/AgreementViewModal';
@@ -106,14 +105,7 @@ export default function CompanyAgreementsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 h-full">
-      <div className="flex items-center justify-between shrink-0">
-        <p className="text-sm text-gray-500">
-          Manage agreements and documents employees are required to sign.
-        </p>
-        <Button onClick={() => setPanelOpen(true)}>+ Add Agreement</Button>
-      </div>
-
+    <div className="flex flex-col flex-1 min-h-0">
       <DataTable
         columns={COLUMNS}
         data={paginated}
@@ -125,6 +117,7 @@ export default function CompanyAgreementsPage() {
           setSearch(q);
           setPage(1);
         }}
+        actionButton={{ label: 'Add Agreement', onClick: () => setPanelOpen(true) }}
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}

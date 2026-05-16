@@ -97,7 +97,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   );
 
   return (
-    <div className="p-8 flex flex-col gap-3 h-full">
+    <div className="p-8 flex flex-col gap-3 flex-1 min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>

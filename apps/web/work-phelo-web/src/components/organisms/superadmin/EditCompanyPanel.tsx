@@ -27,6 +27,7 @@ interface EditCompanyPanelProps {
     size?: string;
     industry?: string;
     country?: string;
+    address?: string;
     phone?: string;
   };
 }
@@ -36,6 +37,7 @@ interface FormValues {
   size?: string;
   industry?: string;
   country?: string;
+  address?: string;
   phone?: string;
 }
 
@@ -59,6 +61,7 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
         size: tenant.size,
         industry: tenant.industry,
         country: tenant.country,
+        address: tenant.address,
         phone: tenant.phone,
       });
     }
@@ -131,6 +134,11 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
           options={COUNTRY_OPTIONS}
           value={country}
           onChange={handleCountryChange}
+        />
+        <FormField
+          label="Address"
+          registration={register('address')}
+          placeholder="eg; 123 Main Street, Accra"
         />
         <PhoneInput
           label="Contact"

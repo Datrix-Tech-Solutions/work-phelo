@@ -21,7 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         onTabChange={setActiveTab}
         notificationCount={0}
       />
-      {children}
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
     </div>
   );
 }

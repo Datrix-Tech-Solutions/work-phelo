@@ -80,6 +80,7 @@ export function BranchesTable() {
     {
       key: 'location',
       label: 'Location',
+      width: '2fr',
       render: (row) => (
         <div className="flex items-center gap-1.5 text-sm text-gray-600">
           {(row.city || row.country) && <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" />}
@@ -112,6 +113,7 @@ export function BranchesTable() {
     {
       key: 'status',
       label: 'Status',
+
       render: (row) => (
         <BranchStatus
           count={row._count?.employees ?? 0}
@@ -134,7 +136,7 @@ export function BranchesTable() {
   };
 
   return (
-    <>
+    <div className="flex flex-col flex-1 min-h-0">
       <DataTable
         columns={columns}
         data={pageData}
@@ -272,6 +274,6 @@ export function BranchesTable() {
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
