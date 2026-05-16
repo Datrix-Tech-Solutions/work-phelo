@@ -40,6 +40,11 @@ Thumbs.db
 
 # Prisma generated
 prisma/migrations/
+# Compiled seed files (generated during build, not needed in repo)
+prisma/seed.js
+prisma/seed.d.ts*
+prisma/seed-resources.js
+prisma/seed-resources.d.ts*
 
 # Test coverage
 coverage/
