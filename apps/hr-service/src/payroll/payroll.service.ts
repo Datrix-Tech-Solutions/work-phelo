@@ -20,6 +20,7 @@ import {
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
+import { FieldEncryptionService } from '../crypto/field-encryption.service';
 import {
   EmploymentStatus,
   PayrollCountry,
@@ -90,6 +91,7 @@ export class PayrollService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly rabbitmq: RabbitMQPublisher,
+    private readonly encryption: FieldEncryptionService,
   ) {}
 
   private canReadPayroll(actor: RequestUser) {
@@ -1194,7 +1196,23 @@ export class PayrollService {
       },
     });
     if (!run) throw new NotFoundException('Payroll run not found');
-    return run;
+    return {
+      ...run,
+      items: run.items.map((item) => ({
+        ...item,
+        employee: item.employee
+          ? {
+              ...item.employee,
+              bankName: this.encryption.decrypt(item.employee.bankName) as
+                | string
+                | null,
+              bankAccountNumber: this.encryption.decrypt(
+                item.employee.bankAccountNumber,
+              ) as string | null,
+            }
+          : item.employee,
+      })),
+    };
   }
 
   async getMyPayslips(tenantId: string, userId: string) {
