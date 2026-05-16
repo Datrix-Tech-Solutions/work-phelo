@@ -179,10 +179,19 @@ if docker_compose_exec \
   -e NODE_ENV=development \
   auth-service \
   node /app/apps/auth-service/dist/prisma/seed.js; then
-  log "✓ Seed complete"
+  log "✓ Auth seed complete"
 else
-  log "✗ Seed FAILED: database not seeded with super admin user"
+  log "✗ Auth seed FAILED: database not seeded with super admin user"
   exit 1
+fi
+
+if docker_compose_exec \
+  -e NODE_ENV=development \
+  hr-service \
+  node /app/apps/hr-service/dist/prisma/seed.js; then
+  log "✓ HR seed complete"
+else
+  log "⚠ HR seed FAILED: demo employees not seeded (non-fatal)"
 fi
 
 section "Reachability"
