@@ -23,44 +23,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  private async resolveEffectivePermissions(
-    userId: string,
-    tenantId: string,
-    role: string,
-  ): Promise<string[]> {
-    if (role !== 'EMPLOYEE') return [];
-
-    const [allDirectPerms, setAssignments] = await Promise.all([
-      this.prisma.userPermission.findMany({
-        where: { tenantId, userId },
-        include: { resource: true },
-      }),
-      this.prisma.userPermissionSet.findMany({
-        where: {
-          userId,
-          permissionSet: { isActive: true },
-        },
-        include: {
-          permissionSet: {
-            include: { resources: { include: { resource: true } } },
-          },
-        },
-      }),
-    ]);
-
-    const direct = allDirectPerms
-      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-      .map((p) => `${p.resource.name}:${p.action}`);
-
-    const fromSets = setAssignments.flatMap((a) =>
-      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-    );
-
-    // Revoked direct permissions remain as audit history, but they do not act
-    // as hard denies against permissions granted via roles or permission sets.
-    return [...new Set([...direct, ...fromSets])];
-  }
-
   async validate(payload: any): Promise<RequestUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
@@ -70,12 +32,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user || user.status !== 'ACTIVE' || user.tenant.status !== 'ACTIVE') {
       throw new UnauthorizedException('User not found or inactive');
     }
-
-    const permissions = await this.resolveEffectivePermissions(
-      user.id,
-      user.tenantId,
-      user.role,
-    );
 
     return {
       id: user.id,
@@ -91,7 +47,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           string,
           Record<string, boolean>
         >) ?? {},
-      permissions,
+      permissions: (payload.permissions as string[]) ?? [],
     };
   }
 }
