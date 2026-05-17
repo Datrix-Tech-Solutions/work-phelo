@@ -53,6 +53,9 @@ jobs:
       - name: Type checks
         run: npm run check-types
 
+      - name: Unit tests
+        run: npm run test:unit
+
       - name: Build validation
         run: npm run build
 
