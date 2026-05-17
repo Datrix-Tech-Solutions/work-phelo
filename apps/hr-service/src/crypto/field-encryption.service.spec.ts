@@ -221,29 +221,26 @@ describe('FieldEncryptionService', () => {
   });
 
   describe('maskListFields', () => {
-    it('decrypts then masks phone and ssnit', () => {
-      const encrypted = svc.encryptEmployeeFields({
-        phone: '+233244123456',
-        ssnit: 'C123456789',
-      });
+    it('decrypts and masks ssnit', () => {
+      const encrypted = svc.encryptEmployeeFields({ ssnit: 'C123456789' });
       const result = svc.maskListFields(encrypted);
-      expect(result.phone).toBe('****3456');
       expect(result.ssnit).toBe('****6789');
     });
 
-    it('decrypts but does not mask other encrypted fields (e.g. bankAccountNumber)', () => {
+    it('decrypts but does not mask phone or other encrypted fields', () => {
       const encrypted = svc.encryptEmployeeFields({
+        phone: '+233244123456',
         bankAccountNumber: '1234567890',
         nationalId: 'GHA-12345678-0',
       });
       const result = svc.maskListFields(encrypted);
+      expect(result.phone).toBe('+233244123456');
       expect(result.bankAccountNumber).toBe('1234567890');
       expect(result.nationalId).toBe('GHA-12345678-0');
     });
 
-    it('passes null phone and ssnit through as null', () => {
-      const result = svc.maskListFields({ phone: null, ssnit: null });
-      expect(result.phone).toBeNull();
+    it('passes null ssnit through as null', () => {
+      const result = svc.maskListFields({ ssnit: null });
       expect(result.ssnit).toBeNull();
     });
 
