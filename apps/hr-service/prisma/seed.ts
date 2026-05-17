@@ -1,3 +1,4 @@
+import process from 'process';
 import { PrismaClient } from '../prisma/generated/client';
 
 const prisma = new PrismaClient();
@@ -157,7 +158,6 @@ async function main() {
         employmentStatus: 'ACTIVE',
         gender: 'MALE',
         nationality: 'Ghanaian',
-        phone: '+233244000001',
       },
     });
 
@@ -233,7 +233,6 @@ async function main() {
         employmentType: 'FULL_TIME',
         employmentStatus: 'ACTIVE',
         nationality: 'Ghanaian',
-        phone: '+233244000002',
       },
     });
 

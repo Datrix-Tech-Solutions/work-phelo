@@ -1203,12 +1203,16 @@ export class PayrollService {
         employee: item.employee
           ? {
               ...item.employee,
+              // bankName is intentionally returned decrypted (not masked): payroll
+              // admins need the full bank name to validate payment instructions.
+              // bankAccountNumber is masked — last 4 digits are sufficient for
+              // reconciliation and prevents bulk account number exposure.
               bankName: this.encryption.decrypt(item.employee.bankName) as
                 | string
                 | null,
-              bankAccountNumber: this.encryption.decrypt(
-                item.employee.bankAccountNumber,
-              ) as string | null,
+              bankAccountNumber: this.encryption.mask(
+                this.encryption.decrypt(item.employee.bankAccountNumber),
+              ),
             }
           : item.employee,
       })),

@@ -1,4 +1,4 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 
@@ -29,6 +29,7 @@ export type EncryptedEmployeeField = (typeof ENCRYPTED_EMPLOYEE_FIELDS)[number];
 
 @Injectable()
 export class FieldEncryptionService implements OnModuleInit {
+  private readonly logger = new Logger(FieldEncryptionService.name);
   private key!: Buffer;
   private hmacKey!: Buffer;
 
@@ -92,9 +93,17 @@ export class FieldEncryptionService implements OnModuleInit {
       authTagLength: AUTH_TAG_BYTES,
     });
     decipher.setAuthTag(authTag);
-    return (
-      decipher.update(ciphertext).toString('utf8') + decipher.final('utf8')
-    );
+    try {
+      return (
+        decipher.update(ciphertext).toString('utf8') + decipher.final('utf8')
+      );
+    } catch {
+      // Do not log ciphertext, IV, or authTag — they are encrypted data.
+      this.logger.error(
+        'Field decryption failed — possible key mismatch or data corruption',
+      );
+      throw new Error('Field decryption failed');
+    }
   }
 
   /** HMAC-SHA256 hex digest. Input is normalised (lowercase + trim) before hashing. */
@@ -163,13 +172,13 @@ export class FieldEncryptionService implements OnModuleInit {
   }
 
   /**
-   * For list-view responses: decrypt phone and ssnit then immediately mask them.
-   * The decrypted value is never present in the returned object.
+   * For list-view responses: decrypt all encrypted fields, then mask only
+   * ssnit. All other encrypted fields are returned decrypted.
    */
   maskListFields<T extends Record<string, unknown>>(obj: T): T {
     const decrypted = this.decryptEmployeeFields(obj);
     const result = { ...decrypted } as Record<string, unknown>;
-    for (const field of ['phone', 'ssnit'] as const) {
+    for (const field of ['ssnit'] as const) {
       if (Object.prototype.hasOwnProperty.call(result, field)) {
         const value = result[field];
         if (typeof value === 'string') {

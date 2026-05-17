@@ -50,6 +50,8 @@ prisma/seed-resources.d.ts*
 coverage/
 apps/*/test/
 **/*.spec.ts
+# Allow committed unit specs in service src directories
+!apps/*/src/**/*.spec.ts
 **/*.e2e-spec.ts
 prisma/generated/
 packages/*/src/*.js

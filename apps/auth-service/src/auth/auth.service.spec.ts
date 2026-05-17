@@ -77,6 +77,7 @@ function makePrismaMock() {
       create: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
     },
     socialAccount: {
       findUnique: jest.fn(),
@@ -93,7 +94,11 @@ function makeJwtMock() {
 }
 
 function makeRabbitMock() {
-  return { emit: jest.fn().mockResolvedValue(undefined) };
+  return {
+    emit: jest.fn().mockResolvedValue(undefined),
+    notificationPasswordResetOtp: jest.fn().mockResolvedValue(undefined),
+    notificationPasswordResetLink: jest.fn().mockResolvedValue(undefined),
+  };
 }
 
 function makeAuditMock() {
@@ -741,6 +746,38 @@ describe('AuthService', () => {
       expect(rabbitmq.emit).toHaveBeenCalledWith(
         'notification.password_reset_otp',
         expect.objectContaining({ phone: '+233244000001' }),
+      );
+    });
+
+    it('logs user.id (not phone) when SMS emit fails', async () => {
+      prisma.tenant.findUnique.mockResolvedValue(TENANT);
+      prisma.user.findFirst.mockResolvedValue({
+        ...USER_BASE,
+        phone: '+233244000001',
+      });
+      prisma.otpCode.count.mockResolvedValue(0);
+      prisma.otpCode.updateMany.mockResolvedValue({ count: 0 });
+      prisma.otpCode.create.mockResolvedValue({});
+      rabbitmq.notificationPasswordResetOtp.mockRejectedValueOnce(
+        new Error('connection refused'),
+      );
+
+      const loggerSpy = jest
+        .spyOn(service['logger'], 'error')
+        .mockImplementation(() => {});
+
+      await service.forgotPassword({ ...dto, method: 'sms' });
+
+      // Flush microtasks so the void .catch() fires before we assert
+      await Promise.resolve();
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining(USER_BASE.id),
+        expect.any(Error),
+      );
+      expect(loggerSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('+233244000001'),
+        expect.anything(),
       );
     });
   });
