@@ -48,11 +48,18 @@ prisma/seed-resources.d.ts*
 
 # Test coverage
 coverage/
-apps/*/test/
 **/*.spec.ts
-# Allow committed unit specs in service src directories
+# Allow committed unit specs in service src/ directories
 !apps/*/src/**/*.spec.ts
+# Allow Jest configs and unit specs in test/ directories
+!apps/*/test/jest.unit.config.js
+!apps/*/test/jest.integration.config.js
+!apps/*/test/setup/**
+!apps/*/test/unit/**/*.spec.ts
+# Keep e2e and integration specs local — they require a live database
 **/*.e2e-spec.ts
+apps/*/test/integration/
+apps/*/test/e2e/
 prisma/generated/
 packages/*/src/*.js
 packages/*/src/*.js.map
