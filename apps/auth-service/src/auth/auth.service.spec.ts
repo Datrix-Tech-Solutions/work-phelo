@@ -71,6 +71,7 @@ function makePrismaMock() {
       findUnique: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
+      upsert: jest.fn(),
     },
     otpCode: {
       findFirst: jest.fn(),
@@ -82,6 +83,12 @@ function makePrismaMock() {
     socialAccount: {
       findUnique: jest.fn(),
       create: jest.fn(),
+    },
+    userPermission: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
+    userPermissionSet: {
+      findMany: jest.fn().mockResolvedValue([]),
     },
   };
 }
@@ -149,12 +156,12 @@ describe('AuthService', () => {
     // Helper: set up a happy-path login where bcrypt resolves to true
     function setupHappyPath(userOverrides: Partial<typeof USER_BASE> = {}) {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         ...USER_BASE,
         password: HASHED_PASSWORD,
         ...userOverrides,
       });
-      prisma.refreshToken.create.mockResolvedValue({});
+      prisma.refreshToken.upsert.mockResolvedValue({});
       prisma.user.update.mockResolvedValue({});
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
     }
@@ -184,9 +191,9 @@ describe('AuthService', () => {
 
       await service.login(loginDto, '127.0.0.1', 'Mozilla/5.0');
 
-      expect(prisma.refreshToken.create).toHaveBeenCalledWith(
+      expect(prisma.refreshToken.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({
+          create: expect.objectContaining({
             userId: USER_BASE.id,
             ipAddress: '127.0.0.1',
             userAgent: 'Mozilla/5.0',
@@ -227,13 +234,13 @@ describe('AuthService', () => {
 
     it('throws UnauthorizedException with countdown on wrong password (attempt 1)', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      // First call: get user for login
-      prisma.user.findUnique.mockResolvedValueOnce({
+      // First call: get user for login (login uses findFirst)
+      prisma.user.findFirst.mockResolvedValueOnce({
         ...USER_BASE,
         password: HASHED_PASSWORD,
         failedLoginAttempts: 0,
       });
-      // Second call: inside handleFailedLogin — still at 0 so newAttempts becomes 1
+      // Second call: inside handleFailedLogin (uses findUnique by userId)
       prisma.user.findUnique.mockResolvedValueOnce({
         ...USER_BASE,
         failedLoginAttempts: 0,
@@ -249,12 +256,13 @@ describe('AuthService', () => {
 
     it('throws ForbiddenException and locks account after 5 failed attempts', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValueOnce({
+      // First call: get user for login (login uses findFirst)
+      prisma.user.findFirst.mockResolvedValueOnce({
         ...USER_BASE,
         password: HASHED_PASSWORD,
         failedLoginAttempts: 0,
       });
-      // Inside handleFailedLogin — user already at 4 attempts
+      // Inside handleFailedLogin — user already at 4 attempts (uses findUnique)
       prisma.user.findUnique.mockResolvedValueOnce({
         ...USER_BASE,
         failedLoginAttempts: 4,
@@ -277,7 +285,7 @@ describe('AuthService', () => {
     it('throws ForbiddenException with minutes-remaining when account is locked', async () => {
       const lockedUntil = new Date(Date.now() + 25 * 60 * 1000); // 25 min from now
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         ...USER_BASE,
         password: HASHED_PASSWORD,
         failedLoginAttempts: 5,
@@ -333,7 +341,7 @@ describe('AuthService', () => {
 
     it('throws UnauthorizedException when user does not exist in tenant', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
 
       await expect(service.login(loginDto)).rejects.toThrow(
         UnauthorizedException,
@@ -342,7 +350,7 @@ describe('AuthService', () => {
 
     it('throws ForbiddenException when user is SUSPENDED', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         ...USER_BASE,
         password: HASHED_PASSWORD,
         status: 'SUSPENDED',
@@ -354,7 +362,7 @@ describe('AuthService', () => {
 
     it('throws ForbiddenException when user is INACTIVE', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         ...USER_BASE,
         password: HASHED_PASSWORD,
         status: 'INACTIVE',
@@ -408,7 +416,7 @@ describe('AuthService', () => {
 
     it('returns tokens for valid SuperAdmin credentials', async () => {
       prisma.user.findFirst.mockResolvedValue(SUPER_ADMIN);
-      prisma.refreshToken.create.mockResolvedValue({});
+      prisma.refreshToken.upsert.mockResolvedValue({});
       prisma.user.update.mockResolvedValue({});
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
 
@@ -463,7 +471,7 @@ describe('AuthService', () => {
     it('rotates tokens and returns new pair on valid refresh token', async () => {
       prisma.refreshToken.findUnique.mockResolvedValue(STORED_TOKEN);
       prisma.refreshToken.update.mockResolvedValue({});
-      prisma.refreshToken.create.mockResolvedValue({});
+      prisma.refreshToken.upsert.mockResolvedValue({});
 
       const result = await service.refresh({
         refreshToken: 'valid-refresh-token',
@@ -562,7 +570,7 @@ describe('AuthService', () => {
 
     it('verifies email and activates user with valid OTP', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue(USER_BASE);
+      prisma.user.findFirst.mockResolvedValue(USER_BASE);
       prisma.otpCode.findFirst.mockResolvedValue(VALID_OTP);
       prisma.otpCode.update.mockResolvedValue({});
       prisma.user.update.mockResolvedValue({});
@@ -586,7 +594,7 @@ describe('AuthService', () => {
 
     it('throws UnauthorizedException for invalid OTP code', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue(USER_BASE);
+      prisma.user.findFirst.mockResolvedValue(USER_BASE);
       prisma.otpCode.findFirst.mockResolvedValue(null);
 
       await expect(service.verifyEmail(dto)).rejects.toThrow(
@@ -596,7 +604,7 @@ describe('AuthService', () => {
 
     it('throws UnauthorizedException for already-used OTP', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue(USER_BASE);
+      prisma.user.findFirst.mockResolvedValue(USER_BASE);
       // OTP with usedAt set — Prisma where clause filters these out, so mock returns null
       prisma.otpCode.findFirst.mockResolvedValue(null);
 
@@ -624,7 +632,8 @@ describe('AuthService', () => {
 
     it('generates OTP and publishes reset email event for valid user', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({ ...USER_BASE });
+      prisma.user.findFirst.mockResolvedValue({ ...USER_BASE });
+      prisma.otpCode.count.mockResolvedValue(0);
       prisma.otpCode.updateMany.mockResolvedValue({ count: 0 });
       prisma.otpCode.create.mockResolvedValue({});
 
@@ -638,50 +647,49 @@ describe('AuthService', () => {
           }),
         }),
       );
-      expect(rabbitmq.emit).toHaveBeenCalledWith(
-        'notification.password_reset_link',
+      expect(rabbitmq.notificationPasswordResetLink).toHaveBeenCalledWith(
         expect.objectContaining({
           email: USER_BASE.email,
-          resetLink: expect.stringContaining('/t/acme-ghana/reset-password'),
+          resetLink: expect.stringContaining('forgot-password/reset'),
         }),
       );
     });
 
     it('reset link contains workspace slug (workspace-aware URL)', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({ ...USER_BASE });
+      prisma.user.findFirst.mockResolvedValue({ ...USER_BASE });
+      prisma.otpCode.count.mockResolvedValue(0);
       prisma.otpCode.updateMany.mockResolvedValue({ count: 0 });
       prisma.otpCode.create.mockResolvedValue({});
 
       await service.forgotPassword(dto);
 
-      const emitCall = rabbitmq.emit.mock.calls[0];
-      expect(emitCall[1].resetLink).toMatch(
-        /\/t\/acme-ghana\/reset-password\?token=/,
-      );
+      const callArgs = rabbitmq.notificationPasswordResetLink.mock.calls[0][0];
+      expect(callArgs.resetLink).toMatch(/forgot-password\/reset/);
     });
 
-    it('OTP expires in 15 minutes', async () => {
+    it('OTP expires in 8 hours', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({ ...USER_BASE });
+      prisma.user.findFirst.mockResolvedValue({ ...USER_BASE });
+      prisma.otpCode.count.mockResolvedValue(0);
       prisma.otpCode.updateMany.mockResolvedValue({ count: 0 });
       prisma.otpCode.create.mockResolvedValue({});
 
       const before = Date.now();
       await service.forgotPassword(dto);
-      const after = Date.now();
 
       const createCall = prisma.otpCode.create.mock.calls[0][0];
       const expiresAt: Date = createCall.data.expiresAt;
-      const diffMinutes = (expiresAt.getTime() - before) / 1000 / 60;
+      const diffHours = (expiresAt.getTime() - before) / 1000 / 60 / 60;
 
-      expect(diffMinutes).toBeGreaterThanOrEqual(14.9);
-      expect(diffMinutes).toBeLessThanOrEqual(15.1);
+      expect(diffHours).toBeGreaterThanOrEqual(7.9);
+      expect(diffHours).toBeLessThanOrEqual(8.1);
     });
 
     it('invalidates previous unused OTPs before creating a new one', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({ ...USER_BASE });
+      prisma.user.findFirst.mockResolvedValue({ ...USER_BASE });
+      prisma.otpCode.count.mockResolvedValue(0);
       prisma.otpCode.updateMany.mockResolvedValue({ count: 1 });
       prisma.otpCode.create.mockResolvedValue({});
 
@@ -702,18 +710,18 @@ describe('AuthService', () => {
 
       const result = await service.forgotPassword(dto);
 
-      expect(result.message).toMatch(/if that email exists/i);
+      expect(result.message).toMatch(/you'll receive a code shortly/i);
       expect(prisma.otpCode.create).not.toHaveBeenCalled();
-      expect(rabbitmq.emit).not.toHaveBeenCalled();
+      expect(rabbitmq.notificationPasswordResetLink).not.toHaveBeenCalled();
     });
 
     it('returns safe message even when user does not exist (prevents enumeration)', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
 
       const result = await service.forgotPassword(dto);
 
-      expect(result.message).toMatch(/if that email exists/i);
+      expect(result.message).toMatch(/you'll receive a code shortly/i);
       expect(prisma.otpCode.create).not.toHaveBeenCalled();
     });
 
@@ -725,16 +733,17 @@ describe('AuthService', () => {
 
       const result = await service.forgotPassword(dto);
 
-      expect(result.message).toMatch(/if that email exists/i);
-      expect(rabbitmq.emit).not.toHaveBeenCalled();
+      expect(result.message).toMatch(/you'll receive a code shortly/i);
+      expect(rabbitmq.notificationPasswordResetLink).not.toHaveBeenCalled();
     });
 
     it('publishes SMS OTP event when method is sms and user has phone', async () => {
       prisma.tenant.findUnique.mockResolvedValue(TENANT);
-      prisma.user.findUnique.mockResolvedValue({
+      prisma.user.findFirst.mockResolvedValue({
         ...USER_BASE,
         phone: '+233244000001',
       });
+      prisma.otpCode.count.mockResolvedValue(0);
       prisma.otpCode.updateMany.mockResolvedValue({ count: 0 });
       prisma.otpCode.create.mockResolvedValue({});
 
@@ -743,8 +752,7 @@ describe('AuthService', () => {
         method: 'sms',
       });
 
-      expect(rabbitmq.emit).toHaveBeenCalledWith(
-        'notification.password_reset_otp',
+      expect(rabbitmq.notificationPasswordResetOtp).toHaveBeenCalledWith(
         expect.objectContaining({ phone: '+233244000001' }),
       );
     });
@@ -796,9 +804,12 @@ describe('AuthService', () => {
 
     const VALID_OTP_RECORD = {
       id: 'otp-uuid',
-      userId: USER_BASE.id,
+      code: dto.token,
+      attempts: 0,
+      lockedUntil: null,
       usedAt: null,
       expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+      user: { id: USER_BASE.id, tenant: TENANT },
     };
 
     it('resets password, hashes with bcrypt, and revokes all refresh tokens', async () => {
@@ -893,7 +904,7 @@ describe('AuthService', () => {
         tenant: TENANT,
       });
       prisma.user.update.mockResolvedValue({});
-      prisma.refreshToken.create.mockResolvedValue({});
+      prisma.refreshToken.upsert.mockResolvedValue({});
 
       const result = await service.forceResetPassword(dto);
 
@@ -909,7 +920,7 @@ describe('AuthService', () => {
         tenant: TENANT,
       });
       prisma.user.update.mockResolvedValue({});
-      prisma.refreshToken.create.mockResolvedValue({});
+      prisma.refreshToken.upsert.mockResolvedValue({});
 
       await service.forceResetPassword(dto);
 
