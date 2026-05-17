@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm, useWatch, Controller } from 'react-hook-form';
 import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/atoms/Button';
 import { FormSection } from '@/components/atoms/FormSection';
 import { FormField } from '@/components/molecules/shared/FormField';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { usePayrollSettings, useUpdatePayrollSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -88,8 +89,7 @@ export default function FinancesPage() {
     updateSettings(
       {
         payrollCountry: data.payrollCountry,
-        payrollCurrency:
-          data.payrollCurrency.trim() || resolvePayrollCurrency(null, data.payrollCountry),
+        payrollCurrency: resolvePayrollCurrency(null, data.payrollCountry),
         payrollTier2FundName: data.payrollTier2FundName.trim() || undefined,
         payrollTier3Enabled: data.payrollTier3Enabled,
         payrollTier3Rate: rate,
@@ -104,7 +104,15 @@ export default function FinancesPage() {
     );
   };
 
-  if (isLoading) return <div className="text-sm text-gray-400">Loading…</div>;
+  if (isLoading)
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="relative w-8 h-8">
+          <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
+          <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
+        </div>
+      </div>
+    );
 
   return (
     <div className="flex flex-col gap-10">
@@ -112,47 +120,38 @@ export default function FinancesPage() {
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 max-w-xl">
         <FormSection title="Payroll Country & Currency">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-bold text-gray-900">Payroll Country</label>
-              <select
-                {...register('payrollCountry')}
-                disabled={!canEditPayrollSettings}
-                onChange={(event) => {
-                  const country = event.target.value as PayrollCountry;
-                  setValue('payrollCountry', country, { shouldDirty: true });
-                  setValue('payrollCurrency', resolvePayrollCurrency(null, country), {
-                    shouldDirty: true,
-                  });
-                }}
-                className={inputClass(undefined)}
-              >
-                {PAYROLL_COUNTRY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <Controller
+              name="payrollCountry"
+              control={control}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Payroll Country"
+                  options={PAYROLL_COUNTRY_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: o.label,
+                    sublabel: `${o.dialCode}, ${o.currency}`,
+                  }))}
+                  value={field.value}
+                  onChange={(val) => {
+                    field.onChange(val as PayrollCountry);
+                    setValue('payrollCurrency', resolvePayrollCurrency(null, val), {
+                      shouldDirty: true,
+                    });
+                  }}
+                />
+              )}
+            />
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-bold text-gray-900">Payroll Currency</label>
-              <input
-                type="text"
-                maxLength={3}
-                placeholder={resolvePayrollCurrency(null, payrollCountry)}
-                {...register('payrollCurrency', {
-                  required: 'Payroll currency is required',
-                  setValueAs: (value) =>
-                    String(value ?? '')
-                      .trim()
-                      .toUpperCase(),
-                })}
-                disabled={!canEditPayrollSettings}
-                className={inputClass(errors.payrollCurrency?.message)}
-              />
-              {errors.payrollCurrency && (
-                <p className="text-xs text-red-500">{errors.payrollCurrency.message}</p>
-              )}
+              <div className="px-4 py-3 border border-gray-200 rounded-input text-sm text-gray-500 bg-gray-50 select-none">
+                {(() => {
+                  const opt = PAYROLL_COUNTRY_OPTIONS.find((o) => o.value === payrollCountry);
+                  return opt
+                    ? `${opt.dialCode}, ${opt.currency}`
+                    : resolvePayrollCurrency(null, payrollCountry);
+                })()}
+              </div>
             </div>
           </div>
 

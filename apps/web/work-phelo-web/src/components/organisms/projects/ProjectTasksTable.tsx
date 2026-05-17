@@ -183,7 +183,7 @@ export function ProjectTasksTable({ projectId }: Props) {
         }
         onRowClick={(task) => {
           setSelectedTask(task);
-          setTaskReadOnly(!canModify && task.assignedEmployeeId !== myProfile?.id);
+          setTaskReadOnly(!canModify);
         }}
         currentPage={1}
         totalPages={1}

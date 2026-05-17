@@ -21,6 +21,21 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const payload = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
 
+      // Permissions are resolved by the API gateway (injected as a header)
+      // rather than read from the JWT, which no longer embeds them.
+      const rawPerms = request.headers['x-user-permissions'];
+      let permissions: string[] = [];
+      if (rawPerms) {
+        try {
+          const parsed = JSON.parse(rawPerms as string);
+          if (Array.isArray(parsed)) permissions = parsed;
+        } catch {
+          /* fall through with empty */
+        }
+      } else {
+        permissions = payload.permissions ?? [];
+      }
+
       const user: RequestUser = {
         id: payload.sub,
         email: payload.email,
@@ -31,7 +46,7 @@ export class JwtAuthGuard implements CanActivate {
         firstName: payload.firstName ?? '',
         moduleConfig: payload.moduleConfig ?? {},
         featureConfig: payload.featureConfig ?? {},
-        permissions: payload.permissions ?? [],
+        permissions,
       };
 
       request.user = user;
