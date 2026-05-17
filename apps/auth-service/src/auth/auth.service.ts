@@ -551,7 +551,7 @@ export class AuthService {
         })
         .catch((err) =>
           this.logger.error(
-            `Failed to emit password_reset_otp for ${user.phone}`,
+            `Failed to emit password_reset_otp for user ${user.id}`,
             err,
           ),
         );

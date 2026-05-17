@@ -1206,9 +1206,9 @@ export class PayrollService {
               bankName: this.encryption.decrypt(item.employee.bankName) as
                 | string
                 | null,
-              bankAccountNumber: this.encryption.decrypt(
-                item.employee.bankAccountNumber,
-              ) as string | null,
+              bankAccountNumber: this.encryption.mask(
+                this.encryption.decrypt(item.employee.bankAccountNumber),
+              ),
             }
           : item.employee,
       })),
