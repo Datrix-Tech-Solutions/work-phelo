@@ -9,6 +9,12 @@ import {
   getGatewayServiceUrl,
 } from '../config/runtime-env';
 
+const permissionsCache = new Map<
+  string,
+  { permissions: string[]; expiresAt: number }
+>();
+const PERM_CACHE_TTL = 5 * 60 * 1000; // 5 minutes — matches access-token lifetime
+
 const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/login$/,
   /^\/api\/v1\/auth\/admin\/login$/,
@@ -33,12 +39,50 @@ const FORWARDED_AUTH_CONTEXT_HEADERS = [
   'x-tenant-slug',
   'x-tenant-name',
   'x-user-first-name',
+  'x-user-permissions',
 ] as const;
 
 @Controller()
 export class ProxyController {
   private readonly logger = new Logger(ProxyController.name);
   private readonly services = getConfiguredGatewayServices();
+
+  private fetchUserPermissions(
+    authServiceUrl: string,
+    token: string,
+  ): Promise<string[]> {
+    return new Promise((resolve) => {
+      const url = new URL(authServiceUrl);
+      const isHttps = url.protocol === 'https:';
+      const port = url.port ? parseInt(url.port) : isHttps ? 443 : 80;
+
+      const req = (isHttps ? https : http).request(
+        {
+          hostname: url.hostname,
+          port,
+          path: '/me',
+          method: 'GET',
+          headers: { Cookie: `access_token=${token}` },
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+          res.on('end', () => {
+            try {
+              const body = JSON.parse(data);
+              resolve(Array.isArray(body.permissions) ? body.permissions : []);
+            } catch {
+              resolve([]);
+            }
+          });
+        },
+      );
+      req.on('error', () => resolve([]));
+      req.end();
+    });
+  }
 
   @All('api/v1/*')
   async proxy(@Req() req: Request, @Res() res: Response) {
@@ -83,6 +127,28 @@ export class ProxyController {
         req.headers['x-tenant-slug'] = payload.tenantSlug;
         req.headers['x-tenant-name'] = payload.tenantName ?? '';
         req.headers['x-user-first-name'] = payload.firstName ?? '';
+
+        // Resolve and forward permissions for non-auth-service requests.
+        // The JWT no longer embeds permissions (removed to keep Set-Cookie small),
+        // so the gateway fetches them from auth-service and injects as a header.
+        if (service !== 'auth') {
+          const userId = payload.sub as string;
+          const cached = permissionsCache.get(userId);
+          let permissions: string[];
+          if (cached && cached.expiresAt > Date.now()) {
+            permissions = cached.permissions;
+          } else {
+            const authUrl = getGatewayServiceUrl('auth');
+            permissions = authUrl
+              ? await this.fetchUserPermissions(authUrl, token)
+              : [];
+            permissionsCache.set(userId, {
+              permissions,
+              expiresAt: Date.now() + PERM_CACHE_TTL,
+            });
+          }
+          req.headers['x-user-permissions'] = JSON.stringify(permissions);
+        }
       } catch {
         return res
           .status(401)

@@ -4,10 +4,11 @@ export const PAYROLL_COUNTRY_OPTIONS: Array<{
   value: PayrollCountry;
   label: string;
   currency: string;
+  dialCode: string;
 }> = [
-  { value: 'GH', label: 'Ghana', currency: 'GHS' },
-  { value: 'NG', label: 'Nigeria', currency: 'NGN' },
-  { value: 'KE', label: 'Kenya', currency: 'KES' },
+  { value: 'GH', label: 'Ghana', currency: 'GHS', dialCode: '+233' },
+  { value: 'NG', label: 'Nigeria', currency: 'NGN', dialCode: '+234' },
+  { value: 'KE', label: 'Kenya', currency: 'KES', dialCode: '+254' },
 ];
 
 const DEFAULT_PAYROLL_COUNTRY: PayrollCountry = 'GH';

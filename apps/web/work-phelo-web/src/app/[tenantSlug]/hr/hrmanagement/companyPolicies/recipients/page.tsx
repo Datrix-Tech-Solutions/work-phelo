@@ -51,7 +51,15 @@ export default function CycleRecipientsPage() {
     });
   };
 
-  if (isLoading) return <div className="p-8 text-sm text-gray-400">Loading...</div>;
+  if (isLoading)
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="relative w-8 h-8">
+          <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
+          <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
+        </div>
+      </div>
+    );
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 max-w-xl">
