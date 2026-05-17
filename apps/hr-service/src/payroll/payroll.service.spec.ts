@@ -121,7 +121,7 @@ describe('PayrollService', () => {
         ACTOR,
       );
 
-      const employee = result.items[0].employee!;
+      const employee = result.items[0].employee;
       expect(employee.bankName).toBe(DECRYPTED_BANK_NAME);
       expect(employee.bankAccountNumber).toBe(MASKED_ACCOUNT);
     });
@@ -135,7 +135,7 @@ describe('PayrollService', () => {
         ACTOR,
       );
 
-      const employee = result.items[0].employee!;
+      const employee = result.items[0].employee;
       expect(employee.bankAccountNumber).not.toBe(DECRYPTED_ACCOUNT);
       expect(employee.bankAccountNumber).toMatch(/^\*{4}/);
     });
@@ -178,7 +178,7 @@ describe('PayrollService', () => {
         ACTOR,
       );
 
-      expect(result.items[0].employee!.bankAccountNumber).toBeNull();
+      expect(result.items[0].employee.bankAccountNumber).toBeNull();
     });
   });
 });

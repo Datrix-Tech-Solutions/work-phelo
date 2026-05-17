@@ -162,8 +162,8 @@ describe('FieldEncryptionService', () => {
       expect(result.id).toBe('uuid-123');
       expect(result.firstName).toBe('Kofi');
       expect(result.jobTitle).toBe('Engineer');
-      expect(svc.isEncrypted(result.phone as string)).toBe(true);
-      expect(svc.isEncrypted(result.nationalId as string)).toBe(true);
+      expect(svc.isEncrypted(String(result.phone))).toBe(true);
+      expect(svc.isEncrypted(String(result.nationalId))).toBe(true);
     });
 
     it('passes null through unchanged', () => {
