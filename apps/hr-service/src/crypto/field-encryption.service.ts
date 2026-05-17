@@ -172,13 +172,13 @@ export class FieldEncryptionService implements OnModuleInit {
   }
 
   /**
-   * For list-view responses: decrypt all encrypted fields then immediately
-   * mask every one. The plaintext value is never present in the returned object.
+   * For list-view responses: decrypt all encrypted fields, then mask only
+   * phone and ssnit. All other encrypted fields are returned decrypted.
    */
   maskListFields<T extends Record<string, unknown>>(obj: T): T {
     const decrypted = this.decryptEmployeeFields(obj);
     const result = { ...decrypted } as Record<string, unknown>;
-    for (const field of ENCRYPTED_EMPLOYEE_FIELDS) {
+    for (const field of ['phone', 'ssnit'] as const) {
       if (Object.prototype.hasOwnProperty.call(result, field)) {
         const value = result[field];
         if (typeof value === 'string') {

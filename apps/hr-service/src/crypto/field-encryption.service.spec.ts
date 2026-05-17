@@ -1,9 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import {
-  FieldEncryptionService,
-  ENCRYPTED_EMPLOYEE_FIELDS,
-} from './field-encryption.service';
+import { FieldEncryptionService } from './field-encryption.service';
 
 const VALID_KEY = 'a'.repeat(64); // 64 hex chars, all 'a'
 const VALID_HMAC = 'b'.repeat(64);
@@ -234,47 +231,20 @@ describe('FieldEncryptionService', () => {
       expect(result.ssnit).toBe('****6789');
     });
 
-    it('masks all ENCRYPTED_EMPLOYEE_FIELDS — no plaintext escapes', () => {
-      const plaintext: Record<string, string> = {
-        phone: '+233244123456',
-        address: '123 Independence Ave',
-        emergencyName: 'Ama Boateng',
-        emergencyPhone: '+233244999888',
-        bankName: 'GCB Bank',
-        bankAccountNumber: '1234567890',
-        bankBranch: 'Accra Main',
-        nationalId: 'GHA-12345678-0',
-        ssnit: 'C123456789',
-        tinNumber: 'P0012345678',
-      };
-      const encrypted = svc.encryptEmployeeFields(plaintext);
-      const result = svc.maskListFields(encrypted);
-
-      for (const field of ENCRYPTED_EMPLOYEE_FIELDS) {
-        const value = result[field] as string;
-        expect(value).toMatch(/^\*{4}/);
-        expect(value).not.toBe(plaintext[field]);
-        expect(svc.isEncrypted(value)).toBe(false);
-      }
-    });
-
-    it('does not expose plaintext bankAccountNumber or nationalId in list responses', () => {
+    it('decrypts but does not mask other encrypted fields (e.g. bankAccountNumber)', () => {
       const encrypted = svc.encryptEmployeeFields({
         bankAccountNumber: '1234567890',
         nationalId: 'GHA-12345678-0',
       });
       const result = svc.maskListFields(encrypted);
-      expect(result.bankAccountNumber).toBe('****7890');
-      expect(result.nationalId).toBe('****78-0');
+      expect(result.bankAccountNumber).toBe('1234567890');
+      expect(result.nationalId).toBe('GHA-12345678-0');
     });
 
-    it('passes null fields through as null', () => {
-      const result = svc.maskListFields({
-        phone: null,
-        bankAccountNumber: null,
-      });
+    it('passes null phone and ssnit through as null', () => {
+      const result = svc.maskListFields({ phone: null, ssnit: null });
       expect(result.phone).toBeNull();
-      expect(result.bankAccountNumber).toBeNull();
+      expect(result.ssnit).toBeNull();
     });
 
     it('does not mutate non-encrypted fields', () => {
