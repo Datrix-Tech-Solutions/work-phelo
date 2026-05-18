@@ -55,52 +55,15 @@ export class AuthService {
         firstName: user.firstName,
         moduleConfig: user.moduleConfig,
         featureConfig: user.featureConfig,
-        permissions: user.permissions,
+        // Permissions omitted — gateway fetches them from /me on each request,
+        // keeping the JWT small regardless of how many permissions a user holds.
       },
       { expiresIn: '15m' },
     );
   }
 
   // ── Token Generation ────────────────────────────────────────────────────
-  private async resolveEffectivePermissions(
-    userId: string,
-    tenantId: string,
-    role: string,
-  ): Promise<string[]> {
-    if (role !== 'EMPLOYEE') return [];
-
-    const [directPerms, setAssignments] = await Promise.all([
-      this.prisma.userPermission.findMany({
-        where: { tenantId, userId },
-        include: { resource: true },
-      }),
-      this.prisma.userPermissionSet.findMany({
-        where: { userId, permissionSet: { isActive: true } },
-        include: {
-          permissionSet: {
-            include: { resources: { include: { resource: true } } },
-          },
-        },
-      }),
-    ]);
-
-    const direct = directPerms
-      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-      .map((p) => `${p.resource.name}:${p.action}`);
-
-    const fromSets = setAssignments.flatMap((a) =>
-      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-    );
-
-    return [...new Set([...direct, ...fromSets])];
-  }
-
   private async generateTokens(user: any, tenant: any) {
-    const permissions = await this.resolveEffectivePermissions(
-      user.id,
-      tenant.id,
-      user.role,
-    );
     const payload = {
       sub: user.id,
       email: user.email,
@@ -116,7 +79,7 @@ export class AuthService {
       },
       featureConfig:
         (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
-      permissions,
+      // Permissions omitted — gateway fetches them from /me on each request.
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
