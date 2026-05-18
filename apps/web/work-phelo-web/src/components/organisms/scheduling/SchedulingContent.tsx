@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useEmployees } from '@/hooks/hr/useEmployees';
-import { useDepartments } from '@/hooks/useDepartments';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useShiftSchedules, useCreateShiftSchedule } from '@/hooks/useScheduling';
 import { useToast } from '@/hooks/useToast';
 import { usePermission } from '@/hooks/usePermission';
@@ -66,7 +66,7 @@ export function SchedulingContent({ tenantSlug }: Props) {
     limit: 100,
   });
   const employees = useMemo(() => empData?.data ?? [], [empData]);
-  const { data: departments = [] } = useDepartments();
+  const { data: departments = [] } = useDepartmentOptions();
   const { data: schedules = [], isLoading: schedulesLoading } = useShiftSchedules();
   const isLoading = empLoading || schedulesLoading;
   const { mutate: createSchedule, isPending } = useCreateShiftSchedule();

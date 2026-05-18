@@ -73,15 +73,24 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const { data: departments = [], isError: deptsError } = useDepartmentOptions();
 
   const { data: approvedLeave = [] } = useLeaveRequests('APPROVED');
-  const onLeaveEmployeeIds = useMemo(
+  const activeLeave = useMemo(
     () =>
-      new Set(
-        approvedLeave
-          .filter((r) => new Date(r.startDate) <= TODAY && new Date(r.endDate) >= TODAY)
-          .map((r) => r.employeeId),
-      ),
+      approvedLeave.filter((r) => new Date(r.startDate) <= TODAY && new Date(r.endDate) >= TODAY),
     [approvedLeave],
   );
+  const onLeaveEmployeeIds = useMemo(
+    () => new Set(activeLeave.map((r) => r.employeeId)),
+    [activeLeave],
+  );
+  const coverageByEmployeeId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of activeLeave) {
+      if (r.coverageEmployee) {
+        map.set(r.employeeId, `${r.coverageEmployee.firstName} ${r.coverageEmployee.lastName}`);
+      }
+    }
+    return map;
+  }, [activeLeave]);
 
   const summary = useMemo(
     () => ({
@@ -223,27 +232,30 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto">
-          {employees.map((emp) => (
-            <EmployeeCard
-              key={emp.id}
-              firstName={emp.firstName}
-              lastName={emp.lastName}
-              jobTitle={emp.jobTitle}
-              email={emp.email}
-              phone={emp.phone}
-              avatarUrl={emp.avatarUrl}
-              status={emp.employmentStatus}
-              department={emp.department?.name}
-              hireDate={emp.hireDate}
-              isOnLeave={onLeaveEmployeeIds.has(emp.id)}
-              onClick={
-                canViewDetail
-                  ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)
-                  : undefined
-              }
-            />
-          ))}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-2">
+            {employees.map((emp) => (
+              <EmployeeCard
+                key={emp.id}
+                firstName={emp.firstName}
+                lastName={emp.lastName}
+                jobTitle={emp.jobTitle}
+                email={emp.email}
+                phone={emp.phone}
+                avatarUrl={emp.avatarUrl}
+                status={emp.employmentStatus}
+                department={emp.department?.name}
+                hireDate={emp.hireDate}
+                isOnLeave={onLeaveEmployeeIds.has(emp.id)}
+                coverageName={coverageByEmployeeId.get(emp.id)}
+                onClick={
+                  canViewDetail
+                    ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)
+                    : undefined
+                }
+              />
+            ))}
+          </div>
         </div>
       )}
 

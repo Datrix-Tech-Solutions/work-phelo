@@ -78,7 +78,6 @@ export function TaxReturnsPanel({
       onClose={onClose}
       title="Tax Returns"
       description="Select a date range to view payslips for that period."
-      width="w-[520px]"
       footer={
         <div className="flex flex-col gap-4">
           {filtered.length > 0 && (

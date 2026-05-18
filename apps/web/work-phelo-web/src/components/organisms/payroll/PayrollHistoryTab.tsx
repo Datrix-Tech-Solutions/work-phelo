@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/atoms/Button';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun, PayrollRunDetail } from '@/types/hr';
 import { usePayrollRuns } from '@/hooks';
@@ -132,13 +133,60 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
   );
 }
 
+const PAGE_SIZE = 10;
+
+const MONTH_OPTIONS = [
+  { value: '1', label: 'January' },
+  { value: '2', label: 'February' },
+  { value: '3', label: 'March' },
+  { value: '4', label: 'April' },
+  { value: '5', label: 'May' },
+  { value: '6', label: 'June' },
+  { value: '7', label: 'July' },
+  { value: '8', label: 'August' },
+  { value: '9', label: 'September' },
+  { value: '10', label: 'October' },
+  { value: '11', label: 'November' },
+  { value: '12', label: 'December' },
+];
+
 export function PayrollHistoryTab() {
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
   useTenantConfig();
 
-  const history = runs.filter((r) => r.status === 'APPROVED' || r.status === 'PAID');
+  const [monthFilter, setMonthFilter] = useState('');
+  const [yearFilter, setYearFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [page, setPage] = useState(1);
+
+  const yearOptions = useMemo(() => {
+    const years = Array.from(
+      new Set(
+        runs.filter((r) => r.status === 'APPROVED' || r.status === 'PAID').map((r) => r.year),
+      ),
+    ).sort((a, b) => b - a);
+    return years.map((y) => ({ value: String(y), label: String(y) }));
+  }, [runs]);
+
+  const history = useMemo(() => {
+    let result = runs.filter((r) => r.status === 'APPROVED' || r.status === 'PAID');
+
+    if (statusFilter) result = result.filter((r) => r.status === statusFilter);
+    if (monthFilter) result = result.filter((r) => r.month === Number(monthFilter));
+    if (yearFilter) result = result.filter((r) => r.year === Number(yearFilter));
+
+    return [...result].sort((a, b) => {
+      const aVal = a.year * 12 + a.month;
+      const bVal = b.year * 12 + b.month;
+      return sortOrder === 'desc' ? bVal - aVal : aVal - bVal;
+    });
+  }, [runs, monthFilter, yearFilter, statusFilter, sortOrder]);
+
+  const totalPages = Math.max(1, Math.ceil(history.length / PAGE_SIZE));
+  const paged = history.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const columns: Column<PayrollRun>[] = [
     {
@@ -217,11 +265,53 @@ export function PayrollHistoryTab() {
     <div className="flex-1 min-h-0 flex flex-col">
       <DataTable
         columns={columns}
-        data={history}
+        data={paged}
         isLoading={isLoading}
-        currentPage={1}
-        totalPages={1}
-        onPageChange={() => {}}
+        emptyMessage="No payroll history found"
+        extraFilters={
+          <>
+            <div className="w-40">
+              <SearchSelect
+                placeholder="Month"
+                options={MONTH_OPTIONS}
+                value={monthFilter}
+                onChange={(val) => {
+                  setMonthFilter(val);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <div className="w-32">
+              <SearchSelect
+                placeholder="Year"
+                options={yearOptions}
+                value={yearFilter}
+                onChange={(val) => {
+                  setYearFilter(val);
+                  setPage(1);
+                }}
+              />
+            </div>
+          </>
+        }
+        filterOptions={[
+          { label: 'Approved', value: 'APPROVED' },
+          { label: 'Paid', value: 'PAID' },
+        ]}
+        onFilter={(val) => {
+          setStatusFilter(val);
+          setPage(1);
+        }}
+        secondaryButton={{
+          label: sortOrder === 'desc' ? '↓ Newest First' : '↑ Oldest First',
+          onClick: () => {
+            setSortOrder((s) => (s === 'desc' ? 'asc' : 'desc'));
+            setPage(1);
+          },
+        }}
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
       />
     </div>
   );

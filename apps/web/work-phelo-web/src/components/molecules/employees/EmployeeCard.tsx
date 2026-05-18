@@ -19,6 +19,7 @@ export interface EmployeeCardProps {
   status: string;
   avatarUrl?: string;
   isOnLeave?: boolean;
+  coverageName?: string;
   onClick?: () => void;
 }
 
@@ -72,6 +73,7 @@ export function EmployeeCard({
   status,
   avatarUrl,
   isOnLeave,
+  coverageName,
   onClick,
 }: EmployeeCardProps) {
   const formattedDate = hireDate
@@ -97,10 +99,24 @@ export function EmployeeCard({
         <div className="flex flex-col items-end gap-1.5">
           <EmploymentStatusBadge status={status} />
           {isOnLeave && (
-            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700">
-              <span className="w-2 h-2 rounded-full shrink-0 bg-blue-500" />
-              On Leave
-            </span>
+            <div className="relative group/leave">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 cursor-default">
+                <span className="w-2 h-2 rounded-full shrink-0 bg-blue-500" />
+                On Leave
+              </span>
+              <div className="absolute right-0 top-full mt-1.5 z-50 pointer-events-none opacity-0 group-hover/leave:opacity-100 transition-opacity duration-150">
+                <div className="bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap shadow-lg">
+                  {coverageName ? (
+                    <>
+                      <span className="text-gray-400">Covered by </span>
+                      {coverageName}
+                    </>
+                  ) : (
+                    <span className="text-gray-400">No cover assigned</span>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       </div>

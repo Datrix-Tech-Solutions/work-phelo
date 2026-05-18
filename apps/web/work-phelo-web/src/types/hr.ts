@@ -361,6 +361,7 @@ export interface LeaveRequest {
   reviewNote?: string;
   createdAt: string;
   updatedAt?: string;
+  coverageEmployee?: { id: string; firstName: string; lastName: string };
 }
 
 export interface CreateLeaveRequestDto {
@@ -368,6 +369,7 @@ export interface CreateLeaveRequestDto {
   startDate: string;
   endDate: string;
   reason?: string;
+  coverageEmployeeId?: string;
   documentationUrl?: string;
 }
 

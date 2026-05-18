@@ -42,6 +42,46 @@ export function useMyPayslips() {
   });
 }
 
+export function useEmployeePayslips(employeeId: string) {
+  const { data: runs = [] } = usePayrollRuns();
+
+  const eligibleRuns = runs.filter((r) => r.status === 'APPROVED' || r.status === 'PAID');
+  const runIds = eligibleRuns.map((r) => r.id);
+
+  return useQuery({
+    queryKey: ['payroll', 'employee-payslips', employeeId, runIds],
+    queryFn: async () => {
+      const details = await Promise.all(
+        eligibleRuns.map((run) =>
+          api.get<PayrollRunDetail>(`/hr/payroll/${run.id}`).then((r) => r.data),
+        ),
+      );
+      const items: PayrollItem[] = [];
+      for (const detail of details) {
+        const item = detail.items.find((i) => i.employeeId === employeeId);
+        if (item) {
+          items.push({
+            ...item,
+            payrollRun: {
+              month: detail.month,
+              year: detail.year,
+              status: detail.status,
+              paidAt: detail.paidAt ?? null,
+              payrollCountry: detail.payrollCountry,
+              payrollCurrency: detail.payrollCurrency,
+              tier3Enabled: detail.tier3Enabled,
+              tier3Rate: detail.tier3Rate ?? null,
+              tier3SchemeName: detail.tier3SchemeName ?? null,
+            },
+          });
+        }
+      }
+      return items;
+    },
+    enabled: !!employeeId && runIds.length > 0,
+  });
+}
+
 export function useRunPayroll() {
   const queryClient = useQueryClient();
 

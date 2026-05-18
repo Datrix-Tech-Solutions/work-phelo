@@ -33,6 +33,7 @@ interface DataTableProps<T extends { id: string | number }> {
   filterOptions?: { value: string; label: string }[];
   onFilter?: (value: string) => void;
   onExport?: () => void;
+  extraFilters?: React.ReactNode;
   secondaryButton?: { label: React.ReactNode; onClick: () => void };
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
@@ -117,6 +118,7 @@ export function DataTable<T extends { id: string | number }>({
   filterOptions,
   onFilter,
   onExport,
+  extraFilters,
   secondaryButton,
   actionButton,
   rowActions,
@@ -127,6 +129,7 @@ export function DataTable<T extends { id: string | number }>({
 }: DataTableProps<T>) {
   const hasToolbar = !!(
     onSearch ||
+    extraFilters ||
     (filterOptions && onFilter) ||
     onExport ||
     secondaryButton ||
@@ -150,6 +153,8 @@ export function DataTable<T extends { id: string | number }>({
               />
             </div>
           )}
+
+          {extraFilters}
 
           {filterOptions && onFilter && (
             <div className="relative">
