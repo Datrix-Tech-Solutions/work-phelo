@@ -33,6 +33,37 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
+    // Fetch permissions from DB — the JWT no longer embeds them to keep
+    // the Set-Cookie header small. SUPER_ADMIN and TENANT_ADMIN bypass
+    // permission guards via role checks so they don't need a list.
+    let permissions: string[] = [];
+    if (user.role === 'EMPLOYEE') {
+      const [directPerms, setAssignments] = await Promise.all([
+        this.prisma.userPermission.findMany({
+          where: { tenantId: user.tenantId, userId: user.id },
+          include: { resource: true },
+        }),
+        this.prisma.userPermissionSet.findMany({
+          where: { userId: user.id, permissionSet: { isActive: true } },
+          include: {
+            permissionSet: {
+              include: { resources: { include: { resource: true } } },
+            },
+          },
+        }),
+      ]);
+
+      const direct = directPerms
+        .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
+        .map((p) => `${p.resource.name}:${p.action}`);
+
+      const fromSets = setAssignments.flatMap((a) =>
+        a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
+      );
+
+      permissions = [...new Set([...direct, ...fromSets])];
+    }
+
     return {
       id: user.id,
       email: user.email,
@@ -47,7 +78,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
           string,
           Record<string, boolean>
         >) ?? {},
-      permissions: (payload.permissions as string[]) ?? [],
+      permissions,
     };
   }
 }
