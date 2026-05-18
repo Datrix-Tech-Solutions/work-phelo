@@ -2,6 +2,16 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-microsoft';
+import { Request } from 'express';
+
+interface MicrosoftProfile {
+  id: string;
+  emails?: Array<{ value: string }>;
+  _json?: { mail?: string; userPrincipalName?: string };
+  displayName?: string;
+}
+
+type OAuthDoneCallback = (err: Error | null, user?: unknown) => void;
 
 @Injectable()
 export class MicrosoftStrategy extends PassportStrategy(Strategy, 'microsoft') {
@@ -16,13 +26,14 @@ export class MicrosoftStrategy extends PassportStrategy(Strategy, 'microsoft') {
   }
 
   async validate(
-    req: any,
-    accessToken: string,
-    refreshToken: string,
-    profile: any,
-    done: Function,
+    req: Request,
+    _accessToken: string,
+    _refreshToken: string,
+    profile: MicrosoftProfile,
+    done: OAuthDoneCallback,
   ) {
-    const tenantSlug = req.query.state || req.query.tenantSlug;
+    const query = req.query as Record<string, string>;
+    const tenantSlug = query.state || query.tenantSlug;
 
     // Normalize Microsoft profile to match Google profile shape
     const normalizedProfile = {
@@ -32,7 +43,8 @@ export class MicrosoftStrategy extends PassportStrategy(Strategy, 'microsoft') {
           value:
             profile.emails?.[0]?.value ||
             profile._json?.mail ||
-            profile._json?.userPrincipalName,
+            profile._json?.userPrincipalName ||
+            '',
         },
       ],
       displayName: profile.displayName,

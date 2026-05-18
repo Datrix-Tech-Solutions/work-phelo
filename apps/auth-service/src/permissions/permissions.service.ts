@@ -63,7 +63,7 @@ export class PermissionsService {
         userId_resourceId_action: {
           userId: dto.userId,
           resourceId: dto.resourceId,
-          action: dto.action as any,
+          action: dto.action,
         },
       },
     });
@@ -95,7 +95,7 @@ export class PermissionsService {
         tenantId,
         userId: dto.userId,
         resourceId: dto.resourceId,
-        action: dto.action as any,
+        action: dto.action,
         grantedBy,
         grantedAt: new Date(),
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
@@ -139,7 +139,7 @@ export class PermissionsService {
         tenantId,
         userId: dto.userId,
         resourceId: dto.resourceId,
-        action: dto.action as any,
+        action: dto.action,
       },
     });
 
@@ -152,7 +152,7 @@ export class PermissionsService {
         userId_resourceId_action: {
           userId: dto.userId,
           resourceId: dto.resourceId,
-          action: dto.action as any,
+          action: dto.action,
         },
       },
       update: {
@@ -164,7 +164,7 @@ export class PermissionsService {
         tenantId,
         userId: dto.userId,
         resourceId: dto.resourceId,
-        action: dto.action as any,
+        action: dto.action,
         grantedBy: revokedBy,
         isActive: false,
         revokedBy,
@@ -218,7 +218,7 @@ export class PermissionsService {
         resources: {
           create: dto.resources.map((r) => ({
             resourceId: r.resourceId,
-            action: r.action as any,
+            action: r.action,
           })),
         },
       },
@@ -265,7 +265,7 @@ export class PermissionsService {
         resources: {
           create: dto.resources.map((r) => ({
             resourceId: r.resourceId,
-            action: r.action as any,
+            action: r.action,
           })),
         },
       },
@@ -301,7 +301,7 @@ export class PermissionsService {
         resources: {
           create: resources.map((r) => ({
             resourceId: r.resourceId,
-            action: r.action as any,
+            action: r.action as PermissionAction,
           })),
         },
       },

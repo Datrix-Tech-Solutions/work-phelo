@@ -5,6 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { Permission } from '@work-phelo/config';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 
@@ -190,7 +192,9 @@ export class PermissionsGuard implements CanActivate {
 
     if (!requiredPermissions || requiredPermissions.length === 0) return true;
 
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: RequestUser }>();
     const user = request.user;
 
     if (!user) throw new ForbiddenException(DENY_MESSAGE);

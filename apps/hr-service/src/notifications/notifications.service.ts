@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -29,9 +30,12 @@ export class NotificationsService {
   ) {
     const safePage = Math.max(1, page);
     const safeLimit = Math.min(100, Math.max(1, limit));
-    const where: any = { userId, tenantId };
-    if (filter === 'read') where.isRead = true;
-    if (filter === 'unread') where.isRead = false;
+    const where: Prisma.NotificationWhereInput = {
+      userId,
+      tenantId,
+      ...(filter === 'read' ? { isRead: true } : {}),
+      ...(filter === 'unread' ? { isRead: false } : {}),
+    };
 
     const skip = (safePage - 1) * safeLimit;
     const [notifications, total] = await Promise.all([

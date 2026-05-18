@@ -31,6 +31,7 @@ import {
   Prisma,
   ShiftSchedule,
   ShiftSwapStatus,
+  TimeCorrectionStatus,
 } from '../../prisma/generated/client';
 
 type TimeApprovalRecipient = {
@@ -1082,7 +1083,7 @@ export class TimeService {
       mine?: boolean;
     },
   ) {
-    const where: any = { tenantId };
+    const where: Prisma.ClockRecordWhereInput = { tenantId };
 
     if (filters.mine) {
       const actorEmployee = await getActorEmployee(
@@ -1106,24 +1107,32 @@ export class TimeService {
     }
 
     if (filters.from || filters.to) {
-      where.date = {};
-      if (filters.from) where.date.gte = new Date(filters.from);
-      if (filters.to) where.date.lte = new Date(filters.to);
+      where.date = {
+        ...(filters.from ? { gte: new Date(filters.from) } : {}),
+        ...(filters.to ? { lte: new Date(filters.to) } : {}),
+      };
     }
-
-    const employeeWhere: any = {};
-    if (filters.departmentId) employeeWhere.departmentId = filters.departmentId;
 
     const trimmedSearch = filters.search?.trim();
-    if (trimmedSearch) {
-      employeeWhere.OR = [
-        { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
-        { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
-        { employeeNumber: { contains: trimmedSearch, mode: 'insensitive' } },
-      ];
-    }
+    const employeeWhere: Prisma.EmployeeWhereInput = {
+      ...(filters.departmentId ? { departmentId: filters.departmentId } : {}),
+      ...(trimmedSearch
+        ? {
+            OR: [
+              { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
+              { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
+              {
+                employeeNumber: {
+                  contains: trimmedSearch,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
-    if (Object.keys(employeeWhere).length > 0) {
+    if (filters.departmentId || trimmedSearch) {
       where.employee = { is: employeeWhere };
     }
 
@@ -1217,7 +1226,7 @@ export class TimeService {
       status?: string;
     },
   ) {
-    const where: any = { tenantId };
+    const where: Prisma.TimeCorrectionWhereInput = { tenantId };
 
     if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
@@ -1233,7 +1242,7 @@ export class TimeService {
       if (filters.employeeId) where.employeeId = filters.employeeId;
     }
 
-    if (filters.status) where.status = filters.status;
+    if (filters.status) where.status = filters.status as TimeCorrectionStatus;
 
     return this.prisma.timeCorrection.findMany({
       where,
@@ -2737,7 +2746,10 @@ export class TimeService {
     actor: RequestUser,
     employeeId?: string,
   ) {
-    const where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
+    const where: Prisma.ShiftScheduleWhereInput = {
+      tenantId,
+      ...(employeeId ? { employeeId } : {}),
+    };
 
     const canViewSchedules =
       isCompanyAdminUser(actor) ||

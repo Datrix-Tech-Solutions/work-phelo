@@ -1339,10 +1339,12 @@ export class AppraisalsService {
   async getTemplates(tenantId: string, page = 1, search?: string) {
     const pageSize = 20;
     const skip = (page - 1) * pageSize;
-    const where: any = { tenantId };
-    if (search?.trim()) {
-      where.name = { contains: search.trim(), mode: 'insensitive' };
-    }
+    const where: Prisma.AppraisalTemplateWhereInput = {
+      tenantId,
+      ...(search?.trim()
+        ? { name: { contains: search.trim(), mode: 'insensitive' } }
+        : {}),
+    };
 
     const [total, data] = await this.prisma.$transaction([
       this.prisma.appraisalTemplate.count({ where }),
@@ -1469,7 +1471,7 @@ export class AppraisalsService {
   // ── Appraisals ─────────────────────────────────────────────────────────────
 
   async getAppraisals(tenantId: string, actor: RequestUser, cycleId: string) {
-    const where: any = { tenantId, cycleId };
+    const where: Prisma.AppraisalWhereInput = { tenantId, cycleId };
 
     if (!isCompanyAdminUser(actor)) {
       assertHrAccess(

@@ -236,9 +236,6 @@ export class DashboardService {
       },
     });
 
-    const todayMonth = today.getMonth();
-    const todayDay = today.getDate();
-
     const upcoming = employees
       .filter((e) => {
         if (!e.dateOfBirth) return false;

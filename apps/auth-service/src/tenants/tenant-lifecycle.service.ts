@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
+import { Prisma, TenantStatus } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
@@ -122,17 +123,20 @@ export class TenantLifecycleService {
     search?: string;
     tenantId?: string;
   }) {
-    const where: any = { slug: { not: 'datrix-internal' } };
-
-    if (filters.tenantId) where.id = filters.tenantId;
-    if (filters.status) where.status = filters.status;
-    if (filters.search) {
-      where.OR = [
-        { name: { contains: filters.search, mode: 'insensitive' } },
-        { email: { contains: filters.search, mode: 'insensitive' } },
-        { slug: { contains: filters.search, mode: 'insensitive' } },
-      ];
-    }
+    const where: Prisma.TenantWhereInput = {
+      slug: { not: 'datrix-internal' },
+      ...(filters.tenantId ? { id: filters.tenantId } : {}),
+      ...(filters.status ? { status: filters.status as TenantStatus } : {}),
+      ...(filters.search
+        ? {
+            OR: [
+              { name: { contains: filters.search, mode: 'insensitive' } },
+              { email: { contains: filters.search, mode: 'insensitive' } },
+              { slug: { contains: filters.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
 
     const tenants = await this.prisma.tenant.findMany({
       where,
