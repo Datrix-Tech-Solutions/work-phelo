@@ -204,7 +204,7 @@ export function inferTagsFromResources(
   return Object.entries(PERMISSION_TAG_MAPPING)
     .filter(
       ([, perms]) =>
-        perms && perms.some(({ resource, action }) => has.has(`${resource}:${action}`)),
+        perms && perms.every(({ resource, action }) => has.has(`${resource}:${action}`)),
     )
     .map(([key]) => key);
 }

@@ -105,7 +105,6 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
   const leaveTypeId = useWatch({ control, name: 'leaveTypeId' });
   const startDate = useWatch({ control, name: 'startDate' });
   const endDate = useWatch({ control, name: 'endDate' });
-  // TODO: include careOfEmployeeId in payload once backend supports it
 
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((t) => t.id === leaveTypeId),
@@ -140,6 +139,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
       startDate: values.startDate,
       endDate: values.endDate,
       reason: values.reason || undefined,
+      coverageEmployeeId: values.careOfEmployeeId || undefined,
       documentationUrl: documentFile ? documentFile.name : undefined,
     };
 

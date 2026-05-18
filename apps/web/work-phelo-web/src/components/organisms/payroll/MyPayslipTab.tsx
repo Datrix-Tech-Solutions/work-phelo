@@ -15,82 +15,14 @@ import {
 } from '@/lib/payrollUtils';
 import { useAuthStore } from '@/store/auth.store';
 import { useTenant, useMyProfile } from '@/hooks';
+import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { TaxReturnsPanel } from './TaxReturnsPanel';
-import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
+import { PayslipDocument } from '@/components/molecules/payroll/PayslipDocument';
+import { PayslipAllowancesPanel } from '@/components/molecules/payroll/PayslipAllowancesPanel';
 
 function payslipLabel(p: PayrollItem) {
   if (!p.payrollRun) return '—';
   return payrollMonthLabel(p.payrollRun.month, p.payrollRun.year);
-}
-
-function PayslipRow({
-  label,
-  value,
-  subtle,
-  bold,
-  green,
-}: {
-  label: string;
-  value: string;
-  subtle?: boolean;
-  bold?: boolean;
-  green?: boolean;
-}) {
-  return (
-    <div className={`flex justify-between items-center py-2.5 ${subtle ? 'opacity-60' : ''}`}>
-      <span className={`text-sm ${bold ? 'font-semibold text-gray-900' : 'text-gray-600'}`}>
-        {label}
-      </span>
-      <span
-        className={`text-sm tabular-nums ${
-          green
-            ? 'font-bold text-emerald-600'
-            : bold
-              ? 'font-semibold text-gray-900'
-              : 'text-gray-800'
-        }`}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function Divider() {
-  return <div className="border-t border-gray-100 my-1" />;
-}
-
-function allowanceRows(item: PayrollItem) {
-  if (item.allowanceItems?.length) {
-    return item.allowanceItems
-      .map((allowance) => ({
-        label: allowance.name,
-        amount: parseFloat(allowance.amount),
-      }))
-      .filter((allowance) => allowance.amount > 0);
-  }
-
-  const rows: Array<{ label: string; amount: number }> = [];
-  const transportAmt = parseFloat(item.transportAmount);
-  const nonTransportAllowances = parseFloat(item.totalAllowances);
-  if (transportAmt > 0) rows.push({ label: 'Transport Allowance', amount: transportAmt });
-  if (nonTransportAllowances > 0)
-    rows.push({ label: 'Allowances', amount: nonTransportAllowances });
-  return rows;
-}
-
-function deductionRows(item: PayrollItem) {
-  if (item.deductionItems?.length) {
-    return item.deductionItems
-      .map((deduction) => ({
-        label: deduction.name,
-        amount: parseFloat(deduction.amount),
-      }))
-      .filter((deduction) => deduction.amount > 0);
-  }
-
-  const otherDeductions = parseFloat(item.otherDeductions);
-  return otherDeductions > 0 ? [{ label: 'Deductions', amount: otherDeductions }] : [];
 }
 
 export function MyPayslipTab() {
@@ -159,13 +91,9 @@ export function MyPayslipTab() {
   const [selectedId, setSelectedId] = useState('');
   const [downloading, setDownloading] = useState(false);
   const [taxReturnsOpen, setTaxReturnsOpen] = useState(false);
+
   const selected: PayrollItem | null =
     payslips.find((p) => p.id === selectedId) ?? payslips[0] ?? null;
-  const selectedPayrollCountry = selected?.payrollRun?.payrollCountry;
-  const selectedPayrollCurrency = selected?.payrollRun?.payrollCurrency;
-  const payrollLabels = getPayrollLabels(selectedPayrollCountry);
-  const money = (value: string | number) =>
-    formatPayrollMoney(value, selectedPayrollCurrency, selectedPayrollCountry);
 
   if (payslips.length === 0) {
     return (
@@ -178,20 +106,10 @@ export function MyPayslipTab() {
   const runStatus = selected?.payrollRun?.status ?? '';
   const canDownload = runStatus === 'APPROVED' || runStatus === 'PAID';
 
-  const tier3Enabled = selected?.payrollRun?.tier3Enabled ?? false;
-  const tier3Label =
-    tier3Enabled && selected?.payrollRun?.tier3Rate
-      ? `Tier 3 (${parseFloat(selected.payrollRun.tier3Rate).toFixed(2).replace(/\.00$/, '')}%)`
-      : 'Tier 3';
-
-  const hasTier3 = tier3Enabled && selected ? parseFloat(selected.tier3Employee) > 0 : false;
-  const selectedAllowanceRows = selected ? allowanceRows(selected) : [];
-  const selectedDeductionRows = selected ? deductionRows(selected) : [];
-
   return (
     <>
       <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
-        {/* Period selector */}
+        {/* Header row */}
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-base font-semibold text-gray-900">My Payslip</h2>
           <div className="flex items-center gap-3">
@@ -236,14 +154,15 @@ export function MyPayslipTab() {
                 ) : (
                   <Download className="w-4 h-4" />
                 )}
-                {downloading ? 'Generating…' : 'Download'}
+                {downloading ? 'Generating…' : 'Download PDF'}
               </Button>
             )}
           </div>
         </div>
 
+        {/* Two-column layout: document + allowances/deductions panel */}
         {selected && (
-          <>
+          <div className="flex flex-col gap-4">
             {/* Hero */}
             <div
               className="rounded-card px-8 py-4 shrink-0 flex items-center justify-between"
@@ -252,7 +171,11 @@ export function MyPayslipTab() {
               <div>
                 <p className="text-sm text-blue-300 mb-1">Net Salary</p>
                 <p className="text-4xl font-bold text-white tabular-nums">
-                  {money(selected.netSalary)}
+                  {formatPayrollMoney(
+                    selected.netSalary,
+                    selected.payrollRun?.payrollCurrency,
+                    selected.payrollRun?.payrollCountry,
+                  )}
                 </p>
               </div>
               <div className="text-right">
@@ -270,64 +193,22 @@ export function MyPayslipTab() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
-              {/* Earnings */}
-              <div className="bg-white border border-gray-200 rounded-card px-6 py-5">
-                <p className="text-sm font-semibold text-gray-900 mb-2">Earnings</p>
-                <PayslipRow label="Basic Salary" value={money(selected.basicSalary)} />
-                {selectedAllowanceRows.map((row, index) => (
-                  <PayslipRow
-                    key={`${row.label}-${index}`}
-                    label={row.label}
-                    value={money(row.amount)}
-                    subtle
-                  />
-                ))}
-                {parseFloat(selected.overtimePay) > 0 && (
-                  <PayslipRow label="Overtime" value={money(selected.overtimePay)} subtle />
-                )}
-                {parseFloat(selected.bonus) > 0 && (
-                  <PayslipRow label="Bonus" value={money(selected.bonus)} subtle />
-                )}
-                {parseFloat(selected.thirteenthMonth) > 0 && (
-                  <PayslipRow label="13th Month" value={money(selected.thirteenthMonth)} subtle />
-                )}
-                <Divider />
-                <PayslipRow label="Gross Salary" value={money(selected.grossSalary)} bold />
-              </div>
-
-              {/* Deductions */}
-              <div className="bg-white border border-gray-200 rounded-card px-6 py-5">
-                <p className="text-sm font-semibold text-gray-900 mb-2">Deductions</p>
-                <PayslipRow
-                  label={payrollLabels.employeeLabel}
-                  value={money(selected.employeeSSNIT)}
+            <div className="flex gap-6 items-start">
+              <div className="flex-1 min-w-0">
+                <PayslipDocument
+                  item={selected}
+                  companyName={user?.tenantName ?? ''}
+                  employeeName={myProfile ? `${myProfile.firstName} ${myProfile.lastName}` : ''}
                 />
-                <PayslipRow label="PAYE Tax" value={money(selected.payeTax)} />
-                {hasTier3 && (
-                  <PayslipRow label={tier3Label} value={money(selected.tier3Employee)} subtle />
-                )}
-                {selectedDeductionRows.map((row, index) => (
-                  <PayslipRow
-                    key={`${row.label}-${index}`}
-                    label={row.label}
-                    value={money(row.amount)}
-                    subtle
-                  />
-                ))}
-                <Divider />
-                <PayslipRow label="Total Deductions" value={money(selected.totalDeductions)} bold />
+              </div>
+              <div className="w-72 shrink-0">
+                <PayslipAllowancesPanel
+                  allowances={myProfile?.allowances ?? []}
+                  deductions={myProfile?.deductions ?? []}
+                />
               </div>
             </div>
-
-            {/* Net summary */}
-            <div className="bg-white border border-gray-200 rounded-card px-6 py-5 shrink-0">
-              <PayslipRow label="Gross Salary" value={money(selected.grossSalary)} />
-              <PayslipRow label="Total Deductions" value={`- ${money(selected.totalDeductions)}`} />
-              <Divider />
-              <PayslipRow label="Net Salary" value={money(selected.netSalary)} bold green />
-            </div>
-          </>
+          </div>
         )}
       </div>
 

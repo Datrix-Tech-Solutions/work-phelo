@@ -1,15 +1,14 @@
 import Image from 'next/image';
-import { ShieldCheck, BadgeCheck } from 'lucide-react';
+import { BadgeCheck } from 'lucide-react';
 import { DetailField } from '../shared/DetailField';
 import { EmploymentStatusBadge } from './EmploymentStatusBadge';
 import type { Employee } from '@/types/hr';
 
 interface EmployeeProfileCardProps {
   employee: Employee;
-  roles?: string[];
 }
 
-export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCardProps) {
+export function EmployeeProfileCard({ employee }: EmployeeProfileCardProps) {
   const name = `${employee.firstName} ${employee.lastName}`;
   const initials = `${employee.firstName[0] ?? ''}${employee.lastName[0] ?? ''}`.toUpperCase();
   const isPendingInvite = employee.userStatus === 'PENDING_VERIFICATION';
@@ -59,24 +58,6 @@ export function EmployeeProfileCard({ employee, roles = [] }: EmployeeProfileCar
           <DetailField label="Employee No." value={employee.employeeNumber} />
         )}
       </div>
-
-      {/* Roles */}
-      {roles.length > 0 && (
-        <>
-          <div className="w-full border-t border-gray-100" />
-          <div className="w-full flex flex-col gap-2.5">
-            <p className="text-xs text-gray-400 font-medium tracking-wider">Roles</p>
-            {roles.map((role) => (
-              <div key={role} className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-brand/10 flex items-center justify-center shrink-0">
-                  <ShieldCheck className="w-3.5 h-3.5 text-brand" />
-                </div>
-                <span className="text-sm font-medium text-gray-700">{role}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
     </div>
   );
 }

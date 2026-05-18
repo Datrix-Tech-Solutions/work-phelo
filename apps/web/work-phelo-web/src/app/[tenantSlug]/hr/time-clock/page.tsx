@@ -8,7 +8,7 @@ import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
-import { useDepartments } from '@/hooks/useDepartments';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
 
 import { CorrectionRequestPanel } from '@/components/organisms/time-clock/CorrectionRequestPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -82,7 +82,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
     search: recordsSearch,
   });
 
-  const { data: departmentsRaw } = useDepartments();
+  const { data: departmentsRaw } = useDepartmentOptions();
   const departments = Array.isArray(departmentsRaw) ? departmentsRaw : [];
 
   // Corrections

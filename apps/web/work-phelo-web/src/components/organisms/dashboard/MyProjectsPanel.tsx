@@ -36,7 +36,7 @@ function TaskRow({
   const isOnHold = task.status === 'ON_HOLD';
   const showAction = isTodo || isInProgress || isOnHold;
 
-  const actionLabel = isTodo ? 'Start' : isInProgress ? 'Finish' : 'Resume';
+  const actionLabel = isTodo ? 'Start' : isInProgress ? 'Mark as completed' : '';
   const nextStatus: TaskStatus = isTodo || isOnHold ? 'IN_PROGRESS' : 'DONE';
 
   return (
@@ -55,7 +55,7 @@ function TaskRow({
           className={cn(
             'shrink-0 text-xs font-semibold rounded-full px-2.5 py-1 transition-colors',
             isInProgress
-              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+              ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               : 'bg-brand/10 text-brand hover:bg-brand/20',
             isProgressing && 'opacity-50 cursor-not-allowed',
           )}
@@ -102,7 +102,7 @@ function ProjectRow({
           <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
         )}
         <span className="flex-1 text-sm font-semibold text-gray-900 truncate">{group.name}</span>
-        <span className="shrink-0 text-[11px] font-bold text-white bg-brand rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
+        <span className="shrink-0 text-[11px] font-bold text-white bg-brand rounded-full min-w-5 h-5 flex items-center justify-center px-1.5">
           {incompleteTasks.length}
         </span>
       </button>
@@ -167,7 +167,6 @@ export function MyProjectsPanel({ isOpen, onClose, tenantSlug }: Props) {
       onClose={onClose}
       title="My Projects"
       description="Your active tasks across assigned projects."
-      width="w-[500px]"
     >
       {isLoading ? (
         <div className="flex flex-col gap-3">

@@ -49,6 +49,7 @@ interface RawLeaveRequest {
   rejectionNote?: string;
   createdAt: string;
   updatedAt?: string;
+  coverageEmployee?: { id: string; firstName: string; lastName: string };
 }
 
 interface RawCreateLeaveRequestResponse {
@@ -95,6 +96,7 @@ function transformRequest(r: RawLeaveRequest): LeaveRequest {
     reviewNote: r.rejectionNote ?? undefined,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
+    coverageEmployee: r.coverageEmployee,
   };
 }
 

@@ -81,7 +81,6 @@ export function PermissionSetMembersPanel({
           </Button>
         </div>
       }
-      width="w-[560px]"
     >
       <div className="flex flex-col gap-2">
         <p className="text-sm font-bold text-gray-900">Assigned members</p>

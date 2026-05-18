@@ -42,13 +42,22 @@ export function SchedulingGrid({
         </div>
         {WEEKDAYS.map(({ label, isoDay }) => {
           const dayDate = addDays(weekStart, isoDay - 1);
-          const isToday = toISODate(dayDate) === today;
+          const dateStr = toISODate(dayDate);
+          const isToday = dateStr === today;
+          const isPast = dateStr < today;
           return (
-            <div key={label} className="px-4 py-3.5 text-center border-l border-gray-200">
+            <div
+              key={label}
+              className={cn(
+                'px-4 py-3.5 text-center border-l border-gray-200',
+                isToday && 'bg-blue-300',
+                isPast && 'bg-gray-50',
+              )}
+            >
               <span
                 className={cn(
                   'text-xs font-semibold tracking-wider',
-                  isToday ? 'text-brand' : 'text-gray-500',
+                  isToday ? 'text-brand' : isPast ? 'text-gray-400' : 'text-gray-500',
                 )}
               >
                 {label} {dayDate.getDate()}
@@ -79,6 +88,8 @@ export function SchedulingGrid({
                 key={date}
                 shifts={shiftsByKey[`${emp.id}-${date}`] ?? []}
                 canManage={canManage}
+                isToday={date === today}
+                isPast={date < today}
                 onAddShift={() => onAddShift(emp.id, date)}
                 onOpenDetail={(s) => onOpenDetail(s, date)}
               />
