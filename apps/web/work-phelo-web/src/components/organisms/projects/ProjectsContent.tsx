@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, ClipboardList, CheckCircle, Layers } from 'lucide-react';
+import { Search, ClipboardList, CheckCircle, Layers, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { ProjectCard } from '@/components/molecules/ProjectCard';
@@ -25,6 +25,52 @@ interface Props {
   tenantSlug: string;
 }
 
+function ConfirmDeleteModal({
+  projectName,
+  isDeleting,
+  onConfirm,
+  onCancel,
+}: {
+  projectName: string;
+  isDeleting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Delete Project</p>
+            <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone.</p>
+          </div>
+        </div>
+        <p className="text-sm text-gray-600">
+          Are you sure you want to delete{' '}
+          <span className="font-semibold text-gray-900">{projectName}</span>?
+        </p>
+        <div className="flex justify-end gap-2 mt-1">
+          <Button variant="outline" onClick={onCancel} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={onConfirm}
+            isLoading={isDeleting}
+            loadingText="Deleting…"
+            className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ProjectsContent({ tenantSlug }: Props) {
   const router = useRouter();
   const toast = useToastStore((s) => s.addToast);
@@ -32,6 +78,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const canViewAll = usePermission(Permission.READ_PROJECTS);
   const canManageProjects = usePermission(Permission.CREATE_PROJECT);
@@ -78,9 +125,12 @@ export function ProjectsContent({ tenantSlug }: Props) {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
     try {
-      await archiveProject.mutateAsync(id);
+      await archiveProject.mutateAsync(deleteTarget.id);
+      toast({ message: `"${deleteTarget.name}" has been deleted.`, type: 'success' });
+      setDeleteTarget(null);
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
     }
@@ -182,7 +232,11 @@ export function ProjectsContent({ tenantSlug }: Props) {
               key={project.id}
               project={project}
               onOpen={() => router.push(`/${tenantSlug}/hr/projects/${project.id}`)}
-              onDelete={canManageProjects ? () => handleDelete(project.id) : undefined}
+              onDelete={
+                canManageProjects
+                  ? () => setDeleteTarget({ id: project.id, name: project.name })
+                  : undefined
+              }
             />
           ))}
         </div>
@@ -195,6 +249,15 @@ export function ProjectsContent({ tenantSlug }: Props) {
           employees={employees}
           onSubmit={handleCreate}
           isSubmitting={createProject.isPending}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          projectName={deleteTarget.name}
+          isDeleting={archiveProject.isPending}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </>
