@@ -8,6 +8,7 @@ import {
   RpcException,
 } from '@nestjs/microservices';
 import { UsersService } from './users.service';
+import { InviteUserDto } from './dto/invite-user.dto';
 import {
   EventPatterns,
   WithMeta,
@@ -29,7 +30,8 @@ export class UsersHandler {
   constructor(private readonly usersService: UsersService) {}
 
   private ack(context: RmqContext) {
-    context.getChannelRef().ack(context.getMessage());
+    const channel = context.getChannelRef() as { ack: (msg: unknown) => void };
+    channel.ack(context.getMessage());
   }
 
   private formatError(error: unknown) {
@@ -58,7 +60,10 @@ export class UsersHandler {
     error: unknown,
     details: string,
   ) {
-    const channel = context.getChannelRef();
+    const channel = context.getChannelRef() as {
+      ack: (msg: unknown) => void;
+      nack: (msg: unknown, allUpTo: boolean, requeue: boolean) => void;
+    };
     const message = context.getMessage();
 
     if (this.shouldRequeue(error)) {
@@ -142,13 +147,13 @@ export class UsersHandler {
         email,
         firstName,
         lastName,
-        role: 'EMPLOYEE' as any,
+        role: 'EMPLOYEE' as InviteUserDto['role'],
       });
       this.logger.log(
         `[auth.invite_employee] Invite sent | email=${email} | corrId=${_meta?.correlationId}`,
       );
       this.ack(context);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.settleEventFailure(
         context,
         'auth.invite_employee',
@@ -280,7 +285,7 @@ export class UsersHandler {
         `[hr.employee_offboarded] Account deactivated and tokens revoked | email=${email} | corrId=${_meta?.correlationId}`,
       );
       this.ack(context);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.settleEventFailure(
         context,
         'hr.employee_offboarded',
@@ -309,7 +314,7 @@ export class UsersHandler {
           email,
           firstName,
           lastName: lastName ?? '',
-          role: 'EMPLOYEE' as any,
+          role: 'EMPLOYEE' as InviteUserDto['role'],
         });
         this.logger.log(
           `[auth.resend_employee_invite] Fresh invite sent | email=${email} | corrId=${_meta?.correlationId}`,
@@ -322,7 +327,7 @@ export class UsersHandler {
         `[auth.resend_employee_invite] Invite resent | email=${email} | corrId=${_meta?.correlationId}`,
       );
       this.ack(context);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.settleEventFailure(
         context,
         'auth.resend_employee_invite',

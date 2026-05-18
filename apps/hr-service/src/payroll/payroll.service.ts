@@ -793,7 +793,7 @@ export class PayrollService {
       throw new NotFoundException('Payroll item not found');
     }
 
-    const tenantSettings = await this.getPayrollSettingsSnapshot(tenantId);
+    await this.getPayrollSettingsSnapshot(tenantId);
     const settings: PayrollSettingsSnapshot = {
       payrollCountry: run.payrollCountry,
       payrollCurrency: run.payrollCurrency,

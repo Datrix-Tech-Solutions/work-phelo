@@ -25,14 +25,18 @@ jobs:
       - name: Type checks
         run: npm run check-types
 
-      - name: RBAC alignment
-        run: npm run check-rbac
+      - name: Lint
+        run: npm run lint || true
 
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Tests
+        run: npm run test
 
       - name: Build
         run: npm run build
+
+      - name: RBAC alignment
+        run: npm run check-rbac
+
 
   lint:
     runs-on: ubuntu-latest

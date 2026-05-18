@@ -34,6 +34,7 @@ import {
 } from './dto/employee-allowance.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 import {
+  AllowanceType,
   AssetStatus,
   EmploymentStatus,
   Prisma,
@@ -546,7 +547,7 @@ export class EmployeesService {
   ) {
     const { take, skip, page } = getPaginationParams(query);
 
-    const where: any = { tenantId };
+    const where: Prisma.EmployeeWhereInput = { tenantId };
 
     if (actor && !isCompanyAdminUser(actor)) {
       const canReadEmployees = hasPermissionRule(actor, 'employees:VIEW');
@@ -1688,7 +1689,7 @@ export class EmployeesService {
         tenantId,
         employeeId,
         name: this.allowanceNameFromType(dto.type),
-        type: dto.type as any,
+        type: dto.type as AllowanceType,
         amount: dto.amount,
         effectiveFrom: new Date(),
       },
@@ -1712,7 +1713,7 @@ export class EmployeesService {
       data: {
         ...(dto.type != null
           ? {
-              type: dto.type as any,
+              type: dto.type as AllowanceType,
               name: this.allowanceNameFromType(dto.type),
             }
           : {}),
@@ -1829,10 +1830,14 @@ export class EmployeesService {
     await this.prisma.employeeDeduction.delete({ where: { id: deductionId } });
   }
 
-  async uploadDocument(tenantId: string, employeeId: string, dto: any) {
+  async uploadDocument(
+    tenantId: string,
+    employeeId: string,
+    dto: Prisma.EmployeeDocumentUncheckedCreateInput,
+  ) {
     await this.findById(tenantId, employeeId);
     return this.prisma.employeeDocument.create({
-      data: { tenantId, employeeId, ...dto },
+      data: { ...dto, tenantId, employeeId },
     });
   }
 

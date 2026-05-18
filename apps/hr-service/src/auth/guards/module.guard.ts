@@ -5,6 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 
 export const MODULE_KEY = 'module';
 
@@ -19,10 +21,10 @@ export class ModuleGuard implements CanActivate {
     );
     if (!requiredModule) return true;
 
-    const request = context.switchToHttp().getRequest();
-    const moduleConfig = request.user?.moduleConfig as
-      | Record<string, boolean>
-      | undefined;
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: RequestUser }>();
+    const moduleConfig = request.user?.moduleConfig;
 
     if (!moduleConfig || !moduleConfig[requiredModule]) {
       throw new ForbiddenException(

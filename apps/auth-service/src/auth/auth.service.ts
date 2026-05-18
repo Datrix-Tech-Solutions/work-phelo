@@ -63,7 +63,22 @@ export class AuthService {
   }
 
   // ── Token Generation ────────────────────────────────────────────────────
-  private async generateTokens(user: any, tenant: any) {
+  private async generateTokens(
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      tenantId: string;
+      firstName: string;
+    },
+    tenant: {
+      id: string;
+      slug: string;
+      name: string;
+      moduleConfig: unknown;
+      featureConfig: unknown;
+    },
+  ) {
     const payload = {
       sub: user.id,
       email: user.email,
@@ -150,7 +165,7 @@ export class AuthService {
     });
   }
 
-  private checkLockout(user: any) {
+  private checkLockout(user: { lockedUntil: Date | null }) {
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       const minutesLeft = Math.ceil(
         (user.lockedUntil.getTime() - Date.now()) / (1000 * 60),
@@ -667,7 +682,9 @@ export class AuthService {
     // Check code correctness
     if (record.code !== credential) {
       const newAttempts = record.attempts + 1;
-      const updateData: any = { attempts: newAttempts };
+      const updateData: { attempts: number; lockedUntil?: Date } = {
+        attempts: newAttempts,
+      };
 
       if (newAttempts >= 5) {
         updateData.lockedUntil = new Date(Date.now() + 30 * 60 * 1000);
@@ -899,18 +916,20 @@ export class AuthService {
 
   // ── Social Login ────────────────────────────────────────────────────────
   async handleSocialLogin(
-    profile: any,
+    profile: Record<string, unknown>,
     provider: 'GOOGLE' | 'MICROSOFT',
     tenantSlug: string,
   ) {
-    const normalizedEmail = normalizeEmail(profile.email);
+    const normalizedEmail = normalizeEmail(profile.email as string);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     const existing = await this.prisma.socialAccount.findUnique({
-      where: { provider_providerId: { provider, providerId: profile.id } },
+      where: {
+        provider_providerId: { provider, providerId: profile.id as string },
+      },
       include: { user: { include: { tenant: true } } },
     });
 
@@ -939,7 +958,7 @@ export class AuthService {
       data: {
         userId: user.id,
         provider,
-        providerId: profile.id,
+        providerId: profile.id as string,
         email: normalizedEmail,
       },
     });

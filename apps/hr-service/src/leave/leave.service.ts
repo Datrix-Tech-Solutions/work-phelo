@@ -17,7 +17,12 @@ import { CreatePublicHolidayDto } from './dto/create-public-holiday.dto';
 import { ReviewLeaveRequestDto } from './dto/review-leave-request.dto';
 import { UpdatePublicHolidayDto } from './dto/update-public-holiday.dto';
 import { UpdateLeaveRequestSupportingDocumentDto } from './dto/update-leave-request-supporting-document.dto';
-import { Gender, LeaveType } from '../../prisma/generated/client';
+import {
+  Gender,
+  LeaveRequestStatus,
+  LeaveType,
+  Prisma,
+} from '../../prisma/generated/client';
 import {
   assertHrAccess,
   getActorEmployee,
@@ -900,15 +905,18 @@ export class LeaveService {
   }
 
   async getPendingCount(tenantId: string, actor: RequestUser) {
-    const where: any = { tenantId, status: 'PENDING' };
+    const baseWhere: Prisma.LeaveRequestWhereInput = {
+      tenantId,
+      status: 'PENDING',
+    };
 
     if (isCompanyAdminUser(actor)) {
-      const count = await this.prisma.leaveRequest.count({ where });
+      const count = await this.prisma.leaveRequest.count({ where: baseWhere });
       return { count };
     }
 
     if (hasPermissionRule(actor, 'leave:APPROVE')) {
-      const count = await this.prisma.leaveRequest.count({ where });
+      const count = await this.prisma.leaveRequest.count({ where: baseWhere });
       return { count };
     }
 
@@ -917,8 +925,9 @@ export class LeaveService {
       tenantId,
       actor.id,
     );
-    where.employeeId = actorEmployee.id;
-    const count = await this.prisma.leaveRequest.count({ where });
+    const count = await this.prisma.leaveRequest.count({
+      where: { ...baseWhere, employeeId: actorEmployee.id },
+    });
     return { count };
   }
   async getLeaveTypes(tenantId: string) {
@@ -1345,9 +1354,13 @@ export class LeaveService {
       scope?: 'all';
     },
   ) {
-    const where: any = { tenantId };
-    if (filters.employeeId) where.employeeId = filters.employeeId;
-    if (filters.status) where.status = filters.status;
+    const where: Prisma.LeaveRequestWhereInput = {
+      tenantId,
+      ...(filters.employeeId ? { employeeId: filters.employeeId } : {}),
+      ...(filters.status
+        ? { status: filters.status as LeaveRequestStatus }
+        : {}),
+    };
 
     if (filters.scope === 'all') {
       assertHrAccess(

@@ -197,7 +197,12 @@ docker_compose_exec() {
 }
 
 validate_compose_render() {
-  docker_compose config >/dev/null
+  local tmp
+  tmp="$(mktemp)"
+  docker_compose config >"$tmp"
+  [[ -s "$tmp" ]] || die "Docker Compose config rendered empty output"
+  rm -f "$tmp"
+  log "Docker Compose config validation passed"
 }
 
 preflight_runtime_env() {

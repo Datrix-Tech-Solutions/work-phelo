@@ -22,6 +22,8 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { CompanyAgreementsService } from './company-agreements.service';
 import { CreateCompanyAgreementDto } from './dto/create-company-agreement.dto';
 
@@ -43,7 +45,7 @@ export class CompanyAgreementsController {
     status: 200,
     description: 'Company agreements retrieved successfully',
   })
-  findAll(@Req() req: any) {
+  findAll(@Req() req: Request & { user: RequestUser }) {
     return this.companyAgreementsService.findAll(req.user.tenantId);
   }
 
@@ -57,7 +59,10 @@ export class CompanyAgreementsController {
     status: 201,
     description: 'Company agreement created successfully',
   })
-  create(@Body() dto: CreateCompanyAgreementDto, @Req() req: any) {
+  create(
+    @Body() dto: CreateCompanyAgreementDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.companyAgreementsService.create(
       req.user.tenantId,
       dto,
@@ -75,7 +80,7 @@ export class CompanyAgreementsController {
     status: 200,
     description: 'Company agreement deleted successfully',
   })
-  remove(@Param('id') id: string, @Req() req: any) {
+  remove(@Param('id') id: string, @Req() req: Request & { user: RequestUser }) {
     return this.companyAgreementsService.remove(req.user.tenantId, id);
   }
 }

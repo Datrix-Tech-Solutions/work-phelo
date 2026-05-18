@@ -37,7 +37,8 @@ export class EventsHandler {
   ) {}
 
   private ack(context: RmqContext) {
-    context.getChannelRef().ack(context.getMessage());
+    const channel = context.getChannelRef() as { ack: (msg: unknown) => void };
+    channel.ack(context.getMessage());
   }
 
   private formatError(error: unknown) {
@@ -66,7 +67,10 @@ export class EventsHandler {
     error: unknown,
     details: string,
   ) {
-    const channel = context.getChannelRef();
+    const channel = context.getChannelRef() as {
+      ack: (msg: unknown) => void;
+      nack: (msg: unknown, allUpTo: boolean, requeue: boolean) => void;
+    };
     const message = context.getMessage();
 
     if (this.shouldRequeue(error)) {
@@ -246,7 +250,7 @@ export class EventsHandler {
         `[hr.employee_activated] Leave balances initialised | email=${email} | corrId=${_meta?.correlationId}`,
       );
       this.ack(context);
-    } catch (e: any) {
+    } catch (e: unknown) {
       this.settleEventFailure(
         context,
         'hr.employee_activated',

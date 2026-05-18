@@ -195,7 +195,12 @@ export class UsersService {
       status: 'SUCCESS',
     });
 
-    const { password, mfaSecret, inviteToken: token, ...safeUser } = user;
+    const {
+      password: _password,
+      mfaSecret: _mfaSecret,
+      inviteToken: _token,
+      ...safeUser
+    } = user;
     return { user: safeUser, message: 'Invitation sent successfully' };
   }
 

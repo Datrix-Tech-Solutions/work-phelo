@@ -27,6 +27,8 @@ import { CreateProjectTaskDto } from './dto/create-project-task.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { UpdateProjectTaskDto } from './dto/update-project-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { ProjectsService } from './projects.service';
 
 @ApiTags('Projects')
@@ -40,19 +42,19 @@ export class ProjectsController {
   @Get()
   @ApiOperation({ summary: 'List projects visible to the current user' })
   @ApiResponse({ status: 200, description: 'Projects retrieved successfully' })
-  findAll(@Req() req: any) {
+  findAll(@Req() req: Request & { user: RequestUser }) {
     return this.projectsService.findAll(req.user.tenantId, req.user);
   }
 
   @Get('my-projects')
   @ApiOperation({ summary: 'List projects the current employee belongs to' })
-  findMyProjects(@Req() req: any) {
+  findMyProjects(@Req() req: Request & { user: RequestUser }) {
     return this.projectsService.findMyProjects(req.user.tenantId, req.user);
   }
 
   @Get('my-tasks')
   @ApiOperation({ summary: 'List tasks assigned to the current employee' })
-  findMyTasks(@Req() req: any) {
+  findMyTasks(@Req() req: Request & { user: RequestUser }) {
     return this.projectsService.findMyTasks(req.user.tenantId, req.user);
   }
 
@@ -63,7 +65,7 @@ export class ProjectsController {
   updateTaskStatus(
     @Param('taskId') taskId: string,
     @Body() dto: UpdateTaskStatusDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.projectsService.updateTaskStatus(
       req.user.tenantId,
@@ -77,14 +79,20 @@ export class ProjectsController {
   @ApiOperation({ summary: 'Create a project' })
   @ApiBody({ type: CreateProjectDto })
   @ApiResponse({ status: 201, description: 'Project created successfully' })
-  create(@Body() dto: CreateProjectDto, @Req() req: any) {
+  create(
+    @Body() dto: CreateProjectDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.projectsService.create(req.user.tenantId, req.user, dto);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
-  findOne(@Param('id') id: string, @Req() req: any) {
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.projectsService.findOne(req.user.tenantId, id, req.user);
   }
 
@@ -95,7 +103,7 @@ export class ProjectsController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateProjectDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.projectsService.update(req.user.tenantId, id, req.user, dto);
   }
@@ -103,14 +111,17 @@ export class ProjectsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Archive a project' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
-  remove(@Param('id') id: string, @Req() req: any) {
+  remove(@Param('id') id: string, @Req() req: Request & { user: RequestUser }) {
     return this.projectsService.remove(req.user.tenantId, id, req.user);
   }
 
   @Get(':id/members')
   @ApiOperation({ summary: 'List project members' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
-  listMembers(@Param('id') id: string, @Req() req: any) {
+  listMembers(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.projectsService.listMembers(req.user.tenantId, id, req.user);
   }
 
@@ -121,7 +132,7 @@ export class ProjectsController {
   addMember(
     @Param('id') id: string,
     @Body() dto: AddProjectMemberDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.projectsService.addMember(req.user.tenantId, id, req.user, dto);
   }
@@ -133,7 +144,7 @@ export class ProjectsController {
   removeMember(
     @Param('id') id: string,
     @Param('employeeId') employeeId: string,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.projectsService.removeMember(
       req.user.tenantId,
@@ -146,7 +157,10 @@ export class ProjectsController {
   @Get(':id/tasks')
   @ApiOperation({ summary: 'List project tasks' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
-  listTasks(@Param('id') id: string, @Req() req: any) {
+  listTasks(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.projectsService.listTasks(req.user.tenantId, id, req.user);
   }
 
@@ -157,7 +171,7 @@ export class ProjectsController {
   createTask(
     @Param('id') id: string,
     @Body() dto: CreateProjectTaskDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.projectsService.createTask(
       req.user.tenantId,
@@ -176,7 +190,7 @@ export class ProjectsController {
     @Param('id') id: string,
     @Param('taskId') taskId: string,
     @Body() dto: UpdateProjectTaskDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.projectsService.updateTask(
       req.user.tenantId,
@@ -194,7 +208,7 @@ export class ProjectsController {
   removeTask(
     @Param('id') id: string,
     @Param('taskId') taskId: string,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.projectsService.removeTask(
       req.user.tenantId,
@@ -207,7 +221,10 @@ export class ProjectsController {
   @Get(':id/activities')
   @ApiOperation({ summary: 'List recent project activity' })
   @ApiParam({ name: 'id', description: 'Project UUID' })
-  listActivities(@Param('id') id: string, @Req() req: any) {
+  listActivities(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.projectsService.listActivities(req.user.tenantId, id, req.user);
   }
 }

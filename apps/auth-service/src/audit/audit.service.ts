@@ -1,4 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
+import {
+  AuditAction,
+  AuditStatus,
+  Prisma,
+} from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface AuditPayload {
@@ -40,13 +45,13 @@ export class AuditService {
           userId: payload.userId,
           userEmail: payload.userEmail,
           userRole: payload.userRole,
-          action: payload.action as any,
+          action: payload.action as AuditAction,
           resource: payload.resource,
           resourceId: payload.resourceId,
-          changes: payload.changes as any,
+          changes: payload.changes as Prisma.InputJsonValue,
           ipAddress: payload.ipAddress,
           userAgent: payload.userAgent,
-          status: (payload.status || 'SUCCESS') as any,
+          status: (payload.status || 'SUCCESS') as AuditStatus,
           failureReason: payload.failureReason,
         },
       });
@@ -71,15 +76,20 @@ export class AuditService {
     const take = Math.min(filters.limit || 50, 200);
     const skip = ((filters.page || 1) - 1) * take;
 
-    const where: any = { tenantId };
-    if (filters.resource) where.resource = filters.resource;
-    if (filters.userId) where.userId = filters.userId;
-    if (filters.action) where.action = filters.action;
-    if (filters.from || filters.to) {
-      where.createdAt = {};
-      if (filters.from) where.createdAt.gte = new Date(filters.from);
-      if (filters.to) where.createdAt.lte = new Date(filters.to);
-    }
+    const where: Prisma.AuditLogWhereInput = {
+      tenantId,
+      ...(filters.resource ? { resource: filters.resource } : {}),
+      ...(filters.userId ? { userId: filters.userId } : {}),
+      ...(filters.action ? { action: filters.action as AuditAction } : {}),
+      ...(filters.from || filters.to
+        ? {
+            createdAt: {
+              ...(filters.from ? { gte: new Date(filters.from) } : {}),
+              ...(filters.to ? { lte: new Date(filters.to) } : {}),
+            },
+          }
+        : {}),
+    };
 
     const [logs, total] = await Promise.all([
       this.prisma.auditLog.findMany({

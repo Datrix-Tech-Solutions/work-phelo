@@ -139,14 +139,21 @@ export class TenantConfigService {
 
     return {
       history: logs
-        .filter((l) => (l.changes as any)?.type === 'FEATURE_CONFIG_UPDATED')
-        .map((l) => ({
-          id: l.id,
-          actorId: l.userId,
-          changes: (l.changes as any)?.changes ?? [],
-          module: (l.changes as any)?.module,
-          timestamp: l.createdAt,
-        })),
+        .filter(
+          (l) =>
+            (l.changes as Record<string, unknown> | null)?.type ===
+            'FEATURE_CONFIG_UPDATED',
+        )
+        .map((l) => {
+          const changes = l.changes as Record<string, unknown> | null;
+          return {
+            id: l.id,
+            actorId: l.userId,
+            changes: (changes?.changes as unknown[]) ?? [],
+            module: changes?.module,
+            timestamp: l.createdAt,
+          };
+        }),
     };
   }
 }

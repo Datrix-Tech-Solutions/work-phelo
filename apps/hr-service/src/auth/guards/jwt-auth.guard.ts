@@ -5,15 +5,19 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
+import { Request } from 'express';
 import { JwtPayload, RequestUser } from '@work-phelo/types';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: RequestUser }>();
 
+    const cookies = request.cookies as Record<string, string> | undefined;
     const token =
-      request.cookies?.access_token ||
+      cookies?.access_token ||
       request.headers.authorization?.replace('Bearer ', '');
 
     if (!token) throw new UnauthorizedException('No token provided');
@@ -27,8 +31,9 @@ export class JwtAuthGuard implements CanActivate {
       let permissions: string[] = [];
       if (rawPerms) {
         try {
-          const parsed = JSON.parse(rawPerms as string);
-          if (Array.isArray(parsed)) permissions = parsed;
+          const permsStr = Array.isArray(rawPerms) ? rawPerms[0] : rawPerms;
+          const parsed: unknown = JSON.parse(permsStr);
+          if (Array.isArray(parsed)) permissions = parsed as string[];
         } catch {
           /* fall through with empty */
         }
