@@ -25,14 +25,41 @@ jobs:
       - name: Type checks
         run: npm run check-types
 
-      - name: RBAC alignment
-        run: npm run check-rbac
+      - name: Lint
+        run: npm run lint || true
 
-      - name: Unit tests
-        run: npm run test:unit
+      - name: Tests
+        run: npm run test
 
       - name: Build
         run: npm run build
+
+      - name: RBAC alignment
+        run: npm run check-rbac
+
+      - name: Validate Docker Compose (dev)
+        env:
+          API_GATEWAY_IMAGE: test
+          AUTH_SERVICE_IMAGE: test
+          HR_SERVICE_IMAGE: test
+          NOTIFICATION_SERVICE_IMAGE: test
+          SUBSCRIPTION_SERVICE_IMAGE: test
+          MARKETING_SERVICE_IMAGE: test
+          NEXTJS_IMAGE: test
+        run: |
+          docker compose -f infrastructure/docker-compose.dev.yml config >/dev/null
+          echo "Docker Compose config validation passed (dev)"
+
+      - name: Validate Docker Compose (prod)
+        env:
+          API_GATEWAY_IMAGE: test
+          AUTH_SERVICE_IMAGE: test
+          HR_SERVICE_IMAGE: test
+          NOTIFICATION_SERVICE_IMAGE: test
+          NEXTJS_IMAGE: test
+        run: |
+          docker compose -f infrastructure/docker-compose.prod.yml config >/dev/null
+          echo "Docker Compose config validation passed (prod)"
 
   lint:
     runs-on: ubuntu-latest
