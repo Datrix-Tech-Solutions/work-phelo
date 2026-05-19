@@ -1,20 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Bell,
-  Home,
-  LayoutGrid,
-  LogOutIcon,
-  Menu,
-  MessageCircleQuestion,
-  Settings,
-  UserIcon,
-} from 'lucide-react';
+import { Bell, Home, LayoutGrid, LogOutIcon, Menu, Settings, UserIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { HelpCenter } from '@/components/organisms/shared/HelpCenter';
 import { Button } from '@/components/atoms/Button';
 import { useAuthStore } from '@/store/auth.store';
 import { useLogout } from '@/hooks/useAuth';
@@ -183,9 +175,7 @@ export function TopNav({
           </button>
 
           {/* Help */}
-          <button className="text-black/70 hover:text-black transition-colors" aria-label="Help">
-            <MessageCircleQuestion className="w-5 h-5" />
-          </button>
+          <HelpCenter />
 
           {/* Apps grid — back to module dashboard */}
           <button

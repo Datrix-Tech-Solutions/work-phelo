@@ -67,7 +67,7 @@ export default function TenantDashboardPage({
   const firstName = user?.firstName ?? 'User';
   const tenantName = user?.tenantName ?? '';
   const isTenantAdmin = user?.role === 'TENANT_ADMIN';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   /* ── Fetch users for employee count ── */
   const { data: users = [] } = useCurrentTenantUsers();

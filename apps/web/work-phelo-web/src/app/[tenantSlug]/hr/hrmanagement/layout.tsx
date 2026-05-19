@@ -53,6 +53,7 @@ function ManagementTabs({ groups }: { groups: TabGroup[] }) {
 
 export default function HRManagementLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ tenantSlug: string }>();
+  const pathname = usePathname();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const base = `/${params.tenantSlug}/hr/hrmanagement`;
@@ -66,11 +67,15 @@ export default function HRManagementLayout({ children }: { children: React.React
     hasAnyManagementAccess,
   } = useHrManagementAccess();
 
+  // Company Policies tabs (Employment, Cycle Recipients, Agreements) are viewable by all —
+  // only redirect away if the user has no management access AND is not on that section.
+  const isOnCompanyPolicies = pathname.startsWith(`${base}/companyPolicies`);
+
   useEffect(() => {
-    if (user !== null && !hasAnyManagementAccess) {
+    if (user !== null && !hasAnyManagementAccess && !isOnCompanyPolicies) {
       router.replace(`/${params.tenantSlug}/hr`);
     }
-  }, [hasAnyManagementAccess, params.tenantSlug, router, user]);
+  }, [hasAnyManagementAccess, isOnCompanyPolicies, params.tenantSlug, router, user]);
 
   const groups: TabGroup[] = [
     {

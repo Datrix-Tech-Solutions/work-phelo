@@ -16,6 +16,21 @@ interface Props {
   onOpenDetail: (schedule: ShiftSchedule, date: string) => void;
 }
 
+function OnLeaveCell({ isToday }: { isToday: boolean }) {
+  return (
+    <div
+      className={cn(
+        'border-l border-gray-100 p-3 min-h-20 flex items-center justify-center',
+        isToday ? 'bg-blue-50' : 'bg-gray-50/80',
+      )}
+    >
+      <span className="text-[11px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
+        On Leave
+      </span>
+    </div>
+  );
+}
+
 export function SchedulingGrid({
   employees,
   weekStart,
@@ -71,31 +86,48 @@ export function SchedulingGrid({
       {employees.length === 0 ? (
         <div className="py-16 text-center text-sm text-gray-400">No employees found</div>
       ) : (
-        employees.map((emp) => (
-          <div
-            key={emp.id}
-            className="grid border-t border-gray-100"
-            style={{ gridTemplateColumns: '180px repeat(7, 1fr)' }}
-          >
-            <div className="px-5 py-4 flex items-start sticky left-0 bg-white z-10 border-r border-gray-100">
-              <span className="text-sm text-gray-800 font-medium leading-snug">
-                {emp.firstName} {emp.lastName}
-              </span>
-            </div>
+        employees.map((emp) => {
+          const isOnLeave = emp.employmentStatus === 'ON_LEAVE';
+          return (
+            <div
+              key={emp.id}
+              className={cn('grid border-t border-gray-100', isOnLeave && 'opacity-60')}
+              style={{ gridTemplateColumns: '180px repeat(7, 1fr)' }}
+            >
+              <div className="px-5 py-4 flex items-center gap-2 sticky left-0 bg-white z-10 border-r border-gray-100">
+                <span
+                  className={cn(
+                    'text-sm font-medium leading-snug',
+                    isOnLeave ? 'text-gray-400' : 'text-gray-800',
+                  )}
+                >
+                  {emp.firstName} {emp.lastName}
+                </span>
+                {isOnLeave && (
+                  <span className="shrink-0 text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">
+                    Leave
+                  </span>
+                )}
+              </div>
 
-            {weekDates.map((date) => (
-              <SchedulingGridCell
-                key={date}
-                shifts={shiftsByKey[`${emp.id}-${date}`] ?? []}
-                canManage={canManage}
-                isToday={date === today}
-                isPast={date < today}
-                onAddShift={() => onAddShift(emp.id, date)}
-                onOpenDetail={(s) => onOpenDetail(s, date)}
-              />
-            ))}
-          </div>
-        ))
+              {weekDates.map((date) =>
+                isOnLeave ? (
+                  <OnLeaveCell key={date} isToday={date === today} />
+                ) : (
+                  <SchedulingGridCell
+                    key={date}
+                    shifts={shiftsByKey[`${emp.id}-${date}`] ?? []}
+                    canManage={canManage}
+                    isToday={date === today}
+                    isPast={date < today}
+                    onAddShift={() => onAddShift(emp.id, date)}
+                    onOpenDetail={(s) => onOpenDetail(s, date)}
+                  />
+                ),
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );

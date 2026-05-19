@@ -20,7 +20,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
   const { tenantSlug } = use(params);
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   const [editOpen, setEditOpen] = useState(false);
 

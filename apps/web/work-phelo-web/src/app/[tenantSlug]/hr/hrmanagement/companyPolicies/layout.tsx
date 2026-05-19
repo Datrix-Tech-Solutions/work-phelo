@@ -11,7 +11,7 @@ import { Permission } from '@/lib/permissionMap';
 
 const TABS = [
   { label: 'Employment & Resignation', slug: 'employment' },
-  { label: 'Cycle Recipients', slug: 'recipients' },
+  { label: 'Appraisal Cycle Recipients', slug: 'recipients' },
   { label: 'Company Agreements', slug: 'agreements' },
   { label: 'Finances', slug: 'finances' },
 ];
@@ -29,20 +29,12 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
 
   useEffect(() => {
     if (user === null) return;
-    if (!canReadHrSettings && !canManagePayroll) {
-      router.replace(`/${user.tenantSlug}/hr`);
-      return;
-    }
-    // Payroll-only users belong on the finances sub-page
+    // Payroll-only users without HR settings access land on the finances sub-page.
+    // All other tabs are viewable by everyone, so no further redirect is needed.
     if (!canReadHrSettings && canManagePayroll && !isOnFinances) {
       router.replace(`${base}/finances`);
     }
-    //HR setting is company policies, it has just been renamed for better understanding.
   }, [canReadHrSettings, canManagePayroll, isOnFinances, router, user, base]);
-
-  if (user !== null && !canReadHrSettings && !canManagePayroll) {
-    return null;
-  }
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
@@ -55,7 +47,7 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
 
       <div className="flex items-end gap-1 border-b border-gray-200 shrink-0 mt-4">
         {TABS.filter((tab) =>
-          tab.slug === 'finances' ? canManagePayroll || canReadHrSettings : canReadHrSettings,
+          tab.slug === 'finances' ? canManagePayroll || canReadHrSettings : true,
         ).map((tab) => {
           const href = `${base}/${tab.slug}`;
           const isActive = pathname === href || pathname.startsWith(href + '/');

@@ -23,7 +23,7 @@ export default function HRLayout({
   const { tenantSlug } = use(params);
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('portal');
