@@ -29,7 +29,6 @@ export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get('resignation')
-  @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({
     summary: 'Get resignation settings for the current tenant',
   })
@@ -69,7 +68,6 @@ export class SettingsController {
   }
 
   @Get('company-policies')
-  @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({
     summary: 'Get company policy settings for the current tenant',
   })

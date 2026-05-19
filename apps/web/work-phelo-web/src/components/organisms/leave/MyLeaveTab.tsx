@@ -114,10 +114,6 @@ export function MyLeaveTab({ tenantSlug }: Props) {
   return (
     <>
       <div className="flex flex-col gap-6 flex-1 min-h-0">
-        <div className="flex justify-end shrink-0">
-          <Button onClick={() => setApplyOpen(true)}>Apply for Leave</Button>
-        </div>
-
         <DataTable
           columns={columns}
           data={myPageData}
@@ -129,6 +125,7 @@ export function MyLeaveTab({ tenantSlug }: Props) {
             setMySearch(q);
             setMyPage(1);
           }}
+          actionButton={{ label: 'Apply for Leave', onClick: () => setApplyOpen(true) }}
           currentPage={myPage}
           totalPages={myTotalPages}
           onPageChange={setMyPage}

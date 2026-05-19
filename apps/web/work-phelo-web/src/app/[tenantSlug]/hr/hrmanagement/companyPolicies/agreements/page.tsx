@@ -12,6 +12,8 @@ import {
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import type {
   CompanyAgreement,
   CompanyAgreementType,
@@ -53,6 +55,7 @@ const PAGE_SIZE = 10;
 
 export default function CompanyAgreementsPage() {
   const toast = useToast();
+  const canManage = usePermission(Permission.MANAGE_HR_SETTINGS);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editAgreement, setEditAgreement] = useState<CompanyAgreement | null>(null);
   const [viewAgreement, setViewAgreement] = useState<CompanyAgreement | null>(null);
@@ -117,7 +120,9 @@ export default function CompanyAgreementsPage() {
           setSearch(q);
           setPage(1);
         }}
-        actionButton={{ label: 'Add Agreement', onClick: () => setPanelOpen(true) }}
+        actionButton={
+          canManage ? { label: 'Add Agreement', onClick: () => setPanelOpen(true) } : undefined
+        }
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
@@ -126,15 +131,19 @@ export default function CompanyAgreementsPage() {
             label: 'View',
             onClick: () => setViewAgreement(row),
           },
-          {
-            label: 'Edit',
-            onClick: () => setEditAgreement(row),
-          },
-          {
-            label: 'Delete',
-            danger: true,
-            onClick: () => handleDelete(row.id),
-          },
+          ...(canManage
+            ? [
+                {
+                  label: 'Edit',
+                  onClick: () => setEditAgreement(row),
+                },
+                {
+                  label: 'Delete',
+                  danger: true,
+                  onClick: () => handleDelete(row.id),
+                },
+              ]
+            : []),
         ]}
       />
 

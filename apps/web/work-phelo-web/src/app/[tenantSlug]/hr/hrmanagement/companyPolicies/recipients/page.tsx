@@ -8,6 +8,8 @@ import { cn } from '@/lib/utils';
 import { useCompanyPoliciesSettings, useUpdateCompanyPoliciesSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import type { CompanyPolicyCycleRecipient } from '@/types/hr';
 
 const CYCLE_RECIPIENTS_OPTIONS: { value: CompanyPolicyCycleRecipient; label: string }[] = [
@@ -24,6 +26,7 @@ interface RecipientsForm {
 
 export default function CycleRecipientsPage() {
   const toast = useToast();
+  const canManage = usePermission(Permission.MANAGE_HR_SETTINGS);
   const { data: settings, isLoading } = useCompanyPoliciesSettings();
   const { mutate: updateSettings, isPending } = useUpdateCompanyPoliciesSettings();
 
@@ -46,7 +49,7 @@ export default function CycleRecipientsPage() {
 
   const onSubmit = (data: RecipientsForm) => {
     updateSettings(data, {
-      onSuccess: () => toast.success('Cycle recipients saved'),
+      onSuccess: () => toast.success('Appraisal Cycle recipients saved'),
       onError: (err) => toast.error(extractError(err, 'Failed to save recipients')),
     });
   };
@@ -63,9 +66,11 @@ export default function CycleRecipientsPage() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 max-w-xl">
-      <FormSection title="Default Cycle Recipients">
+      <FormSection title="Default Appraisal Cycle Recipients">
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-bold text-gray-900">Default Cycle Recipients</label>
+          <label className="text-sm font-bold text-gray-900">
+            Default Appraisal Cycle Recipients
+          </label>
           <p className="text-xs text-gray-500">
             Select which employee groups are included in appraisal cycles by default
           </p>
@@ -86,16 +91,22 @@ export default function CycleRecipientsPage() {
                     <label
                       key={opt.value}
                       className={cn(
-                        'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors',
+                        'flex items-center gap-3 px-4 py-3 transition-colors',
+                        canManage ? 'cursor-pointer' : 'cursor-default',
                         i > 0 && 'border-t border-gray-100',
-                        checked ? 'bg-blue-50' : 'bg-white hover:bg-gray-50',
+                        checked
+                          ? 'bg-blue-50'
+                          : canManage
+                            ? 'bg-white hover:bg-gray-50'
+                            : 'bg-white',
                       )}
                     >
                       <input
                         type="checkbox"
                         checked={checked}
                         onChange={toggle}
-                        className="w-4 h-4 rounded accent-blue-500 cursor-pointer"
+                        disabled={!canManage}
+                        className="w-4 h-4 rounded accent-blue-500 cursor-pointer disabled:cursor-default"
                       />
                       <span className="text-sm text-gray-900">{opt.label}</span>
                     </label>
@@ -107,11 +118,13 @@ export default function CycleRecipientsPage() {
         </div>
       </FormSection>
 
-      <div>
-        <Button type="submit" disabled={!isDirty} isLoading={isPending} loadingText="Saving...">
-          Save Changes
-        </Button>
-      </div>
+      {canManage && (
+        <div>
+          <Button type="submit" disabled={!isDirty} isLoading={isPending} loadingText="Saving...">
+            Save Changes
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

@@ -65,7 +65,13 @@ export function SchedulingContent({ tenantSlug }: Props) {
     departmentId: departmentId || undefined,
     limit: 100,
   });
-  const employees = useMemo(() => empData?.data ?? [], [empData]);
+  const employees = useMemo(
+    () =>
+      (empData?.data ?? []).filter(
+        (e) => e.employmentStatus !== 'OFFBOARDED' && e.employmentStatus !== 'TERMINATED',
+      ),
+    [empData],
+  );
   const { data: departments = [] } = useDepartmentOptions();
   const { data: schedules = [], isLoading: schedulesLoading } = useShiftSchedules();
   const isLoading = empLoading || schedulesLoading;
