@@ -1,5 +1,3 @@
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
-
 CREATE TYPE "hr"."CompanyAgreementState" AS ENUM ('DRAFT', 'PUBLISHED', 'ARCHIVED');
 
 CREATE TYPE "hr"."CompanyAgreementSignatureStatus" AS ENUM ('SIGNED', 'DECLINED', 'REVOKED');
@@ -109,20 +107,15 @@ WITH created_versions AS (
     "createdAt"
   )
   SELECT
-    public.gen_random_uuid()::TEXT,
+    md5(concat_ws('|', 'company-agreement-version', ca."tenantId", ca."id", '1'))::TEXT,
     ca."tenantId",
     ca."id",
     1,
     ca."title",
     ca."details",
     ca."documentUrl",
-    encode(
-      public.digest(
-        concat_ws('|', ca."tenantId", ca."id", ca."title", ca."details", COALESCE(ca."documentUrl", ''))::TEXT,
-        'sha256'::TEXT
-      ),
-      'hex'
-    ),
+    md5(concat_ws('|', ca."tenantId", ca."id", ca."title", ca."details", COALESCE(ca."documentUrl", ''), 'a')) ||
+      md5(concat_ws('|', ca."tenantId", ca."id", ca."title", ca."details", COALESCE(ca."documentUrl", ''), 'b')),
     ca."createdBy",
     ca."createdAt",
     ca."createdAt"
