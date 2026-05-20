@@ -136,7 +136,14 @@ export class CompanyAgreementsService {
           documentUrl,
         });
 
-        if (latestVersion?.agreementHash === agreementHash) {
+        if (
+          latestVersion &&
+          this.isSameAgreementSnapshot(latestVersion, {
+            title: agreement.title,
+            details: agreement.details,
+            documentUrl,
+          })
+        ) {
           throw new BadRequestException(
             'This agreement version is already published.',
           );
@@ -575,6 +582,25 @@ export class CompanyAgreementsService {
         'utf8',
       )
       .digest('hex');
+  }
+
+  private isSameAgreementSnapshot(
+    current: {
+      title: string;
+      details: string;
+      documentUrl: string | null;
+    },
+    next: {
+      title: string;
+      details: string;
+      documentUrl: string | null;
+    },
+  ) {
+    return (
+      current.title === next.title &&
+      current.details === next.details &&
+      (current.documentUrl ?? null) === (next.documentUrl ?? null)
+    );
   }
 
   private isUniqueConstraintError(error: unknown) {
