@@ -175,7 +175,7 @@ export function TopNav({
           </button>
 
           {/* Help */}
-          <HelpCenter />
+          {user?.role !== 'SUPER_ADMIN' && <HelpCenter />}
 
           {/* Apps grid — back to module dashboard */}
           <button

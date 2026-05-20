@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { AddAgreementPanel } from '@/components/organisms/companyPolicies/AddAgreementPanel';
 import { AgreementViewModal } from '@/components/organisms/companyPolicies/AgreementViewModal';
@@ -9,11 +10,13 @@ import {
   useCreateCompanyAgreement,
   useUpdateCompanyAgreement,
   useDeleteCompanyAgreement,
+  usePublishCompanyAgreement,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import { cn } from '@/lib/utils';
 import type {
   CompanyAgreement,
   CompanyAgreementType,
@@ -32,12 +35,38 @@ const AGREEMENT_TYPE_LABELS: Record<CompanyAgreementType, string> = {
   OTHER: 'Other',
 };
 
+const STATE_LABEL: Record<string, string> = {
+  DRAFT: 'Draft',
+  PUBLISHED: 'Published',
+  ARCHIVED: 'Archived',
+};
+
+const STATE_CLASS: Record<string, string> = {
+  DRAFT: 'bg-gray-100 text-gray-600',
+  PUBLISHED: 'bg-green-100 text-green-700',
+  ARCHIVED: 'bg-orange-100 text-orange-700',
+};
+
 const COLUMNS: Column<CompanyAgreement>[] = [
   { key: 'title', label: 'Title' },
   {
     key: 'type',
     label: 'Type',
     render: (row) => AGREEMENT_TYPE_LABELS[row.type] ?? row.type,
+  },
+  {
+    key: 'state',
+    label: 'Status',
+    render: (row) => (
+      <span
+        className={cn(
+          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold',
+          STATE_CLASS[row.state] ?? STATE_CLASS.DRAFT,
+        )}
+      >
+        {STATE_LABEL[row.state] ?? row.state}
+      </span>
+    ),
   },
   {
     key: 'createdAt',
@@ -55,6 +84,8 @@ const PAGE_SIZE = 10;
 
 export default function CompanyAgreementsPage() {
   const toast = useToast();
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const canManage = usePermission(Permission.MANAGE_HR_SETTINGS);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editAgreement, setEditAgreement] = useState<CompanyAgreement | null>(null);
@@ -66,6 +97,7 @@ export default function CompanyAgreementsPage() {
   const { mutate: createAgreement, isPending: isCreating } = useCreateCompanyAgreement();
   const { mutate: updateAgreement, isPending: isUpdating } = useUpdateCompanyAgreement();
   const { mutate: deleteAgreement } = useDeleteCompanyAgreement();
+  const { mutate: publishAgreement } = usePublishCompanyAgreement();
 
   const filtered = agreements.filter(
     (a) =>
@@ -107,6 +139,13 @@ export default function CompanyAgreementsPage() {
     });
   };
 
+  const handlePublish = (id: string) => {
+    publishAgreement(id, {
+      onSuccess: () => toast.success('Agreement published'),
+      onError: (err) => toast.error(extractError(err, 'Failed to publish agreement')),
+    });
+  };
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <DataTable
@@ -131,8 +170,23 @@ export default function CompanyAgreementsPage() {
             label: 'View',
             onClick: () => setViewAgreement(row),
           },
-          ...(canManage
+          ...(row.state === 'PUBLISHED'
             ? [
+                {
+                  label: 'View Signatures',
+                  onClick: () =>
+                    router.push(
+                      `/${tenantSlug}/hr/hrmanagement/companyPolicies/agreements/${row.id}/signatures`,
+                    ),
+                },
+              ]
+            : []),
+          ...(canManage && row.state === 'DRAFT'
+            ? [
+                {
+                  label: 'Publish',
+                  onClick: () => handlePublish(row.id),
+                },
                 {
                   label: 'Edit',
                   onClick: () => setEditAgreement(row),

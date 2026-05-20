@@ -1,7 +1,20 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Calendar } from 'lucide-react';
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverEvent,
+  DragOverlay,
+  DragStartEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+} from '@dnd-kit/core';
+import { useDraggable } from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
 import type { TaskStatus, ProjectTask } from '@/types/hr';
 import {
   useProjectTasks,
@@ -14,11 +27,11 @@ import { Permission } from '@/lib/permissionMap';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
-const COLUMNS: { key: TaskStatus; label: string }[] = [
-  { key: 'TODO', label: 'TO DO' },
-  { key: 'IN_PROGRESS', label: 'IN PROGRESS' },
-  { key: 'ON_HOLD', label: 'ON HOLD' },
-  { key: 'DONE', label: 'DONE' },
+const COLUMNS: { key: TaskStatus; label: string; color: string }[] = [
+  { key: 'TODO', label: 'TO DO', color: 'bg-gray-400' },
+  { key: 'IN_PROGRESS', label: 'IN PROGRESS', color: 'bg-blue-500' },
+  { key: 'ON_HOLD', label: 'ON HOLD', color: 'bg-amber-500' },
+  { key: 'DONE', label: 'DONE', color: 'bg-green-500' },
 ];
 
 function formatDate(dateStr: string) {
@@ -36,25 +49,36 @@ function getInitials(name: string) {
 
 function TaskCard({
   task,
-  onStatusChange,
   canMove,
+  isDragging = false,
 }: {
   task: ProjectTask;
-  onStatusChange: (taskId: string, status: TaskStatus) => void;
   canMove: boolean;
+  isDragging?: boolean;
 }) {
-  const nextStatus: Record<TaskStatus, TaskStatus | null> = {
-    TODO: 'IN_PROGRESS',
-    IN_PROGRESS: 'DONE',
-    ON_HOLD: null,
-    DONE: null,
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({
+    id: task.id,
+    disabled: !canMove,
+    data: { task },
+  });
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
   };
 
-  const next = nextStatus[task.status];
-
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-3 shadow-sm">
-      <p className="text-sm font-semibold text-gray-900 leading-snug">{task.name}</p>
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...(canMove ? listeners : {})}
+      {...(canMove ? attributes : {})}
+      className={`bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-3 shadow-sm transition-opacity touch-none ${
+        canMove ? 'cursor-grab active:cursor-grabbing' : ''
+      } ${isDragging ? 'opacity-40' : 'opacity-100'}`}
+    >
+      <div className="flex items-start gap-2">
+        <p className="text-sm font-semibold text-gray-900 leading-snug flex-1">{task.name}</p>
+      </div>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           {task.assignedEmployeeName ? (
@@ -77,14 +101,90 @@ function TaskCard({
           </div>
         )}
       </div>
-      {canMove && next && (
-        <button
-          onClick={() => onStatusChange(task.id, next)}
-          className="text-xs text-brand font-medium hover:underline text-left"
-        >
-          Mark as {next === 'IN_PROGRESS' ? 'In Progress' : 'Done'} →
-        </button>
-      )}
+    </div>
+  );
+}
+
+function TaskCardOverlay({ task }: { task: ProjectTask }) {
+  return (
+    <div className="bg-white border border-brand/40 rounded-lg p-3 flex flex-col gap-3 shadow-xl rotate-2 opacity-95">
+      <div className="flex items-start gap-2">
+        <p className="text-sm font-semibold text-gray-900 leading-snug flex-1">{task.name}</p>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          {task.assignedEmployeeName ? (
+            <>
+              <div className="w-7 h-7 rounded-full bg-brand/10 flex items-center justify-center shrink-0">
+                <span className="text-[10px] font-bold text-brand">
+                  {getInitials(task.assignedEmployeeName)}
+                </span>
+              </div>
+              <span className="text-xs text-gray-600 truncate">{task.assignedEmployeeName}</span>
+            </>
+          ) : (
+            <span className="text-xs text-gray-300">Unassigned</span>
+          )}
+        </div>
+        {task.dueDate && (
+          <div className="flex items-center gap-1 shrink-0">
+            <Calendar className="w-3.5 h-3.5 text-gray-400" />
+            <span className="text-xs text-gray-500">{formatDate(task.dueDate)}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KanbanColumn({
+  col,
+  tasks,
+  canMove,
+  activeId,
+}: {
+  col: (typeof COLUMNS)[number];
+  tasks: ProjectTask[];
+  canMove: boolean;
+  activeId: string | null;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: col.key });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`flex flex-col gap-3 min-w-60 flex-1 rounded-xl p-3 transition-colors ${
+        isOver ? 'bg-brand/5 ring-2 ring-brand/20' : 'bg-gray-50'
+      }`}
+    >
+      <div className="flex items-center gap-2 px-1">
+        <span className={`w-2 h-2 rounded-full ${col.color}`} />
+        <span className="text-xs font-bold tracking-wide text-gray-600">{col.label}</span>
+        <span className="ml-auto text-xs font-medium text-gray-400 bg-white border border-gray-200 rounded-full px-2 py-0.5">
+          {tasks.length}
+        </span>
+      </div>
+
+      <div className="flex flex-col gap-2 min-h-16">
+        {tasks.length === 0 ? (
+          <div
+            className={`flex-1 rounded-lg border-2 border-dashed text-center py-8 text-xs transition-colors ${
+              isOver ? 'border-brand/40 text-brand/60' : 'border-gray-200 text-gray-300'
+            }`}
+          >
+            {isOver ? 'Drop here' : 'No tasks'}
+          </div>
+        ) : (
+          tasks.map((task) => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              canMove={canMove}
+              isDragging={activeId === task.id}
+            />
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -108,6 +208,15 @@ export function ProjectBoard({ projectId }: Props) {
   const { data: tasks = [], isLoading } = useProjectTasks(projectId);
   const updateStatus = useUpdateTaskStatus();
 
+  const [activeTask, setActiveTask] = useState<ProjectTask | null>(null);
+  // optimistic overrides: taskId → column status
+  const [optimistic, setOptimistic] = useState<Record<string, TaskStatus>>({});
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const canMoveTask = (task: ProjectTask) =>
+    canManageProjects || isProjectManager || task.assignedEmployeeId === myProfile?.id;
+
   const grouped = useMemo(() => {
     const map: Record<TaskStatus, ProjectTask[]> = {
       TODO: [],
@@ -116,24 +225,76 @@ export function ProjectBoard({ projectId }: Props) {
       DONE: [],
     };
     for (const task of tasks) {
-      map[task.status].push(task);
+      const status = optimistic[task.id] ?? task.status;
+      map[status].push(task);
     }
     return map;
-  }, [tasks]);
+  }, [tasks, optimistic]);
 
-  const handleStatusChange = async (taskId: string, status: TaskStatus) => {
+  const handleDragStart = (event: DragStartEvent) => {
+    const task = tasks.find((t) => t.id === event.active.id);
+    if (task) setActiveTask(task);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over, active } = event;
+    if (!over || !active) return;
+    const newStatus = over.id as TaskStatus;
+    const task = tasks.find((t) => t.id === active.id);
+    if (!task) return;
+    const currentStatus = optimistic[task.id] ?? task.status;
+    if (newStatus !== currentStatus && COLUMNS.some((c) => c.key === newStatus)) {
+      setOptimistic((prev) => ({ ...prev, [task.id]: newStatus }));
+    }
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { over, active } = event;
+    setActiveTask(null);
+
+    if (!over) {
+      setOptimistic((prev) => {
+        const next = { ...prev };
+        delete next[active.id as string];
+        return next;
+      });
+      return;
+    }
+
+    const newStatus = over.id as TaskStatus;
+    const task = tasks.find((t) => t.id === active.id);
+    if (!task || !COLUMNS.some((c) => c.key === newStatus)) return;
+
+    const originalStatus = task.status;
+    if (newStatus === originalStatus && !optimistic[task.id]) return;
+
     try {
-      await updateStatus.mutateAsync({ taskId, status });
+      await updateStatus.mutateAsync({ taskId: task.id, status: newStatus });
     } catch (err) {
       toast({ message: extractError(err), type: 'error' });
+      // revert optimistic
+      setOptimistic((prev) => {
+        const next = { ...prev };
+        delete next[task.id];
+        return next;
+      });
+    } finally {
+      setOptimistic((prev) => {
+        const next = { ...prev };
+        delete next[task.id];
+        return next;
+      });
     }
   };
 
   if (isLoading) {
     return (
-      <div className="flex gap-5 overflow-x-auto pb-4">
+      <div className="flex gap-4 overflow-x-auto pb-4">
         {COLUMNS.map((col) => (
-          <div key={col.key} className="flex flex-col gap-3 min-w-55 flex-1">
+          <div
+            key={col.key}
+            className="flex flex-col gap-3 min-w-60 flex-1 bg-gray-50 rounded-xl p-3"
+          >
             <div className="h-4 w-24 bg-gray-200 rounded animate-pulse" />
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="h-20 bg-gray-100 rounded-lg animate-pulse" />
@@ -145,37 +306,27 @@ export function ProjectBoard({ projectId }: Props) {
   }
 
   return (
-    <div className="flex gap-5 overflow-x-auto pb-4 min-h-0">
-      {COLUMNS.map((col) => {
-        const colTasks = grouped[col.key];
-        return (
-          <div key={col.key} className="flex flex-col gap-3 min-w-55 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold tracking-wide text-gray-500">{col.label}</span>
-              <span className="text-xs text-gray-400">{colTasks.length}</span>
-            </div>
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="flex gap-4 overflow-x-auto pb-4 min-h-0">
+        {COLUMNS.map((col) => (
+          <KanbanColumn
+            key={col.key}
+            col={col}
+            tasks={grouped[col.key]}
+            canMove={grouped[col.key].some(canMoveTask)}
+            activeId={activeTask?.id ?? null}
+          />
+        ))}
+      </div>
 
-            <div className="flex flex-col gap-2">
-              {colTasks.length === 0 ? (
-                <p className="text-xs text-gray-300 text-center py-8">No tasks</p>
-              ) : (
-                colTasks.map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onStatusChange={handleStatusChange}
-                    canMove={
-                      canManageProjects ||
-                      isProjectManager ||
-                      task.assignedEmployeeId === myProfile?.id
-                    }
-                  />
-                ))
-              )}
-            </div>
-          </div>
-        );
-      })}
-    </div>
+      <DragOverlay dropAnimation={{ duration: 150, easing: 'ease' }}>
+        {activeTask ? <TaskCardOverlay task={activeTask} /> : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

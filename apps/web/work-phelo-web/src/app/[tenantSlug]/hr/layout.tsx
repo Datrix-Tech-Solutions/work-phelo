@@ -12,6 +12,7 @@ import { usePermission, usePermissionRule } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
 import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';
+import { AgreementGate } from '@/components/organisms/companyPolicies/AgreementGate';
 
 export default function HRLayout({
   children,
@@ -136,6 +137,7 @@ export default function HRLayout({
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
+      {canReadOwnProfile && <AgreementGate tenantSlug={tenantSlug} />}
     </div>
   );
 }

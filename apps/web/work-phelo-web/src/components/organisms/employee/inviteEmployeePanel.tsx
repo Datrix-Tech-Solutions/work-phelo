@@ -89,7 +89,6 @@ function InviteEmployeeForm({
       employmentTypeValue === 'CONTRACT' ||
       employmentTypeValue === 'INTERN' ||
       !hireDateValue ||
-      probationDateValue ||
       !probationMonths
     ) {
       return;
@@ -108,7 +107,7 @@ function InviteEmployeeForm({
     ).padStart(2, '0')}`;
 
     setValue('probationEndsAt', probationMonth);
-  }, [employmentTypeValue, hireDateValue, probationDateValue, policiesSettings, setValue]);
+  }, [employmentTypeValue, hireDateValue, policiesSettings, setValue]);
 
   const { mutateAsync: createEmployee, isPending } = useCreateEmployee();
 

@@ -1055,15 +1055,65 @@ export type CompanyAgreementType =
   | 'PROBATION_AGREEMENT'
   | 'OTHER';
 
+export type CompanyAgreementState = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type CompanyAgreementSignatureStatus = 'SIGNED' | 'DECLINED' | 'REVOKED';
+
 export interface CompanyAgreement {
   id: string;
   tenantId: string;
   type: CompanyAgreementType;
   title: string;
   details: string;
+  documentUrl?: string | null;
+  isRequired: boolean;
+  state: CompanyAgreementState;
+  activeVersionId?: string | null;
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CompanyAgreementSignatureRow {
+  employee: {
+    id: string;
+    employeeNumber: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    department: { id: string; name: string } | null;
+  };
+  signature: {
+    id: string;
+    status: CompanyAgreementSignatureStatus;
+    typedName?: string | null;
+    signedAt?: string | null;
+    declinedAt?: string | null;
+    declineReason?: string | null;
+  } | null;
+  status: CompanyAgreementSignatureStatus | 'PENDING';
+}
+
+export interface CompanyAgreementSignaturesResponse {
+  agreement: CompanyAgreement;
+  version: { id: string; version: number; title: string } | null;
+  summary: { signed: number; declined: number; pending: number; total: number };
+  rows: CompanyAgreementSignatureRow[];
+}
+
+export interface MyCompanyAgreementVersion {
+  id: string;
+  version: number;
+  title: string;
+  details: string;
+  documentUrl?: string | null;
+  publishedAt?: string | null;
+}
+
+export interface MyCompanyAgreement {
+  agreement: CompanyAgreement;
+  version: MyCompanyAgreementVersion;
+  signature: { id: string; status: CompanyAgreementSignatureStatus } | null;
+  status: CompanyAgreementSignatureStatus | 'PENDING';
 }
 
 export interface CreateCompanyAgreementDto {

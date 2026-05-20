@@ -186,7 +186,7 @@ const WORKFLOWS: Workflow[] = [
   {
     id: 'scheduling',
     title: 'Set Up Smart Scheduling',
-    tagline: 'Ensure branches are configured before creating shifts for your team.',
+    tagline: 'Plan work schedules, shifts and coordinate your team efficiently.',
     icon: <CalendarCheck className="w-4 h-4" />,
     steps: [
       {
