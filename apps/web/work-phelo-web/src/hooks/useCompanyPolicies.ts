@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
   CompanyAgreement,
+  CompanyAgreementSignaturesResponse,
   CompanyPoliciesSettings,
   CreateCompanyAgreementDto,
+  MyCompanyAgreement,
   UpdateCompanyAgreementDto,
   UpdateCompanyPoliciesDto,
 } from '@/types/hr';
@@ -12,6 +14,7 @@ export const companyPoliciesKeys = {
   all: ['company-policies'] as const,
   settings: () => ['company-policies', 'settings'] as const,
   agreements: () => ['company-policies', 'agreements'] as const,
+  signatures: (id: string) => ['company-policies', 'agreements', id, 'signatures'] as const,
 };
 
 export function useCompanyPoliciesSettings() {
@@ -97,6 +100,71 @@ export function useDeleteCompanyAgreement() {
       queryClient.invalidateQueries({
         queryKey: companyPoliciesKeys.agreements(),
       });
+    },
+  });
+}
+
+export function usePublishCompanyAgreement() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post(`/hr/company-agreements/${id}/publish`, {});
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: companyPoliciesKeys.agreements(),
+      });
+    },
+  });
+}
+
+export function useCompanyAgreementSignatures(id: string | null) {
+  return useQuery<CompanyAgreementSignaturesResponse>({
+    queryKey: companyPoliciesKeys.signatures(id ?? ''),
+    queryFn: async () => {
+      const res = await api.get<CompanyAgreementSignaturesResponse>(
+        `/hr/company-agreements/${id}/signatures`,
+      );
+      return res.data;
+    },
+    enabled: !!id,
+  });
+}
+
+export function useMyCompanyAgreements() {
+  return useQuery<MyCompanyAgreement[]>({
+    queryKey: ['my-company-agreements'],
+    queryFn: async () => {
+      const res = await api.get<MyCompanyAgreement[]>('/hr/company-agreements/me');
+      return res.data;
+    },
+  });
+}
+
+export function useSignMyAgreement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ versionId, typedName }: { versionId: string; typedName: string }) => {
+      const res = await api.post(`/hr/company-agreements/me/${versionId}/sign`, { typedName });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-company-agreements'] });
+    },
+  });
+}
+
+export function useDeclineMyAgreement() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ versionId, reason }: { versionId: string; reason: string }) => {
+      const res = await api.post(`/hr/company-agreements/me/${versionId}/decline`, { reason });
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['my-company-agreements'] });
     },
   });
 }
