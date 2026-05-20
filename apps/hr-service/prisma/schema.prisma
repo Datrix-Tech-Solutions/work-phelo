@@ -235,6 +235,29 @@ enum CompanyAgreementType {
   @@schema("hr")
 }
 
+enum CompanyAgreementState {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+
+  @@schema("hr")
+}
+
+enum CompanyAgreementSignatureStatus {
+  SIGNED
+  DECLINED
+  REVOKED
+
+  @@schema("hr")
+}
+
+enum CompanyAgreementSignatureType {
+  ACKNOWLEDGEMENT
+  TYPED
+
+  @@schema("hr")
+}
+
 enum AnnouncementAudienceType {
   ALL
   DEPARTMENTS
@@ -406,6 +429,7 @@ model Employee {
   appraisals            Appraisal[]               @relation("AppraisalEmployee")
   managedAppraisals     Appraisal[]               @relation("AppraisalManager")
   documents             EmployeeDocument[]
+  agreementSignatures   CompanyAgreementSignature[]
   allowances            EmployeeAllowance[]
   deductions            EmployeeDeduction[]
   assignedAssets        Asset[]                   @relation("AssignedAssets")
@@ -1331,15 +1355,77 @@ model TenantConfig {
 }
 
 model CompanyAgreement {
-  id        String               @id @default(uuid())
-  tenantId  String
-  type      CompanyAgreementType
-  title     String
-  details   String
-  createdBy String?
-  createdAt DateTime             @default(now())
-  updatedAt DateTime             @updatedAt
+  id              String                @id @default(uuid())
+  tenantId        String
+  type            CompanyAgreementType
+  title           String
+  details         String
+  documentUrl     String?
+  isRequired      Boolean               @default(true)
+  state           CompanyAgreementState @default(DRAFT)
+  activeVersionId String?
+  createdBy       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  versions   CompanyAgreementVersion[]
+  signatures CompanyAgreementSignature[]
 
   @@index([tenantId, createdAt])
+  @@index([tenantId, state])
+  @@index([tenantId, activeVersionId])
+  @@schema("hr")
+}
+
+model CompanyAgreementVersion {
+  id            String    @id @default(uuid())
+  tenantId      String
+  agreementId   String
+  version       Int
+  title         String
+  details       String
+  documentUrl   String?
+  agreementHash String
+  publishedBy   String?
+  publishedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  agreement  CompanyAgreement            @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  signatures CompanyAgreementSignature[]
+
+  @@unique([tenantId, agreementId, version])
+  @@unique([tenantId, agreementHash])
+  @@index([tenantId, agreementId])
+  @@schema("hr")
+}
+
+model CompanyAgreementSignature {
+  id            String                          @id @default(uuid())
+  tenantId      String
+  agreementId   String
+  versionId     String
+  employeeId    String
+  userId        String?
+  status        CompanyAgreementSignatureStatus
+  signatureType CompanyAgreementSignatureType
+  typedName     String?
+  consentText   String
+  agreementHash String
+  ipAddress     String?
+  userAgent     String?
+  signedAt      DateTime?
+  declinedAt    DateTime?
+  declineReason String?
+  revokedAt     DateTime?
+  createdAt     DateTime                        @default(now())
+
+  agreement CompanyAgreement        @relation(fields: [agreementId], references: [id], onDelete: Cascade)
+  version   CompanyAgreementVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  employee  Employee                @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, versionId, employeeId])
+  @@index([tenantId, employeeId, status])
+  @@index([tenantId, agreementId, status])
+  @@index([tenantId, versionId, status])
   @@schema("hr")
 }

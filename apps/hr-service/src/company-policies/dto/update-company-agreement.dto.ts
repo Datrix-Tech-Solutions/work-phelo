@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { CompanyAgreementType } from '../../../prisma/generated/client';
 import {
   IsBoolean,
@@ -8,31 +8,30 @@ import {
   MaxLength,
 } from 'class-validator';
 
-export class CreateCompanyAgreementDto {
-  @ApiProperty({
-    enum: CompanyAgreementType,
-    example: CompanyAgreementType.NDA,
-  })
+export class UpdateCompanyAgreementDto {
+  @ApiPropertyOptional({ enum: CompanyAgreementType })
+  @IsOptional()
   @IsEnum(CompanyAgreementType)
-  type!: CompanyAgreementType;
+  type?: CompanyAgreementType;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example: 'Employee Non-Disclosure Agreement 2026',
     maxLength: 160,
   })
+  @IsOptional()
   @IsString()
   @MaxLength(160)
-  title!: string;
+  title?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     example:
-      'This agreement covers confidentiality obligations and handling of internal information.',
+      'Updated confidentiality obligations and handling of internal information.',
   })
+  @IsOptional()
   @IsString()
-  details!: string;
+  details?: string;
 
-  @ApiProperty({
-    required: false,
+  @ApiPropertyOptional({
     description:
       'Optional source document URL or storage path. MVP signing uses details text as the source of truth.',
   })
@@ -41,9 +40,7 @@ export class CreateCompanyAgreementDto {
   @MaxLength(2048)
   documentUrl?: string;
 
-  @ApiProperty({
-    required: false,
-    default: true,
+  @ApiPropertyOptional({
     description: 'Whether employees are expected to sign this agreement.',
   })
   @IsOptional()
