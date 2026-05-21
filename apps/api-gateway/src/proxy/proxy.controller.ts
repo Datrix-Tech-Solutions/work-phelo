@@ -5,6 +5,7 @@ import * as https from 'https';
 import * as jwt from 'jsonwebtoken';
 import {
   GatewayServiceName,
+  gatewayServiceConfig,
   getConfiguredGatewayServices,
   getGatewayServiceUrl,
 } from '../config/runtime-env';
@@ -165,7 +166,11 @@ export class ProxyController {
     const queryString = req.url.includes('?')
       ? req.url.substring(req.url.indexOf('?'))
       : '';
-    const targetPath = downstreamPath + queryString;
+    const downstreamPrefix =
+      service && gatewayServiceConfig[service]?.downstreamPrefix
+        ? gatewayServiceConfig[service].downstreamPrefix
+        : '';
+    const targetPath = downstreamPrefix + downstreamPath + queryString;
 
     this.logger.log(`${req.method} ${req.path} → ${serviceUrl}${targetPath}`);
 

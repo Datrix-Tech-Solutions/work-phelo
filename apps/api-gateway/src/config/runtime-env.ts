@@ -35,19 +35,29 @@ export const gatewayOptionalServices: GatewayServiceName[] = [
 
 export const gatewayServiceConfig: Record<
   GatewayServiceName,
-  { envVar: (typeof allGatewayEnvVars)[number]; healthPath: string }
+  {
+    envVar: (typeof allGatewayEnvVars)[number];
+    healthPath: string;
+    downstreamPrefix?: string;
+  }
 > = {
   auth: { envVar: 'AUTH_SERVICE_URL', healthPath: '/health' },
   hr: { envVar: 'HR_SERVICE_URL', healthPath: '/health' },
   notification: {
     envVar: 'NOTIFICATION_SERVICE_URL',
     healthPath: '/api/health',
+    downstreamPrefix: '/api',
   },
   subscription: {
     envVar: 'SUBSCRIPTION_SERVICE_URL',
     healthPath: '/api/health',
+    downstreamPrefix: '/api',
   },
-  marketing: { envVar: 'MARKETING_SERVICE_URL', healthPath: '/api/health' },
+  marketing: {
+    envVar: 'MARKETING_SERVICE_URL',
+    healthPath: '/api/health',
+    downstreamPrefix: '/api',
+  },
 };
 
 export function assertGatewayRuntimeEnv(): void {
