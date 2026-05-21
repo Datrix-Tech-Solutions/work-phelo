@@ -130,7 +130,7 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
 
   return (
     <>
-      <div className="flex flex-col gap-4 flex-1 min-h-0">
+      <div className="flex flex-col gap-4">
         {/* Stat cards */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 shrink-0">
           <StatCard
@@ -223,6 +223,7 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
           totalPages={reqTotalPages}
           onPageChange={setReqPage}
           onRowClick={(row) => handleRequestOpen(row)}
+          noInternalScroll
         />
       </div>
 

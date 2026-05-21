@@ -23,6 +23,29 @@ export function swapDialCode(phone: string, newCode: string): string {
   return newCode + number;
 }
 
+export const GHANA_REGION_OPTIONS = [
+  { value: 'Ahafo', label: 'Ahafo' },
+  { value: 'Ashanti', label: 'Ashanti' },
+  { value: 'Bono', label: 'Bono' },
+  { value: 'Bono East', label: 'Bono East' },
+  { value: 'Central', label: 'Central' },
+  { value: 'Eastern', label: 'Eastern' },
+  { value: 'Greater Accra', label: 'Greater Accra' },
+  { value: 'North East', label: 'North East' },
+  { value: 'Northern', label: 'Northern' },
+  { value: 'Oti', label: 'Oti' },
+  { value: 'Savannah', label: 'Savannah' },
+  { value: 'Upper East', label: 'Upper East' },
+  { value: 'Upper West', label: 'Upper West' },
+  { value: 'Volta', label: 'Volta' },
+  { value: 'Western', label: 'Western' },
+  { value: 'Western North', label: 'Western North' },
+];
+
+export const REGION_OPTIONS_BY_COUNTRY: Record<string, { value: string; label: string }[]> = {
+  Ghana: GHANA_REGION_OPTIONS,
+};
+
 export const CURRENCY_OPTIONS = [
   { value: 'GHS', label: 'GHS – Ghana Cedi' },
   { value: 'NGN', label: 'NGN – Nigerian Naira' },

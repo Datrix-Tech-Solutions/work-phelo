@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -13,7 +13,7 @@ import { useCreateBranch, useUpdateBranch, useBranches } from '@/hooks';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import type { Branch, EmployeeOption } from '@/types/hr';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
-import { COUNTRY_OPTIONS } from '@/lib/CompanyOptions';
+import { COUNTRY_OPTIONS, REGION_OPTIONS_BY_COUNTRY } from '@/lib/CompanyOptions';
 
 interface BranchForm {
   name: string;
@@ -76,6 +76,9 @@ function BranchFormInner({ onClose, branch, employees }: Omit<BranchFormPanelPro
           isHeadOffice: false,
         },
   });
+
+  const selectedCountry = useWatch({ control: form.control, name: 'country' });
+  const regionOptions = REGION_OPTIONS_BY_COUNTRY[selectedCountry] ?? [];
 
   const { mutate: createBranch, isPending: isCreating } = useCreateBranch();
   const { mutate: updateBranch, isPending: isUpdating } = useUpdateBranch();
@@ -238,40 +241,51 @@ function BranchFormInner({ onClose, branch, employees }: Omit<BranchFormPanelPro
         />
 
         {/* Location */}
-        <div className="flex flex-col gap-1">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Location</p>
-          <div className="flex flex-col gap-3 p-3 bg-gray-50 rounded-input border border-gray-100">
-            <FormField
-              label="Street Address"
-              registration={form.register('address')}
-              placeholder="e.g. 12 Independence Ave"
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Location</p>
+        <Controller
+          control={form.control}
+          name="country"
+          render={({ field }) => (
+            <SearchSelect
+              label="Country"
+              placeholder="Select country"
+              options={COUNTRY_OPTIONS}
+              value={field.value}
+              onChange={(v) => {
+                field.onChange(v);
+                form.setValue('region', '');
+              }}
             />
-            <div className="grid grid-cols-2 gap-3">
-              <FormField
-                label="City"
-                registration={form.register('city')}
-                placeholder="e.g. Accra"
-              />
-              <FormField
-                label="Region / State"
-                registration={form.register('region')}
-                placeholder="e.g. Greater Accra"
-              />
-            </div>
+          )}
+        />
+        <FormField
+          label="Street Address"
+          registration={form.register('address')}
+          placeholder="e.g. 12 Independence Ave"
+        />
+        <div className="grid grid-cols-2 gap-3">
+          <FormField label="City" registration={form.register('city')} placeholder="e.g. Accra" />
+          {regionOptions.length > 0 ? (
             <Controller
               control={form.control}
-              name="country"
+              name="region"
               render={({ field }) => (
                 <SearchSelect
-                  label="Country"
-                  placeholder="Select country"
-                  options={COUNTRY_OPTIONS}
+                  label="Region"
+                  placeholder="Select region"
+                  options={regionOptions}
                   value={field.value}
-                  onChange={field.onChange}
+                  onChange={(v) => field.onChange(v)}
                 />
               )}
             />
-          </div>
+          ) : (
+            <FormField
+              label="Region / State"
+              registration={form.register('region')}
+              placeholder="e.g. Greater Accra"
+            />
+          )}
         </div>
 
         {/* Contact */}

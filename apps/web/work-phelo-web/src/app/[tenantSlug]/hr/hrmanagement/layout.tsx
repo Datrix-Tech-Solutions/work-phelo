@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname, useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { pagePx, pageHeader, pageContent } from '@/lib/layout';
 import { useAuthStore } from '@/store/auth.store';
 import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 
@@ -22,7 +23,12 @@ function ManagementTabs({ groups }: { groups: TabGroup[] }) {
   const pathname = usePathname();
 
   return (
-    <div className="flex items-end gap-1 px-8 border-b border-gray-200 bg-white overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+    <div
+      className={cn(
+        pagePx,
+        'flex items-end gap-1 border-b border-gray-200 bg-white overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]',
+      )}
+    >
       {groups.map((group, gi) => (
         <div key={gi} className="flex items-end">
           {/* Divider between groups */}
@@ -115,7 +121,7 @@ export default function HRManagementLayout({ children }: { children: React.React
     <div className="flex flex-col flex-1 min-h-0">
       {/* Sticky header + tabs */}
       <div className="shrink-0 bg-white">
-        <div className="px-8 pt-8 pb-2">
+        <div className={pageHeader}>
           <h1 className="text-xl font-semibold text-gray-900">HR Settings</h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Configure leave types, appraisal templates, cycles, and roles
@@ -125,7 +131,7 @@ export default function HRManagementLayout({ children }: { children: React.React
       </div>
 
       {/* Content */}
-      <main className="px-8 pt-4 pb-8 flex-1 min-h-0 overflow-hidden bg-gray-50 flex flex-col">
+      <main className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto bg-gray-50 flex flex-col')}>
         {children}
       </main>
     </div>

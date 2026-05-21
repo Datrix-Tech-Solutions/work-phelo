@@ -24,7 +24,7 @@ interface Props {
 export function PersonalInformationSection({ employee, showNationalId }: Props) {
   return (
     <SectionCard title="Personal Information">
-      <div className="grid grid-cols-3 gap-x-6 gap-y-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-5">
         <DetailField label="First Name" value={employee.firstName} />
         <DetailField label="Last Name" value={employee.lastName} />
         <DetailField label="Phone" value={employee.phone} />

@@ -255,7 +255,7 @@ export default function EmployeeDashboardPage({
         onClockOut={handleClockOut}
       />
 
-      <div className="grid grid-cols-[3fr_2fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[3fr_2fr] gap-4">
         {/* Left column */}
         <div className="flex flex-col gap-4">
           <AnnouncementCard announcements={announcements} />

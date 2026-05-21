@@ -47,6 +47,7 @@ export function useCreateBranch() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['branches'] });
+      queryClient.invalidateQueries({ queryKey: ['branch-options'] });
     },
   });
 }
@@ -76,6 +77,7 @@ export function useUpdateBranch() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['branches'] });
+      queryClient.invalidateQueries({ queryKey: ['branch-options'] });
     },
   });
 }
@@ -88,6 +90,7 @@ export function useDeleteBranch() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['branches'] });
+      queryClient.invalidateQueries({ queryKey: ['branch-options'] });
     },
   });
 }

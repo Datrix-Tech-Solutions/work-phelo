@@ -122,6 +122,7 @@ export function AnnouncementsContent() {
         currentPage={page}
         totalPages={Math.max(1, meta.totalPages)}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       {canAccessAnnouncements && canManageAnnouncements && (

@@ -48,7 +48,7 @@ export function MyLeavePanel({ isOpen, onClose, onRequestLeave, requests }: MyLe
       onClose={onClose}
       title="My Leave"
       description="Your leave request history."
-      width="w-[480px]"
+      width="sm:w-[480px]"
       footer={
         <div className="flex justify-end">
           <Button

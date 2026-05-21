@@ -31,6 +31,7 @@ import {
   type EmployeeDetailPanel,
 } from '@/components/organisms/employee/EmployeeDetailPanels';
 import { EmployeePayslipTab } from '@/components/molecules/employees/EmployeePayslipTab';
+import { pageBreadcrumb, pageBanner, pagePx, pageContent } from '@/lib/layout';
 
 type EmployeeTab = 'personal' | 'payroll';
 
@@ -126,7 +127,7 @@ export default function EmployeeDetailPage({
   if (!employee) {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     return (
-      <div className="p-8 text-center text-sm text-gray-400">
+      <div className="p-4 sm:p-6 lg:p-8 text-center text-sm text-gray-400">
         {status === 403
           ? "You don't have permission to access this. Contact your administrator."
           : 'Employee not found.'}
@@ -137,12 +138,12 @@ export default function EmployeeDetailPage({
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Breadcrumb */}
-      <div className="px-8 pt-6 shrink-0">
+      <div className={`${pageBreadcrumb} shrink-0`}>
         <Breadcrumb tenantSlug={tenantSlug} name={`${employee.firstName} ${employee.lastName}`} />
       </div>
 
       {/* Banner */}
-      <div className="px-8 pt-4 pb-6 shrink-0">
+      <div className={`${pageBanner} shrink-0`}>
         <EmployeeDetailBanner
           employee={employee}
           hasPendingResignation={hrIsNotified}
@@ -155,7 +156,7 @@ export default function EmployeeDetailPage({
       </div>
 
       {/* Tab bar */}
-      <div className="px-8 shrink-0">
+      <div className={`${pagePx} shrink-0`}>
         <TabBar
           tabs={TABS}
           activeTab={activeTab}
@@ -165,10 +166,10 @@ export default function EmployeeDetailPage({
 
       {/* Scrollable content */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-8 pt-4 pb-8">
+        <div className={pageContent}>
           {activeTab === 'personal' && (
-            <div className="grid grid-cols-3 gap-6 items-start">
-              <div className="col-span-2 flex flex-col gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+              <div className="lg:col-span-2 flex flex-col gap-4">
                 <PersonalInformationSection employee={employee} showNationalId />
                 <EmergencyContactSection employee={employee} />
                 <AssetsSection
@@ -176,7 +177,7 @@ export default function EmployeeDetailPage({
                   onAssignAsset={canAssignAsset ? () => setActivePanel('assign-asset') : undefined}
                 />
               </div>
-              <div className="col-span-1">
+              <div className="lg:col-span-1">
                 <EmployeeDetailSidebar
                   employee={employee}
                   managerName={managerName}

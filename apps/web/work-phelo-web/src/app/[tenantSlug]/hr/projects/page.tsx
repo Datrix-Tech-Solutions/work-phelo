@@ -17,7 +17,7 @@ export default function ProjectsPage({ params }: { params: Promise<{ tenantSlug:
   }, [user, tenantSlug, router]);
 
   return (
-    <div className="p-8 flex flex-col gap-6 flex-1 min-h-0">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
       <ProjectsContent tenantSlug={tenantSlug} />
     </div>
   );

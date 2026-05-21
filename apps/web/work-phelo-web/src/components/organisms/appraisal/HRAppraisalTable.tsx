@@ -182,6 +182,7 @@ export function HRAppraisalsTable({ search, onSearch, page, onPageChange }: Prop
       onRowClick={(row) => router.push(`/${tenantSlug}/hr/appraisal/cycles/${row.id}`)}
       onPageChange={onPageChange}
       emptyMessage="No appraisal cycles created yet"
+      noInternalScroll
     />
   );
 }

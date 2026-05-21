@@ -42,47 +42,51 @@ export function AttendanceMetricCard({
       </div>
 
       {/* Content */}
-      <div className="flex items-end justify-between gap-3 min-h-13">
-        {isDone ? (
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <p className="text-sm font-semibold text-green-600">All done for today!</p>
-            {hoursWorked && <p className="text-xs text-gray-400">{hoursWorked} hours worked</p>}
-          </div>
-        ) : clockedIn ? (
-          <p className="text-sm text-gray-700 min-w-0">
-            Clocked in at <span className="font-semibold text-gray-900">{clockInTime}</span>
-          </p>
-        ) : (
-          <p className="text-sm text-gray-400 min-w-0">You haven&apos;t clocked in yet</p>
-        )}
+      <div className="flex flex-col gap-3 flex-1 justify-end mt-2">
+        <div className="text-sm min-w-0">
+          {isDone ? (
+            <div className="flex flex-col gap-0.5">
+              <p className="font-semibold text-green-600">All done for today!</p>
+              {hoursWorked && <p className="text-xs text-gray-400">{hoursWorked} hours worked</p>}
+            </div>
+          ) : clockedIn ? (
+            <p className="text-gray-700">
+              Clocked in at <span className="font-semibold text-gray-900">{clockInTime}</span>
+            </p>
+          ) : (
+            <p className="text-gray-400">You haven&apos;t clocked in yet</p>
+          )}
+        </div>
 
         {/* Action Button */}
-        {isDone ? (
-          <span className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-full border border-green-200">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            Completed
-          </span>
-        ) : clockedIn ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setConfirmClockOut(true)}
-            disabled={isLoading}
-            className="shrink-0 text-orange-600 border-orange-200 hover:bg-orange-50"
-          >
-            Clock Out
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setConfirmClockIn(true)}
-            disabled={isLoading}
-            className="shrink-0 bg-brand hover:bg-brand-hover"
-          >
-            Clock In
-          </Button>
-        )}
+        <div>
+          {isDone ? (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-full border border-green-200">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Completed
+            </span>
+          ) : clockedIn ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmClockOut(true)}
+              disabled={isLoading}
+              className="text-orange-600 border-orange-200 hover:bg-orange-50"
+            >
+              Clock Out
+            </Button>
+          ) : (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => setConfirmClockIn(true)}
+              disabled={isLoading}
+              className="bg-brand hover:bg-brand-hover"
+            >
+              Clock In
+            </Button>
+          )}
+        </div>
       </div>
 
       <Modal

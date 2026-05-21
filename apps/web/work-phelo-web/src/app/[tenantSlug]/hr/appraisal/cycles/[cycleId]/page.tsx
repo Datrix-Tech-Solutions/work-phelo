@@ -30,7 +30,7 @@ function CycleDetailRouter({ tenantSlug, cycleId }: { tenantSlug: string; cycleI
   }, [raw]);
 
   if (isLoading) {
-    return <div className="p-8 text-sm text-gray-400">Loading…</div>;
+    return <div className="p-4 sm:p-6 lg:p-8 text-sm text-gray-400">Loading…</div>;
   }
 
   const total = appraisals.length;

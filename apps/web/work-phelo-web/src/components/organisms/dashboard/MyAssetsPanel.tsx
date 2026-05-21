@@ -40,7 +40,7 @@ export function MyAssetsPanel({ isOpen, onClose }: MyAssetsPanelProps) {
       onClose={onClose}
       title="My Assets"
       description="Assets currently assigned to you."
-      width="w-[480px]"
+      width="sm:w-[480px]"
     >
       {isLoading ? (
         <div className="flex flex-col gap-3 p-4">

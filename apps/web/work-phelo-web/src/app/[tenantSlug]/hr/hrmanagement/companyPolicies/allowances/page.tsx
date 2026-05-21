@@ -79,7 +79,7 @@ export default function AllowancesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 flex-1 min-h-0">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between shrink-0">
         <p className="text-sm text-gray-500">
           Define allowance types that can be assigned to employees.
@@ -100,6 +100,7 @@ export default function AllowancesPage() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
         rowActions={(row) => [
           {
             label: 'Edit',

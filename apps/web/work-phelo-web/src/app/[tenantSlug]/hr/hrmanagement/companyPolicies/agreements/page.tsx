@@ -147,7 +147,7 @@ export default function CompanyAgreementsPage() {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col">
       <DataTable
         columns={COLUMNS}
         data={paginated}
@@ -165,6 +165,7 @@ export default function CompanyAgreementsPage() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
         rowActions={(row) => [
           {
             label: 'View',

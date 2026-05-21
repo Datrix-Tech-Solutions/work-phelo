@@ -74,7 +74,7 @@ function InviteEmployeeForm({
 
   const phoneValue = useWatch({ control, name: 'phone' });
   const hireDateValue = useWatch({ control, name: 'hireDate' });
-  const dobValue = useWatch({ control, name: 'dateOfBirth' });
+  // const dobValue = useWatch({ control, name: 'dateOfBirth' });
   const probationDateValue = useWatch({ control, name: 'probationEndsAt' });
   const contractDateValue = useWatch({ control, name: 'contractEndDate' });
   const deptFormValue = useWatch({ control, name: 'departmentId' });
@@ -217,7 +217,7 @@ function InviteEmployeeForm({
             { value: 'FEMALE', label: 'Female' },
           ]}
         />
-        <DatePicker
+        {/* <DatePicker
           label="Date of Birth"
           value={dobValue}
           onChange={(v) => {
@@ -226,7 +226,7 @@ function InviteEmployeeForm({
           }}
           error={errors.dateOfBirth?.message}
           disableFuture
-        />
+        /> */}
       </div>
 
       {/* Job Information */}

@@ -21,7 +21,7 @@ export function SidePanel({
   description,
   children,
   footer,
-  width = 'w-[480px]',
+  width = 'sm:w-[480px]',
 }: SidePanelProps) {
   // Close on Escape key
   useEffect(() => {
@@ -54,9 +54,13 @@ export function SidePanel({
       {/* Floating Side Panel */}
       <div
         className={cn(
-          'fixed top-6 bottom-6 right-6 z-50 flex flex-col bg-white',
-          'rounded-3xl overflow-hidden border border-gray-100 shadow-2xl',
+          'fixed z-50 flex flex-col bg-white shadow-2xl',
+          'overflow-hidden border border-gray-100',
           'transition-all duration-300 ease-out',
+          // Mobile: full screen, no rounding
+          'inset-0 rounded-none',
+          // sm+: floating panel
+          'sm:inset-auto sm:top-6 sm:bottom-6 sm:right-6 sm:rounded-3xl',
           width,
           // Animation: slide in from right with slight scale
           isOpen
@@ -65,10 +69,12 @@ export function SidePanel({
         )}
       >
         {/* Header */}
-        <div className="shrink-0 px-8 pt-7 pb-5 border-b border-gray-100">
+        <div className="shrink-0 px-5 sm:px-8 pt-5 sm:pt-7 pb-4 sm:pb-5 border-b border-gray-100">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-2xl font-semibold text-gray-900 tracking-tight">{title}</h2>
+              <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 tracking-tight">
+                {title}
+              </h2>
               {description && <p className="text-sm text-gray-500 mt-1.5">{description}</p>}
             </div>
 
@@ -83,13 +89,15 @@ export function SidePanel({
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto px-8 py-7">
+        <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-5 sm:py-7">
           <div className="flex flex-col gap-6 h-full">{children}</div>
         </div>
 
         {/* Footer */}
         {footer && (
-          <div className="shrink-0 px-8 py-5 border-t border-gray-100 bg-white">{footer}</div>
+          <div className="shrink-0 px-5 sm:px-8 py-4 sm:py-5 border-t border-gray-100 bg-white">
+            {footer}
+          </div>
         )}
       </div>
     </>

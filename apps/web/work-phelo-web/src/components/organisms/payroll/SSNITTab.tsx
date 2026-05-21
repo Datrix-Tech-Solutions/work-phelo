@@ -226,7 +226,7 @@ export function SSNITTab() {
   ];
 
   return (
-    <div className="flex flex-col gap-6 flex-1 min-h-0">
+    <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-64">
@@ -285,6 +285,7 @@ export function SSNITTab() {
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
+        noInternalScroll
       />
     </div>
   );

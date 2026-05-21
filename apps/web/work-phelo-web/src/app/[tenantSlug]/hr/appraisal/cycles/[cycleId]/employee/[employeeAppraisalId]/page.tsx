@@ -113,7 +113,7 @@ export default function EmployeeAppraisalDetailPage({
 
   if (isLoading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-64">
+      <div className="p-4 sm:p-6 lg:p-8 flex items-center justify-center min-h-64">
         <p className="text-sm text-gray-400">Loading…</p>
       </div>
     );
@@ -121,7 +121,7 @@ export default function EmployeeAppraisalDetailPage({
 
   if (!appraisal) {
     return (
-      <div className="p-8 flex flex-col gap-4">
+      <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-4">
         <p className="text-sm text-red-500">Appraisal not found.</p>
         <Link href={appraisalHref} className="text-sm text-brand hover:underline">
           ← Back to Appraisals
@@ -131,7 +131,7 @@ export default function EmployeeAppraisalDetailPage({
   }
 
   return (
-    <div className="p-8 flex flex-col gap-6">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link href={appraisalHref} className="hover:text-gray-600 transition-colors">

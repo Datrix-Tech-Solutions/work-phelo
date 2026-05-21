@@ -113,8 +113,12 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
   return (
     <aside
       className={cn(
-        'h-full bg-white border-r border-gray-200 flex flex-col shrink-0 transition-[width] duration-200 overflow-hidden',
-        collapsed ? 'w-14' : 'w-56',
+        'bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-hidden',
+        // Mobile: absolute drawer that slides over content (below the top nav)
+        'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
+        // Desktop: static in flex flow with width animation
+        'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-200',
+        collapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-56',
       )}
     >
       <nav className="flex-1 overflow-y-auto py-3 flex flex-col">

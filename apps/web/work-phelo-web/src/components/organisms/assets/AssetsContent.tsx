@@ -11,9 +11,16 @@ import { TransferAssetPanel } from '@/components/organisms/assets/TransferAssetP
 import { RetireAssetModal } from '@/components/organisms/assets/RetireAssetModal';
 import { DeleteAssetModal } from '@/components/organisms/assets/DeleteAssetModal';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { AssetDetailPanel } from '@/components/organisms/assets/AssetDetailPanel';
 import AssetCard from '@/components/molecules/AssetCard';
 import { AssetType } from '@/components/atoms/assetIcons';
 import { Asset, CreateAssetPayload, UpdateAssetPayload } from '@/types/asset';
+import {
+  ASSET_TYPE_LABELS,
+  ASSET_STATUS_OPTIONS,
+  ASSET_TYPE_OPTIONS,
+  ASSET_CONDITION_OPTIONS,
+} from '@/lib/assetOptions';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
@@ -30,21 +37,10 @@ import { useToast } from '@/hooks/useToast';
 import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
 import { StatCard } from '@/components/molecules/shared/StatCard';
 
-const TYPE_LABELS: Record<AssetType, string> = {
-  LAPTOP: 'Laptop',
-  PHONE: 'Phone',
-  TABLET: 'Tablet',
-  PRINTER: 'Printer',
-  MONITOR: 'Monitor',
-  VEHICLE: 'Vehicle',
-  FURNITURE: 'Furniture',
-  SOFTWARE_LICENSE: 'Software License',
-  OTHER: 'Other',
-};
-
 type PanelState =
   | { type: 'none' }
   | { type: 'add' }
+  | { type: 'detail'; asset: Asset }
   | { type: 'edit'; asset: Asset }
   | { type: 'assign'; asset: Asset }
   | { type: 'unassign'; asset: Asset }
@@ -139,7 +135,7 @@ export function AssetsContent() {
         const match =
           asset.name.toLowerCase().includes(q) ||
           asset.serialNumber?.toLowerCase().includes(q) ||
-          TYPE_LABELS[asset.type].toLowerCase().includes(q);
+          (ASSET_TYPE_LABELS[asset.type] ?? asset.type).toLowerCase().includes(q);
         if (!match) return false;
       }
       return true;
@@ -158,7 +154,7 @@ export function AssetsContent() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-5 gap-3 shrink-0">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
         <StatCard
           title="Total Assets"
           value={summary.total}
@@ -206,38 +202,19 @@ export function AssetsContent() {
           value={statusFilter}
           onChange={setStatusFilter}
           placeholder="All Statuses"
-          options={[
-            { value: 'AVAILABLE', label: 'Available' },
-            { value: 'ASSIGNED', label: 'Assigned' },
-            { value: 'MAINTENANCE', label: 'Maintenance' },
-            { value: 'RETIRED', label: 'Retired' },
-          ]}
+          options={ASSET_STATUS_OPTIONS}
         />
         <FilterSelect
           value={typeFilter}
           onChange={setTypeFilter}
           placeholder="All Types"
-          options={[
-            { value: 'LAPTOP', label: 'Laptop' },
-            { value: 'PHONE', label: 'Phone' },
-            { value: 'PRINTER', label: 'Printer' },
-            { value: 'MONITOR', label: 'Monitor' },
-            { value: 'VEHICLE', label: 'Vehicle' },
-            { value: 'FURNITURE', label: 'Furniture' },
-            { value: 'SOFTWARE_LICENSE', label: 'Software License' },
-            { value: 'OTHER', label: 'Other' },
-          ]}
+          options={ASSET_TYPE_OPTIONS}
         />
         <FilterSelect
           value={conditionFilter}
           onChange={setConditionFilter}
           placeholder="All Conditions"
-          options={[
-            { value: 'NEW', label: 'New' },
-            { value: 'GOOD', label: 'Good' },
-            { value: 'FAIR', label: 'Fair' },
-            { value: 'POOR', label: 'Poor' },
-          ]}
+          options={ASSET_CONDITION_OPTIONS}
         />
         {hasFilters && (
           <button
@@ -270,11 +247,12 @@ export function AssetsContent() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto items-start">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
           {filtered.map((asset) => (
             <div key={asset.id}>
               <AssetCard
                 asset={asset}
+                onView={() => setPanel({ type: 'detail', asset })}
                 onEdit={canUpdateAsset ? () => setPanel({ type: 'edit', asset }) : undefined}
                 onAssign={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
                 onUnassign={
@@ -283,15 +261,49 @@ export function AssetsContent() {
                 onTransfer={
                   canAssignAsset ? () => setPanel({ type: 'transfer', asset }) : undefined
                 }
-                onRetire={canUpdateAsset ? () => setPanel({ type: 'retire', asset }) : undefined}
-                onDelete={canUpdateAsset ? () => setPanel({ type: 'delete', asset }) : undefined}
               />
             </div>
           ))}
         </div>
       )}
 
-      {/* Retire button lives in detail page; expose it here via card context menu if needed */}
+      <AssetDetailPanel
+        isOpen={panel.type === 'detail'}
+        onClose={closePanel}
+        asset={panel.type === 'detail' ? panel.asset : null}
+        canManage={canUpdateAsset}
+        canAssign={canAssignAsset}
+        onEdit={
+          canUpdateAsset && panel.type === 'detail'
+            ? () => setPanel({ type: 'edit', asset: panel.asset })
+            : undefined
+        }
+        onAssign={
+          canAssignAsset && panel.type === 'detail'
+            ? () => setPanel({ type: 'assign', asset: panel.asset })
+            : undefined
+        }
+        onUnassign={
+          canAssignAsset && panel.type === 'detail'
+            ? () => setPanel({ type: 'unassign', asset: panel.asset })
+            : undefined
+        }
+        onTransfer={
+          canAssignAsset && panel.type === 'detail'
+            ? () => setPanel({ type: 'transfer', asset: panel.asset })
+            : undefined
+        }
+        onRetire={
+          canUpdateAsset && panel.type === 'detail'
+            ? () => setPanel({ type: 'retire', asset: panel.asset })
+            : undefined
+        }
+        onDelete={
+          canUpdateAsset && panel.type === 'detail'
+            ? () => setPanel({ type: 'delete', asset: panel.asset })
+            : undefined
+        }
+      />
 
       <AddAssetPanel
         isOpen={panel.type === 'add'}

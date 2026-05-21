@@ -145,7 +145,7 @@ export function ApprovePayrollTab() {
   ];
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex flex-col">
       <DataTable
         columns={columns}
         data={pending}
@@ -154,6 +154,7 @@ export function ApprovePayrollTab() {
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
+        noInternalScroll
       />
 
       <ApprovePayrollPanel run={selectedRun} onClose={() => setSelectedRun(null)} />
