@@ -72,14 +72,14 @@ export default function NewPermissionSetPage({
       </nav>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-bold text-gray-900">New Permission Set</h2>
           <p className="text-sm text-gray-400 mt-0.5">
             Define a reusable bundle of permissions that can be assigned to users.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0">
           <Button variant="secondary" onClick={() => router.push(base)} disabled={isPending}>
             Cancel
           </Button>
@@ -90,13 +90,14 @@ export default function NewPermissionSetPage({
       </div>
 
       {/* Body */}
-      <div className="flex gap-8 items-start">
+      <div className="flex flex-col gap-6 lg:flex-row lg:gap-8 lg:items-start">
         {/* Left: form */}
-        <div className="w-100 shrink-0 flex flex-col gap-5">
+        <div className="w-full lg:w-96 lg:shrink-0 flex flex-col gap-5">
           <RoleFormFields register={register} errors={errors} />
         </div>
 
-        <div className="w-px self-stretch bg-gray-100 shrink-0" />
+        <div className="hidden lg:block w-px self-stretch bg-gray-100 shrink-0" />
+        <div className="lg:hidden h-px bg-gray-100" />
 
         {/* Right: permissions */}
         <div className="flex-1 min-w-0 flex flex-col gap-4">

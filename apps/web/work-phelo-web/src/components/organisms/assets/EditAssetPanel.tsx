@@ -10,16 +10,24 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { Asset } from '@/types/asset';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { useBranchOptions } from '@/hooks';
+import {
+  ASSET_TYPE_OPTIONS,
+  VEHICLE_TYPE_OPTIONS,
+  ASSET_CONDITION_OPTIONS,
+} from '@/lib/assetOptions';
 
 interface AssetForm {
   name: string;
   type: string;
   serialNumber?: string;
+  vehicleType?: string;
   purchaseDate?: string;
   purchaseCost?: string;
   currency: string;
   condition?: string;
   notes?: string;
+  branchId?: string;
 }
 
 interface Props {
@@ -31,6 +39,7 @@ interface Props {
 
 export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
   const { currency: tenantCurrency } = useTenantConfig();
+  const { data: branchOptions = [] } = useBranchOptions();
 
   const {
     register,
@@ -46,6 +55,10 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
   const purchaseDateValue = useWatch({ control, name: 'purchaseDate' });
   const purchaseCostValue = useWatch({ control, name: 'purchaseCost' });
   const currencyValue = useWatch({ control, name: 'currency' });
+  const branchIdValue = useWatch({ control, name: 'branchId' });
+  const vehicleTypeValue = useWatch({ control, name: 'vehicleType' });
+
+  const isVehicle = typeValue === 'VEHICLE';
 
   useEffect(() => {
     if (asset) {
@@ -53,11 +66,13 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
         name: asset.name,
         type: asset.type,
         serialNumber: asset.serialNumber ?? '',
+        vehicleType: asset.vehicleType ?? '',
         purchaseDate: asset.purchaseDate ?? '',
         purchaseCost: asset.purchaseCost != null ? String(asset.purchaseCost) : '',
         currency: asset.currency ?? tenantCurrency,
         condition: asset.condition ?? '',
         notes: asset.notes ?? '',
+        branchId: asset.branchId ?? '',
       });
     }
   }, [asset, reset, tenantCurrency]);
@@ -105,24 +120,24 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
           placeholder="Select type"
           value={typeValue}
           onChange={(v) => setValue('type', v)}
-          options={[
-            { value: 'LAPTOP', label: 'Laptop' },
-            { value: 'PHONE', label: 'Phone' },
-            { value: 'TABLET', label: 'Tablet' },
-            { value: 'PRINTER', label: 'Printer' },
-            { value: 'MONITOR', label: 'Monitor' },
-            { value: 'VEHICLE', label: 'Vehicle' },
-            { value: 'FURNITURE', label: 'Furniture' },
-            { value: 'SOFTWARE_LICENSE', label: 'Software License' },
-            { value: 'OTHER', label: 'Other' },
-          ]}
+          options={ASSET_TYPE_OPTIONS}
         />
 
         <FormField
-          label="Serial Number"
+          label={isVehicle ? 'Registration Number' : 'Serial Number'}
           registration={register('serialNumber')}
-          placeholder="eg; C02XL0LFJGH5"
+          placeholder={isVehicle ? 'eg; GR-1234-24' : 'eg; C02XL0LFJGH5'}
         />
+
+        {isVehicle && (
+          <SearchSelect
+            label="Vehicle Type"
+            placeholder="Select vehicle type"
+            value={vehicleTypeValue}
+            onChange={(v) => setValue('vehicleType', v)}
+            options={VEHICLE_TYPE_OPTIONS}
+          />
+        )}
 
         <DatePicker
           label="Purchase Date"
@@ -145,12 +160,15 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
           placeholder="Select condition"
           value={conditionValue}
           onChange={(v) => setValue('condition', v)}
-          options={[
-            { value: 'NEW', label: 'New' },
-            { value: 'GOOD', label: 'Good' },
-            { value: 'FAIR', label: 'Fair' },
-            { value: 'POOR', label: 'Poor' },
-          ]}
+          options={ASSET_CONDITION_OPTIONS}
+        />
+
+        <SearchSelect
+          label="Branch"
+          placeholder="Select branch"
+          value={branchIdValue}
+          onChange={(v) => setValue('branchId', v)}
+          options={branchOptions.map((b) => ({ value: b.id, label: b.name }))}
         />
 
         <div className="flex flex-col gap-1.5">

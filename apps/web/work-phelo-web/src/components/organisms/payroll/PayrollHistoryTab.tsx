@@ -262,7 +262,7 @@ export function PayrollHistoryTab() {
   ];
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex flex-col">
       <DataTable
         columns={columns}
         data={paged}
@@ -312,6 +312,7 @@ export function PayrollHistoryTab() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
     </div>
   );

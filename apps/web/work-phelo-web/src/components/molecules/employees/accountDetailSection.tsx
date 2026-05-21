@@ -12,7 +12,7 @@ export function AccountDetailsSection({ employee }: Props) {
 
   return (
     <SectionCard title="Account Details">
-      <div className="grid grid-cols-4 gap-x-6 gap-y-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5">
         {/* Employment Status */}
         <div className="flex flex-col gap-0.5">
           <span className="text-xs text-gray-400">Employment Status</span>

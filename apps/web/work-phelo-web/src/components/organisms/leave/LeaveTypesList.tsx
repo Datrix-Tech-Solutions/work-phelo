@@ -155,7 +155,7 @@ export function LeaveTypesList({ tenantSlug }: Props) {
   ];
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col">
       <DataTable
         columns={columns}
         data={filteredLeaveTypes}
@@ -177,6 +177,7 @@ export function LeaveTypesList({ tenantSlug }: Props) {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       <CreateLeaveTypePanel

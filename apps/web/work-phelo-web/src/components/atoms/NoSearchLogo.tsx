@@ -14,7 +14,7 @@ export function NoSearchLogo({ className = '' }: NoSearchLogoProps) {
           alt="No Search Results"
           fill
           className="object-contain"
-          sizes="(max-width: 1200px) 190px, 220px"
+          sizes="(max-width: 500px) 120px, 180px"
           priority
         />
       </div>

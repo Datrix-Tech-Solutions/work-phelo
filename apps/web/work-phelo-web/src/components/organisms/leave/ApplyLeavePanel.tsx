@@ -193,7 +193,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
       />
 
       {/* Dates */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Controller
           name="startDate"
           control={control}

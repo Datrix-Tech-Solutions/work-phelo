@@ -59,7 +59,7 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
   }
 
   return (
-    <div className="p-8 flex flex-col gap-6 flex-1 min-h-0">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0">
       <div className="shrink-0">
         <h1 className="text-xl font-bold text-gray-900">Payroll Management</h1>
       </div>
@@ -71,11 +71,13 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
         country={payrollCountry}
         onTabChange={setTab}
       />
-      {tab === 'payslip' && <MyPayslipTab />}
-      {tab === 'manage' && canManagePayroll && <ManagePayrollTab />}
-      {tab === 'ssnit' && canManagePayroll && renderContributionsTab()}
-      {tab === 'approve' && canApprovePayroll && <ApprovePayrollTab />}
-      {tab === 'history' && canViewHistory && <PayrollHistoryTab />}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {tab === 'payslip' && <MyPayslipTab />}
+        {tab === 'manage' && canManagePayroll && <ManagePayrollTab />}
+        {tab === 'ssnit' && canManagePayroll && renderContributionsTab()}
+        {tab === 'approve' && canApprovePayroll && <ApprovePayrollTab />}
+        {tab === 'history' && canViewHistory && <PayrollHistoryTab />}
+      </div>
     </div>
   );
 }

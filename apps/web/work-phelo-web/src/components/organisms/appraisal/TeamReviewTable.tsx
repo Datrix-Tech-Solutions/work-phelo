@@ -164,6 +164,7 @@ export function TeamReviewTable({ search, onSearch, page, onPageChange }: Props)
       totalPages={totalPages}
       onPageChange={onPageChange}
       emptyMessage="No team members have active appraisals"
+      noInternalScroll
     />
   );
 }

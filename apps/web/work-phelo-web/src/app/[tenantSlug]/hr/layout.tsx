@@ -26,7 +26,9 @@ export default function HRLayout({
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 768,
+  );
   const [activeTab, setActiveTab] = useState('portal');
 
   const { hasAnyManagementAccess } = useHrManagementAccess();
@@ -130,7 +132,14 @@ export default function HRLayout({
         onTabChange={setActiveTab}
         notificationCount={0}
       />
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 relative">
+        {/* Mobile backdrop: closes sidebar when tapping outside */}
+        {!collapsed && (
+          <div
+            className="absolute inset-0 bg-black/40 z-30 md:hidden"
+            onClick={() => setCollapsed(true)}
+          />
+        )}
         <Sidebar groups={groups} collapsed={collapsed} />
         <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
       </div>

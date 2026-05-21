@@ -226,7 +226,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto items-start">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
           {filtered.map((project) => (
             <ProjectCard
               key={project.id}

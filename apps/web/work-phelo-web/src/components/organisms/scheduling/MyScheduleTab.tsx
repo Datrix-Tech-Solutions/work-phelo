@@ -374,50 +374,54 @@ export function MyScheduleTab() {
 
       {/* ── Day cards ── */}
       {isLoading ? (
-        <div className="grid grid-cols-7 gap-4">
-          {WEEKDAYS.map(({ label }) => (
-            <div
-              key={label}
-              className="flex flex-col rounded-2xl overflow-hidden border-2 border-gray-200"
-            >
-              {/* Header skeleton */}
-              <div className="bg-gray-100 px-4 py-3 flex flex-col items-center gap-2">
-                <Skeleton className="h-3 w-8" />
-                <Skeleton className="h-8 w-8 rounded-lg" />
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="grid grid-cols-7 gap-4 min-w-[560px]">
+            {WEEKDAYS.map(({ label }) => (
+              <div
+                key={label}
+                className="flex flex-col rounded-2xl overflow-hidden border-2 border-gray-200"
+              >
+                {/* Header skeleton */}
+                <div className="bg-gray-100 px-4 py-3 flex flex-col items-center gap-2">
+                  <Skeleton className="h-3 w-8" />
+                  <Skeleton className="h-8 w-8 rounded-lg" />
+                </div>
+                {/* Body skeleton */}
+                <div className="flex flex-col flex-1 p-4 min-h-36 bg-white gap-2.5">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-3 w-24" />
+                  <div className="flex-1" />
+                  <Skeleton className="h-8 w-full rounded-xl" />
+                </div>
               </div>
-              {/* Body skeleton */}
-              <div className="flex flex-col flex-1 p-4 min-h-36 bg-white gap-2.5">
-                <Skeleton className="h-3 w-16" />
-                <Skeleton className="h-3 w-24" />
-                <div className="flex-1" />
-                <Skeleton className="h-8 w-full rounded-xl" />
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-7 gap-4">
-          {WEEKDAYS.map(({ label, isoDay }) => {
-            const dayDate = addDays(weekStart, isoDay - 1);
-            const isoDate = toISODate(dayDate);
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="grid grid-cols-7 gap-4 min-w-[560px]">
+            {WEEKDAYS.map(({ label, isoDay }) => {
+              const dayDate = addDays(weekStart, isoDay - 1);
+              const isoDate = toISODate(dayDate);
 
-            return (
-              <WeekDayCard
-                key={label}
-                day={label}
-                date={dayDate.getDate()}
-                isToday={isoDate === today}
-                shifts={shiftsForWeek[isoDate] ?? []}
-                isSelected={selectedDate === isoDate}
-                onClick={() => handleCardClick(isoDate)}
-                onSwapShift={(shift) => {
-                  setSwapShift(shift);
-                  setSwapDate(isoDate);
-                  setSwapPanelOpen(true);
-                }}
-              />
-            );
-          })}
+              return (
+                <WeekDayCard
+                  key={label}
+                  day={label}
+                  date={dayDate.getDate()}
+                  isToday={isoDate === today}
+                  shifts={shiftsForWeek[isoDate] ?? []}
+                  isSelected={selectedDate === isoDate}
+                  onClick={() => handleCardClick(isoDate)}
+                  onSwapShift={(shift) => {
+                    setSwapShift(shift);
+                    setSwapDate(isoDate);
+                    setSwapPanelOpen(true);
+                  }}
+                />
+              );
+            })}
+          </div>
         </div>
       )}
 

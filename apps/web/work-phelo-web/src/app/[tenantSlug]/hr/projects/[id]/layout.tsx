@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { pageWrapper } from '@/lib/layout';
 import { ProjectBanner } from '@/components/molecules/projects/ProjectBanner';
 import { useProject } from '@/hooks';
 
@@ -28,7 +29,7 @@ export default function ProjectDetailLayout({
 
   if (isLoading) {
     return (
-      <div className="p-8 flex flex-col gap-6 animate-pulse">
+      <div className={cn(pageWrapper, 'flex flex-col gap-6 animate-pulse')}>
         <div className="h-4 w-48 bg-gray-200 rounded" />
         <div className="h-24 bg-gray-200 rounded-card" />
         <div className="h-10 bg-gray-100 rounded" />
@@ -37,7 +38,7 @@ export default function ProjectDetailLayout({
   }
 
   if (!project) {
-    return <div className="p-8 text-sm text-gray-500">Project not found.</div>;
+    return <div className={cn(pageWrapper, 'text-sm text-gray-500')}>Project not found.</div>;
   }
 
   const tabs = [
@@ -47,7 +48,7 @@ export default function ProjectDetailLayout({
   ];
 
   return (
-    <div className="p-8 flex flex-col gap-6">
+    <div className={cn(pageWrapper, 'flex flex-col gap-6')}>
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link href={base} className="hover:text-gray-700 transition-colors">

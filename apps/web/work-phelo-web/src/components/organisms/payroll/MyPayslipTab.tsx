@@ -108,7 +108,7 @@ export function MyPayslipTab() {
 
   return (
     <>
-      <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
+      <div className="flex flex-col gap-6">
         {/* Header row */}
         <div className="flex items-center justify-between shrink-0">
           <h2 className="text-base font-semibold text-gray-900">My Payslip</h2>

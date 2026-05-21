@@ -46,6 +46,7 @@ export function useCreateDepartment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['department-options'] });
       queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
   });
@@ -70,6 +71,7 @@ export function useUpdateDepartment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['department-options'] });
       queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
   });
@@ -85,6 +87,7 @@ export function useDeleteDepartment() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['department-options'] });
     },
   });
 }

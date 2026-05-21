@@ -862,7 +862,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
       />
 
       {/* Start + End Date */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Controller
           name="startDate"
           control={control}
@@ -897,7 +897,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
       </div>
 
       {/* Self-assessment + Manager review deadline */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Controller
           name="selfAssessmentDeadline"
           control={control}

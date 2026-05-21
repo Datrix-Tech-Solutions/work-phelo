@@ -167,7 +167,7 @@ export function OffboardEmployeePanel({
       onClose={onClose}
       title="Offboard Employee"
       description={`Processing departure for ${employeeName}`}
-      width="w-[520px]"
+      width="sm:w-[520px]"
       footer={
         <div className="flex items-center justify-end gap-3">
           <Button variant="outline" onClick={onClose} disabled={isBusy}>

@@ -10,6 +10,7 @@ import {
 import { useUserPermissions } from '@/hooks/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { pageBanner, pagePx, pageContent } from '@/lib/layout';
 import { ProfileBanner } from '@/components/molecules/employees/ProfileBanner';
 import { ProfileSummaryCard } from '@/components/molecules/employees/ProfileSummaryCard';
 import { ProfilePerformanceTab } from '@/components/molecules/employees/ProfilePerformanceTab';
@@ -79,7 +80,7 @@ export default function MyProfilePage() {
   if (isLoading) return <EmployeeDetailSkeleton />;
   if (!employee) {
     return (
-      <div className="p-8 text-center text-sm text-gray-400">
+      <div className="p-4 sm:p-6 lg:p-8 text-center text-sm text-gray-400">
         Profile not found. Contact your administrator.
       </div>
     );
@@ -88,7 +89,7 @@ export default function MyProfilePage() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Banner — fixed, never scrolls */}
-      <div className="px-8 pt-8 pb-6 shrink-0">
+      <div className={`${pageBanner} shrink-0`}>
         <ProfileBanner
           employee={employee}
           hasPendingResignation={hasPendingResignation}
@@ -98,7 +99,7 @@ export default function MyProfilePage() {
       </div>
 
       {/* Tab bar — sits below banner, never scrolls */}
-      <div className="px-8 shrink-0">
+      <div className={`${pagePx} shrink-0`}>
         <TabBar
           tabs={TABS}
           activeTab={activeTab}
@@ -108,16 +109,16 @@ export default function MyProfilePage() {
 
       {/* Scrollable content below tabs */}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="px-8 pt-4 pb-8">
+        <div className={pageContent}>
           {activeTab === 'personal' && (
-            <div className="grid grid-cols-3 gap-6 items-start">
-              <div className="col-span-2 flex flex-col gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+              <div className="lg:col-span-2 flex flex-col gap-4">
                 <PersonalInformationSection employee={employee} />
                 <EmergencyContactSection employee={employee} />
                 <AssetsSection assets={employee.assets ?? []} />
               </div>
 
-              <div className="col-span-1 flex flex-col gap-4">
+              <div className="lg:col-span-1 flex flex-col gap-4">
                 <ProfileSummaryCard employee={employee} managerName={managerName} roles={roles} />
                 <EmployeePermissionsCard
                   canManage={false}
@@ -130,13 +131,13 @@ export default function MyProfilePage() {
           )}
 
           {activeTab === 'performance' && (
-            <div className="grid grid-cols-3 gap-6 items-start">
-              <div className="col-span-2">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+              <div className="lg:col-span-2">
                 <SectionCard title="Completed Appraisals">
                   <ProfilePerformanceTab />
                 </SectionCard>
               </div>
-              <div className="col-span-1">
+              <div className="lg:col-span-1">
                 <ProfilePerformanceSummaryCard />
               </div>
             </div>
