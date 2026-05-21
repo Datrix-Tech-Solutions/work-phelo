@@ -124,6 +124,15 @@ preflight_runtime_env "$HR_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/hr-service/.env.p
 preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notification-service/.env.prod" "dist/config/runtime-env.js" "notification-service"
 log "✓ Runtime env validation passed"
 
+section "Database Migrations"
+# Run migrations before the health-gated rollout. New service images can require
+# tables/columns that do not exist yet, so waiting for app health first can
+# deadlock deployments when startup hooks query the database.
+docker_compose run --rm --no-deps auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
+docker_compose run --rm --no-deps hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
+docker_compose run --rm --no-deps notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
+log "✓ Migrations complete"
+
 section "Deploy"
 docker_compose up -d --remove-orphans --no-build
 log "✓ Compose rollout finished"
@@ -135,12 +144,6 @@ wait_for_container_health hr-service
 wait_for_container_health notification-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
-
-section "Database Migrations"
-docker_compose_exec auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
-docker_compose_exec hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
-docker_compose_exec notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
-log "✓ Migrations complete"
 
 section "Database Seed"
 if docker_compose_exec \
