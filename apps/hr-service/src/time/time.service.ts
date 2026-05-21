@@ -1345,15 +1345,24 @@ export class TimeService {
 
     // In-app notification to the employee
     if (employee.userId) {
-      await this.prisma.notification.create({
-        data: {
+      void this.publisher
+        .notificationInAppCreate({
           tenantId,
-          userId: employee.userId,
+          recipientUserId: employee.userId,
           type: 'SCHEDULE_PUBLISHED',
+          title: 'Schedule Published',
           message: `A new shift schedule has been published for you, effective ${formattedDate}. Check your schedule.`,
           link: scheduleLink,
-        },
-      });
+          entityType: 'shiftSchedule',
+          entityId: schedule.id,
+          sourceService: 'hr-service',
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Failed to publish schedule notification for employee ${employee.id}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
     }
 
     // Email notification via RabbitMQ (fire-and-forget)
@@ -1428,15 +1437,24 @@ export class TimeService {
     });
 
     if (schedule.employee.userId) {
-      await this.prisma.notification.create({
-        data: {
+      void this.publisher
+        .notificationInAppCreate({
           tenantId,
-          userId: schedule.employee.userId,
+          recipientUserId: schedule.employee.userId,
           type: 'SCHEDULE_UPDATED',
+          title: 'Schedule Updated',
           message: `Your shift on ${formattedDate} has been updated. Please check your schedule.`,
           link: this.buildScheduleLink(actor.tenantSlug),
-        },
-      });
+          entityType: 'shiftSchedule',
+          entityId: schedule.id,
+          sourceService: 'hr-service',
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Failed to publish schedule update notification for schedule ${schedule.id}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
     }
 
     return updated;
@@ -1470,15 +1488,24 @@ export class TimeService {
     });
 
     if (schedule.employee.userId) {
-      await this.prisma.notification.create({
-        data: {
+      void this.publisher
+        .notificationInAppCreate({
           tenantId,
-          userId: schedule.employee.userId,
+          recipientUserId: schedule.employee.userId,
           type: 'SCHEDULE_REMOVED',
+          title: 'Schedule Removed',
           message: `Your shift on ${formattedDate} has been removed from the schedule.`,
           link: this.buildScheduleLink(actor.tenantSlug),
-        },
-      });
+          entityType: 'shiftSchedule',
+          entityId: schedule.id,
+          sourceService: 'hr-service',
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Failed to publish schedule removal notification for schedule ${schedule.id}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
     }
 
     return { message: 'Schedule deleted successfully' };
