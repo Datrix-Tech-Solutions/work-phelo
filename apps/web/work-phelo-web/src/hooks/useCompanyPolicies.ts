@@ -147,7 +147,10 @@ export function useSignMyAgreement() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ versionId, typedName }: { versionId: string; typedName: string }) => {
-      const res = await api.post(`/hr/company-agreements/me/${versionId}/sign`, { typedName });
+      const res = await api.post(`/hr/company-agreements/me/${versionId}/sign`, {
+        typedName,
+        consentAccepted: true,
+      });
       return res.data;
     },
     onSuccess: () => {
