@@ -152,8 +152,11 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   const [cancelTarget, setCancelTarget] = useState<AppraisalCycle | null>(null);
   const [startTarget, setStartTarget] = useState<AppraisalCycle | null>(null);
 
+  const PAGE_SIZE = 10;
   const { data, isLoading } = useAppraisalCycles({ page, search: search || undefined });
-  const cycles: AppraisalCycle[] = data ?? [];
+  const allCycles: AppraisalCycle[] = data ?? [];
+  const totalPages = Math.max(1, Math.ceil(allCycles.length / PAGE_SIZE));
+  const cycles = allCycles.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const { mutate: startCycle, isPending: isStarting } = useStartAppraisalCycle();
   const { mutate: seedKpis, isPending: isSeeding } = useSeedCycleFromTemplate();
@@ -230,7 +233,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   ];
 
   return (
-    <>
+    <div className="flex flex-col flex-1 min-h-0">
       <DataTable
         columns={columns}
         data={cycles}
@@ -246,7 +249,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
           },
         }}
         currentPage={page}
-        totalPages={1}
+        totalPages={totalPages}
         onPageChange={setPage}
       />
 
@@ -347,6 +350,6 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
           </div>
         }
       />
-    </>
+    </div>
   );
 }

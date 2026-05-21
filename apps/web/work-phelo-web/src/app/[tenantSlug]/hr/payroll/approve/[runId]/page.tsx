@@ -6,79 +6,31 @@ import { useRouter } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
 import { usePayrollRun, useApprovePayroll, useReturnPayrollToDraft } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { PayrollItem } from '@/types/hr';
+import { payrollMonthLabel } from '@/lib/payrollUtils';
+import {
+  formatPayrollMoney,
+  getPayrollLabels,
+  normalizePayrollCountry,
+} from '@/lib/payrollDisplay';
 
-const MONTH_NAMES = [
-  '',
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-function fmt(value: string | number) {
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function totalAllowances(row: PayrollItem): number {
+  if (row.allowanceItems?.length) {
+    return row.allowanceItems.reduce((s, a) => s + parseFloat(a.amount), 0);
+  }
+  return parseFloat(row.totalAllowances) + parseFloat(row.transportAmount);
 }
 
-const columns: Column<PayrollItem>[] = [
-  {
-    key: 'employee',
-    label: 'Employee',
-    width: '2fr',
-    render: (row) => (
-      <div>
-        <p className="font-medium text-gray-900">
-          {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
-        </p>
-        {row.employee?.jobTitle && <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>}
-      </div>
-    ),
-  },
-  {
-    key: 'basicSalary',
-    label: 'Basic Salary',
-    render: (row) => fmt(row.basicSalary),
-  },
-  {
-    key: 'totalAllowances',
-    label: 'Allowances',
-    render: (row) => fmt(row.totalAllowances),
-  },
-  {
-    key: 'grossSalary',
-    label: 'Gross',
-    render: (row) => fmt(row.grossSalary),
-  },
-  {
-    key: 'employeeSSNIT',
-    label: 'SSNIT',
-    render: (row) => fmt(row.employeeSSNIT),
-  },
-  {
-    key: 'payeTax',
-    label: 'PAYE',
-    render: (row) => fmt(row.payeTax),
-  },
-  {
-    key: 'netSalary',
-    label: 'Net Salary',
-    render: (row) => <span className="font-semibold text-emerald-600">{fmt(row.netSalary)}</span>,
-  },
-];
+function totalDeductions(row: PayrollItem): number {
+  if (row.deductionItems?.length) {
+    return row.deductionItems.reduce((s, d) => s + parseFloat(d.amount), 0);
+  }
+  return parseFloat(row.otherDeductions);
+}
 
 export default function ApprovePayrollDetailPage({
   params,
@@ -95,14 +47,69 @@ export default function ApprovePayrollDetailPage({
 
   const [showApproveModal, setShowApproveModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
+  const [approvalNote, setApprovalNote] = useState('');
+  const [returnNote, setReturnNote] = useState('');
 
   const isPending = isApproving || isRejecting;
-  const periodLabel = run ? `${MONTH_NAMES[run.month]} ${run.year}` : '—';
+  const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
   const backHref = `/${tenantSlug}/hr/payroll?tab=approve`;
+  const payrollLabels = getPayrollLabels(run?.payrollCountry);
+  const money = (value: string | number | null | undefined) =>
+    formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
+  const showGhanaTiers = normalizePayrollCountry(run?.payrollCountry) === 'GH';
+
+  const columns: Column<PayrollItem>[] = [
+    {
+      key: 'employee',
+      label: 'Employee',
+      width: '2fr',
+      render: (row) => (
+        <div>
+          <p className="font-medium text-gray-900">
+            {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
+          </p>
+          {row.employee?.jobTitle && (
+            <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>
+          )}
+        </div>
+      ),
+    },
+    { key: 'basicSalary', label: 'Basic Salary', render: (row) => money(row.basicSalary) },
+    { key: 'totalAllowances', label: 'Allowances', render: (row) => money(totalAllowances(row)) },
+    { key: 'otherDeductions', label: 'Deductions', render: (row) => money(totalDeductions(row)) },
+    { key: 'grossSalary', label: 'Gross', render: (row) => money(row.grossSalary) },
+    {
+      key: 'employeeSSNIT',
+      label: payrollLabels.employeeLabel,
+      render: (row) => money(row.employeeSSNIT),
+    },
+    ...(showGhanaTiers
+      ? [
+          {
+            key: 'tier1Contribution',
+            label: 'Tier 1',
+            render: (row: PayrollItem) => money(row.tier1Contribution),
+          },
+          {
+            key: 'tier2Contribution',
+            label: 'Tier 2',
+            render: (row: PayrollItem) => money(row.tier2Contribution),
+          },
+        ]
+      : []),
+    { key: 'payeTax', label: 'PAYE', render: (row) => money(row.payeTax) },
+    {
+      key: 'netSalary',
+      label: 'Net Salary',
+      render: (row) => (
+        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
+      ),
+    },
+  ];
 
   const handleApprove = async () => {
     try {
-      await approvePayroll(runId);
+      await approvePayroll({ id: runId, note: approvalNote.trim() });
       toast.success(`${periodLabel} payroll approved`);
       router.push(backHref);
     } catch (err) {
@@ -112,8 +119,8 @@ export default function ApprovePayrollDetailPage({
 
   const handleReject = async () => {
     try {
-      await returnToDraft(runId);
-      toast.success(`${periodLabel} payroll returned to draft`);
+      await returnToDraft({ id: runId, note: returnNote.trim() });
+      toast.success(`${periodLabel} payroll rejected`);
       router.push(backHref);
     } catch (err) {
       toast.error(extractError(err, 'Failed to reject payroll'));
@@ -135,26 +142,34 @@ export default function ApprovePayrollDetailPage({
           <Button variant="outline" onClick={() => setShowRejectModal(true)} disabled={isPending}>
             Reject
           </Button>
-          <Button onClick={() => setShowApproveModal(true)} disabled={isPending}>
+          <Button
+            onClick={() => setShowApproveModal(true)}
+            disabled={isPending || !approvalNote.trim()}
+          >
             Approve Payroll
           </Button>
         </div>
       </div>
 
-      <SectionCard
-        title={`${periodLabel} Payroll`}
-        className="flex-1 min-h-0 flex flex-col"
-        contentClassName="flex-1 min-h-0 flex flex-col"
-      >
-        <DataTable
-          columns={columns}
-          data={run?.items ?? []}
-          isLoading={isLoading}
-          currentPage={1}
-          totalPages={1}
-          onPageChange={() => {}}
-        />
-      </SectionCard>
+      <DataTable
+        columns={columns}
+        data={run?.items ?? []}
+        isLoading={isLoading}
+        currentPage={1}
+        totalPages={1}
+        onPageChange={() => {}}
+      />
+
+      <label className="text-sm font-bold text-gray-900">
+        Approval Note <span className="text-red-500">*</span>
+      </label>
+      <textarea
+        rows={4}
+        placeholder="Explain why this payroll is being approved…"
+        value={approvalNote}
+        onChange={(e) => setApprovalNote(e.target.value)}
+        className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
+      />
 
       {/* Approve confirmation */}
       <Modal
@@ -171,7 +186,12 @@ export default function ApprovePayrollDetailPage({
             >
               Cancel
             </Button>
-            <Button onClick={handleApprove} isLoading={isApproving} loadingText="Approving…">
+            <Button
+              onClick={handleApprove}
+              isLoading={isApproving}
+              loadingText="Approving…"
+              disabled={!approvalNote.trim()}
+            >
               Approve Payroll
             </Button>
           </>
@@ -182,6 +202,11 @@ export default function ApprovePayrollDetailPage({
           <span className="font-medium text-gray-900">{periodLabel}</span>. Once approved, payslips
           will be finalised and the payroll will be marked as ready for payment.
         </p>
+        {approvalNote.trim() && (
+          <p className="text-sm text-gray-500 leading-relaxed mt-3">
+            Approval note: <span className="text-gray-700">{approvalNote.trim()}</span>
+          </p>
+        )}
       </Modal>
 
       {/* Reject confirmation */}
@@ -204,6 +229,7 @@ export default function ApprovePayrollDetailPage({
               onClick={handleReject}
               isLoading={isRejecting}
               loadingText="Rejecting…"
+              disabled={!returnNote.trim()}
             >
               Reject Payroll
             </Button>
@@ -212,9 +238,21 @@ export default function ApprovePayrollDetailPage({
       >
         <p className="text-sm text-gray-600 leading-relaxed mt-2">
           You are about to reject the payroll for{' '}
-          <span className="font-medium text-gray-900">{periodLabel}</span>. It will be returned to
-          draft and the payroll manager will need to resubmit.
+          <span className="font-medium text-gray-900">{periodLabel}</span>. The payroll manager will
+          need to revise and resubmit.
         </p>
+        <div className="flex flex-col gap-1.5 mt-4">
+          <label className="text-sm font-bold text-gray-900">
+            Rejection Note <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            rows={4}
+            placeholder="Explain why this payroll is being rejected…"
+            value={returnNote}
+            onChange={(e) => setReturnNote(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
+          />
+        </div>
       </Modal>
     </div>
   );

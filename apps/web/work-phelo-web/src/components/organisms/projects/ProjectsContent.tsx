@@ -1,51 +1,99 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search, ClipboardList, CheckCircle, Layers } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, ClipboardList, CheckCircle, Layers, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
-import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { ProjectCard } from '@/components/molecules/ProjectCard';
 import { CreateProjectPanel } from '@/components/organisms/projects/CreateProjectPanel';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
-import { Project, CreateProjectDto } from '@/types/hr';
-import { usePermission } from '@/hooks/usePermission';
+import {
+  useProjects,
+  useMyProjects,
+  useCreateProject,
+  useArchiveProject,
+  usePermission,
+} from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
-
-// TODO: replace with useProjects() hook when endpoint is ready
-const DUMMY_PROJECTS: Project[] = [
-  {
-    id: '1',
-    name: 'Website Redesign',
-    description: 'Full redesign of the company website with new brand identity.',
-    status: 'ACTIVE',
-    startDate: '2026-01-15',
-    endDate: '2026-06-30',
-    budget: 45000,
-    managerName: 'Kwame Mensah',
-    assignedCount: 5,
-    createdAt: '2026-01-10T00:00:00Z',
-  },
-];
+import { CreateProjectDto } from '@/types/hr';
+import { StatCard } from '@/components/molecules/shared/StatCard';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 interface Props {
   tenantSlug: string;
 }
 
+function ConfirmDeleteModal({
+  projectName,
+  isDeleting,
+  onConfirm,
+  onCancel,
+}: {
+  projectName: string;
+  isDeleting: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+            <AlertTriangle className="w-5 h-5 text-red-600" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">Delete Project</p>
+            <p className="text-xs text-gray-500 mt-0.5">This action cannot be undone.</p>
+          </div>
+        </div>
+        <p className="text-sm text-gray-600">
+          Are you sure you want to delete{' '}
+          <span className="font-semibold text-gray-900">{projectName}</span>?
+        </p>
+        <div className="flex justify-end gap-2 mt-1">
+          <Button variant="outline" onClick={onCancel} disabled={isDeleting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={onConfirm}
+            isLoading={isDeleting}
+            loadingText="Deleting…"
+            className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+          >
+            Delete
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ProjectsContent({ tenantSlug }: Props) {
-  void tenantSlug;
-  const canCreateProject = usePermission(Permission.CREATE_PROJECT);
-  const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
-  const canAssignProject = usePermission(Permission.ASSIGN_PROJECT);
+  const router = useRouter();
+  const toast = useToastStore((s) => s.addToast);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+
+  const canViewAll = usePermission(Permission.READ_PROJECTS);
+  const canManageProjects = usePermission(Permission.CREATE_PROJECT);
+
+  const { data: allProjectsData = [], isLoading: allLoading } = useProjects();
+  const { data: myProjectsData = [], isLoading: myLoading } = useMyProjects();
+  const projects = canViewAll ? allProjectsData : myProjectsData;
+  const isLoading = canViewAll ? allLoading : myLoading;
 
   const { data: employees = [] } = useEmployeeOptions();
+  const createProject = useCreateProject();
+  const archiveProject = useArchiveProject();
 
   const filtered = useMemo(() => {
-    return DUMMY_PROJECTS.filter((p) => {
+    return projects.filter((p) => {
       if (statusFilter && p.status !== statusFilter) return false;
       if (search) {
         const q = search.toLowerCase();
@@ -54,24 +102,38 @@ export function ProjectsContent({ tenantSlug }: Props) {
       }
       return true;
     });
-  }, [search, statusFilter]);
+  }, [projects, search, statusFilter]);
 
-  const metrics = useMemo(() => {
-    const all = DUMMY_PROJECTS;
-    return {
-      total: all.length,
-      active: all.filter((p) => p.status === 'ACTIVE').length,
-      completed: all.filter((p) => p.status === 'COMPLETED').length,
-      planning: all.filter((p) => p.status === 'PLANNING').length,
-    };
-  }, []);
+  const metrics = useMemo(
+    () => ({
+      total: projects.length,
+      active: projects.filter((p) => p.status === 'ACTIVE').length,
+      completed: projects.filter((p) => p.status === 'COMPLETED').length,
+      planning: projects.filter((p) => p.status === 'PLANNING').length,
+    }),
+    [projects],
+  );
 
   const hasFilters = !!(search || statusFilter);
 
-  const handleCreate = (data: CreateProjectDto) => {
-    // TODO: POST /hr/projects
-    console.log('Create project:', data);
-    setPanelOpen(false);
+  const handleCreate = async (data: CreateProjectDto) => {
+    try {
+      await createProject.mutateAsync(data);
+      setPanelOpen(false);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    try {
+      await archiveProject.mutateAsync(deleteTarget.id);
+      toast({ message: `"${deleteTarget.name}" has been deleted.`, type: 'success' });
+      setDeleteTarget(null);
+    } catch (err) {
+      toast({ message: extractError(err), type: 'error' });
+    }
   };
 
   return (
@@ -80,33 +142,35 @@ export function ProjectsContent({ tenantSlug }: Props) {
       <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Projects & Tasks</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            {filtered.length} project{filtered.length !== 1 ? 's' : ''}
-          </p>
         </div>
-        {canCreateProject && <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>}
+        {canManageProjects && <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>}
       </div>
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 shrink-0">
-        <MetricCard title="Total Projects" value={metrics.total} icon={Layers} variant="default" />
-        <MetricCard
+        <StatCard
+          title="Total Projects"
+          value={metrics.total}
+          icon={<Layers className="w-4.5 h-4.5 text-green-600" />}
+          iconBg="bg-green-50"
+        />
+        <StatCard
           title="Active Projects"
           value={metrics.active}
-          icon={ClipboardList}
-          variant="default"
+          icon={<ClipboardList className="w-4.5 h-4.5 text-blue-600" />}
+          iconBg="bg-blue-50"
         />
-        <MetricCard
+        <StatCard
           title="Completed"
           value={metrics.completed}
-          icon={CheckCircle}
-          variant="default"
+          icon={<CheckCircle className="w-4.5 h-4.5 text-purple-600" />}
+          iconBg="bg-purple-50"
         />
-        <MetricCard
+        <StatCard
           title="In Planning"
           value={metrics.planning}
-          icon={ClipboardList}
-          variant="default"
+          icon={<ClipboardList className="w-4.5 h-4.5 text-yellow-600" />}
+          iconBg="bg-yellow-50"
         />
       </div>
 
@@ -147,8 +211,14 @@ export function ProjectsContent({ tenantSlug }: Props) {
         )}
       </div>
 
-      {/* Grid or empty state */}
-      {filtered.length === 0 ? (
+      {/* Grid or empty/loading state */}
+      {isLoading ? (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div key={i} className="h-52 bg-gray-100 rounded-card animate-pulse" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">
           <p className="text-sm font-medium text-gray-900">No projects found</p>
           <p className="text-xs text-gray-400">
@@ -161,22 +231,33 @@ export function ProjectsContent({ tenantSlug }: Props) {
             <ProjectCard
               key={project.id}
               project={project}
-              onAddTasks={canUpdateProject ? () => console.log('Add tasks', project.id) : undefined}
-              onAssignEmployees={
-                canAssignProject ? () => console.log('Assign employees', project.id) : undefined
+              onOpen={() => router.push(`/${tenantSlug}/hr/projects/${project.id}`)}
+              onDelete={
+                canManageProjects
+                  ? () => setDeleteTarget({ id: project.id, name: project.name })
+                  : undefined
               }
-              onDelete={canUpdateProject ? () => console.log('Delete', project.id) : undefined}
             />
           ))}
         </div>
       )}
 
-      {canCreateProject && (
+      {canManageProjects && (
         <CreateProjectPanel
           isOpen={panelOpen}
           onClose={() => setPanelOpen(false)}
           employees={employees}
           onSubmit={handleCreate}
+          isSubmitting={createProject.isPending}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDeleteModal
+          projectName={deleteTarget.name}
+          isDeleting={archiveProject.isPending}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </>

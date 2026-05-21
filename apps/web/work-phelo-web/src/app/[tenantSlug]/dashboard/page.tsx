@@ -13,6 +13,7 @@ import { getGreeting } from '@/lib/formatters';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import { AgreementGate } from '@/components/organisms/companyPolicies/AgreementGate';
 
 /* ── Module definitions ── */
 interface ModuleDef {
@@ -66,7 +67,8 @@ export default function TenantDashboardPage({
 
   const firstName = user?.firstName ?? 'User';
   const tenantName = user?.tenantName ?? '';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const isTenantAdmin = user?.role === 'TENANT_ADMIN';
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   /* ── Fetch users for employee count ── */
   const { data: users = [] } = useCurrentTenantUsers();
@@ -85,6 +87,7 @@ export default function TenantDashboardPage({
   }, [users]);
 
   const canViewEmployeeStats = usePermission(Permission.READ_EMPLOYEES);
+  const isEmployee = user?.role === 'EMPLOYEE';
 
   /* ── Enabled modules from tenant config ── */
   const moduleConfig = user?.moduleConfig ?? {};
@@ -97,6 +100,7 @@ export default function TenantDashboardPage({
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+      {isEmployee && <AgreementGate tenantSlug={tenantSlug} />}
       <TopNav
         userInitials={initials}
         notificationCount={0}
@@ -108,9 +112,11 @@ export default function TenantDashboardPage({
         {/* Welcome banner */}
         <div className="bg-brand mx-6 mt-6 rounded-card px-8 py-6 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-orange-400 mb-1">{tenantName}</p>
-            <h1 className="text-2xl font-bold text-white">
-              {getGreeting()}, {firstName}
+            {!isTenantAdmin && (
+              <p className="text-sm font-medium text-orange-400 mb-1">{tenantName}</p>
+            )}
+            <h1 className="text-xl font-bold text-white">
+              {getGreeting()}, {isTenantAdmin ? tenantName : firstName}
             </h1>
           </div>
           <div className="flex items-center gap-0">

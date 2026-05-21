@@ -5,6 +5,8 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { Permission } from '@work-phelo/config';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 
@@ -30,7 +32,7 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
     { resource: 'employees', actions: ['DELETE'] },
   ],
   [Permission.OFFBOARD_EMPLOYEE]: [
-    { resource: 'employees', actions: ['DELETE'] },
+    { resource: 'offboarding', actions: ['EDIT'] },
   ],
   [Permission.SUBMIT_RESIGNATION]: [
     { resource: 'resignations', actions: ['CREATE'] },
@@ -70,11 +72,13 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   ],
 
   // ── Leave ─────────────────────────────────────────────────────────────────
-  [Permission.REQUEST_LEAVE]: [{ resource: 'leave', actions: ['CREATE'] }],
+  [Permission.REQUEST_LEAVE]: [{ resource: 'leave-self', actions: ['CREATE'] }],
   [Permission.APPROVE_LEAVE]: [{ resource: 'leave', actions: ['APPROVE'] }],
   [Permission.READ_ALL_LEAVES]: [{ resource: 'leave', actions: ['VIEW'] }],
-  [Permission.READ_OWN_LEAVE]: [{ resource: 'leave', actions: ['VIEW'] }],
-  [Permission.MANAGE_LEAVE_TYPES]: [{ resource: 'leave', actions: ['EDIT'] }],
+  [Permission.READ_OWN_LEAVE]: [{ resource: 'leave-self', actions: ['VIEW'] }],
+  [Permission.MANAGE_LEAVE_TYPES]: [
+    { resource: 'leave-settings', actions: ['EDIT'] },
+  ],
 
   // ── Time Management ───────────────────────────────────────────────────────
   [Permission.CLOCK_IN_OUT]: [{ resource: 'attendance', actions: ['CREATE'] }],
@@ -104,6 +108,29 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   [Permission.ASSIGN_ASSET]: [
     { resource: 'assets', actions: ['VIEW', 'ASSIGN'] },
   ],
+
+  // ── Projects & Tasks ────────────────────────────────────────────────────
+  [Permission.CREATE_PROJECT]: [{ resource: 'projects', actions: ['CREATE'] }],
+  [Permission.READ_PROJECTS]: [{ resource: 'projects', actions: ['VIEW'] }],
+  [Permission.UPDATE_PROJECT]: [{ resource: 'projects', actions: ['EDIT'] }],
+  [Permission.DELETE_PROJECT]: [{ resource: 'projects', actions: ['DELETE'] }],
+  [Permission.ASSIGN_PROJECT]: [{ resource: 'projects', actions: ['ASSIGN'] }],
+  [Permission.CREATE_PROJECT_TASK]: [
+    { resource: 'project-tasks', actions: ['CREATE'] },
+  ],
+  [Permission.READ_PROJECT_TASKS]: [
+    { resource: 'project-tasks', actions: ['VIEW'] },
+  ],
+  [Permission.UPDATE_PROJECT_TASK]: [
+    { resource: 'project-tasks', actions: ['EDIT'] },
+  ],
+  [Permission.DELETE_PROJECT_TASK]: [
+    { resource: 'project-tasks', actions: ['DELETE'] },
+  ],
+  [Permission.ASSIGN_PROJECT_TASK]: [
+    { resource: 'project-tasks', actions: ['ASSIGN'] },
+  ],
+
   [Permission.READ_ANNOUNCEMENTS]: [
     { resource: 'announcements', actions: ['VIEW'] },
   ],
@@ -115,29 +142,42 @@ const PERMISSION_TO_RULES: Record<string, PermissionRule[]> = {
   ],
 
   // ── Payroll ───────────────────────────────────────────────────────────────
-  [Permission.READ_PAYROLL]: [{ resource: 'payroll', actions: ['VIEW'] }],
+  [Permission.READ_PAYROLL]: [
+    { resource: 'payroll', actions: ['VIEW', 'RUN', 'APPROVE', 'EDIT'] },
+  ],
   [Permission.RUN_PAYROLL]: [{ resource: 'payroll', actions: ['RUN'] }],
   [Permission.APPROVE_PAYROLL]: [{ resource: 'payroll', actions: ['APPROVE'] }],
-  [Permission.READ_OWN_PAYSLIP]: [{ resource: 'payroll', actions: ['VIEW'] }],
+  [Permission.READ_OWN_PAYSLIP]: [
+    { resource: 'payslip-self', actions: ['VIEW'] },
+  ],
   [Permission.MANAGE_PAYROLL_SETTINGS]: [
     { resource: 'payroll', actions: ['EDIT'] },
+  ],
+  // Grants access to anyone who can either run or manage payroll (RUN or EDIT)
+  [Permission.WRITE_EMPLOYEE_PAYROLL]: [
+    { resource: 'payroll', actions: ['RUN', 'EDIT'] },
   ],
 
   // ── Appraisals ────────────────────────────────────────────────────────────
   [Permission.CONFIGURE_APPRAISAL]: [
-    { resource: 'appraisals', actions: ['CREATE'] },
+    { resource: 'appraisal-settings', actions: ['EDIT'] },
   ],
   [Permission.CREATE_APPRAISAL]: [
     { resource: 'appraisals', actions: ['CREATE'] },
   ],
   [Permission.READ_APPRAISALS]: [{ resource: 'appraisals', actions: ['VIEW'] }],
   [Permission.SUBMIT_SELF_ASSESSMENT]: [
-    { resource: 'appraisals', actions: ['EDIT'] },
+    { resource: 'self-appraisals', actions: ['EDIT'] },
   ],
   [Permission.SUBMIT_MANAGER_REVIEW]: [
-    { resource: 'appraisals', actions: ['EDIT'] },
+    { resource: 'appraisal-reviews', actions: ['EDIT'] },
   ],
-  [Permission.READ_OWN_REVIEW]: [{ resource: 'appraisals', actions: ['VIEW'] }],
+  [Permission.FINALIZE_APPRAISAL]: [
+    { resource: 'appraisals', actions: ['APPROVE'] },
+  ],
+  [Permission.READ_OWN_REVIEW]: [
+    { resource: 'self-appraisals', actions: ['VIEW'] },
+  ],
 };
 
 @Injectable()
@@ -152,7 +192,9 @@ export class PermissionsGuard implements CanActivate {
 
     if (!requiredPermissions || requiredPermissions.length === 0) return true;
 
-    const request = context.switchToHttp().getRequest();
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { user?: RequestUser }>();
     const user = request.user;
 
     if (!user) throw new ForbiddenException(DENY_MESSAGE);

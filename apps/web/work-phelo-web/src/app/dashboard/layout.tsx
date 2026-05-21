@@ -9,7 +9,7 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'Admin';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   const [activeTab, setActiveTab] = useState('portal');
 
@@ -21,7 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         onTabChange={setActiveTab}
         notificationCount={0}
       />
-      {children}
+      <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
     </div>
   );
 }

@@ -46,7 +46,10 @@ export function CreatePublicHolidayPanel({
 
   useEffect(() => {
     if (editHoliday) {
-      reset({ name: editHoliday.name, date: editHoliday.date });
+      reset({
+        name: editHoliday.name,
+        date: editHoliday.date,
+      });
     } else {
       reset({ name: '', date: '' });
     }
@@ -58,9 +61,10 @@ export function CreatePublicHolidayPanel({
   }, [reset, onClose]);
 
   const onSubmit = (values: FormValues) => {
+    const payload = { name: values.name, date: values.date };
     if (isEditing) {
       update(
-        { id: editHoliday!.id, name: values.name, date: values.date },
+        { id: editHoliday!.id, ...payload },
         {
           onSuccess: () => {
             toast.success('Holiday updated');
@@ -74,20 +78,17 @@ export function CreatePublicHolidayPanel({
         },
       );
     } else {
-      create(
-        { name: values.name, date: values.date },
-        {
-          onSuccess: () => {
-            toast.success('Holiday added');
-            handleClose();
-          },
-          onError: (err: unknown) =>
-            toast.error(
-              (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
-                'Something went wrong',
-            ),
+      create(payload, {
+        onSuccess: () => {
+          toast.success('Holiday added');
+          handleClose();
         },
-      );
+        onError: (err: unknown) =>
+          toast.error(
+            (err as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+              'Something went wrong',
+          ),
+      });
     }
   };
 
@@ -96,7 +97,7 @@ export function CreatePublicHolidayPanel({
       isOpen={isOpen}
       onClose={handleClose}
       title={isEditing ? 'Edit Public Holiday' : 'Add Public Holiday'}
-      description="Public holidays are automatically excluded from leave day calculations."
+      description="Public holidays are year-specific and automatically excluded from leave day calculations."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={handleClose}>

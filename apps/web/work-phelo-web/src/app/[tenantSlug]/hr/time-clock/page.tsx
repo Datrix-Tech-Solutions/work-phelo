@@ -8,7 +8,7 @@ import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
-import { useDepartments } from '@/hooks/useDepartments';
+import { useDepartmentOptions } from '@/hooks/useDepartments';
 
 import { CorrectionRequestPanel } from '@/components/organisms/time-clock/CorrectionRequestPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -44,7 +44,8 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   const isAdmin = user?.role === 'TENANT_ADMIN';
   const canManageTime = usePermission(Permission.APPROVE_TIME_CORRECTION);
   const canViewAttendance = usePermission(Permission.READ_ATTENDANCE);
-  const canManageRecords = canManageTime || canViewAttendance || isAdmin;
+  const canManageRecords = canViewAttendance || isAdmin;
+  const canApproveCorrections = canManageTime || isAdmin;
 
   const [activeTab, setActiveTab] = useState<'my' | 'live' | 'records' | 'corrections'>(() =>
     useAuthStore.getState().user?.role === 'TENANT_ADMIN' ? 'live' : 'my',
@@ -81,7 +82,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
     search: recordsSearch,
   });
 
-  const { data: departmentsRaw } = useDepartments();
+  const { data: departmentsRaw } = useDepartmentOptions();
   const departments = Array.isArray(departmentsRaw) ? departmentsRaw : [];
 
   // Corrections
@@ -92,7 +93,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
     useCorrectionRequests(correctionStatusFilter);
 
   const { data: pendingCorrections = [] } = useCorrectionRequests('PENDING');
-  const pendingCount = canManageRecords ? pendingCorrections.length : 0;
+  const pendingCount = canApproveCorrections ? pendingCorrections.length : 0;
 
   const { mutate: reviewCorrection, isPending: isReviewing } = useReviewCorrectionRequest();
 
@@ -113,13 +114,14 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   };
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-8 flex flex-col gap-6 flex-1 min-h-0">
       <div className="shrink-0">
         <h1 className="text-xl font-bold text-gray-900">Time Management</h1>
       </div>
       <TimeClockTabs
         activeTab={activeTab}
         canManageRecords={canManageRecords}
+        canApproveCorrections={canApproveCorrections}
         isEmployee={!isAdmin}
         pendingCount={pendingCount}
         onTabChange={setActiveTab}
@@ -173,7 +175,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
         />
       )}
 
-      {activeTab === 'corrections' && canManageRecords && (
+      {activeTab === 'corrections' && canApproveCorrections && (
         <CorrectionsSection
           corrections={corrections}
           correctionsLoading={correctionsLoading}

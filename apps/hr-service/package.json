@@ -20,7 +20,10 @@
     "test:cov": "jest -c test/jest.unit.config.js --coverage",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:seed": "ts-node prisma/seed.ts"
+    "db:seed": "ts-node prisma/seed.ts",
+    "backfill:public-holidays": "node dist/scripts/backfill-public-holidays.js",
+    "backfill:public-holidays:ts": "ts-node src/scripts/backfill-public-holidays.ts",
+    "backfill:encrypt-employees": "ts-node -r tsconfig-paths/register src/scripts/encrypt-employee-fields.ts"
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",
@@ -76,7 +79,7 @@
     "@types/jest": "^29.5.12",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/multer": "^1.4.11",
-    "@types/node": "^20.19.40",
+    "@types/node": "^20.19.41",
     "@types/passport-jwt": "^4.0.1",
     "@types/supertest": "^6.0.2",
     "eslint": "^8.57.0",
@@ -96,7 +99,7 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.ts$": "ts-jest"
     },
     "collectCoverageFrom": [
       "**/*.(t|j)s"

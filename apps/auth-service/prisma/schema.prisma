@@ -7,7 +7,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["auth"]
+  schemas  = ["w_auth"]
 }
 
 // ── Enums ──────────────────────────────────────────────────────────────────
@@ -17,7 +17,7 @@ enum UserRole {
   TENANT_ADMIN
   EMPLOYEE
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 enum TenantStatus {
@@ -26,7 +26,7 @@ enum TenantStatus {
   SUSPENDED
   CANCELLED
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 enum UserStatus {
@@ -35,7 +35,7 @@ enum UserStatus {
   SUSPENDED
   PENDING_VERIFICATION
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 enum OtpType {
@@ -43,21 +43,21 @@ enum OtpType {
   PASSWORD_RESET
   MFA_SMS
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 enum SocialProvider {
   GOOGLE
   MICROSOFT
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 enum MfaMethod {
   TOTP
   SMS
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 enum PermissionAction {
@@ -70,7 +70,7 @@ enum PermissionAction {
   EXPORT
   ASSIGN
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── Tenant ─────────────────────────────────────────────────────────────────
@@ -83,6 +83,7 @@ model Tenant {
   phone          String?
   address        String?
   country        String       @default("GH")
+  currency       String       @default("GHS")
   status         TenantStatus @default(PENDING)
   moduleConfig   Json         @default("{\"hr\": false, \"accounting\": false, \"marketing\": false}")
   featureConfig  Json         @default("{\"hr\": {\"leave\": false, \"time\": false, \"payroll\": false, \"appraisals\": false, \"projects\": false, \"assets\": false}, \"marketing\": {\"leads\": false, \"pipeline\": false, \"contacts\": false}}")
@@ -99,7 +100,7 @@ model Tenant {
   permissionSets  PermissionSet[]
   userPermissions UserPermission[]
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── Resource ───────────────────────────────────────────────────────────────
@@ -117,7 +118,7 @@ model Resource {
   userPermissions       UserPermission[]
   permissionSetResources PermissionSetResource[]
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── UserPermission ─────────────────────────────────────────────────────────
@@ -143,7 +144,7 @@ model UserPermission {
   granter  User     @relation("GrantedPermissions", fields: [grantedBy], references: [id])
 
   @@unique([userId, resourceId, action])
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── PermissionSet ──────────────────────────────────────────────────────────
@@ -165,7 +166,7 @@ model PermissionSet {
   users     UserPermissionSet[]
 
   @@unique([tenantId, name])
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── PermissionSetResource ──────────────────────────────────────────────────
@@ -181,7 +182,7 @@ model PermissionSetResource {
   resource      Resource      @relation(fields: [resourceId], references: [id])
 
   @@unique([permissionSetId, resourceId, action])
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── UserPermissionSet ──────────────────────────────────────────────────────
@@ -198,7 +199,7 @@ model UserPermissionSet {
   permissionSet PermissionSet @relation(fields: [permissionSetId], references: [id], onDelete: Cascade)
 
   @@unique([userId, permissionSetId])
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── User ───────────────────────────────────────────────────────────────────
@@ -237,7 +238,7 @@ model User {
   permissionSets      UserPermissionSet[]
 
   @@unique([tenantId, email])
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── RefreshToken ───────────────────────────────────────────────────────────
@@ -256,7 +257,7 @@ model RefreshToken {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── OtpCode ────────────────────────────────────────────────────────────────
@@ -274,7 +275,7 @@ model OtpCode {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── SocialAccount ──────────────────────────────────────────────────────────
@@ -290,7 +291,7 @@ model SocialAccount {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerId])
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 // ── AuditLog ───────────────────────────────────────────────────────────────
@@ -308,14 +309,14 @@ enum AuditAction {
   ASSIGN
   RUN
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 enum AuditStatus {
   SUCCESS
   FAILURE
 
-  @@schema("auth")
+  @@schema("w_auth")
 }
 
 model AuditLog {
@@ -337,5 +338,5 @@ model AuditLog {
   @@index([tenantId, createdAt])
   @@index([tenantId, resource])
   @@index([tenantId, userId])
-  @@schema("auth")
+  @@schema("w_auth")
 }

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_PIPE } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
@@ -23,12 +23,19 @@ import { FeatureGuard } from './auth/guards/feature.guard';
 import { RabbitMQSetupService } from './messaging/rabbitmq-setup.service';
 import { HealthModule } from './health/health.module';
 import { SettingsModule } from './settings/settings.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    BullModule.forRoot({
-      connection: { url: process.env.REDIS_URL as string },
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          url: configService.getOrThrow<string>('REDIS_URL'),
+        },
+      }),
     }),
     PrismaModule,
     DepartmentsModule,
@@ -47,6 +54,7 @@ import { SettingsModule } from './settings/settings.module';
     SchedulingModule,
     HealthModule,
     SettingsModule,
+    ProjectsModule,
   ],
   providers: [
     RabbitMQSetupService,

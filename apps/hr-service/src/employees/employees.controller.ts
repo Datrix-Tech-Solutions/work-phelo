@@ -33,13 +33,23 @@ import {
   SubmitResignationDto,
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
+import {
+  CreateEmployeeDeductionDto,
+  UpdateEmployeeDeductionDto,
+} from './dto/employee-deduction.dto';
+import {
+  CreateEmployeeAllowanceDto,
+  UpdateEmployeeAllowanceDto,
+} from './dto/employee-allowance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
+import { Prisma } from '../../prisma/generated/client';
 import {
   assertHrAccess,
   hasPermissionRule,
@@ -68,14 +78,10 @@ export class EmployeesController {
         hasPermissionRule(user, 'assets:CREATE') ||
         hasPermissionRule(user, 'assets:EDIT') ||
         hasPermissionRule(user, 'assets:ASSIGN') ||
-        hasPermissionRule(user, 'projects:VIEW') ||
-        hasPermissionRule(user, 'projects:CREATE') ||
-        hasPermissionRule(user, 'projects:EDIT') ||
-        hasPermissionRule(user, 'projects:ASSIGN') ||
         hasPermissionRule(user, 'appraisals:VIEW') ||
         hasPermissionRule(user, 'appraisals:CREATE') ||
-        hasPermissionRule(user, 'appraisals:EDIT') ||
-        hasPermissionRule(user, 'appraisals:APPROVE') ||
+        hasPermissionRule(user, 'appraisal-settings:EDIT') ||
+        hasPermissionRule(user, 'appraisal-reviews:EDIT') ||
         hasPermissionRule(user, 'schedules:VIEW') ||
         hasPermissionRule(user, 'schedules:CREATE') ||
         hasPermissionRule(user, 'schedules:EDIT') ||
@@ -113,11 +119,15 @@ export class EmployeesController {
     status: 409,
     description: 'Employee already exists for this user',
   })
-  create(@Body() dto: CreateEmployeeDto, @Req() req: any) {
+  create(
+    @Body() dto: CreateEmployeeDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.create(req.user.tenantId, dto);
   }
 
   @Get()
+  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({
     summary: 'List all employees — supports filtering and search',
   })
@@ -131,12 +141,11 @@ export class EmployeesController {
   @ApiQuery({ name: 'page', required: false })
   @ApiQuery({ name: 'limit', required: false })
   @ApiResponse({ status: 200, description: 'Employees retrieved successfully' })
-  findAll(@Query() query: QueryEmployeesDto, @Req() req: any) {
-    return this.employeesService.findAll(
-      req.user.tenantId,
-      query,
-      req.user as RequestUser,
-    );
+  findAll(
+    @Query() query: QueryEmployeesDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.findAll(req.user.tenantId, query, req.user);
   }
 
   @Get('options')
@@ -148,8 +157,8 @@ export class EmployeesController {
     status: 200,
     description: 'Employee options retrieved successfully',
   })
-  findOptions(@Req() req: any) {
-    const user = req.user as RequestUser;
+  findOptions(@Req() req: Request & { user: RequestUser }) {
+    const user = req.user;
     this.assertEmployeeOptionsAccess(user);
     return this.employeesService.findOptions(user.tenantId);
   }
@@ -159,24 +168,44 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Get the employee profile of the logged-in user' })
   @ApiResponse({ status: 200, description: 'Employee profile retrieved' })
   @ApiResponse({ status: 404, description: 'Employee profile not found' })
-  getMyProfile(@Req() req: any) {
+  getMyProfile(@Req() req: Request & { user: RequestUser }) {
     return this.employeesService.findByUserId(req.user.tenantId, req.user.id);
   }
 
+  @Patch('me')
+  @RequirePermissions(Permission.UPDATE_OWN_PROFILE)
+  @ApiOperation({
+    summary: 'Update the employee profile of the logged-in user',
+  })
+  @ApiBody({ type: UpdateEmployeeDto })
+  @ApiResponse({ status: 200, description: 'Employee profile updated' })
+  @ApiResponse({ status: 404, description: 'Employee profile not found' })
+  updateMyProfile(
+    @Body() dto: UpdateEmployeeDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.updateMyProfile(
+      req.user.tenantId,
+      dto,
+      req.user,
+    );
+  }
+
   @Get(':id')
+  @RequirePermissions(Permission.READ_EMPLOYEES)
   @ApiOperation({ summary: 'Get an employee by ID' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Employee retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Employee not found' })
-  findOne(@Param('id') id: string, @Req() req: any) {
-    return this.employeesService.findById(
-      req.user.tenantId,
-      id,
-      req.user as RequestUser,
-    );
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.findById(req.user.tenantId, id, req.user);
   }
 
   @Patch(':id')
+  @RequirePermissions(Permission.UPDATE_EMPLOYEE)
   @ApiOperation({ summary: 'Update an employee profile' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiBody({ type: UpdateEmployeeDto })
@@ -185,14 +214,9 @@ export class EmployeesController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateEmployeeDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
-    return this.employeesService.update(
-      req.user.tenantId,
-      id,
-      dto,
-      req.user as RequestUser,
-    );
+    return this.employeesService.update(req.user.tenantId, id, dto, req.user);
   }
 
   @Post(':id/resignation')
@@ -207,13 +231,13 @@ export class EmployeesController {
   submitResignation(
     @Param('id') id: string,
     @Body() dto: SubmitResignationDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.employeesService.submitResignation(
       req.user.tenantId,
       id,
       dto,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -223,11 +247,14 @@ export class EmployeesController {
   })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Resignation record retrieved' })
-  getResignation(@Param('id') id: string, @Req() req: any) {
+  getResignation(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.getResignationRecord(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -239,11 +266,14 @@ export class EmployeesController {
   })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Resignation withdrawn' })
-  withdrawResignation(@Param('id') id: string, @Req() req: any) {
+  withdrawResignation(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.withdrawResignation(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -258,13 +288,13 @@ export class EmployeesController {
   dismissResignation(
     @Param('id') id: string,
     @Body() dto: DismissResignationDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.employeesService.dismissResignation(
       req.user.tenantId,
       id,
       dto,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -279,11 +309,14 @@ export class EmployeesController {
     status: 201,
     description: 'Offboarding initiated from resignation',
   })
-  initiateOffboardingFromResignation(@Param('id') id: string, @Req() req: any) {
+  initiateOffboardingFromResignation(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.initiateOffboardFromResignation(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -297,7 +330,7 @@ export class EmployeesController {
   initiateOffboard(
     @Param('id') id: string,
     @Body() dto: InitiateOffboardDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.employeesService.initiateOffboard(req.user.tenantId, id, dto);
   }
@@ -307,11 +340,14 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Get existing offboarding record for an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Offboarding record retrieved' })
-  getOffboardingRecord(@Param('id') id: string, @Req() req: any) {
+  getOffboardingRecord(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.getOffboardingRecord(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -324,7 +360,7 @@ export class EmployeesController {
   updateChecklist(
     @Param('id') id: string,
     @Body() dto: UpdateChecklistDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.employeesService.updateOffboardChecklist(
       req.user.tenantId,
@@ -343,10 +379,14 @@ export class EmployeesController {
   })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Offboarding completed' })
-  completeOffboard(@Param('id') id: string, @Req() req: any) {
+  completeOffboard(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.completeOffboard(req.user.tenantId, id, {
       id: req.user.id,
       email: req.user.email,
+      tenantSlug: req.user.tenantSlug,
     });
   }
 
@@ -359,27 +399,147 @@ export class EmployeesController {
   @ApiParam({ name: 'id', description: 'Employee UUID' })
   @ApiResponse({ status: 200, description: 'Invite resent successfully' })
   @ApiResponse({ status: 404, description: 'Employee not found' })
-  resendInvite(@Param('id') id: string, @Req() req: any) {
+  resendInvite(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.resendInvite(req.user.tenantId, id);
+  }
+
+  @Get(':id/allowances')
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'List recurring allowances for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Employee allowances retrieved' })
+  listAllowances(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.listAllowances(req.user.tenantId, id);
   }
 
   @Post(':id/allowances')
   @HttpCode(HttpStatus.CREATED)
-  @RequirePermissions(Permission.CREATE_EMPLOYEE)
-  @ApiOperation({ summary: 'Add an allowance to an employee' })
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'Add a recurring allowance to an employee' })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
-  @ApiBody({
-    schema: {
-      example: {
-        type: 'TRANSPORT',
-        amount: 500,
-        description: 'Monthly transport allowance',
-      },
-    },
-  })
+  @ApiBody({ type: CreateEmployeeAllowanceDto })
   @ApiResponse({ status: 201, description: 'Allowance added successfully' })
-  addAllowance(@Param('id') id: string, @Body() dto: any, @Req() req: any) {
+  addAllowance(
+    @Param('id') id: string,
+    @Body() dto: CreateEmployeeAllowanceDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.addAllowance(req.user.tenantId, id, dto);
+  }
+
+  @Patch(':id/allowances/:allowanceId')
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'Update a recurring allowance for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'allowanceId', description: 'Allowance UUID' })
+  @ApiBody({ type: UpdateEmployeeAllowanceDto })
+  @ApiResponse({ status: 200, description: 'Allowance updated successfully' })
+  updateAllowance(
+    @Param('id') id: string,
+    @Param('allowanceId') allowanceId: string,
+    @Body() dto: UpdateEmployeeAllowanceDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.updateAllowance(
+      req.user.tenantId,
+      id,
+      allowanceId,
+      dto,
+    );
+  }
+
+  @Delete(':id/allowances/:allowanceId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'Delete a recurring allowance for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'allowanceId', description: 'Allowance UUID' })
+  @ApiResponse({ status: 204, description: 'Allowance deleted successfully' })
+  async deleteAllowance(
+    @Param('id') id: string,
+    @Param('allowanceId') allowanceId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    await this.employeesService.deleteAllowance(
+      req.user.tenantId,
+      id,
+      allowanceId,
+    );
+  }
+
+  @Get(':id/deductions')
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'List payroll deductions for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiResponse({ status: 200, description: 'Employee deductions retrieved' })
+  listDeductions(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.listDeductions(req.user.tenantId, id);
+  }
+
+  @Post(':id/deductions')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'Add a payroll deduction to an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiBody({ type: CreateEmployeeDeductionDto })
+  @ApiResponse({ status: 201, description: 'Deduction added successfully' })
+  addDeduction(
+    @Param('id') id: string,
+    @Body() dto: CreateEmployeeDeductionDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.addDeduction(req.user.tenantId, id, dto);
+  }
+
+  @Patch(':id/deductions/:deductionId')
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({ summary: 'Update a payroll deduction for an employee' })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'deductionId', description: 'Deduction UUID' })
+  @ApiBody({ type: UpdateEmployeeDeductionDto })
+  @ApiResponse({ status: 200, description: 'Deduction updated successfully' })
+  updateDeduction(
+    @Param('id') id: string,
+    @Param('deductionId') deductionId: string,
+    @Body() dto: UpdateEmployeeDeductionDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.employeesService.updateDeduction(
+      req.user.tenantId,
+      id,
+      deductionId,
+      dto,
+    );
+  }
+
+  @Delete(':id/deductions/:deductionId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @RequirePermissions(Permission.WRITE_EMPLOYEE_PAYROLL)
+  @ApiOperation({
+    summary: 'Delete an unpaid payroll deduction for an employee',
+  })
+  @ApiParam({ name: 'id', description: 'Employee UUID' })
+  @ApiParam({ name: 'deductionId', description: 'Deduction UUID' })
+  @ApiResponse({ status: 204, description: 'Deduction deleted successfully' })
+  async deleteDeduction(
+    @Param('id') id: string,
+    @Param('deductionId') deductionId: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    await this.employeesService.deleteDeduction(
+      req.user.tenantId,
+      id,
+      deductionId,
+    );
   }
 
   @Post(':id/documents')
@@ -397,7 +557,11 @@ export class EmployeesController {
     },
   })
   @ApiResponse({ status: 201, description: 'Document uploaded successfully' })
-  uploadDocument(@Param('id') id: string, @Body() dto: any, @Req() req: any) {
+  uploadDocument(
+    @Param('id') id: string,
+    @Body() dto: Prisma.EmployeeDocumentUncheckedCreateInput,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.employeesService.uploadDocument(req.user.tenantId, id, dto);
   }
 }

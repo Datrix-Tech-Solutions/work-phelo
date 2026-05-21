@@ -6,7 +6,7 @@ import { useState, useMemo } from 'react';
 import { useTenants, useDeleteTenant } from '@/hooks/useTenants';
 import { useRouter } from 'next/navigation';
 import { WelcomeBanner } from '@/components/molecules/shared/WelcomeBanner';
-import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { StatCard } from '@/components/molecules/shared/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { Modal } from '@/components/organisms/shared/Modal';

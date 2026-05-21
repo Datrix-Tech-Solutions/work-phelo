@@ -2,9 +2,10 @@ import Decimal from 'decimal.js';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
+export const EMPLOYEE_TIER1_RATE = '0.005';
+export const EMPLOYEE_TIER2_RATE = '0.05';
 export const EMPLOYEE_SSNIT_RATE = '0.055';
 export const EMPLOYER_SSNIT_RATE = '0.13';
-export const TIER2_EMPLOYER_RATE = '0.05';
 export const MAX_INSURABLE_EARNINGS = '69000';
 
 const MONTHLY_PAYE_TIERS = [
@@ -25,9 +26,11 @@ export function calculateSSNIT(basicSalary: string): {
     new Decimal(basicSalary),
     new Decimal(MAX_INSURABLE_EARNINGS),
   );
+  const tier1Employee = insurable.times(EMPLOYEE_TIER1_RATE);
+  const tier2Employee = insurable.times(EMPLOYEE_TIER2_RATE);
   return {
-    employeeSSNIT: insurable
-      .times(EMPLOYEE_SSNIT_RATE)
+    employeeSSNIT: tier1Employee
+      .plus(tier2Employee)
       .toDecimalPlaces(2)
       .toString(),
     employerSSNIT: insurable
@@ -37,12 +40,20 @@ export function calculateSSNIT(basicSalary: string): {
   };
 }
 
+export function calculateTier1Employee(basicSalary: string): string {
+  const insurable = Decimal.min(
+    new Decimal(basicSalary),
+    new Decimal(MAX_INSURABLE_EARNINGS),
+  );
+  return insurable.times(EMPLOYEE_TIER1_RATE).toDecimalPlaces(2).toString();
+}
+
 export function calculateTier2(basicSalary: string): string {
   const insurable = Decimal.min(
     new Decimal(basicSalary),
     new Decimal(MAX_INSURABLE_EARNINGS),
   );
-  return insurable.times(TIER2_EMPLOYER_RATE).toDecimalPlaces(2).toString();
+  return insurable.times(EMPLOYEE_TIER2_RATE).toDecimalPlaces(2).toString();
 }
 
 export function calculateTier3Contribution(

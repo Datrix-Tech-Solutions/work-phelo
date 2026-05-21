@@ -50,10 +50,12 @@ export function EmployeeActionsBar({
         </Button>
       ) : !isOffboarded ? (
         <>
-          <Button variant="outline" size="sm" onClick={onAssignPermission} className="gap-2">
-            Grant Direct Permissions
-            <ShieldCog className="w-4 h-4" />
-          </Button>
+          {onAssignPermission && (
+            <Button variant="outline" size="sm" onClick={onAssignPermission} className="gap-2">
+              Grant Direct Permissions
+              <ShieldCog className="w-4 h-4" />
+            </Button>
+          )}
           {onAssignAsset && (
             <Button variant="outline" size="sm" onClick={onAssignAsset}>
               Assign Asset

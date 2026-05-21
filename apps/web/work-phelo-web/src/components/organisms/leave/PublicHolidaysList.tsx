@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
 import { useDeletePublicHoliday } from '@/hooks/usePublicHolidays';
 import { extractError } from '@/lib/extractError';
-import { formatDate } from '@/lib/formatters';
+import { formatHolidayDate } from '@/lib/formatters';
 import { PublicHoliday } from '@/types/hr';
 
 interface Props {
@@ -43,6 +43,15 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
   }, [data, search]);
 
   const { mutate: deleteHoliday, isPending: isDeleting } = useDeletePublicHoliday();
+  const formatScope = (holiday: PublicHoliday) => {
+    if (holiday.countryScope) {
+      return holiday.countryScope
+        .split(/\s+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    }
+    return 'Company-wide';
+  };
 
   const columns: Column<PublicHoliday>[] = [
     {
@@ -52,8 +61,23 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
     },
     {
       key: 'date',
-      label: 'Date',
-      render: (row) => <span className="text-gray-700">{formatDate(row.date)}</span>,
+      label: 'Official Date',
+      render: (row) => <span className="text-gray-700">{formatHolidayDate(row.date)}</span>,
+    },
+    {
+      key: 'observedDate',
+      label: 'Observed',
+      render: (row) => (
+        <div>
+          <span className="text-gray-700">{formatHolidayDate(row.observedDate ?? row.date)}</span>
+          {row.isObservedShifted && <p className="text-xs text-amber-600">shifted from weekend</p>}
+        </div>
+      ),
+    },
+    {
+      key: 'countryScope',
+      label: 'Scope',
+      render: (row) => <span className="text-gray-600">{formatScope(row)}</span>,
     },
     {
       key: '_view',
@@ -91,7 +115,7 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
   ];
 
   return (
-    <>
+    <div className="flex flex-col flex-1 min-h-0">
       <DataTable
         columns={columns}
         data={filteredHolidays}
@@ -148,6 +172,6 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
           </div>
         }
       />
-    </>
+    </div>
   );
 }

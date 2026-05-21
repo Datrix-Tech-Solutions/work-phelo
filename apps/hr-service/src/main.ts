@@ -35,7 +35,9 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  setupSwagger(app);
+  if (process.env.NODE_ENV !== 'production') {
+    setupSwagger(app);
+  }
 
   app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,

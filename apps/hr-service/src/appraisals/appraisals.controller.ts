@@ -29,6 +29,8 @@ import { SubmitReviewDto } from './dto/submit-review.dto';
 import { CreateAppraisalTemplateDto } from './dto/create-template.dto';
 import { CreateAppraisalKpiDto } from './dto/create-kpi.dto';
 import { CancelAppraisalCycleDto } from './dto/cancel-cycle.dto';
+import { FinalizeAppraisalDto } from './dto/finalize-appraisal.dto';
+import { ReopenAppraisalDto } from './dto/reopen-appraisal.dto';
 import { QueryAppraisalTemplatesDto } from './dto/query-appraisal-templates.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
@@ -128,7 +130,11 @@ export class AppraisalsController {
     @Param('cycleId') cycleId: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.appraisalsService.startCycle(req.user.tenantId, cycleId);
+    return this.appraisalsService.startCycle(
+      req.user.tenantId,
+      cycleId,
+      req.user as RequestUser,
+    );
   }
 
   @Patch('cycles/:cycleId/cancel')
@@ -333,6 +339,7 @@ export class AppraisalsController {
   }
 
   @Get('team')
+  @RequirePermissions(Permission.SUBMIT_MANAGER_REVIEW)
   @ApiOperation({ summary: "Get manager's team appraisals for review" })
   @ApiResponse({ status: 200, description: 'Team appraisals retrieved' })
   getTeamAppraisals(@Req() req: AuthenticatedRequest) {
@@ -347,7 +354,11 @@ export class AppraisalsController {
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
   @ApiResponse({ status: 200, description: 'Appraisal retrieved' })
   getAppraisal(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.appraisalsService.getAppraisal(req.user.tenantId, id);
+    return this.appraisalsService.getAppraisal(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+    );
   }
 
   @Patch(':id/self-assessment')
@@ -364,7 +375,7 @@ export class AppraisalsController {
     return this.appraisalsService.submitSelfAssessment(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user as RequestUser,
       dto,
     );
   }
@@ -381,6 +392,43 @@ export class AppraisalsController {
     @Req() req: AuthenticatedRequest,
   ) {
     return this.appraisalsService.submitManagerReview(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+      dto,
+    );
+  }
+
+  @Patch(':id/finalize')
+  @RequirePermissions(Permission.FINALIZE_APPRAISAL)
+  @ApiOperation({ summary: 'Finalize an employee appraisal' })
+  @ApiParam({ name: 'id', description: 'Appraisal UUID' })
+  @ApiBody({ type: FinalizeAppraisalDto })
+  @ApiResponse({ status: 200, description: 'Appraisal finalized' })
+  finalizeAppraisal(
+    @Param('id') id: string,
+    @Body() dto: FinalizeAppraisalDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.appraisalsService.finalizeAppraisal(
+      req.user.tenantId,
+      id,
+      req.user as RequestUser,
+      dto,
+    );
+  }
+
+  @Patch(':id/reopen')
+  @ApiOperation({ summary: 'Reopen an appraisal for redo' })
+  @ApiParam({ name: 'id', description: 'Appraisal UUID' })
+  @ApiBody({ type: ReopenAppraisalDto })
+  @ApiResponse({ status: 200, description: 'Appraisal reopened' })
+  reopenAppraisal(
+    @Param('id') id: string,
+    @Body() dto: ReopenAppraisalDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.appraisalsService.reopenAppraisal(
       req.user.tenantId,
       id,
       req.user as RequestUser,

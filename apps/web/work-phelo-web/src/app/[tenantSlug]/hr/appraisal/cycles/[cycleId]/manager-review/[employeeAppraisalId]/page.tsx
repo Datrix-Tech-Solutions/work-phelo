@@ -1,10 +1,14 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
-import { useAppraisal, useCycleKpis, useAppraisalCycles } from '@/hooks';
+import { useAppraisal, useCycleKpis, useAppraisalCycles, useReopenAppraisal } from '@/hooks';
 import { ManagerReviewForm } from '@/components/organisms/appraisal/ManagerReviewForm';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
 import { cn } from '@/lib/utils';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 function scoreToPercent(score: number | null | undefined): string {
   if (score == null) return '—';
@@ -17,6 +21,11 @@ export default function ManagerReviewPage({
   params: Promise<{ tenantSlug: string; cycleId: string; employeeAppraisalId: string }>;
 }) {
   const { tenantSlug, cycleId, employeeAppraisalId } = use(params);
+
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const { mutate: reopen, isPending: isRejecting } = useReopenAppraisal();
 
   const { data: appraisal, isLoading: loadingAppraisal } = useAppraisal(employeeAppraisalId);
   const { data: kpis = [], isLoading: loadingKpis } = useCycleKpis(cycleId);
@@ -93,6 +102,10 @@ export default function ManagerReviewPage({
         <span className="text-gray-600">
           {employeeName} – {cycleTitle}
         </span>
+        <div className="flex-1" />
+        <Button variant="outline" size="sm" onClick={() => setRejectOpen(true)}>
+          Reject
+        </Button>
       </nav>
 
       {/* Header card */}
@@ -138,6 +151,66 @@ export default function ManagerReviewPage({
       ) : (
         <ManagerReviewForm appraisalId={employeeAppraisalId} kpis={kpiRows} backHref={backHref} />
       )}
+
+      <Modal
+        isOpen={rejectOpen}
+        onClose={() => {
+          setRejectOpen(false);
+          setRejectReason('');
+        }}
+        title="Reject Self-Assessment"
+        description="This will send the employee's self-assessment back for revision."
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectOpen(false);
+                setRejectReason('');
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              disabled={!rejectReason.trim()}
+              isLoading={isRejecting}
+              loadingText="Rejecting..."
+              onClick={() =>
+                reopen(
+                  { id: employeeAppraisalId, reason: rejectReason.trim(), target: 'SELF' },
+                  {
+                    onSuccess: () => {
+                      setRejectOpen(false);
+                      setRejectReason('');
+                      useToastStore
+                        .getState()
+                        .addToast({ message: 'Assessment sent back to employee', type: 'success' });
+                    },
+                    onError: (err) =>
+                      useToastStore
+                        .getState()
+                        .addToast({ message: extractError(err), type: 'error' }),
+                  },
+                )
+              }
+            >
+              Confirm Rejection
+            </Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700">Rejection Note</label>
+          <textarea
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="Enter reason…"
+            rows={4}
+            className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
+          />
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -49,6 +49,7 @@ export const EventPatterns = {
   NOTIFY_LEAVE_REVIEWED: 'notify.leave_reviewed',
   NOTIFY_LEAVE_CANCELLED: 'notify.leave_cancelled',
   NOTIFY_TIME_CORRECTION_SUBMITTED: 'notify.time_correction_submitted',
+  NOTIFY_APPRAISAL_CYCLE_STARTED: 'notify.appraisal_cycle_started',
   NOTIFY_APPRAISAL_SELF_SUBMITTED: 'notify.appraisal_self_submitted',
   NOTIFY_APPRAISAL_MANAGER_REVIEWED: 'notify.appraisal_manager_reviewed',
   NOTIFY_APPRAISAL_SELF_REMINDER: 'notify.appraisal_self_reminder',
@@ -61,6 +62,8 @@ export const EventPatterns = {
   NOTIFY_SHIFT_SWAP_REJECTED: 'notify.shift_swap_rejected',
   NOTIFY_SHIFT_SWAP_EXPIRED: 'notify.shift_swap_expired',
   NOTIFY_ANNOUNCEMENT_PUBLISHED: 'notify.announcement_published',
+  NOTIFY_PAYROLL_APPROVAL_REQUESTED: 'notify.payroll_approval_requested',
+  NOTIFY_PAYROLL_DECISION: 'notify.payroll_decision',
 } as const;
 
 export type EventPattern = (typeof EventPatterns)[keyof typeof EventPatterns];
@@ -71,6 +74,8 @@ export interface TenantApprovedEvent {
   tenantId: string;
   adminEmail: string;
   adminUserId?: string;
+  country?: string;
+  currency?: string;
 }
 
 export interface EmployeeActivatedEvent {
@@ -83,6 +88,8 @@ export interface ProvisionTenantWorkspaceCommand {
   tenantId: string;
   adminEmail: string;
   adminUserId?: string;
+  country?: string;
+  currency?: string;
 }
 
 export interface ProvisionTenantWorkspaceResult {
@@ -248,6 +255,7 @@ export interface EmployeeTerminationEvent {
   lastName: string;
   reason: string;
   lastWorkingDate: string;
+  platformLink?: string;
 }
 
 export interface ResignationSubmittedEvent {
@@ -311,22 +319,36 @@ export interface LeaveCancelledEvent {
 export interface AppraisalSelfSubmittedEvent {
   tenantId: string;
   appraisalId: string;
+  cycleId?: string;
   cycleTitle: string;
   employeeFirstName: string;
   employeeLastName: string;
   /** Manager's email — null if employee has no manager */
   managerEmail: string | null;
   managerFirstName: string | null;
+  managerReviewLink?: string;
 }
 
 export interface AppraisalManagerReviewedEvent {
   tenantId: string;
   appraisalId: string;
+  cycleId?: string;
   cycleTitle: string;
   employeeEmail: string;
   employeeFirstName: string;
   finalScore: number;
   finalRating: string;
+  platformLink?: string;
+}
+
+export interface AppraisalCycleStartedEvent {
+  tenantId: string;
+  appraisalId: string;
+  cycleId: string;
+  cycleTitle: string;
+  employeeEmail: string;
+  employeeFirstName: string;
+  selfAssessmentLink: string;
 }
 
 export interface AppraisalSelfReminderEvent {
@@ -338,6 +360,7 @@ export interface AppraisalSelfReminderEvent {
   employeeFirstName: string;
   deadline: string;
   daysRemaining: number;
+  selfAssessmentLink?: string;
 }
 
 export interface AppraisalManagerReminderEvent {
@@ -351,6 +374,7 @@ export interface AppraisalManagerReminderEvent {
   employeeLastName: string;
   deadline: string;
   daysRemaining: number;
+  managerReviewLink?: string;
 }
 
 export interface TimeCorrectionSubmittedEvent {
@@ -461,6 +485,48 @@ export interface AnnouncementRecipientEvent {
   email: string;
   firstName: string;
   lastName: string;
+}
+
+export interface PayrollApprovalRequestedRecipientEvent {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  source: 'APPROVER' | 'TENANT_ADMIN_ESCALATION';
+}
+
+export interface PayrollApprovalRequestedEvent {
+  tenantId: string;
+  payrollRunId: string;
+  month: number;
+  year: number;
+  submittedByName: string;
+  totalGross: string;
+  totalNet: string;
+  notes?: string;
+  reviewLink?: string;
+  recipients: PayrollApprovalRequestedRecipientEvent[];
+}
+
+export interface PayrollDecisionRecipientEvent {
+  userId: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
+
+export interface PayrollDecisionEvent {
+  tenantId: string;
+  payrollRunId: string;
+  month: number;
+  year: number;
+  decision: 'APPROVED' | 'RETURNED_TO_DRAFT';
+  reviewerName: string;
+  decisionNote: string;
+  totalGross: string;
+  totalNet: string;
+  detailLink?: string;
+  recipients: PayrollDecisionRecipientEvent[];
 }
 
 export interface AnnouncementPublishedEvent {

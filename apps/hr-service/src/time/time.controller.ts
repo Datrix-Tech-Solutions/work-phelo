@@ -102,6 +102,7 @@ export class TimeController {
   }
 
   @Get('attendance')
+  @RequirePermissions(Permission.READ_ATTENDANCE)
   @ApiOperation({ summary: 'Get attendance records with date range filter' })
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'from', required: false })
@@ -153,11 +154,13 @@ export class TimeController {
     return this.timeService.submitTimeCorrection(
       req.user.tenantId,
       req.user.id,
+      req.user.tenantSlug,
       dto,
     );
   }
 
   @Get('corrections')
+  @RequirePermissions(Permission.READ_ATTENDANCE)
   @ApiOperation({ summary: 'List time correction requests' })
   @ApiQuery({
     name: 'status',
@@ -196,6 +199,7 @@ export class TimeController {
   }
 
   @Get('live')
+  @RequirePermissions(Permission.READ_ATTENDANCE)
   @ApiOperation({ summary: 'Get all employees currently clocked in' })
   @ApiResponse({ status: 200, description: 'Live attendance list' })
   getLiveAttendance(@Req() req: AuthenticatedRequest) {
@@ -206,6 +210,7 @@ export class TimeController {
   }
 
   @Get('stats/today')
+  @RequirePermissions(Permission.READ_ATTENDANCE)
   @ApiOperation({ summary: "Get today's attendance stats" })
   @ApiResponse({ status: 200, description: 'Attendance stats' })
   getAttendanceStats(@Req() req: AuthenticatedRequest) {
@@ -217,6 +222,7 @@ export class TimeController {
 
   @Post('schedules')
   @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Create a shift schedule for an employee' })
   @ApiBody({ type: CreateScheduleDto })
   @ApiResponse({ status: 201, description: 'Schedule created' })
@@ -247,6 +253,7 @@ export class TimeController {
   }
 
   @Patch('schedules/:id')
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Update a shift schedule' })
   @ApiParam({ name: 'id', description: 'Shift schedule UUID' })
   @ApiBody({ type: UpdateScheduleDto })
@@ -267,6 +274,7 @@ export class TimeController {
 
   @Delete('schedules/:id')
   @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({ summary: 'Delete a shift schedule' })
   @ApiParam({ name: 'id', description: 'Shift schedule UUID' })
   @ApiResponse({ status: 200, description: 'Schedule deleted' })
@@ -395,6 +403,7 @@ export class TimeController {
   }
 
   @Post('shift-swaps/:id/manager-decision')
+  @RequirePermissions(Permission.MANAGE_SCHEDULES)
   @ApiOperation({
     summary: 'Approve or reject a shift swap request as an approver',
   })

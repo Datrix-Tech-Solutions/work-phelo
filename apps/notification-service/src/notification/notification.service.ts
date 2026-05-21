@@ -199,6 +199,7 @@ export class NotificationService {
     lastName: string;
     reason: string;
     lastWorkingDate: string;
+    platformLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -218,6 +219,7 @@ export class NotificationService {
       data.lastName,
       data.reason,
       data.lastWorkingDate,
+      data.platformLink,
     );
     await this.log({
       userId: data.employeeId,
@@ -312,6 +314,136 @@ export class NotificationService {
           metadata: {
             announcementId: data.announcementId,
             employeeId: recipient.employeeId,
+          },
+        });
+      }),
+    );
+  }
+
+  async sendPayrollApprovalRequestedNotification(data: {
+    tenantId: string;
+    payrollRunId: string;
+    month: number;
+    year: number;
+    submittedByName: string;
+    totalGross: string;
+    totalNet: string;
+    notes?: string;
+    reviewLink?: string;
+    recipients: {
+      userId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      source: 'APPROVER' | 'TENANT_ADMIN_ESCALATION';
+    }[];
+  }) {
+    await Promise.all(
+      data.recipients.map(async (recipient) => {
+        if (
+          await this.isDuplicate(
+            recipient.email,
+            NotificationType.PAYROLL_APPROVAL_REQUESTED,
+            data.tenantId,
+          )
+        ) {
+          this.logger.warn(
+            `Duplicate PAYROLL_APPROVAL_REQUESTED suppressed for ${recipient.email}`,
+          );
+          return;
+        }
+
+        const success =
+          await this.email.sendPayrollApprovalRequestedNotification(
+            recipient.email,
+            recipient.firstName,
+            data.month,
+            data.year,
+            data.submittedByName,
+            data.totalGross,
+            data.totalNet,
+            data.notes,
+            data.reviewLink,
+            recipient.source === 'TENANT_ADMIN_ESCALATION',
+          );
+
+        await this.log({
+          userId: recipient.userId,
+          tenantId: data.tenantId,
+          type: 'PAYROLL_APPROVAL_REQUESTED',
+          channel: 'EMAIL',
+          recipient: recipient.email,
+          subject: `Payroll approval required — ${data.month}/${data.year}`,
+          status: success ? 'SENT' : 'FAILED',
+          metadata: {
+            payrollRunId: data.payrollRunId,
+            recipientSource: recipient.source,
+          },
+        });
+      }),
+    );
+  }
+
+  async sendPayrollDecisionNotification(data: {
+    tenantId: string;
+    payrollRunId: string;
+    month: number;
+    year: number;
+    decision: 'APPROVED' | 'RETURNED_TO_DRAFT';
+    reviewerName: string;
+    decisionNote: string;
+    totalGross: string;
+    totalNet: string;
+    detailLink?: string;
+    recipients: {
+      userId: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+    }[];
+  }) {
+    await Promise.all(
+      data.recipients.map(async (recipient) => {
+        if (
+          await this.isDuplicate(
+            recipient.email,
+            NotificationType.PAYROLL_DECISION,
+            data.tenantId,
+          )
+        ) {
+          this.logger.warn(
+            `Duplicate PAYROLL_DECISION suppressed for ${recipient.email}`,
+          );
+          return;
+        }
+
+        const success = await this.email.sendPayrollDecisionNotification(
+          recipient.email,
+          recipient.firstName,
+          data.month,
+          data.year,
+          data.decision,
+          data.reviewerName,
+          data.decisionNote,
+          data.totalGross,
+          data.totalNet,
+          data.detailLink,
+        );
+
+        await this.log({
+          userId: recipient.userId,
+          tenantId: data.tenantId,
+          type: 'PAYROLL_DECISION',
+          channel: 'EMAIL',
+          recipient: recipient.email,
+          subject:
+            data.decision === 'APPROVED'
+              ? `Payroll approved — ${data.month}/${data.year}`
+              : `Payroll returned to draft — ${data.month}/${data.year}`,
+          status: success ? 'SENT' : 'FAILED',
+          metadata: {
+            payrollRunId: data.payrollRunId,
+            decision: data.decision,
           },
         });
       }),
@@ -535,11 +667,13 @@ export class NotificationService {
   async sendAppraisalSelfSubmittedNotification(data: {
     tenantId: string;
     appraisalId: string;
+    cycleId?: string;
     cycleTitle: string;
     employeeFirstName: string;
     employeeLastName: string;
     managerEmail: string;
     managerFirstName: string;
+    managerReviewLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -559,6 +693,7 @@ export class NotificationService {
       data.managerFirstName,
       `${data.employeeFirstName} ${data.employeeLastName}`,
       data.cycleTitle,
+      data.managerReviewLink,
     );
 
     await this.log({
@@ -572,6 +707,46 @@ export class NotificationService {
     });
   }
 
+  async sendAppraisalCycleStartedNotification(data: {
+    tenantId: string;
+    appraisalId: string;
+    cycleId: string;
+    cycleTitle: string;
+    employeeEmail: string;
+    employeeFirstName: string;
+    selfAssessmentLink: string;
+  }) {
+    if (
+      await this.isDuplicate(
+        data.employeeEmail,
+        NotificationType.APPRAISAL_CYCLE_STARTED,
+        data.tenantId,
+      )
+    ) {
+      this.logger.warn(
+        `Duplicate APPRAISAL_CYCLE_STARTED suppressed for ${data.employeeEmail}`,
+      );
+      return;
+    }
+
+    const success = await this.email.sendAppraisalCycleStartedNotification(
+      data.employeeEmail,
+      data.employeeFirstName,
+      data.cycleTitle,
+      data.selfAssessmentLink,
+    );
+
+    await this.log({
+      userId: undefined,
+      tenantId: data.tenantId,
+      type: 'APPRAISAL_CYCLE_STARTED',
+      channel: 'EMAIL',
+      recipient: data.employeeEmail,
+      subject: `Appraisal cycle started — ${data.cycleTitle}`,
+      status: success ? 'SENT' : 'FAILED',
+    });
+  }
+
   async sendAppraisalManagerReviewedNotification(data: {
     tenantId: string;
     appraisalId: string;
@@ -580,6 +755,7 @@ export class NotificationService {
     employeeFirstName: string;
     finalScore: number;
     finalRating: string;
+    platformLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -600,6 +776,7 @@ export class NotificationService {
       data.cycleTitle,
       data.finalScore,
       data.finalRating,
+      data.platformLink,
     );
 
     await this.log({
@@ -622,6 +799,7 @@ export class NotificationService {
     employeeFirstName: string;
     deadline: string;
     daysRemaining: number;
+    selfAssessmentLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -642,6 +820,7 @@ export class NotificationService {
       data.cycleTitle,
       data.deadline,
       data.daysRemaining,
+      data.selfAssessmentLink,
     );
 
     await this.log({
@@ -669,6 +848,7 @@ export class NotificationService {
     employeeLastName: string;
     deadline: string;
     daysRemaining: number;
+    managerReviewLink?: string;
   }) {
     if (
       await this.isDuplicate(
@@ -690,6 +870,7 @@ export class NotificationService {
       data.cycleTitle,
       data.deadline,
       data.daysRemaining,
+      data.managerReviewLink,
     );
 
     await this.log({

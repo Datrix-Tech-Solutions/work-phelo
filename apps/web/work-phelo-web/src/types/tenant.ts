@@ -7,6 +7,8 @@ export interface Tenant {
   email: string;
   phone?: string;
   country?: string;
+  address?: string;
+  currency?: string;
   industry?: string;
   size?: string;
   status: TenantStatus;
@@ -23,6 +25,8 @@ export interface RegisterTenantPayload {
   lastName: string;
   phone?: string;
   country?: string;
+  address?: string;
+  currency?: string;
   industry?: string;
   size?: string;
 }
@@ -41,13 +45,29 @@ export interface TenantUser {
 export interface AuditLog {
   id: string;
   resource: string;
+  resourceId?: string;
   action: string;
+  userId?: string;
+  userEmail?: string;
+  userRole?: string;
+  changes?: { before?: Record<string, unknown>; after?: Record<string, unknown> };
+  ipAddress?: string;
+  userAgent?: string;
+  status?: 'SUCCESS' | 'FAILURE';
+  failureReason?: string;
   createdAt: string;
-  changes?: { after?: Record<string, unknown> };
+}
+
+export interface AuditMeta {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
 
 export interface AuditData {
   logs: AuditLog[];
+  meta: AuditMeta;
 }
 
 // ── Company (SuperAdmin table display model) ─────────────

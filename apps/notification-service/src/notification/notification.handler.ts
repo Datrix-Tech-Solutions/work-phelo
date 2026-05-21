@@ -15,6 +15,7 @@ import {
   LeaveReviewedEvent,
   LeaveCancelledEvent,
   TimeCorrectionSubmittedEvent,
+  AppraisalCycleStartedEvent,
   AppraisalSelfSubmittedEvent,
   AppraisalManagerReviewedEvent,
   AppraisalSelfReminderEvent,
@@ -27,6 +28,8 @@ import {
   ShiftSwapRejectedEvent,
   ShiftSwapExpiredEvent,
   AnnouncementPublishedEvent,
+  PayrollApprovalRequestedEvent,
+  PayrollDecisionEvent,
 } from '@work-phelo/types';
 
 @Controller()
@@ -371,6 +374,29 @@ export class NotificationHandler {
     }
   }
 
+  @EventPattern('notify.appraisal_cycle_started')
+  async handleAppraisalCycleStarted(
+    @Payload() data: WithMeta<AppraisalCycleStartedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.appraisal_cycle_started] Received | employeeEmail=${data.employeeEmail} | cycleId=${data.cycleId} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendAppraisalCycleStartedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.appraisal_cycle_started',
+        err,
+        `appraisalId=${data.appraisalId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
   @EventPattern('notify.appraisal_manager_reviewed')
   async handleAppraisalManagerReviewed(
     @Payload() data: WithMeta<AppraisalManagerReviewedEvent>,
@@ -608,6 +634,50 @@ export class NotificationHandler {
         'notify.announcement_published',
         err,
         `announcementId=${data.announcementId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.payroll_approval_requested')
+  async handlePayrollApprovalRequested(
+    @Payload() data: WithMeta<PayrollApprovalRequestedEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.payroll_approval_requested] Received | payrollRunId=${data.payrollRunId} | recipients=${data.recipients.length} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendPayrollApprovalRequestedNotification(
+        data,
+      );
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.payroll_approval_requested',
+        err,
+        `payrollRunId=${data.payrollRunId} | corrId=${data._meta?.correlationId}`,
+      );
+    }
+  }
+
+  @EventPattern('notify.payroll_decision')
+  async handlePayrollDecision(
+    @Payload() data: WithMeta<PayrollDecisionEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[notify.payroll_decision] Received | payrollRunId=${data.payrollRunId} | decision=${data.decision} | recipients=${data.recipients.length} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.notificationService.sendPayrollDecisionNotification(data);
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        'notify.payroll_decision',
+        err,
+        `payrollRunId=${data.payrollRunId} | corrId=${data._meta?.correlationId}`,
       );
     }
   }

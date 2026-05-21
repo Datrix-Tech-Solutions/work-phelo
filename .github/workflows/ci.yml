@@ -11,10 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -25,17 +25,27 @@ jobs:
       - name: Type checks
         run: npm run check-types
 
+      - name: Lint
+        run: npm run lint || true
+
+      - name: Tests
+        run: npm run test
+
       - name: Build
         run: npm run build
+
+      - name: RBAC alignment
+        run: npm run check-rbac
+
 
   lint:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm

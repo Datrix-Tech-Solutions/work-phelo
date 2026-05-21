@@ -39,12 +39,22 @@ export class CreateLeaveTypeDto {
   maxCarryOverDays?: number;
 
   @ApiPropertyOptional({
-    description: 'Requires manager approval before grant',
+    description:
+      'Deprecated operational flag. Leave requests are now always reviewed before approval.',
     example: true,
   })
   @IsOptional()
   @IsBoolean()
   requiresApproval?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether a supporting document must be attached before this leave can be approved',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  requiresSupportingDocument?: boolean;
 
   @ApiPropertyOptional({
     description: 'Whether this leave type is paid',

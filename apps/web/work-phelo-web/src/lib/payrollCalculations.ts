@@ -45,6 +45,7 @@ export interface PayrollResult {
   employeeStatutoryContrib: number;
   employerStatutoryContrib: number;
 
+  tier1Contribution?: number;
   tier2Contribution?: number;
   tier2FundName?: string;
 
@@ -70,9 +71,9 @@ export class PayrollValidationError extends Error {
 const PAYROLL_CONFIG = {
   GH: {
     currency: 'GHS' as const,
-    tier1EmployeeRate: 0.055,
+    tier1EmployeeRate: 0.005,
     tier1EmployerRate: 0.13,
-    tier2EmployerRate: 0.05,
+    tier2EmployeeRate: 0.05,
     maxInsurableEarnings: 69_000, // SSNIT contribution cap per month
   },
   NG: {
@@ -88,6 +89,11 @@ const PAYROLL_CONFIG = {
     occupationalExemptCap: 20_000,
   },
 } as const;
+
+function isTransportAllowance(item: AllowanceItem): boolean {
+  const label = `${item.type ?? ''} ${item.name ?? ''}`.toLowerCase();
+  return label.includes('transport');
+}
 
 /* ── Validation ── */
 function validateInput(input: PayrollInput): void {
@@ -219,17 +225,17 @@ function calculatePAYE_GH(taxableIncome: number): number {
   return Math.round(tax);
 }
 
-/** Nigeria PAYE — annual bands divided by 12. */
-function calculatePAYE_NG(annualTaxable: number, rentReliefAnnual = 0): number {
+/** Nigeria PAYE — PITA 2011 annual bands applied to post-CRA taxable income. Returns annual tax. */
+function calculatePAYE_NG(annualTaxable: number): number {
   if (annualTaxable <= 0) return 0;
 
   const bands = [
-    { threshold: 800_000, rate: 0 },
-    { threshold: 3_000_000, rate: 0.15 },
-    { threshold: 12_000_000, rate: 0.18 },
-    { threshold: 25_000_000, rate: 0.21 },
-    { threshold: 50_000_000, rate: 0.23 },
-    { threshold: Infinity, rate: 0.25 },
+    { threshold: 300_000, rate: 0.07 },
+    { threshold: 600_000, rate: 0.11 },
+    { threshold: 1_100_000, rate: 0.15 },
+    { threshold: 1_600_000, rate: 0.19 },
+    { threshold: 3_200_000, rate: 0.21 },
+    { threshold: Infinity, rate: 0.24 },
   ];
 
   let tax = 0,
@@ -241,7 +247,7 @@ function calculatePAYE_NG(annualTaxable: number, rentReliefAnnual = 0): number {
     if (annualTaxable <= band.threshold) break;
   }
 
-  return Math.round(Math.max(0, tax - rentReliefAnnual) / 12);
+  return Math.round(tax);
 }
 
 /** Kenya NSSF — tiered 6% each side. */
@@ -286,17 +292,21 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     basicSalary,
     allowances,
     otherDeductions = 0,
-    rentRelief = 0,
+    // rentRelief = 0,
     ghanaPension = {},
     nigeriaPension = {},
     kenyaPension = {},
   } = input;
 
   const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
+  const transportAllowance = allowances
+    .filter(isTransportAllowance)
+    .reduce((sum, a) => sum + a.amount, 0);
   const grossSalary = basicSalary + totalAllowances;
 
   let employeeStatutoryContrib = 0;
   let employerStatutoryContrib = 0;
+  let tier1Contribution: number | undefined;
   let tier2Contribution: number | undefined;
   let tier2FundName: string | undefined;
   let voluntaryPensionEmployee: number | undefined;
@@ -304,20 +314,22 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   let voluntaryPensionName: string | undefined;
   let paye = 0;
   let taxableIncome = 0;
+  let taxExemptTransport = 0;
 
   switch (country) {
     case 'GH': {
       const cfg = PAYROLL_CONFIG.GH;
       const insurable = Math.min(basicSalary, cfg.maxInsurableEarnings);
 
-      // Tier 1 — SSNIT (employee 5.5%, employer 13%)
-      employeeStatutoryContrib = Math.round(insurable * cfg.tier1EmployeeRate);
+      // Tier 1 — SSNIT (employee 0.5%, employer 13%)
+      const tier1Employee = Math.round(insurable * cfg.tier1EmployeeRate);
       employerStatutoryContrib = Math.round(insurable * cfg.tier1EmployerRate);
+      tier1Contribution = tier1Employee;
 
-      // Tier 2 — mandatory occupational pension, employer only (5%)
-      // Separate from and additional to Tier 1 employer SSNIT.
-      tier2Contribution = Math.round(insurable * cfg.tier2EmployerRate);
+      // Tier 2 — employee occupational pension (5%)
+      tier2Contribution = Math.round(insurable * cfg.tier2EmployeeRate);
       tier2FundName = ghanaPension.tier2FundName;
+      employeeStatutoryContrib = tier1Employee + tier2Contribution;
 
       // Tier 3 — voluntary provident fund (both sides tax-deductible for employee)
       const pfEmployee = Math.round(basicSalary * (ghanaPension.providentFundEmployeeRate ?? 0));
@@ -329,10 +341,11 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         voluntaryPensionName = ghanaPension.providentFundName;
       }
 
-      // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax)
+      // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax); transport is exempt
+      taxExemptTransport = transportAllowance;
       taxableIncome = Math.max(
         0,
-        grossSalary - employeeStatutoryContrib - pfEmployee - otherDeductions,
+        grossSalary - employeeStatutoryContrib - pfEmployee - taxExemptTransport - otherDeductions,
       );
       paye = calculatePAYE_GH(taxableIncome);
       break;
@@ -352,11 +365,19 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         voluntaryPensionName = nigeriaPension.pfaName;
       }
 
+      // taxableIncome for net salary: transport stays in (taxable in Nigeria)
       taxableIncome = Math.max(
         0,
         grossSalary - employeeStatutoryContrib - volEmployee - otherDeductions,
       );
-      paye = calculatePAYE_NG(taxableIncome * 12, rentRelief * 12);
+      // CRA (Consolidated Relief Allowance) reduces the PAYE tax base only, not take-home
+      const annualGross = grossSalary * 12;
+      const annualCRA = Math.max(200_000, annualGross * 0.01) + annualGross * 0.2;
+      const annualTaxBase = Math.max(0, taxableIncome * 12 - annualCRA);
+      const computedAnnualPAYE = calculatePAYE_NG(annualTaxBase);
+      // Minimum tax: 1% of monthly gross (applies when income is very low)
+      const minimumMonthlyPAYE = Math.round(grossSalary * 0.01);
+      paye = Math.max(Math.round(computedAnnualPAYE / 12), minimumMonthlyPAYE);
       break;
     }
 
@@ -388,12 +409,9 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     }
   }
 
-  const netSalary = Math.round(taxableIncome - paye);
+  const netSalary = Math.round(taxableIncome + taxExemptTransport - paye);
   const totalEmployerCost = Math.round(
-    grossSalary +
-      employerStatutoryContrib +
-      (tier2Contribution ?? 0) +
-      (voluntaryPensionEmployer ?? 0),
+    grossSalary + employerStatutoryContrib + (voluntaryPensionEmployer ?? 0),
   );
 
   return {
@@ -403,6 +421,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     grossSalary: Math.round(grossSalary),
     employeeStatutoryContrib,
     employerStatutoryContrib,
+    tier1Contribution,
     tier2Contribution,
     tier2FundName,
     voluntaryPensionEmployee,
@@ -434,11 +453,11 @@ export const COUNTRY_META: Record<
     label: 'Ghana',
     flag: '🇬🇭',
     statutoryLabel: 'SSNIT Tier 1',
-    employeeRate: '5.5%',
+    employeeRate: '0.5%',
     employerRate: '13%',
-    tier2Label: 'Tier 2 (occupational)',
+    tier2Label: 'Tier 2 employee (5%)',
     voluntaryLabel: 'Tier 3 (provident fund)',
-    note: 'Max insurable: GHS 69,000/month · Tier 2 is an additional 5% employer obligation',
+    note: 'Max insurable: GHS 69,000/month · Tier 2 is a 5% employee deduction on the payroll breakdown',
   },
   NG: {
     label: 'Nigeria',

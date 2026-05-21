@@ -23,7 +23,7 @@ export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlu
   }
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-0 flex flex-col gap-6 flex-1 min-h-0">
       <div className="shrink-0">
         <h2 className="text-base font-semibold text-gray-900">Leave Types</h2>
         <p className="text-sm text-gray-500 mt-0.5">

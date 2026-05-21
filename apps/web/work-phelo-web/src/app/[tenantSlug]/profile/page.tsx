@@ -3,7 +3,7 @@
 'use client';
 
 import { use, useState } from 'react';
-import { useMyProfile, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { useMyProfile, useUpdateMyProfile, useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useAuthStore } from '@/store/auth.store';
 import { useToast } from '@/hooks/useToast';
 import { TopNav } from '@/components/organisms/shared/TopNav';
@@ -20,26 +20,24 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
   const { tenantSlug } = use(params);
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   const [editOpen, setEditOpen] = useState(false);
 
   const { data: employee, isLoading } = useMyProfile();
-  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
+  const { mutate: updateMyProfile, isPending: isUpdating } = useUpdateMyProfile();
+  const { data: allEmployees = [] } = useEmployeeOptions();
   const toast = useToast();
 
   const handleSave = (data: UpdateEmployeePayload) => {
     if (!employee) return;
-    updateEmployee(
-      { id: employee.id, ...data },
-      {
-        onSuccess: () => {
-          toast.success('Profile updated successfully');
-          setEditOpen(false);
-        },
-        onError: () => toast.error('Failed to update profile'),
+    updateMyProfile(data, {
+      onSuccess: () => {
+        toast.success('Profile updated successfully');
+        setEditOpen(false);
       },
-    );
+      onError: () => toast.error('Failed to update profile'),
+    });
   };
 
   return (
@@ -75,7 +73,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
 
               {/* Right sections */}
               <div className="flex-1 min-w-0 flex flex-col gap-4">
-                <EmploymentDetailsSection employee={employee} allHrEmployees={[]} />
+                <EmploymentDetailsSection employee={employee} allHrEmployees={allEmployees} />
                 <AccountDetailsSection employee={employee} />
               </div>
             </div>

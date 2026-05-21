@@ -7,121 +7,168 @@ type LoggerLike = {
 };
 
 type PermissionResourceMap = Record<string, PermissionAction[]>;
-
-type SystemPermissionSetName = 'Company Admin Set' | 'Employee Set';
+type SystemPermissionSetName = string;
 
 type SystemPermissionSetDefinition = {
   name: SystemPermissionSetName;
   permissions: PermissionResourceMap;
 };
 
+type DefaultPermissionTemplateName = string;
+
+type DefaultPermissionTemplateDefinition = {
+  name: DefaultPermissionTemplateName;
+  description: string;
+  permissions: PermissionResourceMap;
+};
+
+const ACTIVE_SYSTEM_PERMISSION_SET_NAMES = new Set<SystemPermissionSetName>();
+const BASIC_EMPLOYEE_TEMPLATE_NAME = 'Employee';
+const BASIC_EMPLOYEE_LEGACY_NAME = 'Basic Employee';
+const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplateDefinition[] =
+  [
+    {
+      name: BASIC_EMPLOYEE_TEMPLATE_NAME,
+      description:
+        'Starter baseline for employee self-service access after invite acceptance.',
+      permissions: {
+        employees: [PermissionAction.VIEW],
+        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
+        attendance: [PermissionAction.CREATE],
+        'time-corrections': [PermissionAction.CREATE],
+        'payslip-self': [PermissionAction.VIEW],
+        'self-appraisals': [PermissionAction.VIEW, PermissionAction.EDIT],
+        resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
+        announcements: [PermissionAction.VIEW],
+        schedules: [PermissionAction.VIEW],
+      },
+    },
+    {
+      name: 'Manager',
+      description:
+        'Starter template for line managers who approve people workflows without full HR administration.',
+      permissions: {
+        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
+        attendance: [PermissionAction.CREATE, PermissionAction.VIEW],
+        'time-corrections': [PermissionAction.CREATE, PermissionAction.APPROVE],
+        'payslip-self': [PermissionAction.VIEW],
+        'self-appraisals': [PermissionAction.VIEW, PermissionAction.EDIT],
+        resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
+        announcements: [PermissionAction.VIEW],
+        employees: [PermissionAction.VIEW],
+        leave: [PermissionAction.VIEW, PermissionAction.APPROVE],
+        timesheets: [PermissionAction.VIEW, PermissionAction.APPROVE],
+        schedules: [PermissionAction.APPROVE],
+        appraisals: [PermissionAction.VIEW],
+        'appraisal-reviews': [PermissionAction.EDIT],
+        assets: [PermissionAction.VIEW],
+        projects: [PermissionAction.VIEW],
+        'project-tasks': [PermissionAction.VIEW, PermissionAction.EDIT],
+      },
+    },
+    {
+      name: 'CEO',
+      description:
+        'Editable high-access template for executive users who should operate near tenant-admin capability while remaining employee-role users.',
+      permissions: {
+        users: [
+          PermissionAction.CREATE,
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.DELETE,
+        ],
+        'user-security': [PermissionAction.EDIT],
+        'permission-sets': [PermissionAction.VIEW, PermissionAction.ASSIGN],
+        'audit-logs': [PermissionAction.VIEW],
+        employees: [
+          PermissionAction.CREATE,
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.DELETE,
+          PermissionAction.EXPORT,
+        ],
+        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        offboarding: [PermissionAction.EDIT],
+        resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
+        documents: [
+          PermissionAction.VIEW,
+          PermissionAction.CREATE,
+          PermissionAction.EDIT,
+        ],
+        departments: [
+          PermissionAction.CREATE,
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.DELETE,
+        ],
+        branches: [
+          PermissionAction.CREATE,
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.DELETE,
+        ],
+        'hr-settings': [PermissionAction.VIEW, PermissionAction.EDIT],
+        leave: [PermissionAction.VIEW, PermissionAction.APPROVE],
+        'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
+        'leave-settings': [PermissionAction.EDIT],
+        attendance: [PermissionAction.CREATE, PermissionAction.VIEW],
+        'time-corrections': [
+          PermissionAction.VIEW,
+          PermissionAction.CREATE,
+          PermissionAction.APPROVE,
+        ],
+        timesheets: [PermissionAction.VIEW, PermissionAction.APPROVE],
+        schedules: [PermissionAction.EDIT, PermissionAction.APPROVE],
+        payroll: [
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.RUN,
+          PermissionAction.APPROVE,
+        ],
+        'payslip-self': [PermissionAction.VIEW],
+        appraisals: [
+          PermissionAction.VIEW,
+          PermissionAction.CREATE,
+          PermissionAction.APPROVE,
+        ],
+        'appraisal-settings': [PermissionAction.EDIT],
+        'self-appraisals': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'appraisal-reviews': [PermissionAction.EDIT],
+        assets: [
+          PermissionAction.VIEW,
+          PermissionAction.EDIT,
+          PermissionAction.ASSIGN,
+        ],
+        projects: [
+          PermissionAction.VIEW,
+          PermissionAction.CREATE,
+          PermissionAction.EDIT,
+          PermissionAction.DELETE,
+          PermissionAction.ASSIGN,
+        ],
+        'project-tasks': [
+          PermissionAction.VIEW,
+          PermissionAction.CREATE,
+          PermissionAction.EDIT,
+          PermissionAction.DELETE,
+          PermissionAction.ASSIGN,
+        ],
+        announcements: [PermissionAction.VIEW, PermissionAction.EDIT],
+      },
+    },
+  ] as const;
+
 type SyncUserSystemPermissionSetParams = {
   tenantId: string;
   userId: string;
   role: string;
   grantedBy: string;
-  seededSetIds?: Record<SystemPermissionSetName, string>;
+  seededSetIds?: Record<string, string>;
 };
-
-const EMPLOYEE_SET: PermissionResourceMap = {
-  'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
-  resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
-  leave: [PermissionAction.VIEW, PermissionAction.CREATE],
-  attendance: [PermissionAction.CREATE],
-  'time-corrections': [PermissionAction.CREATE],
-  schedules: [PermissionAction.VIEW],
-  assets: [PermissionAction.VIEW],
-  announcements: [PermissionAction.VIEW],
-  payroll: [PermissionAction.VIEW],
-  appraisals: [PermissionAction.VIEW, PermissionAction.EDIT],
-};
-
-const COMPANY_ADMIN_SET: PermissionResourceMap = {
-  users: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.DELETE,
-  ],
-  'permission-sets': [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.DELETE,
-    PermissionAction.ASSIGN,
-  ],
-  employees: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.DELETE,
-    PermissionAction.EXPORT,
-  ],
-  'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
-  resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
-  'hr-settings': [PermissionAction.VIEW, PermissionAction.EDIT],
-  departments: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.DELETE,
-  ],
-  branches: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.DELETE,
-  ],
-  leave: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.APPROVE,
-  ],
-  attendance: [PermissionAction.VIEW, PermissionAction.CREATE],
-  'time-corrections': [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.APPROVE,
-  ],
-  timesheets: [PermissionAction.VIEW, PermissionAction.APPROVE],
-  schedules: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.DELETE,
-    PermissionAction.APPROVE,
-  ],
-  payroll: [
-    PermissionAction.VIEW,
-    PermissionAction.RUN,
-    PermissionAction.APPROVE,
-    PermissionAction.EDIT,
-  ],
-  appraisals: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.APPROVE,
-  ],
-  announcements: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-    PermissionAction.DELETE,
-  ],
-  documents: [
-    PermissionAction.VIEW,
-    PermissionAction.CREATE,
-    PermissionAction.EDIT,
-  ],
-};
-
 const SYSTEM_PERMISSION_SET_DEFINITIONS: readonly SystemPermissionSetDefinition[] =
-  [
-    { name: 'Company Admin Set', permissions: COMPANY_ADMIN_SET },
-    { name: 'Employee Set', permissions: EMPLOYEE_SET },
-  ] as const;
+  [] as const;
 
 type AuthPrisma = Pick<
   PrismaClient,
@@ -138,6 +185,103 @@ function getLogger(logger?: LoggerLike) {
     log: logger?.log?.bind(logger) ?? (() => undefined),
     warn: logger?.warn?.bind(logger) ?? (() => undefined),
   };
+}
+
+async function buildLegacyPermissionSetName(
+  prisma: AuthPrisma,
+  tenantId: string,
+  currentName: string,
+): Promise<string> {
+  const preferredName = `Legacy ${currentName}`;
+  const existing = await prisma.permissionSet.findUnique({
+    where: { tenantId_name: { tenantId, name: preferredName } },
+    select: { id: true },
+  });
+
+  if (!existing) {
+    return preferredName;
+  }
+
+  return `${preferredName} (${new Date().getFullYear()})`;
+}
+
+async function reconcileLegacySystemPermissionSets(
+  prisma: AuthPrisma,
+  tenantId: string,
+  logger?: LoggerLike,
+) {
+  const log = getLogger(logger);
+  const legacySets = await prisma.permissionSet.findMany({
+    where: {
+      tenantId,
+      isSystem: true,
+      name: {
+        notIn: Array.from(ACTIVE_SYSTEM_PERMISSION_SET_NAMES),
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+      description: true,
+      _count: { select: { users: true } },
+    },
+  });
+
+  for (const set of legacySets) {
+    if (set.name === 'Company Admin Set') {
+      await prisma.permissionSet.update({
+        where: { id: set.id },
+        data: {
+          isSystem: false,
+          isActive: false,
+          description:
+            set.description ??
+            'Retired legacy company admin system permission set from a pre-migration RBAC model.',
+        },
+      });
+      log.warn(
+        `Retired legacy Company Admin Set for tenant ${tenantId}; ${set._count.users} user assignment(s) will be removed during system permission sync.`,
+      );
+      continue;
+    }
+
+    if (set._count.users === 0) {
+      await prisma.permissionSet.update({
+        where: { id: set.id },
+        data: {
+          isSystem: false,
+          isActive: false,
+          description:
+            set.description ??
+            'Auto-deactivated legacy system permission set from a pre-migration RBAC model.',
+        },
+      });
+      log.warn(
+        `Deactivated legacy system permission set "${set.name}" for tenant ${tenantId} because it has no assigned users.`,
+      );
+      continue;
+    }
+
+    const legacyName =
+      set.name.startsWith('Legacy ') || set.name.endsWith('(Legacy)')
+        ? set.name
+        : await buildLegacyPermissionSetName(prisma, tenantId, set.name);
+
+    await prisma.permissionSet.update({
+      where: { id: set.id },
+      data: {
+        name: legacyName,
+        isSystem: false,
+        description:
+          set.description ??
+          'Legacy permission set preserved during RBAC system-set migration.',
+      },
+    });
+    log.warn(
+      `Converted legacy system permission set "${set.name}" to custom set "${legacyName}" for tenant ${tenantId}; ${set._count.users} user(s) remain assigned.`,
+    );
+  }
 }
 
 export async function ensurePermissionResources(
@@ -166,10 +310,10 @@ export async function seedSystemPermissionSets(
   prisma: AuthPrisma,
   tenantId: string,
   logger?: LoggerLike,
-): Promise<Record<SystemPermissionSetName, string>> {
+): Promise<Record<string, string>> {
   const log = getLogger(logger);
   const resources = await ensurePermissionResources(prisma);
-  const seeded: Partial<Record<SystemPermissionSetName, string>> = {};
+  const seeded: Record<string, string> = {};
 
   for (const set of SYSTEM_PERMISSION_SET_DEFINITIONS) {
     const entries: { resourceId: string; action: PermissionAction }[] = [];
@@ -233,15 +377,124 @@ export async function seedSystemPermissionSets(
     `Ensured system permission sets for tenant ${tenantId}: ${Object.keys(seeded).join(', ')}`,
   );
 
-  return seeded as Record<SystemPermissionSetName, string>;
+  return seeded;
+}
+
+export async function seedDefaultPermissionTemplates(
+  prisma: AuthPrisma,
+  tenantId: string,
+  logger?: LoggerLike,
+): Promise<Record<string, string>> {
+  const log = getLogger(logger);
+  const resources = await ensurePermissionResources(prisma);
+  const seeded: Record<string, string> = {};
+
+  // Migrate "Basic Employee" → "Employee" if the old name still exists
+  const legacyBasicEmployee = await prisma.permissionSet.findUnique({
+    where: { tenantId_name: { tenantId, name: BASIC_EMPLOYEE_LEGACY_NAME } },
+    select: { id: true },
+  });
+  if (legacyBasicEmployee) {
+    await prisma.permissionSet.update({
+      where: { id: legacyBasicEmployee.id },
+      data: { name: BASIC_EMPLOYEE_TEMPLATE_NAME },
+    });
+    log.log(`Renamed "Basic Employee" → "Employee" for tenant ${tenantId}`);
+  }
+
+  for (const template of DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS) {
+    const entries: { resourceId: string; action: PermissionAction }[] = [];
+
+    for (const [resourceName, actions] of Object.entries(
+      template.permissions,
+    )) {
+      const resourceId = resources[resourceName];
+      if (!resourceId) {
+        throw new Error(
+          `Resource "${resourceName}" is not seeded but is required by ${template.name}`,
+        );
+      }
+
+      for (const action of actions) {
+        entries.push({ resourceId, action });
+      }
+    }
+
+    const existing = await prisma.permissionSet.findUnique({
+      where: { tenantId_name: { tenantId, name: template.name } },
+      select: { id: true, isSystem: true, isActive: true },
+    });
+
+    if (existing) {
+      // Always sync name, description, and active state
+      await prisma.permissionSet.update({
+        where: { id: existing.id },
+        data: {
+          isActive: true,
+          isSystem: false,
+          description: template.description,
+        },
+      });
+
+      // Sync permissions: add any missing resource:action pairs
+      const existingResources = await prisma.permissionSetResource.findMany({
+        where: { permissionSetId: existing.id },
+        select: { resourceId: true, action: true },
+      });
+      const existingKeys = new Set(
+        existingResources.map((r) => `${r.resourceId}:${r.action}`),
+      );
+      const missing = entries.filter(
+        (e) => !existingKeys.has(`${e.resourceId}:${e.action}`),
+      );
+      if (missing.length > 0) {
+        await prisma.permissionSetResource.createMany({
+          data: missing.map((entry) => ({
+            permissionSetId: existing.id,
+            resourceId: entry.resourceId,
+            action: entry.action,
+          })),
+          skipDuplicates: true,
+        });
+        log.log(
+          `Added ${missing.length} missing permission(s) to "${template.name}" for tenant ${tenantId}`,
+        );
+      }
+
+      seeded[template.name] = existing.id;
+      continue;
+    }
+
+    const created = await prisma.permissionSet.create({
+      data: {
+        tenantId,
+        name: template.name,
+        description: template.description,
+        isSystem: false,
+        resources: {
+          create: entries.map((entry) => ({
+            resourceId: entry.resourceId,
+            action: entry.action,
+          })),
+        },
+      },
+      select: { id: true },
+    });
+    seeded[template.name] = created.id;
+  }
+
+  log.log(
+    `Ensured editable permission templates for tenant ${tenantId}: ${Object.keys(seeded).join(', ')}`,
+  );
+
+  return seeded;
 }
 
 export function resolveSystemPermissionSetName(
   role: string,
 ): SystemPermissionSetName | null {
-  if (role === 'SUPER_ADMIN') return null;
-  if (role === 'TENANT_ADMIN') return 'Company Admin Set';
-  return 'Employee Set';
+  void role;
+  return null;
 }
 
 export async function syncUserSystemPermissionSet(
@@ -252,11 +505,30 @@ export async function syncUserSystemPermissionSet(
   const log = getLogger(logger);
   const targetSetName = resolveSystemPermissionSetName(params.role);
 
-  if (!targetSetName) return null;
-
   const seededSetIds =
     params.seededSetIds ??
     (await seedSystemPermissionSets(prisma, params.tenantId, logger));
+
+  if (!targetSetName) {
+    await prisma.userPermissionSet.deleteMany({
+      where: {
+        userId: params.userId,
+        permissionSetId: {
+          in: Object.values(seededSetIds),
+        },
+      },
+    });
+    await prisma.userPermissionSet.deleteMany({
+      where: {
+        userId: params.userId,
+        permissionSet: {
+          tenantId: params.tenantId,
+          isActive: false,
+        },
+      },
+    });
+    return null;
+  }
   const targetSetId = seededSetIds[targetSetName];
 
   await prisma.userPermissionSet.deleteMany({
@@ -304,6 +576,8 @@ export async function backfillSystemPermissionState(
       tenant.id,
       logger,
     );
+    await seedDefaultPermissionTemplates(prisma, tenant.id, logger);
+    await reconcileLegacySystemPermissionSets(prisma, tenant.id, logger);
     const users = await prisma.user.findMany({
       where: { tenantId: tenant.id },
       select: { id: true, role: true },

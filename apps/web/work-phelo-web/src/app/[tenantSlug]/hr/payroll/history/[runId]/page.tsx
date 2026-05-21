@@ -1,93 +1,134 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
-import { usePayrollRun } from '@/hooks';
-import { PayrollItem } from '@/types/hr';
+import { usePayrollRun, useMarkPayrollPaid } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
+import { PayrollItem, PayrollRunDetail } from '@/types/hr';
+import { useAuthStore } from '@/store/auth.store';
+import {
+  payrollMonthLabel,
+  downloadPayrollBankFormat,
+  downloadPayrollFullFormat,
+  downloadPayrollPDFFormat,
+} from '@/lib/payrollUtils';
+import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
 
-const MONTH_NAMES = [
-  '',
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
+function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [pendingFormat, setPendingFormat] = useState<'bank' | 'full' | null>(null);
+  const [loading, setLoading] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const companyName = useAuthStore((s) => s.user?.tenantName ?? '');
 
-function fmt(value: string | number) {
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setPendingFormat(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleFileType = async (type: 'csv' | 'pdf') => {
+    const format = pendingFormat!;
+    setPendingFormat(null);
+    setLoading(true);
+    try {
+      if (type === 'csv') {
+        if (format === 'bank') downloadPayrollBankFormat(detail, label, companyName);
+        else downloadPayrollFullFormat(detail, label, companyName);
+      } else {
+        await downloadPayrollPDFFormat(detail, label, format, companyName);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => {
+          if (!loading) {
+            setOpen((v) => !v);
+            setPendingFormat(null);
+          }
+        }}
+        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+        disabled={loading}
+      >
+        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+        Download
+        <Icons.ChevronDown className="w-4 h-4 text-gray-400" />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1.5 z-10 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1 overflow-hidden">
+          <button
+            onClick={() => {
+              setOpen(false);
+              setPendingFormat('bank');
+            }}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Bank format
+          </button>
+          <button
+            onClick={() => {
+              setOpen(false);
+              setPendingFormat('full');
+            }}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            Full format
+          </button>
+        </div>
+      )}
+
+      {pendingFormat && (
+        <div className="absolute right-0 top-full mt-1.5 z-10 w-44 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden">
+          <p className="px-4 pt-3 pb-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+            {pendingFormat === 'bank' ? 'Bank format' : 'Full format'}
+          </p>
+          <button
+            onClick={() => handleFileType('csv')}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            CSV
+          </button>
+          <button
+            onClick={() => handleFileType('pdf')}
+            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            PDF
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
-const columns: Column<PayrollItem>[] = [
-  {
-    key: 'employee',
-    label: 'Employee',
-    width: '2fr',
-    render: (row) => (
-      <div>
-        <p className="font-medium text-gray-900">
-          {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
-        </p>
-        {row.employee?.jobTitle && <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>}
-      </div>
-    ),
-  },
-  {
-    key: 'basicSalary',
-    label: 'Basic Salary',
-    render: (row) => fmt(row.basicSalary),
-  },
-  {
-    key: 'totalAllowances',
-    label: 'Allowances',
-    render: (row) => fmt(row.totalAllowances),
-  },
-  {
-    key: 'grossSalary',
-    label: 'Gross',
-    render: (row) => fmt(row.grossSalary),
-  },
-  {
-    key: 'employeeSSNIT',
-    label: 'SSNIT',
-    render: (row) => fmt(row.employeeSSNIT),
-  },
-  {
-    key: 'payeTax',
-    label: 'PAYE',
-    render: (row) => fmt(row.payeTax),
-  },
-  {
-    key: 'netSalary',
-    label: 'Net Salary',
-    render: (row) => <span className="font-semibold text-emerald-600">{fmt(row.netSalary)}</span>,
-  },
-  {
-    key: 'download',
-    label: '',
-    width: '60px',
-    render: (row) => (
-      <button
-        className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-        title={`Download ${row.employee?.firstName ?? ''} payslip`}
-      >
-        <Download className="w-4 h-4" />
-      </button>
-    ),
-  },
-];
+function totalAllowances(row: PayrollItem): number {
+  if (row.allowanceItems?.length) {
+    return row.allowanceItems.reduce((s, a) => s + parseFloat(a.amount), 0);
+  }
+  return parseFloat(row.totalAllowances) + parseFloat(row.transportAmount);
+}
+
+function totalDeductions(row: PayrollItem): number {
+  if (row.deductionItems?.length) {
+    return row.deductionItems.reduce((s, d) => s + parseFloat(d.amount), 0);
+  }
+  return parseFloat(row.otherDeductions);
+}
 
 export default function PayrollHistoryDetailPage({
   params,
@@ -95,9 +136,58 @@ export default function PayrollHistoryDetailPage({
   params: Promise<{ tenantSlug: string; runId: string }>;
 }) {
   const { tenantSlug, runId } = use(params);
+  const toast = useToast();
   const { data: run, isLoading } = usePayrollRun(runId);
+  const { mutate: markPaid, isPending: isMarkingPaid } = useMarkPayrollPaid();
 
-  const periodLabel = run ? `${MONTH_NAMES[run.month]} ${run.year}` : '—';
+  const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
+  const fileLabel = periodLabel.replace(' ', '-');
+  const isPaid = run?.status === 'PAID';
+
+  const handleMarkPaid = () => {
+    markPaid(runId, {
+      onSuccess: () => toast.success(`${periodLabel} marked as paid`),
+      onError: (err) => toast.error(extractError(err, 'Failed to mark payroll as paid')),
+    });
+  };
+  const payrollLabels = getPayrollLabels(run?.payrollCountry);
+  const money = (value: string | number | null | undefined) =>
+    formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
+
+  const columns: Column<PayrollItem>[] = [
+    {
+      key: 'employee',
+      label: 'Employee',
+      width: '2fr',
+      render: (row) => (
+        <div>
+          <p className="font-medium text-gray-900">
+            {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
+          </p>
+          {row.employee?.jobTitle && (
+            <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>
+          )}
+        </div>
+      ),
+    },
+    { key: 'basicSalary', label: 'Basic Salary', render: (row) => money(row.basicSalary) },
+    { key: 'totalAllowances', label: 'Allowances', render: (row) => money(totalAllowances(row)) },
+    { key: 'otherDeductions', label: 'Deductions', render: (row) => money(totalDeductions(row)) },
+    { key: 'grossSalary', label: 'Gross', render: (row) => money(row.grossSalary) },
+    {
+      key: 'employeeSSNIT',
+      label: payrollLabels.employeeLabel,
+      render: (row) => money(row.employeeSSNIT),
+    },
+    { key: 'payeTax', label: 'PAYE', render: (row) => money(row.payeTax) },
+    {
+      key: 'netSalary',
+      label: 'Net Salary',
+      render: (row) => (
+        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
+      ),
+    },
+  ];
 
   return (
     <div className="p-8 flex flex-col gap-6 h-full">
@@ -113,11 +203,16 @@ export default function PayrollHistoryDetailPage({
           <span className="text-gray-700 font-medium">{periodLabel}</span>
         </nav>
 
-        <Button>
-          <Download className="w-4 h-4 mr-2" />
-          Download All
-        </Button>
+        {run &&
+          (isPaid ? (
+            <DownloadAllMenu detail={run} label={fileLabel} />
+          ) : (
+            <Button onClick={handleMarkPaid} isLoading={isMarkingPaid} loadingText="Marking…">
+              Mark as Paid
+            </Button>
+          ))}
       </div>
+
       <DataTable
         columns={columns}
         data={run?.items ?? []}

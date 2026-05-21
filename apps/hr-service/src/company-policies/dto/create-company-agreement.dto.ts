@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CompanyAgreementType } from '../../../prisma/generated/client';
-import { IsEnum, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateCompanyAgreementDto {
   @ApiProperty({
@@ -24,4 +30,23 @@ export class CreateCompanyAgreementDto {
   })
   @IsString()
   details!: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Optional source document URL or storage path. MVP signing uses details text as the source of truth.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  documentUrl?: string;
+
+  @ApiProperty({
+    required: false,
+    default: true,
+    description: 'Whether employees are expected to sign this agreement.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isRequired?: boolean;
 }

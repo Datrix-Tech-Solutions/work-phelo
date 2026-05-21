@@ -102,6 +102,7 @@ export interface Employee {
   createdAt?: string;
   assets?: import('@/types/asset').EmployeeAsset[];
   allowances?: EmployeeAllowance[];
+  deductions?: EmployeeDeduction[];
   offboarding?: OffboardingRecord;
 }
 
@@ -109,10 +110,37 @@ export interface EmployeeAllowance {
   id: string;
   employeeId: string;
   type: AllowanceType;
+  name: string;
   amount: number;
-  description?: string;
   effectiveFrom: string;
+  effectiveTo?: string | null;
   createdAt: string;
+}
+
+export interface EmployeeDeduction {
+  id: string;
+  employeeId: string;
+  name: string;
+  totalAmount: number;
+  monthlyRate: number;
+  amountPaid: number;
+  startDate: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateDeductionPayload {
+  name: string;
+  totalAmount: number;
+  monthlyRate: number;
+  startDate: string;
+}
+
+export interface UpdateDeductionPayload {
+  name?: string;
+  totalAmount?: number;
+  monthlyRate?: number;
+  startDate?: string;
 }
 
 export interface EmployeeDocument {
@@ -127,8 +155,11 @@ export interface EmployeeDocument {
 export interface AddAllowancePayload {
   type: AllowanceType;
   amount: number;
-  description?: string;
-  effectiveFrom: string;
+}
+
+export interface UpdateAllowancePayload {
+  type?: AllowanceType;
+  amount?: number;
 }
 
 export interface UploadDocumentPayload {
@@ -175,7 +206,7 @@ export interface CreateEmployeePayload {
   email: string;
   phone?: string;
   gender?: Gender;
-  dateOfBirth?: string;
+  dateOfBirth: string;
   maritalStatus?: MaritalStatus;
   nationality?: string;
   address?: string;
@@ -242,12 +273,17 @@ export interface PublicHoliday {
   tenantId: string;
   name: string;
   date: string;
+  observedDate: string;
+  countryScope: string;
+  regionScope: string;
+  isObservedShifted: boolean;
   createdAt: string;
 }
 
 export interface CreatePublicHolidayDto {
   name: string;
   date: string;
+  countryScope?: string;
 }
 
 // ── Announcements ───────────────────────────────────────
@@ -325,6 +361,7 @@ export interface LeaveRequest {
   reviewNote?: string;
   createdAt: string;
   updatedAt?: string;
+  coverageEmployee?: { id: string; firstName: string; lastName: string };
 }
 
 export interface CreateLeaveRequestDto {
@@ -332,6 +369,7 @@ export interface CreateLeaveRequestDto {
   startDate: string;
   endDate: string;
   reason?: string;
+  coverageEmployeeId?: string;
   documentationUrl?: string;
 }
 
@@ -353,6 +391,7 @@ export interface LeaveBalance {
 
 // ── Payroll ───────────────────────────────────────────────
 export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+export type PayrollCountry = 'GH' | 'NG' | 'KE';
 
 export interface PayrollRun {
   id: string;
@@ -363,14 +402,21 @@ export interface PayrollRun {
   totalGross: string;
   totalNet: string;
   totalSSNIT: string;
+  totalTier1: string;
+  totalTier2: string;
   totalTier3: string;
   totalPAYE: string;
+  totalEmployerCost: string;
   runBy: string;
   submittedBy?: string | null;
   submittedAt?: string | null;
   approvedBy?: string;
   approvedAt?: string;
+  approvalNote?: string | null;
+  returnToDraftNote?: string | null;
   paidAt?: string;
+  payrollCountry: PayrollCountry;
+  payrollCurrency: string;
   tier3Enabled: boolean;
   tier3Rate?: string | null;
   tier3SchemeName?: string | null;
@@ -383,8 +429,29 @@ export interface PayrollRunEmployeeSummary {
   lastName: string;
   employeeNumber: string;
   jobTitle: string;
+  department?: string | null;
+  tinNumber?: string | null;
+  ssnit?: string | null;
+  branchName?: string | null;
   bankName?: string | null;
+  bankBranch?: string | null;
   bankAccountNumber?: string | null;
+}
+
+export interface PayrollItemAllowance {
+  id: string;
+  payrollItemId: string;
+  name: string;
+  type?: string | null;
+  amount: string;
+}
+
+export interface PayrollItemDeduction {
+  id: string;
+  payrollItemId: string;
+  employeeDeductionId?: string | null;
+  name: string;
+  amount: string;
 }
 
 export interface PayrollItem {
@@ -394,14 +461,18 @@ export interface PayrollItem {
   employeeId: string;
   basicSalary: string;
   totalAllowances: string;
+  allowanceItems?: PayrollItemAllowance[];
   transportAmount: string;
   otherDeductions: string;
+  deductionItems?: PayrollItemDeduction[];
   overtimePay: string;
   bonus: string;
   thirteenthMonth: string;
   grossSalary: string;
   employeeSSNIT: string;
   employerSSNIT: string;
+  tier1Contribution: string;
+  tier2Contribution: string;
   tier3Employee: string;
   taxableIncome: string;
   payeTax: string;
@@ -415,6 +486,8 @@ export interface PayrollItem {
     year: number;
     status: PayrollRunStatus;
     paidAt?: string | null;
+    payrollCountry?: PayrollCountry;
+    payrollCurrency?: string;
     tier3Enabled: boolean;
     tier3Rate?: string | null;
     tier3SchemeName?: string | null;
@@ -423,6 +496,10 @@ export interface PayrollItem {
 
 export interface PayrollRunDetail extends PayrollRun {
   items: PayrollItem[];
+}
+
+export interface PayrollDecisionDto {
+  note: string;
 }
 
 export interface RunPayrollDto {
@@ -436,15 +513,31 @@ export interface UpdatePayrollItemDto {
   totalAllowances?: number;
   transportAmount?: number;
   otherDeductions?: number;
+  allowanceItems?: Array<{
+    name: string;
+    type?: string | null;
+    amount: number;
+  }>;
+  deductionItems?: Array<{
+    employeeDeductionId?: string | null;
+    name: string;
+    amount: number;
+  }>;
 }
 
 export interface PayrollSettings {
+  payrollCountry: PayrollCountry;
+  payrollCurrency: string;
+  payrollTier2FundName: string | null;
   payrollTier3Enabled: boolean;
   payrollTier3Rate: number | null;
   payrollTier3SchemeName: string | null;
 }
 
 export interface UpdatePayrollSettingsDto {
+  payrollCountry?: PayrollCountry;
+  payrollCurrency?: string;
+  payrollTier2FundName?: string;
   payrollTier3Enabled?: boolean;
   payrollTier3Rate?: number;
   payrollTier3SchemeName?: string;
@@ -464,6 +557,7 @@ export interface Project {
   managerId?: string;
   managerName?: string;
   assignedCount: number;
+  progress?: number;
   createdAt: string;
 }
 
@@ -474,6 +568,77 @@ export interface CreateProjectDto {
   endDate?: string;
   budget?: number;
   managerId?: string;
+}
+
+export type UpdateProjectDto = Partial<CreateProjectDto> & { status?: ProjectStatus };
+
+export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'ON_HOLD' | 'DONE';
+export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+export type ProjectMemberRole = 'OWNER' | 'MANAGER' | 'MEMBER';
+
+export interface ProjectTask {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  name: string;
+  description?: string | null;
+  status: TaskStatus;
+  priority?: TaskPriority | null;
+  dueDate?: string | null;
+  assignedEmployeeId?: string | null;
+  assignedEmployeeName?: string;
+  completedAt?: string | null;
+  createdByUserId?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  employeeId: string;
+  role: ProjectMemberRole;
+  joinedAt: string;
+  name: string;
+  email: string;
+  jobTitle: string;
+  department: string | null;
+}
+
+export interface ProjectDetail extends Project {
+  tasks: ProjectTask[];
+  members: ProjectMember[];
+}
+
+export interface MyTask extends ProjectTask {
+  project: { id: string; name: string; status: ProjectStatus };
+}
+
+export interface ProjectActivity {
+  id: string;
+  tenantId: string;
+  projectId: string;
+  taskId?: string | null;
+  actorUserId: string;
+  actorEmployeeId?: string | null;
+  type: string;
+  message: string;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface CreateProjectTaskDto {
+  name: string;
+  description?: string;
+  dueDate?: string;
+  priority?: TaskPriority;
+  assignedEmployeeId?: string;
+}
+
+export type UpdateProjectTaskDto = Partial<CreateProjectTaskDto> & { status?: TaskStatus };
+
+export interface AddProjectMemberDto {
+  employeeId: string;
+  role?: ProjectMemberRole;
 }
 
 // ── Dashboard ─────────────────────────────────────────────
@@ -890,21 +1055,77 @@ export type CompanyAgreementType =
   | 'PROBATION_AGREEMENT'
   | 'OTHER';
 
+export type CompanyAgreementState = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+export type CompanyAgreementSignatureStatus = 'SIGNED' | 'DECLINED' | 'REVOKED';
+
 export interface CompanyAgreement {
   id: string;
   tenantId: string;
   type: CompanyAgreementType;
   title: string;
   details: string;
+  documentUrl?: string | null;
+  isRequired: boolean;
+  state: CompanyAgreementState;
+  activeVersionId?: string | null;
   createdBy?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface CompanyAgreementSignatureRow {
+  employee: {
+    id: string;
+    employeeNumber: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    department: { id: string; name: string } | null;
+  };
+  signature: {
+    id: string;
+    status: CompanyAgreementSignatureStatus;
+    typedName?: string | null;
+    signedAt?: string | null;
+    declinedAt?: string | null;
+    declineReason?: string | null;
+  } | null;
+  status: CompanyAgreementSignatureStatus | 'PENDING';
+}
+
+export interface CompanyAgreementSignaturesResponse {
+  agreement: CompanyAgreement;
+  version: { id: string; version: number; title: string } | null;
+  summary: { signed: number; declined: number; pending: number; total: number };
+  rows: CompanyAgreementSignatureRow[];
+}
+
+export interface MyCompanyAgreementVersion {
+  id: string;
+  version: number;
+  title: string;
+  details: string;
+  documentUrl?: string | null;
+  publishedAt?: string | null;
+}
+
+export interface MyCompanyAgreement {
+  agreement: CompanyAgreement;
+  version: MyCompanyAgreementVersion;
+  signature: { id: string; status: CompanyAgreementSignatureStatus } | null;
+  status: CompanyAgreementSignatureStatus | 'PENDING';
 }
 
 export interface CreateCompanyAgreementDto {
   type: CompanyAgreementType;
   title: string;
   details: string;
+}
+
+export interface UpdateCompanyAgreementDto {
+  type?: CompanyAgreementType;
+  title?: string;
+  details?: string;
 }
 
 export interface CreateAppraisalKpiDto {

@@ -10,7 +10,6 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import { CreateProjectDto } from '@/types/hr';
 import { EmployeeOption } from '@/types/hr';
-// import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 
 interface CreateProjectPanelProps {
   isOpen: boolean;
@@ -76,6 +75,7 @@ export function CreateProjectPanel({
   const managerOptions = employees.map((e) => ({
     value: e.id,
     label: `${e.firstName} ${e.lastName}`,
+    sublabel: e.jobTitle,
   }));
 
   return (
@@ -83,7 +83,7 @@ export function CreateProjectPanel({
       isOpen={isOpen}
       onClose={handleClose}
       title="New Project"
-      description="Create a new project and assign a manager."
+      description="Create a new project and assign an owner."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={handleClose}>
@@ -125,6 +125,7 @@ export function CreateProjectPanel({
               value={field.value}
               onChange={field.onChange}
               error={errors.startDate?.message}
+              disablePast
             />
           )}
         />
@@ -132,21 +133,15 @@ export function CreateProjectPanel({
           name="endDate"
           control={control}
           render={({ field }) => (
-            <DatePicker label="End Date" value={field.value} onChange={field.onChange} />
+            <DatePicker
+              label="End Date"
+              value={field.value}
+              onChange={field.onChange}
+              disablePast
+            />
           )}
         />
       </div>
-
-      {/* <CurrencyInput
-        label="Budget"
-        value={basicSalaryValue}
-        currency={salaryCurrency}
-        onValueChange={register('budget', {
-          min: { value: 0, message: 'Budget must be a positive number' },
-        })}
-        onCurrencyChange={setSalaryCurrency}
-        placeholder="0.00"
-      /> */}
 
       <FormField
         label="Budget (GHS)"
@@ -163,8 +158,8 @@ export function CreateProjectPanel({
         control={control}
         render={({ field }) => (
           <SearchSelect
-            label="Project Manager"
-            placeholder="Select manager (optional)"
+            label="Project Owner"
+            placeholder="Select owner (optional)"
             options={managerOptions}
             value={field.value}
             onChange={field.onChange}

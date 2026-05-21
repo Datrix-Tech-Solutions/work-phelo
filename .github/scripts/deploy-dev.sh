@@ -64,7 +64,7 @@ write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.dev" \
 write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.dev" \
   "PORT=4001" \
   "NODE_ENV=production" \
-  "DATABASE_URL=$(db_url_for_schema auth)" \
+  "DATABASE_URL=$(db_url_for_schema w_auth)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
   "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
@@ -89,7 +89,9 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.dev" \
   "REDIS_URL=redis://redis:6379" \
   "JWT_SECRET=${JWT_SECRET}" \
   "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
-  "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}"
+  "FRONTEND_BASE_URL=${AUTH_FRONTEND_BASE_URL}" \
+  "FIELD_ENCRYPTION_KEY=${HR_FIELD_ENCRYPTION_KEY}" \
+  "FIELD_HMAC_KEY=${HR_FIELD_HMAC_KEY}"
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.dev" \
   "PORT=4004" \
@@ -124,7 +126,7 @@ echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
 log "✓ Authenticated with GHCR"
 
 section "Pull Images"
-docker_compose pull postgres redis rabbitmq
+docker_compose pull redis rabbitmq
 ensure_image_available "$API_GATEWAY_IMAGE" "api-gateway" "api-gateway"
 ensure_image_available "$AUTH_SERVICE_IMAGE" "auth-service" "auth-service"
 ensure_image_available "$HR_SERVICE_IMAGE" "hr-service" "hr-service"
@@ -141,12 +143,25 @@ preflight_runtime_env "$HR_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/hr-service/.env.d
 preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notification-service/.env.dev" "dist/config/runtime-env.js" "notification-service"
 log "✓ Runtime env validation passed"
 
+section "Infrastructure Services"
+docker_compose up -d --no-build redis rabbitmq
+wait_for_container_health redis
+wait_for_container_health rabbitmq
+log "✓ Infrastructure services healthy"
+
+section "Database Migrations"
+docker_compose run --rm auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
+docker_compose run --rm hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
+docker_compose run --rm notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
+docker_compose run --rm subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
+docker_compose run --rm marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" || true
+log "✓ Migrations complete"
+
 section "Deploy"
 docker_compose up -d --remove-orphans --no-build
 log "✓ Compose rollout finished"
 
 section "Container Health"
-wait_for_container_health postgres
 wait_for_container_health redis
 wait_for_container_health rabbitmq
 wait_for_container_health auth-service
@@ -157,44 +172,26 @@ wait_for_container_health marketing-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
-section "Database Migrations"
-docker_compose_exec postgres psql -U erp -d workphelo -c "CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS hr; CREATE SCHEMA IF NOT EXISTS notify; CREATE SCHEMA IF NOT EXISTS billing; CREATE SCHEMA IF NOT EXISTS marketing;"
-docker_compose_exec auth-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/auth-service/prisma/schema.prisma"
-docker_compose_exec hr-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/hr-service/prisma/schema.prisma"
-
-NOTIFY_HAS_TABLES="$(
-  docker_compose_exec postgres psql -U erp -d workphelo -tAc \
-    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='notify' AND table_name NOT IN ('_prisma_migrations')" \
-    | tr -d '[:space:]'
-)"
-NOTIFY_TRACKED="$(
-  docker_compose_exec postgres psql -U erp -d workphelo -tAc \
-    "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='notify' AND table_name='_prisma_migrations'" \
-    | tr -d '[:space:]'
-)"
-
-if [[ "${NOTIFY_HAS_TABLES:-0}" != "0" && "${NOTIFY_TRACKED:-0}" == "0" ]]; then
-  log "Untracked notify schema detected; baselining migrations"
-  while IFS= read -r migration; do
-    [[ -n "$migration" ]] || continue
-    docker_compose_exec notification-service sh -c "npx prisma@5.22.0 migrate resolve --applied ${migration} --schema /app/apps/notification-service/prisma/schema.prisma"
-  done < <(docker_compose_exec notification-service sh -c "ls /app/apps/notification-service/prisma/migrations/ | grep -E '^[0-9]'")
-fi
-
-docker_compose_exec notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
-docker_compose_exec subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
-docker_compose_exec marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" || true
-log "✓ Migrations complete"
-
 section "Database Seed"
 if docker_compose_exec \
   -e SUPER_ADMIN_EMAIL="${SUPER_ADMIN_EMAIL}" \
   -e SUPER_ADMIN_PASSWORD="${SUPER_ADMIN_PASSWORD}" \
+  -e NODE_ENV=development \
   auth-service \
-  node /app/apps/auth-service/prisma/seed.js; then
-  log "✓ Seed complete"
+  node /app/apps/auth-service/dist/prisma/seed.js; then
+  log "✓ Auth seed complete"
 else
-  log "⚠ Seed skipped (compiled seed not found or failed)"
+  log "✗ Auth seed FAILED: database not seeded with super admin user"
+  exit 1
+fi
+
+if docker_compose_exec \
+  -e NODE_ENV=development \
+  hr-service \
+  node /app/apps/hr-service/dist/prisma/seed.js; then
+  log "✓ HR seed complete"
+else
+  log "⚠ HR seed FAILED: demo employees not seeded (non-fatal)"
 fi
 
 section "Reachability"

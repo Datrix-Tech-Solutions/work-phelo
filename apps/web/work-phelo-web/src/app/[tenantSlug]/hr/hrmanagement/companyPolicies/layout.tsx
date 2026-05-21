@@ -1,23 +1,43 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname, useParams } from 'next/navigation';
+import { usePathname, useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/store/auth.store';
+import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 
 const TABS = [
   { label: 'Employment & Resignation', slug: 'employment' },
-  { label: 'Cycle Recipients', slug: 'recipients' },
+  { label: 'Appraisal Cycle Recipients', slug: 'recipients' },
   { label: 'Company Agreements', slug: 'agreements' },
-  { label: 'Allowances', slug: 'allowances' },
+  { label: 'Finances', slug: 'finances' },
 ];
 
 export default function CompanyPoliciesLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const params = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const { canReadHrSettings } = useHrManagementAccess();
+  const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
   const base = `/${params.tenantSlug}/hr/hrmanagement/companyPolicies`;
 
+  const isOnFinances = pathname === `${base}/finances` || pathname.startsWith(`${base}/finances/`);
+
+  useEffect(() => {
+    if (user === null) return;
+    // Payroll-only users without HR settings access land on the finances sub-page.
+    // All other tabs are viewable by everyone, so no further redirect is needed.
+    if (!canReadHrSettings && canManagePayroll && !isOnFinances) {
+      router.replace(`${base}/finances`);
+    }
+  }, [canReadHrSettings, canManagePayroll, isOnFinances, router, user, base]);
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col flex-1 min-h-0">
       <div className="shrink-0">
         <h2 className="text-base font-semibold text-gray-900">Company Policies</h2>
         <p className="text-sm text-gray-500 mt-0.5">
@@ -25,8 +45,10 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
         </p>
       </div>
 
-      <div className="flex items-end gap-1 border-b border-gray-200 shrink-0">
-        {TABS.map((tab) => {
+      <div className="flex items-end gap-1 border-b border-gray-200 shrink-0 mt-4">
+        {TABS.filter((tab) =>
+          tab.slug === 'finances' ? canManagePayroll || canReadHrSettings : true,
+        ).map((tab) => {
           const href = `${base}/${tab.slug}`;
           const isActive = pathname === href || pathname.startsWith(href + '/');
           return (
@@ -46,7 +68,7 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
         })}
       </div>
 
-      <div>{children}</div>
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col pt-6">{children}</div>
     </div>
   );
 }

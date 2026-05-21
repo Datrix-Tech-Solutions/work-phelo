@@ -1,3 +1,34 @@
+export const COUNTRY_OPTIONS = [
+  { value: 'Ghana', label: 'Ghana' },
+  { value: 'Nigeria', label: 'Nigeria' },
+  { value: 'Kenya', label: 'Kenya' },
+];
+
+export interface CountryConfig {
+  dialCode: string;
+  currency: string;
+}
+
+export const COUNTRY_CONFIG: Record<string, CountryConfig> = {
+  Ghana: { dialCode: '+233', currency: 'GHS' },
+  Nigeria: { dialCode: '+234', currency: 'NGN' },
+  Kenya: { dialCode: '+254', currency: 'KES' },
+};
+
+const KNOWN_DIAL_CODES = Object.values(COUNTRY_CONFIG).map((c) => c.dialCode);
+
+export function swapDialCode(phone: string, newCode: string): string {
+  const matched = KNOWN_DIAL_CODES.find((c) => phone.startsWith(c));
+  const number = matched ? phone.slice(matched.length) : phone.replace(/^\+\d+/, '');
+  return newCode + number;
+}
+
+export const CURRENCY_OPTIONS = [
+  { value: 'GHS', label: 'GHS – Ghana Cedi' },
+  { value: 'NGN', label: 'NGN – Nigerian Naira' },
+  { value: 'KES', label: 'KES – Kenyan Shilling' },
+];
+
 export const COMPANY_SIZE_OPTIONS = [
   { value: '1-10', label: '1 – 10 employees' },
   { value: '11-50', label: '11 – 50 employees' },

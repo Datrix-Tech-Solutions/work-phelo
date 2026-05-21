@@ -279,10 +279,128 @@ export function renderTimeCorrectionTemplate(input: {
   });
 }
 
+export function renderPayrollApprovalRequestedTemplate(input: {
+  recipientFirstName: string;
+  month: number;
+  year: number;
+  submittedByName: string;
+  totalGross: string;
+  totalNet: string;
+  notes?: string;
+  reviewLink?: string;
+  escalated?: boolean;
+}): string {
+  const period = new Date(input.year, input.month - 1).toLocaleString('en-GB', {
+    month: 'long',
+    year: 'numeric',
+  });
+  return renderStandardEmail({
+    title: 'Payroll Approval Required',
+    heading: input.escalated
+      ? 'Payroll Approval Escalated'
+      : 'Payroll Approval Required',
+    bodyHtml: `
+      <p>Hi ${input.recipientFirstName},</p>
+      <p>
+        Payroll for <strong>${period}</strong> has been submitted by
+        <strong> ${input.submittedByName}</strong> and is awaiting approval.
+      </p>
+      ${
+        input.escalated
+          ? '<p>No explicit payroll approver is currently configured, so this approval has been escalated to you.</p>'
+          : '<p>Please review the payroll summary and take the necessary approval action.</p>'
+      }
+      <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
+        <tr>
+          <td style="padding:8px 0; width:160px; font-weight:500;">Payroll period:</td>
+          <td style="padding:8px 0;">${period}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-weight:500;">Total gross:</td>
+          <td style="padding:8px 0;">${input.totalGross}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-weight:500;">Total net:</td>
+          <td style="padding:8px 0;">${input.totalNet}</td>
+        </tr>
+      </table>
+      ${
+        input.notes
+          ? `<p><strong>Payroll notes:</strong></p>
+      <p style="background:#f9f9f9; padding:16px; border-left:4px solid #ff6a00; margin:15px 0; color:#444; line-height:1.5;">
+        ${input.notes}
+      </p>`
+          : ''
+      }
+      ${
+        input.reviewLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Review payroll', input.reviewLink)}</p>`
+          : ''
+      }
+      <p style="margin-top:30px;">Thank you,</p>
+    `,
+  });
+}
+
+export function renderPayrollDecisionTemplate(input: {
+  recipientFirstName: string;
+  month: number;
+  year: number;
+  decision: 'APPROVED' | 'RETURNED_TO_DRAFT';
+  reviewerName: string;
+  decisionNote: string;
+  totalGross: string;
+  totalNet: string;
+  detailLink?: string;
+}): string {
+  const returnedToDraft = input.decision === 'RETURNED_TO_DRAFT';
+  const period = new Date(input.year, input.month - 1).toLocaleString('en-GB', {
+    month: 'long',
+    year: 'numeric',
+  });
+  return renderStandardEmail({
+    title: returnedToDraft ? 'Payroll Rejected' : 'Payroll Approved',
+    heading: returnedToDraft ? 'Payroll Rejected' : 'Payroll Approved',
+    bodyHtml: `
+      <p>Hi ${input.recipientFirstName},</p>
+      <p>
+        Payroll for <strong>${period}</strong> was
+        <strong>${returnedToDraft ? ' rejected' : ' approved'}</strong>
+        by <strong>${input.reviewerName}</strong>.
+      </p>
+      <table style="width:100%; border-collapse:collapse; margin:15px 0; color:#555; font-size:15px;">
+        <tr>
+          <td style="padding:8px 0; width:160px; font-weight:500;">Payroll period:</td>
+          <td style="padding:8px 0;">${period}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-weight:500;">Total gross:</td>
+          <td style="padding:8px 0;">${input.totalGross}</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 0; font-weight:500;">Total net:</td>
+          <td style="padding:8px 0;">${input.totalNet}</td>
+        </tr>
+      </table>
+      <p><strong>Reviewer note:</strong></p>
+      <p style="background:#f9f9f9; padding:16px; border-left:4px solid #ff6a00; margin:15px 0; color:#444; line-height:1.5;">
+        ${input.decisionNote}
+      </p>
+      ${
+        input.detailLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('View payroll run', input.detailLink)}</p>`
+          : ''
+      }
+      <p style="margin-top:30px;">Thank you,</p>
+    `,
+  });
+}
+
 export function renderAppraisalSelfSubmittedTemplate(input: {
   managerFirstName: string;
   employeeFullName: string;
   cycleTitle: string;
+  managerReviewLink?: string;
 }): string {
   return renderStandardEmail({
     title: 'Self-Assessment Submitted',
@@ -290,7 +408,32 @@ export function renderAppraisalSelfSubmittedTemplate(input: {
     bodyHtml: `
       <p>Hi ${input.managerFirstName},</p>
       <p><strong>${input.employeeFullName}</strong> has submitted their self-assessment for the <strong>${input.cycleTitle}</strong> appraisal cycle and it is now ready for your manager review.</p>
-      <p>Please log in to WorkPhelo to complete your review.</p>
+      ${
+        input.managerReviewLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open manager review', input.managerReviewLink)}</p>`
+          : '<p>Please log in to WorkPhelo to complete your review.</p>'
+      }
+      <p style="margin-top:30px;">Thank you,</p>
+    `,
+  });
+}
+
+export function renderAppraisalCycleStartedTemplate(input: {
+  employeeFirstName: string;
+  cycleTitle: string;
+  selfAssessmentLink?: string;
+}): string {
+  return renderStandardEmail({
+    title: 'Appraisal Cycle Started',
+    heading: 'Your Appraisal Cycle Is Now Active',
+    bodyHtml: `
+      <p>Hi ${input.employeeFirstName},</p>
+      <p>The <strong>${input.cycleTitle}</strong> appraisal cycle has started. Please complete your self-assessment before the deadline.</p>
+      ${
+        input.selfAssessmentLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Start self-assessment', input.selfAssessmentLink)}</p>`
+          : '<p>Please log in to WorkPhelo to start your self-assessment.</p>'
+      }
       <p style="margin-top:30px;">Thank you,</p>
     `,
   });
@@ -337,6 +480,7 @@ export function renderAppraisalSelfReminderTemplate(input: {
   employeeFirstName: string;
   bodyCopy: string;
   deadlineLabel: string;
+  selfAssessmentLink?: string;
 }): string {
   return renderStandardEmail({
     title: 'Self-Assessment Reminder',
@@ -350,7 +494,11 @@ export function renderAppraisalSelfReminderTemplate(input: {
           <td style="padding:10px 12px;border:1px solid #e5e7eb;">${input.deadlineLabel}</td>
         </tr>
       </table>
-      <p>Please log in to WorkPhelo to complete your appraisal submission.</p>
+      ${
+        input.selfAssessmentLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open self-assessment', input.selfAssessmentLink)}</p>`
+          : '<p>Please log in to WorkPhelo to complete your appraisal submission.</p>'
+      }
       <p style="margin-top:30px;">Thank you,</p>
     `,
   });
@@ -361,6 +509,7 @@ export function renderAppraisalManagerReminderTemplate(input: {
   managerFirstName: string;
   bodyCopy: string;
   deadlineLabel: string;
+  managerReviewLink?: string;
 }): string {
   return renderStandardEmail({
     title: 'Manager Review Reminder',
@@ -374,7 +523,11 @@ export function renderAppraisalManagerReminderTemplate(input: {
           <td style="padding:10px 12px;border:1px solid #e5e7eb;">${input.deadlineLabel}</td>
         </tr>
       </table>
-      <p>Please log in to WorkPhelo to complete the manager review.</p>
+      ${
+        input.managerReviewLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('Open manager review', input.managerReviewLink)}</p>`
+          : '<p>Please log in to WorkPhelo to complete the manager review.</p>'
+      }
       <p style="margin-top:30px;">Thank you,</p>
     `,
   });
@@ -437,6 +590,7 @@ export function renderAppraisalManagerReviewedTemplate(input: {
   cycleTitle: string;
   finalScore: number;
   finalRating: string;
+  platformLink?: string;
 }): string {
   return renderStandardEmail({
     title: 'Appraisal Complete',
@@ -454,7 +608,11 @@ export function renderAppraisalManagerReviewedTemplate(input: {
           <td style="padding:10px 12px;border:1px solid #e5e7eb;">${input.finalRating}</td>
         </tr>
       </table>
-      <p>Log in to WorkPhelo to view your full appraisal details.</p>
+      ${
+        input.platformLink
+          ? `<p style="margin:24px 0;">${renderPrimaryButton('View appraisal result', input.platformLink)}</p>`
+          : '<p>Log in to WorkPhelo to view your full appraisal details.</p>'
+      }
       <p style="margin-top:30px;">Thank you,</p>
     `,
   });

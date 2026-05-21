@@ -24,6 +24,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
 import {
@@ -53,7 +55,10 @@ export class DepartmentsController {
   })
   @ApiResponse({ status: 201, description: 'Department created successfully' })
   @ApiResponse({ status: 409, description: 'Department name already exists' })
-  create(@Body() dto: CreateDepartmentDto, @Req() req: any) {
+  create(
+    @Body() dto: CreateDepartmentDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.departmentsService.create(req.user.tenantId, dto);
   }
 
@@ -64,7 +69,7 @@ export class DepartmentsController {
     status: 200,
     description: 'Departments retrieved successfully',
   })
-  findAll(@Req() req: any) {
+  findAll(@Req() req: Request & { user: RequestUser }) {
     return this.departmentsService.findAll(req.user.tenantId);
   }
 
@@ -77,7 +82,7 @@ export class DepartmentsController {
     status: 200,
     description: 'Department options retrieved successfully',
   })
-  findOptions(@Req() req: any) {
+  findOptions(@Req() req: Request & { user: RequestUser }) {
     const user = req.user;
 
     assertHrAccess(
@@ -100,7 +105,10 @@ export class DepartmentsController {
     description: 'Department retrieved successfully',
   })
   @ApiResponse({ status: 404, description: 'Department not found' })
-  findOne(@Param('id') id: string, @Req() req: any) {
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.departmentsService.findById(req.user.tenantId, id);
   }
 
@@ -114,7 +122,7 @@ export class DepartmentsController {
   update(
     @Param('id') id: string,
     @Body() dto: UpdateDepartmentDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.departmentsService.update(req.user.tenantId, id, dto);
   }
@@ -129,7 +137,7 @@ export class DepartmentsController {
     status: 409,
     description: 'Department has employees assigned',
   })
-  remove(@Param('id') id: string, @Req() req: any) {
+  remove(@Param('id') id: string, @Req() req: Request & { user: RequestUser }) {
     return this.departmentsService.remove(req.user.tenantId, id);
   }
 }

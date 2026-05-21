@@ -1,18 +1,28 @@
 'use client';
 
 import { useState } from 'react';
-import { Button } from '@/components/atoms/Button';
+import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { AddAgreementPanel } from '@/components/organisms/companyPolicies/AddAgreementPanel';
 import { AgreementViewModal } from '@/components/organisms/companyPolicies/AgreementViewModal';
 import {
   useCompanyAgreements,
   useCreateCompanyAgreement,
+  useUpdateCompanyAgreement,
   useDeleteCompanyAgreement,
+  usePublishCompanyAgreement,
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { CompanyAgreement, CompanyAgreementType, CreateCompanyAgreementDto } from '@/types/hr';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
+import { cn } from '@/lib/utils';
+import type {
+  CompanyAgreement,
+  CompanyAgreementType,
+  CreateCompanyAgreementDto,
+  UpdateCompanyAgreementDto,
+} from '@/types/hr';
 
 const AGREEMENT_TYPE_LABELS: Record<CompanyAgreementType, string> = {
   NDA: 'Non-Disclosure Agreement',
@@ -25,12 +35,38 @@ const AGREEMENT_TYPE_LABELS: Record<CompanyAgreementType, string> = {
   OTHER: 'Other',
 };
 
+const STATE_LABEL: Record<string, string> = {
+  DRAFT: 'Draft',
+  PUBLISHED: 'Published',
+  ARCHIVED: 'Archived',
+};
+
+const STATE_CLASS: Record<string, string> = {
+  DRAFT: 'bg-gray-100 text-gray-600',
+  PUBLISHED: 'bg-green-100 text-green-700',
+  ARCHIVED: 'bg-orange-100 text-orange-700',
+};
+
 const COLUMNS: Column<CompanyAgreement>[] = [
   { key: 'title', label: 'Title' },
   {
     key: 'type',
     label: 'Type',
     render: (row) => AGREEMENT_TYPE_LABELS[row.type] ?? row.type,
+  },
+  {
+    key: 'state',
+    label: 'Status',
+    render: (row) => (
+      <span
+        className={cn(
+          'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold',
+          STATE_CLASS[row.state] ?? STATE_CLASS.DRAFT,
+        )}
+      >
+        {STATE_LABEL[row.state] ?? row.state}
+      </span>
+    ),
   },
   {
     key: 'createdAt',
@@ -48,14 +84,20 @@ const PAGE_SIZE = 10;
 
 export default function CompanyAgreementsPage() {
   const toast = useToast();
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const canManage = usePermission(Permission.MANAGE_HR_SETTINGS);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editAgreement, setEditAgreement] = useState<CompanyAgreement | null>(null);
   const [viewAgreement, setViewAgreement] = useState<CompanyAgreement | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
   const { data: agreements = [], isLoading } = useCompanyAgreements();
   const { mutate: createAgreement, isPending: isCreating } = useCreateCompanyAgreement();
+  const { mutate: updateAgreement, isPending: isUpdating } = useUpdateCompanyAgreement();
   const { mutate: deleteAgreement } = useDeleteCompanyAgreement();
+  const { mutate: publishAgreement } = usePublishCompanyAgreement();
 
   const filtered = agreements.filter(
     (a) =>
@@ -76,6 +118,20 @@ export default function CompanyAgreementsPage() {
     });
   };
 
+  const handleUpdate = (data: UpdateCompanyAgreementDto) => {
+    if (!editAgreement) return;
+    updateAgreement(
+      { id: editAgreement.id, ...data },
+      {
+        onSuccess: () => {
+          toast.success('Agreement updated');
+          setEditAgreement(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to update agreement')),
+      },
+    );
+  };
+
   const handleDelete = (id: string) => {
     deleteAgreement(id, {
       onSuccess: () => toast.success('Agreement deleted'),
@@ -83,15 +139,15 @@ export default function CompanyAgreementsPage() {
     });
   };
 
-  return (
-    <div className="flex flex-col gap-6 h-full">
-      <div className="flex items-center justify-between shrink-0">
-        <p className="text-sm text-gray-500">
-          Manage agreements and documents employees are required to sign.
-        </p>
-        <Button onClick={() => setPanelOpen(true)}>+ Add Agreement</Button>
-      </div>
+  const handlePublish = (id: string) => {
+    publishAgreement(id, {
+      onSuccess: () => toast.success('Agreement published'),
+      onError: (err) => toast.error(extractError(err, 'Failed to publish agreement')),
+    });
+  };
 
+  return (
+    <div className="flex flex-col flex-1 min-h-0">
       <DataTable
         columns={COLUMNS}
         data={paginated}
@@ -103,6 +159,9 @@ export default function CompanyAgreementsPage() {
           setSearch(q);
           setPage(1);
         }}
+        actionButton={
+          canManage ? { label: 'Add Agreement', onClick: () => setPanelOpen(true) } : undefined
+        }
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
@@ -111,11 +170,34 @@ export default function CompanyAgreementsPage() {
             label: 'View',
             onClick: () => setViewAgreement(row),
           },
-          {
-            label: 'Delete',
-            danger: true,
-            onClick: () => handleDelete(row.id),
-          },
+          ...(row.state === 'PUBLISHED'
+            ? [
+                {
+                  label: 'View Signatures',
+                  onClick: () =>
+                    router.push(
+                      `/${tenantSlug}/hr/hrmanagement/companyPolicies/agreements/${row.id}/signatures`,
+                    ),
+                },
+              ]
+            : []),
+          ...(canManage && row.state === 'DRAFT'
+            ? [
+                {
+                  label: 'Publish',
+                  onClick: () => handlePublish(row.id),
+                },
+                {
+                  label: 'Edit',
+                  onClick: () => setEditAgreement(row),
+                },
+                {
+                  label: 'Delete',
+                  danger: true,
+                  onClick: () => handleDelete(row.id),
+                },
+              ]
+            : []),
         ]}
       />
 
@@ -124,6 +206,14 @@ export default function CompanyAgreementsPage() {
         onClose={() => setPanelOpen(false)}
         onSubmit={handleCreate}
         isSubmitting={isCreating}
+      />
+
+      <AddAgreementPanel
+        isOpen={!!editAgreement}
+        onClose={() => setEditAgreement(null)}
+        onSubmit={handleUpdate}
+        isSubmitting={isUpdating}
+        agreement={editAgreement}
       />
 
       <AgreementViewModal

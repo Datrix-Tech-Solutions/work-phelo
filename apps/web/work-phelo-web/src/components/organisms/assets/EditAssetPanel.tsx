@@ -9,6 +9,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { Asset } from '@/types/asset';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 interface AssetForm {
   name: string;
@@ -29,6 +30,8 @@ interface Props {
 }
 
 export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
+  const { currency: tenantCurrency } = useTenantConfig();
+
   const {
     register,
     handleSubmit,
@@ -36,7 +39,7 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
     control,
     setValue,
     formState: { errors },
-  } = useForm<AssetForm>({ defaultValues: { currency: 'GHS' } });
+  } = useForm<AssetForm>({ defaultValues: { currency: tenantCurrency } });
 
   const typeValue = useWatch({ control, name: 'type' });
   const conditionValue = useWatch({ control, name: 'condition' });
@@ -52,15 +55,15 @@ export function EditAssetPanel({ isOpen, onClose, asset, onSubmit }: Props) {
         serialNumber: asset.serialNumber ?? '',
         purchaseDate: asset.purchaseDate ?? '',
         purchaseCost: asset.purchaseCost != null ? String(asset.purchaseCost) : '',
-        currency: asset.currency ?? 'GHS',
+        currency: asset.currency ?? tenantCurrency,
         condition: asset.condition ?? '',
         notes: asset.notes ?? '',
       });
     }
-  }, [asset, reset]);
+  }, [asset, reset, tenantCurrency]);
 
   const handleClose = () => {
-    reset({ currency: 'GHS' });
+    reset({ currency: tenantCurrency });
     onClose();
   };
 

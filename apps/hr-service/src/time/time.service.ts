@@ -31,6 +31,7 @@ import {
   Prisma,
   ShiftSchedule,
   ShiftSwapStatus,
+  TimeCorrectionStatus,
 } from '../../prisma/generated/client';
 
 type TimeApprovalRecipient = {
@@ -128,8 +129,9 @@ export class TimeService {
     }
   }
 
-  private buildTimeCorrectionAppLink(correctionId: string) {
-    return `/hr/time-clock?tab=corrections&correctionId=${encodeURIComponent(correctionId)}`;
+  private buildTimeCorrectionAppLink(tenantSlug: string, correctionId: string) {
+    const base = process.env.FRONTEND_BASE_URL as string;
+    return `${base}/${tenantSlug}/hr/time-clock?tab=corrections&correctionId=${encodeURIComponent(correctionId)}`;
   }
 
   private toTimeApprovalRecipient(
@@ -348,6 +350,7 @@ export class TimeService {
 
   private async notifyStakeholdersOfTimeCorrectionSubmission(
     tenantId: string,
+    tenantSlug: string,
     correction: {
       id: string;
       employeeId: string;
@@ -378,7 +381,10 @@ export class TimeService {
     }
 
     const attendanceDate = correction.date.toISOString().split('T')[0];
-    const detailLink = this.buildTimeCorrectionAppLink(correction.id);
+    const detailLink = this.buildTimeCorrectionAppLink(
+      tenantSlug,
+      correction.id,
+    );
     const employeeFullName = `${employee.firstName} ${employee.lastName}`;
     const inAppMessage = `${employeeFullName} submitted a time correction request for ${attendanceDate}`;
 
@@ -1077,7 +1083,7 @@ export class TimeService {
       mine?: boolean;
     },
   ) {
-    const where: any = { tenantId };
+    const where: Prisma.ClockRecordWhereInput = { tenantId };
 
     if (filters.mine) {
       const actorEmployee = await getActorEmployee(
@@ -1101,24 +1107,32 @@ export class TimeService {
     }
 
     if (filters.from || filters.to) {
-      where.date = {};
-      if (filters.from) where.date.gte = new Date(filters.from);
-      if (filters.to) where.date.lte = new Date(filters.to);
+      where.date = {
+        ...(filters.from ? { gte: new Date(filters.from) } : {}),
+        ...(filters.to ? { lte: new Date(filters.to) } : {}),
+      };
     }
-
-    const employeeWhere: any = {};
-    if (filters.departmentId) employeeWhere.departmentId = filters.departmentId;
 
     const trimmedSearch = filters.search?.trim();
-    if (trimmedSearch) {
-      employeeWhere.OR = [
-        { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
-        { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
-        { employeeNumber: { contains: trimmedSearch, mode: 'insensitive' } },
-      ];
-    }
+    const employeeWhere: Prisma.EmployeeWhereInput = {
+      ...(filters.departmentId ? { departmentId: filters.departmentId } : {}),
+      ...(trimmedSearch
+        ? {
+            OR: [
+              { firstName: { contains: trimmedSearch, mode: 'insensitive' } },
+              { lastName: { contains: trimmedSearch, mode: 'insensitive' } },
+              {
+                employeeNumber: {
+                  contains: trimmedSearch,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    };
 
-    if (Object.keys(employeeWhere).length > 0) {
+    if (filters.departmentId || trimmedSearch) {
       where.employee = { is: employeeWhere };
     }
 
@@ -1164,6 +1178,7 @@ export class TimeService {
   async submitTimeCorrection(
     tenantId: string,
     userId: string,
+    tenantSlug: string,
     dto: TimeCorrectionDto,
   ) {
     const employee = await this.prisma.employee.findFirst({
@@ -1195,6 +1210,7 @@ export class TimeService {
 
     void this.notifyStakeholdersOfTimeCorrectionSubmission(
       tenantId,
+      tenantSlug,
       correction,
       employee,
     );
@@ -1210,7 +1226,7 @@ export class TimeService {
       status?: string;
     },
   ) {
-    const where: any = { tenantId };
+    const where: Prisma.TimeCorrectionWhereInput = { tenantId };
 
     if (isCompanyAdminUser(actor)) {
       if (filters.employeeId) where.employeeId = filters.employeeId;
@@ -1226,7 +1242,7 @@ export class TimeService {
       if (filters.employeeId) where.employeeId = filters.employeeId;
     }
 
-    if (filters.status) where.status = filters.status;
+    if (filters.status) where.status = filters.status as TimeCorrectionStatus;
 
     return this.prisma.timeCorrection.findMany({
       where,
@@ -2601,10 +2617,22 @@ export class TimeService {
       this.prisma.publicHoliday.findMany({
         where: {
           tenantId,
-          ...(fromDate && { date: { gte: fromDate } }),
-          ...(toDate && { date: { lte: toDate } }),
+          OR: [
+            {
+              date: {
+                ...(fromDate && { gte: fromDate }),
+                ...(toDate && { lte: toDate }),
+              },
+            },
+            {
+              observedDate: {
+                ...(fromDate && { gte: fromDate }),
+                ...(toDate && { lte: toDate }),
+              },
+            },
+          ],
         },
-        orderBy: { date: 'asc' },
+        orderBy: { observedDate: 'asc' },
       }),
       this.prisma.shiftAssignmentOverride.findMany({
         where: {
@@ -2686,7 +2714,7 @@ export class TimeService {
       publicHolidays: publicHolidays.map((h) => ({
         id: h.id,
         name: h.name,
-        date: h.date.toISOString().slice(0, 10),
+        date: h.observedDate.toISOString().slice(0, 10),
       })),
       assignmentOverrides: assignmentOverrides.map((override) => ({
         id: override.id,
@@ -2718,11 +2746,20 @@ export class TimeService {
     actor: RequestUser,
     employeeId?: string,
   ) {
-    const where: any = { tenantId, ...(employeeId ? { employeeId } : {}) };
+    const where: Prisma.ShiftScheduleWhereInput = {
+      tenantId,
+      ...(employeeId ? { employeeId } : {}),
+    };
 
-    if (!isCompanyAdminUser(actor)) {
-      assertHrAccess(hasPermissionRule(actor, 'schedules:VIEW'));
-    }
+    const canViewSchedules =
+      isCompanyAdminUser(actor) ||
+      isEmployeeSelfServiceUser(actor) ||
+      hasPermissionRule(actor, 'schedules:VIEW') ||
+      hasPermissionRule(actor, 'schedules:CREATE') ||
+      hasPermissionRule(actor, 'schedules:EDIT') ||
+      hasPermissionRule(actor, 'schedules:APPROVE') ||
+      hasPermissionRule(actor, 'attendance:CREATE');
+    assertHrAccess(canViewSchedules);
 
     return this.prisma.shiftSchedule.findMany({
       where,

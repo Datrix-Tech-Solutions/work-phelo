@@ -21,6 +21,7 @@ import {
 import { PayrollService } from './payroll.service';
 import { RunPayrollDto } from './dto/run-payroll.dto';
 import { UpdatePayrollItemDto } from './dto/update-payroll-item.dto';
+import { PayrollDecisionDto } from './dto/payroll-decision.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { FeatureGuard } from '../auth/guards/feature.guard';
@@ -29,6 +30,7 @@ import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Permission } from '@work-phelo/config';
+import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
 
 @ApiTags('Payroll')
@@ -61,7 +63,10 @@ export class PayrollController {
     description: 'Payroll draft created successfully',
   })
   @ApiResponse({ status: 400, description: 'No active employees found' })
-  runPayroll(@Body() dto: RunPayrollDto, @Req() req: any) {
+  runPayroll(
+    @Body() dto: RunPayrollDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.payrollService.runPayroll(req.user.tenantId, req.user.id, dto);
   }
 
@@ -78,7 +83,7 @@ export class PayrollController {
     @Param('id') id: string,
     @Param('itemId') itemId: string,
     @Body() dto: UpdatePayrollItemDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.payrollService.updatePayrollItem(
       req.user.tenantId,
@@ -93,11 +98,14 @@ export class PayrollController {
   @ApiOperation({ summary: 'Submit a draft payroll run for approval' })
   @ApiParam({ name: 'id', description: 'Payroll run UUID' })
   @ApiResponse({ status: 200, description: 'Payroll submitted for approval' })
-  submitPayroll(@Param('id') id: string, @Req() req: any) {
+  submitPayroll(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.payrollService.submitPayrollForApproval(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user,
     );
   }
 
@@ -105,18 +113,15 @@ export class PayrollController {
   @RequirePermissions(Permission.READ_PAYROLL)
   @ApiOperation({ summary: 'List all payroll runs for the tenant' })
   @ApiResponse({ status: 200, description: 'Payroll runs retrieved' })
-  getPayrollRuns(@Req() req: any) {
-    return this.payrollService.getPayrollRuns(
-      req.user.tenantId,
-      req.user as RequestUser,
-    );
+  getPayrollRuns(@Req() req: Request & { user: RequestUser }) {
+    return this.payrollService.getPayrollRuns(req.user.tenantId, req.user);
   }
 
   @Get('my-payslips')
   @RequirePermissions(Permission.READ_OWN_PAYSLIP)
   @ApiOperation({ summary: 'Get payslips for the logged-in employee' })
   @ApiResponse({ status: 200, description: 'Payslips retrieved' })
-  getMyPayslips(@Req() req: any) {
+  getMyPayslips(@Req() req: Request & { user: RequestUser }) {
     return this.payrollService.getMyPayslips(req.user.tenantId, req.user.id);
   }
 
@@ -126,11 +131,14 @@ export class PayrollController {
   @ApiParam({ name: 'id', description: 'Payroll run UUID' })
   @ApiResponse({ status: 200, description: 'Payroll run retrieved' })
   @ApiResponse({ status: 404, description: 'Payroll run not found' })
-  getPayrollRun(@Param('id') id: string, @Req() req: any) {
+  getPayrollRun(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.payrollService.getPayrollRunById(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -138,12 +146,18 @@ export class PayrollController {
   @RequirePermissions(Permission.APPROVE_PAYROLL)
   @ApiOperation({ summary: 'Approve a payroll run' })
   @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiBody({ type: PayrollDecisionDto })
   @ApiResponse({ status: 200, description: 'Payroll approved' })
-  approvePayroll(@Param('id') id: string, @Req() req: any) {
+  approvePayroll(
+    @Param('id') id: string,
+    @Body() dto: PayrollDecisionDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.payrollService.approvePayroll(
       req.user.tenantId,
       id,
-      req.user.id,
+      req.user,
+      dto,
     );
   }
 
@@ -153,9 +167,19 @@ export class PayrollController {
     summary: 'Return a pending payroll run to draft for further edits',
   })
   @ApiParam({ name: 'id', description: 'Payroll run UUID' })
+  @ApiBody({ type: PayrollDecisionDto })
   @ApiResponse({ status: 200, description: 'Payroll returned to draft' })
-  returnPayrollToDraft(@Param('id') id: string, @Req() req: any) {
-    return this.payrollService.returnPayrollToDraft(req.user.tenantId, id);
+  returnPayrollToDraft(
+    @Param('id') id: string,
+    @Body() dto: PayrollDecisionDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.payrollService.returnPayrollToDraft(
+      req.user.tenantId,
+      id,
+      req.user,
+      dto,
+    );
   }
 
   @Patch(':id/mark-paid')
@@ -163,7 +187,10 @@ export class PayrollController {
   @ApiOperation({ summary: 'Mark a payroll run as paid' })
   @ApiParam({ name: 'id', description: 'Payroll run UUID' })
   @ApiResponse({ status: 200, description: 'Payroll marked as paid' })
-  markAsPaid(@Param('id') id: string, @Req() req: any) {
+  markAsPaid(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.payrollService.markAsPaid(req.user.tenantId, id);
   }
 }

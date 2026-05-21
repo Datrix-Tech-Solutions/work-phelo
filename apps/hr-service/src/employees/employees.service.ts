@@ -24,8 +24,17 @@ import {
   SubmitResignationDto,
 } from './dto/resignation.dto';
 import { QueryEmployeesDto } from './dto/query-employees.dto';
+import {
+  CreateEmployeeDeductionDto,
+  UpdateEmployeeDeductionDto,
+} from './dto/employee-deduction.dto';
+import {
+  CreateEmployeeAllowanceDto,
+  UpdateEmployeeAllowanceDto,
+} from './dto/employee-allowance.dto';
 import { getPaginationParams, buildMeta } from '@work-phelo/utils';
 import {
+  AllowanceType,
   AssetStatus,
   EmploymentStatus,
   Prisma,
@@ -38,6 +47,7 @@ import {
   isEmployeeSelfServiceUser,
 } from '../auth/access-scope';
 import { NotificationsService } from '../notifications/notifications.service';
+import { FieldEncryptionService } from '../crypto/field-encryption.service';
 import {
   RESIGNATION_QUEUE,
   RESIGNATION_NOTIFY_JOB,
@@ -71,6 +81,7 @@ export class EmployeesService {
     private readonly rabbitmq: RabbitMQPublisher,
     private readonly leaveService: LeaveService,
     private readonly notificationsService: NotificationsService,
+    private readonly encryption: FieldEncryptionService,
     @InjectQueue(RESIGNATION_QUEUE)
     private readonly resignationQueue: Queue<ResignationNotifyPayload>,
   ) {}
@@ -214,18 +225,19 @@ export class EmployeesService {
             firstName: dto.firstName,
             lastName: dto.lastName,
             email: dto.email,
-            phone: dto.phone,
+            emailHash: this.encryption.hmac(dto.email),
+            phone: this.encryption.encrypt(dto.phone),
             gender: dto.gender,
             dateOfBirth: dto.dateOfBirth
               ? new Date(dto.dateOfBirth)
               : undefined,
             maritalStatus: dto.maritalStatus,
             nationality: dto.nationality,
-            address: dto.address,
+            address: this.encryption.encrypt(dto.address),
             city: dto.city,
             region: dto.region,
-            emergencyName: dto.emergencyName,
-            emergencyPhone: dto.emergencyPhone,
+            emergencyName: this.encryption.encrypt(dto.emergencyName),
+            emergencyPhone: this.encryption.encrypt(dto.emergencyPhone),
             emergencyRelation: dto.emergencyRelation,
             jobTitle: dto.jobTitle,
             employmentType: dto.employmentType,
@@ -237,12 +249,12 @@ export class EmployeesService {
               ? new Date(dto.contractEndDate)
               : undefined,
             basicSalary: dto.basicSalary ?? 0,
-            nationalId: dto.nationalId,
-            bankName: dto.bankName,
-            bankAccountNumber: dto.bankAccountNumber,
-            bankBranch: dto.bankBranch,
-            ssnit: dto.ssnit,
-            tinNumber: dto.tinNumber,
+            nationalId: this.encryption.encrypt(dto.nationalId),
+            bankName: this.encryption.encrypt(dto.bankName),
+            bankAccountNumber: this.encryption.encrypt(dto.bankAccountNumber),
+            bankBranch: this.encryption.encrypt(dto.bankBranch),
+            ssnit: this.encryption.encrypt(dto.ssnit),
+            tinNumber: this.encryption.encrypt(dto.tinNumber),
             ...(dto.departmentId && { departmentId: dto.departmentId }),
             ...(dto.branchId && { branchId: dto.branchId }),
             ...(dto.managerId && { managerId: dto.managerId }),
@@ -279,6 +291,60 @@ export class EmployeesService {
       throw new BadRequestException(
         'Contract end date cannot be before the hire date.',
       );
+    }
+  }
+
+  private addMonths(date: Date, months: number) {
+    const value = new Date(date);
+    value.setHours(0, 0, 0, 0);
+    value.setMonth(value.getMonth() + months);
+    return value;
+  }
+
+  private async resolveProbationEndDate(
+    tenantId: string,
+    hireDate: string,
+    probationEndsAt?: string,
+  ) {
+    if (probationEndsAt) {
+      return new Date(probationEndsAt);
+    }
+
+    const config = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: { defaultProbationPeriodMonths: true },
+    });
+
+    if (!config?.defaultProbationPeriodMonths) {
+      return undefined;
+    }
+
+    return this.addMonths(
+      new Date(hireDate),
+      config.defaultProbationPeriodMonths,
+    );
+  }
+
+  private assertMinimumEmployeeAge(dateOfBirth: string) {
+    const dob = new Date(dateOfBirth);
+
+    if (Number.isNaN(dob.getTime())) {
+      throw new BadRequestException('Invalid date of birth.');
+    }
+
+    const today = new Date();
+    let age = today.getUTCFullYear() - dob.getUTCFullYear();
+    const monthDelta = today.getUTCMonth() - dob.getUTCMonth();
+
+    if (
+      monthDelta < 0 ||
+      (monthDelta === 0 && today.getUTCDate() < dob.getUTCDate())
+    ) {
+      age -= 1;
+    }
+
+    if (age < 18) {
+      throw new BadRequestException('Employees must be at least 18 years old.');
     }
   }
 
@@ -363,11 +429,17 @@ export class EmployeesService {
       await this.assertValidManagerAssignment(tenantId, dto.managerId);
     }
 
+    const resolvedProbationEndsAt = await this.resolveProbationEndDate(
+      tenantId,
+      dto.hireDate,
+      dto.probationEndsAt,
+    );
+
+    this.assertMinimumEmployeeAge(dto.dateOfBirth);
+
     this.validateEmploymentDates({
       hireDate: new Date(dto.hireDate),
-      probationEndsAt: dto.probationEndsAt
-        ? new Date(dto.probationEndsAt)
-        : undefined,
+      probationEndsAt: resolvedProbationEndsAt,
       contractEndDate: dto.contractEndDate
         ? new Date(dto.contractEndDate)
         : undefined,
@@ -393,11 +465,21 @@ export class EmployeesService {
     try {
       employee = await this.createEmployeeWithUniqueNumber(
         tenantId,
-        dto,
+        {
+          ...dto,
+          probationEndsAt: resolvedProbationEndsAt
+            ? resolvedProbationEndsAt.toISOString()
+            : undefined,
+        },
         provisionedUser,
       );
       await this.leaveService.initializeLeaveBalances(tenantId, employee.id);
-      this.logger.log(`Leave balances initialised for ${employee.email}`);
+      await this.leaveService.ensurePublicHolidaysSeededForEmployee(
+        tenantId,
+        employee.id,
+        [employee.hireDate.getFullYear(), employee.hireDate.getFullYear() + 1],
+      );
+      this.logger.log(`Leave balances initialised for employee ${employee.id}`);
     } catch (err) {
       if (employee) {
         try {
@@ -455,7 +537,7 @@ export class EmployeesService {
       throw err;
     }
 
-    return employee;
+    return this.encryption.decryptEmployeeFields(employee);
   }
 
   async findAll(
@@ -465,7 +547,7 @@ export class EmployeesService {
   ) {
     const { take, skip, page } = getPaginationParams(query);
 
-    const where: any = { tenantId };
+    const where: Prisma.EmployeeWhereInput = { tenantId };
 
     if (actor && !isCompanyAdminUser(actor)) {
       const canReadEmployees = hasPermissionRule(actor, 'employees:VIEW');
@@ -510,6 +592,31 @@ export class EmployeesService {
           avatarUrl: true,
           userId: true,
           basicSalary: true,
+          ssnit: true,
+          allowances: {
+            select: {
+              id: true,
+              employeeId: true,
+              type: true,
+              name: true,
+              amount: true,
+              effectiveFrom: true,
+              createdAt: true,
+            },
+          },
+          deductions: {
+            select: {
+              id: true,
+              employeeId: true,
+              name: true,
+              totalAmount: true,
+              monthlyRate: true,
+              amountPaid: true,
+              startDate: true,
+              createdAt: true,
+              updatedAt: true,
+            },
+          },
           department: { select: { id: true, name: true } },
           branch: { select: { id: true, name: true } },
         },
@@ -523,7 +630,7 @@ export class EmployeesService {
       .filter((id): id is string => Boolean(id));
     const statusMap = await this.getUserStatusMap(tenantId, userIds);
     const employeesWithStatus = employees.map((employee) =>
-      this.withUserStatus(employee, statusMap),
+      this.withUserStatus(this.encryption.maskListFields(employee), statusMap),
     );
 
     return {
@@ -560,6 +667,7 @@ export class EmployeesService {
           department: true,
           branch: true,
           allowances: true,
+          deductions: true,
           documents: true,
           leaveBalances: { include: { leaveType: true } },
           offboarding: true,
@@ -585,7 +693,8 @@ export class EmployeesService {
       }),
     ]);
     if (!employee) throw new NotFoundException('Employee not found');
-    const employeeWithAssets = { ...employee, assignedAssets };
+    const decrypted = this.encryption.decryptEmployeeFields(employee);
+    const employeeWithAssets = { ...decrypted, assignedAssets };
 
     const statusMap = await this.getUserStatusMap(
       tenantId,
@@ -638,7 +747,9 @@ export class EmployeesService {
       where: { userId, tenantId },
       include: {
         department: true,
+        branch: true,
         allowances: true,
+        deductions: true,
         resignation: true,
       },
     });
@@ -665,11 +776,26 @@ export class EmployeesService {
       }),
     ]);
 
-    const employeeWithAssets = { ...employee, assignedAssets };
+    const decrypted = this.encryption.decryptEmployeeFields(employee);
+    const employeeWithAssets = { ...decrypted, assignedAssets };
     return this.withUserStatus(
       this.mapEmployeeAssets(employeeWithAssets),
       statusMap,
     );
+  }
+
+  async updateMyProfile(
+    tenantId: string,
+    dto: UpdateEmployeeDto,
+    actor: RequestUser,
+  ) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { userId: actor.id, tenantId },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Employee profile not found');
+
+    return this.update(tenantId, employee.id, dto, actor);
   }
 
   async update(
@@ -768,6 +894,10 @@ export class EmployeesService {
       await this.assertValidManagerAssignment(tenantId, rest.managerId, id);
     }
 
+    if (dateOfBirth) {
+      this.assertMinimumEmployeeAge(dateOfBirth);
+    }
+
     this.validateEmploymentDates({
       hireDate: existing.hireDate,
       probationEndsAt: probationEndsAt
@@ -782,10 +912,12 @@ export class EmployeesService {
     const statusChanged =
       employmentStatus && employmentStatus !== existing.employmentStatus;
 
-    return this.prisma.employee.update({
+    const encryptedRest = this.encryption.encryptEmployeeFields(rest);
+
+    const updated = await this.prisma.employee.update({
       where: { id },
       data: {
-        ...rest,
+        ...encryptedRest,
         ...(employmentStatus && { employmentStatus }),
         ...(statusChanged && {
           statusChangedAt: new Date(),
@@ -802,6 +934,21 @@ export class EmployeesService {
       },
       include: { department: true, branch: true },
     });
+
+    const locationChanged =
+      rest.branchId !== undefined ||
+      rest.nationality !== undefined ||
+      rest.region !== undefined;
+
+    if (locationChanged) {
+      await this.leaveService.ensurePublicHolidaysSeededForEmployee(
+        tenantId,
+        updated.id,
+        [new Date().getFullYear(), new Date().getFullYear() + 1],
+      );
+    }
+
+    return this.encryption.decryptEmployeeFields(updated);
   }
 
   private async getTenantResignationConfig(tenantId: string) {
@@ -818,7 +965,13 @@ export class EmployeesService {
   }
 
   private buildResignationDetailLink(tenantSlug: string, employeeId: string) {
-    return `/${tenantSlug}/hr/employees/${employeeId}?tab=resignation`;
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/hr/employees/${employeeId}?tab=resignation`;
+  }
+
+  private buildTenantWorkspaceLink(tenantSlug: string) {
+    const baseUrl = process.env.FRONTEND_BASE_URL!;
+    return `${baseUrl}/${tenantSlug}/login`;
   }
 
   private toResignationNotificationRecipient(
@@ -1410,7 +1563,7 @@ export class EmployeesService {
   async completeOffboard(
     tenantId: string,
     employeeId: string,
-    actor: { id: string; email: string },
+    actor: { id: string; email: string; tenantSlug: string },
   ) {
     await this.findById(tenantId, employeeId);
 
@@ -1494,6 +1647,7 @@ export class EmployeesService {
         lastWorkingDate: record.lastWorkingDate
           ? record.lastWorkingDate.toISOString()
           : new Date().toISOString(),
+        platformLink: this.buildTenantWorkspaceLink(actor.tenantSlug),
       })
       .catch((err) =>
         this.logger.error(
@@ -1505,22 +1659,185 @@ export class EmployeesService {
     return { message: 'Offboarding completed successfully', employee };
   }
 
-  async addAllowance(tenantId: string, employeeId: string, dto: any) {
+  async listAllowances(tenantId: string, employeeId: string) {
+    await this.findById(tenantId, employeeId);
+    return this.prisma.employeeAllowance.findMany({
+      where: { tenantId, employeeId },
+      orderBy: [{ effectiveFrom: 'desc' }],
+    });
+  }
+
+  private allowanceNameFromType(type: string): string {
+    const labels: Record<string, string> = {
+      TRANSPORT: 'Transport Allowance',
+      HOUSING: 'Housing Allowance',
+      MEDICAL: 'Medical Allowance',
+      CLOTHING: 'Clothing Allowance',
+      OTHER: 'Other Allowance',
+    };
+    return labels[type] ?? `${type} Allowance`;
+  }
+
+  async addAllowance(
+    tenantId: string,
+    employeeId: string,
+    dto: CreateEmployeeAllowanceDto,
+  ) {
     await this.findById(tenantId, employeeId);
     return this.prisma.employeeAllowance.create({
       data: {
         tenantId,
         employeeId,
-        ...dto,
-        effectiveFrom: new Date(dto.effectiveFrom),
+        name: this.allowanceNameFromType(dto.type),
+        type: dto.type as AllowanceType,
+        amount: dto.amount,
+        effectiveFrom: new Date(),
       },
     });
   }
 
-  async uploadDocument(tenantId: string, employeeId: string, dto: any) {
+  async updateAllowance(
+    tenantId: string,
+    employeeId: string,
+    allowanceId: string,
+    dto: UpdateEmployeeAllowanceDto,
+  ) {
+    await this.findById(tenantId, employeeId);
+    const existing = await this.prisma.employeeAllowance.findFirst({
+      where: { id: allowanceId, tenantId, employeeId },
+    });
+    if (!existing) throw new NotFoundException('Allowance not found');
+
+    return this.prisma.employeeAllowance.update({
+      where: { id: allowanceId },
+      data: {
+        ...(dto.type != null
+          ? {
+              type: dto.type as AllowanceType,
+              name: this.allowanceNameFromType(dto.type),
+            }
+          : {}),
+        ...(dto.amount != null ? { amount: dto.amount } : {}),
+      },
+    });
+  }
+
+  async deleteAllowance(
+    tenantId: string,
+    employeeId: string,
+    allowanceId: string,
+  ) {
+    await this.findById(tenantId, employeeId);
+    const existing = await this.prisma.employeeAllowance.findFirst({
+      where: { id: allowanceId, tenantId, employeeId },
+    });
+    if (!existing) throw new NotFoundException('Allowance not found');
+    await this.prisma.employeeAllowance.delete({ where: { id: allowanceId } });
+  }
+
+  async listDeductions(tenantId: string, employeeId: string) {
+    await this.findById(tenantId, employeeId);
+
+    return this.prisma.employeeDeduction.findMany({
+      where: { tenantId, employeeId },
+      orderBy: [{ createdAt: 'desc' }],
+    });
+  }
+
+  async addDeduction(
+    tenantId: string,
+    employeeId: string,
+    dto: CreateEmployeeDeductionDto,
+  ) {
+    await this.findById(tenantId, employeeId);
+
+    if (dto.monthlyRate > dto.totalAmount) {
+      throw new BadRequestException('Monthly rate cannot exceed total amount');
+    }
+
+    return this.prisma.employeeDeduction.create({
+      data: {
+        tenantId,
+        employeeId,
+        name: dto.name.trim(),
+        totalAmount: dto.totalAmount,
+        monthlyRate: dto.monthlyRate,
+        startDate: new Date(dto.startDate),
+      },
+    });
+  }
+
+  async updateDeduction(
+    tenantId: string,
+    employeeId: string,
+    deductionId: string,
+    dto: UpdateEmployeeDeductionDto,
+  ) {
+    await this.findById(tenantId, employeeId);
+
+    const existing = await this.prisma.employeeDeduction.findFirst({
+      where: { id: deductionId, tenantId, employeeId },
+    });
+    if (!existing) throw new NotFoundException('Deduction not found');
+
+    const totalAmount =
+      dto.totalAmount != null ? dto.totalAmount : Number(existing.totalAmount);
+    const monthlyRate =
+      dto.monthlyRate != null ? dto.monthlyRate : Number(existing.monthlyRate);
+    const amountPaid = Number(existing.amountPaid);
+
+    if (totalAmount < amountPaid) {
+      throw new BadRequestException(
+        'Total amount cannot be lower than the amount already paid',
+      );
+    }
+
+    if (monthlyRate > totalAmount) {
+      throw new BadRequestException('Monthly rate cannot exceed total amount');
+    }
+
+    return this.prisma.employeeDeduction.update({
+      where: { id: deductionId },
+      data: {
+        ...(dto.name != null ? { name: dto.name.trim() } : {}),
+        ...(dto.totalAmount != null ? { totalAmount: dto.totalAmount } : {}),
+        ...(dto.monthlyRate != null ? { monthlyRate: dto.monthlyRate } : {}),
+        ...(dto.startDate != null
+          ? { startDate: new Date(dto.startDate) }
+          : {}),
+      },
+    });
+  }
+
+  async deleteDeduction(
+    tenantId: string,
+    employeeId: string,
+    deductionId: string,
+  ) {
+    await this.findById(tenantId, employeeId);
+
+    const existing = await this.prisma.employeeDeduction.findFirst({
+      where: { id: deductionId, tenantId, employeeId },
+    });
+    if (!existing) throw new NotFoundException('Deduction not found');
+
+    if (Number(existing.amountPaid) > 0) {
+      throw new BadRequestException(
+        'Partially paid deductions cannot be deleted. Set the total amount to the paid amount instead.',
+      );
+    }
+
+    await this.prisma.employeeDeduction.delete({ where: { id: deductionId } });
+  }
+
+  async uploadDocument(
+    tenantId: string,
+    employeeId: string,
+    dto: Prisma.EmployeeDocumentUncheckedCreateInput,
+  ) {
     await this.findById(tenantId, employeeId);
     return this.prisma.employeeDocument.create({
-      data: { tenantId, employeeId, ...dto },
+      data: { ...dto, tenantId, employeeId },
     });
   }
 

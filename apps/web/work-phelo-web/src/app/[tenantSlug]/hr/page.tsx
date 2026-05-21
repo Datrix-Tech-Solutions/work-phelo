@@ -2,9 +2,10 @@
 
 'use client';
 
-import { use, useState, useRef } from 'react';
+import { use, useMemo, useState, useRef } from 'react';
 import { useAuthStore } from '@/store/auth.store';
-import { useUpcomingBirthdays, useEmployeeDashboard } from '@/hooks';
+import { useUpcomingBirthdays, useEmployeeDashboard, useMyTasks } from '@/hooks';
+import { useMyProfile } from '@/hooks';
 import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/useLeave';
 import { useMyPayslips } from '@/hooks/usePayroll';
 import { usePublicHolidays } from '@/hooks/usePublicHolidays';
@@ -19,8 +20,10 @@ import { DashboardStatCards } from '@/components/organisms/dashboard/DashboardSt
 import { MyLeavePanel } from '@/components/organisms/dashboard/MyLeavePanel';
 import { MyPayslipsPanel } from '@/components/organisms/dashboard/MyPayslipsPanel';
 import { MyAssetsPanel } from '@/components/organisms/dashboard/MyAssetsPanel';
+import { MySchedulesPanel } from '@/components/organisms/dashboard/MySchedulesPanel';
+import { MyProjectsPanel } from '@/components/organisms/dashboard/MyProjectsPanel';
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
-import { formatTime } from '@/lib/formatters';
+import { formatTime, resolveHolidayUpcomingDate } from '@/lib/formatters';
 
 /* ── Avatar colour picker ── */
 const AVATAR_COLORS = [
@@ -55,6 +58,10 @@ export default function EmployeeDashboardPage({
   const tenantName = user?.tenantName ?? 'Your Company';
 
   /* ── Remote data ── */
+  const { data: myProfile } = useMyProfile();
+  const department = myProfile?.department?.name;
+  const branch = myProfile?.branch?.name;
+
   const { data: dashboard, isLoading: isDashboardLoading } = useEmployeeDashboard();
   const { data: balancesRaw } = useLeaveBalances();
   const { data: myLeaveRaw } = useMyLeaveRequests();
@@ -70,7 +77,7 @@ export default function EmployeeDashboardPage({
     ) ?? null;
 
   /* ── Derived: my leave requests ── */
-  const myLeave = Array.isArray(myLeaveRaw) ? myLeaveRaw : [];
+  const myLeave = useMemo(() => (Array.isArray(myLeaveRaw) ? myLeaveRaw : []), [myLeaveRaw]);
 
   /* ── Derived: upcoming leave ── */
   const today = new Date().toISOString().slice(0, 10);
@@ -105,11 +112,16 @@ export default function EmployeeDashboardPage({
   );
 
   /* ── Derived: upcoming holidays (future only, first 5) ── */
+  const now = new Date();
   const holidays = (Array.isArray(holidaysRaw) ? holidaysRaw : [])
-    .filter((h: { date: string }) => new Date(h.date) >= new Date())
+    .filter(
+      (h: { date: string; observedDate?: string }) =>
+        resolveHolidayUpcomingDate(h.observedDate ?? h.date) >= now,
+    )
     .sort(
-      (a: { date: string }, b: { date: string }) =>
-        new Date(a.date).getTime() - new Date(b.date).getTime(),
+      (a: { date: string; observedDate?: string }, b: { date: string; observedDate?: string }) =>
+        resolveHolidayUpcomingDate(a.observedDate ?? a.date).getTime() -
+        resolveHolidayUpcomingDate(b.observedDate ?? b.date).getTime(),
     )
     .slice(0, 5);
 
@@ -169,17 +181,46 @@ export default function EmployeeDashboardPage({
     });
   };
 
+  /* ── Leave notification badge ── */
+  const [seenLeaveIds, setSeenLeaveIds] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      return new Set<string>(JSON.parse(localStorage.getItem('dashboard_leave_seen_ids') ?? '[]'));
+    } catch {
+      return new Set();
+    }
+  });
+
+  const leaveBadgeCount = useMemo(
+    () =>
+      myLeave.filter(
+        (r) => (r.status === 'APPROVED' || r.status === 'REJECTED') && !seenLeaveIds.has(r.id),
+      ).length,
+    [myLeave, seenLeaveIds],
+  );
+
+  const { data: myTasksRaw = [] } = useMyTasks();
+  const projectsBadgeCount = useMemo(
+    () => myTasksRaw.filter((t) => t.status !== 'DONE').length,
+    [myTasksRaw],
+  );
+
   /* ── Panel states ── */
   const [applyLeaveOpen, setApplyLeaveOpen] = useState(false);
   const [payslipsOpen, setPayslipsOpen] = useState(false);
   const [assetsOpen, setAssetsOpen] = useState(false);
   const [myLeaveOpen, setMyLeaveOpen] = useState(false);
+  const [schedulesOpen, setSchedulesOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
 
-  /* ── Announcement pagination ── */
-  const [announcementIdx, setAnnouncementIdx] = useState(0);
-  const prevAnnouncement = () => setAnnouncementIdx((i) => Math.max(0, i - 1));
-  const nextAnnouncement = () =>
-    setAnnouncementIdx((i) => Math.min(Math.max(announcements.length - 1, 0), i + 1));
+  const handleOpenMyLeave = () => {
+    setMyLeaveOpen(true);
+    const ids = myLeave
+      .filter((r) => r.status === 'APPROVED' || r.status === 'REJECTED')
+      .map((r) => r.id);
+    setSeenLeaveIds(new Set(ids));
+    localStorage.setItem('dashboard_leave_seen_ids', JSON.stringify(ids));
+  };
 
   /* ── Birthday scroll ── */
   const birthdayRef = useRef<HTMLDivElement>(null);
@@ -191,8 +232,15 @@ export default function EmployeeDashboardPage({
 
   /* ── Render ── */
   return (
-    <div className="p-6 flex flex-col gap-4 h-full overflow-hidden">
-      <DashboardWelcomeBanner tenantName={tenantName} fullName={fullName} />
+    <div className="p-6 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
+      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-2 bg-gray-50">
+        <DashboardWelcomeBanner
+          tenantName={tenantName}
+          fullName={fullName}
+          department={department}
+          branch={branch}
+        />
+      </div>
 
       <DashboardStatCards
         annualBalance={annualBalance}
@@ -207,15 +255,10 @@ export default function EmployeeDashboardPage({
         onClockOut={handleClockOut}
       />
 
-      <div className="grid grid-cols-[3fr_2fr] gap-4 flex-1 min-h-0 overflow-hidden">
+      <div className="grid grid-cols-[3fr_2fr] gap-4">
         {/* Left column */}
-        <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
-          <AnnouncementCard
-            announcements={announcements}
-            currentIndex={announcementIdx}
-            onPrev={prevAnnouncement}
-            onNext={nextAnnouncement}
-          />
+        <div className="flex flex-col gap-4">
+          <AnnouncementCard announcements={announcements} />
           <BirthdaysCard
             birthdays={birthdays}
             scrollRef={birthdayRef}
@@ -225,12 +268,22 @@ export default function EmployeeDashboardPage({
         </div>
 
         {/* Right column */}
-        <div className="flex flex-col gap-4 min-h-0 overflow-hidden">
+        <div className="flex flex-col gap-4">
           <QuickActionsCard
             onPayslips={() => setPayslipsOpen(true)}
             onAssets={() => setAssetsOpen(true)}
-            onLeave={() => setMyLeaveOpen(true)}
+            onLeave={handleOpenMyLeave}
+            onSchedules={() => setSchedulesOpen(true)}
+            onProjects={() => setProjectsOpen(true)}
+            leaveBadge={leaveBadgeCount}
+            projectsBadge={projectsBadgeCount}
           />
+          {/* <BirthdaysCard
+            birthdays={birthdays}
+            scrollRef={birthdayRef}
+            onScrollLeft={() => scrollBirthdays('left')}
+            onScrollRight={() => scrollBirthdays('right')}
+          /> */}
           <UpcomingHolidaysCard holidays={holidays} />
         </div>
       </div>
@@ -245,7 +298,10 @@ export default function EmployeeDashboardPage({
       <MyLeavePanel
         isOpen={myLeaveOpen}
         onClose={() => setMyLeaveOpen(false)}
-        onRequestLeave={() => setApplyLeaveOpen(true)}
+        onRequestLeave={() => {
+          setMyLeaveOpen(false);
+          setApplyLeaveOpen(true);
+        }}
         requests={myLeave}
       />
       <MyPayslipsPanel
@@ -254,6 +310,12 @@ export default function EmployeeDashboardPage({
         payslips={myPayslips}
       />
       <MyAssetsPanel isOpen={assetsOpen} onClose={() => setAssetsOpen(false)} />
+      <MySchedulesPanel isOpen={schedulesOpen} onClose={() => setSchedulesOpen(false)} />
+      <MyProjectsPanel
+        isOpen={projectsOpen}
+        onClose={() => setProjectsOpen(false)}
+        tenantSlug={tenantSlug}
+      />
     </div>
   );
 }

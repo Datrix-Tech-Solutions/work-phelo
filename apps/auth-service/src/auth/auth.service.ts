@@ -43,41 +43,6 @@ export class AuthService {
     private readonly audit: AuditService,
   ) {}
 
-  private async resolveEffectivePermissions(
-    userId: string,
-    tenantId: string,
-    role: string,
-  ): Promise<string[]> {
-    if (role !== 'EMPLOYEE') return [];
-
-    const [allDirectPerms, setAssignments] = await Promise.all([
-      this.prisma.userPermission.findMany({
-        where: { tenantId, userId },
-        include: { resource: true },
-      }),
-      this.prisma.userPermissionSet.findMany({
-        where: { userId },
-        include: {
-          permissionSet: {
-            include: { resources: { include: { resource: true } } },
-          },
-        },
-      }),
-    ]);
-
-    const direct = allDirectPerms
-      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-      .map((p) => `${p.resource.name}:${p.action}`);
-
-    const fromSets = setAssignments.flatMap((a) =>
-      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-    );
-
-    // Revoked direct permissions remain as audit history, but they do not act
-    // as hard denies against permissions granted via roles or permission sets.
-    return [...new Set([...direct, ...fromSets])];
-  }
-
   signAccessToken(user: RequestUser): string {
     return this.jwtService.sign(
       {
@@ -90,19 +55,30 @@ export class AuthService {
         firstName: user.firstName,
         moduleConfig: user.moduleConfig,
         featureConfig: user.featureConfig,
-        permissions: user.permissions ?? [],
+        // Permissions omitted — gateway fetches them from /me on each request,
+        // keeping the JWT small regardless of how many permissions a user holds.
       },
       { expiresIn: '15m' },
     );
   }
 
   // ── Token Generation ────────────────────────────────────────────────────
-  private async generateTokens(user: any, tenant: any) {
-    const permissions = await this.resolveEffectivePermissions(
-      user.id,
-      tenant.id,
-      user.role,
-    );
+  private async generateTokens(
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      tenantId: string;
+      firstName: string;
+    },
+    tenant: {
+      id: string;
+      slug: string;
+      name: string;
+      moduleConfig: unknown;
+      featureConfig: unknown;
+    },
+  ) {
     const payload = {
       sub: user.id,
       email: user.email,
@@ -118,12 +94,12 @@ export class AuthService {
       },
       featureConfig:
         (tenant.featureConfig as Record<string, Record<string, boolean>>) ?? {},
-      permissions,
+      // Permissions omitted — gateway fetches them from /me on each request.
     };
     const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
     const refreshToken = this.jwtService.sign(
       { sub: user.id, type: 'refresh', jti: randomUUID() },
-      { expiresIn: '7d' },
+      { expiresIn: '8h' },
     );
     return { accessToken, refreshToken };
   }
@@ -137,14 +113,14 @@ export class AuthService {
     await this.prisma.refreshToken.upsert({
       where: { token },
       update: {
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
         ipAddress,
         userAgent,
       },
       create: {
         userId,
         token,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
         ipAddress,
         userAgent,
       },
@@ -189,7 +165,7 @@ export class AuthService {
     });
   }
 
-  private checkLockout(user: any) {
+  private checkLockout(user: { lockedUntil: Date | null }) {
     if (user.lockedUntil && user.lockedUntil > new Date()) {
       const minutesLeft = Math.ceil(
         (user.lockedUntil.getTime() - Date.now()) / (1000 * 60),
@@ -578,7 +554,7 @@ export class AuthService {
           userId: user.id,
           type: 'PASSWORD_RESET',
           code,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+          expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 15 minutes
         },
       });
       void this.rabbitmq
@@ -589,7 +565,7 @@ export class AuthService {
         })
         .catch((err) =>
           this.logger.error(
-            `Failed to emit password_reset_otp for ${user.phone}`,
+            `Failed to emit password_reset_otp for user ${user.id}`,
             err,
           ),
         );
@@ -600,7 +576,7 @@ export class AuthService {
           userId: user.id,
           type: 'PASSWORD_RESET',
           code: resetToken,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000), // 15 minutes
+          expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 15 minutes
         },
       });
       const resetLink = WorkspaceUrl.resetPassword(tenant.slug, resetToken);
@@ -706,7 +682,9 @@ export class AuthService {
     // Check code correctness
     if (record.code !== credential) {
       const newAttempts = record.attempts + 1;
-      const updateData: any = { attempts: newAttempts };
+      const updateData: { attempts: number; lockedUntil?: Date } = {
+        attempts: newAttempts,
+      };
 
       if (newAttempts >= 5) {
         updateData.lockedUntil = new Date(Date.now() + 30 * 60 * 1000);
@@ -938,18 +916,20 @@ export class AuthService {
 
   // ── Social Login ────────────────────────────────────────────────────────
   async handleSocialLogin(
-    profile: any,
+    profile: Record<string, unknown>,
     provider: 'GOOGLE' | 'MICROSOFT',
     tenantSlug: string,
   ) {
-    const normalizedEmail = normalizeEmail(profile.email);
+    const normalizedEmail = normalizeEmail(profile.email as string);
     const tenant = await this.prisma.tenant.findUnique({
       where: { slug: tenantSlug },
     });
     if (!tenant) throw new NotFoundException('Tenant not found');
 
     const existing = await this.prisma.socialAccount.findUnique({
-      where: { provider_providerId: { provider, providerId: profile.id } },
+      where: {
+        provider_providerId: { provider, providerId: profile.id as string },
+      },
       include: { user: { include: { tenant: true } } },
     });
 
@@ -978,7 +958,7 @@ export class AuthService {
       data: {
         userId: user.id,
         provider,
-        providerId: profile.id,
+        providerId: profile.id as string,
         email: normalizedEmail,
       },
     });

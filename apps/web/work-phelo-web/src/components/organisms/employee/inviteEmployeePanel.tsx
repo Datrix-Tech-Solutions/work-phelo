@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -16,6 +16,8 @@ import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useBranchOptions } from '@/hooks/useBranches';
 import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
+import { isAtLeastMinimumEmployeeAge, MIN_EMPLOYEE_AGE } from '@/lib/employeeAge';
+import { usePermissionSets, useAssignPermissionSet } from '@/hooks/useRoles';
 
 /* ── Types ── */
 
@@ -31,7 +33,7 @@ interface InviteForm {
   managerId?: string;
   employmentType: string;
   hireDate: string;
-  dateOfBirth?: string;
+  dateOfBirth: string;
   probationEndsAt?: string;
   contractEndDate?: string;
 }
@@ -54,15 +56,20 @@ function InviteEmployeeForm({
   const { data: departments = [] } = useDepartmentOptions(true);
   const { data: branches = [] } = useBranchOptions(true);
   const { data: policiesSettings } = useCompanyPoliciesSettings();
+  const { data: permissionSetsRaw = [] } = usePermissionSets();
+  const { mutateAsync: assignPermissionSet } = useAssignPermissionSet();
+  const [selectedPermissionSetId, setSelectedPermissionSetId] = useState('');
 
   const {
     register,
     handleSubmit,
     control,
     setValue,
+    setError,
+    clearErrors,
     formState: { errors },
   } = useForm<InviteForm>({
-    defaultValues: { employmentType: 'FULL_TIME', phone: '' },
+    defaultValues: { employmentType: 'FULL_TIME', phone: '', dateOfBirth: '' },
   });
 
   const phoneValue = useWatch({ control, name: 'phone' });
@@ -80,8 +87,8 @@ function InviteEmployeeForm({
     const probationMonths = policiesSettings?.defaultProbationPeriodMonths;
     if (
       employmentTypeValue === 'CONTRACT' ||
+      employmentTypeValue === 'INTERN' ||
       !hireDateValue ||
-      probationDateValue ||
       !probationMonths
     ) {
       return;
@@ -100,11 +107,26 @@ function InviteEmployeeForm({
     ).padStart(2, '0')}`;
 
     setValue('probationEndsAt', probationMonth);
-  }, [employmentTypeValue, hireDateValue, probationDateValue, policiesSettings, setValue]);
+  }, [employmentTypeValue, hireDateValue, policiesSettings, setValue]);
 
-  const { mutate: createEmployee, isPending } = useCreateEmployee();
+  const { mutateAsync: createEmployee, isPending } = useCreateEmployee();
 
-  const onSubmit = (d: InviteForm) => {
+  const onSubmit = async (d: InviteForm) => {
+    if (!d.dateOfBirth) {
+      setError('dateOfBirth', { type: 'required', message: 'Required' });
+      return;
+    }
+
+    if (!isAtLeastMinimumEmployeeAge(d.dateOfBirth)) {
+      setError('dateOfBirth', {
+        type: 'validate',
+        message: `Employee must be at least ${MIN_EMPLOYEE_AGE} years old`,
+      });
+      return;
+    }
+
+    clearErrors('dateOfBirth');
+
     const normalized = { ...d };
     if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
     if (normalized.contractEndDate?.length === 7) normalized.contractEndDate += '-01';
@@ -113,14 +135,19 @@ function InviteEmployeeForm({
       Object.entries(normalized).filter(([, v]) => v !== '' && v !== undefined && v !== null),
     ) as unknown as CreateEmployeePayload;
 
-    createEmployee(payload, {
-      onSuccess: () => {
-        const name = `${d.firstName} ${d.lastName}`;
-        onClose();
-        onSuccess(name);
-      },
-      onError: (err: unknown) => toast.error(extractError(err, 'Failed to invite employee')),
-    });
+    try {
+      const employee = await createEmployee(payload);
+      if (selectedPermissionSetId && employee.userId) {
+        await assignPermissionSet({
+          userId: employee.userId,
+          permissionSetId: selectedPermissionSetId,
+        });
+      }
+      onClose();
+      onSuccess(`${d.firstName} ${d.lastName}`);
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to invite employee'));
+    }
   };
 
   return (
@@ -188,13 +215,16 @@ function InviteEmployeeForm({
           options={[
             { value: 'MALE', label: 'Male' },
             { value: 'FEMALE', label: 'Female' },
-            { value: 'OTHER', label: 'Other' },
           ]}
         />
         <DatePicker
           label="Date of Birth"
           value={dobValue}
-          onChange={(v) => setValue('dateOfBirth', v)}
+          onChange={(v) => {
+            setValue('dateOfBirth', v);
+            clearErrors('dateOfBirth');
+          }}
+          error={errors.dateOfBirth?.message}
           disableFuture
         />
       </div>
@@ -258,7 +288,7 @@ function InviteEmployeeForm({
             { value: 'INTERN', label: 'Intern' },
           ]}
         />
-        {employmentTypeValue !== 'CONTRACT' && (
+        {employmentTypeValue !== 'CONTRACT' && employmentTypeValue !== 'INTERN' && (
           <MonthPicker
             label="Probation End Date"
             value={probationDateValue}
@@ -266,12 +296,21 @@ function InviteEmployeeForm({
             disablePast={true}
           />
         )}
-        {employmentTypeValue === 'CONTRACT' && (
+        {(employmentTypeValue === 'CONTRACT' || employmentTypeValue === 'INTERN') && (
           <MonthPicker
-            label="Contract End Date"
+            label={employmentTypeValue === 'INTERN' ? 'Internship End Date' : 'Contract End Date'}
             value={contractDateValue}
             onChange={(v) => setValue('contractEndDate', v)}
             disablePast={true}
+          />
+        )}
+        {permissionSetsRaw.length > 0 && (
+          <SearchSelect
+            label="Roles"
+            placeholder="Select roles"
+            value={selectedPermissionSetId}
+            onChange={setSelectedPermissionSetId}
+            options={permissionSetsRaw.map((s) => ({ value: s.id, label: s.name }))}
           />
         )}
       </div>

@@ -103,6 +103,14 @@ export class PermissionsController {
     type: Boolean,
     example: true,
   })
+  @ApiResponse({
+    status: 200,
+    description: 'Matching permission holders returned',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Missing required query parameters',
+  })
   getPermissionRecipients(
     @Query() query: QueryPermissionRecipientsDto,
     @Req() req: AuthenticatedRequest,

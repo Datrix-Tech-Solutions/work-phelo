@@ -25,7 +25,6 @@ export class EmployeeSyncRecoveryCronService {
       select: {
         id: true,
         tenantId: true,
-        email: true,
       },
       take: 100,
       orderBy: { createdAt: 'asc' },
@@ -43,11 +42,11 @@ export class EmployeeSyncRecoveryCronService {
           year,
         );
         this.logger.log(
-          `[recovery] Initialised missing leave balances for ${employee.email} (${year})`,
+          `[recovery] Initialised missing leave balances for employee ${employee.id} (${year})`,
         );
       } catch (error) {
         this.logger.error(
-          `[recovery] Failed to initialise leave balances for ${employee.email}`,
+          `[recovery] Failed to initialise leave balances for employee ${employee.id}`,
           error,
         );
       }
@@ -117,11 +116,11 @@ export class EmployeeSyncRecoveryCronService {
               reason: employee.offboardReason ?? 'OFFBOARDED',
             });
             this.logger.log(
-              `[recovery] Deactivated auth access for offboarded employee ${employee.email}`,
+              `[recovery] Deactivated auth access for offboarded employee ${employee.id}`,
             );
           } catch (error) {
             this.logger.error(
-              `[recovery] Failed to deactivate auth access for ${employee.email}`,
+              `[recovery] Failed to deactivate auth access for employee ${employee.id}`,
               error,
             );
           }
@@ -161,7 +160,7 @@ export class EmployeeSyncRecoveryCronService {
         });
 
         this.logger.log(
-          `[recovery] Deleted stranded auth invite for ${task.email}`,
+          `[recovery] Deleted stranded auth invite for rollback task ${task.id}`,
         );
       } catch (error) {
         await this.prisma.employeeInviteRollbackTask.update({
@@ -174,7 +173,7 @@ export class EmployeeSyncRecoveryCronService {
         });
 
         this.logger.error(
-          `[recovery] Failed to delete stranded auth invite for ${task.email}`,
+          `[recovery] Failed to delete stranded auth invite for rollback task ${task.id}`,
           error,
         );
       }

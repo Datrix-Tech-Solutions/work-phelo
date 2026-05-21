@@ -5,7 +5,7 @@
 import { useState, use, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Users, UserCheck, Clock, CalendarOff } from 'lucide-react';
-import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { StatCard } from '@/components/molecules/shared/StatCard';
 import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
@@ -27,8 +27,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const { tenantSlug } = use(params);
   const router = useRouter();
   const canInvite = usePermission(Permission.CREATE_EMPLOYEE);
-  const canViewDetail = usePermission(Permission.READ_EMPLOYEES);
-  const canViewAllStatuses = usePermission(Permission.READ_EMPLOYEES);
+  const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
+  const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
+  const canViewDetail = canEditEmployee || canOffboardEmployee;
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -58,24 +59,38 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   const { data: allStaff = [], isLoading: isStatsLoading } = useEmployeeOptions();
 
   const allEmployees = empResult?.data ?? [];
-  // Advanced users can filter for restricted statuses explicitly, but they're hidden by default
-  const employees =
-    canViewAllStatuses && statusFilter
-      ? allEmployees
-      : allEmployees.filter((e) => !RESTRICTED_STATUSES.includes(e.employmentStatus));
+  const canViewRestricted = canEditEmployee || canOffboardEmployee;
+  const employees = allEmployees
+    .filter((e) => {
+      if (e.employmentStatus === 'OFFBOARDED')
+        return canViewRestricted && statusFilter === 'OFFBOARDED';
+      if (e.employmentStatus === 'SUSPENDED')
+        return canViewRestricted && statusFilter === 'SUSPENDED';
+      return true;
+    })
+    .filter((e) => !typeFilter || e.employmentType === typeFilter);
 
   const { data: departments = [], isError: deptsError } = useDepartmentOptions();
 
   const { data: approvedLeave = [] } = useLeaveRequests('APPROVED');
-  const onLeaveEmployeeIds = useMemo(
+  const activeLeave = useMemo(
     () =>
-      new Set(
-        approvedLeave
-          .filter((r) => new Date(r.startDate) <= TODAY && new Date(r.endDate) >= TODAY)
-          .map((r) => r.employeeId),
-      ),
+      approvedLeave.filter((r) => new Date(r.startDate) <= TODAY && new Date(r.endDate) >= TODAY),
     [approvedLeave],
   );
+  const onLeaveEmployeeIds = useMemo(
+    () => new Set(activeLeave.map((r) => r.employeeId)),
+    [activeLeave],
+  );
+  const coverageByEmployeeId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of activeLeave) {
+      if (r.coverageEmployee) {
+        map.set(r.employeeId, `${r.coverageEmployee.firstName} ${r.coverageEmployee.lastName}`);
+      }
+    }
+    return map;
+  }, [activeLeave]);
 
   const summary = useMemo(
     () => ({
@@ -91,7 +106,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   );
 
   return (
-    <div className="p-8 flex flex-col gap-3 h-full">
+    <div className="p-8 flex flex-col gap-3 flex-1 min-h-0">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
@@ -154,9 +169,9 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           onChange={setStatusFilter}
           placeholder="All Statuses"
           options={[
-            { value: 'ACTIVE', label: 'Active' },
+            { value: 'ACTIVE', label: 'Permanent Staff' },
             { value: 'PROBATION', label: 'Probation' },
-            ...(canViewAllStatuses
+            ...(canEditEmployee || canOffboardEmployee
               ? [
                   { value: 'SUSPENDED', label: 'Suspended' },
                   { value: 'OFFBOARDED', label: 'Offboarded' },
@@ -217,27 +232,30 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto">
-          {employees.map((emp) => (
-            <EmployeeCard
-              key={emp.id}
-              firstName={emp.firstName}
-              lastName={emp.lastName}
-              jobTitle={emp.jobTitle}
-              email={emp.email}
-              phone={emp.phone}
-              avatarUrl={emp.avatarUrl}
-              status={emp.employmentStatus}
-              department={emp.department?.name}
-              hireDate={emp.hireDate}
-              isOnLeave={onLeaveEmployeeIds.has(emp.id)}
-              onClick={
-                canViewDetail
-                  ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)
-                  : undefined
-              }
-            />
-          ))}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-2">
+            {employees.map((emp) => (
+              <EmployeeCard
+                key={emp.id}
+                firstName={emp.firstName}
+                lastName={emp.lastName}
+                jobTitle={emp.jobTitle}
+                email={emp.email}
+                phone={emp.phone}
+                avatarUrl={emp.avatarUrl}
+                status={emp.employmentStatus}
+                department={emp.department?.name}
+                hireDate={emp.hireDate}
+                isOnLeave={onLeaveEmployeeIds.has(emp.id)}
+                coverageName={coverageByEmployeeId.get(emp.id)}
+                onClick={
+                  canViewDetail
+                    ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)
+                    : undefined
+                }
+              />
+            ))}
+          </div>
         </div>
       )}
 

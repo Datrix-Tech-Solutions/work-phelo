@@ -10,7 +10,13 @@ import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useUpdateTenant } from '@/hooks/useTenants';
 import { useToast } from '@/hooks/useToast';
-import { COMPANY_SIZE_OPTIONS, INDUSTRY_OPTIONS } from '@/lib/CompanyOptions';
+import {
+  COMPANY_SIZE_OPTIONS,
+  COUNTRY_CONFIG,
+  COUNTRY_OPTIONS,
+  INDUSTRY_OPTIONS,
+  swapDialCode,
+} from '@/lib/CompanyOptions';
 
 interface EditCompanyPanelProps {
   isOpen: boolean;
@@ -21,6 +27,7 @@ interface EditCompanyPanelProps {
     size?: string;
     industry?: string;
     country?: string;
+    address?: string;
     phone?: string;
   };
 }
@@ -30,6 +37,7 @@ interface FormValues {
   size?: string;
   industry?: string;
   country?: string;
+  address?: string;
   phone?: string;
 }
 
@@ -53,6 +61,7 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
         size: tenant.size,
         industry: tenant.industry,
         country: tenant.country,
+        address: tenant.address,
         phone: tenant.phone,
       });
     }
@@ -60,6 +69,16 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
 
   const size = useWatch({ control, name: 'size' }) ?? '';
   const industry = useWatch({ control, name: 'industry' }) ?? '';
+  const country = useWatch({ control, name: 'country' }) ?? '';
+  const phone = useWatch({ control, name: 'phone' }) ?? '';
+
+  const handleCountryChange = (v: string) => {
+    setValue('country', v);
+    const config = COUNTRY_CONFIG[v];
+    if (config) {
+      setValue('phone', swapDialCode(phone, config.dialCode));
+    }
+  };
 
   const onSubmit = (data: FormValues) => {
     updateTenant(data, {
@@ -109,11 +128,22 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
           value={industry}
           onChange={(v) => setValue('industry', v)}
         />
-        <FormField label="Country" registration={register('country')} placeholder="eg; GH" />
+        <SearchSelect
+          label="Country"
+          placeholder="Select country"
+          options={COUNTRY_OPTIONS}
+          value={country}
+          onChange={handleCountryChange}
+        />
+        <FormField
+          label="Address"
+          registration={register('address')}
+          placeholder="eg; 123 Main Street, Accra"
+        />
         <PhoneInput
           label="Contact"
           placeholder="00 000 0000"
-          value={tenant.phone}
+          value={phone}
           onChange={(v) => setValue('phone', v)}
         />
       </FormSection>

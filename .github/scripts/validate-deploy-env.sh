@@ -13,6 +13,10 @@ source "${SCRIPT_DIR}/deploy-common.sh"
 
 DEPLOY_ENV="$1"
 
+if [[ "$1" == "dev" && -z "${DATABASE_URL:-}" && -n "${DEV_DATABASE_URL:-}" ]]; then
+export DATABASE_URL="$DEV_DATABASE_URL"
+fi
+
 validate_required_envs "$DEPLOY_ENV"
 warn_optional_envs
 

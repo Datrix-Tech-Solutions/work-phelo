@@ -24,6 +24,8 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { QueryAnnouncementsDto } from './dto/query-announcements.dto';
 
@@ -41,7 +43,10 @@ export class AnnouncementsController {
     summary: 'Create a company announcement',
   })
   @ApiResponse({ status: 201, description: 'Announcement created' })
-  create(@Body() dto: CreateAnnouncementDto, @Req() req: any) {
+  create(
+    @Body() dto: CreateAnnouncementDto,
+    @Req() req: Request & { user: RequestUser },
+  ) {
     return this.announcementsService.create(req.user.tenantId, req.user, dto);
   }
 
@@ -60,7 +65,10 @@ export class AnnouncementsController {
     enum: ['visible', 'all'],
   })
   @ApiResponse({ status: 200, description: 'Announcements retrieved' })
-  findAll(@Req() req: any, @Query() query: QueryAnnouncementsDto) {
+  findAll(
+    @Req() req: Request & { user: RequestUser },
+    @Query() query: QueryAnnouncementsDto,
+  ) {
     return this.announcementsService.findAll(
       req.user.tenantId,
       req.user,
@@ -73,7 +81,7 @@ export class AnnouncementsController {
   @ApiOperation({ summary: 'Delete an announcement' })
   @ApiParam({ name: 'id', description: 'Announcement UUID' })
   @ApiResponse({ status: 200, description: 'Announcement deleted' })
-  remove(@Param('id') id: string, @Req() req: any) {
+  remove(@Param('id') id: string, @Req() req: Request & { user: RequestUser }) {
     return this.announcementsService.remove(req.user.tenantId, id);
   }
 }

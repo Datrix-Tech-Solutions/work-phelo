@@ -27,6 +27,7 @@ export function SelfAssessmentForm({ appraisalId, kpis, backHref }: Props) {
   const [answers, setAnswers] = useState<Record<string, KpiState>>(() =>
     Object.fromEntries(kpis.map((k) => [k.id, { score: null, comment: '' }])),
   );
+  const [overallComment, setOverallComment] = useState('');
 
   const setScore = (kpiId: string, score: number) =>
     setAnswers((prev) => ({ ...prev, [kpiId]: { ...prev[kpiId], score } }));
@@ -51,7 +52,7 @@ export function SelfAssessmentForm({ appraisalId, kpis, backHref }: Props) {
     }));
 
     mutate(
-      { id: appraisalId, kpiScores },
+      { id: appraisalId, kpiScores, comment: overallComment || undefined },
       {
         onSuccess: () => {
           useToastStore
@@ -124,6 +125,18 @@ export function SelfAssessmentForm({ appraisalId, kpis, backHref }: Props) {
           </div>
         );
       })}
+
+      {/* Overall Comment */}
+      <div className="rounded-xl border border-gray-200 bg-white px-6 py-5 flex flex-col gap-3">
+        <p className="text-base font-semibold text-gray-900">Overall Comment</p>
+        <textarea
+          rows={4}
+          placeholder="Add an overall comment on your self-assessment"
+          value={overallComment}
+          onChange={(e) => setOverallComment(e.target.value)}
+          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-300 resize-none"
+        />
+      </div>
 
       <div className="flex items-center justify-end gap-3 pt-2">
         <Button variant="secondary" onClick={() => router.push(backHref)}>

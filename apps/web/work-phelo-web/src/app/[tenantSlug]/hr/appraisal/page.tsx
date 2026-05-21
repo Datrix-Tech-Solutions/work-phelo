@@ -24,11 +24,11 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
     }
   }, [user, tenantSlug, router]);
   const hasHRProfile = user?.role === 'EMPLOYEE';
-  const canViewAppraisals =
-    usePermission(Permission.READ_APPRAISALS) ||
-    usePermission(Permission.APPROVE_APPRAISAL) ||
-    usePermission(Permission.CREATE_APPRAISAL) ||
-    usePermission(Permission.CONFIGURE_APPRAISAL);
+
+  const canCreateAppraisal = usePermission(Permission.CREATE_APPRAISAL);
+  const canConfigureAppraisal = usePermission(Permission.CONFIGURE_APPRAISAL);
+  const canApproveAppraisal = usePermission(Permission.FINALIZE_APPRAISAL);
+  const canViewAppraisals = canCreateAppraisal || canConfigureAppraisal || canApproveAppraisal;
 
   const { data: teamData } = useTeamAppraisals();
   const isManager = (teamData?.length ?? 0) > 0;
@@ -48,7 +48,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   const [hrPage, setHrPage] = useState(1);
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-8 flex flex-col gap-6 flex-1 min-h-0">
       <div className="shrink-0">
         <h1 className="text-xl font-bold text-gray-900">Appraisal Management</h1>
       </div>

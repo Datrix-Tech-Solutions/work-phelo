@@ -63,7 +63,7 @@ export class PermissionsService {
         userId_resourceId_action: {
           userId: dto.userId,
           resourceId: dto.resourceId,
-          action: dto.action as any,
+          action: dto.action,
         },
       },
     });
@@ -95,7 +95,7 @@ export class PermissionsService {
         tenantId,
         userId: dto.userId,
         resourceId: dto.resourceId,
-        action: dto.action as any,
+        action: dto.action,
         grantedBy,
         grantedAt: new Date(),
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
@@ -139,7 +139,7 @@ export class PermissionsService {
         tenantId,
         userId: dto.userId,
         resourceId: dto.resourceId,
-        action: dto.action as any,
+        action: dto.action,
       },
     });
 
@@ -152,7 +152,7 @@ export class PermissionsService {
         userId_resourceId_action: {
           userId: dto.userId,
           resourceId: dto.resourceId,
-          action: dto.action as any,
+          action: dto.action,
         },
       },
       update: {
@@ -164,7 +164,7 @@ export class PermissionsService {
         tenantId,
         userId: dto.userId,
         resourceId: dto.resourceId,
-        action: dto.action as any,
+        action: dto.action,
         grantedBy: revokedBy,
         isActive: false,
         revokedBy,
@@ -218,7 +218,7 @@ export class PermissionsService {
         resources: {
           create: dto.resources.map((r) => ({
             resourceId: r.resourceId,
-            action: r.action as any,
+            action: r.action,
           })),
         },
       },
@@ -235,6 +235,9 @@ export class PermissionsService {
       where: { id, tenantId, isActive: true },
     });
     if (!set) throw new NotFoundException('Permission set not found');
+    if (set.isSystem) {
+      throw new ForbiddenException('System permission sets cannot be edited');
+    }
 
     if (dto.resources.length > 0) {
       const uniqueResourceIds = [
@@ -262,7 +265,7 @@ export class PermissionsService {
         resources: {
           create: dto.resources.map((r) => ({
             resourceId: r.resourceId,
-            action: r.action as any,
+            action: r.action,
           })),
         },
       },
@@ -298,7 +301,7 @@ export class PermissionsService {
         resources: {
           create: resources.map((r) => ({
             resourceId: r.resourceId,
-            action: r.action as any,
+            action: r.action as PermissionAction,
           })),
         },
       },
@@ -435,11 +438,21 @@ export class PermissionsService {
       where: { id: dto.permissionSetId, tenantId },
     });
     if (!set) throw new NotFoundException('Permission set not found');
+    if (set.isSystem) {
+      throw new ForbiddenException(
+        'System permission sets cannot be assigned through the tenant permission management flow',
+      );
+    }
 
     const user = await this.prisma.user.findFirst({
       where: { id: dto.userId, tenantId },
     });
     if (!user) throw new NotFoundException('User not found');
+    if (user.role !== 'EMPLOYEE') {
+      throw new ForbiddenException(
+        'Permission sets can only be assigned to employee users',
+      );
+    }
 
     return this.prisma.userPermissionSet.upsert({
       where: {
@@ -512,7 +525,10 @@ export class PermissionsService {
 
     // Permission set permissions
     const setAssignments = await this.prisma.userPermissionSet.findMany({
-      where: { userId },
+      where: {
+        userId,
+        permissionSet: { isActive: true },
+      },
       include: {
         permissionSet: {
           include: {

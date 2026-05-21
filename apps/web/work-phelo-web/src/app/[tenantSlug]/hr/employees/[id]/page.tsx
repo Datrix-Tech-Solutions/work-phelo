@@ -1,5 +1,3 @@
-// EMPLOYEE DETAILS PAGE //
-
 'use client';
 
 import { use, useState } from 'react';
@@ -8,11 +6,9 @@ import {
   useEmployee,
   useEmployeeOptions,
   useResendEmployeeInvite,
-  useUpdateEmployee,
   useResignationRecord,
 } from '@/hooks/hr/useEmployees';
-import { useAssignAsset, useAvailableAssets } from '@/hooks/useAssets';
-import { useToast } from '@/hooks/useToast';
+import { useAvailableAssets } from '@/hooks/useAssets';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
@@ -21,20 +17,27 @@ import {
   useRemovePermissionSet,
   useUserPermissions,
 } from '@/hooks/useRoles';
-import { OffboardEmployeePanel } from '@/components/organisms/employee/OffboardEmployeePanel';
-import { ResignationPanel } from '@/components/organisms/employee/resignationPanel';
-import { EditEmployeePanel } from '@/components/organisms/employee/EditEmployeePanel';
-import { AssignAssetPanel } from '@/components/organisms/employee/AssignAssetEmployeePanel';
-import { EmployeePermissionsPanel } from '@/components/organisms/roles/EmployeePermissionsPanel';
-import { AssignPermissionPanel } from '@/components/organisms/roles/assignPermissionPanel';
+import { useToast } from '@/hooks/useToast';
 import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
-import { EmployeeActionsBar } from '@/components/molecules/employees/employeeActionBar';
-import { EmployeeProfileCard } from '@/components/molecules/employees/employeeProfileCard';
-import { EmploymentDetailsSection } from '@/components/molecules/employees/employeeDetailsSection';
+import { EmployeeDetailBanner } from '@/components/molecules/employees/EmployeeDetailBanner';
+import { EmployeeDetailSidebar } from '@/components/molecules/employees/EmployeeDetailSidebar';
+import { PersonalInformationSection } from '@/components/molecules/employees/PersonalInformationSection';
 import { AssetsSection } from '@/components/molecules/employees/assetSection';
-import { BankingComplianceSection } from '@/components/molecules/employees/bankingComplianceSection';
 import { EmergencyContactSection } from '@/components/molecules/employees/emergencyContactSection';
 import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
+import { TabBar } from '@/components/molecules/shared/TabBar';
+import {
+  EmployeeDetailPanels,
+  type EmployeeDetailPanel,
+} from '@/components/organisms/employee/EmployeeDetailPanels';
+import { EmployeePayslipTab } from '@/components/molecules/employees/EmployeePayslipTab';
+
+type EmployeeTab = 'personal' | 'payroll';
+
+const TABS = [
+  { key: 'personal', label: 'Personal' },
+  { key: 'payroll', label: 'Payroll' },
+];
 
 const NOTIFY_DELAY_MS = 30 * 60 * 1000;
 
@@ -45,63 +48,56 @@ export default function EmployeeDetailPage({
 }) {
   const { tenantSlug, id } = use(params);
 
-  const [offboardOpen, setOffboardOpen] = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [assignAssetOpen, setAssignAssetOpen] = useState(false);
-  const [permissionSetsOpen, setPermissionSetsOpen] = useState(false);
-  const [assignPermOpen, setAssignPermOpen] = useState(false);
-  const [resignOpen, setResignOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<EmployeeTab>('personal');
+  const [activePanel, setActivePanel] = useState<EmployeeDetailPanel | null>(null);
 
-  // Data fetching
   const { data: employee, isLoading, error } = useEmployee(id);
   const { data: resignationRecord } = useResignationRecord(id);
-  const hrIsNotified =
-    resignationRecord?.status === 'PENDING' &&
-    // eslint-disable-next-line react-hooks/purity
-    Date.now() - new Date(resignationRecord.submittedAt).getTime() >= NOTIFY_DELAY_MS;
-  const { data: allHrResult = [] } = useEmployeeOptions();
+  const { data: allHrEmployees = [] } = useEmployeeOptions();
   const { data: availableAssets = [] } = useAvailableAssets();
+  const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
+
   const canGrantPermission = usePermission(Permission.GRANT_PERMISSION);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
   const canEditEmployee = usePermission(Permission.UPDATE_EMPLOYEE);
   const canOffboardEmployee = usePermission(Permission.OFFBOARD_EMPLOYEE);
-  const { data: permissionSets = [] } = usePermissionSets({
-    enabled: canGrantPermission,
-  });
-  const allHrEmployees = allHrResult;
 
-  const toast = useToast();
+  const { data: permissionSets = [] } = usePermissionSets({ enabled: canGrantPermission });
   const { mutate: resendInvite, isPending: isResending } = useResendEmployeeInvite();
-  const { mutate: updateEmployee, isPending: isUpdating } = useUpdateEmployee();
-  const { mutate: assignAsset } = useAssignAsset();
   const { mutate: assignPermissionSet, isPending: isAssigningPermissionSet } =
     useAssignPermissionSet();
   const { mutate: removePermissionSet, isPending: isRemovingPermissionSet } =
     useRemovePermissionSet();
 
-  const { data: userPerms } = useUserPermissions(employee?.userId ?? '');
-  const assignedSets = userPerms?.permissionSets ?? [];
-  const customPermissionSets = permissionSets.filter((set) => !set.isSystem);
+  const toast = useToast();
 
-  const handleResendInvite = () => {
+  const userPermsTyped = userPermsRaw as
+    | {
+        permissionSets?: { id: string; name: string }[];
+        directPermissions?: { resourceName: string; action: string }[];
+      }
+    | undefined;
+  const assignedSets = userPermsTyped?.permissionSets ?? [];
+  const directPermissions = userPermsTyped?.directPermissions ?? [];
+  const customPermissionSets = permissionSets.filter((s) => !s.isSystem);
+  const roles = assignedSets.map((s) => s.name);
+
+  const managerName = (() => {
+    if (!employee?.managerId) return undefined;
+    const mgr = allHrEmployees.find((e) => e.id === employee.managerId);
+    return mgr ? `${mgr.firstName} ${mgr.lastName}` : undefined;
+  })();
+
+  const hrIsNotified =
+    resignationRecord?.status === 'PENDING' &&
+    // eslint-disable-next-line react-hooks/purity
+    Date.now() - new Date(resignationRecord.submittedAt).getTime() >= NOTIFY_DELAY_MS;
+
+  const handleResendInvite = () =>
     resendInvite(id, {
       onSuccess: () => toast.success('Invite resent successfully'),
       onError: () => toast.error('Failed to resend invite'),
     });
-  };
-
-  const handleUpdateEmployee = (data: import('@/types').UpdateEmployeePayload) => {
-    updateEmployee(
-      { id, ...data },
-      {
-        onSuccess: () => {
-          toast.success('Employee updated successfully');
-          setEditOpen(false);
-        },
-        onError: () => toast.error('Failed to update employee'),
-      },
-    );
-  };
 
   const handleAssignPermissionSet = (permissionSetId: string) => {
     if (!employee?.userId) return;
@@ -125,29 +121,12 @@ export default function EmployeeDetailPage({
     );
   };
 
-  const handleAssignAsset = (assetId: string) => {
-    assignAsset(
-      { assetId, employeeId: id },
-      {
-        onSuccess: () => {
-          toast.success('Asset assigned successfully');
-          setAssignAssetOpen(false);
-        },
-        onError: () => {
-          toast.error('Failed to assign asset');
-        },
-      },
-    );
-  };
-
-  if (isLoading) {
-    return <EmployeeDetailSkeleton />;
-  }
+  if (isLoading) return <EmployeeDetailSkeleton />;
 
   if (!employee) {
     const status = axios.isAxiosError(error) ? error.response?.status : undefined;
     return (
-      <div className="p-8 text-center">
+      <div className="p-8 text-center text-sm text-gray-400">
         {status === 403
           ? "You don't have permission to access this. Contact your administrator."
           : 'Employee not found.'}
@@ -155,111 +134,79 @@ export default function EmployeeDetailPage({
     );
   }
 
-  const name = `${employee.firstName} ${employee.lastName}`;
-
   return (
-    <div className="p-8 flex flex-col gap-6 overflow-y-auto">
+    <div className="flex flex-col h-full overflow-hidden">
       {/* Breadcrumb */}
-      <Breadcrumb tenantSlug={tenantSlug} name={name} />
+      <div className="px-8 pt-6 shrink-0">
+        <Breadcrumb tenantSlug={tenantSlug} name={`${employee.firstName} ${employee.lastName}`} />
+      </div>
 
-      {/* Actions Bar */}
-      <EmployeeActionsBar
-        isPendingInvite={employee.userStatus === 'PENDING_VERIFICATION'}
-        isOffboarded={employee.employmentStatus === 'OFFBOARDED'}
-        resendInvite={handleResendInvite}
-        isResending={isResending}
-        onAssignAsset={canAssignAsset ? () => setAssignAssetOpen(true) : undefined}
-        onAssignRole={
-          employee.userId && canGrantPermission ? () => setPermissionSetsOpen(true) : undefined
-        }
-        onAssignPermission={
-          employee.userId && canGrantPermission ? () => setAssignPermOpen(true) : undefined
-        }
-        onOffboard={canOffboardEmployee ? () => setOffboardOpen(true) : undefined}
-        onResign={() => setResignOpen(true)}
-        hasPendingResignation={hrIsNotified}
-        onEdit={canEditEmployee ? () => setEditOpen(true) : undefined}
-      />
+      {/* Banner */}
+      <div className="px-8 pt-4 pb-6 shrink-0">
+        <EmployeeDetailBanner
+          employee={employee}
+          hasPendingResignation={hrIsNotified}
+          onEdit={canEditEmployee ? () => setActivePanel('edit') : undefined}
+          onOffboard={canOffboardEmployee ? () => setActivePanel('offboard') : undefined}
+          onResign={() => setActivePanel('resign')}
+          onResendInvite={handleResendInvite}
+          isResending={isResending}
+        />
+      </div>
 
-      {/* Main Content */}
-      <div className="flex gap-6 items-start">
-        {/* Left Sidebar */}
-        <EmployeeProfileCard employee={employee} roles={assignedSets.map((s) => s.name)} />
+      {/* Tab bar */}
+      <div className="px-8 shrink-0">
+        <TabBar
+          tabs={TABS}
+          activeTab={activeTab}
+          onTabChange={(tab) => setActiveTab(tab as EmployeeTab)}
+        />
+      </div>
 
-        {/* Right Sections */}
-        <div className="flex-1 min-w-0 flex flex-col gap-4">
-          <EmploymentDetailsSection employee={employee} allHrEmployees={allHrEmployees} />
-          <BankingComplianceSection employee={employee} />
-          <EmergencyContactSection employee={employee} />
-          <AssetsSection assets={employee.assets || []} />
+      {/* Scrollable content */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="px-8 pt-4 pb-8">
+          {activeTab === 'personal' && (
+            <div className="grid grid-cols-3 gap-6 items-start">
+              <div className="col-span-2 flex flex-col gap-4">
+                <PersonalInformationSection employee={employee} showNationalId />
+                <EmergencyContactSection employee={employee} />
+                <AssetsSection
+                  assets={employee.assets ?? []}
+                  onAssignAsset={canAssignAsset ? () => setActivePanel('assign-asset') : undefined}
+                />
+              </div>
+              <div className="col-span-1">
+                <EmployeeDetailSidebar
+                  employee={employee}
+                  managerName={managerName}
+                  roles={roles}
+                  canEditRoles={canGrantPermission}
+                  canManagePermissions={canGrantPermission}
+                  onEditRoles={() => setActivePanel('roles')}
+                  onManagePermissions={() => setActivePanel('permissions')}
+                  directPermissions={directPermissions}
+                />
+              </div>
+            </div>
+          )}
+          {activeTab === 'payroll' && <EmployeePayslipTab employee={employee} />}
         </div>
       </div>
 
-      {/* Side Panels */}
-      <ResignationPanel
-        isOpen={resignOpen}
-        onClose={() => setResignOpen(false)}
+      <EmployeeDetailPanels
+        activePanel={activePanel}
+        onClose={() => setActivePanel(null)}
         employee={employee}
-        isHrView
-        onAccept={() => setOffboardOpen(true)}
+        allHrEmployees={allHrEmployees}
+        availableAssets={availableAssets}
+        customPermissionSets={customPermissionSets}
+        assignedSets={assignedSets}
+        isAssigningPermissionSet={isAssigningPermissionSet}
+        isRemovingPermissionSet={isRemovingPermissionSet}
+        onAssignPermissionSet={handleAssignPermissionSet}
+        onRemovePermissionSet={handleRemovePermissionSet}
       />
-
-      <OffboardEmployeePanel
-        isOpen={offboardOpen}
-        onClose={() => setOffboardOpen(false)}
-        employeeId={id}
-        employeeName={name}
-        assignedAssets={employee.assets ?? []}
-      />
-
-      <EditEmployeePanel
-        isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        employee={employee}
-        employees={allHrEmployees}
-        name={name}
-        onSave={handleUpdateEmployee}
-        isUpdating={isUpdating}
-      />
-
-      <AssignAssetPanel
-        isOpen={assignAssetOpen}
-        onClose={() => setAssignAssetOpen(false)}
-        employeeName={name}
-        availableAssets={availableAssets.map((asset) => ({
-          id: asset.id,
-          name: asset.name,
-          type: asset.type,
-          condition: asset.condition ?? 'GOOD',
-          assetNumber: asset.assetNumber ?? '—',
-        }))}
-        onAssign={handleAssignAsset}
-      />
-
-      {employee.userId && (
-        <EmployeePermissionsPanel
-          isOpen={permissionSetsOpen}
-          onClose={() => setPermissionSetsOpen(false)}
-          employeeName={name}
-          userId={employee.userId}
-          availableSets={customPermissionSets}
-          assignedSets={assignedSets.map((set) => ({ id: set.id, name: set.name }))}
-          baseSetName="Employee Set"
-          onAssign={handleAssignPermissionSet}
-          onRemove={handleRemovePermissionSet}
-          isAssigning={isAssigningPermissionSet}
-          isRemoving={isRemovingPermissionSet}
-        />
-      )}
-
-      {employee.userId && (
-        <AssignPermissionPanel
-          isOpen={assignPermOpen}
-          onClose={() => setAssignPermOpen(false)}
-          employeeName={name}
-          userId={employee.userId}
-        />
-      )}
     </div>
   );
 }

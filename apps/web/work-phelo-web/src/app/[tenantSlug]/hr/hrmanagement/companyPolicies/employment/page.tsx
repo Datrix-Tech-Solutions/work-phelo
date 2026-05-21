@@ -8,6 +8,8 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCompanyPoliciesSettings, useUpdateCompanyPoliciesSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import type { CompanyPolicyProbationPeriod, CompanyPolicyResignationWindow } from '@/types/hr';
 
 const PROBATION_OPTIONS = [
@@ -36,6 +38,7 @@ interface EmploymentForm {
 
 export default function EmploymentPoliciesPage() {
   const toast = useToast();
+  const canManage = usePermission(Permission.MANAGE_HR_SETTINGS);
   const { data: settings, isLoading } = useCompanyPoliciesSettings();
   const { mutate: updateSettings, isPending } = useUpdateCompanyPoliciesSettings();
 
@@ -67,47 +70,59 @@ export default function EmploymentPoliciesPage() {
     });
   };
 
-  if (isLoading) return <div className="p-8 text-sm text-gray-400">Loading...</div>;
+  if (isLoading)
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="relative w-8 h-8">
+          <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
+          <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
+        </div>
+      </div>
+    );
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8 max-w-xl">
-      <FormSection title="Employment">
-        <Controller
-          name="probationPeriod"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Default Probation Period"
-              placeholder="Select probation period"
-              options={PROBATION_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
-      </FormSection>
+      <fieldset disabled={!canManage} className="contents">
+        <FormSection title="Employment">
+          <Controller
+            name="probationPeriod"
+            control={control}
+            render={({ field }) => (
+              <SearchSelect
+                label="Default Probation Period"
+                placeholder="Select probation period"
+                options={PROBATION_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+        </FormSection>
 
-      <FormSection title="Resignation">
-        <Controller
-          name="resignationWindow"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Resignation Notice Period"
-              placeholder="Select notice period"
-              options={RESIGNATION_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
-      </FormSection>
+        <FormSection title="Resignation">
+          <Controller
+            name="resignationWindow"
+            control={control}
+            render={({ field }) => (
+              <SearchSelect
+                label="Resignation Notice Period"
+                placeholder="Select notice period"
+                options={RESIGNATION_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+        </FormSection>
+      </fieldset>
 
-      <div>
-        <Button type="submit" disabled={!isDirty} isLoading={isPending} loadingText="Saving...">
-          Save Changes
-        </Button>
-      </div>
+      {canManage && (
+        <div>
+          <Button type="submit" disabled={!isDirty} isLoading={isPending} loadingText="Saving...">
+            Save Changes
+          </Button>
+        </div>
+      )}
     </form>
   );
 }

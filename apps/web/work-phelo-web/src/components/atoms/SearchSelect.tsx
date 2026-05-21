@@ -37,6 +37,13 @@ export function SearchSelect({
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open && dropdownRef.current) {
+      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [open]);
 
   const selected = options.find((o) => o.value === value);
 
@@ -147,7 +154,10 @@ export function SearchSelect({
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+        <div
+          ref={dropdownRef}
+          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+        >
           <div className="max-h-52 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
@@ -162,7 +172,7 @@ export function SearchSelect({
                     'w-full text-left px-4 py-2.5 text-sm transition-colors flex flex-col',
                     opt.value === value
                       ? 'bg-[#EEF1F8] text-brand font-medium'
-                      : 'text-gray-900 hover:bg-gray-50',
+                      : 'text-gray-900 hover:bg-gray-300',
                   )}
                 >
                   <span>{opt.label}</span>

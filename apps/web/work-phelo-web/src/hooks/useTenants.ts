@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Tenant, RegisterTenantPayload } from '@/types/tenant';
+import { Tenant, RegisterTenantPayload, AuditData } from '@/types/tenant';
 
 export function useTenants() {
   return useQuery({
@@ -136,6 +136,14 @@ export function useTenantAudit(id: string) {
     queryKey: ['tenant-audit', id],
     queryFn: () => api.get(`/auth/tenants/${id}/audit`).then((r) => r.data),
     enabled: !!id,
+  });
+}
+
+export function useAuditLogs(page = 1) {
+  return useQuery({
+    queryKey: ['audit-logs', page],
+    queryFn: () =>
+      api.get<AuditData>('/auth/audit', { params: { page, limit: 50 } }).then((r) => r.data),
   });
 }
 

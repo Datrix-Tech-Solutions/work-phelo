@@ -24,7 +24,6 @@ required_env_vars_for() {
   local -a required=(
     GHCR_TOKEN
     GHCR_USERNAME
-    DATABASE_URL
     RABBITMQ_URL
     JWT_SECRET
     ALLOWED_ORIGINS
@@ -41,14 +40,21 @@ required_env_vars_for() {
     NOTIFY_RESEND_FROM_EMAIL
     SUPER_ADMIN_PASSWORD
     SUPER_ADMIN_EMAIL
+    HR_FIELD_ENCRYPTION_KEY
+    HR_FIELD_HMAC_KEY
     BUILD_SHA
     BUILD_REF
     IMAGE_PREFIX
   )
 
-  if [[ "$deploy_env" == "prod" ]]; then
-    required+=(REDIS_PASSWORD)
-  fi
+  case "$deploy_env" in
+  dev)
+    required+=(DATABASE_URL)
+    ;;
+  prod)
+    required+=(DATABASE_URL REDIS_PASSWORD)
+    ;;
+esac
 
   printf '%s\n' "${required[@]}"
 }
@@ -79,6 +85,9 @@ validate_required_envs() {
       die "AUTH_COOKIE_SAME_SITE must be one of: lax, strict, none (got '${AUTH_COOKIE_SAME_SITE}')"
       ;;
   esac
+
+
+  validate_database_target "$deploy_env"
 }
 
 warn_optional_envs() {
@@ -188,7 +197,12 @@ docker_compose_exec() {
 }
 
 validate_compose_render() {
-  docker_compose config >/dev/null
+  local tmp
+  tmp="$(mktemp)"
+  docker_compose config >"$tmp"
+  [[ -s "$tmp" ]] || die "Docker Compose config rendered empty output"
+  rm -f "$tmp"
+  log "Docker Compose config validation passed"
 }
 
 preflight_runtime_env() {
@@ -308,4 +322,22 @@ print_service_logs() {
   log ""
   log "Recent logs for ${service_name}:"
   docker_compose logs --no-color --tail 120 "$service_name" || true
+}
+
+validate_database_target() {
+  local deploy_env="$1"
+  local db_url="${DATABASE_URL:-}"
+
+  [[ -n "$db_url" ]] || die "DATABASE_URL is required"
+
+  case "$deploy_env" in
+    prod)
+      [[ "$db_url" != *"dev"* ]] || die "Prod deployment must not use dev database URL"
+      [[ "$db_url" != *"staging"* ]] || die "Prod deployment must not use staging database URL"
+      ;;
+    dev)
+      [[ "$db_url" != *"prod"* ]] || die "Dev deployment must not use prod database URL"
+      [[ "$db_url" != *"production"* ]] || die "Dev deployment must not use production database URL"
+      ;;
+  esac
 }

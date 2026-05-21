@@ -28,7 +28,7 @@ import {
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
 import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
-import { StatCard } from '@/components/molecules/dashboard/StatCard';
+import { StatCard } from '@/components/molecules/shared/StatCard';
 
 const TYPE_LABELS: Record<AssetType, string> = {
   LAPTOP: 'Laptop',
@@ -152,10 +152,7 @@ export function AssetsContent() {
     <>
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Assets</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            {filtered.length} asset{filtered.length !== 1 ? 's' : ''}
-          </p>
+          <h1 className="text-xl font-bold text-gray-900">Asset Management</h1>
         </div>
         {canCreateAsset && <Button onClick={() => setPanel({ type: 'add' })}>+ Add Asset</Button>}
       </div>
@@ -258,8 +255,12 @@ export function AssetsContent() {
       </div>
 
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">
-          <p className="text-sm font-medium text-gray-900">Loading assets...</p>
+        <div className="flex flex-col items-center justify-center flex-1 gap-4">
+          <div className="relative w-8 h-8">
+            <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
+            <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
+          </div>
+          <p className="text-sm text-gray-500 font-medium">Loading...</p>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">

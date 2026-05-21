@@ -8,10 +8,11 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
 import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission, usePermissionRule } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
 import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';
+import { AgreementGate } from '@/components/organisms/companyPolicies/AgreementGate';
 
 export default function HRLayout({
   children,
@@ -23,14 +24,12 @@ export default function HRLayout({
   const { tenantSlug } = use(params);
   const user = useAuthStore((s) => s.user);
   const firstName = user?.firstName ?? 'User';
-  const initials = firstName.slice(0, 2).toUpperCase();
+  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   const [collapsed, setCollapsed] = useState(false);
   const [activeTab, setActiveTab] = useState('portal');
 
   const { hasAnyManagementAccess } = useHrManagementAccess();
-  const canReadDepartments = usePermission(Permission.READ_DEPARTMENTS);
-  const canReadBranches = usePermission(Permission.READ_BRANCHES);
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
@@ -46,13 +45,9 @@ export default function HRLayout({
   const canReadAttendance = usePermission(Permission.READ_ATTENDANCE);
   const canSubmitTimeCorrection = usePermission(Permission.SUBMIT_TIME_CORRECTION);
   const canApproveTimeCorrection = usePermission(Permission.APPROVE_TIME_CORRECTION);
-  const canReadSchedules = usePermission(Permission.READ_SCHEDULES);
+  const canReadSchedules = usePermissionRule('schedules:VIEW');
   const canManageSchedules = usePermission(Permission.MANAGE_SCHEDULES);
   const canApproveShiftSwap = usePermission(Permission.APPROVE_SHIFT_SWAP);
-  const canReadProjects = usePermission(Permission.READ_PROJECTS);
-  const canCreateProject = usePermission(Permission.CREATE_PROJECT);
-  const canUpdateProject = usePermission(Permission.UPDATE_PROJECT);
-  const canAssignProject = usePermission(Permission.ASSIGN_PROJECT);
   const canReadOwnPayslip = usePermission(Permission.READ_OWN_PAYSLIP);
   const canReadPayroll = usePermission(Permission.READ_PAYROLL);
   const canRunPayroll = usePermission(Permission.RUN_PAYROLL);
@@ -61,7 +56,6 @@ export default function HRLayout({
   const canReadAssets = usePermission(Permission.READ_ASSETS);
   const canManageAssets = usePermission(Permission.MANAGE_ASSETS);
   const canAssignAsset = usePermission(Permission.ASSIGN_ASSET);
-  const canReadAnnouncements = usePermission(Permission.READ_ANNOUNCEMENTS);
   const canManageAnnouncements = usePermission(Permission.MANAGE_ANNOUNCEMENTS);
   const canAccessLeave = canReadOwnLeave || canReadAllLeaves || canRequestLeave || canApproveLeave;
   const canAccessAppraisal =
@@ -73,8 +67,6 @@ export default function HRLayout({
   const canAccessTimeClock =
     canClockInOut || canReadAttendance || canSubmitTimeCorrection || canApproveTimeCorrection;
   const canAccessScheduling = canReadSchedules || canManageSchedules || canApproveShiftSwap;
-  const canAccessProjects =
-    canReadProjects || canCreateProject || canUpdateProject || canAssignProject;
   const canAccessPayroll =
     canReadOwnPayslip ||
     canReadPayroll ||
@@ -89,18 +81,17 @@ export default function HRLayout({
   const coreKeys = new Set(['dashboard', 'management', 'announcements']);
   const navAccess: Record<string, boolean> = {
     dashboard: true,
-    departments: canReadDepartments,
-    branches: canReadBranches,
+
     employees: canReadEmployees || canReadOwnProfile,
     leave: canAccessLeave,
     appraisal: canAccessAppraisal,
     timeclock: canAccessTimeClock,
     scheduling: canAccessScheduling,
-    projects: canAccessProjects,
     payroll: canAccessPayroll,
     assets: canReadAssets || canManageAssets || canAssignAsset,
+    projects: true,
     management: hasAnyManagementAccess,
-    announcements: canReadAnnouncements || canManageAnnouncements,
+    announcements: canManageAnnouncements,
   };
 
   const groups = HR_NAV_GROUPS.map((group) => ({
@@ -141,11 +132,12 @@ export default function HRLayout({
       />
       <div className="flex flex-1 min-h-0">
         <Sidebar groups={groups} collapsed={collapsed} />
-        <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
+        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
       </div>
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
+      {canReadOwnProfile && <AgreementGate tenantSlug={tenantSlug} />}
     </div>
   );
 }

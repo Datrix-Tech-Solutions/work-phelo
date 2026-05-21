@@ -61,12 +61,12 @@ export class CreateEmployeeDto {
   gender?: Gender;
 
   @ApiPropertyOptional({
-    description: 'Date of birth in ISO format',
+    description:
+      'Date of birth in ISO format. Employees must be at least 18 years old.',
     example: '1990-05-18',
   })
-  @IsOptional()
   @IsDateString()
-  dateOfBirth?: string;
+  dateOfBirth!: string;
 
   @ApiPropertyOptional({
     description: 'Marital status of the employee',
@@ -168,7 +168,8 @@ export class CreateEmployeeDto {
   hireDate!: string;
 
   @ApiPropertyOptional({
-    description: 'End date of probation period',
+    description:
+      'End date of probation period. If omitted, the tenant default probation period is used when configured.',
     example: '2026-04-05',
   })
   @IsOptional()

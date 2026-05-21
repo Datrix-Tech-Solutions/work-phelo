@@ -10,15 +10,21 @@ import { Permission } from '@/lib/permissionMap';
 import { PayrollTabs } from '@/components/molecules/payroll/PayrollTabs';
 import { MyPayslipTab } from '@/components/organisms/payroll/MyPayslipTab';
 import { ManagePayrollTab } from '@/components/organisms/payroll/ManagePayrollTab';
+import { SSNITTab } from '@/components/organisms/payroll/SSNITTab';
+import { PensionTab_NG } from '@/components/organisms/payroll/PensionTab_NG';
+import { NSSFTab_KE } from '@/components/organisms/payroll/NSSFTab_KE';
 import { ApprovePayrollTab } from '@/components/organisms/payroll/ApprovePayrollTab';
 import { PayrollHistoryTab } from '@/components/organisms/payroll/PayrollHistoryTab';
+import { usePayrollSettings } from '@/hooks';
 
-type Tab = 'payslip' | 'manage' | 'approve' | 'history';
+type Tab = 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history';
 
 export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+  const { data: payrollSettings } = usePayrollSettings();
+  const payrollCountry = payrollSettings?.payrollCountry ?? 'GH';
 
   useEffect(() => {
     if (user !== null && !user.featureConfig?.hr?.payroll) {
@@ -28,20 +34,32 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
 
   const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
   const canApprovePayroll = usePermission(Permission.APPROVE_PAYROLL);
+  const canViewHistory = canManagePayroll || canApprovePayroll;
   const searchParams = useSearchParams();
 
   const initialTab = useMemo((): Tab => {
     const t = searchParams.get('tab') as Tab | null;
-    if (t === 'history' && canApprovePayroll) return 'history';
+    if (t === 'history' && canViewHistory) return 'history';
     if (t === 'approve' && canApprovePayroll) return 'approve';
+    if (t === 'ssnit' && canManagePayroll) return 'ssnit';
     if (t === 'manage' && canManagePayroll) return 'manage';
     return canManagePayroll ? 'manage' : 'payslip';
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, canApprovePayroll, canManagePayroll, canViewHistory]);
 
   const [tab, setTab] = useState<Tab>(initialTab);
 
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
+
+  function renderContributionsTab() {
+    if (payrollCountry === 'NG') return <PensionTab_NG />;
+    if (payrollCountry === 'KE') return <NSSFTab_KE />;
+    return <SSNITTab />;
+  }
+
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-8 flex flex-col gap-6 flex-1 min-h-0">
       <div className="shrink-0">
         <h1 className="text-xl font-bold text-gray-900">Payroll Management</h1>
       </div>
@@ -49,12 +67,15 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
         activeTab={tab}
         canManage={canManagePayroll}
         canApprove={canApprovePayroll}
+        canViewHistory={canViewHistory}
+        country={payrollCountry}
         onTabChange={setTab}
       />
       {tab === 'payslip' && <MyPayslipTab />}
       {tab === 'manage' && canManagePayroll && <ManagePayrollTab />}
+      {tab === 'ssnit' && canManagePayroll && renderContributionsTab()}
       {tab === 'approve' && canApprovePayroll && <ApprovePayrollTab />}
-      {tab === 'history' && canApprovePayroll && <PayrollHistoryTab />}
+      {tab === 'history' && canViewHistory && <PayrollHistoryTab />}
     </div>
   );
 }

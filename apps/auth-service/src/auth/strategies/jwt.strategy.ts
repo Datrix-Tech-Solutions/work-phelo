@@ -1,60 +1,31 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
-import { RequestUser } from '@work-phelo/types';
+import { JwtPayload, RequestUser } from '@work-phelo/types';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    configService: ConfigService,
+  ) {
     super({
       // Extract JWT from cookie first, fall back to Authorization header
       jwtFromRequest: ExtractJwt.fromExtractors([
-        (req: Request) => req?.cookies?.access_token ?? null,
+        (req: Request) =>
+          (req?.cookies as Record<string, string> | undefined)?.access_token ??
+          null,
         ExtractJwt.fromAuthHeaderAsBearerToken(),
       ]),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET,
+      secretOrKey: configService.getOrThrow<string>('JWT_SECRET'),
     });
   }
 
-  private async resolveEffectivePermissions(
-    userId: string,
-    tenantId: string,
-    role: string,
-  ): Promise<string[]> {
-    if (role !== 'EMPLOYEE') return [];
-
-    const [allDirectPerms, setAssignments] = await Promise.all([
-      this.prisma.userPermission.findMany({
-        where: { tenantId, userId },
-        include: { resource: true },
-      }),
-      this.prisma.userPermissionSet.findMany({
-        where: { userId },
-        include: {
-          permissionSet: {
-            include: { resources: { include: { resource: true } } },
-          },
-        },
-      }),
-    ]);
-
-    const direct = allDirectPerms
-      .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
-      .map((p) => `${p.resource.name}:${p.action}`);
-
-    const fromSets = setAssignments.flatMap((a) =>
-      a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
-    );
-
-    // Revoked direct permissions remain as audit history, but they do not act
-    // as hard denies against permissions granted via roles or permission sets.
-    return [...new Set([...direct, ...fromSets])];
-  }
-
-  async validate(payload: any): Promise<RequestUser> {
+  async validate(payload: JwtPayload): Promise<RequestUser> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
       include: { tenant: true },
@@ -64,11 +35,36 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('User not found or inactive');
     }
 
-    const permissions = await this.resolveEffectivePermissions(
-      user.id,
-      user.tenantId,
-      user.role,
-    );
+    // Fetch permissions from DB — the JWT no longer embeds them to keep
+    // the Set-Cookie header small. SUPER_ADMIN and TENANT_ADMIN bypass
+    // permission guards via role checks so they don't need a list.
+    let permissions: string[] = [];
+    if (user.role === 'EMPLOYEE') {
+      const [directPerms, setAssignments] = await Promise.all([
+        this.prisma.userPermission.findMany({
+          where: { tenantId: user.tenantId, userId: user.id },
+          include: { resource: true },
+        }),
+        this.prisma.userPermissionSet.findMany({
+          where: { userId: user.id, permissionSet: { isActive: true } },
+          include: {
+            permissionSet: {
+              include: { resources: { include: { resource: true } } },
+            },
+          },
+        }),
+      ]);
+
+      const direct = directPerms
+        .filter((p) => p.isActive && (!p.expiresAt || p.expiresAt > new Date()))
+        .map((p) => `${p.resource.name}:${p.action}`);
+
+      const fromSets = setAssignments.flatMap((a) =>
+        a.permissionSet.resources.map((r) => `${r.resource.name}:${r.action}`),
+      );
+
+      permissions = [...new Set([...direct, ...fromSets])];
+    }
 
     return {
       id: user.id,

@@ -10,7 +10,13 @@ import { FormSection } from '@/components/atoms/FormSection';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '../../atoms/SearchSelect';
 import { useState } from 'react';
-import { COMPANY_SIZE_OPTIONS, INDUSTRY_OPTIONS } from '@/lib/CompanyOptions';
+import {
+  COMPANY_SIZE_OPTIONS,
+  COUNTRY_CONFIG,
+  COUNTRY_OPTIONS,
+  INDUSTRY_OPTIONS,
+  swapDialCode,
+} from '@/lib/CompanyOptions';
 
 interface AddCompanyPayload {
   name: string;
@@ -19,6 +25,9 @@ interface AddCompanyPayload {
   firstName: string;
   lastName: string;
   phone?: string;
+  country?: string;
+  address?: string;
+  currency?: string;
   industry?: string;
   customIndustry?: string;
   size?: string;
@@ -46,6 +55,9 @@ function AddCompanyInner({
 }) {
   const [industry, setIndustry] = useState('');
   const [size, setSize] = useState('');
+  const [country, setCountry] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [phone, setPhone] = useState('');
 
   const {
     register,
@@ -55,6 +67,25 @@ function AddCompanyInner({
   } = useForm<AddCompanyPayload>();
 
   const { mutate: registerTenant, isPending } = useRegisterTenant();
+
+  const handleCountryChange = (v: string) => {
+    setCountry(v);
+    setValue('country', v);
+
+    const config = COUNTRY_CONFIG[v];
+    if (config) {
+      // Swap dial code while preserving any number already typed
+      const updatedPhone = swapDialCode(phone, config.dialCode);
+      setPhone(updatedPhone);
+      setValue('phone', updatedPhone);
+
+      // Auto-fill currency only if not yet manually chosen
+      if (!currency) {
+        setCurrency(config.currency);
+        setValue('currency', config.currency);
+      }
+    }
+  };
 
   const onSubmit = (data: AddCompanyPayload) => {
     const payload = { ...data, slug: generateSlug(data.name) };
@@ -101,7 +132,6 @@ function AddCompanyInner({
           error={errors.name}
           placeholder="eg; Companyname Corp Ltd"
         />
-
         <SearchSelect
           label="Company Size"
           placeholder="Select size range"
@@ -132,6 +162,19 @@ function AddCompanyInner({
             placeholder="eg; Space Tourism"
           />
         )}
+        <SearchSelect
+          label="Country"
+          placeholder="Select country"
+          options={COUNTRY_OPTIONS}
+          value={country}
+          onChange={handleCountryChange}
+        />
+
+        <FormField
+          label="Address"
+          registration={register('address')}
+          placeholder="eg; 12 Independence Ave, Accra"
+        />
       </FormSection>
 
       {/* Administrator Information */}
@@ -151,7 +194,11 @@ function AddCompanyInner({
         <PhoneInput
           label="Contact"
           placeholder="00 000 0000"
-          onChange={(v) => setValue('phone', v)}
+          value={phone}
+          onChange={(v) => {
+            setPhone(v);
+            setValue('phone', v);
+          }}
         />
         <FormField
           label="Email Address"

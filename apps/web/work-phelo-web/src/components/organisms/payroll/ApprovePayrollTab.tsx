@@ -6,35 +6,17 @@ import { MoreVertical } from 'lucide-react';
 import { Column, DataTable } from '../shared/DataTable';
 import { PayrollRun } from '@/types/hr';
 import { usePayrollRuns, useReturnPayrollToDraft } from '@/hooks';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { ApprovePayrollPanel } from './ApprovePayrollPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-
-const MONTH_NAMES = [
-  '',
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-
-function fmt(value: string | number) {
-  const n = typeof value === 'string' ? parseFloat(value) : value;
-  return `GHS ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+import { payrollMonthLabel } from '@/lib/payrollUtils';
+import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
 
 function monthLabel(run: PayrollRun) {
-  return `${MONTH_NAMES[run.month]} ${run.year}`;
+  return payrollMonthLabel(run.month, run.year);
 }
 
 interface RowMenuProps {
@@ -105,8 +87,10 @@ export function ApprovePayrollTab() {
   const params = useParams<{ tenantSlug: string }>();
   const { data: runs = [], isLoading } = usePayrollRuns();
   const { mutate: returnToDraft, isPending: isRejecting } = useReturnPayrollToDraft();
+  useTenantConfig();
   const [selectedRun, setSelectedRun] = useState<PayrollRun | null>(null);
   const [rejectRun, setRejectRun] = useState<PayrollRun | null>(null);
+  const [returnNote, setReturnNote] = useState('');
 
   const pending = runs.filter((r) => r.status === 'PENDING_APPROVAL');
 
@@ -119,27 +103,32 @@ export function ApprovePayrollTab() {
     {
       key: 'totalGross',
       label: 'Total Gross',
-      render: (row) => fmt(row.totalGross),
+      render: (row) => formatPayrollMoney(row.totalGross, row.payrollCurrency, row.payrollCountry),
     },
     {
-      key: 'totalAllowances',
-      label: 'Total Allowances',
-      render: () => <span className="text-gray-400">—</span>,
-    },
-    {
-      key: 'totalSSNIT',
-      label: 'Total SSNIT',
-      render: (row) => fmt(row.totalSSNIT),
+      key: 'totalNet',
+      label: 'Total Net Pay',
+      render: (row) => formatPayrollMoney(row.totalNet, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'totalPAYE',
       label: 'Total PAYE',
-      render: (row) => fmt(row.totalPAYE),
+      render: (row) => formatPayrollMoney(row.totalPAYE, row.payrollCurrency, row.payrollCountry),
     },
     {
-      key: 'employerCost',
-      label: 'Employer Cost',
-      render: () => <span className="text-gray-400">—</span>,
+      key: 'totalSSNIT',
+      label: 'Statutory',
+      render: (row) => (
+        <span title={getPayrollLabels(row.payrollCountry).totalLabel}>
+          {formatPayrollMoney(row.totalSSNIT, row.payrollCurrency, row.payrollCountry)}
+        </span>
+      ),
+    },
+    {
+      key: 'totalEmployerCost',
+      label: 'Total Employer Cost',
+      render: (row) =>
+        formatPayrollMoney(row.totalEmployerCost, row.payrollCurrency, row.payrollCountry),
     },
     {
       key: 'actions',
@@ -171,27 +160,43 @@ export function ApprovePayrollTab() {
 
       <Modal
         isOpen={rejectRun !== null}
-        onClose={() => !isRejecting && setRejectRun(null)}
+        onClose={() => {
+          if (isRejecting) return;
+          setRejectRun(null);
+          setReturnNote('');
+        }}
         title="Reject Payroll"
         hideClose={isRejecting}
         footer={
           <>
-            <Button variant="outline" onClick={() => setRejectRun(null)} disabled={isRejecting}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRejectRun(null);
+                setReturnNote('');
+              }}
+              disabled={isRejecting}
+            >
               Cancel
             </Button>
             <Button
               variant="danger"
               isLoading={isRejecting}
               loadingText="Rejecting…"
+              disabled={!returnNote.trim()}
               onClick={() => {
                 if (!rejectRun) return;
-                returnToDraft(rejectRun.id, {
-                  onSuccess: () => {
-                    toast.success(`${monthLabel(rejectRun)} payroll returned to draft`);
-                    setRejectRun(null);
+                returnToDraft(
+                  { id: rejectRun.id, note: returnNote.trim() },
+                  {
+                    onSuccess: () => {
+                      toast.success(`${monthLabel(rejectRun)} payroll rejected`);
+                      setRejectRun(null);
+                      setReturnNote('');
+                    },
+                    onError: (err) => toast.error(extractError(err, 'Failed to reject payroll')),
                   },
-                  onError: (err) => toast.error(extractError(err, 'Failed to reject payroll')),
-                });
+                );
               }}
             >
               Reject Payroll
@@ -199,14 +204,27 @@ export function ApprovePayrollTab() {
           </>
         }
       >
-        <p className="text-sm text-gray-600 leading-relaxed mt-2">
-          You are about to reject the payroll for{' '}
-          <span className="font-medium text-gray-900">
-            {rejectRun ? monthLabel(rejectRun) : ''}
-          </span>
-          . It will be returned to draft and the payroll manager will need to resubmit. This action
-          cannot be undone.
-        </p>
+        <div className="flex flex-col gap-4 mt-2">
+          <p className="text-sm text-gray-600 leading-relaxed">
+            You are about to reject the payroll for{' '}
+            <span className="font-medium text-gray-900">
+              {rejectRun ? monthLabel(rejectRun) : ''}
+            </span>
+            . The payroll manager will need to revise and resubmit.
+          </p>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-bold text-gray-900">
+              Rejection Note <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              rows={4}
+              placeholder="Explain why this payroll is being rejected…"
+              value={returnNote}
+              onChange={(e) => setReturnNote(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
+            />
+          </div>
+        </div>
       </Modal>
     </div>
   );

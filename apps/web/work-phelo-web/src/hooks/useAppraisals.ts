@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import type {
   AppraisalCycle,
   AppraisalKpi,
@@ -307,12 +309,15 @@ export function useMyAppraisals() {
 }
 
 export function useTeamAppraisals() {
+  const canReviewTeam = usePermission(Permission.SUBMIT_MANAGER_REVIEW);
+
   return useQuery<TeamAppraisalRecord[]>({
     queryKey: ['team-appraisals'],
     queryFn: async () => {
       const res = await api.get('/hr/appraisals/team');
       return unpackListResponse<TeamAppraisalRecord>(res.data);
     },
+    enabled: canReviewTeam,
   });
 }
 
@@ -341,6 +346,42 @@ export function useSubmitManagerReview() {
       queryClient.invalidateQueries({ queryKey: ['team-appraisals'] });
       queryClient.invalidateQueries({ queryKey: ['cycle-appraisals'] });
       queryClient.invalidateQueries({ queryKey: ['appraisal', id] });
+    },
+  });
+}
+
+export function useFinalizeAppraisal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note?: string }) =>
+      api.patch(`/hr/appraisals/${id}/finalize`, { note }).then((r) => r.data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['appraisal', id] });
+      queryClient.invalidateQueries({ queryKey: ['cycle-results'] });
+      queryClient.invalidateQueries({ queryKey: ['cycle-appraisals'] });
+    },
+  });
+}
+
+export function useReopenAppraisal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      reason,
+      target,
+    }: {
+      id: string;
+      reason: string;
+      target?: 'SELF' | 'MANAGER' | 'FULL';
+    }) =>
+      api
+        .patch(`/hr/appraisals/${id}/reopen`, { reason, target: target ?? 'FULL' })
+        .then((r) => r.data),
+    onSuccess: (_, { id }) => {
+      queryClient.invalidateQueries({ queryKey: ['appraisal', id] });
+      queryClient.invalidateQueries({ queryKey: ['cycle-results'] });
+      queryClient.invalidateQueries({ queryKey: ['cycle-appraisals'] });
     },
   });
 }

@@ -3,13 +3,20 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   AppraisalCycleRecipientGroup,
   EmploymentStatus,
+  PayrollCountry,
 } from '../../prisma/generated/client';
+import {
+  defaultPayrollCurrency,
+  normalizePayrollCountry,
+  normalizePayrollCurrency,
+} from '../common/payroll-calculator.helper';
 
 const DEFAULT_NOTICE_PERIOD_DAYS = 30;
 const DEFAULT_PROBATION_PERIOD_MONTHS: number | null = null;
 const DEFAULT_PAYROLL_TIER3_ENABLED = false;
 const DEFAULT_PAYROLL_TIER3_RATE: number | null = null;
 const DEFAULT_PAYROLL_TIER3_SCHEME_NAME: string | null = null;
+const DEFAULT_PAYROLL_COUNTRY = PayrollCountry.GH;
 const DEFAULT_APPRAISAL_CYCLE_RECIPIENTS = [
   AppraisalCycleRecipientGroup.ALL,
 ] as const;
@@ -249,13 +256,21 @@ export class SettingsService {
     const config = await this.prisma.tenantConfig.findUnique({
       where: { tenantId },
       select: {
+        payrollCountry: true,
+        payrollCurrency: true,
+        payrollTier2FundName: true,
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
       },
     });
 
+    const payrollCountry = config?.payrollCountry ?? DEFAULT_PAYROLL_COUNTRY;
     return {
+      payrollCountry,
+      payrollCurrency:
+        config?.payrollCurrency ?? defaultPayrollCurrency(payrollCountry),
+      payrollTier2FundName: config?.payrollTier2FundName ?? null,
       payrollTier3Enabled:
         config?.payrollTier3Enabled ?? DEFAULT_PAYROLL_TIER3_ENABLED,
       payrollTier3Rate:
@@ -385,6 +400,9 @@ export class SettingsService {
   async updatePayrollSettings(
     tenantId: string,
     payrollSettings: {
+      payrollCountry?: string;
+      payrollCurrency?: string;
+      payrollTier2FundName?: string;
       payrollTier3Enabled?: boolean;
       payrollTier3Rate?: number;
       payrollTier3SchemeName?: string;
@@ -392,14 +410,51 @@ export class SettingsService {
     adminUserId?: string | null,
     adminEmail?: string | null,
   ) {
+    const existing = await this.prisma.tenantConfig.findUnique({
+      where: { tenantId },
+      select: {
+        payrollCountry: true,
+        payrollCurrency: true,
+        payrollTier2FundName: true,
+        payrollTier3Enabled: true,
+        payrollTier3Rate: true,
+        payrollTier3SchemeName: true,
+      },
+    });
+    const payrollCountryProvided = payrollSettings.payrollCountry !== undefined;
+    const payrollCountry = payrollCountryProvided
+      ? normalizePayrollCountry(payrollSettings.payrollCountry)
+      : (existing?.payrollCountry ?? DEFAULT_PAYROLL_COUNTRY);
+    const payrollCurrency =
+      payrollSettings.payrollCurrency !== undefined
+        ? normalizePayrollCurrency(
+            payrollSettings.payrollCurrency,
+            payrollCountry,
+          )
+        : payrollCountryProvided
+          ? defaultPayrollCurrency(payrollCountry)
+          : (existing?.payrollCurrency ??
+            defaultPayrollCurrency(payrollCountry));
+    const normalizedTier2FundName =
+      payrollSettings.payrollTier2FundName !== undefined
+        ? payrollSettings.payrollTier2FundName?.trim() || null
+        : (existing?.payrollTier2FundName ?? null);
     const tier3Enabled =
-      payrollSettings.payrollTier3Enabled ?? DEFAULT_PAYROLL_TIER3_ENABLED;
+      payrollSettings.payrollTier3Enabled ??
+      existing?.payrollTier3Enabled ??
+      DEFAULT_PAYROLL_TIER3_ENABLED;
     const normalizedTier3Rate =
-      payrollSettings.payrollTier3Rate == null
-        ? null
-        : Number(payrollSettings.payrollTier3Rate);
+      payrollSettings.payrollTier3Rate !== undefined
+        ? payrollSettings.payrollTier3Rate == null
+          ? null
+          : Number(payrollSettings.payrollTier3Rate)
+        : existing?.payrollTier3Rate != null
+          ? Number(existing.payrollTier3Rate.toString())
+          : null;
     const normalizedTier3SchemeName =
-      payrollSettings.payrollTier3SchemeName?.trim() || null;
+      payrollSettings.payrollTier3SchemeName !== undefined
+        ? payrollSettings.payrollTier3SchemeName?.trim() || null
+        : (existing?.payrollTier3SchemeName ?? null);
 
     if (tier3Enabled) {
       if (normalizedTier3Rate == null) {
@@ -421,11 +476,17 @@ export class SettingsService {
         tenantId,
         adminEmail: adminEmail ?? '',
         adminUserId: adminUserId ?? null,
+        payrollCountry,
+        payrollCurrency,
+        payrollTier2FundName: normalizedTier2FundName,
         payrollTier3Enabled: tier3Enabled,
         payrollTier3Rate: tier3Enabled ? normalizedTier3Rate : null,
         payrollTier3SchemeName: tier3Enabled ? normalizedTier3SchemeName : null,
       },
       update: {
+        payrollCountry,
+        payrollCurrency,
+        payrollTier2FundName: normalizedTier2FundName,
         payrollTier3Enabled: tier3Enabled,
         payrollTier3Rate: tier3Enabled ? normalizedTier3Rate : null,
         payrollTier3SchemeName: tier3Enabled ? normalizedTier3SchemeName : null,
@@ -433,6 +494,9 @@ export class SettingsService {
         ...(adminEmail ? { adminEmail } : {}),
       },
       select: {
+        payrollCountry: true,
+        payrollCurrency: true,
+        payrollTier2FundName: true,
         payrollTier3Enabled: true,
         payrollTier3Rate: true,
         payrollTier3SchemeName: true,
@@ -441,6 +505,9 @@ export class SettingsService {
 
     return {
       message: 'Payroll settings updated successfully',
+      payrollCountry: config.payrollCountry,
+      payrollCurrency: config.payrollCurrency,
+      payrollTier2FundName: config.payrollTier2FundName,
       payrollTier3Enabled: config.payrollTier3Enabled,
       payrollTier3Rate:
         config.payrollTier3Rate != null

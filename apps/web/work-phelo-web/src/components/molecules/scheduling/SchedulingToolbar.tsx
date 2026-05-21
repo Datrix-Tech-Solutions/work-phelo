@@ -1,5 +1,4 @@
 import { SearchIcon, ChevronRight } from 'lucide-react';
-import { Department } from '@/types/hr';
 import { WeekSelector } from './WeekSelector';
 
 interface Props {
@@ -7,7 +6,7 @@ interface Props {
   onSearchChange: (value: string) => void;
   departmentId: string;
   onDepartmentChange: (id: string) => void;
-  departments: Department[];
+  departments: { id: string; name: string }[];
   weekStart: Date;
   onPrevWeek: () => void;
   onNextWeek: () => void;

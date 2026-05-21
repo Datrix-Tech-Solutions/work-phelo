@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsBoolean,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -10,6 +11,32 @@ import {
 } from 'class-validator';
 
 export class UpdatePayrollSettingsDto {
+  @ApiPropertyOptional({
+    description: 'Payroll country used for statutory deductions and PAYE',
+    example: 'GH',
+    enum: ['GH', 'NG', 'KE'],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['GH', 'NG', 'KE', 'Ghana', 'Nigeria', 'Kenya'])
+  payrollCountry?: string;
+
+  @ApiPropertyOptional({
+    description: 'Payroll currency code used for display and exports',
+    example: 'GHS',
+  })
+  @IsOptional()
+  @IsString()
+  payrollCurrency?: string;
+
+  @ApiPropertyOptional({
+    description: 'Display name of the Tier 2 provident fund trustee',
+    example: 'SSNIT Provident Fund',
+  })
+  @IsOptional()
+  @IsString()
+  payrollTier2FundName?: string;
+
   @ApiPropertyOptional({
     description:
       'Whether Tier 3 employee contributions are enabled for payroll',

@@ -16,6 +16,8 @@ import { UpdateAttendanceSettingsDto } from './dto/update-attendance-settings.dt
 import { UpdateAppraisalSettingsDto } from './dto/update-appraisal-settings.dto';
 import { UpdatePayrollSettingsDto } from './dto/update-payroll-settings.dto';
 import { UpdateCompanyPoliciesDto } from './dto/update-company-policies.dto';
+import { Request } from 'express';
+import { RequestUser } from '@work-phelo/types';
 import { SettingsService } from './settings.service';
 
 @ApiTags('Settings')
@@ -27,12 +29,11 @@ export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
   @Get('resignation')
-  @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({
     summary: 'Get resignation settings for the current tenant',
   })
   @ApiResponse({ status: 200, description: 'Resignation settings retrieved' })
-  getResignationSettings(@Req() req: any) {
+  getResignationSettings(@Req() req: Request & { user: RequestUser }) {
     return this.settingsService.getResignationSettings(
       req.user.tenantId,
       req.user.role === 'TENANT_ADMIN' ? req.user.id : null,
@@ -48,7 +49,7 @@ export class SettingsController {
   @ApiResponse({ status: 200, description: 'Resignation settings updated' })
   updateResignationSettings(
     @Body() dto: UpdateResignationSettingsDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.settingsService.updateResignationSettings(
       req.user.tenantId,
@@ -62,12 +63,11 @@ export class SettingsController {
   @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({ summary: 'Get attendance settings for the current tenant' })
   @ApiResponse({ status: 200, description: 'Attendance settings retrieved' })
-  getAttendanceSettings(@Req() req: any) {
+  getAttendanceSettings(@Req() req: Request & { user: RequestUser }) {
     return this.settingsService.getAttendanceSettings(req.user.tenantId);
   }
 
   @Get('company-policies')
-  @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({
     summary: 'Get company policy settings for the current tenant',
   })
@@ -75,15 +75,15 @@ export class SettingsController {
     status: 200,
     description: 'Company policy settings retrieved',
   })
-  getCompanyPoliciesSettings(@Req() req: any) {
+  getCompanyPoliciesSettings(@Req() req: Request & { user: RequestUser }) {
     return this.settingsService.getCompanyPoliciesSettings(req.user.tenantId);
   }
 
   @Get('payroll')
-  @RequirePermissions(Permission.MANAGE_PAYROLL_SETTINGS)
+  @RequirePermissions(Permission.READ_PAYROLL)
   @ApiOperation({ summary: 'Get payroll settings for the current tenant' })
   @ApiResponse({ status: 200, description: 'Payroll settings retrieved' })
-  getPayrollSettings(@Req() req: any) {
+  getPayrollSettings(@Req() req: Request & { user: RequestUser }) {
     return this.settingsService.getPayrollSettings(req.user.tenantId);
   }
 
@@ -95,7 +95,7 @@ export class SettingsController {
   @ApiResponse({ status: 200, description: 'Attendance settings updated' })
   updateAttendanceSettings(
     @Body() dto: UpdateAttendanceSettingsDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.settingsService.updateAttendanceSettings(
       req.user.tenantId,
@@ -113,7 +113,7 @@ export class SettingsController {
   @ApiResponse({ status: 200, description: 'Payroll settings updated' })
   updatePayrollSettings(
     @Body() dto: UpdatePayrollSettingsDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.settingsService.updatePayrollSettings(
       req.user.tenantId,
@@ -134,7 +134,7 @@ export class SettingsController {
   })
   updateCompanyPoliciesSettings(
     @Body() dto: UpdateCompanyPoliciesDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.settingsService.updateCompanyPoliciesSettings(
       req.user.tenantId,
@@ -148,7 +148,7 @@ export class SettingsController {
   @RequirePermissions(Permission.READ_HR_SETTINGS)
   @ApiOperation({ summary: 'Get appraisal settings for the current tenant' })
   @ApiResponse({ status: 200, description: 'Appraisal settings retrieved' })
-  getAppraisalSettings(@Req() req: any) {
+  getAppraisalSettings(@Req() req: Request & { user: RequestUser }) {
     return this.settingsService.getAppraisalSettings(req.user.tenantId);
   }
 
@@ -160,7 +160,7 @@ export class SettingsController {
   @ApiResponse({ status: 200, description: 'Appraisal settings updated' })
   updateAppraisalSettings(
     @Body() dto: UpdateAppraisalSettingsDto,
-    @Req() req: any,
+    @Req() req: Request & { user: RequestUser },
   ) {
     return this.settingsService.updateAppraisalSettings(
       req.user.tenantId,

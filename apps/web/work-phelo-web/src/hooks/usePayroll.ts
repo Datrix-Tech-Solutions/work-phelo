@@ -6,6 +6,7 @@ import {
   PayrollRunDetail,
   PayrollSettings,
   RunPayrollDto,
+  PayrollDecisionDto,
   UpdatePayrollItemDto,
   UpdatePayrollSettingsDto,
 } from '@/types/hr';
@@ -38,6 +39,46 @@ export function useMyPayslips() {
       const res = await api.get<PayrollItem[]>('/hr/payroll/my-payslips');
       return res.data;
     },
+  });
+}
+
+export function useEmployeePayslips(employeeId: string) {
+  const { data: runs = [] } = usePayrollRuns();
+
+  const eligibleRuns = runs.filter((r) => r.status === 'APPROVED' || r.status === 'PAID');
+  const runIds = eligibleRuns.map((r) => r.id);
+
+  return useQuery({
+    queryKey: ['payroll', 'employee-payslips', employeeId, runIds],
+    queryFn: async () => {
+      const details = await Promise.all(
+        eligibleRuns.map((run) =>
+          api.get<PayrollRunDetail>(`/hr/payroll/${run.id}`).then((r) => r.data),
+        ),
+      );
+      const items: PayrollItem[] = [];
+      for (const detail of details) {
+        const item = detail.items.find((i) => i.employeeId === employeeId);
+        if (item) {
+          items.push({
+            ...item,
+            payrollRun: {
+              month: detail.month,
+              year: detail.year,
+              status: detail.status,
+              paidAt: detail.paidAt ?? null,
+              payrollCountry: detail.payrollCountry,
+              payrollCurrency: detail.payrollCurrency,
+              tier3Enabled: detail.tier3Enabled,
+              tier3Rate: detail.tier3Rate ?? null,
+              tier3SchemeName: detail.tier3SchemeName ?? null,
+            },
+          });
+        }
+      }
+      return items;
+    },
+    enabled: !!employeeId && runIds.length > 0,
   });
 }
 
@@ -96,12 +137,15 @@ export function useApprovePayroll() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await api.patch(`/hr/payroll/${id}/approve`);
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await api.patch(`/hr/payroll/${id}/approve`, {
+        note,
+      } satisfies PayrollDecisionDto);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['payroll'] });
+      queryClient.invalidateQueries({ queryKey: ['payroll', id] });
     },
   });
 }
@@ -110,15 +154,21 @@ export function useReturnPayrollToDraft() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await api.patch<PayrollRun>(`/hr/payroll/${id}/return-to-draft`);
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const res = await api.patch<PayrollRun>(`/hr/payroll/${id}/return-to-draft`, {
+        note,
+      } satisfies PayrollDecisionDto);
       return res.data;
     },
-    onSuccess: (_, id) => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ['payroll'] });
       queryClient.invalidateQueries({ queryKey: ['payroll', id] });
     },
   });
+}
+
+export function useRejectPayroll() {
+  return useReturnPayrollToDraft();
 }
 
 export function useMarkPayrollPaid() {

@@ -41,7 +41,7 @@ export function renderEmployeeInviteEmailTemplate(input: {
           : ''
       }
       <p style="color:#777;">
-        This invitation link will expire. If it expires before you use it, contact your HR administrator and they will send you a new one.
+        This invitation link will expire in 48 hours. If it expires before you use it, contact your HR administrator and they will send you a new one. Contact 'Workphelo' for assistance.
       </p>
       <hr style="border:none; border-top:1px solid #eee; margin:24px 0;" />
       <p style="color:#555;">Once you're in, you'll be able to:</p>
@@ -77,7 +77,7 @@ export function renderTenantAdminWelcomeEmailTemplate(input: {
           : ''
       }
       <p style="color:#777;">
-        This invitation link will expire. If it expires before you use it, contact the platform owner or request a fresh invite.
+        This invitation link will expire in 1 week. If it expires before you use it, contact Workphelo team for a new invite.
       </p>
       <hr style="border:none; border-top:1px solid #eee; margin:24px 0;" />
       <p style="color:#555;">As Company Admin, you will be able to:</p>
@@ -117,6 +117,7 @@ export function renderTerminationNoticeTemplate(input: {
   lastName: string;
   reasonLabel: string;
   formattedDate: string;
+  platformLink?: string;
 }): string {
   return renderCardEmail({
     title: 'Employment Notice',
@@ -139,6 +140,11 @@ export function renderTerminationNoticeTemplate(input: {
         Your access to WorkPhelo and all associated systems will be revoked
         effective from your last working date.
       </p>
+      ${
+        input.platformLink
+          ? `<p style="margin: 24px 0;">${renderPrimaryButton('Access your workspace', input.platformLink)}</p>`
+          : ''
+      }
       <p style="color: #6b7280; font-size: 13px; margin-top: 32px;">
         If you have any questions, please contact your HR department directly.
       </p>

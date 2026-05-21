@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Users, User, CalendarCheck, BarChart2 } from 'lucide-react';
 import { Icons } from '@/components/atoms/icons';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
@@ -11,12 +12,16 @@ import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/useAppraisals';
 import { cn } from '@/lib/utils';
 import type { AppraisalCycle } from '@/types/hr';
 
+type Tab = 'overview' | 'results';
+
 type AppraisalItem = {
   id: string;
-  employee?: { firstName?: string; lastName?: string };
-  manager?: { firstName?: string; lastName?: string } | null;
+  employeeName?: string | null;
+  managerName?: string | null;
   selfStatus?: string;
   managerStatus?: string;
+  selfScore?: number | null;
+  managerScore?: number | null;
   status?: string;
 };
 
@@ -77,6 +82,11 @@ interface Props {
 }
 
 export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<Tab>(
+    searchParams.get('tab') === 'results' ? 'results' : 'overview',
+  );
   const { data: cycles = [] } = useAppraisalCycles();
   const { data: rawAppraisals, isLoading } = useCycleAppraisals(cycleId);
 
@@ -103,21 +113,13 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
       key: 'employee',
       label: 'Employee',
       width: '2fr',
-      render: (r) => (
-        <span className="font-medium text-gray-900">
-          {r.employee ? `${r.employee.firstName ?? ''} ${r.employee.lastName ?? ''}`.trim() : '—'}
-        </span>
-      ),
+      render: (r) => <span className="font-medium text-gray-900">{r.employeeName || '—'}</span>,
     },
     {
       key: 'manager',
       label: 'Manager',
       width: '2fr',
-      render: (r) => (
-        <span className="text-gray-700">
-          {r.manager ? `${r.manager.firstName ?? ''} ${r.manager.lastName ?? ''}`.trim() : '—'}
-        </span>
-      ),
+      render: (r) => <span className="text-gray-700">{r.managerName || '—'}</span>,
     },
     {
       key: 'selfStatus',
@@ -126,10 +128,30 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
       render: (r) => <ReviewStatus status={r.selfStatus} />,
     },
     {
+      key: 'selfScore',
+      label: 'Employee Score',
+      width: '140px',
+      render: (r) => (
+        <span className="text-gray-700">
+          {r.selfScore != null ? `${Math.round(r.selfScore)}%` : '—'}
+        </span>
+      ),
+    },
+    {
       key: 'managerStatus',
       label: 'Manager Status',
       width: '160px',
       render: (r) => <ReviewStatus status={r.managerStatus} />,
+    },
+    {
+      key: 'managerScore',
+      label: 'Manager Score',
+      width: '140px',
+      render: (r) => (
+        <span className="text-gray-700">
+          {r.managerScore != null ? `${Math.round(r.managerScore)}%` : '—'}
+        </span>
+      ),
     },
   ];
 
@@ -158,31 +180,50 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
         <p className="text-sm text-gray-400 mt-1">Results</p>
       </div>
 
-      {/* Metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="Employees Included" value={total} icon={Users} />
-        <MetricCard label="Self Assessment" value={selfCompleted} icon={User} />
-        <MetricCard label="Manager Review" value={managerCompleted} icon={CalendarCheck} />
-        <MetricCard label="Overall Completion" value={`${overallPct}%`} icon={BarChart2} />
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-gray-200 shrink-0">
+        {(['overview', 'results'] as Tab[]).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              'px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
+              activeTab === tab
+                ? 'border-brand text-brand'
+                : 'border-transparent text-gray-500 hover:text-gray-700',
+            )}
+          >
+            {tab === 'overview' ? 'Overview' : 'Individual Results'}
+          </button>
+        ))}
       </div>
 
-      {/* Progress sections */}
-      <CycleProgressSection
-        title="Self Assessments"
-        completed={selfCompleted}
-        total={total}
-        entityLabel="employees"
-      />
-      <CycleProgressSection
-        title="Manager Reviews"
-        completed={managerCompleted}
-        total={total}
-        entityLabel="Managers"
-      />
+      {activeTab === 'overview' ? (
+        <>
+          {/* Metric cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <MetricCard label="Employees Included" value={total} icon={Users} />
+            <MetricCard label="Self Assessment" value={selfCompleted} icon={User} />
+            <MetricCard label="Manager Review" value={managerCompleted} icon={CalendarCheck} />
+            <MetricCard label="Overall Completion" value={`${overallPct}%`} icon={BarChart2} />
+          </div>
 
-      {/* Pending table */}
-      <div className="flex flex-col gap-3">
-        <p className="text-base font-bold text-gray-900">Pending Table</p>
+          {/* Progress sections */}
+          <CycleProgressSection
+            title="Self Assessments"
+            completed={selfCompleted}
+            total={total}
+            entityLabel="employees"
+          />
+          <CycleProgressSection
+            title="Manager Reviews"
+            completed={managerCompleted}
+            total={total}
+            entityLabel="Managers"
+          />
+        </>
+      ) : (
+        /* Individual Results tab */
         <DataTable
           columns={columns}
           data={pendingRows}
@@ -191,8 +232,11 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
           currentPage={1}
           totalPages={1}
           onPageChange={() => {}}
+          onRowClick={(row) =>
+            router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/employee/${row.id}`)
+          }
         />
-      </div>
+      )}
     </div>
   );
 }

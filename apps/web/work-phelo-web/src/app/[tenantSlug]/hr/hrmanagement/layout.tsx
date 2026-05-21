@@ -22,7 +22,7 @@ function ManagementTabs({ groups }: { groups: TabGroup[] }) {
   const pathname = usePathname();
 
   return (
-    <div className="flex items-end gap-1 px-8 border-b border-gray-200 bg-white">
+    <div className="flex items-end gap-1 px-8 border-b border-gray-200 bg-white overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
       {groups.map((group, gi) => (
         <div key={gi} className="flex items-end">
           {/* Divider between groups */}
@@ -53,19 +53,37 @@ function ManagementTabs({ groups }: { groups: TabGroup[] }) {
 
 export default function HRManagementLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ tenantSlug: string }>();
+  const pathname = usePathname();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const base = `/${params.tenantSlug}/hr/hrmanagement`;
-  const { canManageLeaveTypes, canConfigureAppraisal, canAccessRoles, hasAnyManagementAccess } =
-    useHrManagementAccess();
+  const {
+    canManageLeaveTypes,
+    canConfigureAppraisal,
+    canAccessRoles,
+    canViewAuditLogs,
+    canReadDepartments,
+    canReadBranches,
+    hasAnyManagementAccess,
+  } = useHrManagementAccess();
+
+  // Company Policies tabs (Employment, Cycle Recipients, Agreements) are viewable by all —
+  // only redirect away if the user has no management access AND is not on that section.
+  const isOnCompanyPolicies = pathname.startsWith(`${base}/companyPolicies`);
 
   useEffect(() => {
-    if (user !== null && !hasAnyManagementAccess) {
+    if (user !== null && !hasAnyManagementAccess && !isOnCompanyPolicies) {
       router.replace(`/${params.tenantSlug}/hr`);
     }
-  }, [hasAnyManagementAccess, params.tenantSlug, router, user]);
+  }, [hasAnyManagementAccess, isOnCompanyPolicies, params.tenantSlug, router, user]);
 
   const groups: TabGroup[] = [
+    {
+      tabs: [
+        ...(canReadDepartments ? [{ label: 'Departments', href: `${base}/departments` }] : []),
+        ...(canReadBranches ? [{ label: 'Branches', href: `${base}/branches` }] : []),
+      ],
+    },
     {
       tabs: canManageLeaveTypes
         ? [
@@ -88,23 +106,28 @@ export default function HRManagementLayout({ children }: { children: React.React
     {
       tabs: [{ label: 'Company Policies', href: `${base}/companyPolicies` }],
     },
+    {
+      tabs: canViewAuditLogs ? [{ label: 'Audit Trail', href: `${base}/audit-logs` }] : [],
+    },
   ].filter((group) => group.tabs.length > 0);
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Page header */}
-      <div className="px-8 pt-8 pb-5 bg-white shrink-0">
-        <h1 className="text-xl font-semibold text-gray-900">HR Management</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Configure leave types, appraisal templates, cycles, and roles
-        </p>
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Sticky header + tabs */}
+      <div className="shrink-0 bg-white">
+        <div className="px-8 pt-8 pb-2">
+          <h1 className="text-xl font-semibold text-gray-900">HR Settings</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Configure leave types, appraisal templates, cycles, and roles
+          </p>
+        </div>
+        <ManagementTabs groups={groups} />
       </div>
 
-      {/* Tabs */}
-      <ManagementTabs groups={groups} />
-
       {/* Content */}
-      <main className="flex-1 overflow-y-auto p-8">{children}</main>
+      <main className="px-8 pt-4 pb-8 flex-1 min-h-0 overflow-hidden bg-gray-50 flex flex-col">
+        {children}
+      </main>
     </div>
   );
 }

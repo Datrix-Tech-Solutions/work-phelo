@@ -7,27 +7,31 @@ import { Column, DataTable } from '../shared/DataTable';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
-type MyAppraisalStatus = 'Pending' | 'Completed' | 'Overdue';
+type MyAppraisalStatus =
+  | 'In Progress'
+  | 'Pending Manager'
+  | 'Pending Approval'
+  | 'Completed'
+  | 'Overdue';
 
 const STATUS_CONFIG: Record<MyAppraisalStatus, { dot: string; text: string }> = {
-  Pending: { dot: 'bg-amber-400', text: 'text-amber-500' },
+  'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
+  'Pending Manager': { dot: 'bg-amber-400', text: 'text-amber-500' },
+  'Pending Approval': { dot: 'bg-purple-400', text: 'text-purple-600' },
   Completed: { dot: 'bg-green-500', text: 'text-green-600' },
   Overdue: { dot: 'bg-red-500', text: 'text-red-500' },
 };
 
 function deriveStatus(overallStatus: string, deadline: string): MyAppraisalStatus {
-  if (
-    overallStatus === 'Completed' ||
-    overallStatus === 'SelfSubmitted' ||
-    overallStatus === 'ManagerSubmitted' ||
-    overallStatus === 'Finalized'
-  )
-    return 'Completed';
+  if (overallStatus === 'Finalized') return 'Completed';
+  if (overallStatus === 'ManagerSubmitted' || overallStatus === 'PendingFinalization')
+    return 'Pending Approval';
+  if (overallStatus === 'SelfSubmitted') return 'Pending Manager';
   if (deadline) {
     const today = new Date().toISOString().slice(0, 10);
     if (deadline.slice(0, 10) < today) return 'Overdue';
   }
-  return 'Pending';
+  return 'In Progress';
 }
 
 function formatDeadline(d: string): string {
@@ -144,26 +148,28 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
       width: '160px',
       render: (r) => {
         const status = deriveStatus(r.overallStatus, r.selfAssessmentDeadline);
-        if (status === 'Completed') {
+        if (status === 'In Progress' || status === 'Overdue') {
           return (
             <button
               onClick={() =>
-                router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
+                router.push(
+                  `/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`,
+                )
               }
-              className="text-sm font-medium text-gray-700 hover:text-brand transition-colors"
+              className="px-2 py-1.5 text-sm font-medium text-gray-700 hover:text-brand transition-colors"
             >
-              View Assessment
+              Start
             </button>
           );
         }
         return (
           <button
             onClick={() =>
-              router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`)
+              router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`)
             }
-            className="px-4 py-1.5 rounded-full border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="px-2 py-1.5 text-sm font-medium text-gray-700 hover:text-brand transition-colors"
           >
-            Start
+            View Assessment
           </button>
         );
       },
@@ -184,8 +190,10 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
             }}
             className="appearance-none pl-4 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white font-medium"
           >
-            <option value="">Filter</option>
-            <option value="Pending">Pending</option>
+            <option value="">All</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Pending Manager">Pending Manager</option>
+            <option value="Pending Approval">Pending Approval</option>
             <option value="Completed">Completed</option>
             <option value="Overdue">Overdue</option>
           </select>
@@ -204,6 +212,14 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={onPageChange}
+        onRowClick={(r) => {
+          const status = deriveStatus(r.overallStatus, r.selfAssessmentDeadline);
+          if (status === 'In Progress' || status === 'Overdue') {
+            router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`);
+          } else {
+            router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`);
+          }
+        }}
       />
     </div>
   );

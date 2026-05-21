@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 import {
+  renderAppraisalCycleStartedTemplate,
   renderAppraisalManagerReminderTemplate,
   renderAppraisalManagerReviewedTemplate,
   renderAppraisalSelfReminderTemplate,
@@ -12,6 +13,8 @@ import {
   renderLeaveRequestedTemplate,
   renderLeaveReviewedTemplate,
   renderPasswordResetLinkTemplate,
+  renderPayrollApprovalRequestedTemplate,
+  renderPayrollDecisionTemplate,
   renderResignationSubmittedTemplate,
   renderSchedulePublishedTemplate,
   renderShiftSwapTemplate,
@@ -194,6 +197,7 @@ export class EmailService {
     lastName: string,
     reason: string,
     lastWorkingDate: string,
+    platformLink?: string,
   ): Promise<boolean> {
     const reasonLabels: Record<string, string> = {
       TERMINATION: 'Termination',
@@ -212,6 +216,7 @@ export class EmailService {
         lastName: this.escapeHtml(lastName),
         reasonLabel: this.escapeHtml(reasonLabels[reason] ?? reason),
         formattedDate: this.escapeHtml(this.formatDate(lastWorkingDate)),
+        platformLink: this.sanitizeUrl(platformLink),
       }),
     );
   }
@@ -378,6 +383,7 @@ export class EmailService {
     managerFirstName: string,
     employeeFullName: string,
     cycleTitle: string,
+    managerReviewLink?: string,
   ): Promise<boolean> {
     return this.send(
       to,
@@ -386,6 +392,24 @@ export class EmailService {
         managerFirstName: this.escapeHtml(managerFirstName),
         employeeFullName: this.escapeHtml(employeeFullName),
         cycleTitle: this.escapeHtml(cycleTitle),
+        managerReviewLink: this.sanitizeUrl(managerReviewLink),
+      }),
+    );
+  }
+
+  async sendAppraisalCycleStartedNotification(
+    to: string,
+    employeeFirstName: string,
+    cycleTitle: string,
+    selfAssessmentLink?: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Appraisal cycle started — ${cycleTitle}`,
+      renderAppraisalCycleStartedTemplate({
+        employeeFirstName: this.escapeHtml(employeeFirstName),
+        cycleTitle: this.escapeHtml(cycleTitle),
+        selfAssessmentLink: this.sanitizeUrl(selfAssessmentLink),
       }),
     );
   }
@@ -411,12 +435,73 @@ export class EmailService {
     );
   }
 
+  async sendPayrollApprovalRequestedNotification(
+    to: string,
+    firstName: string,
+    month: number,
+    year: number,
+    submittedByName: string,
+    totalGross: string,
+    totalNet: string,
+    notes?: string,
+    reviewLink?: string,
+    escalated?: boolean,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      `Payroll approval required — ${month}/${year}`,
+      renderPayrollApprovalRequestedTemplate({
+        recipientFirstName: this.escapeHtml(firstName),
+        month,
+        year,
+        submittedByName: this.escapeHtml(submittedByName),
+        totalGross: this.escapeHtml(totalGross),
+        totalNet: this.escapeHtml(totalNet),
+        notes: notes ? this.escapeHtmlWithBreaks(notes) : undefined,
+        reviewLink: this.sanitizeUrl(reviewLink),
+        escalated,
+      }),
+    );
+  }
+
+  async sendPayrollDecisionNotification(
+    to: string,
+    firstName: string,
+    month: number,
+    year: number,
+    decision: 'APPROVED' | 'RETURNED_TO_DRAFT',
+    reviewerName: string,
+    decisionNote: string,
+    totalGross: string,
+    totalNet: string,
+    detailLink?: string,
+  ): Promise<boolean> {
+    return this.send(
+      to,
+      decision === 'APPROVED'
+        ? `Payroll approved — ${month}/${year}`
+        : `Payroll rejected — ${month}/${year}`,
+      renderPayrollDecisionTemplate({
+        recipientFirstName: this.escapeHtml(firstName),
+        month,
+        year,
+        decision,
+        reviewerName: this.escapeHtml(reviewerName),
+        decisionNote: this.escapeHtmlWithBreaks(decisionNote),
+        totalGross: this.escapeHtml(totalGross),
+        totalNet: this.escapeHtml(totalNet),
+        detailLink: this.sanitizeUrl(detailLink),
+      }),
+    );
+  }
+
   async sendAppraisalSelfReminderNotification(
     to: string,
     employeeFirstName: string,
     cycleTitle: string,
     deadline: string,
     daysRemaining: number,
+    selfAssessmentLink?: string,
   ): Promise<boolean> {
     const heading =
       daysRemaining === 0
@@ -438,6 +523,7 @@ export class EmailService {
         employeeFirstName: this.escapeHtml(employeeFirstName),
         bodyCopy,
         deadlineLabel: this.formatDateOnly(deadline),
+        selfAssessmentLink: this.sanitizeUrl(selfAssessmentLink),
       }),
     );
   }
@@ -449,6 +535,7 @@ export class EmailService {
     cycleTitle: string,
     deadline: string,
     daysRemaining: number,
+    managerReviewLink?: string,
   ): Promise<boolean> {
     const heading =
       daysRemaining === 0
@@ -469,6 +556,7 @@ export class EmailService {
         managerFirstName: this.escapeHtml(managerFirstName),
         bodyCopy,
         deadlineLabel: this.formatDateOnly(deadline),
+        managerReviewLink: this.sanitizeUrl(managerReviewLink),
       }),
     );
   }
@@ -743,6 +831,7 @@ export class EmailService {
     cycleTitle: string,
     finalScore: number,
     finalRating: string,
+    platformLink?: string,
   ): Promise<boolean> {
     return this.send(
       to,
@@ -752,6 +841,7 @@ export class EmailService {
         cycleTitle: this.escapeHtml(cycleTitle),
         finalScore,
         finalRating: this.escapeHtml(finalRating),
+        platformLink: this.sanitizeUrl(platformLink),
       }),
     );
   }

@@ -83,6 +83,7 @@ function DepartmentSelect({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const { data: departments = [] } = useDepartments();
 
   useEffect(() => {
@@ -92,6 +93,12 @@ function DepartmentSelect({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+
+  useEffect(() => {
+    if (open && dropdownRef.current) {
+      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [open]);
 
   const allSelected = value.length === 0;
 
@@ -141,7 +148,10 @@ function DepartmentSelect({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+        <div
+          ref={dropdownRef}
+          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+        >
           <div className="max-h-52 overflow-y-auto py-1">
             <button
               type="button"
@@ -210,6 +220,14 @@ function EmploymentTypeSelect({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open && dropdownRef.current) {
+      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [open]);
+
   const allSelected = value.length === 0;
   const label = allSelected
     ? 'All employment types'
@@ -241,7 +259,10 @@ function EmploymentTypeSelect({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+        <div
+          ref={dropdownRef}
+          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+        >
           <div className="py-1">
             <button
               type="button"
@@ -306,6 +327,14 @@ function EmploymentStatusSelect({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open && dropdownRef.current) {
+      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [open]);
+
   const label = value.length
     ? EMPLOYMENT_STATUS_OPTIONS.filter((option) => value.includes(option.value))
         .map((option) => option.label)
@@ -338,7 +367,10 @@ function EmploymentStatusSelect({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+        <div
+          ref={dropdownRef}
+          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+        >
           <div className="py-1">
             {EMPLOYMENT_STATUS_OPTIONS.map((option) => {
               const checked = value.includes(option.value);
@@ -379,6 +411,7 @@ function PermissionSetSelect({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const { data: rawSets = [] } = usePermissionSets();
   const sets = rawSets.filter((s: PermissionSet) => !s.isSystem);
 
@@ -390,6 +423,12 @@ function PermissionSetSelect({
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  useEffect(() => {
+    if (open && dropdownRef.current) {
+      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [open]);
+
   const toggle = (id: string) =>
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
 
@@ -398,7 +437,7 @@ function PermissionSetSelect({
 
   return (
     <div className="flex flex-col gap-1.5 relative" ref={ref}>
-      <label className="text-sm font-medium text-gray-700">Permission Sets</label>
+      <label className="text-sm font-medium text-gray-700">Roles</label>
 
       {selectedSets.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -428,16 +467,17 @@ function PermissionSetSelect({
           open ? 'border-brand ring-1 ring-brand/20' : 'border-gray-300',
         )}
       >
-        <span className="text-gray-900">
-          {allSelected ? 'All permission sets' : 'Add more permission sets…'}
-        </span>
+        <span className="text-gray-900">{allSelected ? 'All roles' : 'Add more roles…'}</span>
         <Icons.ChevronDown
           className={cn('text-gray-400 transition-transform duration-150', open && 'rotate-180')}
         />
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+        <div
+          ref={dropdownRef}
+          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+        >
           <div className="max-h-52 overflow-y-auto py-1">
             <button
               type="button"
@@ -453,7 +493,7 @@ function PermissionSetSelect({
               >
                 {allSelected && <Icons.Check className="w-2.5 h-2.5 text-white" />}
               </span>
-              All Permission Sets
+              All Roles
             </button>
             {sets.map((set: PermissionSet) => {
               const checked = value.includes(set.id);
@@ -509,6 +549,7 @@ function EmployeeSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const { data: employees = [] } = useEmployeeOptions();
 
   useEffect(() => {
@@ -540,6 +581,12 @@ function EmployeeSelect({
         emp.email.toLowerCase().includes(q)
       );
     });
+
+  useEffect(() => {
+    if (open && dropdownRef.current) {
+      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [open]);
 
   const toggle = (id: string) =>
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
@@ -587,7 +634,10 @@ function EmployeeSelect({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+        <div
+          ref={dropdownRef}
+          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+        >
           <div className="p-2 border-b border-gray-100">
             <input
               type="text"

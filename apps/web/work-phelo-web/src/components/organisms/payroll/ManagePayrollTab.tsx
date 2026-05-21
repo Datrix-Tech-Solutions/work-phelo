@@ -1,19 +1,29 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { TrendingUp, TrendingDown } from 'lucide-react';
-import { Button } from '@/components/atoms/Button';
+import { useState, useMemo, useEffect } from 'react';
+import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
-import { useEmployees } from '@/hooks/hr/useEmployees';
-import { calculatePayroll, AllowanceItem } from '@/lib/payrollCalculations';
+import { usePayrollSettings, usePayrollRuns } from '@/hooks';
+import { useAllEmployees } from '@/hooks/hr/useEmployees';
+import { calculatePayroll, AllowanceItem, Country } from '@/lib/payrollCalculations';
+import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
 import { Employee } from '@/types/hr';
-import { PayrollItemsPanel } from './PayrollItemsPanel';
+import { AllowancesPanel } from './AllowancesPanel';
+import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
-import { PayrollDraftsPanel } from './PayrollDraftsPanel';
+import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
 
 function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
+
+  useEffect(() => {
+    const localNumeric = local === '' ? 0 : Number(local);
+    if (value !== localNumeric) {
+      setLocal(value === 0 ? '' : String(value));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
 
   return (
     <input
@@ -25,7 +35,7 @@ function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: num
         setLocal(e.target.value);
         onChange(e.target.value === '' ? 0 : Number(e.target.value));
       }}
-      className="w-28 px-3 py-1.5 text-sm focus:outline-none placeholder:text-gray-300"
+      className="w-28 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 cursor-text hover:border-brand/50 hover:bg-white focus:outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10 placeholder:text-gray-300 transition-colors"
     />
   );
 }
@@ -39,7 +49,8 @@ interface PayrollRow {
   deductions: number;
   grossSalary: number;
   employeeStatutoryContrib: number;
-  employerStatutoryContrib: number;
+  tier1Contribution: number;
+  tier2Contribution: number;
   taxableIncome: number;
   paye: number;
   netSalary: number;
@@ -47,33 +58,96 @@ interface PayrollRow {
   department?: string;
 }
 
+// Keep in sync with hr-service/src/payroll/payroll.service.ts employee eligibility filter
+const PAYROLL_ELIGIBLE: Employee['employmentStatus'][] = ['ACTIVE', 'PROBATION', 'ON_LEAVE'];
+
+function isTransportAllowance(item: AllowanceItem) {
+  const label = `${item.type ?? ''} ${item.name ?? ''}`.toLowerCase();
+  return label.includes('transport');
+}
+
 export function ManagePayrollTab() {
-  const { data: empData, isLoading } = useEmployees({ limit: 100 });
+  const { data: empData, isLoading } = useAllEmployees();
+  const { data: payrollSettings } = usePayrollSettings();
+  const { data: runs = [] } = usePayrollRuns();
+  const rejectedDraftsCount = runs.filter(
+    (r) => r.status === 'DRAFT' && !!r.returnToDraftNote,
+  ).length;
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
   const [allowancesMap, setAllowancesMap] = useState<Record<string, AllowanceItem[]>>({});
-  const [deductionsMap, setDeductionsMap] = useState<Record<string, AllowanceItem[]>>({});
-  const [panel, setPanel] = useState<{
-    rowId: string;
-    rowName: string;
-    type: 'allowance' | 'deduction';
-  } | null>(null);
+  const [deductionItemsMap, setDeductionItemsMap] = useState<Record<string, DeductionLineItem[]>>(
+    {},
+  );
+
+  const [allowancePanel, setAllowancePanel] = useState<{ rowId: string; rowName: string } | null>(
+    null,
+  );
+  const [deductionPanel, setDeductionPanel] = useState<{ rowId: string; rowName: string } | null>(
+    null,
+  );
   const [runPanelOpen, setRunPanelOpen] = useState(false);
   const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
+  const payrollCountry = (payrollSettings?.payrollCountry ?? 'GH') as Country;
+  const payrollCurrency = resolvePayrollCurrency(payrollSettings?.payrollCurrency, payrollCountry);
+  const payrollLabels = getPayrollLabels(payrollCountry);
+  const money = (value: string | number | null | undefined) =>
+    formatPayrollMoney(value, payrollCurrency, payrollCountry);
+  const tier3Rate =
+    payrollSettings?.payrollTier3Enabled && payrollSettings.payrollTier3Rate != null
+      ? Number(payrollSettings.payrollTier3Rate) / 100
+      : 0;
+
+  const profileDeductionItems = useMemo(() => {
+    const map: Record<string, DeductionLineItem[]> = {};
+    (empData?.data ?? []).forEach((e) => {
+      if (e.deductions) {
+        map[e.id] = e.deductions
+          .filter((d) => d.amountPaid < d.totalAmount)
+          .map((d) => {
+            const balance = Math.max(0, d.totalAmount - d.amountPaid);
+            return {
+              employeeDeductionId: d.id,
+              name: d.name,
+              amount: Math.min(balance, d.monthlyRate),
+            };
+          })
+          .filter((d) => d.amount > 0);
+      }
+    });
+    return map;
+  }, [empData]);
 
   const payrollRows: PayrollRow[] = useMemo(() => {
-    const employees: Employee[] = empData?.data ?? [];
+    const employees: Employee[] = (empData?.data ?? []).filter(
+      (e) =>
+        PAYROLL_ELIGIBLE.includes(e.employmentStatus) && e.userStatus !== 'PENDING_VERIFICATION',
+    );
     return employees.map((e) => {
       const basic = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
-      const allowances = allowancesMap[e.id] ?? [];
+      const savedAllowances: AllowanceItem[] =
+        e.allowances?.map((a) => ({
+          name: a.name ?? (a.type as string),
+          type: a.type,
+          amount: Number(a.amount),
+        })) ?? [];
+      const allowances = allowancesMap[e.id] ?? savedAllowances;
       const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
-      const deductionItems = deductionsMap[e.id] ?? [];
+      const deductionItems = deductionItemsMap[e.id] ?? profileDeductionItems[e.id] ?? [];
       const otherDeductions = deductionItems.reduce((sum, d) => sum + d.amount, 0);
       const calc = calculatePayroll({
         basicSalary: basic,
         allowances,
         otherDeductions,
-        country: 'GH',
+        country: payrollCountry,
+        ...(payrollCountry === 'GH' && tier3Rate > 0
+          ? {
+              ghanaPension: {
+                providentFundEmployeeRate: tier3Rate,
+                providentFundName: payrollSettings?.payrollTier3SchemeName ?? undefined,
+              },
+            }
+          : {}),
       });
       return {
         id: e.id,
@@ -82,10 +156,10 @@ export function ManagePayrollTab() {
         basicSalary: basic,
         allowances: totalAllowances,
         deductions: otherDeductions,
-
         grossSalary: calc.grossSalary,
         employeeStatutoryContrib: calc.employeeStatutoryContrib,
-        employerStatutoryContrib: calc.employerStatutoryContrib,
+        tier1Contribution: calc.employerStatutoryContrib,
+        tier2Contribution: calc.tier2Contribution ?? 0,
         taxableIncome: calc.taxableIncome,
         paye: calc.paye,
         netSalary: calc.netSalary,
@@ -93,7 +167,16 @@ export function ManagePayrollTab() {
         department: e.department?.name,
       };
     });
-  }, [empData, basicMap, allowancesMap, deductionsMap]);
+  }, [
+    empData,
+    basicMap,
+    allowancesMap,
+    deductionItemsMap,
+    payrollCountry,
+    payrollSettings?.payrollTier3SchemeName,
+    profileDeductionItems,
+    tier3Rate,
+  ]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery) return payrollRows;
@@ -108,10 +191,10 @@ export function ManagePayrollTab() {
           gross: acc.gross + r.grossSalary,
           net: acc.net + r.netSalary,
           paye: acc.paye + r.paye,
-          ssnit: acc.ssnit + r.employeeStatutoryContrib,
+          statutory: acc.statutory + r.employeeStatutoryContrib + r.tier1Contribution,
           employerCost: acc.employerCost + r.totalEmployerCost,
         }),
-        { gross: 0, net: 0, paye: 0, ssnit: 0, employerCost: 0 },
+        { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
       ),
     [filteredData],
   );
@@ -122,25 +205,35 @@ export function ManagePayrollTab() {
       result[id] = { ...result[id], basicSalary: val };
     });
     Object.entries(allowancesMap).forEach(([id, items]) => {
-      result[id] = { ...result[id], totalAllowances: items.reduce((s, a) => s + a.amount, 0) };
+      const totalAllowances = items
+        .filter((item) => !isTransportAllowance(item))
+        .reduce((sum, item) => sum + item.amount, 0);
+      const transportAmount = items
+        .filter(isTransportAllowance)
+        .reduce((sum, item) => sum + item.amount, 0);
+      result[id] = {
+        ...result[id],
+        totalAllowances,
+        transportAmount,
+        allowanceItems: items.map((item) => ({
+          name: item.name,
+          type: item.type ?? null,
+          amount: item.amount,
+        })),
+      };
     });
-    Object.entries(deductionsMap).forEach(([id, items]) => {
-      result[id] = { ...result[id], otherDeductions: items.reduce((s, d) => s + d.amount, 0) };
+    Object.entries(deductionItemsMap).forEach(([id, items]) => {
+      result[id] = {
+        ...result[id],
+        otherDeductions: items.reduce((sum, item) => sum + item.amount, 0),
+        deductionItems: items,
+      };
     });
     return result;
-  }, [basicMap, allowancesMap, deductionsMap]);
+  }, [basicMap, allowancesMap, deductionItemsMap]);
 
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
-  };
-
-  const handlePanelSave = (items: AllowanceItem[]) => {
-    if (!panel) return;
-    if (panel.type === 'allowance') {
-      setAllowancesMap((prev) => ({ ...prev, [panel.rowId]: items }));
-    } else {
-      setDeductionsMap((prev) => ({ ...prev, [panel.rowId]: items }));
-    }
   };
 
   const columns: Column<PayrollRow>[] = [
@@ -160,7 +253,6 @@ export function ManagePayrollTab() {
         </div>
       ),
     },
-
     {
       key: 'basicSalary',
       label: 'Basic Salary',
@@ -173,10 +265,11 @@ export function ManagePayrollTab() {
       label: 'Allowances',
       render: (row) => (
         <button
-          onClick={() => setPanel({ rowId: row.id, rowName: row.employeeName, type: 'allowance' })}
-          className="text-sm font-medium text-gray-900 hover:text-brand transition-colors"
+          onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
+          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.allowances > 0 ? `GHS ${row.allowances.toLocaleString()}` : '—'}
+          {row.allowances > 0 ? money(row.allowances) : <span className="text-gray-400">Add</span>}
+          <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
     },
@@ -185,107 +278,128 @@ export function ManagePayrollTab() {
       label: 'Deductions',
       render: (row) => (
         <button
-          onClick={() => setPanel({ rowId: row.id, rowName: row.employeeName, type: 'deduction' })}
-          className="text-sm font-medium text-gray-900 hover:text-brand transition-colors"
+          onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
+          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.deductions > 0 ? `GHS ${row.deductions.toLocaleString()}` : '—'}
+          {row.deductions > 0 ? money(row.deductions) : <span className="text-gray-400">Add</span>}
+          <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
     },
     {
       key: 'grossSalary',
       label: 'Gross',
-      render: (row) => `GHS ${row.grossSalary.toLocaleString()}`,
+      render: (row) => money(row.grossSalary),
     },
     {
       key: 'employeeSSNIT',
-      label: 'SSNIT(5.5%)',
-      render: (row) => `GHS ${row.employeeStatutoryContrib.toLocaleString()}`,
+      label: payrollLabels.employeeLabel,
+      render: (row) => money(row.employeeStatutoryContrib),
     },
     {
       key: 'taxableIncome',
       label: 'Taxable Income',
-      render: (row) => `GHS ${row.taxableIncome.toLocaleString()}`,
+      render: (row) => money(row.taxableIncome),
     },
     {
       key: 'paye',
       label: 'PAYE',
-      render: (row) => `GHS ${row.paye.toLocaleString()}`,
+      render: (row) => money(row.paye),
     },
     {
       key: 'netSalary',
       label: 'Net Salary',
       render: (row) => (
-        <span className="font-semibold text-emerald-600">GHS {row.netSalary.toLocaleString()}</span>
+        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
       ),
     },
   ];
 
   return (
     <div className="flex flex-col gap-6 flex-1 min-h-0">
-      <div className="flex items-center justify-end gap-3 shrink-0">
-        <Button variant="outline" onClick={() => setDraftsPanelOpen(true)}>
-          Drafts
-        </Button>
-        <Button onClick={() => setRunPanelOpen(true)}>Run Payroll</Button>
-      </div>
-
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
         <MetricCard
           title="Total Gross"
-          value={`GHS ${totals.gross.toLocaleString()}`}
+          value={money(totals.gross)}
           icon={TrendingUp}
           variant="highlight"
         />
         <MetricCard
           title="Total Net Pay"
-          value={`GHS ${totals.net.toLocaleString()}`}
+          value={money(totals.net)}
           icon={TrendingUp}
           variant="success"
         />
         <MetricCard
           title="Total PAYE"
-          value={`GHS ${totals.paye.toLocaleString()}`}
+          value={money(totals.paye)}
           icon={TrendingDown}
           variant="warning"
         />
         <MetricCard
-          title="Total SSNIT"
-          value={`GHS ${totals.ssnit.toLocaleString()}`}
+          title={payrollLabels.summaryLabel}
+          value={money(totals.statutory)}
           icon={TrendingUp}
           variant="highlight"
         />
         <MetricCard
           title="Employer Cost"
-          value={`GHS ${totals.employerCost.toLocaleString()}`}
+          value={money(totals.employerCost)}
           icon={TrendingUp}
           variant="highlight"
         />
       </div>
+
       <DataTable
         columns={columns}
         data={filteredData}
         isLoading={isLoading}
+        emptyMessage={
+          payrollRows.length === 0
+            ? 'No payroll-eligible employees found. Employees must be Active or Probation.'
+            : 'No employees match your search.'
+        }
         searchPlaceholder="Search employee name..."
         onSearch={setSearchQuery}
+        secondaryButton={{
+          label: (
+            <span className="relative inline-flex items-center gap-2">
+              Drafts
+              {rejectedDraftsCount > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
+                  {rejectedDraftsCount}
+                </span>
+              )}
+            </span>
+          ),
+          onClick: () => setDraftsPanelOpen(true),
+        }}
+        actionButton={{ label: 'Run Payroll', onClick: () => setRunPanelOpen(true) }}
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
       />
 
-      <PayrollItemsPanel
-        isOpen={!!panel}
-        onClose={() => setPanel(null)}
-        type={panel?.type ?? 'allowance'}
-        employeeName={panel?.rowName ?? ''}
-        items={
-          panel
-            ? panel.type === 'allowance'
-              ? (allowancesMap[panel.rowId] ?? [])
-              : (deductionsMap[panel.rowId] ?? [])
-            : []
-        }
-        onSave={handlePanelSave}
+      <AllowancesPanel
+        isOpen={!!allowancePanel}
+        onClose={() => setAllowancePanel(null)}
+        employeeId={allowancePanel?.rowId ?? ''}
+        employeeName={allowancePanel?.rowName ?? ''}
+        onItems={(items) => {
+          if (!allowancePanel) return;
+          setAllowancesMap((prev) => ({ ...prev, [allowancePanel.rowId]: items }));
+        }}
+      />
+
+      <DeductionsPanel
+        isOpen={!!deductionPanel}
+        onClose={() => setDeductionPanel(null)}
+        employeeId={deductionPanel?.rowId ?? ''}
+        employeeName={deductionPanel?.rowName ?? ''}
+        onActiveItems={(items) => {
+          if (!deductionPanel) return;
+          setDeductionItemsMap((prev) => ({ ...prev, [deductionPanel.rowId]: items }));
+        }}
       />
 
       <RunPayrollPanel
@@ -293,9 +407,19 @@ export function ManagePayrollTab() {
         onClose={() => setRunPanelOpen(false)}
         totals={totals}
         overrides={overrides}
+        payrollCountry={payrollCountry}
+        payrollCurrency={payrollCurrency}
       />
 
-      <PayrollDraftsPanel isOpen={draftsPanelOpen} onClose={() => setDraftsPanelOpen(false)} />
+      <PayrollDraftsPanel
+        isOpen={draftsPanelOpen}
+        onClose={() => setDraftsPanelOpen(false)}
+        onLoad={({ basicMap, allowancesMap, deductionItemsMap }: DraftLoadData) => {
+          setBasicMap(basicMap);
+          setAllowancesMap(allowancesMap);
+          setDeductionItemsMap(deductionItemsMap);
+        }}
+      />
     </div>
   );
 }
