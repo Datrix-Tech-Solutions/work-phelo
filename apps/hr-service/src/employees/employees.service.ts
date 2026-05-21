@@ -435,7 +435,9 @@ export class EmployeesService {
       dto.probationEndsAt,
     );
 
-    this.assertMinimumEmployeeAge(dto.dateOfBirth);
+    if (dto.dateOfBirth) {
+      this.assertMinimumEmployeeAge(dto.dateOfBirth);
+    }
 
     this.validateEmploymentDates({
       hireDate: new Date(dto.hireDate),
