@@ -1828,17 +1828,23 @@ export class LeaveService {
         (recipient) => recipient.userId,
       );
       if (inAppRecipients.length > 0) {
-        await this.prisma.notification.createMany({
-          data: inAppRecipients.map((recipient) => ({
+        await this.rabbitmq.notificationInAppCreateMany(
+          inAppRecipients.map((recipient) => ({
             tenantId,
-            userId: recipient.userId!,
+            recipientUserId: recipient.userId!,
             type: 'LEAVE_REQUESTED',
+            title: autoApproved
+              ? 'Leave Automatically Approved'
+              : 'Leave Request Submitted',
             message: autoApproved
               ? `${employee.firstName} ${employee.lastName}'s ${leaveTypeName} request from ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')} was automatically approved.`
               : `${employee.firstName} ${employee.lastName} submitted a ${leaveTypeName} request from ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')}.`,
             link: this.buildLeaveRequestAppLink(requestId),
+            entityType: 'leaveRequest',
+            entityId: requestId,
+            sourceService: 'hr-service',
           })),
-        });
+        );
       }
     } catch (err) {
       this.logger.error(
@@ -2031,15 +2037,19 @@ export class LeaveService {
         (recipient) => recipient.userId,
       );
       if (inAppRecipients.length > 0) {
-        await this.prisma.notification.createMany({
-          data: inAppRecipients.map((recipient) => ({
+        await this.rabbitmq.notificationInAppCreateMany(
+          inAppRecipients.map((recipient) => ({
             tenantId,
-            userId: recipient.userId!,
+            recipientUserId: recipient.userId!,
             type: 'LEAVE_CANCELLED',
+            title: 'Leave Request Cancelled',
             message: `${employee.firstName} ${employee.lastName} cancelled a ${leaveTypeName} request from ${new Date(startDate).toLocaleDateString('en-GB')} to ${new Date(endDate).toLocaleDateString('en-GB')}.`,
             link: this.buildLeaveRequestAppLink(requestId),
+            entityType: 'leaveRequest',
+            entityId: requestId,
+            sourceService: 'hr-service',
           })),
-        });
+        );
       }
     } catch (err) {
       this.logger.error(

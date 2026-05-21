@@ -41,6 +41,7 @@ export const EventPatterns = {
   NOTIFICATION_PASSWORD_RESET_LINK: 'notification.password_reset_link',
   NOTIFICATION_PASSWORD_RESET_OTP: 'notification.password_reset_otp',
   NOTIFICATION_SMS_OTP: 'notification.sms_otp',
+  NOTIFICATION_IN_APP_CREATE: 'notification.in_app.create',
 
   // HR → Notification
   NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
@@ -243,6 +244,23 @@ export interface SmsOtpEvent {
   phone: string;
   otp: string;
   context: string;
+}
+
+export type InAppNotificationPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export interface InAppNotificationCreateEvent {
+  eventId?: string;
+  tenantId: string;
+  recipientUserId: string;
+  type: string;
+  title: string;
+  message: string;
+  link?: string;
+  metadata?: Record<string, unknown>;
+  entityType?: string;
+  entityId?: string;
+  sourceService?: string;
+  priority?: InAppNotificationPriority;
 }
 
 // ── HR → Notification Events ───────────────────────────────────────────────

@@ -38,6 +38,7 @@ import {
   AnnouncementPublishedEvent,
   PayrollApprovalRequestedEvent,
   PayrollDecisionEvent,
+  InAppNotificationCreateEvent,
 } from '@work-phelo/types';
 
 @Injectable()
@@ -329,6 +330,29 @@ export class RabbitMQPublisher {
   }
 
   // ── HR → Notification ──────────────────────────────────────────────────────
+
+  notificationInAppCreate(
+    data: InAppNotificationCreateEvent,
+    correlationId?: string,
+  ): Promise<void> {
+    return this.publish(
+      this.notificationClient,
+      EventPatterns.NOTIFICATION_IN_APP_CREATE,
+      data,
+      correlationId,
+    );
+  }
+
+  async notificationInAppCreateMany(
+    notifications: InAppNotificationCreateEvent[],
+    correlationId?: string,
+  ): Promise<void> {
+    await Promise.all(
+      notifications.map((notification) =>
+        this.notificationInAppCreate(notification, correlationId),
+      ),
+    );
+  }
 
   notificationEmployeeTermination(
     data: EmployeeTerminationEvent,

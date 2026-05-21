@@ -1038,27 +1038,34 @@ export class AppraisalsService {
             (log) => log.reminderType === reminderType,
           )
         ) {
-          await this.prisma.$transaction([
-            this.prisma.appraisalReminderLog.create({
-              data: {
-                tenantId: appraisal.tenantId,
-                appraisalId: appraisal.id,
-                reminderType,
-              },
-            }),
-            this.prisma.notification.create({
-              data: {
-                tenantId: appraisal.tenantId,
-                userId: appraisal.employee.userId,
-                type: 'APPRAISAL_SELF_REMINDER',
-                message:
-                  daysUntil === 0
-                    ? `Your self assessment for "${appraisal.cycle.title}" is due today.`
-                    : `Your self assessment for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
-                link: `/hr/appraisal/cycles/${appraisal.cycleId}/self-assessment/${appraisal.id}`,
-              },
-            }),
-          ]);
+          await this.prisma.appraisalReminderLog.create({
+            data: {
+              tenantId: appraisal.tenantId,
+              appraisalId: appraisal.id,
+              reminderType,
+            },
+          });
+          void this.publisher
+            .notificationInAppCreate({
+              tenantId: appraisal.tenantId,
+              recipientUserId: appraisal.employee.userId,
+              type: 'APPRAISAL_SELF_REMINDER',
+              title: 'Appraisal Reminder',
+              message:
+                daysUntil === 0
+                  ? `Your self assessment for "${appraisal.cycle.title}" is due today.`
+                  : `Your self assessment for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
+              link: `/hr/appraisal/cycles/${appraisal.cycleId}/self-assessment/${appraisal.id}`,
+              entityType: 'appraisal',
+              entityId: appraisal.id,
+              sourceService: 'hr-service',
+            })
+            .catch((error) =>
+              this.logger.error(
+                `Failed to publish self appraisal reminder for appraisal ${appraisal.id}`,
+                error instanceof Error ? error.stack : String(error),
+              ),
+            );
 
           if (appraisal.employee.email) {
             this.publisher
@@ -1109,27 +1116,34 @@ export class AppraisalsService {
             (log) => log.reminderType === reminderType,
           )
         ) {
-          await this.prisma.$transaction([
-            this.prisma.appraisalReminderLog.create({
-              data: {
-                tenantId: appraisal.tenantId,
-                appraisalId: appraisal.id,
-                reminderType,
-              },
-            }),
-            this.prisma.notification.create({
-              data: {
-                tenantId: appraisal.tenantId,
-                userId: appraisal.manager.userId,
-                type: 'APPRAISAL_MANAGER_REMINDER',
-                message:
-                  daysUntil === 0
-                    ? `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due today.`
-                    : `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
-                link: `/hr/appraisal/cycles/${appraisal.cycleId}/manager-review/${appraisal.id}`,
-              },
-            }),
-          ]);
+          await this.prisma.appraisalReminderLog.create({
+            data: {
+              tenantId: appraisal.tenantId,
+              appraisalId: appraisal.id,
+              reminderType,
+            },
+          });
+          void this.publisher
+            .notificationInAppCreate({
+              tenantId: appraisal.tenantId,
+              recipientUserId: appraisal.manager.userId,
+              type: 'APPRAISAL_MANAGER_REMINDER',
+              title: 'Manager Review Reminder',
+              message:
+                daysUntil === 0
+                  ? `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due today.`
+                  : `${appraisal.employee.firstName} ${appraisal.employee.lastName}'s manager review for "${appraisal.cycle.title}" is due in ${daysUntil} days.`,
+              link: `/hr/appraisal/cycles/${appraisal.cycleId}/manager-review/${appraisal.id}`,
+              entityType: 'appraisal',
+              entityId: appraisal.id,
+              sourceService: 'hr-service',
+            })
+            .catch((error) =>
+              this.logger.error(
+                `Failed to publish manager appraisal reminder for appraisal ${appraisal.id}`,
+                error instanceof Error ? error.stack : String(error),
+              ),
+            );
 
           if (appraisal.manager.email) {
             this.publisher
@@ -1775,15 +1789,24 @@ export class AppraisalsService {
         appraisalId,
       );
       if (manager?.userId) {
-        await this.prisma.notification.create({
-          data: {
+        void this.publisher
+          .notificationInAppCreate({
             tenantId,
-            userId: manager.userId,
+            recipientUserId: manager.userId,
             type: 'APPRAISAL_SELF_SUBMITTED',
+            title: 'Self Assessment Submitted',
             message: `${appraisal.employee.firstName} ${appraisal.employee.lastName} submitted their self-assessment for "${appraisal.cycle.title}".`,
             link: `/hr/appraisal/cycles/${appraisal.cycleId}/manager-review/${appraisalId}`,
-          },
-        });
+            entityType: 'appraisal',
+            entityId: appraisalId,
+            sourceService: 'hr-service',
+          })
+          .catch((error) =>
+            this.logger.error(
+              `Failed to publish self submitted notification for appraisal ${appraisalId}`,
+              error instanceof Error ? error.stack : String(error),
+            ),
+          );
       }
       if (manager?.email) {
         this.emitNotificationEvent(
@@ -2040,15 +2063,24 @@ export class AppraisalsService {
     );
 
     if (appraisal.employee.userId) {
-      await this.prisma.notification.create({
-        data: {
+      void this.publisher
+        .notificationInAppCreate({
           tenantId,
-          userId: appraisal.employee.userId,
+          recipientUserId: appraisal.employee.userId,
           type: 'APPRAISAL_FINALIZED',
+          title: 'Appraisal Finalized',
           message: `Your appraisal for "${appraisal.cycle.title}" has been finalized.`,
           link: `/hr/appraisal/cycles/${appraisal.cycleId}/results/${appraisalId}`,
-        },
-      });
+          entityType: 'appraisal',
+          entityId: appraisalId,
+          sourceService: 'hr-service',
+        })
+        .catch((error) =>
+          this.logger.error(
+            `Failed to publish finalized notification for appraisal ${appraisalId}`,
+            error instanceof Error ? error.stack : String(error),
+          ),
+        );
     }
 
     if (appraisal.employee.email) {
