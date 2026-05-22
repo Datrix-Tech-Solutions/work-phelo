@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { MoreVertical } from 'lucide-react';
 import { Column, DataTable } from '../shared/DataTable';
@@ -27,55 +27,74 @@ interface RowMenuProps {
 
 function RowMenu({ onView, onApprove, onReject }: RowMenuProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, bottom: 0, right: 0 });
+  const [openUpward, setOpenUpward] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  const handleToggle = () => {
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setOpenUpward(window.innerHeight - rect.bottom < 120);
+      setMenuPos({
+        top: rect.bottom + 4,
+        bottom: window.innerHeight - rect.top + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setOpen((v) => !v);
+  };
 
   return (
-    <div ref={ref} className="relative flex justify-end">
+    <div className="flex justify-end">
       <button
-        onClick={() => setOpen((v) => !v)}
+        ref={buttonRef}
+        onClick={handleToggle}
         className="p-1.5 rounded-lg text-gray-600 hover:text-gray-900 hover:bg-gray-100 transition-colors"
       >
         <MoreVertical className="w-5 h-5" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-8 z-10 w-36 bg-white border border-gray-100 rounded-xl shadow-lg py-1 overflow-hidden">
-          <button
-            onClick={() => {
-              setOpen(false);
-              onView();
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            style={{
+              position: 'fixed',
+              right: menuPos.right,
+              ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
+              minWidth: 144,
             }}
-            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="z-50 bg-white border border-gray-100 rounded-xl shadow-lg py-1 overflow-hidden"
           >
-            View
-          </button>
-          <button
-            onClick={() => {
-              setOpen(false);
-              onApprove();
-            }}
-            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Approve
-          </button>
-          <button
-            onClick={() => {
-              setOpen(false);
-              onReject();
-            }}
-            className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-          >
-            Reject
-          </button>
-        </div>
+            <button
+              onClick={() => {
+                setOpen(false);
+                onView();
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              View
+            </button>
+            <button
+              onClick={() => {
+                setOpen(false);
+                onApprove();
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              Approve
+            </button>
+            <button
+              onClick={() => {
+                setOpen(false);
+                onReject();
+              }}
+              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Reject
+            </button>
+          </div>
+        </>
       )}
     </div>
   );

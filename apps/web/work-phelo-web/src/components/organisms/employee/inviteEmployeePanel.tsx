@@ -16,7 +16,6 @@ import { useDepartmentOptions } from '@/hooks/useDepartments';
 import { useBranchOptions } from '@/hooks/useBranches';
 import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
-import { isAtLeastMinimumEmployeeAge, MIN_EMPLOYEE_AGE } from '@/lib/employeeAge';
 import { usePermissionSets, useAssignPermissionSet } from '@/hooks/useRoles';
 
 /* ── Types ── */
@@ -33,7 +32,6 @@ interface InviteForm {
   managerId?: string;
   employmentType: string;
   hireDate: string;
-  dateOfBirth: string;
   probationEndsAt?: string;
   contractEndDate?: string;
 }
@@ -45,13 +43,7 @@ interface InviteEmployeePanelProps {
   employees: Employee[];
 }
 
-/* ── Inner form (mounts fresh each time the panel opens) ── */
-
-function InviteEmployeeForm({
-  onClose,
-  onSuccess,
-  employees,
-}: Omit<InviteEmployeePanelProps, 'isOpen'>) {
+function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmployeePanelProps) {
   const toast = useToast();
   const { data: departments = [] } = useDepartmentOptions(true);
   const { data: branches = [] } = useBranchOptions(true);
@@ -65,16 +57,14 @@ function InviteEmployeeForm({
     handleSubmit,
     control,
     setValue,
-    setError,
-    clearErrors,
+    reset,
     formState: { errors },
   } = useForm<InviteForm>({
-    defaultValues: { employmentType: 'FULL_TIME', phone: '', dateOfBirth: '' },
+    defaultValues: { employmentType: 'FULL_TIME', phone: '' },
   });
 
   const phoneValue = useWatch({ control, name: 'phone' });
   const hireDateValue = useWatch({ control, name: 'hireDate' });
-  // const dobValue = useWatch({ control, name: 'dateOfBirth' });
   const probationDateValue = useWatch({ control, name: 'probationEndsAt' });
   const contractDateValue = useWatch({ control, name: 'contractEndDate' });
   const deptFormValue = useWatch({ control, name: 'departmentId' });
@@ -84,15 +74,17 @@ function InviteEmployeeForm({
   const genderValue = useWatch({ control, name: 'gender' });
 
   useEffect(() => {
-    const probationMonths = policiesSettings?.defaultProbationPeriodMonths;
     if (
       employmentTypeValue === 'CONTRACT' ||
       employmentTypeValue === 'INTERN' ||
       !hireDateValue ||
-      !probationMonths
+      policiesSettings === undefined
     ) {
       return;
     }
+
+    const probationMonths = policiesSettings.defaultProbationPeriodMonths ?? 3;
+    if (!probationMonths) return;
 
     const hireDate = new Date(hireDateValue);
     if (isNaN(hireDate.getTime())) return;
@@ -112,21 +104,6 @@ function InviteEmployeeForm({
   const { mutateAsync: createEmployee, isPending } = useCreateEmployee();
 
   const onSubmit = async (d: InviteForm) => {
-    if (!d.dateOfBirth) {
-      setError('dateOfBirth', { type: 'required', message: 'Required' });
-      return;
-    }
-
-    if (!isAtLeastMinimumEmployeeAge(d.dateOfBirth)) {
-      setError('dateOfBirth', {
-        type: 'validate',
-        message: `Employee must be at least ${MIN_EMPLOYEE_AGE} years old`,
-      });
-      return;
-    }
-
-    clearErrors('dateOfBirth');
-
     const normalized = { ...d };
     if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
     if (normalized.contractEndDate?.length === 7) normalized.contractEndDate += '-01';
@@ -143,6 +120,22 @@ function InviteEmployeeForm({
           permissionSetId: selectedPermissionSetId,
         });
       }
+      reset({
+        firstName: '',
+        lastName: '',
+        email: '',
+        phone: '',
+        gender: undefined,
+        jobTitle: '',
+        departmentId: undefined,
+        branchId: undefined,
+        managerId: undefined,
+        employmentType: 'FULL_TIME',
+        hireDate: undefined,
+        probationEndsAt: undefined,
+        contractEndDate: undefined,
+      });
+      setSelectedPermissionSetId('');
       onClose();
       onSuccess(`${d.firstName} ${d.lastName}`);
     } catch (err) {
@@ -152,7 +145,7 @@ function InviteEmployeeForm({
 
   return (
     <SidePanel
-      isOpen
+      isOpen={isOpen}
       onClose={onClose}
       title="Add New Employee"
       description="Add a new employee to onboard them onto WorkPhelo."
@@ -217,16 +210,6 @@ function InviteEmployeeForm({
             { value: 'FEMALE', label: 'Female' },
           ]}
         />
-        {/* <DatePicker
-          label="Date of Birth"
-          value={dobValue}
-          onChange={(v) => {
-            setValue('dateOfBirth', v);
-            clearErrors('dateOfBirth');
-          }}
-          error={errors.dateOfBirth?.message}
-          disableFuture
-        /> */}
       </div>
 
       {/* Job Information */}
@@ -318,20 +301,6 @@ function InviteEmployeeForm({
   );
 }
 
-/* ── Public wrapper ── */
-
-export function InviteEmployeePanel({
-  isOpen,
-  onClose,
-  onSuccess,
-  employees,
-}: InviteEmployeePanelProps) {
-  if (!isOpen) {
-    return (
-      <SidePanel isOpen={false} onClose={onClose} title="">
-        {null}
-      </SidePanel>
-    );
-  }
-  return <InviteEmployeeForm onClose={onClose} onSuccess={onSuccess} employees={employees} />;
+export function InviteEmployeePanel(props: InviteEmployeePanelProps) {
+  return <InviteEmployeeForm {...props} />;
 }

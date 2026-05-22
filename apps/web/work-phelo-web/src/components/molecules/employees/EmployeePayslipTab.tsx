@@ -114,11 +114,11 @@ export function EmployeePayslipTab({ employee }: EmployeePayslipTabProps) {
   return (
     <>
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-end gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="outline" onClick={() => setTaxReturnsOpen(true)}>
             Tax Returns
           </Button>
-          <div className="w-52">
+          <div className="w-48">
             <SearchSelect
               placeholder="Select month…"
               options={payslips.map((p) => ({
@@ -162,15 +162,15 @@ export function EmployeePayslipTab({ employee }: EmployeePayslipTabProps) {
         </div>
 
         {selected && (
-          <div className="grid grid-cols-3 gap-6 items-start">
-            <div className="col-span-2">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-2">
               <PayslipDocument
                 item={selected}
                 companyName={user?.tenantName ?? ''}
                 employeeName={employeeName}
               />
             </div>
-            <div className="col-span-1 flex flex-col gap-4">
+            <div className="lg:col-span-1 flex flex-col gap-4">
               <BankingComplianceCard employee={employee} />
               <PayslipAllowancesPanel
                 allowances={employee.allowances ?? []}

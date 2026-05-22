@@ -19,11 +19,7 @@ const AGREEMENT_TYPE_LABELS: Record<string, string> = {
   OTHER: 'Agreement',
 };
 
-interface Props {
-  tenantSlug: string;
-}
-
-export function AgreementGate({ tenantSlug: _tenantSlug }: Props) {
+export function AgreementGate() {
   const { data: agreements, isLoading } = useMyCompanyAgreements();
   const { mutate: sign, isPending: isSigning } = useSignMyAgreement();
   const { mutate: decline, isPending: isDeclining } = useDeclineMyAgreement();

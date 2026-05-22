@@ -79,9 +79,9 @@ export default function HRManagementLayout({ children }: { children: React.React
 
   useEffect(() => {
     if (user !== null && !hasAnyManagementAccess && !isOnCompanyPolicies) {
-      router.replace(`/${params.tenantSlug}/hr`);
+      router.replace(`${base}/companyPolicies`);
     }
-  }, [hasAnyManagementAccess, isOnCompanyPolicies, params.tenantSlug, router, user]);
+  }, [hasAnyManagementAccess, isOnCompanyPolicies, base, router, user]);
 
   const groups: TabGroup[] = [
     {

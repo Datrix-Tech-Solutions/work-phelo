@@ -24,7 +24,7 @@ export default function HRManagementPage({ params }: { params: Promise<{ tenantS
     if (user === null) return;
 
     if (!hasAnyManagementAccess) {
-      router.replace(`/${tenantSlug}/hr`);
+      router.replace(`/${tenantSlug}/hr/hrmanagement/companyPolicies`);
       return;
     }
 

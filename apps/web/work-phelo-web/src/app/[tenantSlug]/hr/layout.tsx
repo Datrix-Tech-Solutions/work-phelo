@@ -7,7 +7,6 @@ import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 import { usePermission, usePermissionRule } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
@@ -31,7 +30,6 @@ export default function HRLayout({
   );
   const [activeTab, setActiveTab] = useState('portal');
 
-  const { hasAnyManagementAccess } = useHrManagementAccess();
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
@@ -92,7 +90,7 @@ export default function HRLayout({
     payroll: canAccessPayroll,
     assets: canReadAssets || canManageAssets || canAssignAsset,
     projects: true,
-    management: hasAnyManagementAccess,
+    management: true,
     announcements: canManageAnnouncements,
   };
 
@@ -146,7 +144,7 @@ export default function HRLayout({
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
-      {canReadOwnProfile && <AgreementGate tenantSlug={tenantSlug} />}
+      {canReadOwnProfile && <AgreementGate />}
     </div>
   );
 }

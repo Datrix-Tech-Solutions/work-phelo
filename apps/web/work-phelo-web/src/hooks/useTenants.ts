@@ -143,7 +143,7 @@ export function useAuditLogs(page = 1) {
   return useQuery({
     queryKey: ['audit-logs', page],
     queryFn: () =>
-      api.get<AuditData>('/auth/audit', { params: { page, limit: 50 } }).then((r) => r.data),
+      api.get<AuditData>('/auth/audit', { params: { page, limit: 10 } }).then((r) => r.data),
   });
 }
 

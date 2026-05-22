@@ -58,15 +58,12 @@ export function AddAllowancePanel({
   useEffect(() => {
     if (isOpen && allowance) {
       reset({ name: allowance.name, type: allowance.type, description: allowance.description });
-    } else if (!isOpen) {
-      reset({ name: '', type: undefined, description: '' });
     }
   }, [isOpen, allowance, reset]);
 
   const handleClose = useCallback(() => {
-    reset();
     onClose();
-  }, [reset, onClose]);
+  }, [onClose]);
 
   return (
     <SidePanel

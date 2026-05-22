@@ -64,7 +64,6 @@ export function CreateTaskPanel({ projectId, isOpen, onClose, onCreate, isCreati
   );
 
   const handleClose = () => {
-    reset();
     setEmployeeSearch('');
     setSelectedEmployeeId(undefined);
     onClose();
@@ -72,7 +71,7 @@ export function CreateTaskPanel({ projectId, isOpen, onClose, onCreate, isCreati
 
   const onSubmit = (values: TaskFormValues) => {
     onCreate({ ...values, status: 'TODO', assignedEmployeeId: selectedMember?.employeeId });
-    reset();
+    reset({ name: '', dueDate: '' });
     setEmployeeSearch('');
     setSelectedEmployeeId(undefined);
   };
