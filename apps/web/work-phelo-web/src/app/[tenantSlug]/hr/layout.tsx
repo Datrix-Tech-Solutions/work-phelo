@@ -139,7 +139,14 @@ export default function HRLayout({
           />
         )}
         <Sidebar groups={groups} collapsed={collapsed} />
-        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
+        <main
+          className="flex-1 min-h-0 overflow-hidden flex flex-col"
+          onClick={() => {
+            if (!collapsed) setCollapsed(true);
+          }}
+        >
+          {children}
+        </main>
       </div>
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}

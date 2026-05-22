@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────── Types ─────────────────────────── */
@@ -110,15 +111,20 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
 /* ─────────────────────────── Sidebar ─────────────────────────── */
 
 export function Sidebar({ groups, collapsed = false }: SidebarProps) {
+  const [isHovering, setIsHovering] = useState(false);
+  const effectiveCollapsed = collapsed && !isHovering;
+
   return (
     <aside
+      onMouseEnter={() => collapsed && setIsHovering(true)}
+      onMouseLeave={() => setIsHovering(false)}
       className={cn(
         'bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-hidden',
         // Mobile: absolute drawer that slides over content (below the top nav)
         'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
         // Desktop: static in flex flow with width animation
         'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-200',
-        collapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-56',
+        effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-56',
       )}
     >
       <nav className="flex-1 overflow-y-auto py-3 flex flex-col">
@@ -129,7 +135,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
           return (
             <div key={group.label} className="mb-1">
               {/* Group label / divider */}
-              {collapsed ? (
+              {effectiveCollapsed ? (
                 <div className="mx-3 my-2 h-px bg-gray-200" />
               ) : (
                 <p className="px-5 pt-5 pb-1.5 text-[10px] font-semibold tracking-widest text-gray-400 uppercase select-none">
@@ -140,7 +146,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
               {/* Nav items */}
               <div className="flex flex-col gap-0.5">
                 {visibleItems.map((item) => (
-                  <SidebarItem key={item.key} item={item} collapsed={collapsed} />
+                  <SidebarItem key={item.key} item={item} collapsed={effectiveCollapsed} />
                 ))}
               </div>
             </div>
