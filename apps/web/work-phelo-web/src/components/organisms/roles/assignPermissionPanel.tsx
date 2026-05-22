@@ -39,10 +39,11 @@ type DirectPerm = {
 };
 
 function AssignPermissionPanelInner({
+  isOpen,
   onClose,
   employeeName,
   userId,
-}: Omit<AssignPermissionPanelProps, 'isOpen'>) {
+}: AssignPermissionPanelProps) {
   const toast = useToast();
   const [selectedGroup, setSelectedGroup] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -126,7 +127,7 @@ function AssignPermissionPanelInner({
 
   return (
     <SidePanel
-      isOpen
+      isOpen={isOpen}
       onClose={onClose}
       title="Grant Direct Permissions"
       description={`One-off permission overrides for ${employeeName}. These are exceptions on top of their base role and assigned permission sets.`}
@@ -251,12 +252,5 @@ function AssignPermissionPanelInner({
 }
 
 export function AssignPermissionPanel({ isOpen, ...props }: AssignPermissionPanelProps) {
-  if (!isOpen) {
-    return (
-      <SidePanel isOpen={false} onClose={props.onClose} title="">
-        {null}
-      </SidePanel>
-    );
-  }
-  return <AssignPermissionPanelInner key={props.userId} {...props} />;
+  return <AssignPermissionPanelInner key={props.userId} isOpen={isOpen} {...props} />;
 }

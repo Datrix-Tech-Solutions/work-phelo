@@ -37,7 +37,7 @@ interface BranchFormPanelProps {
   employees: EmployeeOption[];
 }
 
-function BranchFormInner({ onClose, branch, employees }: Omit<BranchFormPanelProps, 'isOpen'>) {
+function BranchFormInner({ isOpen, onClose, branch, employees }: BranchFormPanelProps) {
   const isEditMode = !!branch;
 
   const toast = useToast();
@@ -205,7 +205,7 @@ function BranchFormInner({ onClose, branch, employees }: Omit<BranchFormPanelPro
         message={`"${successBranch}" has been added to your organisation.`}
       />
       <SidePanel
-        isOpen
+        isOpen={isOpen}
         onClose={onClose}
         title={isEditMode ? 'Edit Branch' : 'New Branch'}
         description={
@@ -354,16 +354,10 @@ function BranchFormInner({ onClose, branch, employees }: Omit<BranchFormPanelPro
 }
 
 export function BranchFormPanel({ isOpen, onClose, branch, employees }: BranchFormPanelProps) {
-  if (!isOpen) {
-    return (
-      <SidePanel isOpen={false} onClose={onClose} title="">
-        {null}
-      </SidePanel>
-    );
-  }
   return (
     <BranchFormInner
       key={branch?.id ?? 'new'}
+      isOpen={isOpen}
       onClose={onClose}
       branch={branch}
       employees={employees}

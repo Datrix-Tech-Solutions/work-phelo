@@ -245,17 +245,18 @@ function StepsModal({
             </span>
 
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800">{step.title}</p>
-              <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{step.description}</p>
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-medium text-gray-800 leading-snug">{step.title}</p>
+                <button
+                  onClick={() => navigate(step.href)}
+                  className="shrink-0 flex items-center gap-1 text-xs font-medium text-orange-500 hover:text-orange-600 border border-orange-200 hover:border-orange-300 bg-orange-50 hover:bg-orange-100 rounded-md px-3 py-1.5 transition-colors"
+                >
+                  {step.buttonLabel}
+                  <ArrowUpRight className="w-3 h-3" />
+                </button>
+              </div>
+              <p className="text-xs text-gray-400 mt-1 leading-relaxed">{step.description}</p>
             </div>
-
-            <button
-              onClick={() => navigate(step.href)}
-              className="shrink-0 flex items-center gap-1 text-xs font-medium text-orange-500 hover:text-orange-600 border border-orange-200 hover:border-orange-300 bg-orange-50 hover:bg-orange-100 rounded-md px-3 py-1.5 transition-colors"
-            >
-              {step.buttonLabel}
-              <ArrowUpRight className="w-3 h-3" />
-            </button>
           </li>
         ))}
       </ol>
@@ -268,9 +269,11 @@ export function HelpCenter() {
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [showBeacon, setShowBeacon] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useAuthStore();
 
   const tenantSlug = user?.tenantSlug || pathname.split('/')[1];
+  const isEmployee = user?.role === 'EMPLOYEE';
 
   useEffect(() => {
     if (!user?.id) return;
@@ -343,22 +346,50 @@ export function HelpCenter() {
                   Guides
                 </p>
               </div>
-              {WORKFLOWS.map((workflow) => (
+              {isEmployee ? (
                 <button
-                  key={workflow.id}
-                  onClick={() => handleSelectWorkflow(workflow)}
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    if (user?.id) {
+                      const record = getRecord(user.id);
+                      if (record && !record.seen) {
+                        saveRecord(user.id, { ...record, seen: true });
+                        setShowBeacon(false);
+                      }
+                    }
+                    router.push(`/${tenantSlug}/hr/profile`);
+                  }}
                   className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
                 >
                   <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
-                    {workflow.icon}
+                    <Users className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800">{workflow.title}</p>
-                    <p className="text-xs text-gray-400 truncate">{workflow.tagline}</p>
+                    <p className="text-sm font-medium text-gray-800">Complete Your Profile</p>
+                    <p className="text-xs text-gray-400 truncate">
+                      Update your personal details and profile photo.
+                    </p>
                   </div>
                   <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
                 </button>
-              ))}
+              ) : (
+                WORKFLOWS.map((workflow) => (
+                  <button
+                    key={workflow.id}
+                    onClick={() => handleSelectWorkflow(workflow)}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
+                      {workflow.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800">{workflow.title}</p>
+                      <p className="text-xs text-gray-400 truncate">{workflow.tagline}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                  </button>
+                ))
+              )}
             </div>
           </>
         )}

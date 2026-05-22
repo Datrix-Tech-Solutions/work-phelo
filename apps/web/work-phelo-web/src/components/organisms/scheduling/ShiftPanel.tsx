@@ -51,6 +51,7 @@ const WORK_MODE_OPTIONS: SearchSelectOption[] = [
 /* ── Inner form ── */
 
 interface FormProps {
+  isOpen: boolean;
   isEditing: boolean;
   isLoading?: boolean;
   employeeName: string;
@@ -68,7 +69,15 @@ interface FormProps {
   onClose: () => void;
 }
 
-function ShiftForm({ isEditing, isLoading, employeeName, initial, onSave, onClose }: FormProps) {
+function ShiftForm({
+  isOpen,
+  isEditing,
+  isLoading,
+  employeeName,
+  initial,
+  onSave,
+  onClose,
+}: FormProps) {
   const [shiftType, setShiftType] = useState<ShiftType>(initial.shiftType);
   const [workMode, setWorkMode] = useState<WorkMode>(initial.workMode);
   const [startTime, setStartTime] = useState(initial.startTime);
@@ -111,7 +120,7 @@ function ShiftForm({ isEditing, isLoading, employeeName, initial, onSave, onClos
 
   return (
     <SidePanel
-      isOpen
+      isOpen={isOpen}
       onClose={onClose}
       title={employeeName}
       description={isEditing ? 'Edit shift details' : 'Add a new shift'}
@@ -234,14 +243,6 @@ export function ShiftPanel({
   shift,
   onSave,
 }: ShiftPanelProps) {
-  if (!isOpen) {
-    return (
-      <SidePanel isOpen={false} onClose={onClose} title="">
-        {null}
-      </SidePanel>
-    );
-  }
-
   const resolvedEmployeeId = shift?.employeeId ?? employeeId;
   const employeeName =
     employeeOptions.find((o) => o.value === resolvedEmployeeId)?.label ?? 'Employee';
@@ -249,6 +250,7 @@ export function ShiftPanel({
   return (
     <ShiftForm
       key={shift?.id ?? `new-${employeeId}-${date}`}
+      isOpen={isOpen}
       isEditing={!!shift}
       isLoading={isLoading}
       employeeName={employeeName}

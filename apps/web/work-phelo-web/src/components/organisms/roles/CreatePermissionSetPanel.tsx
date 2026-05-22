@@ -32,11 +32,12 @@ interface CreatePermissionSetPanelProps {
 }
 
 function PanelInner({
+  isOpen,
   onClose,
   onSubmit,
   isSubmitting,
   editTarget,
-}: Omit<CreatePermissionSetPanelProps, 'isOpen'>) {
+}: CreatePermissionSetPanelProps) {
   const { data: resources = [] } = usePermissionResources();
 
   const resourceIdMap = useMemo(() => {
@@ -97,7 +98,7 @@ function PanelInner({
 
   return (
     <SidePanel
-      isOpen
+      isOpen={isOpen}
       onClose={onClose}
       title={isEdit ? 'Edit Permission Set' : 'Create Permission Set'}
       description="Define a reusable bundle of permissions that can be assigned to users."
@@ -119,12 +120,5 @@ function PanelInner({
 }
 
 export function CreatePermissionSetPanel({ isOpen, ...props }: CreatePermissionSetPanelProps) {
-  if (!isOpen) {
-    return (
-      <SidePanel isOpen={false} onClose={props.onClose} title="">
-        {null}
-      </SidePanel>
-    );
-  }
-  return <PanelInner key={props.editTarget?.id ?? 'new'} {...props} />;
+  return <PanelInner key={props.editTarget?.id ?? 'new'} isOpen={isOpen} {...props} />;
 }

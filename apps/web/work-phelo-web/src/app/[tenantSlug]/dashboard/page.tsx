@@ -100,7 +100,7 @@ export default function TenantDashboardPage({
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
-      {isEmployee && <AgreementGate tenantSlug={tenantSlug} />}
+      {isEmployee && <AgreementGate />}
       <TopNav
         userInitials={initials}
         notificationCount={0}

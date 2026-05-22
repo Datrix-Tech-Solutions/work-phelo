@@ -126,7 +126,7 @@ export function ResignationPanel({
         toast.success(
           'Resignation submitted. You have 30 minutes to withdraw before HR is notified.',
         );
-        reset();
+        reset({ lastWorkingDate: '', reason: undefined, additionalNotes: '' });
         onClose();
       },
       onError: (err) => {
