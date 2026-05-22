@@ -41,6 +41,7 @@ interface DataTableProps<T extends { id: string | number }> {
   currentPage: number;
   totalPages: number;
   onPageChange: (page: number) => void;
+  noInternalScroll?: boolean;
 }
 
 function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
@@ -126,6 +127,7 @@ export function DataTable<T extends { id: string | number }>({
   currentPage,
   totalPages,
   onPageChange,
+  noInternalScroll = false,
 }: DataTableProps<T>) {
   const hasToolbar = !!(
     onSearch ||
@@ -137,7 +139,7 @@ export function DataTable<T extends { id: string | number }>({
   );
 
   return (
-    <div className="flex flex-col gap-3 flex-1 min-h-0 h-full">
+    <div className={cn('flex flex-col gap-3', noInternalScroll ? '' : 'flex-1 min-h-0 h-full')}>
       {/* Toolbar — outside the card */}
       {hasToolbar && (
         <div className="flex items-center gap-3 flex-wrap shrink-0">
@@ -207,66 +209,20 @@ export function DataTable<T extends { id: string | number }>({
       )}
 
       {/* Table card — header + rows only */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col flex-1 min-h-0 pt-3">
-        {/* Header */}
-        <div className="relative shrink-0">
-          <div className="absolute inset-y-0 left-4 right-4 bg-gray-100 rounded-lg" />
-          <div
-            className="relative grid text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-3"
-            style={{
-              gridTemplateColumns: [
-                ...columns.map((c) => c.width ?? '1fr'),
-                ...(rowActions ? ['auto'] : []),
-              ].join(' '),
-            }}
-          >
-            {columns.map((col) => (
-              <span key={col.key} className={col.className}>
-                {col.label}
-              </span>
-            ))}
-            {rowActions && <span />}
-          </div>
-        </div>
-
-        {/* Scrollable Content Area */}
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          {isLoading ? (
-            <div className="h-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-4">
-                <div className="relative w-8 h-8">
-                  <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
-                  <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
-                </div>
-                <p className="text-sm text-gray-500 font-medium">Loading...</p>
-              </div>
-            </div>
-          ) : data.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
-              <div className="flex flex-col items-center gap-5 text-center px-6">
-                {emptyImage ?? (
-                  <div className="w-28 h-28 rounded-3xl flex items-center justify-center">
-                    <NoSearchLogo className="w-25 h-25" />
-                  </div>
-                )}
-                <div>
-                  <p className="text-base font-medium text-gray-600 mb-1">{emptyMessage}</p>
-                  {emptyMessage.toLowerCase().includes('found') && (
-                    <p className="text-sm text-gray-400">Try adjusting your search or filters</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : (
-            data.map((row) => (
+      <div
+        className={cn(
+          'bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col pt-3',
+          noInternalScroll ? '' : 'flex-1 min-h-0',
+        )}
+      >
+        {/* Horizontal scroll wrapper — keeps header and rows in sync */}
+        <div className="overflow-x-auto flex-1 min-h-0 flex flex-col">
+          <div className="min-w-max flex flex-col flex-1 min-h-0">
+            {/* Header */}
+            <div className="relative shrink-0">
+              <div className="absolute inset-y-0 left-4 right-4 bg-gray-100 rounded-lg" />
               <div
-                key={row.id}
-                onClick={() => onRowClick?.(row)}
-                className={cn(
-                  'grid px-6 py-4 items-center text-sm text-gray-800 border-b border-gray-100 last:border-b-0',
-                  'hover:bg-gray-50 transition-colors',
-                  onRowClick && 'cursor-pointer',
-                )}
+                className="relative grid text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-3"
                 style={{
                   gridTemplateColumns: [
                     ...columns.map((c) => c.width ?? '1fr'),
@@ -275,46 +231,104 @@ export function DataTable<T extends { id: string | number }>({
                 }}
               >
                 {columns.map((col) => (
-                  <div key={col.key} className={col.className}>
-                    {col.render
-                      ? col.render(row)
-                      : String((row as Record<string, unknown>)[col.key] ?? '')}
-                  </div>
+                  <span key={col.key} className={col.className}>
+                    {col.label}
+                  </span>
                 ))}
-                {rowActions &&
-                  (() => {
-                    const actions = rowActions(row);
-                    if (actions.length === 0) return null;
-                    if (actions.length === 1) {
-                      const action = actions[0];
-                      return (
-                        <div className="flex justify-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              action.onClick();
-                            }}
-                            className={cn(
-                              'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
-                              action.danger
-                                ? 'text-red-600 hover:bg-red-50'
-                                : 'text-brand hover:bg-brand/5',
-                            )}
-                          >
-                            {action.label}
-                          </button>
-                        </div>
-                      );
-                    }
-                    return (
-                      <div className="flex justify-end w-4">
-                        <ThreeDotMenu actions={actions} />
-                      </div>
-                    );
-                  })()}
+                {rowActions && <span />}
               </div>
-            ))
-          )}
+            </div>
+
+            {/* Scrollable Content Area */}
+            <div className={noInternalScroll ? '' : 'flex-1 min-h-0 overflow-y-auto'}>
+              {isLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="relative w-8 h-8">
+                      <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
+                      <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
+                    </div>
+                    <p className="text-sm text-gray-500 font-medium">Loading...</p>
+                  </div>
+                </div>
+              ) : data.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center gap-3 text-center">
+                  <div className="flex flex-col items-center gap-5 text-center px-6">
+                    {emptyImage ?? (
+                      <div className="w-28 h-28 rounded-3xl flex items-center justify-center">
+                        <NoSearchLogo className="w-25 h-25" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-base font-medium text-gray-600 mb-1">{emptyMessage}</p>
+                      {emptyMessage.toLowerCase().includes('found') && (
+                        <p className="text-sm text-gray-400">
+                          Try adjusting your search or filters
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                data.map((row) => (
+                  <div
+                    key={row.id}
+                    onClick={() => onRowClick?.(row)}
+                    className={cn(
+                      'grid px-6 py-4 items-center text-sm text-gray-800 border-b border-gray-100 last:border-b-0',
+                      'hover:bg-gray-50 transition-colors',
+                      onRowClick && 'cursor-pointer',
+                    )}
+                    style={{
+                      gridTemplateColumns: [
+                        ...columns.map((c) => c.width ?? '1fr'),
+                        ...(rowActions ? ['auto'] : []),
+                      ].join(' '),
+                    }}
+                  >
+                    {columns.map((col) => (
+                      <div key={col.key} className={col.className}>
+                        {col.render
+                          ? col.render(row)
+                          : String((row as Record<string, unknown>)[col.key] ?? '')}
+                      </div>
+                    ))}
+                    {rowActions &&
+                      (() => {
+                        const actions = rowActions(row);
+                        if (actions.length === 0) return null;
+                        if (actions.length === 1) {
+                          const action = actions[0];
+                          return (
+                            <div className="flex justify-center">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  action.onClick();
+                                }}
+                                className={cn(
+                                  'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
+                                  action.danger
+                                    ? 'text-red-600 hover:bg-red-50'
+                                    : 'text-brand hover:bg-brand/5',
+                                )}
+                              >
+                                {action.label}
+                              </button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <div className="flex justify-end w-4">
+                            <ThreeDotMenu actions={actions} />
+                          </div>
+                        );
+                      })()}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

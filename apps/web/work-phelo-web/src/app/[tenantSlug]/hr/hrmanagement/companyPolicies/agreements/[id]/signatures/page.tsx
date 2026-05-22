@@ -79,7 +79,7 @@ export default function AgreementSignaturesPage() {
   const rows: SignatureRow[] = (data?.rows ?? []).map((r) => ({ ...r, id: r.employee.id }));
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-6">
+    <div className="flex flex-col gap-6">
       <nav className="shrink-0 flex items-center gap-2 text-sm text-gray-400">
         <Link href={agreementsHref} className="hover:text-gray-700 transition-colors">
           Company Agreements
@@ -98,6 +98,7 @@ export default function AgreementSignaturesPage() {
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
+        noInternalScroll
       />
     </div>
   );

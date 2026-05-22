@@ -78,9 +78,13 @@ export function RolesContent() {
     {
       key: 'description',
       label: 'Description',
-      className: 'overflow-hidden pr-4',
+      width: 'minmax(0, 1fr)',
+      className: 'overflow-hidden min-w-0 pr-4',
       render: (row) => (
-        <span className="text-sm text-gray-500 block truncate">
+        <span
+          className="text-sm text-gray-500 block truncate max-w-xs lg:max-w-sm xl:max-w-md"
+          title={row.description ?? undefined}
+        >
           {row.description || <span className="text-gray-300 italic">No description</span>}
         </span>
       ),
@@ -104,7 +108,7 @@ export function RolesContent() {
 
   return (
     <>
-      <div className="flex flex-col gap-6 flex-1 min-h-0">
+      <div className="flex flex-col gap-6">
         <div className="shrink-0">
           <h2 className="text-base font-semibold text-gray-900">Roles & Permissions</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -130,6 +134,7 @@ export function RolesContent() {
           currentPage={page}
           totalPages={totalPages}
           onPageChange={setPage}
+          noInternalScroll
           rowActions={(row) => [
             { label: 'Manage Members', onClick: () => setMembersTarget(row) },
             {

@@ -141,12 +141,12 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   ];
 
   if (cycleLoading) {
-    return <div className="p-8 text-sm text-gray-400">Loading…</div>;
+    return <div className="p-4 sm:p-6 lg:p-8 text-sm text-gray-400">Loading…</div>;
   }
 
   if (!cycle) {
     return (
-      <div className="p-8 flex flex-col gap-4">
+      <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-4">
         <p className="text-sm text-red-500">Cycle not found.</p>
         <Link href={`/${tenantSlug}/hr/appraisal`} className="text-sm text-brand hover:underline">
           Back to Appraisals
@@ -156,7 +156,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   }
 
   return (
-    <div className="p-8 flex flex-col gap-6 min-h-full">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 min-h-full">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link
@@ -236,7 +236,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
         </>
       ) : (
         /* Results tab */
-        <div className="flex flex-col gap-3 flex-1 min-h-0">
+        <div className="flex flex-col gap-3">
           <div className="flex items-center gap-3 flex-wrap">
             <select
               value={deptFilter}
@@ -277,6 +277,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
             currentPage={1}
             totalPages={1}
             onPageChange={() => {}}
+            noInternalScroll
           />
         </div>
       )}

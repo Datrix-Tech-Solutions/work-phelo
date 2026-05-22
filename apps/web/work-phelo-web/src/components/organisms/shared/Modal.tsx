@@ -52,12 +52,12 @@ export function Modal({
       {/* Dialog */}
       <div
         className={cn(
-          'relative z-10 w-full bg-white rounded-card shadow-2xl p-6 flex flex-col',
+          'relative z-10 w-full bg-white rounded-card shadow-2xl p-6 flex flex-col max-h-[calc(100dvh-2rem)]',
           width,
         )}
       >
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-3">
+        <div className="flex items-start justify-between gap-4 mb-3 shrink-0">
           <h2 className="text-xl font-bold text-gray-800">{title}</h2>
           {!hideClose && (
             <button
@@ -71,14 +71,16 @@ export function Modal({
         </div>
 
         {/* Body */}
-        <div className="relative flex-1">
+        <div className="relative flex-1 min-h-0 overflow-y-auto">
           {description && <p className="text-sm text-gray-500 leading-relaxed">{description}</p>}
           {children}
 
           {visual && <div className="absolute top-0 right-0">{visual}</div>}
         </div>
 
-        {footer && <div className="mt-auto pt-6 flex items-center justify-end gap-3">{footer}</div>}
+        {footer && (
+          <div className="mt-auto pt-6 shrink-0 flex items-center justify-end gap-3">{footer}</div>
+        )}
       </div>
     </div>
   );

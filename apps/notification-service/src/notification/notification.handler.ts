@@ -30,13 +30,19 @@ import {
   AnnouncementPublishedEvent,
   PayrollApprovalRequestedEvent,
   PayrollDecisionEvent,
+  InAppNotificationCreateEvent,
+  EventPatterns,
 } from '@work-phelo/types';
+import { InAppNotificationsService } from '../in-app-notifications/in-app-notifications.service';
 
 @Controller()
 export class NotificationHandler {
   private readonly logger = new Logger(NotificationHandler.name);
 
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly inAppNotifications: InAppNotificationsService,
+  ) {}
 
   private ack(context: RmqContext) {
     const channel = context.getChannelRef() as Channel;
@@ -86,6 +92,30 @@ export class NotificationHandler {
       `[${pattern}] Permanent failure — acknowledging | ${details} | error=${this.formatError(error)}`,
     );
     channel.ack(message);
+  }
+
+  @EventPattern(EventPatterns.NOTIFICATION_IN_APP_CREATE)
+  async handleInAppCreate(
+    @Payload() data: WithMeta<InAppNotificationCreateEvent>,
+    @Ctx() context: RmqContext,
+  ) {
+    this.logger.log(
+      `[${EventPatterns.NOTIFICATION_IN_APP_CREATE}] Received | tenant=${data.tenantId} | recipient=${data.recipientUserId} | type=${data.type} | corrId=${data._meta?.correlationId}`,
+    );
+    try {
+      await this.inAppNotifications.create({
+        ...data,
+        eventId: data.eventId ?? data._meta?.messageId,
+      });
+      this.ack(context);
+    } catch (err) {
+      this.settleFailure(
+        context,
+        EventPatterns.NOTIFICATION_IN_APP_CREATE,
+        err,
+        `tenant=${data.tenantId} | recipient=${data.recipientUserId} | type=${data.type} | corrId=${data._meta?.correlationId}`,
+      );
+    }
   }
 
   @EventPattern('notification.email_verification')

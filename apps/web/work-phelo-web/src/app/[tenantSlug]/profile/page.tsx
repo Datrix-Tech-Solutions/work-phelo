@@ -53,7 +53,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
         {isLoading || !employee ? (
           <EmployeeDetailSkeleton />
         ) : (
-          <div className="p-8 flex flex-col gap-6">
+          <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
             {/* Page header */}
             <div className="flex items-center justify-between">
               <div>

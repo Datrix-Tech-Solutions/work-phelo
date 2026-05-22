@@ -100,7 +100,7 @@ export default function TenantDashboardPage({
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
-      {isEmployee && <AgreementGate tenantSlug={tenantSlug} />}
+      {isEmployee && <AgreementGate />}
       <TopNav
         userInitials={initials}
         notificationCount={0}
@@ -110,7 +110,7 @@ export default function TenantDashboardPage({
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         {/* Welcome banner */}
-        <div className="bg-brand mx-6 mt-6 rounded-card px-8 py-6 flex items-center justify-between">
+        <div className="bg-brand mx-3 mt-3 sm:mx-6 sm:mt-6 rounded-card px-4 sm:px-8 py-4 sm:py-6 flex flex-wrap items-center gap-4 justify-between">
           <div>
             {!isTenantAdmin && (
               <p className="text-sm font-medium text-orange-400 mb-1">{tenantName}</p>
@@ -138,7 +138,7 @@ export default function TenantDashboardPage({
             <p className="text-sm text-gray-400 mt-1">Click on a module to get started</p>
           </div>
 
-          <div className="grid grid-cols-4 gap-4 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
             {MODULE_DEFS.map((mod) => {
               const enabled = enabledKeys.has(mod.key);
               return (

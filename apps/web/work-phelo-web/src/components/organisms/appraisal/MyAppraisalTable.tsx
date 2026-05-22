@@ -177,7 +177,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
   ];
 
   return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0 h-full">
+    <div className="flex flex-col gap-4">
       {/* Custom toolbar */}
       <div className="flex items-center gap-3 flex-wrap shrink-0">
         {/* Status filter */}
@@ -220,6 +220,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
             router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/results/${r.id}`);
           }
         }}
+        noInternalScroll
       />
     </div>
   );

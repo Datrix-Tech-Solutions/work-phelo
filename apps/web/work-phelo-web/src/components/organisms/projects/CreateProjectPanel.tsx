@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect } from 'react';
+import { useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -39,7 +39,6 @@ export function CreateProjectPanel({
     register,
     handleSubmit,
     control,
-    reset,
     formState: { errors },
   } = useForm<FormValues>({
     defaultValues: {
@@ -52,14 +51,9 @@ export function CreateProjectPanel({
     },
   });
 
-  useEffect(() => {
-    if (!isOpen) reset();
-  }, [isOpen, reset]);
-
   const handleClose = useCallback(() => {
-    reset();
     onClose();
-  }, [reset, onClose]);
+  }, [onClose]);
 
   const onValid = (values: FormValues) => {
     onSubmit({
@@ -114,7 +108,7 @@ export function CreateProjectPanel({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Controller
           name="startDate"
           control={control}

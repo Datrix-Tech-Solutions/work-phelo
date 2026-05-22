@@ -74,7 +74,7 @@ export function MyPayslipsPanel({ isOpen, onClose, payslips }: MyPayslipsPanelPr
       onClose={onClose}
       title="My Payslips"
       description="Your approved payslips."
-      width="w-[480px]"
+      width="sm:w-[480px]"
     >
       {approved.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">

@@ -7,7 +7,6 @@ import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
 import { usePermission, usePermissionRule } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
@@ -26,10 +25,11 @@ export default function HRLayout({
   const firstName = user?.firstName ?? 'User';
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < 768,
+  );
   const [activeTab, setActiveTab] = useState('portal');
 
-  const { hasAnyManagementAccess } = useHrManagementAccess();
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
@@ -90,7 +90,7 @@ export default function HRLayout({
     payroll: canAccessPayroll,
     assets: canReadAssets || canManageAssets || canAssignAsset,
     projects: true,
-    management: hasAnyManagementAccess,
+    management: true,
     announcements: canManageAnnouncements,
   };
 
@@ -130,14 +130,28 @@ export default function HRLayout({
         onTabChange={setActiveTab}
         notificationCount={0}
       />
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 relative">
+        {/* Mobile backdrop: closes sidebar when tapping outside */}
+        {!collapsed && (
+          <div
+            className="absolute inset-0 bg-black/40 z-30 md:hidden"
+            onClick={() => setCollapsed(true)}
+          />
+        )}
         <Sidebar groups={groups} collapsed={collapsed} />
-        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
+        <main
+          className="flex-1 min-h-0 overflow-hidden flex flex-col"
+          onClick={() => {
+            if (!collapsed) setCollapsed(true);
+          }}
+        >
+          {children}
+        </main>
       </div>
 
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
-      {canReadOwnProfile && <AgreementGate tenantSlug={tenantSlug} />}
+      {canReadOwnProfile && <AgreementGate />}
     </div>
   );
 }

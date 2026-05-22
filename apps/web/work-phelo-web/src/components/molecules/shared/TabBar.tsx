@@ -19,7 +19,12 @@ interface TabBarProps {
 
 export function TabBar({ tabs, activeTab, onTabChange, className }: TabBarProps) {
   return (
-    <div className={cn('flex items-end gap-1 border-b border-gray-200 shrink-0', className)}>
+    <div
+      className={cn(
+        'flex items-end gap-1 border-b border-gray-200 shrink-0 overflow-x-auto scrollbar-none',
+        className,
+      )}
+    >
       {tabs.map((tab) => (
         <button
           key={tab.key}

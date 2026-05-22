@@ -86,7 +86,7 @@ export function DepartmentsTable({
   ];
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col">
       <DataTable
         columns={COLUMNS}
         data={paged}
@@ -121,6 +121,7 @@ export function DepartmentsTable({
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
     </div>
   );

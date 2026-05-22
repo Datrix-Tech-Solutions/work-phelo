@@ -54,9 +54,16 @@ export function MetricCard({
         className,
       )}
     >
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-gray-500 font-medium">{heading}</span>
-        {Icon && <Icon className="w-5 h-5 text-gray-400" />}
+      <div className="relative mb-3 min-h-[1.25rem]">
+        <span
+          className={cn(
+            'text-sm text-gray-500 font-medium block leading-snug line-clamp-2',
+            Icon && 'pr-6',
+          )}
+        >
+          {heading}
+        </span>
+        {Icon && <Icon className="absolute top-0.5 right-0 w-4 h-4 text-gray-400 shrink-0" />}
       </div>
 
       <div className="flex items-end justify-between flex-1">

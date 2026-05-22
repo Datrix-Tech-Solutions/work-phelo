@@ -65,8 +65,9 @@ export class CreateEmployeeDto {
       'Date of birth in ISO format. Employees must be at least 18 years old.',
     example: '1990-05-18',
   })
+  @IsOptional()
   @IsDateString()
-  dateOfBirth!: string;
+  dateOfBirth?: string;
 
   @ApiPropertyOptional({
     description: 'Marital status of the employee',

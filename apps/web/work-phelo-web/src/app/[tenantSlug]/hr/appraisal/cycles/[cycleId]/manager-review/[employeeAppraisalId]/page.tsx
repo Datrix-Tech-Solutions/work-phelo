@@ -37,7 +37,7 @@ export default function ManagerReviewPage({
 
   if (isLoading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-64">
+      <div className="p-4 sm:p-6 lg:p-8 flex items-center justify-center min-h-64">
         <p className="text-sm text-gray-400">Loading...</p>
       </div>
     );
@@ -45,7 +45,7 @@ export default function ManagerReviewPage({
 
   if (!appraisal) {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         <p className="text-sm text-red-500">Appraisal not found.</p>
         <Link href={backHref} className="text-brand hover:underline mt-4 inline-block text-sm">
           ← Back
@@ -56,7 +56,7 @@ export default function ManagerReviewPage({
 
   if (appraisal.overallStatus === 'ManagerSubmitted' || appraisal.overallStatus === 'Finalized') {
     return (
-      <div className="p-8 flex flex-col gap-4">
+      <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-4">
         <p className="text-sm text-gray-500">Manager review has already been submitted.</p>
         <Link href={backHref} className="text-brand hover:underline text-sm">
           ← Back to Appraisals
@@ -92,7 +92,7 @@ export default function ManagerReviewPage({
   const isPending = appraisal.overallStatus === 'SelfSubmitted';
 
   return (
-    <div className="p-8 flex flex-col gap-6">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link href={backHref} className="hover:text-gray-600 transition-colors">

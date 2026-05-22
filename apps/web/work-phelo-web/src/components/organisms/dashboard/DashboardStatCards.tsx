@@ -43,7 +43,7 @@ export function DashboardStatCards({
   onClockOut,
 }: DashboardStatCardsProps) {
   return (
-    <div className="grid grid-cols-3 gap-4 shrink-0">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 shrink-0">
       <MetricCard
         title="Annual Leave"
         value={annualBalance ? `${annualBalance.remaining}/${annualBalance.entitled}` : '—'}

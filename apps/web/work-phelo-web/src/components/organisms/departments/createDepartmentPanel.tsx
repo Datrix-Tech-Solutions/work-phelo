@@ -20,10 +20,11 @@ interface Props {
 }
 
 function CreateDepartmentForm({
+  isOpen,
   onClose,
   onSuccess,
   employees,
-}: Omit<Props, 'isOpen' | 'tenantSlug'>) {
+}: Omit<Props, 'tenantSlug'>) {
   const form = useForm<DeptForm>();
   const { mutate: createDepartment, isPending } = useCreateDepartment();
 
@@ -36,6 +37,7 @@ function CreateDepartmentForm({
       { name: data.name, description: data.description || undefined },
       {
         onSuccess: () => {
+          form.reset({ name: '', description: '', managerId: undefined });
           onSuccess?.(data.name);
           handleClose();
         },
@@ -45,7 +47,7 @@ function CreateDepartmentForm({
 
   return (
     <SidePanel
-      isOpen
+      isOpen={isOpen}
       onClose={handleClose}
       title="New Department"
       description="Add a new department to your organisation."
@@ -70,12 +72,12 @@ function CreateDepartmentForm({
 }
 
 export function CreateDepartmentPanel({ isOpen, onClose, onSuccess, employees }: Props) {
-  if (!isOpen) {
-    return (
-      <SidePanel isOpen={false} onClose={onClose} title="">
-        {null}
-      </SidePanel>
-    );
-  }
-  return <CreateDepartmentForm onClose={onClose} onSuccess={onSuccess} employees={employees} />;
+  return (
+    <CreateDepartmentForm
+      isOpen={isOpen}
+      onClose={onClose}
+      onSuccess={onSuccess}
+      employees={employees}
+    />
+  );
 }

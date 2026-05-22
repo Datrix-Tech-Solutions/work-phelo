@@ -7,10 +7,6 @@ import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
 
-// Range of years to show in the picker
-const YEAR_RANGE_BACK = 80;
-const YEAR_RANGE_FORWARD = 10;
-
 interface DatePickerProps {
   label?: string;
   value?: string; // ISO: YYYY-MM-DD
@@ -36,21 +32,22 @@ export function DatePicker({
   const parsed = value ? new Date(value) : null;
 
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<'days' | 'monthYear'>('days');
+  const [view, setView] = useState<'days' | 'months' | 'years'>('days');
   const [viewYear, setViewYear] = useState(parsed?.getFullYear() ?? today.getFullYear());
   const [viewMonth, setViewMonth] = useState(parsed?.getMonth() ?? today.getMonth());
+  const [yearPageStart, setYearPageStart] = useState(() => {
+    const y = parsed?.getFullYear() ?? today.getFullYear();
+    return Math.floor(y / 9) * 9;
+  });
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const selectedYearRef = useRef<HTMLButtonElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Scroll the selected year into view whenever the monthYear panel opens
   useEffect(() => {
-    if (view === 'monthYear') {
-      setTimeout(() => {
-        selectedYearRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      }, 50);
+    if (open && dropdownRef.current) {
+      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-  }, [view]);
+  }, [open]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -68,7 +65,6 @@ export function DatePicker({
     : '';
 
   const todayNorm = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
   const minDateNorm = minDate
     ? (() => {
         const d = new Date(minDate);
@@ -76,12 +72,33 @@ export function DatePicker({
       })()
     : null;
 
-  const isFutureDay = (day: number) =>
-    disableFuture && new Date(viewYear, viewMonth, day) > todayNorm;
-  const isPastDay = (day: number) => disablePast && new Date(viewYear, viewMonth, day) < todayNorm;
-  const isBeforeMinDate = (day: number) =>
-    !!minDateNorm && new Date(viewYear, viewMonth, day) < minDateNorm;
-  const isDisabledDay = (day: number) => isFutureDay(day) || isPastDay(day) || isBeforeMinDate(day);
+  const isDisabledDay = (day: number) => {
+    const date = new Date(viewYear, viewMonth, day);
+    if (disableFuture && date > todayNorm) return true;
+    if (disablePast && date < todayNorm) return true;
+    if (minDateNorm && date < minDateNorm) return true;
+    return false;
+  };
+
+  // A month is disabled if no selectable day exists within it
+  const isDisabledMonth = (monthIdx: number) => {
+    const firstDay = new Date(viewYear, monthIdx, 1);
+    const lastDay = new Date(viewYear, monthIdx + 1, 0);
+    if (disableFuture && firstDay > todayNorm) return true;
+    if (disablePast && lastDay < todayNorm) return true;
+    if (minDateNorm && lastDay < minDateNorm) return true;
+    return false;
+  };
+
+  // A year is disabled if no selectable day exists within it
+  const isDisabledYear = (year: number) => {
+    const firstDay = new Date(year, 0, 1);
+    const lastDay = new Date(year, 11, 31);
+    if (disableFuture && firstDay > todayNorm) return true;
+    if (disablePast && lastDay < todayNorm) return true;
+    if (minDateNorm && lastDay < minDateNorm) return true;
+    return false;
+  };
 
   const selectDay = (day: number) => {
     if (isDisabledDay(day)) return;
@@ -113,11 +130,7 @@ export function DatePicker({
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const currentYear = today.getFullYear();
-  const years = Array.from(
-    { length: YEAR_RANGE_BACK + YEAR_RANGE_FORWARD },
-    (_, i) => currentYear - YEAR_RANGE_BACK + i + 1,
-  );
+  const yearGrid = Array.from({ length: 9 }, (_, i) => yearPageStart + i);
 
   return (
     <div className="flex flex-col gap-1.5 relative" ref={containerRef}>
@@ -142,19 +155,33 @@ export function DatePicker({
       {error && <p className="text-xs text-red-500">{error}</p>}
 
       {open && (
-        <div className="absolute top-full left-0 mt-2 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden">
+        <div
+          ref={dropdownRef}
+          className="absolute top-full left-0 mt-2 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+        >
           {/* ── Days view ── */}
           {view === 'days' && (
             <>
-              {/* Header */}
               <div className="flex items-center justify-between px-4 pt-4 pb-2">
-                <button
-                  onClick={() => setView('monthYear')}
-                  className="flex items-center gap-1.5 text-sm font-bold text-brand hover:opacity-70 transition-opacity"
-                >
-                  {MONTHS[viewMonth]} {viewYear}
-                  <ChevronDown className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setView('months')}
+                    className="flex items-center gap-1 text-sm font-bold text-[#0D1C4D] hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
+                  >
+                    {MONTHS[viewMonth]}
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setYearPageStart(Math.floor(viewYear / 9) * 9);
+                      setView('years');
+                    }}
+                    className="flex items-center gap-1 text-sm font-bold text-[#0D1C4D] hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
+                  >
+                    {viewYear}
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
                 <div className="flex gap-1">
                   <button
                     onClick={prevMonth}
@@ -171,7 +198,6 @@ export function DatePicker({
                 </div>
               </div>
 
-              {/* Day labels */}
               <div className="grid grid-cols-7 text-xs text-gray-500 py-2 px-3 border-b">
                 {DAYS.map((d) => (
                   <div key={d} className="text-center font-medium">
@@ -180,7 +206,6 @@ export function DatePicker({
                 ))}
               </div>
 
-              {/* Day cells */}
               <div className="grid grid-cols-7 gap-1 p-3">
                 {cells.map((day, i) => {
                   if (!day) return <div key={i} className="h-9" />;
@@ -219,74 +244,94 @@ export function DatePicker({
             </>
           )}
 
-          {/* ── Month + Year combined view ── */}
-          {view === 'monthYear' && (
-            <>
-              {/* Header */}
-              <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-100">
+          {/* ── Months view ── */}
+          {view === 'months' && (
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-4">
                 <button
                   onClick={() => setView('days')}
-                  className="flex items-center gap-1.5 text-sm font-bold text-brand hover:opacity-70 transition-opacity"
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
                 >
-                  {MONTHS[viewMonth]} {viewYear}
-                  <ChevronDown className="w-4 h-4 rotate-180" />
+                  <ChevronLeft className="w-4 h-4 text-gray-600" />
+                </button>
+                <span className="text-sm font-bold text-[#0D1C4D]">{viewYear}</span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {MONTHS.map((month, idx) => {
+                  const disabled = isDisabledMonth(idx);
+                  return (
+                    <button
+                      key={month}
+                      onClick={() => {
+                        if (disabled) return;
+                        setViewMonth(idx);
+                        setView('days');
+                      }}
+                      disabled={disabled}
+                      className={cn(
+                        'py-3 text-sm rounded-lg transition-colors font-medium',
+                        disabled
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : idx === viewMonth
+                            ? 'bg-brand text-white'
+                            : 'text-gray-700 hover:bg-gray-100',
+                      )}
+                    >
+                      {month}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Years view ── */}
+          {view === 'years' && (
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-4">
+                <button
+                  onClick={() => setYearPageStart((s) => s - 9)}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4 text-gray-600" />
+                </button>
+                <span className="text-sm font-bold text-[#0D1C4D]">
+                  {yearPageStart} – {yearPageStart + 8}
+                </span>
+                <button
+                  onClick={() => setYearPageStart((s) => s + 9)}
+                  className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
-
-              <div className="flex" style={{ height: '280px' }}>
-                {/* Left: months grid */}
-                <div className="flex-1 p-3 border-r border-gray-100">
-                  <p className="text-xs text-gray-400 font-medium mb-2 px-1">Month</p>
-                  <div className="grid grid-cols-3 gap-1">
-                    {MONTHS.map((month, idx) => (
-                      <button
-                        key={month}
-                        onClick={() => {
-                          setViewMonth(idx);
-                          setView('days');
-                        }}
-                        className={cn(
-                          'py-2 text-sm rounded-lg transition-colors font-medium',
-                          idx === viewMonth
+              <div className="grid grid-cols-3 gap-2">
+                {yearGrid.map((year) => {
+                  const disabled = isDisabledYear(year);
+                  return (
+                    <button
+                      key={year}
+                      onClick={() => {
+                        if (disabled) return;
+                        setViewYear(year);
+                        setView('days');
+                      }}
+                      disabled={disabled}
+                      className={cn(
+                        'py-3 text-sm rounded-lg transition-colors font-medium',
+                        disabled
+                          ? 'text-gray-300 cursor-not-allowed'
+                          : year === viewYear
                             ? 'bg-brand text-white'
-                            : 'hover:bg-gray-100 text-gray-700',
-                        )}
-                      >
-                        {month}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Right: scrollable years list */}
-                <div className="w-24 overflow-y-auto">
-                  <p className="text-xs text-gray-400 font-medium px-3 pt-3 pb-2 sticky top-0 bg-white">
-                    Year
-                  </p>
-                  {years.map((year) => {
-                    const isSelected = year === viewYear;
-                    return (
-                      <button
-                        key={year}
-                        ref={isSelected ? selectedYearRef : undefined}
-                        onClick={() => {
-                          setViewYear(year);
-                          setView('days');
-                        }}
-                        className={cn(
-                          'w-full text-left px-3 py-2.5 text-sm transition-colors',
-                          isSelected
-                            ? 'bg-[#EEF1F8] text-brand font-bold'
-                            : 'text-gray-700 hover:bg-gray-50',
-                        )}
-                      >
-                        {year}
-                      </button>
-                    );
-                  })}
-                </div>
+                            : 'text-gray-700 hover:bg-gray-100',
+                      )}
+                    >
+                      {year}
+                    </button>
+                  );
+                })}
               </div>
-            </>
+            </div>
           )}
         </div>
       )}

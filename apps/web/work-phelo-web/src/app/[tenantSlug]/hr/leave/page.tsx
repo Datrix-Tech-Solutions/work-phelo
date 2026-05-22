@@ -44,7 +44,7 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
   };
 
   return (
-    <div className="p-8 flex flex-col gap-6 flex-1 min-h-0">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0">
       <div className="shrink-0">
         <h1 className="text-xl font-bold text-gray-900">Leave Management</h1>
       </div>
@@ -56,10 +56,12 @@ export default function LeavePage({ params }: { params: Promise<{ tenantSlug: st
         onTabChange={handleTabChange}
       />
 
-      {activeTab === 'my' && hasHRProfile && <MyLeaveTab tenantSlug={tenantSlug} />}
-      {activeTab === 'requests' && canSeeRequests && (
-        <LeaveRequestsTab tenantSlug={tenantSlug} canReview={canSeeRequests} />
-      )}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        {activeTab === 'my' && hasHRProfile && <MyLeaveTab tenantSlug={tenantSlug} />}
+        {activeTab === 'requests' && canSeeRequests && (
+          <LeaveRequestsTab tenantSlug={tenantSlug} canReview={canSeeRequests} />
+        )}
+      </div>
     </div>
   );
 }

@@ -190,7 +190,7 @@ export default function PayrollHistoryDetailPage({
   ];
 
   return (
-    <div className="p-8 flex flex-col gap-6 h-full">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 h-full">
       <div className="flex items-center justify-between shrink-0">
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link

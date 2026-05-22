@@ -46,13 +46,14 @@ export function useUpdateCompanyPoliciesSettings() {
   });
 }
 
-export function useCompanyAgreements() {
+export function useCompanyAgreements(options?: { enabled?: boolean }) {
   return useQuery<CompanyAgreement[]>({
     queryKey: companyPoliciesKeys.agreements(),
     queryFn: async () => {
       const res = await api.get<CompanyAgreement[]>('/hr/company-agreements');
       return res.data;
     },
+    enabled: options?.enabled,
   });
 }
 
@@ -133,13 +134,14 @@ export function useCompanyAgreementSignatures(id: string | null) {
   });
 }
 
-export function useMyCompanyAgreements() {
+export function useMyCompanyAgreements(options?: { enabled?: boolean }) {
   return useQuery<MyCompanyAgreement[]>({
     queryKey: ['my-company-agreements'],
     queryFn: async () => {
       const res = await api.get<MyCompanyAgreement[]>('/hr/company-agreements/me');
       return res.data;
     },
+    enabled: options?.enabled,
   });
 }
 

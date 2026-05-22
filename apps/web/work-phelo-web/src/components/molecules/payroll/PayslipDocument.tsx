@@ -98,16 +98,16 @@ export function PayslipDocument({ item, companyName, employeeName }: PayslipDocu
   return (
     <div className="bg-white border border-gray-200 rounded-card overflow-hidden">
       {/* Document header */}
-      <div className="flex items-start justify-between px-8 pt-7 pb-5 border-b border-gray-100">
-        <h2 className="text-2xl font-bold text-[#1a3557]">Payslip</h2>
-        <div className="text-right">
-          <p className="text-sm font-semibold text-gray-900">{companyName}</p>
-          <p className="text-sm font-semibold text-gray-900">{employeeName}</p>
+      <div className="flex items-start justify-between gap-4 px-5 sm:px-8 pt-5 sm:pt-7 pb-4 sm:pb-5 border-b border-gray-100">
+        <h2 className="text-xl sm:text-2xl font-bold text-[#1a3557] shrink-0">Payslip</h2>
+        <div className="text-right min-w-0">
+          <p className="text-sm font-semibold text-gray-900 truncate">{companyName}</p>
+          <p className="text-sm font-semibold text-gray-900 truncate">{employeeName}</p>
           <p className="text-sm text-gray-500">{period}</p>
         </div>
       </div>
 
-      <div className="px-8 py-2 flex flex-col">
+      <div className="px-5 sm:px-8 py-2 flex flex-col">
         {/* Earnings */}
         <div className="py-4">
           <SectionLabel>Earnings</SectionLabel>

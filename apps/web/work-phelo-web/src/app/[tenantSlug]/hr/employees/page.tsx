@@ -106,7 +106,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
   );
 
   return (
-    <div className="p-8 flex flex-col gap-3 flex-1 min-h-0">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
@@ -116,7 +116,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-3 shrink-0">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
         {isStatsLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-24 bg-gray-100 rounded-card animate-pulse" />
@@ -232,30 +232,28 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
           </p>
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-2">
-            {employees.map((emp) => (
-              <EmployeeCard
-                key={emp.id}
-                firstName={emp.firstName}
-                lastName={emp.lastName}
-                jobTitle={emp.jobTitle}
-                email={emp.email}
-                phone={emp.phone}
-                avatarUrl={emp.avatarUrl}
-                status={emp.employmentStatus}
-                department={emp.department?.name}
-                hireDate={emp.hireDate}
-                isOnLeave={onLeaveEmployeeIds.has(emp.id)}
-                coverageName={coverageByEmployeeId.get(emp.id)}
-                onClick={
-                  canViewDetail
-                    ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)
-                    : undefined
-                }
-              />
-            ))}
-          </div>
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-2">
+          {employees.map((emp) => (
+            <EmployeeCard
+              key={emp.id}
+              firstName={emp.firstName}
+              lastName={emp.lastName}
+              jobTitle={emp.jobTitle}
+              email={emp.email}
+              phone={emp.phone}
+              avatarUrl={emp.avatarUrl}
+              status={emp.employmentStatus}
+              department={emp.department?.name}
+              hireDate={emp.hireDate}
+              isOnLeave={onLeaveEmployeeIds.has(emp.id)}
+              coverageName={coverageByEmployeeId.get(emp.id)}
+              onClick={
+                canViewDetail
+                  ? () => router.push(`/${tenantSlug}/hr/employees/${emp.id}`)
+                  : undefined
+              }
+            />
+          ))}
         </div>
       )}
 

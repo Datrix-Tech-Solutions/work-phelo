@@ -1,6 +1,7 @@
 export const notificationRequiredEnvVars = [
   'DATABASE_URL',
   'RABBITMQ_URL',
+  'JWT_SECRET',
   'FRONTEND_BASE_URL',
   'RESEND_API_KEY',
   'RESEND_FROM_EMAIL',

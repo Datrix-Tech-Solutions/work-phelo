@@ -113,7 +113,7 @@ export function MyLeaveTab({ tenantSlug }: Props) {
 
   return (
     <>
-      <div className="flex flex-col gap-6 flex-1 min-h-0">
+      <div className="flex flex-col gap-6">
         <DataTable
           columns={columns}
           data={myPageData}
@@ -130,6 +130,7 @@ export function MyLeaveTab({ tenantSlug }: Props) {
           totalPages={myTotalPages}
           onPageChange={setMyPage}
           onRowClick={(row) => setDetailRequest(row)}
+          noInternalScroll
         />
       </div>
 

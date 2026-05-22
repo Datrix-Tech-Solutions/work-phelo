@@ -23,38 +23,35 @@ export function ProfileBanner({
 
   return (
     <div className="w-full rounded-card overflow-hidden bg-[#1a3557]">
-      <div className="flex items-center gap-6 px-8 py-7">
+      <div className="flex items-center gap-4 px-5 sm:px-6 py-3">
         {employee.avatarUrl ? (
           <Image
             src={employee.avatarUrl}
             alt={initials}
-            width={96}
-            height={96}
-            className="w-24 h-24 rounded-full object-cover ring-4 ring-white/20 shrink-0"
+            width={40}
+            height={40}
+            className="w-10 h-10 rounded-full object-cover ring-2 ring-white/20 shrink-0"
           />
         ) : (
-          <div className="w-24 h-24 rounded-full bg-white/10 ring-4 ring-white/20 flex items-center justify-center text-white text-2xl font-bold shrink-0">
+          <div className="w-10 h-10 rounded-full bg-white/10 ring-2 ring-white/20 flex items-center justify-center text-white text-sm font-bold shrink-0">
             {initials}
           </div>
         )}
 
-        <div className="flex-1 min-w-0 flex flex-col gap-2">
-          <h1 className="text-xl font-bold text-white">{name}</h1>
-          <div className="flex flex-col gap-1">
-            <p className="text-sm">
-              <span className="text-white/50 mr-2">Email Address:</span>
-              <span className="text-white/80">{employee.email}</span>
-            </p>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-base font-bold text-white truncate">{name}</h1>
+          <div className="flex items-center gap-2.5 flex-wrap mt-0.5">
+            <span className="text-xs text-white/60">{employee.email}</span>
             {employee.phone && (
-              <p className="text-sm">
-                <span className="text-white/50 mr-2">Phone Number:</span>
-                <span className="text-white/80">{employee.phone}</span>
-              </p>
+              <>
+                <span className="text-white/30 text-xs">·</span>
+                <span className="text-xs text-white/60">{employee.phone}</span>
+              </>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
           <Button
             variant="outline"
             size="sm"

@@ -55,7 +55,7 @@ export function CorrectionsSection({
   ];
 
   return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0">
+    <div className="flex flex-col gap-4">
       <div className="flex items-center gap-2 shrink-0">
         {(['PENDING', 'APPROVED', 'REJECTED'] as const).map((s) => (
           <button
@@ -83,6 +83,7 @@ export function CorrectionsSection({
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
+        noInternalScroll
         rowActions={(row) =>
           row.status === 'PENDING'
             ? [

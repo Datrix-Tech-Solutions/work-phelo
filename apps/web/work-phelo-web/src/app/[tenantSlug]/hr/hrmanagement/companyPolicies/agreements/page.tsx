@@ -7,6 +7,7 @@ import { AddAgreementPanel } from '@/components/organisms/companyPolicies/AddAgr
 import { AgreementViewModal } from '@/components/organisms/companyPolicies/AgreementViewModal';
 import {
   useCompanyAgreements,
+  useMyCompanyAgreements,
   useCreateCompanyAgreement,
   useUpdateCompanyAgreement,
   useDeleteCompanyAgreement,
@@ -14,6 +15,7 @@ import {
 } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { cn } from '@/lib/utils';
@@ -86,6 +88,7 @@ export default function CompanyAgreementsPage() {
   const toast = useToast();
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
+  const user = useAuthStore((s) => s.user);
   const canManage = usePermission(Permission.MANAGE_HR_SETTINGS);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editAgreement, setEditAgreement] = useState<CompanyAgreement | null>(null);
@@ -93,7 +96,18 @@ export default function CompanyAgreementsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data: agreements = [], isLoading } = useCompanyAgreements();
+  const { data: allAgreements = [], isLoading: isLoadingAll } = useCompanyAgreements({
+    enabled: canManage,
+  });
+  const { data: myAgreements = [], isLoading: isLoadingMine } = useMyCompanyAgreements({
+    enabled: user !== null && !canManage,
+  });
+
+  const agreements: CompanyAgreement[] = canManage
+    ? allAgreements
+    : myAgreements.map((ma) => ma.agreement);
+  const isLoading = canManage ? isLoadingAll : isLoadingMine;
+
   const { mutate: createAgreement, isPending: isCreating } = useCreateCompanyAgreement();
   const { mutate: updateAgreement, isPending: isUpdating } = useUpdateCompanyAgreement();
   const { mutate: deleteAgreement } = useDeleteCompanyAgreement();
@@ -101,8 +115,9 @@ export default function CompanyAgreementsPage() {
 
   const filtered = agreements.filter(
     (a) =>
-      a.title.toLowerCase().includes(search.toLowerCase()) ||
-      (AGREEMENT_TYPE_LABELS[a.type] ?? a.type).toLowerCase().includes(search.toLowerCase()),
+      (!canManage ? a.state === 'PUBLISHED' : true) &&
+      (a.title.toLowerCase().includes(search.toLowerCase()) ||
+        (AGREEMENT_TYPE_LABELS[a.type] ?? a.type).toLowerCase().includes(search.toLowerCase())),
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -147,7 +162,7 @@ export default function CompanyAgreementsPage() {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col">
       <DataTable
         columns={COLUMNS}
         data={paginated}
@@ -165,12 +180,13 @@ export default function CompanyAgreementsPage() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
         rowActions={(row) => [
           {
             label: 'View',
             onClick: () => setViewAgreement(row),
           },
-          ...(row.state === 'PUBLISHED'
+          ...(canManage && row.state === 'PUBLISHED'
             ? [
                 {
                   label: 'View Signatures',

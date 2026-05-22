@@ -111,7 +111,7 @@ export function AuditLogsTable() {
   ];
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col">
       <DataTable
         columns={columns}
         data={logs}
@@ -121,6 +121,7 @@ export function AuditLogsTable() {
         totalPages={totalPages}
         onPageChange={setPage}
         onRowClick={(row) => setSelected(row)}
+        noInternalScroll
       />
 
       <SidePanel

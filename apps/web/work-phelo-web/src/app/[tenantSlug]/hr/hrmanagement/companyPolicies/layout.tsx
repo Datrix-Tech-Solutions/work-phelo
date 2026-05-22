@@ -37,7 +37,7 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
   }, [canReadHrSettings, canManagePayroll, isOnFinances, router, user, base]);
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col">
       <div className="shrink-0">
         <h2 className="text-base font-semibold text-gray-900">Company Policies</h2>
         <p className="text-sm text-gray-500 mt-0.5">
@@ -45,30 +45,35 @@ export default function CompanyPoliciesLayout({ children }: { children: React.Re
         </p>
       </div>
 
-      <div className="flex items-end gap-1 border-b border-gray-200 shrink-0 mt-4">
-        {TABS.filter((tab) =>
-          tab.slug === 'finances' ? canManagePayroll || canReadHrSettings : true,
-        ).map((tab) => {
-          const href = `${base}/${tab.slug}`;
-          const isActive = pathname === href || pathname.startsWith(href + '/');
-          return (
-            <Link
-              key={tab.slug}
-              href={href}
-              className={cn(
-                'relative px-6 py-3 text-sm transition-colors whitespace-nowrap',
-                isActive
-                  ? 'text-brand font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand after:rounded-t-full'
-                  : 'text-gray-500 hover:text-gray-800',
-              )}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
+      {/* Tab bar — horizontally scrollable on mobile, scrollbar hidden */}
+      <div className="border-b border-gray-200 shrink-0 mt-4">
+        <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]">
+          <div className="flex items-end gap-1 min-w-max">
+            {TABS.filter((tab) =>
+              tab.slug === 'finances' ? canManagePayroll || canReadHrSettings : true,
+            ).map((tab) => {
+              const href = `${base}/${tab.slug}`;
+              const isActive = pathname === href || pathname.startsWith(href + '/');
+              return (
+                <Link
+                  key={tab.slug}
+                  href={href}
+                  className={cn(
+                    'relative px-4 py-3 text-sm transition-colors whitespace-nowrap',
+                    isActive
+                      ? 'text-brand font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand after:rounded-t-full'
+                      : 'text-gray-500 hover:text-gray-800',
+                  )}
+                >
+                  {tab.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col pt-6">{children}</div>
+      <div className="flex flex-col pt-6">{children}</div>
     </div>
   );
 }

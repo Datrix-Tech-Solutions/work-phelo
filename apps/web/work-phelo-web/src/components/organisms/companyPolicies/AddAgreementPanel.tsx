@@ -54,15 +54,12 @@ export function AddAgreementPanel({
   useEffect(() => {
     if (isOpen && agreement) {
       reset({ type: agreement.type, title: agreement.title, details: agreement.details });
-    } else if (!isOpen) {
-      reset({ type: undefined, title: '', details: '' });
     }
   }, [isOpen, agreement, reset]);
 
   const handleClose = useCallback(() => {
-    reset();
     onClose();
-  }, [reset, onClose]);
+  }, [onClose]);
 
   return (
     <SidePanel

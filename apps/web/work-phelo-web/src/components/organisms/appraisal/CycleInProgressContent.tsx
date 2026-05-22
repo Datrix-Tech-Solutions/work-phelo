@@ -156,7 +156,7 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
   ];
 
   return (
-    <div className="p-8 flex flex-col gap-6">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-gray-400">
         <Link
@@ -235,6 +235,7 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
           onRowClick={(row) =>
             router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/employee/${row.id}`)
           }
+          noInternalScroll
         />
       )}
     </div>

@@ -93,7 +93,7 @@ export function AgreementViewModal(props: AgreementViewModalProps) {
       isOpen={isOpen}
       onClose={handleClose}
       title={typeLabel}
-      width="w-[50vw] min-h-[70vh]"
+      width="w-full sm:w-[90vw] md:w-[70vw] lg:w-[50vw] min-h-[70vh]"
       hideClose={mode === 'employee'}
       footer={footer}
     >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -25,21 +25,32 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
   const [open, setOpen] = useState(false);
   const [pendingFormat, setPendingFormat] = useState<'bank' | 'full' | null>(null);
   const [loading, setLoading] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [menuPos, setMenuPos] = useState({ top: 0, bottom: 0, right: 0 });
+  const [openUpward, setOpenUpward] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const queryClient = useQueryClient();
   const companyName = useAuthStore((s) => s.user?.tenantName ?? '');
   const label = payrollMonthLabel(run.month, run.year).replace(' ', '-');
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-        setPendingFormat(null);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  const closeAll = () => {
+    setOpen(false);
+    setPendingFormat(null);
+  };
+
+  const handleOpen = () => {
+    if (loading || !isPaid) return;
+    if (!open && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      setOpenUpward(window.innerHeight - rect.bottom < 120);
+      setMenuPos({
+        top: rect.bottom + 4,
+        bottom: window.innerHeight - rect.top + 4,
+        right: window.innerWidth - rect.right,
+      });
+    }
+    setOpen((v) => !v);
+    setPendingFormat(null);
+  };
 
   const fetchDetail = () =>
     queryClient.fetchQuery({
@@ -52,7 +63,7 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
 
   const handleFileType = async (type: 'csv' | 'pdf') => {
     const format = pendingFormat!;
-    setPendingFormat(null);
+    closeAll();
     setLoading(true);
     try {
       const detail = await fetchDetail();
@@ -67,15 +78,13 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
     }
   };
 
+  const dropdownVisible = open || !!pendingFormat;
+
   return (
-    <div ref={ref} className="relative">
+    <div>
       <button
-        onClick={() => {
-          if (!loading && isPaid) {
-            setOpen((v) => !v);
-            setPendingFormat(null);
-          }
-        }}
+        ref={buttonRef}
+        onClick={handleOpen}
         disabled={!isPaid}
         title={isPaid ? 'Download' : 'Mark as paid to download'}
         className={`p-1.5 rounded-lg transition-colors ${
@@ -87,47 +96,61 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
         {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
       </button>
 
-      {open && (
-        <div className="absolute right-0 top-8 z-10 w-44 bg-white border border-gray-100 rounded-xl shadow-lg py-1 overflow-hidden">
-          <button
-            onClick={() => {
-              setOpen(false);
-              setPendingFormat('bank');
+      {dropdownVisible && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={closeAll} />
+          <div
+            style={{
+              position: 'fixed',
+              right: menuPos.right,
+              ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
+              minWidth: 176,
             }}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            className="z-50 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden"
           >
-            Bank format
-          </button>
-          <button
-            onClick={() => {
-              setOpen(false);
-              setPendingFormat('full');
-            }}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            Full format
-          </button>
-        </div>
-      )}
-
-      {pendingFormat && (
-        <div className="absolute right-0 top-8 z-10 w-44 bg-white border border-gray-100 rounded-xl shadow-lg overflow-hidden">
-          <p className="px-4 pt-3 pb-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-            {pendingFormat === 'bank' ? 'Bank format' : 'Full format'}
-          </p>
-          <button
-            onClick={() => handleFileType('csv')}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            CSV
-          </button>
-          <button
-            onClick={() => handleFileType('pdf')}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            PDF
-          </button>
-        </div>
+            {open && (
+              <>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setPendingFormat('bank');
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Bank format
+                </button>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setPendingFormat('full');
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Full format
+                </button>
+              </>
+            )}
+            {pendingFormat && (
+              <>
+                <p className="px-4 pt-3 pb-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                  {pendingFormat === 'bank' ? 'Bank format' : 'Full format'}
+                </p>
+                <button
+                  onClick={() => handleFileType('csv')}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  CSV
+                </button>
+                <button
+                  onClick={() => handleFileType('pdf')}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  PDF
+                </button>
+              </>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -262,7 +285,7 @@ export function PayrollHistoryTab() {
   ];
 
   return (
-    <div className="flex-1 min-h-0 flex flex-col">
+    <div className="flex flex-col">
       <DataTable
         columns={columns}
         data={paged}
@@ -312,6 +335,7 @@ export function PayrollHistoryTab() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
     </div>
   );

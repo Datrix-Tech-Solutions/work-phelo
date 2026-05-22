@@ -23,7 +23,7 @@ export default function BranchesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 flex-1 min-h-0">
+    <div className="flex flex-col gap-6">
       <div className="shrink-0">
         <h2 className="text-base font-semibold text-gray-900">Branches</h2>
         <p className="text-sm text-gray-500 mt-0.5">Manage company branches and their details</p>

@@ -108,15 +108,15 @@ export function MyPayslipTab() {
 
   return (
     <>
-      <div className="flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
+      <div className="flex flex-col gap-6">
         {/* Header row */}
-        <div className="flex items-center justify-between shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-2 shrink-0">
           <h2 className="text-base font-semibold text-gray-900">My Payslip</h2>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => setTaxReturnsOpen(true)}>
               Tax Returns
             </Button>
-            <div className="w-52">
+            <div className="w-48">
               <SearchSelect
                 placeholder="Select month…"
                 options={payslips.map((p) => ({
@@ -193,15 +193,15 @@ export function MyPayslipTab() {
               </div>
             </div>
 
-            <div className="flex gap-6 items-start">
-              <div className="flex-1 min-w-0">
+            <div className="flex flex-col lg:flex-row gap-6 items-start">
+              <div className="flex-1 min-w-0 w-full">
                 <PayslipDocument
                   item={selected}
                   companyName={user?.tenantName ?? ''}
                   employeeName={myProfile ? `${myProfile.firstName} ${myProfile.lastName}` : ''}
                 />
               </div>
-              <div className="w-72 shrink-0">
+              <div className="w-full lg:w-72 lg:shrink-0">
                 <PayslipAllowancesPanel
                   allowances={myProfile?.allowances ?? []}
                   deductions={myProfile?.deductions ?? []}

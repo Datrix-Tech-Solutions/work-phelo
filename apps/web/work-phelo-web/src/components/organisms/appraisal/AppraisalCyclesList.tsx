@@ -233,7 +233,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   ];
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col">
       <DataTable
         columns={columns}
         data={cycles}
@@ -251,6 +251,7 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       <CreateCyclePanel

@@ -22,7 +22,7 @@ export function EmploymentDetailsSection({ employee, allHrEmployees }: Props) {
 
   return (
     <SectionCard title="Employment Details">
-      <div className="grid grid-cols-4 gap-x-6 gap-y-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-5">
         <DetailField label="Department" value={employee?.department?.name} />
         <DetailField label="Branch" value={employee?.branch?.name} />
         <DetailField label="Job Title" value={employee?.jobTitle} />

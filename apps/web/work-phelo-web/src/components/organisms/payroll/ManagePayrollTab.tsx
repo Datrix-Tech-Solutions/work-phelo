@@ -16,6 +16,7 @@ import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
 
 function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
+  const [focused, setFocused] = useState(false);
 
   useEffect(() => {
     const localNumeric = local === '' ? 0 : Number(local);
@@ -25,15 +26,26 @@ function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: num
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
+  const displayValue =
+    focused || local === ''
+      ? local
+      : Number(local).toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        });
+
   return (
     <input
-      type="number"
-      min="0"
-      value={local}
+      type="text"
+      inputMode="decimal"
+      value={displayValue}
       placeholder="0.00"
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       onChange={(e) => {
-        setLocal(e.target.value);
-        onChange(e.target.value === '' ? 0 : Number(e.target.value));
+        const raw = e.target.value.replace(/[^0-9.]/g, '');
+        setLocal(raw);
+        onChange(raw === '' ? 0 : Number(raw));
       }}
       className="w-28 px-3 py-1.5 text-sm rounded-lg border border-gray-200 bg-gray-50 cursor-text hover:border-brand/50 hover:bg-white focus:outline-none focus:border-brand focus:bg-white focus:ring-2 focus:ring-brand/10 placeholder:text-gray-300 transition-colors"
     />
@@ -266,10 +278,19 @@ export function ManagePayrollTab() {
       render: (row) => (
         <button
           onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
-          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
+          className="group w-28 flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.allowances > 0 ? money(row.allowances) : <span className="text-gray-400">Add</span>}
-          <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <span className="truncate">
+            {row.allowances > 0 ? (
+              row.allowances.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
+            ) : (
+              <span className="text-gray-400">Add</span>
+            )}
+          </span>
+          <Pencil className="w-3 h-3 shrink-0 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
     },
@@ -279,10 +300,19 @@ export function ManagePayrollTab() {
       render: (row) => (
         <button
           onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
-          className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
+          className="group w-28 flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
         >
-          {row.deductions > 0 ? money(row.deductions) : <span className="text-gray-400">Add</span>}
-          <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <span className="truncate">
+            {row.deductions > 0 ? (
+              row.deductions.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
+            ) : (
+              <span className="text-gray-400">Add</span>
+            )}
+          </span>
+          <Pencil className="w-3 h-3 shrink-0 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
         </button>
       ),
     },
@@ -316,7 +346,7 @@ export function ManagePayrollTab() {
   ];
 
   return (
-    <div className="flex flex-col gap-6 flex-1 min-h-0">
+    <div className="flex flex-col gap-6">
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
         <MetricCard
           title="Total Gross"
@@ -378,6 +408,7 @@ export function ManagePayrollTab() {
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
+        noInternalScroll
       />
 
       <AllowancesPanel

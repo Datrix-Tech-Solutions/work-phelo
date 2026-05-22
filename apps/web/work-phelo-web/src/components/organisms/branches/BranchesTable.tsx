@@ -136,7 +136,7 @@ export function BranchesTable() {
   };
 
   return (
-    <div className="flex flex-col flex-1 min-h-0">
+    <div className="flex flex-col">
       <DataTable
         columns={columns}
         data={pageData}
@@ -178,6 +178,7 @@ export function BranchesTable() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
+        noInternalScroll
       />
 
       {(canCreate || canUpdate || canDelete) && (
