@@ -89,7 +89,6 @@ export function RunPayrollPanel({
 
   const handleClose = () => {
     setShowConfirm(false);
-    setNotes('');
     onClose();
   };
 

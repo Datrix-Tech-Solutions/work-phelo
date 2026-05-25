@@ -2,10 +2,10 @@
 
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ReinsuranceFoundation } from '@/components/organisms/reinsurance/ReinsuranceFoundation';
 import { usePermission } from '@/hooks';
 import { Permission } from '@/lib/permissionMap';
 import { useAuthStore } from '@/store/auth.store';
+import ReinsuranceFoundation from '@/components/organisms/reinsurance/ReinsuranceFoundation';
 
 export default function ReinsurancePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
