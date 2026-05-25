@@ -43,6 +43,15 @@ export const EventPatterns = {
   NOTIFICATION_SMS_OTP: 'notification.sms_otp',
   NOTIFICATION_IN_APP_CREATE: 'notification.in_app.create',
 
+  // Reinsurance Operations domain events
+  REINSURANCE_PLACEMENT_CREATED: 'reinsurance.placement.created',
+  REINSURANCE_PLACEMENT_UPDATED: 'reinsurance.placement.updated',
+  REINSURANCE_PLACEMENT_STATUS_CHANGED: 'reinsurance.placement.status_changed',
+  REINSURANCE_EMAIL_RECEIVED: 'reinsurance.email.received',
+  REINSURANCE_EMAIL_SENT: 'reinsurance.email.sent',
+  REINSURANCE_EMAIL_LINKED: 'reinsurance.email.linked',
+  REINSURANCE_CLAIM_CREATED: 'reinsurance.claim.created',
+
   // HR → Notification
   NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
   NOTIFY_RESIGNATION_SUBMITTED: 'notify.resignation_submitted',

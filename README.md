@@ -22,6 +22,7 @@ work-phelo/
 │   ├── notification-service/
 │   ├── subscription-service/
 │   ├── marketing-service/
+│   ├── reinsurance-service/
 │   └── web/
 │       └── work-phelo-web/
 ├── packages/
@@ -32,6 +33,11 @@ work-phelo/
 └── infrastructure/
     └── docker-compose.dev.yml
 ```
+
+The broker-only Reinsurance Operations module is being introduced as a
+domain-specific service inside this monorepo. See
+[docs/reinsurance-operations.md](./docs/reinsurance-operations.md) for its
+architecture decision, MVP boundaries and implementation plan.
 
 ## Tech Stack
 

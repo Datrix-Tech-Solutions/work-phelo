@@ -96,23 +96,13 @@ export const DEFAULT_MODULES: Module[] = [
     id: 'operations',
     key: 'operations',
     name: 'Operation Module',
-    description: 'Manage operations',
+    description: 'Manage industry-specific operational workflows',
     enabled: false,
     options: [
       {
-        key: 'leads',
-        label: 'Lead Management',
-        description: 'Manage leads and conversions',
-      },
-      {
-        key: 'pipeline',
-        label: 'Sales Pipeline',
-        description: 'Track deals through pipeline stages',
-      },
-      {
-        key: 'contacts',
-        label: 'Contact Management',
-        description: 'Manage customer contacts',
+        key: 'reinsurance',
+        label: 'Reinsurance Operations',
+        description: 'Broker placements, counterparties and correspondence',
       },
     ],
   },

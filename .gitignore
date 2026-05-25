@@ -76,6 +76,9 @@ roles-ui-spec/
 
 # Local docs drafts
 docs/
+!docs/
+docs/*
+!docs/reinsurance-operations.md
 
 .compose.local.env
 .env.dev
