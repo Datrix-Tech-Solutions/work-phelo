@@ -48,6 +48,22 @@ export class ProxyController {
   private readonly logger = new Logger(ProxyController.name);
   private readonly services = getConfiguredGatewayServices();
 
+  private resolveDownstream(pathParts: string[]): {
+    service: GatewayServiceName | undefined;
+    consumedPathParts: number;
+  } {
+    // Operations is a public navigation namespace, while Reinsurance remains
+    // the deployable downstream service boundary.
+    if (pathParts[2] === 'operations' && pathParts[3] === 'reinsurance') {
+      return { service: 'reinsurance', consumedPathParts: 4 };
+    }
+
+    return {
+      service: pathParts[2] as GatewayServiceName | undefined,
+      consumedPathParts: 3,
+    };
+  }
+
   private fetchUserPermissions(
     authServiceUrl: string,
     token: string,
@@ -89,7 +105,7 @@ export class ProxyController {
   async proxy(@Req() req: Request, @Res() res: Response) {
     // pathParts: ['api', 'v1', 'auth', 'login', ...]
     const pathParts = req.path.split('/').filter(Boolean);
-    const service = pathParts[2] as GatewayServiceName | undefined; // index 2 — after 'api' and 'v1'
+    const { service, consumedPathParts } = this.resolveDownstream(pathParts);
     const serviceUrl = service ? getGatewayServiceUrl(service) : undefined;
 
     if (!serviceUrl) {
@@ -157,10 +173,11 @@ export class ProxyController {
       }
     }
 
-    // Strip 'api', 'v1', and service name — forward the rest downstream
-    // /api/v1/auth/login     → /auth/login    (auth-service)
-    // /api/v1/hr/departments      → /departments   (hr-service)
-    const remainingParts = pathParts.slice(3); // remove 'api', 'v1', service
+    // Strip the public route namespace before forwarding downstream:
+    // /api/v1/auth/login -> /auth/login (auth-service)
+    // /api/v1/hr/departments -> /departments (hr-service)
+    // /api/v1/operations/reinsurance/health -> /api/health (reinsurance-service)
+    const remainingParts = pathParts.slice(consumedPathParts);
     const downstreamPath = '/' + remainingParts.join('/');
 
     const queryString = req.url.includes('?')
