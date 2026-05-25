@@ -1,0 +1,15 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["reinsurance"]
+}
+
+// Broker operations models are intentionally introduced only with approved
+// workflows. This scaffold establishes schema ownership without speculative
+// tables that would be difficult to migrate later.
