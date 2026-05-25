@@ -108,6 +108,47 @@ export const RESOURCES = [
   },
 
   {
+    name: 'operations.reinsurance.dashboard',
+    module: 'OPERATIONS',
+    description: 'Reinsurance operations dashboard',
+  },
+  {
+    name: 'operations.reinsurance.placements',
+    module: 'OPERATIONS',
+    description: 'Reinsurance placement workflows',
+  },
+  {
+    name: 'operations.reinsurance.counterparties',
+    module: 'OPERATIONS',
+    description: 'Reinsurance counterparties and contacts',
+  },
+  {
+    name: 'operations.reinsurance.claims',
+    module: 'OPERATIONS',
+    description: 'Reinsurance claims workflows',
+  },
+  {
+    name: 'operations.reinsurance.email',
+    module: 'OPERATIONS',
+    description: 'Broker correspondence and linked email threads',
+  },
+  {
+    name: 'operations.reinsurance.email-settings',
+    module: 'OPERATIONS',
+    description: 'Broker mailbox integration settings',
+  },
+  {
+    name: 'operations.reinsurance.reports',
+    module: 'OPERATIONS',
+    description: 'Reinsurance operational reports',
+  },
+  {
+    name: 'operations.reinsurance.settings',
+    module: 'OPERATIONS',
+    description: 'Reinsurance module configuration',
+  },
+
+  {
     name: 'platform-settings',
     module: 'PLATFORM',
     description: 'Platform configuration',
