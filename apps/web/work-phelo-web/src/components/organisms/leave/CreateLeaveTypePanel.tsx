@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
 import { extractError } from '@/lib/extractError';
 import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -80,10 +80,7 @@ export function CreateLeaveTypePanel({
     }
   }, [editLeaveType, reset]);
 
-  const handleClose = useCallback(() => {
-    reset(emptyDefaults);
-    onClose();
-  }, [reset, onClose]);
+  const handleClose = () => onClose();
 
   const isCarryOver = useWatch({ control, name: 'isCarryOver' });
 
@@ -110,7 +107,8 @@ export function CreateLeaveTypePanel({
 
     const handleSuccess = () => {
       toast.success(isEditing ? 'Leave type updated' : 'Leave type created');
-      handleClose();
+      reset(emptyDefaults);
+      onClose();
     };
     const handleError = (err: unknown) => {
       toast.error(extractError(err, 'Something went wrong'));

@@ -760,7 +760,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         employeeIds: [],
       });
     }
-  }, [editCycle, reset, isOpen]);
+  }, [editCycle, reset]);
 
   const startDate = useWatch({ control, name: 'startDate' });
   const useCompanyDefaultEligibility = useWatch({ control, name: 'useCompanyDefaultEligibility' });
@@ -800,6 +800,23 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
     const options = {
       onSuccess: () => {
         toast.success(isEditing ? 'Cycle updated' : 'Cycle created');
+        reset({
+          title: '',
+          description: '',
+          frequency: '',
+          startDate: '',
+          endDate: '',
+          selfAssessmentDeadline: '',
+          managerReviewDeadline: '',
+          templateId: '',
+          departmentIds: [],
+          employmentTypes: [],
+          useCompanyDefaultEligibility: true,
+          employmentStatuses: [],
+          permissionSetIds: [],
+          selectSpecificEmployees: false,
+          employeeIds: [],
+        });
         onClose();
       },
       onError: (err: unknown) => toast.error(extractError(err, 'Something went wrong')),

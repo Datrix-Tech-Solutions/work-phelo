@@ -1,39 +1,49 @@
+'use client';
+
 import { useState, useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import type { Department, EmployeeOption } from '@/types/hr';
+import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
+import { CreateDepartmentPanel } from '@/components/organisms/departments/createDepartmentPanel';
+import { EditDepartmentPanel } from '@/components/organisms/departments/editDepartmentPanel';
+import { AddMembersPanel } from '@/components/organisms/departments/addMembersPanel';
+import { useDepartments, useUpdateDepartment, useDeleteDepartment } from '@/hooks/useDepartments';
+import { useEmployeeOptions, useUpdateEmployee } from '@/hooks/hr/useEmployees';
+import { usePermission } from '@/hooks/usePermission';
+import { Permission } from '@/lib/permissionMap';
+import { useToast } from '@/hooks/useToast';
+import { useParams } from 'next/navigation';
+import { extractError } from '@/lib/extractError';
+import type { Department } from '@/types/hr';
 
-interface DepartmentsTableProps {
-  departments: Department[];
-  employees: EmployeeOption[];
-  isLoading: boolean;
-  canCreate: boolean;
-  canUpdate: boolean;
-  canDelete: boolean;
-  onCreate: () => void;
-  onEdit: (dept: Department) => void;
-  onAddMembers: (dept: Department) => void;
-  onDelete: (dept: Department) => void;
-  onToggleActive: (dept: Department) => void;
-}
+const PAGE_SIZE = 8;
 
-export function DepartmentsTable({
-  departments,
-  employees,
-  isLoading,
-  canCreate,
-  canUpdate,
-  canDelete,
-  onCreate,
-  onEdit,
-  onAddMembers,
-  onDelete,
-  onToggleActive,
-}: DepartmentsTableProps) {
+export function DepartmentsTable() {
+  const params = useParams<{ tenantSlug: string }>();
+  const toast = useToast();
+
+  const canCreate = usePermission(Permission.CREATE_DEPARTMENT);
+  const canUpdate = usePermission(Permission.UPDATE_DEPARTMENT);
+  const canDelete = usePermission(Permission.DELETE_DEPARTMENT);
+
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Department | null>(null);
+  const [membersTarget, setMembersTarget] = useState<Department | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
+  const [toggleActiveTarget, setToggleActiveTarget] = useState<Department | null>(null);
+  const [successName, setSuccessName] = useState<string | null>(null);
 
-  const PAGE_SIZE = 10;
+  const { data: departments = [], isLoading } = useDepartments();
+  const { data: employees = [] } = useEmployeeOptions();
+
+  const { mutateAsync: updateEmployeeAsync } = useUpdateEmployee();
+  const { mutateAsync: updateDepartmentAsync } = useUpdateDepartment();
+  const { mutate: deleteDepartment, isPending: isDeleting } = useDeleteDepartment();
+  const { mutate: updateDepartment, isPending: isTogglingActive } = useUpdateDepartment();
 
   const employeeMap = useMemo(
     () => new Map(employees.map((e) => [e.id, `${e.firstName} ${e.lastName}`])),
@@ -49,7 +59,48 @@ export function DepartmentsTable({
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const COLUMNS: Column<Department>[] = [
+  const handleAddMembers = async (departmentId: string, employeeIds: string[]) => {
+    await Promise.all(
+      employeeIds.map(async (empId) => {
+        const oldDept = departments.find((d) => d.managerId === empId && d.id !== departmentId);
+        if (oldDept) {
+          await updateDepartmentAsync({ id: oldDept.id, managerId: null });
+        }
+        await updateEmployeeAsync({ id: empId, departmentId });
+      }),
+    );
+  };
+
+  const handleToggleActiveConfirm = () => {
+    if (!toggleActiveTarget) return;
+    updateDepartment(
+      { id: toggleActiveTarget.id, isActive: !toggleActiveTarget.isActive },
+      {
+        onSuccess: () => {
+          toast.success(
+            toggleActiveTarget.isActive
+              ? `"${toggleActiveTarget.name}" deactivated`
+              : `"${toggleActiveTarget.name}" activated`,
+          );
+          setToggleActiveTarget(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to update department')),
+      },
+    );
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    deleteDepartment(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success(`"${deleteTarget.name}" deleted`);
+        setDeleteTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to delete department')),
+    });
+  };
+
+  const columns: Column<Department>[] = [
     {
       key: 'name',
       label: 'Department Name',
@@ -88,7 +139,7 @@ export function DepartmentsTable({
   return (
     <div className="flex flex-col">
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={paged}
         isLoading={isLoading}
         searchPlaceholder="Search departments..."
@@ -97,22 +148,24 @@ export function DepartmentsTable({
           setSearch(q);
           setPage(1);
         }}
-        actionButton={canCreate ? { label: 'New Department', onClick: onCreate } : undefined}
+        {...(canCreate && {
+          actionButton: { label: 'New Department', onClick: () => setCreateOpen(true) },
+        })}
         rowActions={
           canUpdate || canDelete
             ? (row) => [
                 ...(canUpdate
                   ? [
-                      { label: 'Edit Department', onClick: () => onEdit(row) },
-                      { label: 'Add Members', onClick: () => onAddMembers(row) },
+                      { label: 'Edit Department', onClick: () => setEditTarget(row) },
+                      { label: 'Add Members', onClick: () => setMembersTarget(row) },
                       {
                         label: row.isActive ? 'Deactivate' : 'Activate',
-                        onClick: () => onToggleActive(row),
+                        onClick: () => setToggleActiveTarget(row),
                       },
                     ]
                   : []),
                 ...(canDelete
-                  ? [{ label: 'Delete', onClick: () => onDelete(row), danger: true }]
+                  ? [{ label: 'Delete', onClick: () => setDeleteTarget(row), danger: true }]
                   : []),
               ]
             : undefined
@@ -122,6 +175,89 @@ export function DepartmentsTable({
         totalPages={totalPages}
         onPageChange={setPage}
         noInternalScroll
+      />
+
+      {canCreate && (
+        <CreateDepartmentPanel
+          isOpen={createOpen}
+          onClose={() => setCreateOpen(false)}
+          tenantSlug={params.tenantSlug}
+          employees={employees}
+          onSuccess={(name) => setSuccessName(name)}
+        />
+      )}
+
+      {canUpdate && (
+        <>
+          <EditDepartmentPanel
+            isOpen={!!editTarget}
+            onClose={() => setEditTarget(null)}
+            editTarget={editTarget}
+          />
+          <AddMembersPanel
+            isOpen={!!membersTarget}
+            onClose={() => setMembersTarget(null)}
+            department={membersTarget}
+            employees={employees}
+            onAddMembers={handleAddMembers}
+          />
+          <Modal
+            isOpen={!!toggleActiveTarget}
+            onClose={() => setToggleActiveTarget(null)}
+            title={toggleActiveTarget?.isActive ? 'Deactivate Department' : 'Activate Department'}
+            description={
+              toggleActiveTarget?.isActive
+                ? `Are you sure you want to deactivate "${toggleActiveTarget?.name}"? Members will remain assigned but the department will be marked inactive.`
+                : `Are you sure you want to activate "${toggleActiveTarget?.name}"?`
+            }
+            footer={
+              <div className="flex justify-end gap-3">
+                <Button variant="secondary" onClick={() => setToggleActiveTarget(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  variant={toggleActiveTarget?.isActive ? 'danger' : 'primary'}
+                  isLoading={isTogglingActive}
+                  loadingText={toggleActiveTarget?.isActive ? 'Deactivating...' : 'Activating...'}
+                  onClick={handleToggleActiveConfirm}
+                >
+                  {toggleActiveTarget?.isActive ? 'Deactivate' : 'Activate'}
+                </Button>
+              </div>
+            }
+          />
+        </>
+      )}
+
+      {canDelete && (
+        <Modal
+          isOpen={!!deleteTarget}
+          onClose={() => setDeleteTarget(null)}
+          title="Delete Department"
+          description={`Are you sure you want to delete "${deleteTarget?.name}"? This cannot be undone.`}
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button variant="secondary" onClick={() => setDeleteTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                isLoading={isDeleting}
+                loadingText="Deleting..."
+                onClick={handleDeleteConfirm}
+              >
+                Delete Department
+              </Button>
+            </div>
+          }
+        />
+      )}
+
+      <SuccessModal
+        isOpen={!!successName}
+        onClose={() => setSuccessName(null)}
+        title="Department Created!"
+        message={`"${successName}" has been added to your organisation.`}
       />
     </div>
   );

@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /* ─────────────────────────── Types ─────────────────────────── */
@@ -18,6 +19,8 @@ export interface NavItem {
   active?: boolean;
   // exact true means only highlight on exact path match (use for index/dashboard routes)
   exact?: boolean;
+  // children turns this item into a collapsible dropdown section
+  children?: NavItem[];
 }
 
 export interface NavGroup {
@@ -108,6 +111,142 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
   );
 }
 
+/* ──────────────────────── Child Item ───────────────────────── */
+
+function SidebarChildItem({ item }: { item: NavItem }) {
+  const pathname = usePathname();
+  const isCurrent = pathname === item.href || pathname.startsWith(item.href + '/');
+  const isDeactivated = item.active === false;
+
+  const baseRow = 'flex items-center px-3 py-2 rounded-input transition-colors w-full text-sm';
+
+  if (isDeactivated) {
+    return (
+      <div className={cn(baseRow, 'cursor-not-allowed text-gray-300')}>
+        <span className="truncate">{item.label}</span>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        baseRow,
+        isCurrent
+          ? 'bg-[#EEF1F8] text-brand font-semibold'
+          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+      )}
+    >
+      <span className="truncate">{item.label}</span>
+    </Link>
+  );
+}
+
+/* ─────────────────────── Dropdown Item ─────────────────────── */
+
+function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
+  const pathname = usePathname();
+
+  const isAnyChildActive =
+    item.children?.some(
+      (child) => pathname === child.href || pathname.startsWith(child.href + '/'),
+    ) ?? false;
+
+  const [open, setOpen] = useState(false);
+
+  // A child route being active always forces the section open
+  const isOpen = open || isAnyChildActive;
+
+  const isDeactivated = item.active === false;
+
+  const baseRow = cn(
+    'relative flex items-center gap-3 rounded-input transition-colors w-full',
+    collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5',
+  );
+
+  return (
+    <div className="relative group/tip px-2">
+      {/* Highlight bar when a child is active */}
+      {isAnyChildActive && !isDeactivated && !collapsed && (
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-brand rounded-r-full" />
+      )}
+
+      <button
+        type="button"
+        disabled={isDeactivated}
+        onClick={() => {
+          if (!collapsed) setOpen((v) => !v || isAnyChildActive);
+        }}
+        className={cn(
+          baseRow,
+          isDeactivated
+            ? 'cursor-not-allowed text-gray-300'
+            : isAnyChildActive
+              ? 'bg-[#EEF1F8] text-brand font-semibold'
+              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+        )}
+      >
+        <span
+          className={cn(
+            'shrink-0 flex items-center justify-center',
+            isDeactivated ? 'text-gray-300' : isAnyChildActive ? 'text-brand' : 'text-gray-400',
+          )}
+        >
+          {item.icon}
+        </span>
+
+        {!collapsed && (
+          <>
+            <span className="text-sm truncate flex-1 text-left">{item.label}</span>
+            <ChevronDown
+              className={cn(
+                'w-4 h-4 shrink-0 transition-transform duration-200',
+                isOpen && 'rotate-180',
+              )}
+            />
+          </>
+        )}
+      </button>
+
+      {/* Flyout menu when collapsed */}
+      {collapsed && (
+        <div
+          className={cn(
+            'absolute left-full top-0 ml-2 z-50',
+            'opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150',
+            'pointer-events-none group-hover/tip:pointer-events-auto',
+          )}
+        >
+          {/* Invisible bridge to prevent hover gap closing the flyout */}
+          <div className="absolute right-full top-0 bottom-0 w-2" />
+          <div className="bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 min-w-[160px]">
+            <p className="px-3 py-1.5 text-[10px] font-semibold tracking-widest text-gray-400 uppercase select-none">
+              {item.label}
+            </p>
+            {item.children
+              ?.filter((child) => child.enabled !== false)
+              .map((child) => (
+                <SidebarChildItem key={child.key} item={child} />
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Children list — only in expanded sidebar */}
+      {isOpen && !collapsed && (
+        <div className="mt-0.5 ml-3 flex flex-col gap-0.5 border-l border-gray-100 pl-2">
+          {item.children
+            ?.filter((child) => child.enabled !== false)
+            .map((child) => (
+              <SidebarChildItem key={child.key} item={child} />
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─────────────────────────── Sidebar ─────────────────────────── */
 
 export function Sidebar({ groups, collapsed = false }: SidebarProps) {
@@ -145,9 +284,17 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
 
               {/* Nav items */}
               <div className="flex flex-col gap-0.5">
-                {visibleItems.map((item) => (
-                  <SidebarItem key={item.key} item={item} collapsed={effectiveCollapsed} />
-                ))}
+                {visibleItems.map((item) =>
+                  item.children?.length ? (
+                    <SidebarDropdownItem
+                      key={item.key}
+                      item={item}
+                      collapsed={effectiveCollapsed}
+                    />
+                  ) : (
+                    <SidebarItem key={item.key} item={item} collapsed={effectiveCollapsed} />
+                  ),
+                )}
               </div>
             </div>
           );

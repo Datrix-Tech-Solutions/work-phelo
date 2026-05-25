@@ -232,8 +232,15 @@ export default function EmployeeDashboardPage({
 
   /* ── Render ── */
   return (
-    <div className="p-6 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
-      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-2 bg-gray-50">
+    <div className="pl-6 pr-6 pt-0 pb-6 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
+      <div
+        className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-3"
+        style={{
+          backgroundColor: 'rgba(249, 250, 251, 0.55)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }}
+      >
         <DashboardWelcomeBanner
           tenantName={tenantName}
           fullName={fullName}
