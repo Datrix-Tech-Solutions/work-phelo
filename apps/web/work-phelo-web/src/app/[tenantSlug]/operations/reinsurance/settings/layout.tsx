@@ -48,8 +48,10 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
   const tabs: TabItem[] = [
     { label: 'Cedants', href: `${base}/cedants` },
     { label: 'Reinsurers', href: `${base}/reinsurers` },
+    { label: 'Brokers', href: `${base}/brokers` },
     { label: 'Risk Types', href: `${base}/risk-types` },
     { label: 'Risk Classes', href: `${base}/risk-classes` },
+    { label: 'Currency', href: `${base}/currency` },
   ];
 
   return (
@@ -57,7 +59,7 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
       {/* Sticky header + tabs */}
       <div className="shrink-0 bg-white">
         <div className={pageHeader}>
-          <h1 className="text-xl font-semibold text-gray-900">Settings</h1>
+          <h1 className="text-xl font-semibold text-gray-900">System Settings</h1>
         </div>
         <SettingsTabs tabs={tabs} />
       </div>

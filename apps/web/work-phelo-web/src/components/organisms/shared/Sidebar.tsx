@@ -86,7 +86,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
           className={cn(
             baseRow,
             isCurrent
-              ? 'bg-[#EEF1F8] text-brand font-semibold'
+              ? 'bg-brand-tint text-brand font-semibold'
               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
           )}
         >
@@ -134,7 +134,7 @@ function SidebarChildItem({ item }: { item: NavItem }) {
       className={cn(
         baseRow,
         isCurrent
-          ? 'bg-[#EEF1F8] text-brand font-semibold'
+          ? 'bg-brand-tint text-brand font-semibold'
           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
       )}
     >
@@ -183,7 +183,7 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
           isDeactivated
             ? 'cursor-not-allowed text-gray-300'
             : isAnyChildActive
-              ? 'bg-[#EEF1F8] text-brand font-semibold'
+              ? 'bg-brand-tint text-brand font-semibold'
               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
         )}
       >
@@ -220,7 +220,7 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
         >
           {/* Invisible bridge to prevent hover gap closing the flyout */}
           <div className="absolute right-full top-0 bottom-0 w-2" />
-          <div className="bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 min-w-[160px]">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-lg py-1.5 min-w-40">
             <p className="px-3 py-1.5 text-[10px] font-semibold tracking-widest text-gray-400 uppercase select-none">
               {item.label}
             </p>

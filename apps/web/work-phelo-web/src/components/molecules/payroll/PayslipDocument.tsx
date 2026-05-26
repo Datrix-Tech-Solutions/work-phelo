@@ -99,7 +99,7 @@ export function PayslipDocument({ item, companyName, employeeName }: PayslipDocu
     <div className="bg-white border border-gray-200 rounded-card overflow-hidden">
       {/* Document header */}
       <div className="flex items-start justify-between gap-4 px-5 sm:px-8 pt-5 sm:pt-7 pb-4 sm:pb-5 border-b border-gray-100">
-        <h2 className="text-xl sm:text-2xl font-bold text-[#1a3557] shrink-0">Payslip</h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-brand shrink-0">Payslip</h2>
         <div className="text-right min-w-0">
           <p className="text-sm font-semibold text-gray-900 truncate">{companyName}</p>
           <p className="text-sm font-semibold text-gray-900 truncate">{employeeName}</p>

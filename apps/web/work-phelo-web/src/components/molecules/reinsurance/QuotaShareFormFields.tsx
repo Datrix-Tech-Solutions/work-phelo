@@ -1,17 +1,34 @@
 'use client';
 
-import { Controller, UseFormReturn } from 'react-hook-form';
+import { Controller, UseFormReturn, type FieldValues } from 'react-hook-form';
+import type { Control, UseFormRegister } from 'react-hook-form';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FileUpload } from '@/components/atoms/FileUpload';
+import { inputClass } from '@/lib/utils';
+import {
+  ReinsurerPanel,
+  ReinsurerPanelErrors,
+} from '@/components/molecules/reinsurance/ReinsurerPanel';
 import {
   QuotaShareFormValues,
   TERRITORIAL_SCOPE_OPTIONS,
   ACCOUNTING_ARRANGEMENT_OPTIONS,
   CURRENCY_OPTIONS,
 } from '@/types/reinsurance';
+
+function ComputedField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-sm font-bold text-gray-900">{label}</label>
+      <div className={inputClass(undefined, 'bg-gray-50 text-gray-500 cursor-default select-none')}>
+        {value || <span className="text-gray-300">—</span>}
+      </div>
+    </div>
+  );
+}
 
 /* Year options: 2000 → current year + 5 */
 const currentYear = new Date().getFullYear();
@@ -33,6 +50,15 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
   } = form;
 
   const effectiveDate = watch('effectiveDate');
+  const cedantShare = watch('cedantShare');
+  const reinsurerPanelValues = watch('reinsurerPanel');
+
+  const reinsuranceShareNum =
+    typeof cedantShare === 'number' && cedantShare >= 0 && cedantShare <= 100
+      ? 100 - cedantShare
+      : null;
+
+  const reinsuranceShare = reinsuranceShareNum !== null ? String(reinsuranceShareNum) : '';
 
   return (
     <div className="flex flex-col gap-7">
@@ -258,25 +284,14 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
               error={errors.cedantShare}
               placeholder="e.g. 50"
             />
-            <FormField
-              label="Reinsurance Share (%)"
-              type="number"
-              registration={register('reinsuranceShare', {
-                required: 'Reinsurance share is required',
-                min: { value: 0, message: 'Cannot be negative' },
-                max: { value: 100, message: 'Cannot exceed 100%' },
-                valueAsNumber: true,
-              })}
-              error={errors.reinsuranceShare}
-              placeholder="e.g. 50"
-            />
+            <ComputedField label="Reinsurance Share (%)" value={reinsuranceShare} />
           </div>
         </div>
       </FormSection>
 
       {/* ── Reinsurer Panel ── */}
       <FormSection title="Reinsurer Panel">
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4">
           <FormField
             label="Your Share (%)"
             type="number"
@@ -288,6 +303,14 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
             })}
             error={errors.yourShare}
             placeholder="e.g. 25"
+          />
+
+          <ReinsurerPanel
+            control={control as unknown as Control<FieldValues>}
+            register={register as unknown as UseFormRegister<FieldValues>}
+            errors={errors as unknown as ReinsurerPanelErrors}
+            reinsurerPanelValues={reinsurerPanelValues}
+            maxShare={reinsuranceShareNum}
           />
         </div>
       </FormSection>

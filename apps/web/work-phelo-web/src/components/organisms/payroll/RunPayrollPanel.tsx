@@ -10,6 +10,7 @@ import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatPayrollMoney } from '@/lib/payrollDisplay';
+import { MetricPreview } from '@/components/molecules/shared/MetricPreview';
 
 const MONTHS = [
   { value: '1', label: 'January' },
@@ -154,25 +155,14 @@ export function RunPayrollPanel({
             />
           </div>
 
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5 flex flex-col gap-4">
-            <p className="text-sm font-medium text-gray-600">Payroll Summary</p>
-            <div className="grid grid-cols-3 gap-0 divide-x divide-gray-200">
-              <div className="flex flex-col gap-1 pr-4">
-                <p className="text-xs text-gray-500">Total Gross</p>
-                <p className="text-sm font-semibold text-gray-900">{money(totals.gross)}</p>
-              </div>
-              <div className="flex flex-col gap-1 px-4">
-                <p className="text-xs text-gray-500">Total PAYE</p>
-                <p className="text-sm font-semibold text-gray-900">{money(totals.paye)}</p>
-              </div>
-              <div className="flex flex-col gap-1 pl-4">
-                <p className="text-xs text-gray-500">Employer Cost</p>
-                <p className="text-sm font-semibold text-orange-500">
-                  {money(totals.employerCost)}
-                </p>
-              </div>
-            </div>
-          </div>
+          <MetricPreview
+            title="Payroll Summary"
+            metrics={[
+              { label: 'Total Gross', value: money(totals.gross) },
+              { label: 'Total PAYE', value: money(totals.paye) },
+              { label: 'Employer Cost', value: money(totals.employerCost), highlight: true },
+            ]}
+          />
         </div>
       </SidePanel>
 

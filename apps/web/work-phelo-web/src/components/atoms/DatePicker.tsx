@@ -166,7 +166,7 @@ export function DatePicker({
                 <div className="flex items-center gap-0.5">
                   <button
                     onClick={() => setView('months')}
-                    className="flex items-center gap-1 text-sm font-bold text-[#0D1C4D] hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
+                    className="flex items-center gap-1 text-sm font-bold text-brand hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
                   >
                     {MONTHS[viewMonth]}
                     <ChevronDown className="w-3.5 h-3.5" />
@@ -176,7 +176,7 @@ export function DatePicker({
                       setYearPageStart(Math.floor(viewYear / 9) * 9);
                       setView('years');
                     }}
-                    className="flex items-center gap-1 text-sm font-bold text-[#0D1C4D] hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
+                    className="flex items-center gap-1 text-sm font-bold text-brand hover:opacity-70 transition-opacity px-1 py-1 rounded-lg hover:bg-gray-100"
                   >
                     {viewYear}
                     <ChevronDown className="w-3.5 h-3.5" />
@@ -254,7 +254,7 @@ export function DatePicker({
                 >
                   <ChevronLeft className="w-4 h-4 text-gray-600" />
                 </button>
-                <span className="text-sm font-bold text-[#0D1C4D]">{viewYear}</span>
+                <span className="text-sm font-bold text-brand">{viewYear}</span>
               </div>
               <div className="grid grid-cols-4 gap-2">
                 {MONTHS.map((month, idx) => {
@@ -295,7 +295,7 @@ export function DatePicker({
                 >
                   <ChevronLeft className="w-4 h-4 text-gray-600" />
                 </button>
-                <span className="text-sm font-bold text-[#0D1C4D]">
+                <span className="text-sm font-bold text-brand">
                   {yearPageStart} – {yearPageStart + 8}
                 </span>
                 <button

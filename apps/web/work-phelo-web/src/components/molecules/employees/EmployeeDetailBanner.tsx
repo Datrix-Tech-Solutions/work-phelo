@@ -31,7 +31,7 @@ export function EmployeeDetailBanner({
   const isOffboarded = employee.employmentStatus === 'OFFBOARDED';
 
   return (
-    <div className="w-full rounded-card overflow-hidden bg-[#1a3557]">
+    <div className="w-full rounded-card overflow-hidden bg-brand">
       <div className="flex items-center gap-4 px-5 sm:px-6 py-3">
         {employee.avatarUrl ? (
           <Image

@@ -4,10 +4,10 @@ import { useState, useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { TreatyStatusBadge } from '@/components/molecules/reinsurance/TreatyStatusBadge';
 import { TreatyTypeSelectorModal } from '@/components/organisms/reinsurance/TreatyTypeSelectorModal';
-import { CreateQuotaSharePanel } from '@/components/organisms/reinsurance/CreateQuotaSharePanel';
-import { CreateSurplusPanel } from '@/components/organisms/reinsurance/CreateSurplusPanel';
-import { CreateFacObligatoryPanel } from '@/components/organisms/reinsurance/CreateFacObligatoryPanel';
-import { CreateExcessOfLossPanel } from '@/components/organisms/reinsurance/CreateExcessOfLossPanel';
+import { CreateQuotaSharePanel } from '@/components/organisms/reinsurance/panels/CreateQuotaSharePanel';
+import { CreateSurplusPanel } from '@/components/organisms/reinsurance/panels/CreateSurplusPanel';
+import { CreateFacObligatoryPanel } from '@/components/organisms/reinsurance/panels/CreateFacObligatoryPanel';
+import { CreateExcessOfLossPanel } from '@/components/organisms/reinsurance/panels/CreateExcessOfLossPanel';
 import { Treaty, TreatyType, TreatyStatus, TREATY_STATUSES } from '@/types/reinsurance';
 
 const PAGE_SIZE = 10;
@@ -25,6 +25,12 @@ const MOCK_DATA: Treaty[] = [];
 
 const COLUMNS: Column<Treaty>[] = [
   {
+    key: 'policynumber',
+    label: 'Policy Number',
+    width: '2fr',
+    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
+  },
+  {
     key: 'name',
     label: 'Treaty Name',
     width: '2fr',
@@ -35,6 +41,12 @@ const COLUMNS: Column<Treaty>[] = [
     label: 'Type',
     width: '1.4fr',
     render: (row) => <span className="text-gray-700">{row.type}</span>,
+  },
+  {
+    key: 'classOfBusiness',
+    label: 'Class',
+    width: '1.4fr',
+    render: (row) => <span className="text-gray-700">{row.classofBusiness}</span>,
   },
   {
     key: 'cedant',

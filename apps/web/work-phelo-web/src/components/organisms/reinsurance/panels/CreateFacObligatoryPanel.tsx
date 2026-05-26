@@ -3,16 +3,16 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { QuotaShareFormFields } from '@/components/molecules/reinsurance/QuotaShareFormFields';
-import { QuotaShareFormValues, QUOTA_SHARE_DEFAULTS } from '@/types/reinsurance';
+import { FacObligatoryFormFields } from '@/components/molecules/reinsurance/FacObligatoryFormFields';
+import { FacObligatoryFormValues, FAC_OBLIGATORY_DEFAULTS } from '@/types/reinsurance';
 
-interface CreateQuotaSharePanelProps {
+interface CreateFacObligatoryPanelProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function CreateQuotaSharePanel({ isOpen, onClose }: CreateQuotaSharePanelProps) {
-  const form = useForm<QuotaShareFormValues>({ defaultValues: QUOTA_SHARE_DEFAULTS });
+export function CreateFacObligatoryPanel({ isOpen, onClose }: CreateFacObligatoryPanelProps) {
+  const form = useForm<FacObligatoryFormValues>({ defaultValues: FAC_OBLIGATORY_DEFAULTS });
   const {
     handleSubmit,
     reset,
@@ -20,11 +20,12 @@ export function CreateQuotaSharePanel({ isOpen, onClose }: CreateQuotaSharePanel
   } = form;
 
   const handleClose = () => {
-    reset(QUOTA_SHARE_DEFAULTS);
+    reset(FAC_OBLIGATORY_DEFAULTS);
     onClose();
   };
 
-  const onSubmit = (_data: QuotaShareFormValues) => {
+  // TODO: wire to API mutation when fac. obligatory endpoints are ready
+  const onSubmit = () => {
     handleClose();
   };
 
@@ -32,7 +33,7 @@ export function CreateQuotaSharePanel({ isOpen, onClose }: CreateQuotaSharePanel
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="New Quota Share Treaty"
+      title="New Fac. Obligatory Treaty"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>
@@ -44,7 +45,7 @@ export function CreateQuotaSharePanel({ isOpen, onClose }: CreateQuotaSharePanel
         </div>
       }
     >
-      <QuotaShareFormFields form={form} />
+      <FacObligatoryFormFields form={form} />
     </SidePanel>
   );
 }

@@ -153,7 +153,7 @@ export function CreatableSearchSelect({
                 className={cn(
                   'w-full text-left px-4 py-2.5 text-sm transition-colors',
                   opt.value === value
-                    ? 'bg-[#EEF1F8] text-brand font-medium'
+                    ? 'bg-brand-tint text-brand font-medium'
                     : 'text-gray-900 hover:bg-gray-50',
                 )}
               >
@@ -166,7 +166,7 @@ export function CreatableSearchSelect({
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleCreate}
-                className="w-full text-left px-4 py-2.5 text-sm text-brand hover:bg-[#EEF1F8] transition-colors flex items-center gap-2 border-t border-gray-100"
+                className="w-full text-left px-4 py-2.5 text-sm text-brand hover:bg-brand-tint transition-colors flex items-center gap-2 border-t border-gray-100"
               >
                 <Icons.Plus className="w-4 h-4 shrink-0" />
                 <span>
