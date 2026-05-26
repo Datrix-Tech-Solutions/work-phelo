@@ -34,6 +34,7 @@ HR_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "HR_SERVICE_IMAGE" "hr
 NOTIFICATION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service" "dev")"
 SUBSCRIPTION_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service" "dev")"
 MARKETING_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service" "dev")"
+REINSURANCE_SERVICE_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service" "dev")"
 NEXTJS_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web" "nextjs-web" "dev")"
 
 section "Compose Env"
@@ -46,6 +47,7 @@ write_env_file "$COMPOSE_ENV_FILE" \
   "NOTIFICATION_SERVICE_IMAGE=${NOTIFICATION_SERVICE_IMAGE}" \
   "SUBSCRIPTION_SERVICE_IMAGE=${SUBSCRIPTION_SERVICE_IMAGE}" \
   "MARKETING_SERVICE_IMAGE=${MARKETING_SERVICE_IMAGE}" \
+  "REINSURANCE_SERVICE_IMAGE=${REINSURANCE_SERVICE_IMAGE}" \
   "NEXTJS_IMAGE=${NEXTJS_IMAGE}"
 log "✓ ${COMPOSE_ENV_FILE}"
 
@@ -59,7 +61,8 @@ write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.dev" \
   "HR_SERVICE_URL=http://hr-service:4002" \
   "NOTIFICATION_SERVICE_URL=http://notification-service:4004" \
   "SUBSCRIPTION_SERVICE_URL=http://subscription-service:4005" \
-  "MARKETING_SERVICE_URL=http://marketing-service:4006"
+  "MARKETING_SERVICE_URL=http://marketing-service:4006" \
+  "REINSURANCE_SERVICE_URL=http://reinsurance-service:4007"
 
 write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.dev" \
   "PORT=4001" \
@@ -116,6 +119,12 @@ write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.dev" \
   "NODE_ENV=production" \
   "DATABASE_URL=${DATABASE_URL}" \
   "RABBITMQ_URL=${RABBITMQ_URL}"
+
+write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
+  "PORT=4007" \
+  "NODE_ENV=production" \
+  "DATABASE_URL=$(db_url_for_schema reinsurance)" \
+  "JWT_SECRET=${JWT_SECRET}"
 log "✓ Service env files written"
 
 section "Compose Validation"
@@ -134,6 +143,7 @@ ensure_image_available "$HR_SERVICE_IMAGE" "hr-service" "hr-service"
 ensure_image_available "$NOTIFICATION_SERVICE_IMAGE" "notification-service" "notification-service"
 ensure_image_available "$SUBSCRIPTION_SERVICE_IMAGE" "subscription-service" "subscription-service"
 ensure_image_available "$MARKETING_SERVICE_IMAGE" "marketing-service" "marketing-service"
+ensure_image_available "$REINSURANCE_SERVICE_IMAGE" "reinsurance-service" "reinsurance-service"
 ensure_image_available "$NEXTJS_IMAGE" "nextjs-web" "nextjs-web"
 log "✓ Required images available"
 
@@ -142,6 +152,7 @@ preflight_runtime_env "$API_GATEWAY_IMAGE" "${DEPLOY_PATH}/apps/api-gateway/.env
 preflight_runtime_env "$AUTH_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/auth-service/.env.dev" "dist/config/runtime-env.js" "auth-service"
 preflight_runtime_env "$HR_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/hr-service/.env.dev" "dist/config/runtime-env.js" "hr-service"
 preflight_runtime_env "$NOTIFICATION_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/notification-service/.env.dev" "dist/config/runtime-env.js" "notification-service"
+preflight_runtime_env "$REINSURANCE_SERVICE_IMAGE" "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" "dist/config/runtime-env.js" "reinsurance-service"
 log "✓ Runtime env validation passed"
 
 section "Infrastructure Services"
@@ -156,6 +167,7 @@ docker_compose run --rm hr-service sh -c "npx prisma@5.22.0 migrate deploy --sch
 docker_compose run --rm notification-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/notification-service/prisma/schema.prisma"
 docker_compose run --rm subscription-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/subscription-service/prisma/schema.prisma" || true
 docker_compose run --rm marketing-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/marketing-service/prisma/schema.prisma" || true
+docker_compose run --rm reinsurance-service sh -c "npx prisma@5.22.0 migrate deploy --schema /app/apps/reinsurance-service/prisma/schema.prisma"
 log "✓ Migrations complete"
 
 section "Deploy"
@@ -170,6 +182,7 @@ wait_for_container_health hr-service
 wait_for_container_health notification-service
 wait_for_container_health subscription-service
 wait_for_container_health marketing-service
+wait_for_container_health reinsurance-service
 wait_for_container_health api-gateway
 wait_for_container_health nextjs
 
@@ -201,7 +214,9 @@ wait_for_http_ok "dev hr-service" "http://127.0.0.1:4002/health"
 wait_for_http_ok "dev notification-service" "http://127.0.0.1:4004/api/health"
 wait_for_http_ok "dev subscription-service" "http://127.0.0.1:4005/api/health"
 wait_for_http_ok "dev marketing-service" "http://127.0.0.1:4006/api/health"
+wait_for_http_ok "dev reinsurance-service" "http://127.0.0.1:4007/api/health"
 wait_for_http_ok "dev api-gateway" "http://127.0.0.1:4010/health"
+wait_for_http_ok "dev reinsurance via gateway" "http://127.0.0.1:4010/api/v1/operations/reinsurance/health"
 wait_for_http_ok "dev nextjs" "http://127.0.0.1:3000/health"
 
 section "Container Status"

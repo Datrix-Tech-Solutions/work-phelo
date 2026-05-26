@@ -3,6 +3,8 @@ import { Request, Response } from 'express';
 import * as http from 'http';
 import * as https from 'https';
 import * as jwt from 'jsonwebtoken';
+import { createHmac } from 'crypto';
+import { JwtPayload } from '@work-phelo/types';
 import {
   GatewayServiceName,
   gatewayServiceConfig,
@@ -30,6 +32,7 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/tenants\/register$/,
   /^\/api\/v1\/auth\/users\/accept-invite$/,
   /^\/api\/v1\/auth\/mfa\/send-sms$/,
+  /^\/api\/v1\/operations\/reinsurance\/health$/,
 ];
 
 const FORWARDED_AUTH_CONTEXT_HEADERS = [
@@ -41,6 +44,7 @@ const FORWARDED_AUTH_CONTEXT_HEADERS = [
   'x-tenant-name',
   'x-user-first-name',
   'x-user-permissions',
+  'x-gateway-permissions-signature',
 ] as const;
 
 @Controller()
@@ -125,8 +129,9 @@ export class ProxyController {
     const isPublic = PUBLIC_PATTERNS.some((p) => p.test(req.path));
 
     if (!isPublic) {
+      const cookies = req.cookies as Record<string, string> | undefined;
       const token =
-        req.cookies?.access_token ||
+        cookies?.access_token ||
         req.headers.authorization?.replace('Bearer ', '');
 
       if (!token) {
@@ -136,7 +141,10 @@ export class ProxyController {
       }
 
       try {
-        const payload = jwt.verify(token, process.env.JWT_SECRET!) as any;
+        const payload = jwt.verify(
+          token,
+          process.env.JWT_SECRET!,
+        ) as JwtPayload;
         req.headers['x-user-id'] = payload.sub;
         req.headers['x-user-email'] = payload.email;
         req.headers['x-user-role'] = payload.role;
@@ -149,7 +157,7 @@ export class ProxyController {
         // The JWT no longer embeds permissions (removed to keep Set-Cookie small),
         // so the gateway fetches them from auth-service and injects as a header.
         if (service !== 'auth') {
-          const userId = payload.sub as string;
+          const userId = payload.sub;
           const cached = permissionsCache.get(userId);
           let permissions: string[];
           if (cached && cached.expiresAt > Date.now()) {
@@ -164,7 +172,13 @@ export class ProxyController {
               expiresAt: Date.now() + PERM_CACHE_TTL,
             });
           }
-          req.headers['x-user-permissions'] = JSON.stringify(permissions);
+          const serializedPermissions = JSON.stringify(permissions);
+          req.headers['x-user-permissions'] = serializedPermissions;
+          req.headers['x-gateway-permissions-signature'] = this.signPermissions(
+            payload.sub,
+            payload.tenantId,
+            serializedPermissions,
+          );
         }
       } catch {
         return res
@@ -244,5 +258,15 @@ export class ProxyController {
     }
 
     proxyReq.end();
+  }
+
+  private signPermissions(
+    userId: string,
+    tenantId: string,
+    serializedPermissions: string,
+  ): string {
+    return createHmac('sha256', process.env.JWT_SECRET!)
+      .update(`${userId}:${tenantId}:${serializedPermissions}`)
+      .digest('hex');
   }
 }
