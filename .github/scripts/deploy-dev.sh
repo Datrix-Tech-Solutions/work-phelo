@@ -124,7 +124,8 @@ write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
   "PORT=4007" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema reinsurance)" \
-  "JWT_SECRET=${JWT_SECRET}"
+  "JWT_SECRET=${JWT_SECRET}" \
+  "RABBITMQ_URL=${RABBITMQ_URL}"
 log "✓ Service env files written"
 
 section "Compose Validation"
