@@ -1,9 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import {
-  AuditAction,
-  AuditStatus,
-  Prisma,
-} from '../../prisma/generated/client';
+import { AuditAction, Prisma } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface AuditPayload {
@@ -45,13 +41,13 @@ export class AuditService {
           userId: payload.userId,
           userEmail: payload.userEmail,
           userRole: payload.userRole,
-          action: payload.action as AuditAction,
+          action: payload.action,
           resource: payload.resource,
           resourceId: payload.resourceId,
           changes: payload.changes as Prisma.InputJsonValue,
           ipAddress: payload.ipAddress,
           userAgent: payload.userAgent,
-          status: (payload.status || 'SUCCESS') as AuditStatus,
+          status: payload.status || 'SUCCESS',
           failureReason: payload.failureReason,
         },
       });

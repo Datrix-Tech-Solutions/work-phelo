@@ -133,7 +133,7 @@ export class AppraisalsController {
     return this.appraisalsService.startCycle(
       req.user.tenantId,
       cycleId,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -165,7 +165,7 @@ export class AppraisalsController {
   ) {
     return this.appraisalsService.getAppraisals(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       cycleId,
     );
   }
@@ -210,7 +210,7 @@ export class AppraisalsController {
     return this.appraisalsService.createCycleKpi(
       req.user.tenantId,
       cycleId,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -231,7 +231,7 @@ export class AppraisalsController {
       req.user.tenantId,
       cycleId,
       kpiId,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -354,11 +354,7 @@ export class AppraisalsController {
   @ApiParam({ name: 'id', description: 'Appraisal UUID' })
   @ApiResponse({ status: 200, description: 'Appraisal retrieved' })
   getAppraisal(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.appraisalsService.getAppraisal(
-      req.user.tenantId,
-      id,
-      req.user as RequestUser,
-    );
+    return this.appraisalsService.getAppraisal(req.user.tenantId, id, req.user);
   }
 
   @Patch(':id/self-assessment')
@@ -375,7 +371,7 @@ export class AppraisalsController {
     return this.appraisalsService.submitSelfAssessment(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -394,7 +390,7 @@ export class AppraisalsController {
     return this.appraisalsService.submitManagerReview(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -413,7 +409,7 @@ export class AppraisalsController {
     return this.appraisalsService.finalizeAppraisal(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -431,7 +427,7 @@ export class AppraisalsController {
     return this.appraisalsService.reopenAppraisal(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }

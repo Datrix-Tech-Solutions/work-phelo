@@ -105,7 +105,7 @@ export class AssetsService {
         where: { tenantId, type },
       })) + 1;
 
-    while (true) {
+    for (;;) {
       const assetNumber = `${prefix}-${String(sequence).padStart(4, '0')}`;
       const existing = await this.prisma.asset.findUnique({
         where: {
