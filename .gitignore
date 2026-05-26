@@ -74,14 +74,12 @@ HOME
 # Local UI specs / design references
 roles-ui-spec/
 
-# Local docs drafts
+# Local/internal docs
 docs/
 !docs/
 docs/*
-!docs/reinsurance-operations.md
 
 .compose.local.env
 .env.dev
 
 data_masking.md
-

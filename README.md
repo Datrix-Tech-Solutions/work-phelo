@@ -35,9 +35,9 @@ work-phelo/
 ```
 
 The broker-only Reinsurance Operations module is being introduced as a
-domain-specific service inside this monorepo. See
-[docs/reinsurance-operations.md](./docs/reinsurance-operations.md) for its
-architecture decision, MVP boundaries and implementation plan.
+domain-specific service inside this monorepo. Detailed Reinsurance planning
+documentation is maintained internally/local-only and is intentionally not
+tracked in Git.
 
 ## Tech Stack
 
