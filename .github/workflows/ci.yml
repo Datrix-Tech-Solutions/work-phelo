@@ -25,9 +25,6 @@ jobs:
       - name: Type checks
         run: npm run check-types
 
-      - name: Lint
-        run: npm run lint || true
-
       - name: Tests
         run: npm run test
 
@@ -36,7 +33,6 @@ jobs:
 
       - name: RBAC alignment
         run: npm run check-rbac
-
 
   lint:
     runs-on: ubuntu-latest
@@ -55,3 +51,29 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+  web:
+    name: Web Lint & Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web/work-phelo-web
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/web/work-phelo-web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build

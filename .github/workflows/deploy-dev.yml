@@ -47,7 +47,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Type checks
         run: npm run check-types
@@ -57,7 +57,6 @@ jobs:
 
       - name: Build validation
         run: npm run build
-
 
   detect-changes:
     name: Detect Changed Services
@@ -125,7 +124,6 @@ jobs:
             nextjs-web:
               - 'apps/web/work-phelo-web/**'
           list-files: none
-
 
   build-and-push:
     name: Build & Push — ${{ matrix.service }}
@@ -211,7 +209,6 @@ jobs:
             BUILD_SHA=${{ env.BUILD_SHA }}
             BUILD_REF=${{ env.BUILD_REF }}
             NEXT_PUBLIC_API_URL=${{ env.WEB_PUBLIC_API_URL }}
-
 
   deploy:
     name: Deploy to Dev

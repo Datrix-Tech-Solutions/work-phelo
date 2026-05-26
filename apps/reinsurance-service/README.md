@@ -28,5 +28,5 @@ not as evidence that business persistence is ready.
 - Use Core notification and audit contracts instead of owning those records.
 - Store broker workflow records only in the `reinsurance` schema.
 
-See [../../docs/reinsurance-operations.md](../../docs/reinsurance-operations.md)
-for the MVP decision record and implementation plan.
+Detailed Reinsurance planning documentation is maintained internally/local-only
+and is intentionally not tracked in Git.
