@@ -1,4 +1,7 @@
-export const reinsuranceRequiredEnvVars = ['DATABASE_URL'] as const;
+export const reinsuranceRequiredEnvVars = [
+  'DATABASE_URL',
+  'JWT_SECRET',
+] as const;
 
 export function assertReinsuranceRuntimeEnv(): void {
   const missing = reinsuranceRequiredEnvVars.filter(
