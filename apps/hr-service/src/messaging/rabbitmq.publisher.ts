@@ -59,7 +59,7 @@ export class RabbitMQPublisher {
     error?: string;
   } {
     if (err instanceof Error) {
-      return err as Error & { statusCode?: number; error?: string };
+      return err;
     }
 
     const remote =
