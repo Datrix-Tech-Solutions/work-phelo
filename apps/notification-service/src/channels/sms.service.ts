@@ -33,7 +33,7 @@ export class SmsService {
       const data: unknown = await response.json();
       const statusCode =
         data && typeof data === 'object' && 'code' in data
-          ? String((data as { code: unknown }).code)
+          ? String(data.code)
           : undefined;
 
       if (!response.ok || statusCode !== 'ok') {
