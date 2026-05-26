@@ -125,7 +125,7 @@ export function AssetDetailPanel({
       <div className="flex flex-col gap-5">
         {/* Identity */}
         <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-          <div className="w-12 h-12 rounded-xl bg-[#EEF1F8] flex items-center justify-center shrink-0">
+          <div className="w-12 h-12 rounded-xl bg-brand-tint flex items-center justify-center shrink-0">
             <AssetTypeIcon type={asset.type} size="md" />
           </div>
           <div className="flex-1 min-w-0">

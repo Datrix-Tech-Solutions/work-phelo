@@ -25,10 +25,12 @@ import { MyProjectsPanel } from '@/components/organisms/dashboard/MyProjectsPane
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
 import { formatTime, resolveHolidayUpcomingDate } from '@/lib/formatters';
 
-/* ── Avatar colour picker ── */
+/* ── Avatar colour picker ──
+   Intentional variety palette for employee initials.
+   First two mirror --brand and --brand-gradient-end from globals.css. */
 const AVATAR_COLORS = [
-  '#0D2244',
-  '#1E3A8A',
+  '#0D2244' /* = --brand */,
+  '#1E3A8A' /* = --brand-gradient-end */,
   '#6D28D9',
   '#B45309',
   '#047857',

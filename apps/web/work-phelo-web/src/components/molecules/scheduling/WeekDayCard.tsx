@@ -35,7 +35,7 @@ function formatTime(time: string): string {
 const SHIFT_STYLES: Record<DayShiftType, { bg: string; text: string }> = {
   morning: { bg: 'bg-green-100', text: 'text-green-600' },
   afternoon: { bg: 'bg-purple-100', text: 'text-purple-600' },
-  night: { bg: 'bg-[#0d1b3e]', text: 'text-white' },
+  night: { bg: 'bg-shift-night', text: 'text-white' },
   'on-leave': { bg: 'bg-blue-200', text: 'text-blue-600' },
 };
 
@@ -171,7 +171,7 @@ export function WeekDayCard({
       onKeyDown={(e) => e.key === 'Enter' && onClick?.()}
       className={cn(
         'flex flex-col rounded-2xl overflow-hidden border-2 w-full text-left transition-all duration-150 cursor-pointer',
-        isSelected ? 'border-[#0d1b3e]' : 'border-gray-200',
+        isSelected ? 'border-shift-night' : 'border-gray-200',
       )}
     >
       {/* Header */}

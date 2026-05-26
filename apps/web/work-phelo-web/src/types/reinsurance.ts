@@ -1,5 +1,123 @@
 /* ── Reinsurance domain types ── */
 
+/* ── Cedant ── */
+export interface Cedant {
+  id: string;
+  name: string;
+  email: string;
+  phoneNumber: string;
+}
+
+export interface CedantFormValues {
+  name: string;
+  emails: { value: string }[];
+  phoneNumbers: { value: string }[];
+}
+
+export const CEDANT_FORM_DEFAULTS: CedantFormValues = {
+  name: '',
+  emails: [{ value: '' }],
+  phoneNumbers: [{ value: '' }],
+};
+
+// Reinsurers
+export interface Reinsurer {
+  id: string;
+  name: string;
+  email: string;
+  phoneNumber: string;
+}
+
+export interface ReinsurerFormValues {
+  name: string;
+  email: { value: string }[];
+  phoneNumber: { value: string }[];
+}
+
+export const REINSURER_FORM_DEFAULTS: ReinsurerFormValues = {
+  name: '',
+  email: [{ value: '' }],
+  phoneNumber: [{ value: '' }],
+};
+
+// Brokers
+export interface Broker {
+  id: string;
+  name: string;
+  email: string;
+  phoneNumber: string;
+}
+
+export interface BrokerFormValues {
+  name: string;
+  email: { value: string }[];
+  phoneNumber: { value: string }[];
+}
+
+export const BROKER_FORM_DEFAULTS: BrokerFormValues = {
+  name: '',
+  email: [{ value: '' }],
+  phoneNumber: [{ value: '' }],
+};
+
+/* ── Facultative ── */
+export const FACULTATIVE_STATUSES = ['Active', 'Pending', 'Expired', 'Cancelled'] as const;
+export type FacultativeStatus = (typeof FACULTATIVE_STATUSES)[number];
+
+export interface Facultative {
+  id: string;
+  policyNumber: string;
+  cedant: string;
+  riskType: string;
+  classOfBusiness: string;
+  periodStart: string; // ISO date
+  periodEnd: string; // ISO date
+  year: number;
+  yourShare: number; // 0-100
+  grossPremium: number;
+  netPremium: number;
+  status: FacultativeStatus;
+}
+
+/* ── Facultative form ── */
+export interface FacultativeFormValues {
+  riskClass: string;
+  riskType: string;
+  insuredName: string;
+  cedant: string;
+  brokerName: string;
+  brokerageFee: number | '';
+  currency: string;
+  accountingYear: string;
+  startDate: string;
+  endDate: string;
+  territorialScope: string;
+  sumAssured: number | ''; // 100% sum assured
+  grossPremium: number | ''; // 100% gross premium
+  commission: number | ''; // commission (%)
+  facOffer: number | ''; // fac offer (%)
+  supportingDocument: File | null;
+}
+
+export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
+  riskClass: '',
+  riskType: '',
+  insuredName: '',
+  cedant: '',
+  brokerName: '',
+  brokerageFee: '',
+  currency: '',
+  accountingYear: String(new Date().getFullYear()),
+  startDate: '',
+  endDate: '',
+  territorialScope: '',
+  sumAssured: '',
+  grossPremium: '',
+  commission: '',
+  facOffer: '',
+  supportingDocument: null,
+};
+
 export const TREATY_TYPES = [
   'Quota Share',
   'Surplus',
@@ -17,6 +135,7 @@ export interface Treaty {
   id: string;
   name: string;
   type: TreatyType;
+  classofBusiness: string;
   cedant: string;
   share: number; // reinsurer's share 0-100
   periodStart: string; // ISO date
@@ -26,6 +145,16 @@ export interface Treaty {
 }
 
 /* ── Quota Share form ── */
+
+export interface ReinsurerPanelRow {
+  reinsurer: string;
+  reinsurerShare: number | '';
+}
+
+export const DEFAULT_REINSURER_ROW: ReinsurerPanelRow = {
+  reinsurer: '',
+  reinsurerShare: '',
+};
 
 export const TERRITORIAL_SCOPE_OPTIONS = [
   { value: 'Ghana', label: 'Ghana' },
@@ -66,6 +195,7 @@ export interface QuotaShareFormValues {
   cedantShare: number | '';
   reinsuranceShare: number | '';
   yourShare: number | '';
+  reinsurerPanel: ReinsurerPanelRow[];
   supportingDocument: File | null;
 }
 
@@ -246,5 +376,6 @@ export const QUOTA_SHARE_DEFAULTS: QuotaShareFormValues = {
   cedantShare: '',
   reinsuranceShare: '',
   yourShare: '',
+  reinsurerPanel: [{ ...DEFAULT_REINSURER_ROW }],
   supportingDocument: null,
 };

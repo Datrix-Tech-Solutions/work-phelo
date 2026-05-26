@@ -149,7 +149,7 @@ export function SwapRequestCard({
               </Button>
               <Button
                 size="sm"
-                className="bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
+                className="bg-shift-night hover:bg-shift-night/90 focus:ring-shift-night"
                 onClick={() => onApprove(request.id)}
                 isLoading={isApproving}
                 loadingText="Approving..."

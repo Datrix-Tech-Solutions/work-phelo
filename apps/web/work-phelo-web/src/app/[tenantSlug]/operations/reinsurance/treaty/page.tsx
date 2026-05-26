@@ -1,6 +1,6 @@
 'use client';
 
-import { TreatiesTable } from '@/components/organisms/reinsurance/TreatiesTable';
+import { TreatiesTable } from '@/components/organisms/reinsurance/tables/TreatiesTable';
 
 export default function TreatyPage() {
   return (

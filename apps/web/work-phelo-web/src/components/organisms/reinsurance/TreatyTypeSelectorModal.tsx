@@ -54,7 +54,7 @@ export function TreatyTypeSelectorModal({
               onClick={() => onSelect(type)}
               className={cn(
                 'flex flex-col items-start gap-3 rounded-xl border border-gray-200 p-4 text-left',
-                'transition-all hover:border-brand hover:bg-[#EEF1F8] hover:shadow-sm',
+                'transition-all hover:border-brand hover:bg-brand-tint hover:shadow-sm',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
               )}
             >

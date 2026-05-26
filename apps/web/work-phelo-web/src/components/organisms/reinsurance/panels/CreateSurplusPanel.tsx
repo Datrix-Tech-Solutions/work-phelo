@@ -24,7 +24,7 @@ export function CreateSurplusPanel({ isOpen, onClose }: CreateSurplusPanelProps)
     onClose();
   };
 
-  const onSubmit = (_: SurplusFormValues) => {
+  const onSubmit = () => {
     handleClose();
   };
 

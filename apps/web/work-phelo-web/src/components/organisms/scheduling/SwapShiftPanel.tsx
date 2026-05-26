@@ -42,7 +42,7 @@ function formatTime(time: string): string {
 const SHIFT_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   morning: { bg: 'bg-green-100', text: 'text-green-700', label: 'Morning' },
   afternoon: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Afternoon' },
-  night: { bg: 'bg-[#0d1b3e]', text: 'text-white', label: 'Night' },
+  night: { bg: 'bg-shift-night', text: 'text-white', label: 'Night' },
   flexible: { bg: 'bg-orange-100', text: 'text-orange-600', label: 'Flexible' },
 };
 

@@ -3,16 +3,16 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { FacObligatoryFormFields } from '@/components/molecules/reinsurance/FacObligatoryFormFields';
-import { FacObligatoryFormValues, FAC_OBLIGATORY_DEFAULTS } from '@/types/reinsurance';
+import { QuotaShareFormFields } from '@/components/molecules/reinsurance/QuotaShareFormFields';
+import { QuotaShareFormValues, QUOTA_SHARE_DEFAULTS } from '@/types/reinsurance';
 
-interface CreateFacObligatoryPanelProps {
+interface CreateQuotaSharePanelProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export function CreateFacObligatoryPanel({ isOpen, onClose }: CreateFacObligatoryPanelProps) {
-  const form = useForm<FacObligatoryFormValues>({ defaultValues: FAC_OBLIGATORY_DEFAULTS });
+export function CreateQuotaSharePanel({ isOpen, onClose }: CreateQuotaSharePanelProps) {
+  const form = useForm<QuotaShareFormValues>({ defaultValues: QUOTA_SHARE_DEFAULTS });
   const {
     handleSubmit,
     reset,
@@ -20,13 +20,11 @@ export function CreateFacObligatoryPanel({ isOpen, onClose }: CreateFacObligator
   } = form;
 
   const handleClose = () => {
-    reset(FAC_OBLIGATORY_DEFAULTS);
+    reset(QUOTA_SHARE_DEFAULTS);
     onClose();
   };
 
-  // TODO: wire to API mutation when fac. obligatory endpoints are ready
-  const onSubmit = (_values: FacObligatoryFormValues) => {
-    void _values;
+  const onSubmit = () => {
     handleClose();
   };
 
@@ -34,7 +32,7 @@ export function CreateFacObligatoryPanel({ isOpen, onClose }: CreateFacObligator
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="New Fac. Obligatory Treaty"
+      title="New Quota Share Treaty"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>
@@ -46,7 +44,7 @@ export function CreateFacObligatoryPanel({ isOpen, onClose }: CreateFacObligator
         </div>
       }
     >
-      <FacObligatoryFormFields form={form} />
+      <QuotaShareFormFields form={form} />
     </SidePanel>
   );
 }
