@@ -9,8 +9,10 @@ import {
   Min,
 } from 'class-validator';
 import { CounterpartyType } from '../../../prisma/generated/client';
+import { TrimmedString } from './string.transforms';
 
 export class QueryCounterpartiesDto {
+  @TrimmedString()
   @IsOptional()
   @IsString()
   @MaxLength(100)

@@ -207,7 +207,29 @@ describe('CounterpartiesService', () => {
     loggerWarn.mockRestore();
   });
 
-  it('updates using the tenant-qualified compound key', async () => {
+  it('does not fail a completed write when audit publication throws synchronously', async () => {
+    const loggerWarn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+    prisma.counterparty.create.mockResolvedValue(counterparty);
+    publisher.created.mockImplementationOnce(() => {
+      throw new Error('publisher unavailable');
+    });
+
+    await expect(
+      service.create(user, {
+        type: CounterpartyType.CEDANT,
+        name: 'Acme Cedant',
+      }),
+    ).resolves.toEqual(counterparty);
+
+    expect(loggerWarn).toHaveBeenCalledWith(
+      expect.stringContaining('audit event failed'),
+    );
+    loggerWarn.mockRestore();
+  });
+
+  it('updates only an active record using the tenant-qualified compound key', async () => {
     prisma.counterparty.findFirst.mockResolvedValue(counterparty);
     prisma.counterparty.update.mockResolvedValue({
       ...counterparty,
@@ -220,6 +242,7 @@ describe('CounterpartiesService', () => {
       expect.objectContaining({
         where: {
           id_tenantId: { id: 'counterparty-1', tenantId: 'tenant-1' },
+          archivedAt: null,
         },
       }),
     );
@@ -239,6 +262,7 @@ describe('CounterpartiesService', () => {
     expect(prisma.counterparty.update.mock.calls[0]?.[0]).toMatchObject({
       where: {
         id_tenantId: { id: 'counterparty-1', tenantId: 'tenant-1' },
+        archivedAt: null,
       },
       data: {
         archivedByUserId: 'user-1',

@@ -62,6 +62,7 @@ CREATE TABLE "reinsurance"."CounterpartyAddress" (
 CREATE UNIQUE INDEX "Counterparty_id_tenantId_key" ON "reinsurance"."Counterparty"("id", "tenantId");
 CREATE INDEX "Counterparty_tenantId_type_archivedAt_name_idx" ON "reinsurance"."Counterparty"("tenantId", "type", "archivedAt", "name");
 CREATE INDEX "Counterparty_tenantId_archivedAt_createdAt_idx" ON "reinsurance"."Counterparty"("tenantId", "archivedAt", "createdAt");
+-- Allow a name to be reused only after its previous counterparty is archived.
 CREATE UNIQUE INDEX "Counterparty_active_name_type_key" ON "reinsurance"."Counterparty"("tenantId", "type", "normalizedName") WHERE "archivedAt" IS NULL;
 CREATE INDEX "CounterpartyContact_tenantId_counterpartyId_idx" ON "reinsurance"."CounterpartyContact"("tenantId", "counterpartyId");
 CREATE INDEX "CounterpartyAddress_tenantId_counterpartyId_idx" ON "reinsurance"."CounterpartyAddress"("tenantId", "counterpartyId");

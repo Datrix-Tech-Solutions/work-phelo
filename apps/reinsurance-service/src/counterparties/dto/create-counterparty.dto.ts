@@ -14,36 +14,43 @@ import {
 import { CounterpartyType } from '../../../prisma/generated/client';
 import { CreateCounterpartyAddressDto } from './create-counterparty-address.dto';
 import { CreateCounterpartyContactDto } from './create-counterparty-contact.dto';
+import { TrimmedString } from './string.transforms';
 
 export class CreateCounterpartyDto {
   @IsEnum(CounterpartyType)
   type!: CounterpartyType;
 
+  @TrimmedString()
   @IsString()
   @MinLength(2)
   @MaxLength(200)
   name!: string;
 
+  @TrimmedString()
   @IsOptional()
   @IsString()
   @MaxLength(100)
   registrationNumber?: string;
 
+  @TrimmedString()
   @IsOptional()
   @IsEmail()
   @MaxLength(200)
   email?: string;
 
+  @TrimmedString()
   @IsOptional()
   @IsString()
   @MaxLength(50)
   phone?: string;
 
+  @TrimmedString()
   @IsOptional()
   @IsUrl({ require_protocol: true })
   @MaxLength(2048)
   website?: string;
 
+  @TrimmedString()
   @IsOptional()
   @IsString()
   @MaxLength(2000)

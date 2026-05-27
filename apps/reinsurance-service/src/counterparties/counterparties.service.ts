@@ -130,17 +130,18 @@ export class CounterpartiesService {
       });
 
       this.publish(
-        this.publisher.created(
-          this.auditEvent(created, user, {
-            after: this.auditSnapshot(created),
-          }),
-        ),
+        () =>
+          this.publisher.created(
+            this.auditEvent(created, user, {
+              after: this.auditSnapshot(created),
+            }),
+          ),
         'create',
         created.id,
       );
       return created;
     } catch (error) {
-      this.rethrowConflict(error);
+      this.rethrowWriteError(error);
       throw error;
     }
   }
@@ -189,47 +190,61 @@ export class CounterpartiesService {
 
     try {
       const updated = await this.prisma.counterparty.update({
-        where: { id_tenantId: { id, tenantId: user.tenantId } },
+        where: {
+          id_tenantId: { id, tenantId: user.tenantId },
+          archivedAt: null,
+        },
         data,
         include: counterpartyInclude,
       });
 
       this.publish(
-        this.publisher.updated(
-          this.auditEvent(updated, user, {
-            before: this.auditSnapshot(existing),
-            after: this.auditSnapshot(updated),
-          }),
-        ),
+        () =>
+          this.publisher.updated(
+            this.auditEvent(updated, user, {
+              before: this.auditSnapshot(existing),
+              after: this.auditSnapshot(updated),
+            }),
+          ),
         'update',
         updated.id,
       );
       return updated;
     } catch (error) {
-      this.rethrowConflict(error);
+      this.rethrowWriteError(error);
       throw error;
     }
   }
 
   async archive(user: RequestUser, id: string): Promise<CounterpartyRecord> {
     const existing = await this.findOne(user.tenantId, id);
-    const archived = await this.prisma.counterparty.update({
-      where: { id_tenantId: { id, tenantId: user.tenantId } },
-      data: {
-        archivedAt: new Date(),
-        archivedByUserId: user.id,
-        updatedByUserId: user.id,
-      },
-      include: counterpartyInclude,
-    });
+    let archived: CounterpartyRecord;
+    try {
+      archived = await this.prisma.counterparty.update({
+        where: {
+          id_tenantId: { id, tenantId: user.tenantId },
+          archivedAt: null,
+        },
+        data: {
+          archivedAt: new Date(),
+          archivedByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+        include: counterpartyInclude,
+      });
+    } catch (error) {
+      this.rethrowWriteError(error);
+      throw error;
+    }
 
     this.publish(
-      this.publisher.deleted(
-        this.auditEvent(archived, user, {
-          before: this.auditSnapshot(existing),
-          after: this.auditSnapshot(archived),
-        }),
-      ),
+      () =>
+        this.publisher.deleted(
+          this.auditEvent(archived, user, {
+            before: this.auditSnapshot(existing),
+            after: this.auditSnapshot(archived),
+          }),
+        ),
       'archive',
       archived.id,
     );
@@ -335,7 +350,7 @@ export class CounterpartiesService {
     return name.toLowerCase();
   }
 
-  private rethrowConflict(error: unknown): void {
+  private rethrowWriteError(error: unknown): void {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
@@ -344,18 +359,36 @@ export class CounterpartiesService {
         'An active counterparty with this name and type already exists',
       );
     }
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2025'
+    ) {
+      throw new NotFoundException('Counterparty not found');
+    }
   }
 
   private publish(
-    pending: Promise<void>,
+    publishEvent: () => Promise<void>,
     operation: string,
     counterpartyId: string,
   ): void {
-    void pending.catch((error: unknown) => {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.logger.warn(
-        `Counterparty ${operation} audit event failed for ${counterpartyId}: ${reason}`,
-      );
-    });
+    try {
+      void publishEvent().catch((error: unknown) => {
+        this.logPublishFailure(operation, counterpartyId, error);
+      });
+    } catch (error) {
+      this.logPublishFailure(operation, counterpartyId, error);
+    }
+  }
+
+  private logPublishFailure(
+    operation: string,
+    counterpartyId: string,
+    error: unknown,
+  ): void {
+    const reason = error instanceof Error ? error.message : String(error);
+    this.logger.warn(
+      `Counterparty ${operation} audit event failed for ${counterpartyId}: ${reason}`,
+    );
   }
 }

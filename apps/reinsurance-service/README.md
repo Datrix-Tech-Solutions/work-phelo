@@ -39,6 +39,9 @@ The gateway forwards these routes under
 List requests support `search`, `type`, `page` and `limit`. Deletion is a
 soft archive. Every record lookup and mutation is scoped by authenticated
 `tenantId`; the service does not accept tenant ownership from request bodies.
+When a `PATCH` body supplies `contacts` or `addresses`, the supplied child
+collection replaces the stored collection within the same tenant-scoped
+parent update.
 
 ## Boundary Rules
 
