@@ -5,6 +5,9 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { ReinsurerFormValues, REINSURER_FORM_DEFAULTS } from '@/types/reinsurance';
 import { ReinsurerFormFields } from '@/components/molecules/reinsurance/ReinsurerFormFields';
+import { useCreateReinsurer } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 interface AddReinsurancePanelProps {
   isOpen: boolean;
@@ -12,13 +15,16 @@ interface AddReinsurancePanelProps {
 }
 
 export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProps) {
+  const toast = useToast();
+  const { mutateAsync: createReinsurer, isPending } = useCreateReinsurer();
+
   const {
     control,
     register,
     handleSubmit,
     reset,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<ReinsurerFormValues>({
     defaultValues: REINSURER_FORM_DEFAULTS,
   });
@@ -28,10 +34,18 @@ export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProp
     onClose();
   };
 
-  const onSubmit = (data: ReinsurerFormValues) => {
-    // TODO: call useCreateCedant() mutation once API is ready
-    console.log('Create Reinsurer:', data);
-    handleClose();
+  const onSubmit = async (data: ReinsurerFormValues) => {
+    try {
+      await createReinsurer({
+        name: data.name,
+        emails: data.email.map((e) => e.value).filter(Boolean),
+        phoneNumbers: data.phoneNumber.map((p) => p.value).filter(Boolean),
+      });
+      toast.success('Reinsurer created successfully');
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to create reinsurer'));
+    }
   };
 
   return (
@@ -42,11 +56,11 @@ export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProp
       description="Fill in the details to create a new reinsurer."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+          <Button variant="outline" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
-            {isSubmitting ? 'Saving…' : 'Save Reinsurer'}
+          <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
+            Save Reinsurer
           </Button>
         </div>
       }

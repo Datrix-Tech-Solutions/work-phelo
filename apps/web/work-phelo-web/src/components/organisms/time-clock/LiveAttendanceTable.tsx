@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { Badge } from '@/components/atoms/Badge';
 import { cn } from '@/lib/utils';
-import { useLiveAttendance, useAttendanceStats } from '@/hooks/useTimeClock';
+import { useLiveAttendance, useAttendanceStats } from '@/hooks/hr/useTimeClock';
 import type { LiveAttendanceEntry } from '@/types/timeclock';
 
 function formatDurationMs(ms: number) {

@@ -17,8 +17,8 @@ import {
 } from '@/types/hr';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
-import { useDepartmentOptions } from '@/hooks/useDepartments';
-import { useBranchOptions } from '@/hooks/useBranches';
+import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
+import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { isAtLeastMinimumEmployeeAge, MIN_EMPLOYEE_AGE } from '@/lib/employeeAge';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
 

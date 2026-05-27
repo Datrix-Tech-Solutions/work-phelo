@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { useCompanyPoliciesSettings, useUpdateCompanyPoliciesSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import type { CompanyPolicyCycleRecipient } from '@/types/hr';
 

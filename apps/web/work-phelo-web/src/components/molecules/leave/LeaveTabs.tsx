@@ -1,4 +1,4 @@
-import { useLeaveRequests } from '@/hooks/useLeave';
+import { useLeaveRequests } from '@/hooks/hr/useLeave';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 
 interface Props {

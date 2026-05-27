@@ -21,7 +21,7 @@ import {
   ASSET_TYPE_OPTIONS,
   ASSET_CONDITION_OPTIONS,
 } from '@/lib/assetOptions';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
   useAssets,
@@ -31,7 +31,7 @@ import {
   useRetireAsset,
   useUnassignAsset,
   useUpdateAsset,
-} from '@/hooks/useAssets';
+} from '@/hooks/hr/useAssets';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
 import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';

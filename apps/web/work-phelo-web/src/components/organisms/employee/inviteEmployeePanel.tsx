@@ -12,11 +12,11 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { Employee, CreateEmployeePayload } from '@/types/hr';
 import { useCreateEmployee } from '@/hooks/hr/useEmployees';
-import { useDepartmentOptions } from '@/hooks/useDepartments';
-import { useBranchOptions } from '@/hooks/useBranches';
+import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
+import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
-import { usePermissionSets, useAssignPermissionSet } from '@/hooks/useRoles';
+import { usePermissionSets, useAssignPermissionSet } from '@/hooks/hr/useRoles';
 
 /* ── Types ── */
 

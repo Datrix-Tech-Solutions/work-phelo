@@ -8,7 +8,7 @@ import {
   DepartmentFormFields,
   DeptForm,
 } from '@/components/molecules/departments/DepartmentFormFields';
-import { useCreateDepartment } from '@/hooks/useDepartments';
+import { useCreateDepartment } from '@/hooks/hr/useDepartments';
 import { EmployeeOption } from '@/types/hr';
 
 interface Props {

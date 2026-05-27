@@ -5,7 +5,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { ShiftSchedule, BackendShiftType, WorkMode } from '@/types/scheduling';
-import { useUpdateShiftSchedule, useDeleteShiftSchedule } from '@/hooks/useScheduling';
+import { useUpdateShiftSchedule, useDeleteShiftSchedule } from '@/hooks/hr/useScheduling';
 import { useToast } from '@/hooks/useToast';
 
 interface Props {

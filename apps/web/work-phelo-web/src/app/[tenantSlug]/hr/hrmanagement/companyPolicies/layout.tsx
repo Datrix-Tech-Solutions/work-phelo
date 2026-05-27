@@ -5,8 +5,8 @@ import Link from 'next/link';
 import { usePathname, useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth.store';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
-import { usePermission } from '@/hooks/usePermission';
+import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 
 const TABS = [

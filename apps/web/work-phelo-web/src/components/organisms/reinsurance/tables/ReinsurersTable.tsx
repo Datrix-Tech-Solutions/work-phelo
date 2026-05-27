@@ -2,13 +2,15 @@
 
 import { useState, useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
+import { AddReinsurancePanel } from '@/components/organisms/reinsurance/panels/AddReinsurancepanel';
+import { useReinsurers, useDeleteReinsurer } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { Reinsurer } from '@/types/reinsurance';
-import { AddReinsurancePanel } from '../panels/AddReinsurancepanel';
 
 const PAGE_SIZE = 10;
-
-// TODO: replace with useCedants() hook once API is ready
-const MOCK_DATA: Reinsurer[] = [];
 
 const COLUMNS: Column<Reinsurer>[] = [
   {
@@ -32,29 +34,46 @@ const COLUMNS: Column<Reinsurer>[] = [
 ];
 
 export function ReinsurersTable() {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Reinsurer | null>(null);
+
+  const { data = [], isLoading } = useReinsurers();
+  const { mutate: deleteReinsurer, isPending: isDeleting } = useDeleteReinsurer();
 
   const filtered = useMemo(() => {
-    if (!search) return MOCK_DATA;
+    if (!search) return data;
     const q = search.toLowerCase();
-    return MOCK_DATA.filter(
+    return data.filter(
       (r) =>
         r.name.toLowerCase().includes(q) ||
         r.email.toLowerCase().includes(q) ||
         r.phoneNumber.includes(q),
     );
-  }, [search]);
+  }, [data, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    deleteReinsurer(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success('Reinsurer deleted successfully');
+        setDeleteTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to delete reinsurer')),
+    });
+  };
 
   return (
     <>
       <DataTable
         columns={COLUMNS}
         data={paged}
+        isLoading={isLoading}
         searchPlaceholder="Search reinsurers…"
         searchValue={search}
         onSearch={(q) => {
@@ -62,18 +81,16 @@ export function ReinsurersTable() {
           setPage(1);
         }}
         actionButton={{ label: 'Add Reinsurer', onClick: () => setPanelOpen(true) }}
-        rowActions={() => [
+        rowActions={(row) => [
           {
             label: 'Edit',
             onClick: () => {
-              /* TODO */
+              /* TODO: open edit panel */
             },
           },
           {
             label: 'Delete',
-            onClick: () => {
-              /* TODO */
-            },
+            onClick: () => setDeleteTarget(row),
             danger: true,
           },
         ]}
@@ -85,6 +102,28 @@ export function ReinsurersTable() {
       />
 
       <AddReinsurancePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Reinsurer"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isDeleting}
+              loadingText="Deleting…"
+              onClick={handleDelete}
+            >
+              Delete
+            </Button>
+          </div>
+        }
+      />
     </>
   );
 }

@@ -9,7 +9,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
 import { ApplicableTo, ALL_SPECIFIC } from '@/components/molecules/leave/ApplicableTo';
 import { useToast } from '@/hooks/useToast';
-import { useCreateLeaveType, useUpdateLeaveType } from '@/hooks/useLeave';
+import { useCreateLeaveType, useUpdateLeaveType } from '@/hooks/hr/useLeave';
 import { LeaveType, LeaveApplicableTo } from '@/types/hr';
 
 interface CreateLeaveTypePanelProps {

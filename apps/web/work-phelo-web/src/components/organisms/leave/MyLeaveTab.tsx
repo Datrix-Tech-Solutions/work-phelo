@@ -9,7 +9,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
-import { useLeaveBalances, useMyLeaveRequests, useCancelLeaveRequest } from '@/hooks/useLeave';
+import { useLeaveBalances, useMyLeaveRequests, useCancelLeaveRequest } from '@/hooks/hr/useLeave';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/formatters';
 import { LeaveBalance, LeaveRequest, LeaveRequestStatus } from '@/types/hr';

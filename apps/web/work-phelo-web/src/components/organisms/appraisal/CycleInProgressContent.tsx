@@ -8,7 +8,7 @@ import { Icons } from '@/components/atoms/icons';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { CycleProgressSection } from '@/components/molecules/appraisal/CycleProgressSection';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/useAppraisals';
+import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/hr/useAppraisals';
 import { cn } from '@/lib/utils';
 import type { AppraisalCycle } from '@/types/hr';
 

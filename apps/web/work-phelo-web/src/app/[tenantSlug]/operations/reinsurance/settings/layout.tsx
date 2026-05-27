@@ -49,8 +49,8 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
     { label: 'Cedants', href: `${base}/cedants` },
     { label: 'Reinsurers', href: `${base}/reinsurers` },
     { label: 'Brokers', href: `${base}/brokers` },
-    { label: 'Risk Types', href: `${base}/risk-types` },
     { label: 'Risk Classes', href: `${base}/risk-classes` },
+    { label: 'Risk Types', href: `${base}/risk-types` },
     { label: 'Currency', href: `${base}/currency` },
   ];
 
