@@ -11,7 +11,7 @@ import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { StatPill } from '@/components/molecules/departments/StatPill';
 import { getGreeting } from '@/lib/formatters';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { AgreementGate } from '@/components/organisms/companyPolicies/AgreementGate';
 

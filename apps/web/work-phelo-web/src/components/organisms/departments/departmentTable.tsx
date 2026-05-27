@@ -9,9 +9,13 @@ import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { CreateDepartmentPanel } from '@/components/organisms/departments/createDepartmentPanel';
 import { EditDepartmentPanel } from '@/components/organisms/departments/editDepartmentPanel';
 import { AddMembersPanel } from '@/components/organisms/departments/addMembersPanel';
-import { useDepartments, useUpdateDepartment, useDeleteDepartment } from '@/hooks/useDepartments';
+import {
+  useDepartments,
+  useUpdateDepartment,
+  useDeleteDepartment,
+} from '@/hooks/hr/useDepartments';
 import { useEmployeeOptions, useUpdateEmployee } from '@/hooks/hr/useEmployees';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { useParams } from 'next/navigation';

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useUpdateEmployee } from '@/hooks/hr/useEmployees';
-import { useAssignAsset } from '@/hooks/useAssets';
+import { useAssignAsset } from '@/hooks/hr/useAssets';
 import { useToast } from '@/hooks/useToast';
 import { OffboardEmployeePanel } from './OffboardEmployeePanel';
 import { ResignationPanel } from './resignationPanel';

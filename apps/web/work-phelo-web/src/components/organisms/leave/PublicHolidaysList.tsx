@@ -8,7 +8,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { CreatePublicHolidayPanel } from '@/components/organisms/leave/CreatePublicHolidayPanel';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { useDeletePublicHoliday } from '@/hooks/usePublicHolidays';
+import { useDeletePublicHoliday } from '@/hooks/hr/usePublicHolidays';
 import { extractError } from '@/lib/extractError';
 import { formatHolidayDate } from '@/lib/formatters';
 import { PublicHoliday } from '@/types/hr';

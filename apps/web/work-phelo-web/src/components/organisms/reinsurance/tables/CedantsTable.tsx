@@ -2,13 +2,15 @@
 
 import { useState, useMemo } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Modal } from '@/components/organisms/shared/Modal';
+import { Button } from '@/components/atoms/Button';
 import { AddCedantPanel } from '@/components/organisms/reinsurance/panels/AddCedantPanel';
+import { useCedants, useDeleteCedant } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import { Cedant } from '@/types/reinsurance';
 
 const PAGE_SIZE = 10;
-
-// TODO: replace with useCedants() hook once API is ready
-const MOCK_DATA: Cedant[] = [];
 
 const COLUMNS: Column<Cedant>[] = [
   {
@@ -32,29 +34,46 @@ const COLUMNS: Column<Cedant>[] = [
 ];
 
 export function CedantsTable() {
+  const toast = useToast();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Cedant | null>(null);
+
+  const { data = [], isLoading } = useCedants();
+  const { mutate: deleteCedant, isPending: isDeleting } = useDeleteCedant();
 
   const filtered = useMemo(() => {
-    if (!search) return MOCK_DATA;
+    if (!search) return data;
     const q = search.toLowerCase();
-    return MOCK_DATA.filter(
+    return data.filter(
       (r) =>
         r.name.toLowerCase().includes(q) ||
         r.email.toLowerCase().includes(q) ||
         r.phoneNumber.includes(q),
     );
-  }, [search]);
+  }, [data, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+    deleteCedant(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success('Cedant deleted successfully');
+        setDeleteTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to delete cedant')),
+    });
+  };
 
   return (
     <>
       <DataTable
         columns={COLUMNS}
         data={paged}
+        isLoading={isLoading}
         searchPlaceholder="Search cedants…"
         searchValue={search}
         onSearch={(q) => {
@@ -62,18 +81,16 @@ export function CedantsTable() {
           setPage(1);
         }}
         actionButton={{ label: 'Add Cedant', onClick: () => setPanelOpen(true) }}
-        rowActions={() => [
+        rowActions={(row) => [
           {
             label: 'Edit',
             onClick: () => {
-              /* TODO */
+              /* TODO: open edit panel */
             },
           },
           {
             label: 'Delete',
-            onClick: () => {
-              /* TODO */
-            },
+            onClick: () => setDeleteTarget(row),
             danger: true,
           },
         ]}
@@ -85,6 +102,28 @@ export function CedantsTable() {
       />
 
       <AddCedantPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Cedant"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isDeleting}
+              loadingText="Deleting…"
+              onClick={handleDelete}
+            >
+              Delete
+            </Button>
+          </div>
+        }
+      />
     </>
   );
 }

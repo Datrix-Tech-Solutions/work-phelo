@@ -11,7 +11,7 @@ import {
   usePermissionSetMembers,
   useAssignPermissionSet,
   useRemovePermissionSet,
-} from '@/hooks/useRoles';
+} from '@/hooks/hr/useRoles';
 import { useCurrentTenantUsers } from '@/hooks/useTenants';
 import { useToast } from '@/hooks/useToast';
 import type { PermissionSet } from '@/types/roles';

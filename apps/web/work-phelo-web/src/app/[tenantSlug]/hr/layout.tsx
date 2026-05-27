@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
-import { usePermission, usePermissionRule } from '@/hooks/usePermission';
+import { usePermission, usePermissionRule } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
 import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';

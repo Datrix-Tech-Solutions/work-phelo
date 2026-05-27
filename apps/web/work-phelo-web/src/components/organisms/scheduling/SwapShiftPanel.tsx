@@ -6,7 +6,10 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { Button } from '@/components/atoms/Button';
-import { useEligibleShiftSwapColleagues, useCreateShiftSwapRequest } from '@/hooks/useScheduling';
+import {
+  useEligibleShiftSwapColleagues,
+  useCreateShiftSwapRequest,
+} from '@/hooks/hr/useScheduling';
 import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { DayShift } from '@/components/molecules/scheduling/WeekDayCard';

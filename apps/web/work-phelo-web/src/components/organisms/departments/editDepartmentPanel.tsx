@@ -10,7 +10,7 @@ import {
   DepartmentFormFields,
   DeptForm,
 } from '@/components/molecules/departments/DepartmentFormFields';
-import { useDepartments, useUpdateDepartment } from '@/hooks/useDepartments';
+import { useDepartments, useUpdateDepartment } from '@/hooks/hr/useDepartments';
 import { useToast } from '@/hooks/useToast';
 
 interface Props {

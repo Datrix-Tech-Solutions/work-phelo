@@ -8,7 +8,7 @@ import { usePathname, useParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pagePx, pageHeader, pageContent } from '@/lib/layout';
 import { useAuthStore } from '@/store/auth.store';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
+import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 
 interface TabItem {
   label: string;

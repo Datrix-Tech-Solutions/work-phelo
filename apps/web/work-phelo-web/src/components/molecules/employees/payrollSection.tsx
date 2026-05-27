@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { AllowancesPanel } from '@/components/organisms/payroll/AllowancesPanel';
 import { DeductionsPanel } from '@/components/organisms/payroll/DeductionsPanel';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { Employee } from '@/types/hr';
 

@@ -6,7 +6,7 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { CreateAnnouncementPanel } from '@/components/organisms/announcements/CreateAnnouncementPanel';
 import { useAnnouncementsPage } from '@/hooks';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import type { Announcement } from '@/types/hr';
 

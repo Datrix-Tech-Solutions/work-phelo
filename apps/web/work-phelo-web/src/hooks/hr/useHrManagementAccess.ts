@@ -1,4 +1,4 @@
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 
 export function useHrManagementAccess() {

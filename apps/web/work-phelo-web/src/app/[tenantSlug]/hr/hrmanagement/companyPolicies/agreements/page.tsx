@@ -16,7 +16,7 @@ import {
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { useAuthStore } from '@/store/auth.store';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { cn } from '@/lib/utils';
 import type {

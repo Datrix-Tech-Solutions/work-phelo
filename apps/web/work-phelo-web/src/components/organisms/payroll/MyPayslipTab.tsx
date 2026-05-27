@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useMyPayslips } from '@/hooks/usePayroll';
+import { useMyPayslips } from '@/hooks/hr/usePayroll';
 import { PayrollItem } from '@/types/hr';
 import {
   payrollMonthLabel,

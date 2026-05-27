@@ -60,6 +60,100 @@ export const BROKER_FORM_DEFAULTS: BrokerFormValues = {
   phoneNumber: [{ value: '' }],
 };
 
+/* ── API payload types ── */
+
+export interface CreateCedantPayload {
+  name: string;
+  emails: string[];
+  phoneNumbers: string[];
+}
+export type UpdateCedantPayload = Partial<CreateCedantPayload>;
+
+export interface CreateReinsurerPayload {
+  name: string;
+  emails: string[];
+  phoneNumbers: string[];
+}
+export type UpdateReinsurerPayload = Partial<CreateReinsurerPayload>;
+
+export interface CreateBrokerPayload {
+  name: string;
+  emails: string[];
+  phoneNumbers: string[];
+}
+export type UpdateBrokerPayload = Partial<CreateBrokerPayload>;
+
+export interface CreateRiskClassPayload {
+  name: string;
+}
+export type UpdateRiskClassPayload = Partial<CreateRiskClassPayload>;
+
+export interface CreateRiskTypePayload {
+  name: string;
+  riskClassId: string;
+}
+export type UpdateRiskTypePayload = Partial<CreateRiskTypePayload>;
+
+export interface CreateCurrencyPayload {
+  name: string;
+  isoCode: string;
+  rate: number;
+}
+export type UpdateCurrencyPayload = Partial<CreateCurrencyPayload>;
+
+/* ── Currency ── */
+export interface Currency {
+  id: string;
+  name: string;
+  isoCode: string;
+  rate: number;
+}
+
+export interface CurrencyFormValues {
+  name: string;
+  isoCode: string;
+  rate: number | '';
+}
+
+export const CURRENCY_FORM_DEFAULTS: CurrencyFormValues = {
+  name: '',
+  isoCode: '',
+  rate: '',
+};
+
+/* ── Risk Type ── */
+export interface RiskType {
+  id: string;
+  name: string;
+  riskClass: string;
+  createdBy: string;
+}
+
+export interface RiskTypeFormValues {
+  name: string;
+  riskClassId: string;
+}
+
+export const RISK_TYPE_FORM_DEFAULTS: RiskTypeFormValues = {
+  name: '',
+  riskClassId: '',
+};
+
+/* ── Risk Class ── */
+export interface RiskClass {
+  id: string;
+  name: string;
+  createdBy: string;
+}
+
+export interface RiskClassFormValues {
+  name: string;
+}
+
+export const RISK_CLASS_FORM_DEFAULTS: RiskClassFormValues = {
+  name: '',
+};
+
 /* ── Facultative ── */
 export const FACULTATIVE_STATUSES = ['Active', 'Pending', 'Expired', 'Cancelled'] as const;
 export type FacultativeStatus = (typeof FACULTATIVE_STATUSES)[number];

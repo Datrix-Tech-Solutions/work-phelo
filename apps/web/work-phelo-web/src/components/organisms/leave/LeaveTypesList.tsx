@@ -9,7 +9,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateLeaveTypePanel } from '@/components/organisms/leave/CreateLeaveTypePanel';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { useDeleteLeaveType, leaveKeys } from '@/hooks/useLeave';
+import { useDeleteLeaveType, leaveKeys } from '@/hooks/hr/useLeave';
 import { LeaveType, PaginatedResponse } from '@/types/hr';
 import { extractError } from '@/lib/extractError';
 

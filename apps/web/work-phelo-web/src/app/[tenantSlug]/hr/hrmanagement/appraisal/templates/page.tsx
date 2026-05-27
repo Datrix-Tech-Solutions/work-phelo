@@ -4,7 +4,7 @@ import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { AppraisalTemplatesList } from '@/components/organisms/appraisal/AppraisalTemplatesList';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
+import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 
 export default function AppraisalTemplatesPage({
   params,

@@ -11,7 +11,7 @@ import { usePayrollSettings, useUpdatePayrollSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { inputClass } from '@/lib/utils';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
   PAYROLL_COUNTRY_OPTIONS,

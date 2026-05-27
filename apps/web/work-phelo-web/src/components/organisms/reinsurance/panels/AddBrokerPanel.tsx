@@ -5,6 +5,9 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { BROKER_FORM_DEFAULTS, BrokerFormValues } from '@/types/reinsurance';
 import { BrokerFormFields } from '@/components/molecules/reinsurance/BrokerFormFields';
+import { useCreateBroker } from '@/hooks';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 interface AddBrokerPanelProps {
   isOpen: boolean;
@@ -12,13 +15,16 @@ interface AddBrokerPanelProps {
 }
 
 export function AddBrokerPanel({ isOpen, onClose }: AddBrokerPanelProps) {
+  const toast = useToast();
+  const { mutateAsync: createBroker, isPending } = useCreateBroker();
+
   const {
     control,
     register,
     handleSubmit,
     reset,
     setValue,
-    formState: { errors, isSubmitting },
+    formState: { errors },
   } = useForm<BrokerFormValues>({
     defaultValues: BROKER_FORM_DEFAULTS,
   });
@@ -28,10 +34,18 @@ export function AddBrokerPanel({ isOpen, onClose }: AddBrokerPanelProps) {
     onClose();
   };
 
-  const onSubmit = (data: BrokerFormValues) => {
-    // TODO: call useCreateCedant() mutation once API is ready
-    console.log('Create broker:', data);
-    handleClose();
+  const onSubmit = async (data: BrokerFormValues) => {
+    try {
+      await createBroker({
+        name: data.name,
+        emails: data.email.map((e) => e.value).filter(Boolean),
+        phoneNumbers: data.phoneNumber.map((p) => p.value).filter(Boolean),
+      });
+      toast.success('Broker created successfully');
+      handleClose();
+    } catch (err) {
+      toast.error(extractError(err, 'Failed to create broker'));
+    }
   };
 
   return (
@@ -42,11 +56,11 @@ export function AddBrokerPanel({ isOpen, onClose }: AddBrokerPanelProps) {
       description="Fill in the details to create a new broker."
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
+          <Button variant="outline" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
-            {isSubmitting ? 'Saving…' : 'Save Broker'}
+          <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
+            Save Broker
           </Button>
         </div>
       }

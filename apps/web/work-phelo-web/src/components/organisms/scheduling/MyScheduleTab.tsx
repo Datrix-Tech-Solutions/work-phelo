@@ -15,7 +15,7 @@ import {
   useMyShiftSwaps,
   useRespondToShiftSwap,
   useCancelShiftSwap,
-} from '@/hooks/useScheduling';
+} from '@/hooks/hr/useScheduling';
 import { ShiftSwapRequest, ShiftSwapStatus } from '@/types/scheduling';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { Button } from '@/components/atoms/Button';

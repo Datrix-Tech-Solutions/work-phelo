@@ -4,7 +4,7 @@ import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { AppraisalCyclesList } from '@/components/organisms/appraisal/AppraisalCyclesList';
-import { useHrManagementAccess } from '@/hooks/useHrManagementAccess';
+import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 
 export default function AppraisalCyclesPage({
   params,
