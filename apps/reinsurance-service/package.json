@@ -4,12 +4,18 @@
   "private": true,
   "scripts": {
     "dev": "nest start --watch",
+    "prebuild": "npm run db:generate",
     "build": "nest build",
+    "precheck-types": "npm run db:generate",
     "check-types": "tsc --noEmit -p tsconfig.build.json",
     "start": "node dist/main",
+    "prelint": "npm run db:generate",
     "lint": "eslint \"src/**/*.ts\"",
+    "pretest": "npm run db:generate",
     "test": "jest",
+    "pretest:unit": "npm run db:generate",
     "test:unit": "jest",
+    "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:validate": "prisma validate"
   },
@@ -17,7 +23,9 @@
     "@nestjs/common": "^10.4.0",
     "@nestjs/config": "^3.3.0",
     "@nestjs/core": "^10.4.0",
+    "@nestjs/microservices": "^10.4.22",
     "@nestjs/platform-express": "^10.4.0",
+    "@prisma/client": "^5.22.0",
     "@work-phelo/types": "file:../../packages/types",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -51,7 +59,7 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.ts$": "ts-jest"
     },
     "testEnvironment": "node",
     "passWithNoTests": true

@@ -10,6 +10,73 @@ datasource db {
   schemas  = ["reinsurance"]
 }
 
-// Broker operations models are intentionally introduced only with approved
-// workflows. This scaffold establishes schema ownership without speculative
-// tables that would be difficult to migrate later.
+enum CounterpartyType {
+  CEDANT
+  REINSURER
+  BROKER
+
+  @@schema("reinsurance")
+}
+
+model Counterparty {
+  id                 String                @id @default(uuid())
+  tenantId           String
+  type               CounterpartyType
+  name               String
+  normalizedName     String
+  registrationNumber String?
+  email              String?
+  phone              String?
+  website            String?
+  notes              String?
+  createdByUserId    String
+  updatedByUserId    String
+  archivedByUserId   String?
+  archivedAt         DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  contacts           CounterpartyContact[]
+  addresses          CounterpartyAddress[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, type, archivedAt, name])
+  @@index([tenantId, archivedAt, createdAt])
+  @@schema("reinsurance")
+}
+
+model CounterpartyContact {
+  id             String       @id @default(uuid())
+  tenantId       String
+  counterpartyId String
+  fullName       String
+  jobTitle       String?
+  email          String?
+  phone          String?
+  isPrimary      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  counterparty   Counterparty @relation(fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, counterpartyId])
+  @@schema("reinsurance")
+}
+
+model CounterpartyAddress {
+  id             String       @id @default(uuid())
+  tenantId       String
+  counterpartyId String
+  label          String?
+  line1          String
+  line2          String?
+  city           String
+  state          String?
+  postalCode     String?
+  country        String
+  isPrimary      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  counterparty   Counterparty @relation(fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, counterpartyId])
+  @@schema("reinsurance")
+}

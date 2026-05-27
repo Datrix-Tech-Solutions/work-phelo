@@ -44,6 +44,9 @@ export const EventPatterns = {
   NOTIFICATION_IN_APP_CREATE: 'notification.in_app.create',
 
   // Reinsurance Operations domain events
+  REINSURANCE_COUNTERPARTY_CREATED: 'reinsurance.counterparty.created',
+  REINSURANCE_COUNTERPARTY_UPDATED: 'reinsurance.counterparty.updated',
+  REINSURANCE_COUNTERPARTY_DELETED: 'reinsurance.counterparty.deleted',
   REINSURANCE_PLACEMENT_CREATED: 'reinsurance.placement.created',
   REINSURANCE_PLACEMENT_UPDATED: 'reinsurance.placement.updated',
   REINSURANCE_PLACEMENT_STATUS_CHANGED: 'reinsurance.placement.status_changed',
@@ -270,6 +273,24 @@ export interface InAppNotificationCreateEvent {
   entityId?: string;
   sourceService?: string;
   priority?: InAppNotificationPriority;
+}
+
+// ── Reinsurance → Core Audit Events ───────────────────────────────────────
+
+export type ReinsuranceCounterpartyType = 'CEDANT' | 'REINSURER' | 'BROKER';
+
+export interface ReinsuranceCounterpartyAuditEvent {
+  tenantId: string;
+  counterpartyId: string;
+  counterpartyType: ReinsuranceCounterpartyType;
+  counterpartyName: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
 }
 
 // ── HR → Notification Events ───────────────────────────────────────────────

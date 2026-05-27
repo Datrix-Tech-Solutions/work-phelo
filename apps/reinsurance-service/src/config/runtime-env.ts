@@ -1,6 +1,7 @@
 export const reinsuranceRequiredEnvVars = [
   'DATABASE_URL',
   'JWT_SECRET',
+  'RABBITMQ_URL',
 ] as const;
 
 export function assertReinsuranceRuntimeEnv(): void {
