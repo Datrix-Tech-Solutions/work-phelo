@@ -51,6 +51,9 @@ export const EventPatterns = {
   REINSURANCE_PLACEMENT_UPDATED: 'reinsurance.placement.updated',
   REINSURANCE_PLACEMENT_DELETED: 'reinsurance.placement.deleted',
   REINSURANCE_PLACEMENT_STATUS_CHANGED: 'reinsurance.placement.status_changed',
+  REINSURANCE_MAILBOX_CONNECTED: 'reinsurance.mailbox.connected',
+  REINSURANCE_MAILBOX_SYNCED: 'reinsurance.mailbox.synced',
+  REINSURANCE_MAILBOX_ARCHIVED: 'reinsurance.mailbox.archived',
   REINSURANCE_EMAIL_RECEIVED: 'reinsurance.email.received',
   REINSURANCE_EMAIL_SENT: 'reinsurance.email.sent',
   REINSURANCE_EMAIL_LINKED: 'reinsurance.email.linked',
@@ -321,6 +324,43 @@ export interface ReinsurancePlacementStatusAuditEvent extends ReinsurancePlaceme
   previousStatus: ReinsurancePlacementStatus;
   nextStatus: ReinsurancePlacementStatus;
   note?: string;
+}
+
+export type ReinsuranceMailboxProvider = 'MICROSOFT_GRAPH' | 'GOOGLE_GMAIL';
+
+export interface ReinsuranceMailboxAuditEvent {
+  tenantId: string;
+  mailboxConnectionId: string;
+  provider: ReinsuranceMailboxProvider;
+  emailAddress: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export interface ReinsuranceMailboxSyncAuditEvent extends ReinsuranceMailboxAuditEvent {
+  threadsSynced: number;
+  messagesSynced: number;
+  lastSyncedAt: string;
+}
+
+export interface ReinsuranceEmailLinkAuditEvent {
+  tenantId: string;
+  linkId: string;
+  placementId: string;
+  threadId: string;
+  messageId?: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
 }
 
 // ── HR → Notification Events ───────────────────────────────────────────────

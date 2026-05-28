@@ -3,6 +3,9 @@ import { Ctx, EventPattern, Payload, RmqContext } from '@nestjs/microservices';
 import {
   EventPatterns,
   ReinsuranceCounterpartyAuditEvent,
+  ReinsuranceEmailLinkAuditEvent,
+  ReinsuranceMailboxAuditEvent,
+  ReinsuranceMailboxSyncAuditEvent,
   ReinsurancePlacementAuditEvent,
   ReinsurancePlacementStatusAuditEvent,
   WithMeta,
@@ -76,6 +79,51 @@ export class AuditEventsHandler {
     this.ack(context);
   }
 
+  @EventPattern(EventPatterns.REINSURANCE_MAILBOX_CONNECTED)
+  async onMailboxConnected(
+    @Payload() data: WithMeta<ReinsuranceMailboxAuditEvent>,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    await this.logMailbox('CREATE', data);
+    this.ack(context);
+  }
+
+  @EventPattern(EventPatterns.REINSURANCE_MAILBOX_SYNCED)
+  async onMailboxSynced(
+    @Payload() data: WithMeta<ReinsuranceMailboxSyncAuditEvent>,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    await this.logMailbox('UPDATE', data);
+    this.ack(context);
+  }
+
+  @EventPattern(EventPatterns.REINSURANCE_MAILBOX_ARCHIVED)
+  async onMailboxArchived(
+    @Payload() data: WithMeta<ReinsuranceMailboxAuditEvent>,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    await this.logMailbox('DELETE', data);
+    this.ack(context);
+  }
+
+  @EventPattern(EventPatterns.REINSURANCE_EMAIL_LINKED)
+  async onEmailLinked(
+    @Payload() data: WithMeta<ReinsuranceEmailLinkAuditEvent>,
+    @Ctx() context: RmqContext,
+  ): Promise<void> {
+    await this.auditService.log({
+      tenantId: data.tenantId,
+      userId: data.actorUserId,
+      userEmail: data.actorEmail,
+      userRole: data.actorRole,
+      action: 'CREATE',
+      resource: 'operations.reinsurance.email',
+      resourceId: data.linkId,
+      changes: data.changes,
+    });
+    this.ack(context);
+  }
+
   private logCounterparty(
     action: 'CREATE' | 'UPDATE' | 'DELETE',
     data: ReinsuranceCounterpartyAuditEvent,
@@ -104,6 +152,22 @@ export class AuditEventsHandler {
       action,
       resource: 'operations.reinsurance.placements',
       resourceId: data.placementId,
+      changes: data.changes,
+    });
+  }
+
+  private logMailbox(
+    action: 'CREATE' | 'UPDATE' | 'DELETE',
+    data: ReinsuranceMailboxAuditEvent,
+  ): Promise<void> {
+    return this.auditService.log({
+      tenantId: data.tenantId,
+      userId: data.actorUserId,
+      userEmail: data.actorEmail,
+      userRole: data.actorRole,
+      action,
+      resource: 'operations.reinsurance.email-settings',
+      resourceId: data.mailboxConnectionId,
       changes: data.changes,
     });
   }

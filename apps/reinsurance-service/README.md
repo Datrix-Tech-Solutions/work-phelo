@@ -18,6 +18,9 @@ The service foundation and Counterparties domain provide:
   persistence for cedants, reinsurers and brokers.
 - Tenant-scoped facultative Placement, PlacementParticipant and
   PlacementStatusHistory persistence built on active Counterparties.
+- Email technical foundation for mailbox connection metadata, provider
+  verification, sync proof-of-concept, thread/message metadata, attachment
+  metadata and manual placement email links.
 - Development-only Swagger/OpenAPI documentation for live contract discovery.
 
 `/api/health` performs only a database connectivity check and is exposed
@@ -313,6 +316,98 @@ view layer, for example `DRAFT`/`MARKETING`/`QUOTED` as work-in-progress,
 The backend does not expose split `/cedants`, `/reinsurers` or `/brokers`
 placement endpoints; retrieve those through `/counterparties?type=...`.
 
+## Email Foundation API
+
+This phase establishes the technical base for embedded Reinsurance mailbox
+workflows. It is intentionally not the full email workflow MVP yet.
+
+Implemented now:
+
+- Mailbox connection metadata and encrypted OAuth token storage.
+- Microsoft Graph provider abstraction and connection verification.
+- Manual sync proof-of-concept for recent message metadata.
+- Email threads, messages and attachment metadata persistence.
+- Manual placement-to-thread/message links.
+
+Deferred:
+
+- Sending, replying and forwarding.
+- Attachment file downloads.
+- AI parsing or OCR.
+- Automatic placement/counterparty updates.
+- Webhook subscriptions and background schedulers.
+
+Microsoft Graph is the recommended first production provider because most
+broker operations teams use Outlook/Exchange and Graph gives clean OAuth,
+thread/message metadata and attachment metadata APIs. Gmail remains reserved
+in the enum for future provider support but is not enabled yet.
+
+Mailbox token encryption uses `REINSURANCE_MAILBOX_TOKEN_ENCRYPTION_KEY`.
+This variable is not required for service boot, but it is required before any
+mailbox token can be stored or decrypted. Use a 32-byte key encoded as 64 hex
+characters or base64. Never expose encrypted tokens through API responses.
+
+The gateway forwards these routes:
+
+| Method   | Gateway route                                                                         | Permission                                   |
+| -------- | ------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `GET`    | `/api/v1/operations/reinsurance/email/mailboxes`                                      | `operations.reinsurance.email-settings:VIEW` |
+| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/connect`                              | `operations.reinsurance.email-settings:EDIT` |
+| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/:id/verify`                           | `operations.reinsurance.email-settings:EDIT` |
+| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/:id/sync`                             | `operations.reinsurance.email-settings:EDIT` |
+| `DELETE` | `/api/v1/operations/reinsurance/email/mailboxes/:id`                                  | `operations.reinsurance.email-settings:EDIT` |
+| `GET`    | `/api/v1/operations/reinsurance/email/threads`                                        | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/email/threads/:id`                                    | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/email/messages`                                       | `operations.reinsurance.email:VIEW`          |
+| `POST`   | `/api/v1/operations/reinsurance/email/threads/:threadId/placements/:placementId/link` | `operations.reinsurance.email:EDIT`          |
+| `DELETE` | `/api/v1/operations/reinsurance/email/links/:id`                                      | `operations.reinsurance.email:EDIT`          |
+
+Connect payload:
+
+```json
+{
+  "provider": "MICROSOFT_GRAPH",
+  "emailAddress": "placements@broker.example",
+  "displayName": "Reinsurance Placements",
+  "accessToken": "oauth-access-token",
+  "refreshToken": "oauth-refresh-token",
+  "tokenExpiresAt": "2026-05-28T12:00:00.000Z"
+}
+```
+
+The access and refresh tokens are write-only inputs. Responses return mailbox
+metadata only. `sync` stores provider message metadata and attachment metadata
+only; it does not download attachment content.
+
+Email frontend integration should follow the same route/key style as
+Counterparties and Placements:
+
+```text
+src/
+├── hooks/operations/reinsurance/useEmail.ts
+├── lib/operations/reinsurance/email-api.ts
+├── types/operations/reinsurance-email.ts
+└── app/[tenantSlug]/operations/reinsurance/email/
+```
+
+Recommended query keys:
+
+```ts
+const emailKeys = {
+  all: ['operations', 'reinsurance', 'email'] as const,
+  mailboxes: (params: MailboxQuery) =>
+    [...emailKeys.all, 'mailboxes', params] as const,
+  threads: (params: EmailThreadQuery) =>
+    [...emailKeys.all, 'threads', params] as const,
+  messages: (params: EmailMessageQuery) =>
+    [...emailKeys.all, 'messages', params] as const,
+};
+```
+
+Prefer refetch/invalidation after mailbox sync and manual link mutations.
+Avoid optimistic updates for sync because provider state and local persistence
+can diverge during the foundation phase.
+
 ## Boundary Rules
 
 - Use authenticated tenant context for every business query.
@@ -323,9 +418,9 @@ placement endpoints; retrieve those through `/counterparties?type=...`.
 - Do not query Core service database schemas.
 - Use Core notification and audit contracts instead of owning those records.
 - Store broker workflow records only in the `reinsurance` schema.
-- Publish `reinsurance.counterparty.*` and `reinsurance.placement.*`
-  lifecycle events to Auth for central audit persistence; event failure is
-  logged after a successful domain write.
+- Publish `reinsurance.counterparty.*`, `reinsurance.placement.*` and
+  `reinsurance.email.*` lifecycle events to Auth for central audit
+  persistence; event failure is logged after a successful domain write.
 
 ## Development Deployment
 
