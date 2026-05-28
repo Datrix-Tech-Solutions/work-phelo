@@ -606,14 +606,8 @@ export class LeaveService {
     for (const lt of DEFAULT_LEAVE_TYPES) {
       await this.prisma.leaveType.upsert({
         where: { tenantId_name: { tenantId, name: lt.name } },
-        update: lt.isDefault
-          ? {
-              applicableGenders: lt.applicableGenders ?? [],
-              requiresApproval: true,
-              requiresSupportingDocument:
-                lt.requiresSupportingDocument ?? false,
-            }
-          : {},
+        // Preserve tenant-specific edits and archives after initial seeding.
+        update: { isDefault: true },
         create: { tenantId, ...lt },
       });
     }
@@ -708,15 +702,29 @@ export class LeaveService {
       where: { id, tenantId },
     });
     if (!leaveType) throw new NotFoundException('Leave type not found');
-    if (leaveType.isDefault) {
-      throw new ForbiddenException('Default leave types cannot be deleted');
-    }
 
-    await this.prisma.leaveType.update({
+    const [requestCount, balanceCount] = await Promise.all([
+      this.prisma.leaveRequest.count({
+        where: { leaveTypeId: id, tenantId },
+      }),
+      this.prisma.leaveBalance.count({
+        where: { leaveTypeId: id, tenantId },
+      }),
+    ]);
+
+    const archived = await this.prisma.leaveType.update({
       where: { id },
       data: { isActive: false },
     });
-    return { message: 'Leave type deleted successfully' };
+
+    return {
+      ...archived,
+      message: 'Leave type archived successfully',
+      warning:
+        requestCount > 0 || balanceCount > 0
+          ? 'This leave type is referenced by existing leave records, so it was archived instead of destructively deleted.'
+          : null,
+    };
   }
 
   // ── Public Holidays ───────────────────────────────────────────────────────
