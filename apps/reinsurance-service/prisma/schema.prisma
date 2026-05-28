@@ -44,6 +44,28 @@ enum PlacementParticipantRole {
   @@schema("reinsurance")
 }
 
+enum MailboxProvider {
+  MICROSOFT_GRAPH
+  GOOGLE_GMAIL
+
+  @@schema("reinsurance")
+}
+
+enum MailboxConnectionStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+
+  @@schema("reinsurance")
+}
+
+enum EmailMessageDirection {
+  INBOUND
+  OUTBOUND
+
+  @@schema("reinsurance")
+}
+
 model Counterparty {
   id                 String                 @id @default(uuid())
   tenantId           String
@@ -113,6 +135,7 @@ model Placement {
   cedant              Counterparty             @relation("PlacementCedant", fields: [cedantId, tenantId], references: [id, tenantId], onDelete: Restrict)
   participants        PlacementParticipant[]
   statusHistory       PlacementStatusHistory[]
+  emailLinks          PlacementEmailLink[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
@@ -155,6 +178,131 @@ model PlacementStatusHistory {
 
   @@index([tenantId, placementId, createdAt])
   @@index([tenantId, toStatus, createdAt])
+  @@schema("reinsurance")
+}
+
+model MailboxConnection {
+  id                    String                  @id @default(uuid())
+  tenantId              String
+  provider              MailboxProvider
+  emailAddress          String
+  normalizedEmail       String
+  displayName           String?
+  status                MailboxConnectionStatus @default(ACTIVE)
+  externalMailboxId     String?
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  tokenExpiresAt        DateTime?
+  syncCursor            String?
+  lastSyncedAt          DateTime?
+  lastSyncError         String?
+  connectedByUserId     String
+  archivedByUserId      String?
+  archivedAt            DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  threads               EmailThread[]
+  messages              EmailMessage[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, provider, status, archivedAt])
+  @@index([tenantId, normalizedEmail, archivedAt])
+  @@schema("reinsurance")
+}
+
+model EmailThread {
+  id                  String               @id @default(uuid())
+  tenantId            String
+  mailboxConnectionId String
+  providerThreadId    String
+  subject             String?
+  participants        Json?
+  lastMessageAt       DateTime?
+  messageCount        Int                  @default(0)
+  hasAttachments      Boolean              @default(false)
+  archivedByUserId    String?
+  archivedAt          DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  mailboxConnection   MailboxConnection    @relation(fields: [mailboxConnectionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  messages            EmailMessage[]
+  placementLinks      PlacementEmailLink[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, mailboxConnectionId, providerThreadId])
+  @@index([tenantId, mailboxConnectionId, archivedAt, lastMessageAt])
+  @@index([tenantId, archivedAt, lastMessageAt])
+  @@schema("reinsurance")
+}
+
+model EmailMessage {
+  id                  String                    @id @default(uuid())
+  tenantId            String
+  mailboxConnectionId String
+  threadId            String
+  providerMessageId   String
+  internetMessageId   String?
+  direction           EmailMessageDirection
+  subject             String?
+  fromEmail           String?
+  fromName            String?
+  toRecipients        Json?
+  ccRecipients        Json?
+  receivedAt          DateTime?
+  sentAt              DateTime?
+  bodyPreview         String?
+  hasAttachments      Boolean                   @default(false)
+  isRead              Boolean                   @default(false)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  mailboxConnection   MailboxConnection         @relation(fields: [mailboxConnectionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  thread              EmailThread               @relation(fields: [threadId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  attachments         EmailAttachmentMetadata[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, mailboxConnectionId, providerMessageId])
+  @@index([tenantId, threadId, receivedAt])
+  @@index([tenantId, mailboxConnectionId, receivedAt])
+  @@schema("reinsurance")
+}
+
+model EmailAttachmentMetadata {
+  id                   String       @id @default(uuid())
+  tenantId             String
+  messageId            String
+  providerAttachmentId String
+  fileName             String
+  contentType          String?
+  sizeBytes            Int?
+  isInline             Boolean      @default(false)
+  contentId            String?
+  createdAt            DateTime     @default(now())
+  message              EmailMessage @relation(fields: [messageId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, messageId, providerAttachmentId])
+  @@index([tenantId, messageId])
+  @@schema("reinsurance")
+}
+
+model PlacementEmailLink {
+  id               String      @id @default(uuid())
+  tenantId         String
+  placementId      String
+  threadId         String
+  messageId        String?
+  linkedByUserId   String
+  note             String?
+  archivedByUserId String?
+  archivedAt       DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  placement        Placement   @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  thread           EmailThread @relation(fields: [threadId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, archivedAt])
+  @@index([tenantId, threadId, archivedAt])
+  @@index([tenantId, messageId, archivedAt])
   @@schema("reinsurance")
 }
 

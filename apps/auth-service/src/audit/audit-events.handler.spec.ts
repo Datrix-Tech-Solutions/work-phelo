@@ -2,6 +2,8 @@ import { RmqContext } from '@nestjs/microservices';
 import {
   EventPatterns,
   ReinsuranceCounterpartyAuditEvent,
+  ReinsuranceEmailLinkAuditEvent,
+  ReinsuranceMailboxAuditEvent,
   ReinsurancePlacementAuditEvent,
   ReinsurancePlacementStatusAuditEvent,
 } from '@work-phelo/types';
@@ -18,6 +20,10 @@ describe('AuditEventsHandler', () => {
     | 'onPlacementUpdated'
     | 'onPlacementDeleted'
     | 'onPlacementStatusChanged';
+  type MailboxAuditHandler =
+    | 'onMailboxConnected'
+    | 'onMailboxSynced'
+    | 'onMailboxArchived';
 
   const meta = {
     messageId: 'message-1',
@@ -66,6 +72,31 @@ describe('AuditEventsHandler', () => {
       before: { status: 'DRAFT' },
       after: { status: 'MARKETING' },
     },
+  };
+  const mailboxEvent: ReinsuranceMailboxAuditEvent & { _meta: typeof meta } = {
+    tenantId: 'tenant-1',
+    mailboxConnectionId: 'mailbox-1',
+    provider: 'MICROSOFT_GRAPH',
+    emailAddress: 'placements@example.com',
+    actorUserId: 'user-1',
+    actorEmail: 'broker@example.com',
+    actorRole: 'EMPLOYEE',
+    changes: { after: { emailAddress: 'placements@example.com' } },
+    _meta: meta,
+  };
+  const emailLinkEvent: ReinsuranceEmailLinkAuditEvent & {
+    _meta: typeof meta;
+  } = {
+    tenantId: 'tenant-1',
+    linkId: 'link-1',
+    placementId: 'placement-1',
+    threadId: 'thread-1',
+    messageId: 'message-1',
+    actorUserId: 'user-1',
+    actorEmail: 'broker@example.com',
+    actorRole: 'EMPLOYEE',
+    changes: { after: { placementId: 'placement-1' } },
+    _meta: meta,
   };
 
   let auditService: { log: jest.Mock };
@@ -163,4 +194,47 @@ describe('AuditEventsHandler', () => {
       expect(channel.ack).toHaveBeenCalledWith('message');
     },
   );
+
+  it.each<[string, string, MailboxAuditHandler]>([
+    [
+      EventPatterns.REINSURANCE_MAILBOX_CONNECTED,
+      'CREATE',
+      'onMailboxConnected',
+    ],
+    [EventPatterns.REINSURANCE_MAILBOX_SYNCED, 'UPDATE', 'onMailboxSynced'],
+    [EventPatterns.REINSURANCE_MAILBOX_ARCHIVED, 'DELETE', 'onMailboxArchived'],
+  ])(
+    'records %s as %s and acknowledges the event',
+    async (_pattern, action, method) => {
+      await handler[method](mailboxEvent as never, context);
+
+      expect(auditService.log).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        userId: 'user-1',
+        userEmail: 'broker@example.com',
+        userRole: 'EMPLOYEE',
+        action,
+        resource: 'operations.reinsurance.email-settings',
+        resourceId: 'mailbox-1',
+        changes: mailboxEvent.changes,
+      });
+      expect(channel.ack).toHaveBeenCalledWith('message');
+    },
+  );
+
+  it('records email link events and acknowledges the event', async () => {
+    await handler.onEmailLinked(emailLinkEvent, context);
+
+    expect(auditService.log).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      userEmail: 'broker@example.com',
+      userRole: 'EMPLOYEE',
+      action: 'CREATE',
+      resource: 'operations.reinsurance.email',
+      resourceId: 'link-1',
+      changes: emailLinkEvent.changes,
+    });
+    expect(channel.ack).toHaveBeenCalledWith('message');
+  });
 });
