@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -37,6 +38,11 @@ type AnnouncementAudienceSelection = {
   targetDepartmentIds: string[];
   targetBranchIds: string[];
   targetEmployeeIds: string[];
+};
+
+type AnnouncementReadState = {
+  isRead: boolean;
+  readAt: Date | null;
 };
 
 @Injectable()
@@ -275,6 +281,68 @@ export class AnnouncementsService {
     return where;
   }
 
+  private applyReadFilter(
+    where: Prisma.AnnouncementWhereInput,
+    tenantId: string,
+    userId: string,
+    read?: QueryAnnouncementsDto['read'],
+  ) {
+    if (read === 'read') {
+      where.readReceipts = { some: { tenantId, userId } };
+    }
+
+    if (read === 'unread') {
+      where.readReceipts = { none: { tenantId, userId } };
+    }
+  }
+
+  private async buildVisibleWhereForActor(
+    tenantId: string,
+    actor: RequestUser,
+    query: QueryAnnouncementsDto = {},
+  ): Promise<Prisma.AnnouncementWhereInput> {
+    const canManage = this.canManageAnnouncements(actor);
+    if (!this.canReadAnnouncements(actor)) {
+      throw new ForbiddenException(
+        "You don't have permission to access this. Contact your administrator.",
+      );
+    }
+
+    const actorContext = await this.getActorContext(tenantId, actor);
+    return this.buildVisibilityWhere(tenantId, actorContext, query, canManage);
+  }
+
+  private async attachReadState<T extends Announcement>(
+    tenantId: string,
+    userId: string,
+    announcements: T[],
+  ): Promise<Array<T & AnnouncementReadState>> {
+    if (announcements.length === 0) {
+      return [];
+    }
+
+    const receipts = await this.prisma.announcementReadReceipt.findMany({
+      where: {
+        tenantId,
+        userId,
+        announcementId: { in: announcements.map((item) => item.id) },
+      },
+      select: { announcementId: true, readAt: true },
+    });
+    const readAtByAnnouncementId = new Map(
+      receipts.map((receipt) => [receipt.announcementId, receipt.readAt]),
+    );
+
+    return announcements.map((announcement) => {
+      const readAt = readAtByAnnouncementId.get(announcement.id) ?? null;
+      return {
+        ...announcement,
+        isRead: readAt !== null,
+        readAt,
+      };
+    });
+  }
+
   private async resolveAnnouncementRecipients(
     tenantId: string,
     announcement: Pick<
@@ -383,20 +451,9 @@ export class AnnouncementsService {
     actor: RequestUser,
     query: QueryAnnouncementsDto,
   ) {
-    const canManage = this.canManageAnnouncements(actor);
-    if (!this.canReadAnnouncements(actor)) {
-      throw new ForbiddenException(
-        "You don't have permission to access this. Contact your administrator.",
-      );
-    }
+    const where = await this.buildVisibleWhereForActor(tenantId, actor, query);
+    this.applyReadFilter(where, tenantId, actor.id, query.read);
 
-    const actorContext = await this.getActorContext(tenantId, actor);
-    const where = this.buildVisibilityWhere(
-      tenantId,
-      actorContext,
-      query,
-      canManage,
-    );
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -412,7 +469,7 @@ export class AnnouncementsService {
     ]);
 
     return {
-      items,
+      items: await this.attachReadState(tenantId, actor.id, items),
       meta: {
         page,
         limit,
@@ -431,15 +488,9 @@ export class AnnouncementsService {
       return [];
     }
 
-    const actorContext = await this.getActorContext(tenantId, actor);
-    const where = this.buildVisibilityWhere(
-      tenantId,
-      actorContext,
-      {},
-      this.canManageAnnouncements(actor),
-    );
+    const where = await this.buildVisibleWhereForActor(tenantId, actor);
 
-    return this.prisma.announcement.findMany({
+    const announcements = await this.prisma.announcement.findMany({
       where,
       orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
       take: limit,
@@ -450,6 +501,107 @@ export class AnnouncementsService {
         publishedAt: true,
       },
     });
+
+    const receipts = await this.prisma.announcementReadReceipt.findMany({
+      where: {
+        tenantId,
+        userId: actor.id,
+        announcementId: { in: announcements.map((item) => item.id) },
+      },
+      select: { announcementId: true, readAt: true },
+    });
+    const readAtByAnnouncementId = new Map(
+      receipts.map((receipt) => [receipt.announcementId, receipt.readAt]),
+    );
+
+    return announcements.map((announcement) => {
+      const readAt = readAtByAnnouncementId.get(announcement.id) ?? null;
+      return {
+        ...announcement,
+        isRead: readAt !== null,
+        readAt,
+      };
+    });
+  }
+
+  async getUnreadCount(tenantId: string, actor: RequestUser) {
+    const visibleWhere = await this.buildVisibleWhereForActor(tenantId, actor);
+    const count = await this.prisma.announcement.count({
+      where: {
+        AND: [
+          visibleWhere,
+          {
+            readReceipts: {
+              none: { tenantId, userId: actor.id },
+            },
+          },
+        ],
+      },
+    });
+
+    return { count };
+  }
+
+  async markRead(tenantId: string, actor: RequestUser, id: string) {
+    const visibleWhere = await this.buildVisibleWhereForActor(tenantId, actor);
+    const announcement = await this.prisma.announcement.findFirst({
+      where: { AND: [visibleWhere, { id, tenantId }] },
+      select: { id: true },
+    });
+
+    if (!announcement) throw new NotFoundException('Announcement not found');
+
+    const receipt = await this.prisma.announcementReadReceipt.upsert({
+      where: {
+        tenantId_announcementId_userId: {
+          tenantId,
+          announcementId: id,
+          userId: actor.id,
+        },
+      },
+      update: { readAt: new Date() },
+      create: { tenantId, announcementId: id, userId: actor.id },
+    });
+
+    return { message: 'Announcement marked as read', readAt: receipt.readAt };
+  }
+
+  async markAllRead(tenantId: string, actor: RequestUser) {
+    const visibleWhere = await this.buildVisibleWhereForActor(tenantId, actor);
+    const announcements = await this.prisma.announcement.findMany({
+      where: {
+        AND: [
+          visibleWhere,
+          {
+            readReceipts: {
+              none: { tenantId, userId: actor.id },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (announcements.length === 0) {
+      return { message: 'All announcements marked as read', count: 0 };
+    }
+
+    const now = new Date();
+    const result = await this.prisma.announcementReadReceipt.createMany({
+      data: announcements.map((announcement) => ({
+        id: randomUUID(),
+        tenantId,
+        announcementId: announcement.id,
+        userId: actor.id,
+        readAt: now,
+      })),
+      skipDuplicates: true,
+    });
+
+    return {
+      message: 'All announcements marked as read',
+      count: result.count,
+    };
   }
 
   async remove(tenantId: string, id: string) {

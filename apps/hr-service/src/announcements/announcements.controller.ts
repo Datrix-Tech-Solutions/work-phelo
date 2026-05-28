@@ -10,12 +10,15 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
   Query,
   Req,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { Permission } from '@work-phelo/config';
 import { AnnouncementsService } from './announcements.service';
@@ -64,6 +67,11 @@ export class AnnouncementsController {
     required: false,
     enum: ['visible', 'all'],
   })
+  @ApiQuery({
+    name: 'read',
+    required: false,
+    enum: ['read', 'unread'],
+  })
   @ApiResponse({ status: 200, description: 'Announcements retrieved' })
   findAll(
     @Req() req: Request & { user: RequestUser },
@@ -74,6 +82,43 @@ export class AnnouncementsController {
       req.user,
       query,
     );
+  }
+
+  @Get('unread-count')
+  @RequirePermissions(Permission.READ_ANNOUNCEMENTS)
+  @ApiOperation({
+    summary: 'Get unread announcement count for the current user',
+  })
+  @ApiResponse({ status: 200, description: 'Unread count retrieved' })
+  getUnreadCount(@Req() req: Request & { user: RequestUser }) {
+    return this.announcementsService.getUnreadCount(
+      req.user.tenantId,
+      req.user,
+    );
+  }
+
+  @Patch('mark-all-read')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.READ_ANNOUNCEMENTS)
+  @ApiOperation({
+    summary: 'Mark all visible announcements as read for the current user',
+  })
+  @ApiResponse({ status: 200, description: 'Announcements marked as read' })
+  markAllRead(@Req() req: Request & { user: RequestUser }) {
+    return this.announcementsService.markAllRead(req.user.tenantId, req.user);
+  }
+
+  @Patch(':id/read')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermissions(Permission.READ_ANNOUNCEMENTS)
+  @ApiOperation({ summary: 'Mark one announcement as read' })
+  @ApiParam({ name: 'id', description: 'Announcement UUID' })
+  @ApiResponse({ status: 200, description: 'Announcement marked as read' })
+  markRead(
+    @Param('id') id: string,
+    @Req() req: Request & { user: RequestUser },
+  ) {
+    return this.announcementsService.markRead(req.user.tenantId, req.user, id);
   }
 
   @Delete(':id')
