@@ -49,6 +49,7 @@ export const EventPatterns = {
   REINSURANCE_COUNTERPARTY_DELETED: 'reinsurance.counterparty.deleted',
   REINSURANCE_PLACEMENT_CREATED: 'reinsurance.placement.created',
   REINSURANCE_PLACEMENT_UPDATED: 'reinsurance.placement.updated',
+  REINSURANCE_PLACEMENT_DELETED: 'reinsurance.placement.deleted',
   REINSURANCE_PLACEMENT_STATUS_CHANGED: 'reinsurance.placement.status_changed',
   REINSURANCE_EMAIL_RECEIVED: 'reinsurance.email.received',
   REINSURANCE_EMAIL_SENT: 'reinsurance.email.sent',
@@ -291,6 +292,35 @@ export interface ReinsuranceCounterpartyAuditEvent {
     before?: Record<string, unknown>;
     after?: Record<string, unknown>;
   };
+}
+
+export type ReinsurancePlacementStatus =
+  | 'DRAFT'
+  | 'MARKETING'
+  | 'QUOTED'
+  | 'BOUND'
+  | 'DECLINED'
+  | 'CANCELLED';
+
+export interface ReinsurancePlacementAuditEvent {
+  tenantId: string;
+  placementId: string;
+  reference: string;
+  title: string;
+  status: ReinsurancePlacementStatus;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export interface ReinsurancePlacementStatusAuditEvent extends ReinsurancePlacementAuditEvent {
+  previousStatus: ReinsurancePlacementStatus;
+  nextStatus: ReinsurancePlacementStatus;
+  note?: string;
 }
 
 // ── HR → Notification Events ───────────────────────────────────────────────

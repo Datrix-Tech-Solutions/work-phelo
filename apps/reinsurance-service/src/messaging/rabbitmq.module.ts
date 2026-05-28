@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ClientsModule, Transport } from '@nestjs/microservices';
 import { CounterpartyEventPublisher } from './counterparty-event.publisher';
+import { PlacementEventPublisher } from './placement-event.publisher';
 
 @Module({
   imports: [
@@ -26,7 +27,7 @@ import { CounterpartyEventPublisher } from './counterparty-event.publisher';
       },
     ]),
   ],
-  providers: [CounterpartyEventPublisher],
-  exports: [CounterpartyEventPublisher],
+  providers: [CounterpartyEventPublisher, PlacementEventPublisher],
+  exports: [CounterpartyEventPublisher, PlacementEventPublisher],
 })
 export class RabbitMQModule {}
