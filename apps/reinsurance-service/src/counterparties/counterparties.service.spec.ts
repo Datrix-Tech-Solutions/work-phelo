@@ -123,7 +123,7 @@ describe('CounterpartiesService', () => {
     );
   });
 
-  it('creates nested tenant-owned data and publishes a lifecycle event', async () => {
+  it('creates nested data under the tenant-owned parent and publishes a lifecycle event', async () => {
     prisma.counterparty.create.mockResolvedValue({
       ...counterparty,
       contacts: [{ id: 'contact-1' }],
@@ -156,10 +156,10 @@ describe('CounterpartiesService', () => {
         name: 'Acme Cedant',
         normalizedName: 'acme cedant',
         contacts: {
-          create: [{ tenantId: 'tenant-1', fullName: 'Kofi Broker' }],
+          create: [{ fullName: 'Kofi Broker' }],
         },
         addresses: {
-          create: [{ tenantId: 'tenant-1', country: 'GH' }],
+          create: [{ country: 'GH' }],
         },
       },
     });

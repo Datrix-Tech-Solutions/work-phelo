@@ -120,10 +120,10 @@ export class CounterpartiesService {
           createdByUserId: user.id,
           updatedByUserId: user.id,
           contacts: dto.contacts
-            ? { create: this.mapContacts(user.tenantId, dto.contacts) }
+            ? { create: this.mapContacts(dto.contacts) }
             : undefined,
           addresses: dto.addresses
-            ? { create: this.mapAddresses(user.tenantId, dto.addresses) }
+            ? { create: this.mapAddresses(dto.addresses) }
             : undefined,
         },
         include: counterpartyInclude,
@@ -178,13 +178,13 @@ export class CounterpartiesService {
     if (dto.contacts !== undefined) {
       data.contacts = {
         deleteMany: {},
-        create: this.mapContacts(user.tenantId, dto.contacts),
+        create: this.mapContacts(dto.contacts),
       };
     }
     if (dto.addresses !== undefined) {
       data.addresses = {
         deleteMany: {},
-        create: this.mapAddresses(user.tenantId, dto.addresses),
+        create: this.mapAddresses(dto.addresses),
       };
     }
 
@@ -278,12 +278,9 @@ export class CounterpartiesService {
     }
   }
 
-  private mapContacts(
-    tenantId: string,
-    contacts: CreateCounterpartyContactDto[],
-  ) {
+  // The nested relation inherits both parent keys, including tenantId.
+  private mapContacts(contacts: CreateCounterpartyContactDto[]) {
     return contacts.map((contact) => ({
-      tenantId,
       fullName: this.requiredText(contact.fullName),
       jobTitle: this.optionalText(contact.jobTitle),
       email: this.optionalText(contact.email),
@@ -292,12 +289,8 @@ export class CounterpartiesService {
     }));
   }
 
-  private mapAddresses(
-    tenantId: string,
-    addresses: CreateCounterpartyAddressDto[],
-  ) {
+  private mapAddresses(addresses: CreateCounterpartyAddressDto[]) {
     return addresses.map((address) => ({
-      tenantId,
       label: this.optionalText(address.label),
       line1: this.requiredText(address.line1),
       line2: this.optionalText(address.line2),
