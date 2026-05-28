@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { assertReinsuranceRuntimeEnv } from './config/runtime-env';
+import { setupSwagger } from './swagger.config';
 
 async function bootstrap() {
   assertReinsuranceRuntimeEnv();
@@ -17,6 +18,10 @@ async function bootstrap() {
     }),
   );
   app.setGlobalPrefix('api');
+
+  if (process.env.ENABLE_SWAGGER === 'true') {
+    setupSwagger(app);
+  }
 
   const port = process.env.PORT || 4007;
   await app.listen(port);

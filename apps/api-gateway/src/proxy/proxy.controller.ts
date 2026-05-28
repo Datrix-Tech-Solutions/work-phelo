@@ -35,6 +35,10 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/operations\/reinsurance\/health$/,
 ];
 
+const SWAGGER_PUBLIC_PATTERNS = [
+  /^\/api\/v1\/operations\/reinsurance\/docs(?:\/.*|-json|-yaml)?$/,
+];
+
 const FORWARDED_AUTH_CONTEXT_HEADERS = [
   'x-user-id',
   'x-user-email',
@@ -105,6 +109,17 @@ export class ProxyController {
     });
   }
 
+  private isPublicPath(path: string): boolean {
+    if (PUBLIC_PATTERNS.some((pattern) => pattern.test(path))) {
+      return true;
+    }
+
+    return (
+      process.env.ENABLE_SWAGGER === 'true' &&
+      SWAGGER_PUBLIC_PATTERNS.some((pattern) => pattern.test(path))
+    );
+  }
+
   @All('api/v1/*')
   async proxy(@Req() req: Request, @Res() res: Response) {
     // pathParts: ['api', 'v1', 'auth', 'login', ...]
@@ -126,7 +141,7 @@ export class ProxyController {
       delete req.headers[header];
     }
 
-    const isPublic = PUBLIC_PATTERNS.some((p) => p.test(req.path));
+    const isPublic = this.isPublicPath(req.path);
 
     if (!isPublic) {
       const cookies = req.cookies as Record<string, string> | undefined;

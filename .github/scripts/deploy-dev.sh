@@ -55,6 +55,7 @@ section "Service Env Files"
 write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.dev" \
   "PORT=4000" \
   "NODE_ENV=production" \
+  "ENABLE_SWAGGER=true" \
   "JWT_SECRET=${JWT_SECRET}" \
   "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
   "AUTH_SERVICE_URL=http://auth-service:4001" \
@@ -123,6 +124,7 @@ write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.dev" \
 write_env_file "${DEPLOY_PATH}/apps/reinsurance-service/.env.dev" \
   "PORT=4007" \
   "NODE_ENV=production" \
+  "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema reinsurance)" \
   "JWT_SECRET=${JWT_SECRET}" \
   "RABBITMQ_URL=${RABBITMQ_URL}"
