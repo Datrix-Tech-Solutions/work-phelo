@@ -59,6 +59,21 @@ esac
   printf '%s\n' "${required[@]}"
 }
 
+contains_any() {
+  local value
+  value="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  shift
+
+  local token
+  for token in "$@"; do
+    if [[ "$value" == *"$(printf '%s' "$token" | tr '[:upper:]' '[:lower:]')"* ]]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 validate_required_envs() {
   local deploy_env="$1"
   local -a missing=()
@@ -86,8 +101,8 @@ validate_required_envs() {
       ;;
   esac
 
-
   validate_database_target "$deploy_env"
+  validate_environment_boundaries "$deploy_env"
 }
 
 warn_optional_envs() {
@@ -340,5 +355,43 @@ validate_database_target() {
       [[ "$db_url" != *"prod"* ]] || die "Dev deployment must not use prod database URL"
       [[ "$db_url" != *"production"* ]] || die "Dev deployment must not use production database URL"
       ;;
+  esac
+}
+
+validate_environment_boundaries() {
+  local deploy_env="$1"
+  local frontend_url="${AUTH_FRONTEND_BASE_URL:-}"
+  local allowed_origins="${ALLOWED_ORIGINS:-}"
+  local rabbitmq_url="${RABBITMQ_URL:-}"
+
+  case "$deploy_env" in
+  prod)
+    [[ "${AUTH_COOKIE_SECURE}" == "true" ]] ||
+      die "Production deployments require AUTH_COOKIE_SECURE=true"
+
+    if contains_any "$frontend_url" "localhost" "127.0.0.1" "dev.workphelo" "staging"; then
+      die "Production AUTH_FRONTEND_BASE_URL appears to point at a non-production host"
+    fi
+
+    if contains_any "$allowed_origins" "localhost" "127.0.0.1" "dev.workphelo" "staging"; then
+      die "Production ALLOWED_ORIGINS contains local/dev/staging origins"
+    fi
+
+    if contains_any "$rabbitmq_url" "localhost" "127.0.0.1" "workphelo-dev"; then
+      die "Production RABBITMQ_URL appears to point at a local/dev broker"
+    fi
+    ;;
+  dev)
+    if contains_any "$frontend_url" "https://workphelo.com"; then
+      die "Dev AUTH_FRONTEND_BASE_URL appears to point at production"
+    fi
+
+    if contains_any "$allowed_origins" "https://workphelo.com"; then
+      die "Dev ALLOWED_ORIGINS contains the production origin"
+    fi
+    ;;
+  *)
+    die "Unknown DEPLOY_ENV '${deploy_env}'. Expected dev or prod."
+    ;;
   esac
 }
