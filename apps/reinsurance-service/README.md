@@ -16,6 +16,8 @@ The service foundation and Counterparties domain provide:
 - JWT, tenant module, tenant feature and resource-action guard foundations.
 - Tenant-scoped Counterparty, CounterpartyContact and CounterpartyAddress
   persistence for cedants, reinsurers and brokers.
+- Tenant-scoped facultative Placement, PlacementParticipant and
+  PlacementStatusHistory persistence built on active Counterparties.
 - Development-only Swagger/OpenAPI documentation for live contract discovery.
 
 `/api/health` performs only a database connectivity check and is exposed
@@ -43,6 +45,56 @@ soft archive. Every record lookup and mutation is scoped by authenticated
 When a `PATCH` body supplies `contacts` or `addresses`, the supplied child
 collection replaces the stored collection within the same tenant-scoped
 parent update.
+
+## Placements API
+
+The gateway forwards these routes under
+`/api/v1/operations/reinsurance/placements`:
+
+| Method   | Service route                | Permission                                 |
+| -------- | ---------------------------- | ------------------------------------------ |
+| `GET`    | `/api/placements`            | `operations.reinsurance.placements:VIEW`   |
+| `POST`   | `/api/placements`            | `operations.reinsurance.placements:CREATE` |
+| `GET`    | `/api/placements/:id`        | `operations.reinsurance.placements:VIEW`   |
+| `PATCH`  | `/api/placements/:id`        | `operations.reinsurance.placements:EDIT`   |
+| `PATCH`  | `/api/placements/:id/status` | `operations.reinsurance.placements:EDIT`   |
+| `DELETE` | `/api/placements/:id`        | `operations.reinsurance.placements:DELETE` |
+
+List requests support `search`, `status`, `placementType`, `cedantId`, `page`
+and `limit`. Deletion is a soft archive. Every lookup and mutation is scoped
+by the authenticated `tenantId`; request bodies cannot choose tenant ownership.
+
+Placements currently support the broker-only facultative lifecycle foundation:
+
+```text
+DRAFT -> MARKETING -> QUOTED -> BOUND
+                   -> DECLINED
+                   -> CANCELLED
+```
+
+`DECLINED` can return to `MARKETING`; `BOUND` and `CANCELLED` are terminal in
+the MVP foundation. Status changes are recorded in `PlacementStatusHistory`.
+`BOUND` and `CANCELLED` placements cannot be edited through the header/market
+participant update endpoint. `BOUND` placements also cannot be archived.
+When a `PATCH /placements/:id` body supplies `participants`, the supplied
+array replaces the complete stored participant collection. Omit
+`participants` when editing only placement header fields.
+
+Capacity validation is intentionally conservative for Sprint 1:
+
+- Individual `signedLinePercent` cannot exceed that participant's
+  `sharePercent` when both are supplied.
+- Total `sharePercent` cannot exceed `100`.
+- Total `signedLinePercent` cannot exceed `100`.
+- Cedants are linked through the placement `cedantId`; they are not allowed in
+  the market participant collection.
+
+Participant role validation is tied to Counterparty type:
+
+| Participant role                              | Required counterparty type |
+| --------------------------------------------- | -------------------------- |
+| `BROKER`                                      | `BROKER`                   |
+| `REINSURER`, `LEAD_REINSURER`, `CO_REINSURER` | `REINSURER`                |
 
 ## OpenAPI Documentation
 
@@ -95,7 +147,7 @@ Frontend handling expectations:
 | `404`       | Record is absent, archived or outside the tenant | Return to list or show unavailable record         |
 | `409`       | Active type/name combination already exists      | Show field-level duplicate feedback               |
 
-### Contract Examples
+### Counterparty Contract Examples
 
 List active records:
 
@@ -180,6 +232,87 @@ const counterpartyKeys = {
   unnecessarily fragile for the MVP.
 - Render an archive confirmation dialog instead of a destructive-delete label.
 
+### Placement Contract Examples
+
+List active placements:
+
+```http
+GET /api/v1/operations/reinsurance/placements?search=FAC-2026&status=MARKETING&placementType=FACULTATIVE&page=1&limit=20
+```
+
+Create payload:
+
+```json
+{
+  "reference": "FAC-2026-0001",
+  "title": "Acme Energy Facultative Placement",
+  "cedantId": "7c2d7cae-1dd2-4a7c-9332-4a23f2e1b9a9",
+  "classOfBusiness": "Energy",
+  "inceptionDate": "2026-06-01T00:00:00.000Z",
+  "expiryDate": "2027-05-31T23:59:59.000Z",
+  "currency": "USD",
+  "sumInsured": 5000000,
+  "participants": [
+    {
+      "counterpartyId": "2ee7957a-5a47-472b-95d1-983c2d86be16",
+      "role": "LEAD_REINSURER",
+      "sharePercent": 45
+    }
+  ]
+}
+```
+
+Change status:
+
+```http
+PATCH /api/v1/operations/reinsurance/placements/:id/status
+```
+
+```json
+{
+  "status": "MARKETING",
+  "note": "Submitted to selected markets."
+}
+```
+
+Decimal values such as `sumInsured`, `sharePercent` and
+`signedLinePercent` are accepted as numbers in requests and are returned by
+Prisma as JSON strings. Frontend types should model them as `string | null`
+on responses and convert only at display/form boundaries.
+
+Recommended placement frontend structure:
+
+```text
+src/
+├── hooks/operations/reinsurance/usePlacements.ts
+├── lib/operations/reinsurance/placements-api.ts
+├── types/operations/reinsurance.ts
+└── app/[tenantSlug]/operations/reinsurance/placements/
+```
+
+Use placement query keys parallel to Counterparties:
+
+```ts
+const placementKeys = {
+  all: ['operations', 'reinsurance', 'placements'] as const,
+  list: (params: PlacementQuery) =>
+    [...placementKeys.all, 'list', params] as const,
+  detail: (id: string) => [...placementKeys.all, 'detail', id] as const,
+};
+```
+
+Prefer mutation success invalidation over optimistic updates for the first UI
+pass because participant replacement and status history make optimistic
+rollback more complex than the MVP needs.
+
+Current frontend note: the initial Facultative UI uses placeholder labels like
+`Pending`, `Active`, `Expired` and `Cancelled`. When wiring it to this API,
+use the backend lifecycle statuses directly in API calls and map labels in the
+view layer, for example `DRAFT`/`MARKETING`/`QUOTED` as work-in-progress,
+`BOUND` as active, `DECLINED` as declined and `CANCELLED` as cancelled.
+The backend does not expose split `/cedants`, `/reinsurers` or `/brokers`
+placement endpoints; retrieve those through `/counterparties?type=...`.
+
 ## Boundary Rules
 
 - Use authenticated tenant context for every business query.
@@ -190,8 +323,9 @@ const counterpartyKeys = {
 - Do not query Core service database schemas.
 - Use Core notification and audit contracts instead of owning those records.
 - Store broker workflow records only in the `reinsurance` schema.
-- Publish `reinsurance.counterparty.*` lifecycle events to Auth for central
-  audit persistence; event failure is logged after a successful domain write.
+- Publish `reinsurance.counterparty.*` and `reinsurance.placement.*`
+  lifecycle events to Auth for central audit persistence; event failure is
+  logged after a successful domain write.
 
 ## Development Deployment
 

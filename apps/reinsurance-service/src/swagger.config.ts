@@ -18,9 +18,10 @@ Bearer authentication is also documented for API tooling. Through the gateway,
 tenant context and signed dynamic permissions are forwarded to this service.
 
 ### Authorization
-Counterparty endpoints require the tenant to have the \`operations\` module and
+Counterparty and placement endpoints require the tenant to have the \`operations\` module and
 \`operations.reinsurance\` feature enabled, plus the endpoint-specific
-\`operations.reinsurance.counterparties:*\` permission.
+\`operations.reinsurance.counterparties:*\` or
+\`operations.reinsurance.placements:*\` permission.
 
 Documentation is exposed only when \`ENABLE_SWAGGER=true\`; the deployment
 pipeline enables it for development only.
@@ -35,6 +36,7 @@ pipeline enables it for development only.
     .addTag('Health', 'Development and deployment health verification')
     .addTag('Access', 'Authenticated entitlement and permission verification')
     .addTag('Counterparties', 'Cedants, reinsurers and brokers')
+    .addTag('Placements', 'Facultative placement lifecycle foundation')
     .addCookieAuth('access_token')
     .addBearerAuth(
       {

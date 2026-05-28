@@ -2,6 +2,8 @@ import { RmqContext } from '@nestjs/microservices';
 import {
   EventPatterns,
   ReinsuranceCounterpartyAuditEvent,
+  ReinsurancePlacementAuditEvent,
+  ReinsurancePlacementStatusAuditEvent,
 } from '@work-phelo/types';
 import { AuditEventsHandler } from './audit-events.handler';
 import { AuditService } from './audit.service';
@@ -11,7 +13,17 @@ describe('AuditEventsHandler', () => {
     | 'onCounterpartyCreated'
     | 'onCounterpartyUpdated'
     | 'onCounterpartyDeleted';
+  type PlacementAuditHandler =
+    | 'onPlacementCreated'
+    | 'onPlacementUpdated'
+    | 'onPlacementDeleted'
+    | 'onPlacementStatusChanged';
 
+  const meta = {
+    messageId: 'message-1',
+    correlationId: 'correlation-1',
+    timestamp: '2026-05-26T10:00:00.000Z',
+  };
   const event: ReinsuranceCounterpartyAuditEvent & {
     _meta: {
       messageId: string;
@@ -27,10 +39,32 @@ describe('AuditEventsHandler', () => {
     actorEmail: 'broker@example.com',
     actorRole: 'EMPLOYEE',
     changes: { after: { name: 'Acme Cedant' } },
-    _meta: {
-      messageId: 'message-1',
-      correlationId: 'correlation-1',
-      timestamp: '2026-05-26T10:00:00.000Z',
+    _meta: meta,
+  };
+  const placementEvent: ReinsurancePlacementAuditEvent & {
+    _meta: typeof meta;
+  } = {
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    reference: 'FAC-2026-0001',
+    title: 'Acme Energy Placement',
+    status: 'DRAFT',
+    actorUserId: 'user-1',
+    actorEmail: 'broker@example.com',
+    actorRole: 'EMPLOYEE',
+    changes: { after: { reference: 'FAC-2026-0001' } },
+    _meta: meta,
+  };
+  const placementStatusEvent: ReinsurancePlacementStatusAuditEvent & {
+    _meta: typeof meta;
+  } = {
+    ...placementEvent,
+    status: 'MARKETING',
+    previousStatus: 'DRAFT',
+    nextStatus: 'MARKETING',
+    changes: {
+      before: { status: 'DRAFT' },
+      after: { status: 'MARKETING' },
     },
   };
 
@@ -79,6 +113,52 @@ describe('AuditEventsHandler', () => {
         resource: 'operations.reinsurance.counterparties',
         resourceId: 'counterparty-1',
         changes: event.changes,
+      });
+      expect(channel.ack).toHaveBeenCalledWith('message');
+    },
+  );
+
+  it.each<
+    [string, string, PlacementAuditHandler, ReinsurancePlacementAuditEvent]
+  >([
+    [
+      EventPatterns.REINSURANCE_PLACEMENT_CREATED,
+      'CREATE',
+      'onPlacementCreated',
+      placementEvent,
+    ],
+    [
+      EventPatterns.REINSURANCE_PLACEMENT_UPDATED,
+      'UPDATE',
+      'onPlacementUpdated',
+      placementEvent,
+    ],
+    [
+      EventPatterns.REINSURANCE_PLACEMENT_DELETED,
+      'DELETE',
+      'onPlacementDeleted',
+      placementEvent,
+    ],
+    [
+      EventPatterns.REINSURANCE_PLACEMENT_STATUS_CHANGED,
+      'UPDATE',
+      'onPlacementStatusChanged',
+      placementStatusEvent,
+    ],
+  ])(
+    'records %s as %s and acknowledges the event',
+    async (_pattern, action, method, payload) => {
+      await handler[method](payload as never, context);
+
+      expect(auditService.log).toHaveBeenCalledWith({
+        tenantId: 'tenant-1',
+        userId: 'user-1',
+        userEmail: 'broker@example.com',
+        userRole: 'EMPLOYEE',
+        action,
+        resource: 'operations.reinsurance.placements',
+        resourceId: 'placement-1',
+        changes: payload.changes,
       });
       expect(channel.ack).toHaveBeenCalledWith('message');
     },

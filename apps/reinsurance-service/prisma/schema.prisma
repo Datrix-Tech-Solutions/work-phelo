@@ -18,8 +18,34 @@ enum CounterpartyType {
   @@schema("reinsurance")
 }
 
+enum PlacementType {
+  FACULTATIVE
+
+  @@schema("reinsurance")
+}
+
+enum PlacementStatus {
+  DRAFT
+  MARKETING
+  QUOTED
+  BOUND
+  DECLINED
+  CANCELLED
+
+  @@schema("reinsurance")
+}
+
+enum PlacementParticipantRole {
+  BROKER
+  REINSURER
+  LEAD_REINSURER
+  CO_REINSURER
+
+  @@schema("reinsurance")
+}
+
 model Counterparty {
-  id                 String                @id @default(uuid())
+  id                 String                 @id @default(uuid())
   tenantId           String
   type               CounterpartyType
   name               String
@@ -33,10 +59,12 @@ model Counterparty {
   updatedByUserId    String
   archivedByUserId   String?
   archivedAt         DateTime?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
   contacts           CounterpartyContact[]
   addresses          CounterpartyAddress[]
+  cededPlacements    Placement[]            @relation("PlacementCedant")
+  placementRoles     PlacementParticipant[] @relation("PlacementParticipantCounterparty")
 
   @@unique([id, tenantId])
   @@index([tenantId, type, archivedAt, name])
@@ -58,6 +86,75 @@ model CounterpartyContact {
   counterparty   Counterparty @relation(fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Cascade)
 
   @@index([tenantId, counterpartyId])
+  @@schema("reinsurance")
+}
+
+model Placement {
+  id                  String                   @id @default(uuid())
+  tenantId            String
+  reference           String
+  normalizedReference String
+  title               String
+  placementType       PlacementType            @default(FACULTATIVE)
+  status              PlacementStatus          @default(DRAFT)
+  cedantId            String
+  classOfBusiness     String?
+  description         String?
+  inceptionDate       DateTime?
+  expiryDate          DateTime?
+  currency            String?
+  sumInsured          Decimal?                 @db.Decimal(18, 2)
+  createdByUserId     String
+  updatedByUserId     String
+  archivedByUserId    String?
+  archivedAt          DateTime?
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+  cedant              Counterparty             @relation("PlacementCedant", fields: [cedantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participants        PlacementParticipant[]
+  statusHistory       PlacementStatusHistory[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementType, archivedAt])
+  @@index([tenantId, status, archivedAt, createdAt])
+  @@index([tenantId, cedantId, archivedAt])
+  @@index([tenantId, archivedAt, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementParticipant {
+  id                String                   @id @default(uuid())
+  tenantId          String
+  placementId       String
+  counterpartyId    String
+  role              PlacementParticipantRole
+  sharePercent      Decimal?                 @db.Decimal(7, 4)
+  signedLinePercent Decimal?                 @db.Decimal(7, 4)
+  notes             String?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+  placement         Placement                @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  counterparty      Counterparty             @relation("PlacementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([tenantId, placementId, counterpartyId, role])
+  @@index([tenantId, placementId])
+  @@index([tenantId, counterpartyId])
+  @@schema("reinsurance")
+}
+
+model PlacementStatusHistory {
+  id              String           @id @default(uuid())
+  tenantId        String
+  placementId     String
+  fromStatus      PlacementStatus?
+  toStatus        PlacementStatus
+  changedByUserId String
+  note            String?
+  createdAt       DateTime         @default(now())
+  placement       Placement        @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, placementId, createdAt])
+  @@index([tenantId, toStatus, createdAt])
   @@schema("reinsurance")
 }
 
