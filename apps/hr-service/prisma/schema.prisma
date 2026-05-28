@@ -1272,9 +1272,27 @@ model Announcement {
   createdAt           DateTime                 @default(now())
   updatedAt           DateTime                 @updatedAt
 
+  readReceipts AnnouncementReadReceipt[]
+
   @@index([tenantId, publishedAt])
   @@index([tenantId, expiresAt])
   @@index([tenantId, audienceType])
+  @@schema("hr")
+}
+
+model AnnouncementReadReceipt {
+  id             String   @id @default(uuid())
+  tenantId       String
+  announcementId String
+  userId         String
+  readAt         DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  announcement Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, announcementId, userId])
+  @@index([tenantId, userId, readAt])
+  @@index([tenantId, userId, announcementId])
   @@schema("hr")
 }
 
