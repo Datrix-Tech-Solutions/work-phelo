@@ -71,13 +71,13 @@ export class LeaveController {
   @Delete('types/:id')
   @RequirePermissions(Permission.MANAGE_LEAVE_TYPES)
   @ApiOperation({
-    summary: 'Delete a custom leave type — default types cannot be deleted',
+    summary: 'Archive a leave type',
   })
   @ApiParam({ name: 'id', description: 'Leave type UUID' })
-  @ApiResponse({ status: 200, description: 'Leave type deleted' })
+  @ApiResponse({ status: 200, description: 'Leave type archived' })
   @ApiResponse({
-    status: 403,
-    description: 'Default leave types cannot be deleted',
+    status: 404,
+    description: 'Leave type not found',
   })
   deleteLeaveType(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.leaveService.deleteLeaveType(req.user.tenantId, id);
