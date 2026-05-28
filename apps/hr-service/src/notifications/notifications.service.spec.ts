@@ -66,4 +66,45 @@ describe('NotificationsService', () => {
       ]),
     ).resolves.toEqual({ count: 1 });
   });
+
+  it('marks only the current user tenant notification as read', async () => {
+    const notification = {
+      id: 'notification-1',
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      isRead: false,
+    };
+    prisma.notification.findFirst.mockResolvedValueOnce(notification);
+    prisma.notification.update.mockResolvedValueOnce({
+      ...notification,
+      isRead: true,
+      readAt: new Date('2026-05-28T10:00:00Z'),
+    });
+
+    await service.markRead('user-1', 'tenant-1', 'notification-1');
+
+    expect(prisma.notification.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'notification-1',
+        userId: 'user-1',
+        tenantId: 'tenant-1',
+      },
+    });
+    expect(prisma.notification.update).toHaveBeenCalledWith({
+      where: { id: 'notification-1' },
+      data: { isRead: true, readAt: expect.any(Date) },
+    });
+  });
+
+  it('marks all unread notifications for only the current tenant/user', async () => {
+    prisma.notification.updateMany.mockResolvedValueOnce({ count: 3 });
+
+    const result = await service.markAllRead('user-1', 'tenant-1');
+
+    expect(result).toEqual({ message: 'All notifications marked as read' });
+    expect(prisma.notification.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', tenantId: 'tenant-1', isRead: false },
+      data: { isRead: true, readAt: expect.any(Date) },
+    });
+  });
 });
