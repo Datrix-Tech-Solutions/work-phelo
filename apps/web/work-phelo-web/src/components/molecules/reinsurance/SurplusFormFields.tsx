@@ -13,6 +13,7 @@ import {
   CURRENCY_OPTIONS,
 } from '@/types/reinsurance';
 import { inputClass } from '@/lib/utils';
+import { useCedantOptions, useBrokerOptions } from '@/hooks';
 
 /* Year options: 2000 → current year + 5 */
 const currentYear = new Date().getFullYear();
@@ -49,6 +50,9 @@ export function SurplusFormFields({ form }: SurplusFormFieldsProps) {
   const effectiveDate = watch('effectiveDate');
   const cedantRetentionLine = watch('cedantRetentionLine');
   const reinsuranceLine = watch('reinsuranceLine');
+
+  const { options: cedantOptions } = useCedantOptions();
+  const { options: brokerOptions } = useBrokerOptions();
 
   /* Compute total capacity — only when both fields have valid numbers */
   const totalCapacity =
@@ -158,11 +162,11 @@ export function SurplusFormFields({ form }: SurplusFormFieldsProps) {
             render={({ field }) => (
               <SearchSelect
                 label="Cedant Company"
-                placeholder="Type to search or add cedant…"
+                placeholder="Select cedant…"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.cedantCompany?.message}
-                options={[]}
+                options={cedantOptions}
               />
             )}
           />
@@ -174,11 +178,11 @@ export function SurplusFormFields({ form }: SurplusFormFieldsProps) {
             render={({ field }) => (
               <SearchSelect
                 label="Broker"
-                placeholder="Type to search or add broker…"
+                placeholder="Select broker…"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.broker?.message}
-                options={[]}
+                options={brokerOptions}
               />
             )}
           />

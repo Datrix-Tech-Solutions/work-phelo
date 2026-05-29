@@ -3,8 +3,12 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { ReinsurerFormValues, REINSURER_FORM_DEFAULTS } from '@/types/reinsurance';
 import { ReinsurerFormFields } from '@/components/molecules/reinsurance/ReinsurerFormFields';
+import {
+  ReinsurerFormValues,
+  REINSURER_FORM_DEFAULTS,
+  CreateCounterpartyPayload,
+} from '@/types/reinsurance';
 import { useCreateReinsurer } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -12,6 +16,39 @@ import { extractError } from '@/lib/extractError';
 interface AddReinsurancePanelProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+function buildPayload(data: ReinsurerFormValues): CreateCounterpartyPayload {
+  const contacts = data.contacts
+    .filter((c) => c.fullName.trim())
+    .map((c) => ({
+      fullName: c.fullName,
+      ...(c.email && { email: c.email }),
+      ...(c.phone && { phone: c.phone }),
+    }));
+
+  const addr = data.address;
+  const addresses =
+    addr.country === 'Ghana' && addr.city
+      ? [
+          {
+            line1: [addr.city, addr.state].filter(Boolean).join(', '),
+            city: addr.city,
+            country: 'GH',
+            ...(addr.state && { state: addr.state }),
+            isPrimary: true,
+          },
+        ]
+      : [];
+
+  return {
+    type: 'REINSURER',
+    name: data.name,
+    ...(data.email && { email: data.email }),
+    ...(data.phone && { phone: data.phone }),
+    ...(contacts.length && { contacts }),
+    ...(addresses.length && { addresses }),
+  };
 }
 
 export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProps) {
@@ -36,11 +73,7 @@ export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProp
 
   const onSubmit = async (data: ReinsurerFormValues) => {
     try {
-      await createReinsurer({
-        name: data.name,
-        emails: data.email.map((e) => e.value).filter(Boolean),
-        phoneNumbers: data.phoneNumber.map((p) => p.value).filter(Boolean),
-      });
+      await createReinsurer(buildPayload(data));
       toast.success('Reinsurer created successfully');
       handleClose();
     } catch (err) {

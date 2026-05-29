@@ -4,7 +4,11 @@ import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { CedantFormFields } from '@/components/molecules/reinsurance/CedantFormFields';
-import { CedantFormValues, CEDANT_FORM_DEFAULTS } from '@/types/reinsurance';
+import {
+  CedantFormValues,
+  CEDANT_FORM_DEFAULTS,
+  CreateCounterpartyPayload,
+} from '@/types/reinsurance';
 import { useCreateCedant } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -12,6 +16,39 @@ import { extractError } from '@/lib/extractError';
 interface AddCedantPanelProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+function buildPayload(data: CedantFormValues): CreateCounterpartyPayload {
+  const contacts = data.contacts
+    .filter((c) => c.fullName.trim())
+    .map((c) => ({
+      fullName: c.fullName,
+      ...(c.email && { email: c.email }),
+      ...(c.phone && { phone: c.phone }),
+    }));
+
+  const addr = data.address;
+  const addresses =
+    addr.country === 'Ghana' && addr.city
+      ? [
+          {
+            line1: [addr.city, addr.state].filter(Boolean).join(', '),
+            city: addr.city,
+            country: 'GH',
+            ...(addr.state && { state: addr.state }),
+            isPrimary: true,
+          },
+        ]
+      : [];
+
+  return {
+    type: 'CEDANT',
+    name: data.name,
+    ...(data.email && { email: data.email }),
+    ...(data.phone && { phone: data.phone }),
+    ...(contacts.length && { contacts }),
+    ...(addresses.length && { addresses }),
+  };
 }
 
 export function AddCedantPanel({ isOpen, onClose }: AddCedantPanelProps) {
@@ -36,11 +73,7 @@ export function AddCedantPanel({ isOpen, onClose }: AddCedantPanelProps) {
 
   const onSubmit = async (data: CedantFormValues) => {
     try {
-      await createCedant({
-        name: data.name,
-        emails: data.emails.map((e) => e.value).filter(Boolean),
-        phoneNumbers: data.phoneNumbers.map((p) => p.value).filter(Boolean),
-      });
+      await createCedant(buildPayload(data));
       toast.success('Cedant created successfully');
       handleClose();
     } catch (err) {

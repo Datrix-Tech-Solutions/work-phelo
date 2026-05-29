@@ -5,14 +5,23 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { AddBrokerPanel } from '@/components/organisms/reinsurance/panels/AddBrokerPanel';
+import { AddContactPanel } from '@/components/organisms/reinsurance/panels/AddContactPanel';
 import { useBrokers, useDeleteBroker } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { Broker } from '@/types/reinsurance';
+import { Counterparty } from '@/types/reinsurance';
 
 const PAGE_SIZE = 10;
 
-const COLUMNS: Column<Broker>[] = [
+/** Format the primary address as "Region, Country" or just "Country". */
+function formatTerritory(addresses: Counterparty['addresses']): string {
+  const primary = addresses.find((a) => a.isPrimary) ?? addresses[0];
+  if (!primary) return '—';
+  const country = primary.country === 'GH' ? 'Ghana' : primary.country;
+  return primary.state ? `${primary.state}, ${country}` : country;
+}
+
+const COLUMNS: Column<Counterparty>[] = [
   {
     key: 'name',
     label: 'Broker Name',
@@ -23,13 +32,19 @@ const COLUMNS: Column<Broker>[] = [
     key: 'email',
     label: 'Email',
     width: '2fr',
-    render: (row) => <span className="text-gray-700">{row.email}</span>,
+    render: (row) => <span className="text-gray-700">{row.email ?? '—'}</span>,
   },
   {
-    key: 'phoneNumber',
+    key: 'phone',
     label: 'Phone Number',
     width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{row.phoneNumber}</span>,
+    render: (row) => <span className="text-gray-700">{row.phone ?? '—'}</span>,
+  },
+  {
+    key: 'addresses',
+    label: 'Territory',
+    width: '1.5fr',
+    render: (row) => <span className="text-gray-700">{formatTerritory(row.addresses)}</span>,
   },
 ];
 
@@ -38,7 +53,8 @@ export function BrokersTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Broker | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Counterparty | null>(null);
+  const [contactTarget, setContactTarget] = useState<Counterparty | null>(null);
 
   const { data = [], isLoading } = useBrokers();
   const { mutate: deleteBroker, isPending: isDeleting } = useDeleteBroker();
@@ -49,8 +65,8 @@ export function BrokersTable() {
     return data.filter(
       (r) =>
         r.name.toLowerCase().includes(q) ||
-        r.email.toLowerCase().includes(q) ||
-        r.phoneNumber.includes(q),
+        (r.email ?? '').toLowerCase().includes(q) ||
+        (r.phone ?? '').includes(q),
     );
   }, [data, search]);
 
@@ -61,10 +77,10 @@ export function BrokersTable() {
     if (!deleteTarget) return;
     deleteBroker(deleteTarget.id, {
       onSuccess: () => {
-        toast.success('Broker deleted successfully');
+        toast.success('Broker archived successfully');
         setDeleteTarget(null);
       },
-      onError: (err) => toast.error(extractError(err, 'Failed to delete broker')),
+      onError: (err) => toast.error(extractError(err, 'Failed to archive broker')),
     });
   };
 
@@ -89,7 +105,11 @@ export function BrokersTable() {
             },
           },
           {
-            label: 'Delete',
+            label: 'Add Contact',
+            onClick: () => setContactTarget(row),
+          },
+          {
+            label: 'Archive',
             onClick: () => setDeleteTarget(row),
             danger: true,
           },
@@ -103,11 +123,13 @@ export function BrokersTable() {
 
       <AddBrokerPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
 
+      <AddContactPanel counterparty={contactTarget} onClose={() => setContactTarget(null)} />
+
       <Modal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        title="Delete Broker"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        title="Archive Broker"
+        description={`Are you sure you want to archive "${deleteTarget?.name}"? It will no longer appear in lists.`}
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
@@ -116,10 +138,10 @@ export function BrokersTable() {
             <Button
               variant="danger"
               isLoading={isDeleting}
-              loadingText="Deleting…"
+              loadingText="Archiving…"
               onClick={handleDelete}
             >
-              Delete
+              Archive
             </Button>
           </div>
         }

@@ -1,15 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { Broker, CreateBrokerPayload, UpdateBrokerPayload } from '@/types/reinsurance';
+import {
+  Counterparty,
+  PaginatedCounterparties,
+  CreateCounterpartyPayload,
+  UpdateCounterpartyPayload,
+} from '@/types/reinsurance';
 
-const BROKERS_KEY = ['reinsurance', 'brokers'] as const;
+const BROKERS_KEY = ['reinsurance', 'counterparties', 'BROKER'] as const;
+const ENDPOINT = '/operations/reinsurance/counterparties';
 
 export function useBrokers() {
   return useQuery({
     queryKey: BROKERS_KEY,
     queryFn: async () => {
-      const res = await api.get<Broker[]>('/operations/reinsurance/brokers');
-      return Array.isArray(res.data) ? res.data : ((res.data as { data: Broker[] })?.data ?? []);
+      const res = await api.get<PaginatedCounterparties>(ENDPOINT, {
+        params: { type: 'BROKER', limit: 100 },
+      });
+      return res.data.items ?? [];
     },
   });
 }
@@ -17,8 +25,8 @@ export function useBrokers() {
 export function useCreateBroker() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: CreateBrokerPayload) => {
-      const res = await api.post<Broker>('/operations/reinsurance/brokers', payload);
+    mutationFn: async (payload: CreateCounterpartyPayload) => {
+      const res = await api.post<Counterparty>(ENDPOINT, payload);
       return res.data;
     },
     onSuccess: () => {
@@ -30,8 +38,8 @@ export function useCreateBroker() {
 export function useUpdateBroker() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, ...payload }: UpdateBrokerPayload & { id: string }) => {
-      const res = await api.patch<Broker>(`/operations/reinsurance/brokers/${id}`, payload);
+    mutationFn: async ({ id, ...payload }: UpdateCounterpartyPayload & { id: string }) => {
+      const res = await api.patch<Counterparty>(`${ENDPOINT}/${id}`, payload);
       return res.data;
     },
     onSuccess: () => {
@@ -40,11 +48,20 @@ export function useUpdateBroker() {
   });
 }
 
+/** Derived options for SearchSelect — reuses the cached useBrokers() data. */
+export function useBrokerOptions() {
+  const { data = [], isLoading } = useBrokers();
+  return {
+    options: data.map((b) => ({ value: b.id, label: b.name })),
+    isLoading,
+  };
+}
+
 export function useDeleteBroker() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/operations/reinsurance/brokers/${id}`);
+      await api.delete(`${ENDPOINT}/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: BROKERS_KEY });

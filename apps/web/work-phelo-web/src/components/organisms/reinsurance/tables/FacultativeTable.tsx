@@ -1,44 +1,56 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panels/CreateFacultativePanel';
 import { Facultative, FacultativeStatus, FACULTATIVE_STATUSES } from '@/types/reinsurance';
+import { useFacultatives } from '@/hooks';
 
 const PAGE_SIZE = 10;
 
-function fmtMonth(iso: string) {
+function fmtDate(iso: string) {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function fmtAmount(val: number) {
+  return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neutral' | 'danger'> =
   {
-    Active: 'success',
-    Pending: 'warning',
+    Open: 'success',
+    Closed: 'warning',
     Expired: 'neutral',
     Cancelled: 'danger',
   };
 
 const STATUS_FILTER_OPTIONS = FACULTATIVE_STATUSES.map((s) => ({ value: s, label: s }));
 
-// TODO: replace with useFacultative() hook once API is ready
-const MOCK_DATA: Facultative[] = [];
-
 const COLUMNS: Column<Facultative>[] = [
   {
     key: 'policyNumber',
     label: 'Policy Number',
-    width: '1.4fr',
+    width: '1.2fr',
     render: (row) => <span className="font-medium text-gray-900">{row.policyNumber}</span>,
   },
   {
-    key: 'cedant',
-    label: 'Cedant',
-    width: '1.6fr',
-    render: (row) => <span className="text-gray-700">{row.cedant}</span>,
+    key: 'insuranceCompany',
+    label: 'Insurance Company',
+    width: '1.5fr',
+    render: (row) => <span className="text-gray-700">{row.insuranceCompany}</span>,
+  },
+  {
+    key: 'insured',
+    label: 'Insured',
+    width: '1.5fr',
+    render: (row) => <span className="text-gray-700">{row.insured}</span>,
   },
   {
     key: 'riskType',
@@ -47,44 +59,22 @@ const COLUMNS: Column<Facultative>[] = [
     render: (row) => <span className="text-gray-600">{row.riskType}</span>,
   },
   {
-    key: 'classOfBusiness',
-    label: 'Class',
-    width: '1.2fr',
-    render: (row) => <span className="text-gray-600">{row.classOfBusiness}</span>,
+    key: 'sumInsured',
+    label: 'Sum Insured',
+    width: '1.1fr',
+    render: (row) => <span className="text-gray-700">{fmtAmount(row.sumInsured)}</span>,
   },
   {
-    key: 'period',
-    label: 'Period',
-    width: '1.4fr',
-    render: (row) => (
-      <span className="text-gray-600">
-        {fmtMonth(row.periodStart)} – {fmtMonth(row.periodEnd)}
-      </span>
-    ),
-  },
-  {
-    key: 'year',
-    label: 'Year',
-    width: '70px',
-    render: (row) => <span className="text-gray-700">{row.year}</span>,
-  },
-  {
-    key: 'yourShare',
-    label: 'Your Share',
+    key: 'rate',
+    label: 'Rate (%)',
     width: '90px',
-    render: (row) => <span className="text-gray-700">{row.yourShare}%</span>,
+    render: (row) => <span className="text-gray-700">{row.rate}%</span>,
   },
   {
-    key: 'grossPremium',
-    label: 'Gross Premium',
-    width: '1.2fr',
-    render: (row) => <span className="text-gray-700">{row.grossPremium.toLocaleString()}</span>,
-  },
-  {
-    key: 'netPremium',
-    label: 'Net Premium',
-    width: '1.2fr',
-    render: (row) => <span className="text-gray-700">{row.netPremium.toLocaleString()}</span>,
+    key: 'offerDate',
+    label: 'Offer Date',
+    width: '1.1fr',
+    render: (row) => <span className="text-gray-600">{fmtDate(row.offerDate)}</span>,
   },
   {
     key: 'status',
@@ -95,28 +85,32 @@ const COLUMNS: Column<Facultative>[] = [
 ];
 
 export function FacultativeTable() {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
 
+  const { data: allRows = [], isLoading } = useFacultatives();
+
   const filtered = useMemo(() => {
-    let rows = MOCK_DATA;
+    let rows = allRows;
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
         (r) =>
           r.policyNumber.toLowerCase().includes(q) ||
-          r.cedant.toLowerCase().includes(q) ||
-          r.riskType.toLowerCase().includes(q) ||
-          r.classOfBusiness.toLowerCase().includes(q),
+          r.insuranceCompany.toLowerCase().includes(q) ||
+          r.insured.toLowerCase().includes(q) ||
+          r.riskType.toLowerCase().includes(q),
       );
     }
     if (statusFilter) {
       rows = rows.filter((r) => r.status === (statusFilter as FacultativeStatus));
     }
     return rows;
-  }, [search, statusFilter]);
+  }, [allRows, search, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -126,6 +120,7 @@ export function FacultativeTable() {
       <DataTable
         columns={COLUMNS}
         data={paged}
+        isLoading={isLoading}
         searchPlaceholder="Search facultative…"
         searchValue={search}
         onSearch={(q) => {
@@ -140,16 +135,21 @@ export function FacultativeTable() {
         onExport={() => {
           /* TODO: implement export */
         }}
-        actionButton={{ label: 'New Facultative', onClick: () => setPanelOpen(true) }}
-        rowActions={() => [
+        actionButton={{ label: 'New Offer', onClick: () => setPanelOpen(true) }}
+        rowActions={(row) => [
           {
             label: 'View',
+            onClick: () =>
+              router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.id}`),
+          },
+          {
+            label: 'Preview Quotation Slip',
             onClick: () => {
               /* TODO */
             },
           },
           {
-            label: 'Edit',
+            label: 'Edit Slip',
             onClick: () => {
               /* TODO */
             },

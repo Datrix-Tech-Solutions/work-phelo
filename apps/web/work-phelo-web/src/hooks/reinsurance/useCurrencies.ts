@@ -51,3 +51,16 @@ export function useDeleteCurrency() {
     },
   });
 }
+
+export function useCurrencyOptions() {
+  return useQuery({
+    queryKey: [...CURRENCIES_KEY, 'options'],
+    queryFn: async () => {
+      const res = await api.get<Currency[]>('/operations/reinsurance/currencies');
+      const list = Array.isArray(res.data)
+        ? res.data
+        : ((res.data as { data: Currency[] })?.data ?? []);
+      return list.map((c) => ({ value: c.id, label: `${c.isoCode} – ${c.name}` }));
+    },
+  });
+}

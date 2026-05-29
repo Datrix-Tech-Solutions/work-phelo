@@ -18,6 +18,7 @@ import {
   REINSTATEMENT_TYPE_OPTIONS,
   EXCESS_OF_LOSS_TYPE_OPTIONS,
 } from '@/types/reinsurance';
+import { useCedantOptions, useBrokerOptions } from '@/hooks';
 
 /* Year options: 2000 → current year + 5 */
 const currentYear = new Date().getFullYear();
@@ -53,6 +54,9 @@ export function ExcessOfLossFormFields({ form }: ExcessOfLossFormFieldsProps) {
   const { fields, append, remove } = useFieldArray({ control, name: 'layers' });
 
   const effectiveDate = watch('effectiveDate');
+
+  const { options: cedantOptions } = useCedantOptions();
+  const { options: brokerOptions } = useBrokerOptions();
   const egnpi = watch('egnpi');
   const rate = watch('rate');
   const mAndD = watch('mAndD');
@@ -186,11 +190,11 @@ export function ExcessOfLossFormFields({ form }: ExcessOfLossFormFieldsProps) {
             render={({ field }) => (
               <SearchSelect
                 label="Cedant Company"
-                placeholder="Type to search or add cedant…"
+                placeholder="Select cedant…"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.cedantCompany?.message}
-                options={[]}
+                options={cedantOptions}
               />
             )}
           />
@@ -202,11 +206,11 @@ export function ExcessOfLossFormFields({ form }: ExcessOfLossFormFieldsProps) {
             render={({ field }) => (
               <SearchSelect
                 label="Broker"
-                placeholder="Type to search or add broker…"
+                placeholder="Select broker…"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.broker?.message}
-                options={[]}
+                options={brokerOptions}
               />
             )}
           />

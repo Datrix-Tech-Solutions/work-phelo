@@ -22,6 +22,8 @@ export * from './useTenantConfig';
 export * from './hr/useProjects';
 
 // Reinsurance hooks
+export * from './reinsurance/useFacultatives';
+export * from './reinsurance/useCounterparties';
 export * from './reinsurance/useCedants';
 export * from './reinsurance/useReinsurers';
 export * from './reinsurance/useBrokers';

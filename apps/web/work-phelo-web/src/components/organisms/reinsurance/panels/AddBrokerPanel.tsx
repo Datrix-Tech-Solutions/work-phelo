@@ -3,8 +3,12 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { BROKER_FORM_DEFAULTS, BrokerFormValues } from '@/types/reinsurance';
 import { BrokerFormFields } from '@/components/molecules/reinsurance/BrokerFormFields';
+import {
+  BrokerFormValues,
+  BROKER_FORM_DEFAULTS,
+  CreateCounterpartyPayload,
+} from '@/types/reinsurance';
 import { useCreateBroker } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -12,6 +16,39 @@ import { extractError } from '@/lib/extractError';
 interface AddBrokerPanelProps {
   isOpen: boolean;
   onClose: () => void;
+}
+
+function buildPayload(data: BrokerFormValues): CreateCounterpartyPayload {
+  const contacts = data.contacts
+    .filter((c) => c.fullName.trim())
+    .map((c) => ({
+      fullName: c.fullName,
+      ...(c.email && { email: c.email }),
+      ...(c.phone && { phone: c.phone }),
+    }));
+
+  const addr = data.address;
+  const addresses =
+    addr.country === 'Ghana' && addr.city
+      ? [
+          {
+            line1: [addr.city, addr.state].filter(Boolean).join(', '),
+            city: addr.city,
+            country: 'GH',
+            ...(addr.state && { state: addr.state }),
+            isPrimary: true,
+          },
+        ]
+      : [];
+
+  return {
+    type: 'BROKER',
+    name: data.name,
+    ...(data.email && { email: data.email }),
+    ...(data.phone && { phone: data.phone }),
+    ...(contacts.length && { contacts }),
+    ...(addresses.length && { addresses }),
+  };
 }
 
 export function AddBrokerPanel({ isOpen, onClose }: AddBrokerPanelProps) {
@@ -36,11 +73,7 @@ export function AddBrokerPanel({ isOpen, onClose }: AddBrokerPanelProps) {
 
   const onSubmit = async (data: BrokerFormValues) => {
     try {
-      await createBroker({
-        name: data.name,
-        emails: data.email.map((e) => e.value).filter(Boolean),
-        phoneNumbers: data.phoneNumber.map((p) => p.value).filter(Boolean),
-      });
+      await createBroker(buildPayload(data));
       toast.success('Broker created successfully');
       handleClose();
     } catch (err) {

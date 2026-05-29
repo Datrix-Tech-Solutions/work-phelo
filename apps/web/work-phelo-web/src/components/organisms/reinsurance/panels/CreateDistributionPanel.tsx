@@ -1,0 +1,46 @@
+'use client';
+
+import { useState } from 'react';
+import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Button } from '@/components/atoms/Button';
+import { ReinsurerDistributionSelect } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
+
+interface ReinsurerEntry {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface CreateDistributionPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function CreateDistributionPanel({ isOpen, onClose }: CreateDistributionPanelProps) {
+  const [entries, setEntries] = useState<ReinsurerEntry[]>([]);
+
+  const handleClose = () => {
+    setEntries([]);
+    onClose();
+  };
+
+  return (
+    <SidePanel
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Create Distribution List"
+      footer={
+        <div className="flex justify-end gap-3">
+          <Button variant="outline" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button onClick={handleClose}>Send</Button>
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-5">
+        <ReinsurerDistributionSelect value={entries} onChange={setEntries} />
+      </div>
+    </SidePanel>
+  );
+}
