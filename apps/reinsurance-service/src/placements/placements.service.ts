@@ -79,6 +79,14 @@ export class PlacementsService {
       ...(query.status ? { status: query.status } : {}),
       ...(query.placementType ? { placementType: query.placementType } : {}),
       ...(query.cedantId ? { cedantId: query.cedantId } : {}),
+      ...(query.classOfBusiness
+        ? {
+            classOfBusiness: {
+              equals: query.classOfBusiness,
+              mode: 'insensitive' as const,
+            },
+          }
+        : {}),
       ...(query.search
         ? {
             OR: [
@@ -151,6 +159,13 @@ export class PlacementsService {
       dto.offerDetails,
     );
 
+    const cleanCurrency =
+      this.cleanOptional(dto.currency)?.toUpperCase() ?? null;
+    const exchangeRateToBase = await this.resolveExchangeRate(
+      user.tenantId,
+      cleanCurrency,
+    );
+
     const data: Prisma.PlacementUncheckedCreateInput = {
       tenantId: user.tenantId,
       reference: this.cleanRequired(dto.reference),
@@ -169,7 +184,8 @@ export class PlacementsService {
       description: this.cleanOptional(dto.description),
       inceptionDate: this.toDate(dto.inceptionDate),
       expiryDate: this.toDate(dto.expiryDate),
-      currency: this.cleanOptional(dto.currency)?.toUpperCase(),
+      currency: cleanCurrency,
+      exchangeRateToBase: exchangeRateToBase ?? undefined,
       sumInsured: dto.sumInsured,
       createdByUserId: user.id,
       updatedByUserId: user.id,
@@ -238,6 +254,23 @@ export class PlacementsService {
       );
     }
 
+    // Pre-compute currency patch: only resnapshot exchangeRateToBase when the ISO code is changing.
+    let currencyPatch:
+      | { currency: string | null; exchangeRateToBase?: Prisma.Decimal | null }
+      | undefined;
+    if (dto.currency !== undefined) {
+      const newIso = this.cleanOptional(dto.currency)?.toUpperCase() ?? null;
+      if (newIso !== existing.currency) {
+        const snappedRate = await this.resolveExchangeRate(
+          user.tenantId,
+          newIso,
+        );
+        currencyPatch = { currency: newIso, exchangeRateToBase: snappedRate };
+      } else {
+        currencyPatch = { currency: newIso };
+      }
+    }
+
     const data: Prisma.PlacementUpdateInput = {
       ...(dto.reference !== undefined
         ? {
@@ -286,9 +319,7 @@ export class PlacementsService {
       ...(dto.expiryDate !== undefined
         ? { expiryDate: this.toDate(dto.expiryDate) }
         : {}),
-      ...(dto.currency !== undefined
-        ? { currency: this.cleanOptional(dto.currency)?.toUpperCase() }
-        : {}),
+      ...(currencyPatch ?? {}),
       ...(dto.sumInsured !== undefined ? { sumInsured: dto.sumInsured } : {}),
       updatedByUserId: user.id,
       ...(dto.participants !== undefined
@@ -797,6 +828,18 @@ export class PlacementsService {
         }
       }
     }
+  }
+
+  private async resolveExchangeRate(
+    tenantId: string,
+    isoCode: string | null,
+  ): Promise<Prisma.Decimal | null> {
+    if (!isoCode) return null;
+    const record = await this.prisma.currency.findFirst({
+      where: { tenantId, isoCode, archivedAt: null },
+      select: { exchangeRateToBase: true },
+    });
+    return record?.exchangeRateToBase ?? null;
   }
 
   private rethrowWriteError(error: unknown): void {

@@ -151,6 +151,15 @@ export class PlacementResponseDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
+    example: '16.500000',
+    description:
+      'Exchange rate to the tenant base currency, snapshotted at placement creation or when currency was last changed. Decimal returned as a JSON string by Prisma.',
+  })
+  exchangeRateToBase!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
     example: '5000000.00',
     description: 'Decimal value returned as a JSON string by Prisma.',
   })
