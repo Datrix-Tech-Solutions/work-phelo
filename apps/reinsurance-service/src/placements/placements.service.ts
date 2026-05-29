@@ -7,6 +7,8 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  BusinessClassFieldSection,
+  BusinessClassFieldType,
   CounterpartyType,
   PlacementParticipantRole,
   PlacementStatus,
@@ -141,6 +143,14 @@ export class PlacementsService {
     await this.assertCedant(user.tenantId, dto.cedantId);
     await this.assertParticipants(user.tenantId, dto.participants ?? []);
 
+    const classOfBusiness = this.cleanOptional(dto.classOfBusiness);
+    await this.validateDynamicFields(
+      user.tenantId,
+      classOfBusiness,
+      dto.businessDetails,
+      dto.offerDetails,
+    );
+
     const data: Prisma.PlacementUncheckedCreateInput = {
       tenantId: user.tenantId,
       reference: this.cleanRequired(dto.reference),
@@ -149,7 +159,13 @@ export class PlacementsService {
       placementType: dto.placementType ?? PlacementType.FACULTATIVE,
       status: PlacementStatus.DRAFT,
       cedantId: dto.cedantId,
-      classOfBusiness: this.cleanOptional(dto.classOfBusiness),
+      classOfBusiness,
+      businessDetails: dto.businessDetails
+        ? (dto.businessDetails as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
+      offerDetails: dto.offerDetails
+        ? (dto.offerDetails as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
       description: this.cleanOptional(dto.description),
       inceptionDate: this.toDate(dto.inceptionDate),
       expiryDate: this.toDate(dto.expiryDate),
@@ -205,6 +221,23 @@ export class PlacementsService {
     }
     this.assertEditable(existing);
 
+    if (
+      dto.businessDetails !== undefined ||
+      dto.offerDetails !== undefined ||
+      dto.classOfBusiness !== undefined
+    ) {
+      const effectiveClass =
+        dto.classOfBusiness !== undefined
+          ? this.cleanOptional(dto.classOfBusiness)
+          : existing.classOfBusiness;
+      await this.validateDynamicFields(
+        user.tenantId,
+        effectiveClass,
+        dto.businessDetails,
+        dto.offerDetails,
+      );
+    }
+
     const data: Prisma.PlacementUpdateInput = {
       ...(dto.reference !== undefined
         ? {
@@ -229,6 +262,20 @@ export class PlacementsService {
         : {}),
       ...(dto.classOfBusiness !== undefined
         ? { classOfBusiness: this.cleanOptional(dto.classOfBusiness) }
+        : {}),
+      ...(dto.businessDetails !== undefined
+        ? {
+            businessDetails: dto.businessDetails
+              ? (dto.businessDetails as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
+          }
+        : {}),
+      ...(dto.offerDetails !== undefined
+        ? {
+            offerDetails: dto.offerDetails
+              ? (dto.offerDetails as Prisma.InputJsonValue)
+              : Prisma.JsonNull,
+          }
         : {}),
       ...(dto.description !== undefined
         ? { description: this.cleanOptional(dto.description) }
@@ -628,6 +675,127 @@ export class PlacementsService {
           error instanceof Error ? error.message : String(error)
         }`,
       );
+    }
+  }
+
+  private async validateDynamicFields(
+    tenantId: string,
+    classCode: string | undefined | null,
+    businessDetails: Record<string, unknown> | undefined,
+    offerDetails: Record<string, unknown> | undefined,
+  ): Promise<void> {
+    if (!classCode) return;
+
+    const bc = await this.prisma.businessClass.findFirst({
+      where: { tenantId, code: classCode, archivedAt: null, isActive: true },
+      select: {
+        fields: {
+          where: { isActive: true },
+          select: {
+            section: true,
+            fieldKey: true,
+            fieldType: true,
+            required: true,
+            options: true,
+          },
+        },
+      },
+    });
+
+    if (!bc || !bc.fields.length) return;
+
+    const bdFields = bc.fields.filter(
+      (f) => f.section === BusinessClassFieldSection.BUSINESS_DETAILS,
+    );
+    const odFields = bc.fields.filter(
+      (f) => f.section === BusinessClassFieldSection.OFFER_DETAILS,
+    );
+
+    if (bdFields.length > 0) {
+      this.validateSection(bdFields, businessDetails, 'businessDetails');
+    }
+    if (odFields.length > 0) {
+      this.validateSection(odFields, offerDetails, 'offerDetails');
+    }
+  }
+
+  private validateSection(
+    fields: Array<{
+      fieldKey: string;
+      fieldType: BusinessClassFieldType;
+      required: boolean;
+      options: Prisma.JsonValue;
+    }>,
+    data: Record<string, unknown> | undefined,
+    sectionName: string,
+  ): void {
+    const provided = data ?? {};
+    const definedKeys = new Set(fields.map((f) => f.fieldKey));
+
+    for (const key of Object.keys(provided)) {
+      if (!definedKeys.has(key)) {
+        throw new BadRequestException(
+          `Unknown field key '${key}' in ${sectionName}`,
+        );
+      }
+    }
+
+    for (const field of fields) {
+      const value = provided[field.fieldKey];
+
+      if (field.required && !(field.fieldKey in provided)) {
+        throw new BadRequestException(
+          `Required field '${field.fieldKey}' is missing from ${sectionName}`,
+        );
+      }
+
+      if (value === undefined || value === null) continue;
+
+      switch (field.fieldType) {
+        case BusinessClassFieldType.NUMBER:
+          if (typeof value !== 'number') {
+            throw new BadRequestException(
+              `Field '${field.fieldKey}' must be a number`,
+            );
+          }
+          break;
+        case BusinessClassFieldType.CHECKBOX:
+          if (typeof value !== 'boolean') {
+            throw new BadRequestException(
+              `Field '${field.fieldKey}' must be a boolean`,
+            );
+          }
+          break;
+        case BusinessClassFieldType.TEXT:
+        case BusinessClassFieldType.TEXTAREA:
+          if (typeof value !== 'string') {
+            throw new BadRequestException(
+              `Field '${field.fieldKey}' must be a string`,
+            );
+          }
+          break;
+        case BusinessClassFieldType.DATE:
+          if (typeof value !== 'string' || isNaN(Date.parse(value))) {
+            throw new BadRequestException(
+              `Field '${field.fieldKey}' must be a valid ISO date string`,
+            );
+          }
+          break;
+        case BusinessClassFieldType.SELECT: {
+          if (typeof value !== 'string') {
+            throw new BadRequestException(
+              `Field '${field.fieldKey}' must be a string`,
+            );
+          }
+          const opts = field.options as string[] | null;
+          if (opts && !opts.includes(value)) {
+            throw new BadRequestException(
+              `Value '${String(value)}' is not a valid option for field '${field.fieldKey}'`,
+            );
+          }
+          break;
+        }
+      }
     }
   }
 
