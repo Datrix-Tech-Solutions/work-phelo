@@ -299,8 +299,10 @@ export class PlacementsService {
       ...(dto.businessDetails !== undefined
         ? {
             businessDetails:
-              this.normalizeJsonObject(dto.businessDetails, 'businessDetails') ??
-              Prisma.JsonNull,
+              this.normalizeJsonObject(
+                dto.businessDetails,
+                'businessDetails',
+              ) ?? Prisma.JsonNull,
           }
         : {}),
       ...(dto.offerDetails !== undefined
@@ -648,7 +650,7 @@ export class PlacementsService {
       result[key] = this.trimJsonValue(entry, fieldName);
     }
 
-    return result as Prisma.InputJsonObject;
+    return result;
   }
 
   private trimJsonValue(
@@ -670,7 +672,7 @@ export class PlacementsService {
       )) {
         nested[key] = this.trimJsonValue(entry, fieldName);
       }
-      return nested as Prisma.InputJsonObject;
+      return nested;
     }
 
     return value as Prisma.InputJsonValue;
