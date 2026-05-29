@@ -107,7 +107,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Create a facultative placement',
     description:
-      'Creates a DRAFT placement linked to an active tenant-owned cedant counterparty.',
+      'Creates a DRAFT placement linked to an active tenant-owned cedant counterparty. Fixed placement fields remain column-backed, while class-specific fields should be supplied under businessDetails and offerDetails based on classOfBusiness.',
   })
   @ApiCreatedResponse({ type: PlacementResponseDto })
   @ApiBadRequestResponse({
@@ -147,7 +147,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Update an active placement',
     description:
-      'If participants are supplied, the supplied array replaces the complete stored participant collection. Status changes must use the status endpoint.',
+      'If participants are supplied, the supplied array replaces the complete stored participant collection. Status changes must use the status endpoint. businessDetails and offerDetails are stored as JSON objects keyed by classOfBusiness.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiOkResponse({ type: PlacementResponseDto })
