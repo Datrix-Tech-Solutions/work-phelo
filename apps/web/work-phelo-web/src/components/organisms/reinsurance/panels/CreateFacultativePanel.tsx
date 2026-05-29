@@ -35,7 +35,7 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="New Facultative"
+      title="Facultative Placement Slip"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>

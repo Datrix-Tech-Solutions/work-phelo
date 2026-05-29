@@ -18,6 +18,7 @@ import {
   ACCOUNTING_ARRANGEMENT_OPTIONS,
   CURRENCY_OPTIONS,
 } from '@/types/reinsurance';
+import { useCedantOptions, useBrokerOptions, useReinsurerOptions } from '@/hooks';
 
 function ComputedField({ label, value }: { label: string; value: string }) {
   return (
@@ -52,6 +53,10 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
   const effectiveDate = watch('effectiveDate');
   const cedantShare = watch('cedantShare');
   const reinsurerPanelValues = watch('reinsurerPanel');
+
+  const { options: cedantOptions } = useCedantOptions();
+  const { options: brokerOptions } = useBrokerOptions();
+  const { options: reinsurerOptions } = useReinsurerOptions();
 
   const reinsuranceShareNum =
     typeof cedantShare === 'number' && cedantShare >= 0 && cedantShare <= 100
@@ -163,11 +168,11 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
             render={({ field }) => (
               <SearchSelect
                 label="Cedant Company"
-                placeholder="Type to search or add cedant…"
+                placeholder="Select cedant…"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.cedantCompany?.message}
-                options={[]}
+                options={cedantOptions}
               />
             )}
           />
@@ -179,11 +184,11 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
             render={({ field }) => (
               <SearchSelect
                 label="Broker"
-                placeholder="Type to search or add broker…"
+                placeholder="Select broker…"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.broker?.message}
-                options={[]}
+                options={brokerOptions}
               />
             )}
           />
@@ -311,6 +316,7 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
             errors={errors as unknown as ReinsurerPanelErrors}
             reinsurerPanelValues={reinsurerPanelValues}
             maxShare={reinsuranceShareNum}
+            reinsurerOptions={reinsurerOptions}
           />
         </div>
       </FormSection>

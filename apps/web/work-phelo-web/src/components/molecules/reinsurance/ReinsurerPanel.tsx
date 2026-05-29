@@ -6,7 +6,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { Icons } from '@/components/atoms/icons';
 import { cn } from '@/lib/utils';
 import { ReinsurerPanelRow, DEFAULT_REINSURER_ROW } from '@/types/reinsurance';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 
 export interface ReinsurerPanelErrors {
   reinsurerPanel?: Array<{ reinsurer?: FieldError; reinsurerShare?: FieldError } | undefined>;
@@ -18,6 +18,7 @@ interface ReinsurerPanelProps {
   errors: ReinsurerPanelErrors;
   reinsurerPanelValues: ReinsurerPanelRow[];
   maxShare: number | null;
+  reinsurerOptions?: SearchSelectOption[];
 }
 
 export function ReinsurerPanel({
@@ -26,6 +27,7 @@ export function ReinsurerPanel({
   errors,
   reinsurerPanelValues,
   maxShare,
+  reinsurerOptions = [],
 }: ReinsurerPanelProps) {
   const { fields, append, remove } = useFieldArray({ control, name: 'reinsurerPanel' });
 
@@ -96,11 +98,11 @@ export function ReinsurerPanel({
               render={({ field: f }) => (
                 <SearchSelect
                   label="Reinsurer"
-                  placeholder="Type to search or add reinsurer…"
+                  placeholder="Select reinsurer…"
                   value={f.value}
                   onChange={f.onChange}
                   error={rowErrors?.reinsurer?.message}
-                  options={[]}
+                  options={reinsurerOptions}
                 />
               )}
             />

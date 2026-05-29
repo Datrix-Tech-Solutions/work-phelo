@@ -1,6 +1,6 @@
 'use client';
 
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm, useWatch, useFieldArray } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
@@ -9,6 +9,8 @@ import { RiskTypeFormValues, RISK_TYPE_FORM_DEFAULTS } from '@/types/reinsurance
 import { useCreateRiskType, useRiskClassOptions } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { Trash2, Plus } from 'lucide-react';
+import { inputClass } from '@/lib/utils';
 
 interface AddRiskTypePanelProps {
   isOpen: boolean;
@@ -33,6 +35,8 @@ export function AddRiskTypePanel({ isOpen, onClose }: AddRiskTypePanelProps) {
 
   const riskClassId = useWatch({ control, name: 'riskClassId' });
 
+  const { fields, append, remove } = useFieldArray({ control, name: 'customFields' });
+
   const handleClose = () => {
     reset(RISK_TYPE_FORM_DEFAULTS);
     onClose();
@@ -40,7 +44,11 @@ export function AddRiskTypePanel({ isOpen, onClose }: AddRiskTypePanelProps) {
 
   const onSubmit = async (data: RiskTypeFormValues) => {
     try {
-      await createRiskType({ name: data.name, riskClassId: data.riskClassId });
+      await createRiskType({
+        name: data.name,
+        riskClassId: data.riskClassId,
+        ...(data.customFields.length > 0 && { customFields: data.customFields }),
+      });
       toast.success('Risk type created successfully');
       handleClose();
     } catch (err) {
@@ -81,6 +89,54 @@ export function AddRiskTypePanel({ isOpen, onClose }: AddRiskTypePanelProps) {
           options={riskClassOptions}
           error={errors.riskClassId?.message}
         />
+
+        {fields.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm font-bold text-gray-900">Risk Details</p>
+            {fields.map((field, index) => (
+              <div
+                key={field.id}
+                className="flex flex-col gap-2 rounded-lg border border-gray-200 p-3"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-gray-500">Field {index + 1}</span>
+                  <button
+                    type="button"
+                    onClick={() => remove(index)}
+                    className="text-gray-400 hover:text-blue-500 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div>
+                    <input
+                      {...register(`customFields.${index}.label`, {
+                        required: 'Field name is required',
+                      })}
+                      placeholder="e.g. Coverage Limit"
+                      className={inputClass(errors.customFields?.[index]?.label?.message)}
+                    />
+                    {errors.customFields?.[index]?.label && (
+                      <p className="mt-1 text-xs text-blue-500">
+                        {errors.customFields[index]!.label!.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => append({ label: '', value: '' })}
+          className="flex items-center gap-2 text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors w-fit"
+        >
+          <Plus size={16} />
+          Add Field
+        </button>
       </div>
     </SidePanel>
   );

@@ -12,6 +12,7 @@ import {
   ACCOUNTING_ARRANGEMENT_OPTIONS,
   CURRENCY_OPTIONS,
 } from '@/types/reinsurance';
+import { useCedantOptions, useBrokerOptions } from '@/hooks';
 
 const currentYear = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: currentYear - 2000 + 6 }, (_, i) => {
@@ -32,6 +33,9 @@ export function FacObligatoryFormFields({ form }: FacObligatoryFormFieldsProps) 
   } = form;
 
   const effectiveDate = watch('effectiveDate');
+
+  const { options: cedantOptions } = useCedantOptions();
+  const { options: brokerOptions } = useBrokerOptions();
 
   return (
     <div className="flex flex-col gap-7">
@@ -132,11 +136,11 @@ export function FacObligatoryFormFields({ form }: FacObligatoryFormFieldsProps) 
             render={({ field }) => (
               <SearchSelect
                 label="Cedant Company"
-                placeholder="Type to search or add cedant…"
+                placeholder="Select cedant…"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.cedantCompany?.message}
-                options={[]}
+                options={cedantOptions}
               />
             )}
           />
@@ -148,11 +152,11 @@ export function FacObligatoryFormFields({ form }: FacObligatoryFormFieldsProps) 
             render={({ field }) => (
               <SearchSelect
                 label="Broker"
-                placeholder="Type to search or add broker…"
+                placeholder="Select broker…"
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.broker?.message}
-                options={[]}
+                options={brokerOptions}
               />
             )}
           />

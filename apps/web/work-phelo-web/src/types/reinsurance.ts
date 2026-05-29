@@ -1,96 +1,192 @@
 /* ── Reinsurance domain types ── */
 
-/* ── Cedant ── */
-export interface Cedant {
+/* ── Unified Counterparty (API response shape) ── */
+export type CounterpartyType = 'CEDANT' | 'REINSURER' | 'BROKER';
+
+export interface CounterpartyContact {
   id: string;
-  name: string;
-  email: string;
-  phoneNumber: string;
+  fullName: string;
+  jobTitle: string | null;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
 }
 
+export interface CounterpartyAddress {
+  id: string;
+  label: string | null;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string | null;
+  postalCode: string | null;
+  country: string;
+  isPrimary: boolean;
+}
+
+export interface Counterparty {
+  id: string;
+  tenantId: string;
+  type: CounterpartyType;
+  name: string;
+  normalizedName: string;
+  registrationNumber: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  notes: string | null;
+  contacts: CounterpartyContact[];
+  addresses: CounterpartyAddress[];
+  createdByUserId: string;
+  updatedByUserId: string;
+  archivedByUserId: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Backward-compat aliases used by existing table components */
+export type Cedant = Counterparty;
+export type Reinsurer = Counterparty;
+export type Broker = Counterparty;
+
+/* ── Paginated list response ── */
+export interface PaginatedCounterparties {
+  items: Counterparty[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+/* ── Shared address form values ── */
+export interface AddressFormValues {
+  country: string; // 'Ghana' | 'Africa' | 'Europe' | 'Asia' | 'Rest of the World'
+  state: string; // Ghana region — only relevant when country === 'Ghana'
+  city: string; // only relevant when country === 'Ghana'
+}
+
+export const ADDRESS_FORM_DEFAULTS: AddressFormValues = {
+  country: '',
+  state: '',
+  city: '',
+};
+
+/* ── Additional contact person (used in all three counterparty forms) ── */
+export interface ContactPersonFormValues {
+  fullName: string;
+  email: string;
+  phone: string;
+}
+
+export const CONTACT_PERSON_DEFAULTS: ContactPersonFormValues = {
+  fullName: '',
+  email: '',
+  phone: '',
+};
+
+/* ── Cedant form ── */
 export interface CedantFormValues {
   name: string;
-  emails: { value: string }[];
-  phoneNumbers: { value: string }[];
+  email: string;
+  phone: string;
+  contacts: ContactPersonFormValues[];
+  address: AddressFormValues;
 }
 
 export const CEDANT_FORM_DEFAULTS: CedantFormValues = {
   name: '',
-  emails: [{ value: '' }],
-  phoneNumbers: [{ value: '' }],
+  email: '',
+  phone: '',
+  contacts: [],
+  address: ADDRESS_FORM_DEFAULTS,
 };
 
-// Reinsurers
-export interface Reinsurer {
-  id: string;
-  name: string;
-  email: string;
-  phoneNumber: string;
-}
-
+/* ── Reinsurer form ── */
 export interface ReinsurerFormValues {
   name: string;
-  email: { value: string }[];
-  phoneNumber: { value: string }[];
+  email: string;
+  phone: string;
+  contacts: ContactPersonFormValues[];
+  address: AddressFormValues;
 }
 
 export const REINSURER_FORM_DEFAULTS: ReinsurerFormValues = {
   name: '',
-  email: [{ value: '' }],
-  phoneNumber: [{ value: '' }],
+  email: '',
+  phone: '',
+  contacts: [],
+  address: ADDRESS_FORM_DEFAULTS,
 };
 
-// Brokers
-export interface Broker {
-  id: string;
-  name: string;
-  email: string;
-  phoneNumber: string;
-}
-
+/* ── Broker form ── */
 export interface BrokerFormValues {
   name: string;
-  email: { value: string }[];
-  phoneNumber: { value: string }[];
+  email: string;
+  phone: string;
+  contacts: ContactPersonFormValues[];
+  address: AddressFormValues;
 }
 
 export const BROKER_FORM_DEFAULTS: BrokerFormValues = {
   name: '',
-  email: [{ value: '' }],
-  phoneNumber: [{ value: '' }],
+  email: '',
+  phone: '',
+  contacts: [],
+  address: ADDRESS_FORM_DEFAULTS,
 };
 
 /* ── API payload types ── */
 
-export interface CreateCedantPayload {
-  name: string;
-  emails: string[];
-  phoneNumbers: string[];
+export interface CounterpartyContactPayload {
+  fullName: string;
+  jobTitle?: string;
+  email?: string;
+  phone?: string;
+  isPrimary?: boolean;
 }
-export type UpdateCedantPayload = Partial<CreateCedantPayload>;
 
-export interface CreateReinsurerPayload {
-  name: string;
-  emails: string[];
-  phoneNumbers: string[];
+export interface CounterpartyAddressPayload {
+  label?: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state?: string;
+  postalCode?: string;
+  country: string;
+  isPrimary?: boolean;
 }
-export type UpdateReinsurerPayload = Partial<CreateReinsurerPayload>;
 
-export interface CreateBrokerPayload {
+export interface CreateCounterpartyPayload {
+  type: CounterpartyType;
   name: string;
-  emails: string[];
-  phoneNumbers: string[];
+  registrationNumber?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  notes?: string;
+  contacts?: CounterpartyContactPayload[];
+  addresses?: CounterpartyAddressPayload[];
 }
-export type UpdateBrokerPayload = Partial<CreateBrokerPayload>;
+
+export type UpdateCounterpartyPayload = Partial<Omit<CreateCounterpartyPayload, 'type'>>;
 
 export interface CreateRiskClassPayload {
   name: string;
 }
 export type UpdateRiskClassPayload = Partial<CreateRiskClassPayload>;
 
+export interface RiskTypeCustomField {
+  label: string;
+  value: string;
+}
+
 export interface CreateRiskTypePayload {
   name: string;
   riskClassId: string;
+  customFields?: RiskTypeCustomField[];
 }
 export type UpdateRiskTypePayload = Partial<CreateRiskTypePayload>;
 
@@ -132,11 +228,13 @@ export interface RiskType {
 export interface RiskTypeFormValues {
   name: string;
   riskClassId: string;
+  customFields: RiskTypeCustomField[];
 }
 
 export const RISK_TYPE_FORM_DEFAULTS: RiskTypeFormValues = {
   name: '',
   riskClassId: '',
+  customFields: [],
 };
 
 /* ── Risk Class ── */
@@ -155,61 +253,62 @@ export const RISK_CLASS_FORM_DEFAULTS: RiskClassFormValues = {
 };
 
 /* ── Facultative ── */
-export const FACULTATIVE_STATUSES = ['Active', 'Pending', 'Expired', 'Cancelled'] as const;
+export const FACULTATIVE_STATUSES = ['Open', 'Closed', 'Expired', 'Cancelled'] as const;
 export type FacultativeStatus = (typeof FACULTATIVE_STATUSES)[number];
 
 export interface Facultative {
   id: string;
   policyNumber: string;
-  cedant: string;
+  insuranceCompany: string;
+  insured: string;
   riskType: string;
-  classOfBusiness: string;
-  periodStart: string; // ISO date
-  periodEnd: string; // ISO date
+  sumInsured: number;
+  rate: number;
+  commission: number;
+  facultativeOffer: number;
+  preliminaryBrokerage: number;
+  premium: number;
+  currency: string;
+  periodFrom: string; // ISO date
+  periodTo: string; // ISO date
   year: number;
-  yourShare: number; // 0-100
-  grossPremium: number;
-  netPremium: number;
+  offerDate: string; // ISO date
   status: FacultativeStatus;
 }
 
 /* ── Facultative form ── */
 export interface FacultativeFormValues {
-  riskClass: string;
+  insuranceCompany: string;
   riskType: string;
-  insuredName: string;
-  cedant: string;
-  brokerName: string;
-  brokerageFee: number | '';
+  policyNo: string;
+  insured: string;
+  sumInsured: number | '';
+  rate: number | '';
+  premium: number | '';
+  facultativeOffer: number | '';
+  commission: number | '';
+  preliminaryBrokerage: number | '';
   currency: string;
-  accountingYear: string;
-  startDate: string;
-  endDate: string;
-  territorialScope: string;
-  sumAssured: number | ''; // 100% sum assured
-  grossPremium: number | ''; // 100% gross premium
-  commission: number | ''; // commission (%)
-  facOffer: number | ''; // fac offer (%)
-  supportingDocument: File | null;
+  periodFrom: string;
+  periodTo: string;
+  comment: string;
 }
 
 export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
-  riskClass: '',
+  insuranceCompany: '',
   riskType: '',
-  insuredName: '',
-  cedant: '',
-  brokerName: '',
-  brokerageFee: '',
-  currency: '',
-  accountingYear: String(new Date().getFullYear()),
-  startDate: '',
-  endDate: '',
-  territorialScope: '',
-  sumAssured: '',
-  grossPremium: '',
+  policyNo: '',
+  insured: '',
+  sumInsured: '',
+  rate: '',
+  premium: '',
+  facultativeOffer: '',
   commission: '',
-  facOffer: '',
-  supportingDocument: null,
+  preliminaryBrokerage: '',
+  currency: '',
+  periodFrom: '',
+  periodTo: '',
+  comment: '',
 };
 
 export const TREATY_TYPES = [

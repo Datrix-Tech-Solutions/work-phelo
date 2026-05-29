@@ -226,7 +226,7 @@ export function DataTable<T extends { id: string | number }>({
                 style={{
                   gridTemplateColumns: [
                     ...columns.map((c) => c.width ?? '1fr'),
-                    ...(rowActions ? ['auto'] : []),
+                    ...(rowActions ? ['44px'] : []),
                   ].join(' '),
                 }}
               >
@@ -282,7 +282,7 @@ export function DataTable<T extends { id: string | number }>({
                     style={{
                       gridTemplateColumns: [
                         ...columns.map((c) => c.width ?? '1fr'),
-                        ...(rowActions ? ['auto'] : []),
+                        ...(rowActions ? ['44px'] : []),
                       ].join(' '),
                     }}
                   >

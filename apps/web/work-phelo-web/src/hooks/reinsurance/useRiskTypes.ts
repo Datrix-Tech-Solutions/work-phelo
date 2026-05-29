@@ -51,3 +51,16 @@ export function useDeleteRiskType() {
     },
   });
 }
+
+export function useRiskTypeOptions() {
+  return useQuery({
+    queryKey: [...RISK_TYPES_KEY, 'options'],
+    queryFn: async () => {
+      const res = await api.get<RiskType[]>('/operations/reinsurance/risk-types');
+      const list = Array.isArray(res.data)
+        ? res.data
+        : ((res.data as { data: RiskType[] })?.data ?? []);
+      return list.map((rt) => ({ value: rt.id, label: rt.name }));
+    },
+  });
+}

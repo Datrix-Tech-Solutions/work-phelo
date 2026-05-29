@@ -84,7 +84,7 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
         />
 
         <FormField
-          label="Rate (%)"
+          label="Rate to Ghana Cedi (GHS)"
           type="number"
           registration={register('rate', {
             required: 'Rate is required',
@@ -92,7 +92,7 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
             valueAsNumber: true,
           })}
           error={errors.rate}
-          placeholder="e.g. 1.00"
+          placeholder="e.g. 1.0000"
         />
       </div>
     </SidePanel>
