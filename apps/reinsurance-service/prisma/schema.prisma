@@ -66,6 +66,24 @@ enum EmailMessageDirection {
   @@schema("reinsurance")
 }
 
+enum BusinessClassFieldSection {
+  BUSINESS_DETAILS
+  OFFER_DETAILS
+
+  @@schema("reinsurance")
+}
+
+enum BusinessClassFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  CHECKBOX
+  TEXTAREA
+
+  @@schema("reinsurance")
+}
+
 model Counterparty {
   id                 String                 @id @default(uuid())
   tenantId           String
@@ -121,10 +139,13 @@ model Placement {
   status              PlacementStatus          @default(DRAFT)
   cedantId            String
   classOfBusiness     String?
+  businessDetails     Json?
+  offerDetails        Json?
   description         String?
   inceptionDate       DateTime?
   expiryDate          DateTime?
   currency            String?
+  exchangeRateToBase  Decimal?                 @db.Decimal(18, 6)
   sumInsured          Decimal?                 @db.Decimal(18, 2)
   createdByUserId     String
   updatedByUserId     String
@@ -142,6 +163,75 @@ model Placement {
   @@index([tenantId, status, archivedAt, createdAt])
   @@index([tenantId, cedantId, archivedAt])
   @@index([tenantId, archivedAt, createdAt])
+  @@schema("reinsurance")
+}
+
+model Currency {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  isoCode            String
+  name               String
+  symbol             String?
+  exchangeRateToBase Decimal?  @db.Decimal(18, 6)
+  isBaseCurrency     Boolean   @default(false)
+  isActive           Boolean   @default(true)
+  displayOrder       Int       @default(0)
+  createdByUserId    String
+  updatedByUserId    String
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, isoCode])
+  @@index([tenantId, isActive, displayOrder])
+  @@index([tenantId, archivedAt, createdAt])
+  @@schema("reinsurance")
+}
+
+model BusinessClass {
+  id              String               @id @default(uuid())
+  tenantId        String
+  name            String
+  code            String
+  description     String?
+  isActive        Boolean              @default(true)
+  displayOrder    Int                  @default(0)
+  createdByUserId String
+  updatedByUserId String
+  archivedAt      DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  fields          BusinessClassField[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive, displayOrder])
+  @@index([tenantId, archivedAt, createdAt])
+  @@schema("reinsurance")
+}
+
+model BusinessClassField {
+  id              String                    @id @default(uuid())
+  tenantId        String
+  businessClassId String
+  section         BusinessClassFieldSection
+  fieldKey        String
+  label           String
+  fieldType       BusinessClassFieldType
+  required        Boolean                   @default(false)
+  options         Json?
+  validationRules Json?
+  placeholder     String?
+  helpText        String?
+  displayOrder    Int                       @default(0)
+  isActive        Boolean                   @default(true)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  businessClass   BusinessClass             @relation(fields: [businessClassId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, businessClassId, section, fieldKey])
+  @@index([tenantId, businessClassId, section, isActive])
   @@schema("reinsurance")
 }
 

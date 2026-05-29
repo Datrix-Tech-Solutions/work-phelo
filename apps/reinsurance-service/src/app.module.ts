@@ -6,6 +6,8 @@ import { EmailModule } from './email/email.module';
 import { HealthModule } from './health/health.module';
 import { PlacementsModule } from './placements/placements.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { BusinessClassSettingsModule } from './settings/business-class-settings.module';
+import { CurrencySettingsModule } from './settings/currency-settings.module';
 
 @Module({
   imports: [
@@ -15,6 +17,8 @@ import { PrismaModule } from './prisma/prisma.module';
     AccessModule,
     CounterpartiesModule,
     PlacementsModule,
+    BusinessClassSettingsModule,
+    CurrencySettingsModule,
     EmailModule,
   ],
 })

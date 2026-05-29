@@ -5,6 +5,7 @@ import {
   IsDateString,
   IsEnum,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -113,4 +114,24 @@ export class CreatePlacementDto {
   @ValidateNested({ each: true })
   @Type(() => CreatePlacementParticipantDto)
   participants?: CreatePlacementParticipantDto[];
+
+  @ApiPropertyOptional({
+    type: Object,
+    description:
+      'Business-class-specific risk details. Keys must match active BusinessClassField definitions for the BUSINESS_DETAILS section of the selected classOfBusiness.',
+    example: { vehicle_make: 'Toyota', vehicle_model: 'Camry', year: 2022 },
+  })
+  @IsOptional()
+  @IsObject()
+  businessDetails?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    type: Object,
+    description:
+      'Offer-specific details. Keys must match active BusinessClassField definitions for the OFFER_DETAILS section of the selected classOfBusiness.',
+    example: { coverage_type: 'comprehensive', deductible: 5000 },
+  })
+  @IsOptional()
+  @IsObject()
+  offerDetails?: Record<string, unknown>;
 }

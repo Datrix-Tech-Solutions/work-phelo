@@ -112,8 +112,25 @@ export class PlacementResponseDto {
   @ApiProperty({ format: 'uuid' })
   cedantId!: string;
 
-  @ApiPropertyOptional({ type: String, nullable: true, example: 'Energy' })
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'MOTOR' })
   classOfBusiness!: string | null;
+
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    example: { vehicle_make: 'Toyota', vehicle_model: 'Camry' },
+    description:
+      'Business-class-specific risk details keyed by field definitions.',
+  })
+  businessDetails!: Record<string, unknown> | null;
+
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    example: { coverage_type: 'comprehensive', deductible: 5000 },
+    description: 'Offer-specific details keyed by field definitions.',
+  })
+  offerDetails!: Record<string, unknown> | null;
 
   @ApiPropertyOptional({
     type: String,
@@ -130,6 +147,15 @@ export class PlacementResponseDto {
 
   @ApiPropertyOptional({ type: String, nullable: true, example: 'USD' })
   currency!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '16.500000',
+    description:
+      'Exchange rate to the tenant base currency, snapshotted at placement creation or when currency was last changed. Decimal returned as a JSON string by Prisma.',
+  })
+  exchangeRateToBase!: string | null;
 
   @ApiPropertyOptional({
     type: String,

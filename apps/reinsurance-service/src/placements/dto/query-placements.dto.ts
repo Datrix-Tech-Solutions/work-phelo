@@ -10,11 +10,11 @@ import {
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { TrimmedString } from '../../counterparties/dto/string.transforms';
 import {
   PlacementStatus,
   PlacementType,
 } from '../../../prisma/generated/client';
-import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
 export class QueryPlacementsDto {
   @ApiPropertyOptional({ example: 'FAC-2026', maxLength: 100 })
@@ -47,6 +47,18 @@ export class QueryPlacementsDto {
   @IsOptional()
   @IsUUID()
   cedantId?: string;
+
+  @ApiPropertyOptional({
+    example: 'MOTOR',
+    maxLength: 100,
+    description:
+      'Filter by class of business code (exact match, case-insensitive).',
+  })
+  @TrimmedString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  classOfBusiness?: string;
 
   @ApiPropertyOptional({ example: 1, default: 1, minimum: 1 })
   @IsOptional()
