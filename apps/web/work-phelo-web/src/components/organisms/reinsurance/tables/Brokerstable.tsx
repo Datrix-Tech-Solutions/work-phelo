@@ -10,6 +10,7 @@ import { useBrokers, useDeleteBroker } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { Counterparty } from '@/types/reinsurance';
+import { codeToCountry } from '@/lib/geo';
 
 const PAGE_SIZE = 10;
 
@@ -17,7 +18,7 @@ const PAGE_SIZE = 10;
 function formatTerritory(addresses: Counterparty['addresses']): string {
   const primary = addresses.find((a) => a.isPrimary) ?? addresses[0];
   if (!primary) return '—';
-  const country = primary.country === 'GH' ? 'Ghana' : primary.country;
+  const country = codeToCountry(primary.country);
   return primary.state ? `${primary.state}, ${country}` : country;
 }
 

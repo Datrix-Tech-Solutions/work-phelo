@@ -117,6 +117,7 @@ export class CounterpartiesService {
           phone: this.optionalText(dto.phone),
           website: this.optionalText(dto.website),
           notes: this.optionalText(dto.notes),
+          brokerageFee: dto.brokerageFee ?? null,
           createdByUserId: user.id,
           updatedByUserId: user.id,
           contacts: dto.contacts
@@ -175,6 +176,8 @@ export class CounterpartiesService {
       data.website = this.optionalText(dto.website);
     }
     if (dto.notes !== undefined) data.notes = this.optionalText(dto.notes);
+    if (dto.brokerageFee !== undefined)
+      data.brokerageFee = dto.brokerageFee ?? null;
     if (dto.contacts !== undefined) {
       data.contacts = {
         deleteMany: {},

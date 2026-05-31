@@ -8,7 +8,7 @@ export function useRiskTypes() {
   return useQuery({
     queryKey: RISK_TYPES_KEY,
     queryFn: async () => {
-      const res = await api.get<RiskType[]>('/operations/reinsurance/risk-types');
+      const res = await api.get<RiskType[]>('/operations/reinsurance/settings/business-classes');
       return Array.isArray(res.data) ? res.data : ((res.data as { data: RiskType[] })?.data ?? []);
     },
   });
@@ -18,7 +18,10 @@ export function useCreateRiskType() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: CreateRiskTypePayload) => {
-      const res = await api.post<RiskType>('/operations/reinsurance/risk-types', payload);
+      const res = await api.post<RiskType>(
+        '/operations/reinsurance/settings/business-classes',
+        payload,
+      );
       return res.data;
     },
     onSuccess: () => {
@@ -31,7 +34,10 @@ export function useUpdateRiskType() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...payload }: UpdateRiskTypePayload & { id: string }) => {
-      const res = await api.patch<RiskType>(`/operations/reinsurance/risk-types/${id}`, payload);
+      const res = await api.patch<RiskType>(
+        `/operations/reinsurance/settings/business-classes/${id}`,
+        payload,
+      );
       return res.data;
     },
     onSuccess: () => {
@@ -44,7 +50,7 @@ export function useDeleteRiskType() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/operations/reinsurance/risk-types/${id}`);
+      await api.delete(`/operations/reinsurance/settings/business-classes/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY });
@@ -56,7 +62,7 @@ export function useRiskTypeOptions() {
   return useQuery({
     queryKey: [...RISK_TYPES_KEY, 'options'],
     queryFn: async () => {
-      const res = await api.get<RiskType[]>('/operations/reinsurance/risk-types');
+      const res = await api.get<RiskType[]>('/operations/reinsurance/settings/business-classes');
       const list = Array.isArray(res.data)
         ? res.data
         : ((res.data as { data: RiskType[] })?.data ?? []);

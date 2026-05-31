@@ -10,6 +10,7 @@ import {
   CreateCounterpartyPayload,
 } from '@/types/reinsurance';
 import { useCreateBroker } from '@/hooks';
+import { countryToCode } from '@/lib/geo';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 
@@ -28,8 +29,8 @@ function buildPayload(data: BrokerFormValues): CreateCounterpartyPayload {
     }));
 
   const addr = data.address;
-  const addresses =
-    addr.country === 'Ghana' && addr.city
+  const addresses = addr.country
+    ? addr.country === 'Ghana' && addr.city
       ? [
           {
             line1: [addr.city, addr.state].filter(Boolean).join(', '),
@@ -39,7 +40,17 @@ function buildPayload(data: BrokerFormValues): CreateCounterpartyPayload {
             isPrimary: true,
           },
         ]
-      : [];
+      : addr.country !== 'Ghana'
+        ? [
+            {
+              line1: addr.country,
+              city: addr.country,
+              country: countryToCode(addr.country),
+              isPrimary: true,
+            },
+          ]
+        : []
+    : [];
 
   return {
     type: 'BROKER',

@@ -35,6 +35,7 @@ export interface Counterparty {
   phone: string | null;
   website: string | null;
   notes: string | null;
+  brokerageFee: number | null;
   contacts: CounterpartyContact[];
   addresses: CounterpartyAddress[];
   createdByUserId: string;
@@ -109,6 +110,7 @@ export interface ReinsurerFormValues {
   name: string;
   email: string;
   phone: string;
+  brokerageFee: number | '';
   contacts: ContactPersonFormValues[];
   address: AddressFormValues;
 }
@@ -117,6 +119,7 @@ export const REINSURER_FORM_DEFAULTS: ReinsurerFormValues = {
   name: '',
   email: '',
   phone: '',
+  brokerageFee: '',
   contacts: [],
   address: ADDRESS_FORM_DEFAULTS,
 };
@@ -167,6 +170,7 @@ export interface CreateCounterpartyPayload {
   phone?: string;
   website?: string;
   notes?: string;
+  brokerageFee?: number;
   contacts?: CounterpartyContactPayload[];
   addresses?: CounterpartyAddressPayload[];
 }

@@ -5,11 +5,13 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { AddReinsurancePanel } from '@/components/organisms/reinsurance/panels/AddReinsurancepanel';
+import { EditReinsurancePanel } from '@/components/organisms/reinsurance/panels/EditReinsurancePanel';
 import { AddContactPanel } from '@/components/organisms/reinsurance/panels/AddContactPanel';
 import { useReinsurers, useDeleteReinsurer } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { Counterparty } from '@/types/reinsurance';
+import { codeToCountry } from '@/lib/geo';
 
 const PAGE_SIZE = 10;
 
@@ -17,7 +19,7 @@ const PAGE_SIZE = 10;
 function formatTerritory(addresses: Counterparty['addresses']): string {
   const primary = addresses.find((a) => a.isPrimary) ?? addresses[0];
   if (!primary) return '—';
-  const country = primary.country === 'GH' ? 'Ghana' : primary.country;
+  const country = codeToCountry(primary.country);
   return primary.state ? `${primary.state}, ${country}` : country;
 }
 
@@ -46,6 +48,16 @@ const COLUMNS: Column<Counterparty>[] = [
     width: '1.5fr',
     render: (row) => <span className="text-gray-700">{formatTerritory(row.addresses)}</span>,
   },
+  {
+    key: 'brokerageFee',
+    label: 'Brokerage Fee',
+    width: '1fr',
+    render: (row) => (
+      <span className="text-gray-700">
+        {row.brokerageFee != null ? `${row.brokerageFee}%` : '—'}
+      </span>
+    ),
+  },
 ];
 
 export function ReinsurersTable() {
@@ -53,6 +65,7 @@ export function ReinsurersTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Counterparty | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Counterparty | null>(null);
   const [contactTarget, setContactTarget] = useState<Counterparty | null>(null);
 
@@ -100,9 +113,7 @@ export function ReinsurersTable() {
         rowActions={(row) => [
           {
             label: 'Edit',
-            onClick: () => {
-              /* TODO: open edit panel */
-            },
+            onClick: () => setEditTarget(row),
           },
           {
             label: 'Add Contact',
@@ -122,6 +133,8 @@ export function ReinsurersTable() {
       />
 
       <AddReinsurancePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+
+      <EditReinsurancePanel reinsurer={editTarget} onClose={() => setEditTarget(null)} />
 
       <AddContactPanel counterparty={contactTarget} onClose={() => setContactTarget(null)} />
 

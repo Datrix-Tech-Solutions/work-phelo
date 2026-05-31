@@ -3,13 +3,10 @@
 import { useState } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { ReinsurerDistributionSelect } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
-
-interface ReinsurerEntry {
-  id: string;
-  name: string;
-  email: string;
-}
+import {
+  ReinsurerDistributionSelect,
+  ReinsurerEntry,
+} from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 
 interface CreateDistributionPanelProps {
   isOpen: boolean;
