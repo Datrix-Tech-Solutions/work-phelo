@@ -135,6 +135,14 @@ export class CounterpartyResponseDto {
   })
   notes!: string | null;
 
+  @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
+    example: 5.0,
+    description: 'Brokerage fee as a percentage (0–100)',
+  })
+  brokerageFee!: number | null;
+
   @ApiProperty({ type: [CounterpartyContactResponseDto] })
   contacts!: CounterpartyContactResponseDto[];
 

@@ -9,6 +9,7 @@ import { Icons } from '@/components/atoms/icons';
 import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/CounterpartyAddressFields';
 import { CONTACT_PERSON_DEFAULTS } from '@/types/reinsurance';
 import type { ReinsurerFormValues } from '@/types/reinsurance';
+import { inputClass } from '@/lib/utils';
 
 interface ReinsurerFormFieldsProps {
   control: Control<ReinsurerFormValues>;
@@ -42,6 +43,33 @@ export function ReinsurerFormFields({
           error={errors.name}
           placeholder="e.g. Reinsurance Company Ltd."
         />
+      </FormSection>
+
+      {/* ── Brokerage fee ── */}
+      <FormSection title="Financials">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-gray-900">Brokerage Fee (%)</label>
+          <div className="relative">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              placeholder="e.g. 5.00"
+              {...register('brokerageFee', {
+                min: { value: 0, message: 'Must be at least 0' },
+                max: { value: 100, message: 'Cannot exceed 100' },
+              })}
+              className={inputClass(errors.brokerageFee?.message)}
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">
+              %
+            </span>
+          </div>
+          {errors.brokerageFee && (
+            <p className="text-xs text-red-500">{errors.brokerageFee.message}</p>
+          )}
+        </div>
       </FormSection>
 
       {/* ── Primary contact ── */}

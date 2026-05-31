@@ -68,7 +68,10 @@ export default function FacultativeDetailPage({
 
               <div className="flex-1 pt-5">
                 {activeTab === 'distribution' && (
-                  <DistributionListTab facOffer={placement.facultativeOffer} />
+                  <DistributionListTab
+                    facOffer={placement.facultativeOffer}
+                    premium={placement.premium}
+                  />
                 )}
                 {activeTab === 'closings' && (
                   <div className="flex items-center justify-center h-40 text-sm text-gray-400">

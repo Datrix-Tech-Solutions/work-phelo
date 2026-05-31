@@ -95,6 +95,7 @@ model Counterparty {
   phone              String?
   website            String?
   notes              String?
+  brokerageFee       Decimal?  @db.Decimal(5, 2)
   createdByUserId    String
   updatedByUserId    String
   archivedByUserId   String?

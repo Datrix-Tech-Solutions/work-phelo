@@ -9,6 +9,29 @@ export const COUNTRY_OPTIONS: SearchSelectOption[] = [
   { value: 'Rest of the World', label: 'Rest of the World' },
 ];
 
+/** Maps form label → 2-char API code (API enforces max 2 characters). */
+const LABEL_TO_CODE: Record<string, string> = {
+  Ghana: 'GH',
+  Africa: 'AF',
+  Europe: 'EU',
+  Asia: 'AS',
+  'Rest of the World': 'RW',
+};
+
+const CODE_TO_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(LABEL_TO_CODE).map(([label, code]) => [code, label]),
+);
+
+/** Convert a form country label (e.g. "Africa") to a 2-char API code (e.g. "AF"). */
+export function countryToCode(label: string): string {
+  return LABEL_TO_CODE[label] ?? label;
+}
+
+/** Convert a 2-char API code (e.g. "AF") back to the form label (e.g. "Africa"). */
+export function codeToCountry(code: string): string {
+  return CODE_TO_LABEL[code] ?? code;
+}
+
 export const GHANA_REGIONS: SearchSelectOption[] = [
   { value: 'Greater Accra', label: 'Greater Accra' },
   { value: 'Ashanti', label: 'Ashanti' },

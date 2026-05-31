@@ -4,10 +4,13 @@ import {
   IsArray,
   IsEmail,
   IsEnum,
+  IsNumber,
   IsOptional,
   IsString,
   IsUrl,
+  Max,
   MaxLength,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
@@ -72,6 +75,18 @@ export class UpdateCounterpartyDto {
   @IsString()
   @MaxLength(2000)
   notes?: string;
+
+  @ApiPropertyOptional({
+    example: 5.0,
+    minimum: 0,
+    maximum: 100,
+    description: 'Brokerage fee as a percentage (0–100)',
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  brokerageFee?: number;
 
   @ApiPropertyOptional({
     type: [CreateCounterpartyContactDto],

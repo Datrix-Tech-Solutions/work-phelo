@@ -1,25 +1,47 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { ReinsurerFormFields } from '@/components/molecules/reinsurance/ReinsurerFormFields';
 import {
+  Counterparty,
   ReinsurerFormValues,
   REINSURER_FORM_DEFAULTS,
-  CreateCounterpartyPayload,
+  UpdateCounterpartyPayload,
 } from '@/types/reinsurance';
-import { useCreateReinsurer } from '@/hooks';
-import { countryToCode } from '@/lib/geo';
+import { useUpdateReinsurer } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { countryToCode, codeToCountry } from '@/lib/geo';
 
-interface AddReinsurancePanelProps {
-  isOpen: boolean;
+interface EditReinsurancePanelProps {
+  reinsurer: Counterparty | null;
   onClose: () => void;
 }
 
-function buildPayload(data: ReinsurerFormValues): CreateCounterpartyPayload {
+function toFormValues(r: Counterparty): ReinsurerFormValues {
+  const primary = r.addresses.find((a) => a.isPrimary) ?? r.addresses[0];
+  return {
+    name: r.name,
+    email: r.email ?? '',
+    phone: r.phone ?? '',
+    brokerageFee: r.brokerageFee ?? '',
+    contacts: r.contacts.map((c) => ({
+      fullName: c.fullName,
+      email: c.email ?? '',
+      phone: c.phone ?? '',
+    })),
+    address: {
+      country: primary ? codeToCountry(primary.country) : '',
+      state: primary?.state ?? '',
+      city: primary?.city ?? '',
+    },
+  };
+}
+
+function buildPayload(data: ReinsurerFormValues): UpdateCounterpartyPayload {
   const contacts = data.contacts
     .filter((c) => c.fullName.trim())
     .map((c) => ({
@@ -53,7 +75,6 @@ function buildPayload(data: ReinsurerFormValues): CreateCounterpartyPayload {
     : [];
 
   return {
-    type: 'REINSURER',
     name: data.name,
     ...(data.email && { email: data.email }),
     ...(data.phone && { phone: data.phone }),
@@ -63,9 +84,9 @@ function buildPayload(data: ReinsurerFormValues): CreateCounterpartyPayload {
   };
 }
 
-export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProps) {
+export function EditReinsurancePanel({ reinsurer, onClose }: EditReinsurancePanelProps) {
   const toast = useToast();
-  const { mutateAsync: createReinsurer, isPending } = useCreateReinsurer();
+  const { mutateAsync: updateReinsurer, isPending } = useUpdateReinsurer();
 
   const {
     control,
@@ -78,34 +99,41 @@ export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProp
     defaultValues: REINSURER_FORM_DEFAULTS,
   });
 
+  useEffect(() => {
+    if (reinsurer) {
+      reset(toFormValues(reinsurer));
+    }
+  }, [reinsurer, reset]);
+
   const handleClose = () => {
     reset(REINSURER_FORM_DEFAULTS);
     onClose();
   };
 
   const onSubmit = async (data: ReinsurerFormValues) => {
+    if (!reinsurer) return;
     try {
-      await createReinsurer(buildPayload(data));
-      toast.success('Reinsurer created successfully');
+      await updateReinsurer({ id: reinsurer.id, ...buildPayload(data) });
+      toast.success('Reinsurer updated successfully');
       handleClose();
     } catch (err) {
-      toast.error(extractError(err, 'Failed to create reinsurer'));
+      toast.error(extractError(err, 'Failed to update reinsurer'));
     }
   };
 
   return (
     <SidePanel
-      isOpen={isOpen}
+      isOpen={!!reinsurer}
       onClose={handleClose}
-      title="Add Reinsurer"
-      description="Fill in the details to create a new reinsurer."
+      title="Edit Reinsurer"
+      description="Update the details for this reinsurer."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
-            Save Reinsurer
+            Save Changes
           </Button>
         </div>
       }
