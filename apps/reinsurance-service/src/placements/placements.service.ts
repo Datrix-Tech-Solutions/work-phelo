@@ -175,12 +175,12 @@ export class PlacementsService {
       status: PlacementStatus.DRAFT,
       cedantId: dto.cedantId,
       classOfBusiness,
-      businessDetails: dto.businessDetails
-        ? (dto.businessDetails as Prisma.InputJsonValue)
-        : Prisma.JsonNull,
-      offerDetails: dto.offerDetails
-        ? (dto.offerDetails as Prisma.InputJsonValue)
-        : Prisma.JsonNull,
+      businessDetails:
+        this.normalizeJsonObject(dto.businessDetails, 'businessDetails') ??
+        Prisma.JsonNull,
+      offerDetails:
+        this.normalizeJsonObject(dto.offerDetails, 'offerDetails') ??
+        Prisma.JsonNull,
       description: this.cleanOptional(dto.description),
       inceptionDate: this.toDate(dto.inceptionDate),
       expiryDate: this.toDate(dto.expiryDate),
@@ -298,16 +298,18 @@ export class PlacementsService {
         : {}),
       ...(dto.businessDetails !== undefined
         ? {
-            businessDetails: dto.businessDetails
-              ? (dto.businessDetails as Prisma.InputJsonValue)
-              : Prisma.JsonNull,
+            businessDetails:
+              this.normalizeJsonObject(
+                dto.businessDetails,
+                'businessDetails',
+              ) ?? Prisma.JsonNull,
           }
         : {}),
       ...(dto.offerDetails !== undefined
         ? {
-            offerDetails: dto.offerDetails
-              ? (dto.offerDetails as Prisma.InputJsonValue)
-              : Prisma.JsonNull,
+            offerDetails:
+              this.normalizeJsonObject(dto.offerDetails, 'offerDetails') ??
+              Prisma.JsonNull,
           }
         : {}),
       ...(dto.description !== undefined
@@ -624,6 +626,56 @@ export class PlacementsService {
 
   private normalizeReference(value: string): string {
     return value.trim().toLowerCase();
+  }
+
+  private normalizeJsonObject(
+    value: Record<string, unknown> | undefined,
+    fieldName: string,
+  ): Prisma.InputJsonObject | undefined {
+    if (value === undefined) return undefined;
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new BadRequestException(`${fieldName} must be an object`);
+    }
+
+    return this.trimJsonObject(value, fieldName);
+  }
+
+  private trimJsonObject(
+    value: Record<string, unknown>,
+    fieldName: string,
+  ): Prisma.InputJsonObject {
+    const result: Record<string, Prisma.InputJsonValue> = {};
+
+    for (const [key, entry] of Object.entries(value)) {
+      result[key] = this.trimJsonValue(entry, fieldName);
+    }
+
+    return result;
+  }
+
+  private trimJsonValue(
+    value: unknown,
+    fieldName: string,
+  ): Prisma.InputJsonValue {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+
+    if (value && typeof value === 'object') {
+      if (Array.isArray(value)) {
+        throw new BadRequestException(`${fieldName} must not include arrays`);
+      }
+
+      const nested: Record<string, Prisma.InputJsonValue> = {};
+      for (const [key, entry] of Object.entries(
+        value as Record<string, unknown>,
+      )) {
+        nested[key] = this.trimJsonValue(entry, fieldName);
+      }
+      return nested;
+    }
+
+    return value as Prisma.InputJsonValue;
   }
 
   private auditSnapshot(placement: PlacementRecord): Record<string, unknown> {

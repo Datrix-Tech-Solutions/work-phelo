@@ -251,6 +251,16 @@ Create payload:
   "title": "Acme Energy Facultative Placement",
   "cedantId": "7c2d7cae-1dd2-4a7c-9332-4a23f2e1b9a9",
   "classOfBusiness": "Energy",
+  "businessDetails": {
+    "projectType": "Offshore drilling",
+    "equipmentValue": 12000000,
+    "contractorDetails": "Kente Engineering Ltd"
+  },
+  "offerDetails": {
+    "offeredShare": 45,
+    "proposedRate": 12.5,
+    "leader": "Acme Re"
+  },
   "inceptionDate": "2026-06-01T00:00:00.000Z",
   "expiryDate": "2027-05-31T23:59:59.000Z",
   "currency": "USD",
@@ -282,6 +292,14 @@ Decimal values such as `sumInsured`, `sharePercent` and
 `signedLinePercent` are accepted as numbers in requests and are returned by
 Prisma as JSON strings. Frontend types should model them as `string | null`
 on responses and convert only at display/form boundaries.
+
+Placement fields are split into:
+
+- Fixed fields: `cedantId`, `placementType`, `classOfBusiness`, `status`,
+  `currency`, `sumInsured`, `inceptionDate`, `expiryDate`, `participants`.
+- Dynamic fields: `businessDetails` and `offerDetails` (JSON objects) that are
+  driven by `classOfBusiness` and should be rendered as class-specific form
+  sections in the frontend.
 
 Recommended placement frontend structure:
 
@@ -315,6 +333,16 @@ view layer, for example `DRAFT`/`MARKETING`/`QUOTED` as work-in-progress,
 `BOUND` as active, `DECLINED` as declined and `CANCELLED` as cancelled.
 The backend does not expose split `/cedants`, `/reinsurers` or `/brokers`
 placement endpoints; retrieve those through `/counterparties?type=...`.
+
+Frontend mapping guidance:
+
+- Use a simple mapping to render class-specific sections:
+  `classOfBusiness -> BusinessDetails component` and
+  `classOfBusiness -> OfferDetails component`.
+- Submit the values from those sections under `businessDetails` and
+  `offerDetails` respectively.
+- Keep search/reportable fields in fixed columns; do not push UI labels into
+  backend status enums.
 
 ## Email Foundation API
 
