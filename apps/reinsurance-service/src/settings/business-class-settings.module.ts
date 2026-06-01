@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
 import { BusinessClassSettingsController } from './business-class-settings.controller';
+import { RiskClassSettingsController } from './risk-class-settings.controller';
 import { RiskClassSettingsService } from './risk-class-settings.service';
+import { RiskTypeSettingsController } from './risk-type-settings.controller';
 import { RiskTypeSettingsService } from './risk-type-settings.service';
 
 /**
@@ -10,7 +12,11 @@ import { RiskTypeSettingsService } from './risk-type-settings.service';
  */
 @Module({
   imports: [PrismaModule],
-  controllers: [BusinessClassSettingsController],
+  controllers: [
+    BusinessClassSettingsController,
+    RiskClassSettingsController,
+    RiskTypeSettingsController,
+  ],
   providers: [RiskClassSettingsService, RiskTypeSettingsService],
   exports: [RiskClassSettingsService, RiskTypeSettingsService],
 })
