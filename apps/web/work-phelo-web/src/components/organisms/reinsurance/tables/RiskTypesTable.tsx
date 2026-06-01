@@ -6,6 +6,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { AddRiskTypePanel } from '@/components/organisms/reinsurance/panels/AddRiskTypePanel';
+import { EditRiskTypePanel } from '@/components/organisms/reinsurance/panels/EditRiskTypePanel';
 import { useRiskTypes, useDeleteRiskType, useRiskClassOptions } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -13,34 +14,38 @@ import { RiskType } from '@/types/reinsurance';
 
 const PAGE_SIZE = 10;
 
-const COLUMNS: Column<RiskType>[] = [
-  {
-    key: 'name',
-    label: 'Risk Type',
-    width: '2fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-  },
-  {
-    key: 'description',
-    label: 'Description',
-    width: '3fr',
-    render: (row) => <span className="text-gray-500 text-sm">{row.description ?? '—'}</span>,
-  },
-  {
-    key: 'isActive',
-    label: 'Status',
-    width: '1fr',
-    render: (row) => (
-      <span
-        className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold ${
-          row.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-        }`}
-      >
-        {row.isActive ? 'Active' : 'Inactive'}
-      </span>
-    ),
-  },
-];
+function buildColumns(classMap: Map<string, string>): Column<RiskType>[] {
+  return [
+    {
+      key: 'name',
+      label: 'Risk Type',
+      width: '2fr',
+      render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
+    },
+    {
+      key: 'riskClassId',
+      label: 'Risk Class',
+      width: '2fr',
+      render: (row) => (
+        <span className="text-gray-700">{classMap.get(row.riskClassId) ?? '—'}</span>
+      ),
+    },
+    {
+      key: 'createdAt',
+      label: 'Date Created',
+      width: '1.5fr',
+      render: (row) => (
+        <span className="text-gray-600 text-sm">
+          {new Date(row.createdAt).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+          })}
+        </span>
+      ),
+    },
+  ];
+}
 
 export function RiskTypesTable() {
   const toast = useToast();
@@ -48,11 +53,18 @@ export function RiskTypesTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<RiskType | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RiskType | null>(null);
 
   const { data: riskClassOptions = [] } = useRiskClassOptions();
   const { data = [], isLoading } = useRiskTypes(selectedClassId);
   const { mutate: deleteRiskType, isPending: isDeleting } = useDeleteRiskType();
+
+  const classMap = useMemo(
+    () => new Map(riskClassOptions.map((o) => [o.value, o.label])),
+    [riskClassOptions],
+  );
+  const columns = useMemo(() => buildColumns(classMap), [classMap]);
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -91,7 +103,7 @@ export function RiskTypesTable() {
       </div>
 
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={paged}
         isLoading={isLoading && !!selectedClassId}
         searchPlaceholder="Search risk types…"
@@ -105,6 +117,10 @@ export function RiskTypesTable() {
           onClick: () => setPanelOpen(true),
         }}
         rowActions={(row) => [
+          {
+            label: 'Edit',
+            onClick: () => setEditTarget(row),
+          },
           {
             label: 'Delete',
             onClick: () => setDeleteTarget(row),
@@ -125,6 +141,8 @@ export function RiskTypesTable() {
         defaultRiskClassId={selectedClassId}
         onClose={() => setPanelOpen(false)}
       />
+
+      <EditRiskTypePanel riskType={editTarget} onClose={() => setEditTarget(null)} />
 
       <Modal
         isOpen={!!deleteTarget}

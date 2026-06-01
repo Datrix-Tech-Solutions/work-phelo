@@ -5,6 +5,9 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import { FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@/types/reinsurance';
+import { useCreateFacultative } from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 interface CreateFacultativePanelProps {
   isOpen: boolean;
@@ -22,13 +25,34 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
     formState: { isSubmitting },
   } = form;
 
+  const { mutateAsync: createFacultative } = useCreateFacultative();
+
   const handleClose = () => {
     reset();
     onClose();
   };
 
-  const onSubmit = async () => {
-    handleClose();
+  const onSubmit = async (values: FacultativeFormValues) => {
+    try {
+      await createFacultative({
+        cedantId: values.insuranceCompany,
+        riskTypeId: values.riskType,
+        reference: values.reference,
+        title: values.title,
+        sumInsured: values.sumInsured as number,
+        rate: values.rate as number,
+        premium: values.premium as number,
+        facultativeOffer: values.facultativeOffer as number,
+        commission: values.commission as number,
+        currency: values.currency,
+      });
+      useToastStore
+        .getState()
+        .addToast({ message: 'Placement created successfully', type: 'success' });
+      handleClose();
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
   };
 
   return (
