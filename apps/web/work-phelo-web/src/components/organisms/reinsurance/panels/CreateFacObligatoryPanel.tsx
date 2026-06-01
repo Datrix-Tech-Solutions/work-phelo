@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { FacObligatoryFormFields } from '@/components/molecules/reinsurance/FacObligatoryFormFields';
+import { FacObligatoryFormFields } from '@/components/molecules/reinsurance/forms/FacObligatoryFormFields';
 import { FacObligatoryFormValues, FAC_OBLIGATORY_DEFAULTS } from '@/types/reinsurance';
 
 interface CreateFacObligatoryPanelProps {

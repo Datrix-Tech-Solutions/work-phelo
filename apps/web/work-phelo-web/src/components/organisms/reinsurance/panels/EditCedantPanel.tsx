@@ -1,25 +1,44 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { ReinsurerFormFields } from '@/components/molecules/reinsurance/forms/ReinsurerFormFields';
+import { CedantFormFields } from '@/components/molecules/reinsurance/forms/CedantFormFields';
 import {
-  ReinsurerFormValues,
-  REINSURER_FORM_DEFAULTS,
-  CreateCounterpartyPayload,
+  Counterparty,
+  CedantFormValues,
+  CEDANT_FORM_DEFAULTS,
+  UpdateCounterpartyPayload,
 } from '@/types/reinsurance';
-import { useCreateReinsurer } from '@/hooks';
-import { countryToCode } from '@/lib/geo';
+import { useUpdateCedant } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { countryToCode, codeToCountry } from '@/lib/geo';
 
-interface AddReinsurancePanelProps {
-  isOpen: boolean;
+interface EditCedantPanelProps {
+  cedant: Counterparty | null;
   onClose: () => void;
 }
 
-function buildPayload(data: ReinsurerFormValues): CreateCounterpartyPayload {
+function toFormValues(c: Counterparty): CedantFormValues {
+  const primary = c.addresses.find((a) => a.isPrimary) ?? c.addresses[0];
+  return {
+    name: c.name,
+    email: c.email ?? '',
+    phone: c.phone ?? '',
+    contacts: c.contacts
+      .filter((ct) => !ct.isPrimary)
+      .map((ct) => ({ fullName: ct.fullName, email: ct.email ?? '', phone: ct.phone ?? '' })),
+    address: {
+      country: primary ? codeToCountry(primary.country) : '',
+      state: primary?.state ?? '',
+      city: primary?.city ?? '',
+    },
+  };
+}
+
+function buildPayload(data: CedantFormValues): UpdateCounterpartyPayload {
   const contacts = data.contacts
     .filter((c) => c.fullName.trim())
     .map((c) => ({
@@ -53,19 +72,17 @@ function buildPayload(data: ReinsurerFormValues): CreateCounterpartyPayload {
     : [];
 
   return {
-    type: 'REINSURER',
     name: data.name,
     ...(data.email && { email: data.email }),
     ...(data.phone && { phone: data.phone }),
-    ...(data.brokerageFee !== '' && { brokerageFee: Number(data.brokerageFee) }),
     ...(contacts.length && { contacts }),
     ...(addresses.length && { addresses }),
   };
 }
 
-export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProps) {
+export function EditCedantPanel({ cedant, onClose }: EditCedantPanelProps) {
   const toast = useToast();
-  const { mutateAsync: createReinsurer, isPending } = useCreateReinsurer();
+  const { mutateAsync: updateCedant, isPending } = useUpdateCedant();
 
   const {
     control,
@@ -74,48 +91,46 @@ export function AddReinsurancePanel({ isOpen, onClose }: AddReinsurancePanelProp
     reset,
     setValue,
     formState: { errors },
-  } = useForm<ReinsurerFormValues>({
-    defaultValues: REINSURER_FORM_DEFAULTS,
-  });
+  } = useForm<CedantFormValues>({ defaultValues: CEDANT_FORM_DEFAULTS });
+
+  useEffect(() => {
+    if (cedant) reset(toFormValues(cedant));
+  }, [cedant, reset]);
 
   const handleClose = () => {
-    reset(REINSURER_FORM_DEFAULTS);
+    reset(CEDANT_FORM_DEFAULTS);
     onClose();
   };
 
-  const onSubmit = async (data: ReinsurerFormValues) => {
+  const onSubmit = async (data: CedantFormValues) => {
+    if (!cedant) return;
     try {
-      await createReinsurer(buildPayload(data));
-      toast.success('Reinsurer created successfully');
+      await updateCedant({ id: cedant.id, ...buildPayload(data) });
+      toast.success('Cedant updated successfully');
       handleClose();
     } catch (err) {
-      toast.error(extractError(err, 'Failed to create reinsurer'));
+      toast.error(extractError(err, 'Failed to update cedant'));
     }
   };
 
   return (
     <SidePanel
-      isOpen={isOpen}
+      isOpen={!!cedant}
       onClose={handleClose}
-      title="Add Reinsurer"
-      description="Fill in the details to create a new reinsurer."
+      title="Edit Cedant"
+      description="Update the details for this cedant."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
-            Save Reinsurer
+            Save Changes
           </Button>
         </div>
       }
     >
-      <ReinsurerFormFields
-        control={control}
-        register={register}
-        setValue={setValue}
-        errors={errors}
-      />
+      <CedantFormFields control={control} register={register} setValue={setValue} errors={errors} />
     </SidePanel>
   );
 }

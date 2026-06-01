@@ -10,9 +10,8 @@ import {
   FacObligatoryFormValues,
   TERRITORIAL_SCOPE_OPTIONS,
   ACCOUNTING_ARRANGEMENT_OPTIONS,
-  CURRENCY_OPTIONS,
 } from '@/types/reinsurance';
-import { useCedantOptions, useBrokerOptions } from '@/hooks';
+import { useCedantOptions, useBrokerOptions, useCurrencyOptions } from '@/hooks';
 
 const currentYear = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: currentYear - 2000 + 6 }, (_, i) => {
@@ -36,6 +35,7 @@ export function FacObligatoryFormFields({ form }: FacObligatoryFormFieldsProps) 
 
   const { options: cedantOptions } = useCedantOptions();
   const { options: brokerOptions } = useBrokerOptions();
+  const { data: currencyOptions = [] } = useCurrencyOptions();
 
   return (
     <div className="flex flex-col gap-7">
@@ -121,7 +121,7 @@ export function FacObligatoryFormFields({ form }: FacObligatoryFormFieldsProps) 
               <SearchSelect
                 label="Currency"
                 placeholder="Select currency…"
-                options={CURRENCY_OPTIONS}
+                options={currencyOptions}
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.currency?.message}

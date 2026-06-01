@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { BrokerFormFields } from '@/components/molecules/reinsurance/BrokerFormFields';
+import { BrokerFormFields } from '@/components/molecules/reinsurance/forms/BrokerFormFields';
 import {
   BrokerFormValues,
   BROKER_FORM_DEFAULTS,

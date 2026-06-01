@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { AddCurrencyPanel } from '@/components/organisms/reinsurance/panels/AddCurrencyPanel';
+import { EditCurrencyPanel } from '@/components/organisms/reinsurance/panels/EditCurrencyPanel';
 import { useCurrencies, useDeleteCurrency } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -30,18 +32,29 @@ const COLUMNS: Column<Currency>[] = [
     ),
   },
   {
-    key: 'rate',
-    label: 'Rate',
+    key: 'exchangeRateToBase',
+    label: 'Exchange Rate',
     width: '1fr',
-    render: (row) => <span className="text-gray-700">{row.rate.toFixed(2)}</span>,
+    render: (row) => (
+      <span className="text-gray-700">
+        {row.isBaseCurrency
+          ? 'Base'
+          : row.exchangeRateToBase
+            ? parseFloat(row.exchangeRateToBase).toFixed(4)
+            : '—'}
+      </span>
+    ),
   },
 ];
 
 export function CurrenciesTable() {
   const toast = useToast();
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Currency | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Currency | null>(null);
 
   const { data = [], isLoading } = useCurrencies();
@@ -84,10 +97,13 @@ export function CurrenciesTable() {
         actionButton={{ label: 'Add Currency', onClick: () => setPanelOpen(true) }}
         rowActions={(row) => [
           {
-            label: 'Edit',
-            onClick: () => {
-              /* TODO: open edit panel */
-            },
+            label: 'View',
+            onClick: () =>
+              router.push(`/${tenantSlug}/operations/reinsurance/settings/currency/${row.id}`),
+          },
+          {
+            label: 'Update Rate',
+            onClick: () => setEditTarget(row),
           },
           {
             label: 'Delete',
@@ -103,6 +119,8 @@ export function CurrenciesTable() {
       />
 
       <AddCurrencyPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+
+      <EditCurrencyPanel currency={editTarget} onClose={() => setEditTarget(null)} />
 
       <Modal
         isOpen={!!deleteTarget}

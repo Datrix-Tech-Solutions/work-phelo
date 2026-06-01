@@ -1,15 +1,19 @@
 'use client';
 
+import { useState } from 'react';
 import { useFieldArray, useWatch } from 'react-hook-form';
 import type { Control, UseFormRegister, UseFormSetValue, FieldErrors } from 'react-hook-form';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { Icons } from '@/components/atoms/icons';
 import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/CounterpartyAddressFields';
 import { CONTACT_PERSON_DEFAULTS } from '@/types/reinsurance';
 import type { ReinsurerFormValues } from '@/types/reinsurance';
 import { inputClass } from '@/lib/utils';
+import { useCedants } from '@/hooks';
+import { codeToCountry } from '@/lib/geo';
 
 interface ReinsurerFormFieldsProps {
   control: Control<ReinsurerFormValues>;
@@ -33,8 +37,47 @@ export function ReinsurerFormFields({
   const primaryPhone = useWatch({ control, name: 'phone' });
   const watchedContacts = useWatch({ control, name: 'contacts' });
 
+  const { data: cedants = [] } = useCedants();
+  const [prefillId, setPrefillId] = useState('');
+
+  const cedantOptions = cedants.map((c) => ({ value: c.id, label: c.name }));
+
+  const handlePrefill = (cedantId: string) => {
+    setPrefillId(cedantId);
+    const cedant = cedants.find((c) => c.id === cedantId);
+    if (!cedant) return;
+
+    setValue('name', cedant.name);
+    setValue('email', cedant.email ?? '');
+    setValue('phone', cedant.phone ?? '');
+
+    const additionalContacts = cedant.contacts
+      .filter((c) => !c.isPrimary)
+      .map((c) => ({ fullName: c.fullName, email: c.email ?? '', phone: c.phone ?? '' }));
+    setValue('contacts', additionalContacts);
+
+    const primaryAddr = cedant.addresses.find((a) => a.isPrimary) ?? cedant.addresses[0];
+    if (primaryAddr) {
+      setValue('address.country', codeToCountry(primaryAddr.country));
+      setValue('address.state', primaryAddr.state ?? '');
+      setValue('address.city', primaryAddr.city ?? '');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
+      {/* ── Prefill from cedant ── */}
+      <div className="flex flex-col gap-1">
+        <SearchSelect
+          label="Prefill from Cedant"
+          placeholder="Search cedant to prefill…"
+          options={cedantOptions}
+          value={prefillId}
+          onChange={handlePrefill}
+        />
+        <p className="text-xs text-gray-400">Selecting a cedant prefills the fields below.</p>
+      </div>
+
       {/* ── Basic info ── */}
       <FormSection title="Basic Info">
         <FormField

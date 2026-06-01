@@ -1,5 +1,10 @@
 import { redirect } from 'next/navigation';
 
-export default function ReinsuranceSettingsPage({ params }: { params: { tenantSlug: string } }) {
-  redirect(`/${params.tenantSlug}/operations/reinsurance/settings/cedants`);
+export default async function ReinsuranceSettingsPage({
+  params,
+}: {
+  params: Promise<{ tenantSlug: string }>;
+}) {
+  const { tenantSlug } = await params;
+  redirect(`/${tenantSlug}/operations/reinsurance/settings/cedants`);
 }

@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import FacultativeFormFields from '@/components/molecules/reinsurance/FacultativeFormFields';
+import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import { FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@/types/reinsurance';
 
 interface CreateFacultativePanelProps {

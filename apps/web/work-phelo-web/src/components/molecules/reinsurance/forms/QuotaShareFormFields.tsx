@@ -16,9 +16,13 @@ import {
   QuotaShareFormValues,
   TERRITORIAL_SCOPE_OPTIONS,
   ACCOUNTING_ARRANGEMENT_OPTIONS,
-  CURRENCY_OPTIONS,
 } from '@/types/reinsurance';
-import { useCedantOptions, useBrokerOptions, useReinsurerOptions } from '@/hooks';
+import {
+  useCedantOptions,
+  useBrokerOptions,
+  useReinsurerOptions,
+  useCurrencyOptions,
+} from '@/hooks';
 
 function ComputedField({ label, value }: { label: string; value: string }) {
   return (
@@ -57,6 +61,7 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
   const { options: cedantOptions } = useCedantOptions();
   const { options: brokerOptions } = useBrokerOptions();
   const { options: reinsurerOptions } = useReinsurerOptions();
+  const { data: currencyOptions = [] } = useCurrencyOptions();
 
   const reinsuranceShareNum =
     typeof cedantShare === 'number' && cedantShare >= 0 && cedantShare <= 100
@@ -151,7 +156,7 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
               <SearchSelect
                 label="Currency"
                 placeholder="Select currency…"
-                options={CURRENCY_OPTIONS}
+                options={currencyOptions}
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.currency?.message}

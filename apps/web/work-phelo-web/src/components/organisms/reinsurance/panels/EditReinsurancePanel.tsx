@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { ReinsurerFormFields } from '@/components/molecules/reinsurance/ReinsurerFormFields';
+import { ReinsurerFormFields } from '@/components/molecules/reinsurance/forms/ReinsurerFormFields';
 import {
   Counterparty,
   ReinsurerFormValues,
