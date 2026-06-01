@@ -3,7 +3,7 @@ import { Facultative } from '@/types/reinsurance';
 
 const FACULTATIVES_KEY = ['reinsurance', 'facultatives'] as const;
 
-// TODO: replace mock with real API call once endpoint is ready
+// change to actual endpoint data
 const MOCK_FACULTATIVES: Facultative[] = [
   {
     id: '1',
@@ -11,12 +11,12 @@ const MOCK_FACULTATIVES: Facultative[] = [
     insuranceCompany: 'Enterprise Insurance Co.',
     insured: 'Accra Breweries Ltd',
     riskType: 'Property All Risk',
-    sumInsured: 5000000,
-    rate: 1.5,
-    commission: 15,
-    facultativeOffer: 60,
-    preliminaryBrokerage: 5,
-    premium: 75000,
+    sumInsured: 828000,
+    rate: 0,
+    commission: 21.5,
+    facultativeOffer: 51.69,
+
+    premium: 30505.04,
     currency: 'USD',
     periodFrom: '2025-01-01',
     periodTo: '2025-12-31',

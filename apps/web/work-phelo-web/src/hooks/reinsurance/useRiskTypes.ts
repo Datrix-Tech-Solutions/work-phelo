@@ -2,14 +2,22 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { RiskType, CreateRiskTypePayload, UpdateRiskTypePayload } from '@/types/reinsurance';
 
+const BASE = '/operations/reinsurance/settings/risk-types';
 const RISK_TYPES_KEY = ['reinsurance', 'risk-types'] as const;
 
-export function useRiskTypes() {
+function extractList(data: unknown): RiskType[] {
+  if (Array.isArray(data)) return data as RiskType[];
+  const paginated = data as { items?: RiskType[]; data?: RiskType[] };
+  return paginated?.items ?? paginated?.data ?? [];
+}
+
+export function useRiskTypes(riskClassId?: string) {
   return useQuery({
-    queryKey: RISK_TYPES_KEY,
+    queryKey: [...RISK_TYPES_KEY, riskClassId ?? 'all'],
     queryFn: async () => {
-      const res = await api.get<RiskType[]>('/operations/reinsurance/settings/business-classes');
-      return Array.isArray(res.data) ? res.data : ((res.data as { data: RiskType[] })?.data ?? []);
+      const res = await api.get(BASE);
+      const list = extractList(res.data);
+      return riskClassId ? list.filter((rt) => rt.riskClassId === riskClassId) : list;
     },
   });
 }
@@ -18,10 +26,7 @@ export function useCreateRiskType() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (payload: CreateRiskTypePayload) => {
-      const res = await api.post<RiskType>(
-        '/operations/reinsurance/settings/business-classes',
-        payload,
-      );
+      const res = await api.post<RiskType>(BASE, payload);
       return res.data;
     },
     onSuccess: () => {
@@ -34,10 +39,7 @@ export function useUpdateRiskType() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, ...payload }: UpdateRiskTypePayload & { id: string }) => {
-      const res = await api.patch<RiskType>(
-        `/operations/reinsurance/settings/business-classes/${id}`,
-        payload,
-      );
+      const res = await api.patch<RiskType>(`${BASE}/${id}`, payload);
       return res.data;
     },
     onSuccess: () => {
@@ -50,7 +52,7 @@ export function useDeleteRiskType() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await api.delete(`/operations/reinsurance/settings/business-classes/${id}`);
+      await api.delete(`${BASE}/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: RISK_TYPES_KEY });
@@ -58,15 +60,14 @@ export function useDeleteRiskType() {
   });
 }
 
-export function useRiskTypeOptions() {
+export function useRiskTypeOptions(riskClassId?: string) {
   return useQuery({
-    queryKey: [...RISK_TYPES_KEY, 'options'],
+    queryKey: [...RISK_TYPES_KEY, riskClassId ?? 'all', 'options'],
     queryFn: async () => {
-      const res = await api.get<RiskType[]>('/operations/reinsurance/settings/business-classes');
-      const list = Array.isArray(res.data)
-        ? res.data
-        : ((res.data as { data: RiskType[] })?.data ?? []);
-      return list.map((rt) => ({ value: rt.id, label: rt.name }));
+      const res = await api.get(BASE);
+      const list = extractList(res.data);
+      const filtered = riskClassId ? list.filter((rt) => rt.riskClassId === riskClassId) : list;
+      return filtered.map((rt) => ({ value: rt.id, label: rt.name }));
     },
   });
 }

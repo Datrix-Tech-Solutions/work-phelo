@@ -15,9 +15,14 @@ import { inputClass } from '@/lib/utils';
 interface AddRiskTypePanelProps {
   isOpen: boolean;
   onClose: () => void;
+  defaultRiskClassId?: string;
 }
 
-export function AddRiskTypePanel({ isOpen, onClose }: AddRiskTypePanelProps) {
+export function AddRiskTypePanel({
+  isOpen,
+  onClose,
+  defaultRiskClassId = '',
+}: AddRiskTypePanelProps) {
   const toast = useToast();
   const { mutateAsync: createRiskType, isPending } = useCreateRiskType();
   const { data: riskClassOptions = [] } = useRiskClassOptions();
@@ -30,7 +35,7 @@ export function AddRiskTypePanel({ isOpen, onClose }: AddRiskTypePanelProps) {
     setValue,
     formState: { errors },
   } = useForm<RiskTypeFormValues>({
-    defaultValues: RISK_TYPE_FORM_DEFAULTS,
+    defaultValues: { ...RISK_TYPE_FORM_DEFAULTS, riskClassId: defaultRiskClassId },
   });
 
   const riskClassId = useWatch({ control, name: 'riskClassId' });
@@ -47,7 +52,6 @@ export function AddRiskTypePanel({ isOpen, onClose }: AddRiskTypePanelProps) {
       await createRiskType({
         name: data.name,
         riskClassId: data.riskClassId,
-        ...(data.customFields.length > 0 && { customFields: data.customFields }),
       });
       toast.success('Risk type created successfully');
       handleClose();

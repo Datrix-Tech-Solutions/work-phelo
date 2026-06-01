@@ -5,6 +5,7 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { AddRiskClassPanel } from '@/components/organisms/reinsurance/panels/AddRiskClassPanel';
+import { EditRiskClassPanel } from '@/components/organisms/reinsurance/panels/EditRiskClassPanel';
 import { useRiskClasses, useDeleteRiskClass } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
@@ -20,10 +21,24 @@ const COLUMNS: Column<RiskClass>[] = [
     render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
   },
   {
-    key: 'createdBy',
-    label: 'Created By',
-    width: '2fr',
-    render: (row) => <span className="text-gray-700">{row.createdBy}</span>,
+    key: 'description',
+    label: 'Description',
+    width: '3fr',
+    render: (row) => <span className="text-gray-500 text-sm">{row.description ?? '—'}</span>,
+  },
+  {
+    key: 'createdAt',
+    label: 'Date Created',
+    width: '1.5fr',
+    render: (row) => (
+      <span className="text-gray-600 text-sm">
+        {new Date(row.createdAt).toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })}
+      </span>
+    ),
   },
 ];
 
@@ -32,6 +47,7 @@ export function RiskClassesTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<RiskClass | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<RiskClass | null>(null);
 
   const { data = [], isLoading } = useRiskClasses();
@@ -40,9 +56,7 @@ export function RiskClassesTable() {
   const filtered = useMemo(() => {
     if (!search) return data;
     const q = search.toLowerCase();
-    return data.filter(
-      (r) => r.name.toLowerCase().includes(q) || r.createdBy.toLowerCase().includes(q),
-    );
+    return data.filter((r) => r.name.toLowerCase().includes(q));
   }, [data, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -75,9 +89,7 @@ export function RiskClassesTable() {
         rowActions={(row) => [
           {
             label: 'Edit',
-            onClick: () => {
-              /* TODO: open edit panel */
-            },
+            onClick: () => setEditTarget(row),
           },
           {
             label: 'Delete',
@@ -93,6 +105,8 @@ export function RiskClassesTable() {
       />
 
       <AddRiskClassPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+
+      <EditRiskClassPanel riskClass={editTarget} onClose={() => setEditTarget(null)} />
 
       <Modal
         isOpen={!!deleteTarget}

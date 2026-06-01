@@ -179,6 +179,9 @@ export type UpdateCounterpartyPayload = Partial<Omit<CreateCounterpartyPayload, 
 
 export interface CreateRiskClassPayload {
   name: string;
+  description?: string;
+  isActive?: boolean;
+  displayOrder?: number;
 }
 export type UpdateRiskClassPayload = Partial<CreateRiskClassPayload>;
 
@@ -190,9 +193,11 @@ export interface RiskTypeCustomField {
 export interface CreateRiskTypePayload {
   name: string;
   riskClassId: string;
-  customFields?: RiskTypeCustomField[];
+  description?: string;
+  isActive?: boolean;
+  displayOrder?: number;
 }
-export type UpdateRiskTypePayload = Partial<CreateRiskTypePayload>;
+export type UpdateRiskTypePayload = Partial<Omit<CreateRiskTypePayload, 'riskClassId'>>;
 
 export interface CreateCurrencyPayload {
   name: string;
@@ -240,11 +245,39 @@ export const CURRENCY_FORM_DEFAULTS: CurrencyFormValues = {
 };
 
 /* ── Risk Type ── */
+export interface RiskTypeField {
+  id: string;
+  tenantId: string;
+  riskTypeId: string;
+  section: string;
+  fieldKey: string;
+  label: string;
+  fieldType: string;
+  required: boolean;
+  options: string[] | null;
+  validationRules: Record<string, unknown> | null;
+  placeholder: string | null;
+  helpText: string | null;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RiskType {
   id: string;
+  tenantId: string;
+  riskClassId: string;
   name: string;
-  riskClass: string;
-  createdBy: string;
+  description: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  fields: RiskTypeField[];
+  createdByUserId: string;
+  updatedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface RiskTypeFormValues {
@@ -262,16 +295,27 @@ export const RISK_TYPE_FORM_DEFAULTS: RiskTypeFormValues = {
 /* ── Risk Class ── */
 export interface RiskClass {
   id: string;
+  tenantId: string;
   name: string;
-  createdBy: string;
+  description: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  riskTypes: RiskType[];
+  createdByUserId: string;
+  updatedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface RiskClassFormValues {
   name: string;
+  description: string;
 }
 
 export const RISK_CLASS_FORM_DEFAULTS: RiskClassFormValues = {
   name: '',
+  description: '',
 };
 
 /* ── Facultative ── */
@@ -288,7 +332,6 @@ export interface Facultative {
   rate: number;
   commission: number;
   facultativeOffer: number;
-  preliminaryBrokerage: number;
   premium: number;
   currency: string;
   periodFrom: string; // ISO date
@@ -301,6 +344,7 @@ export interface Facultative {
 /* ── Facultative form ── */
 export interface FacultativeFormValues {
   insuranceCompany: string;
+  riskClassId: string;
   riskType: string;
   policyNo: string;
   insured: string;
@@ -309,7 +353,6 @@ export interface FacultativeFormValues {
   premium: number | '';
   facultativeOffer: number | '';
   commission: number | '';
-  preliminaryBrokerage: number | '';
   currency: string;
   periodFrom: string;
   periodTo: string;
@@ -318,6 +361,7 @@ export interface FacultativeFormValues {
 
 export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   insuranceCompany: '',
+  riskClassId: '',
   riskType: '',
   policyNo: '',
   insured: '',
@@ -326,7 +370,6 @@ export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   premium: '',
   facultativeOffer: '',
   commission: '',
-  preliminaryBrokerage: '',
   currency: '',
   periodFrom: '',
   periodTo: '',
