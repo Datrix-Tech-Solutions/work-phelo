@@ -1,3 +1,16 @@
+/**
+ * Backward-compatible alias controller.
+ *
+ * Route: /settings/business-classes
+ *
+ * Retained so that existing frontend calls to /settings/business-classes do not 404
+ * while the frontend migrates to the new /settings/risk-classes and /settings/risk-types
+ * routes (added in PR2). Remove this controller in PR3 after the frontend is updated.
+ *
+ * Delegation:
+ *   - Main entity CRUD  → RiskClassSettingsService
+ *   - Field operations  → RiskTypeSettingsService (route :id is treated as riskTypeId)
+ */
 import {
   Body,
   Controller,
@@ -35,227 +48,190 @@ import { FeatureGuard } from '../auth/guards/feature.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
-import { BusinessClassSettingsService } from './business-class-settings.service';
-import { BusinessClassSettingsPermission } from './business-class-settings.permissions';
+import { RiskClassSettingsPermission } from './risk-class-settings.permissions';
+import { RiskClassSettingsService } from './risk-class-settings.service';
+import { RiskTypeSettingsService } from './risk-type-settings.service';
 import {
   ApiErrorResponseDto,
-  BusinessClassFormSchemaResponseDto,
-  BusinessClassResponseDto,
-  PaginatedBusinessClassesResponseDto,
-} from './dto/business-class-response.dto';
-import { CreateBusinessClassDto } from './dto/create-business-class.dto';
-import { CreateBusinessClassFieldDto } from './dto/create-business-class-field.dto';
-import { QueryBusinessClassesDto } from './dto/query-business-classes.dto';
-import { UpdateBusinessClassDto } from './dto/update-business-class.dto';
-import { UpdateBusinessClassFieldDto } from './dto/update-business-class-field.dto';
+  PaginatedRiskClassesResponseDto,
+  RiskClassResponseDto,
+  RiskTypeFormSchemaResponseDto,
+  RiskTypeResponseDto,
+} from './dto/risk-class-response.dto';
+import { CreateRiskClassDto } from './dto/create-risk-class.dto';
+import { UpdateRiskClassDto } from './dto/update-risk-class.dto';
+import { QueryRiskClassesDto } from './dto/query-risk-classes.dto';
+import { CreateRiskTypeFieldDto } from './dto/create-risk-type-field.dto';
+import { UpdateRiskTypeFieldDto } from './dto/update-risk-type-field.dto';
 
 @Controller('settings/business-classes')
-@ApiTags('Business Class Settings')
+@ApiTags(
+  'Business Class Settings (Alias — use /settings/risk-classes in new code)',
+)
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
-@ApiUnauthorizedResponse({
-  type: ApiErrorResponseDto,
-  description: 'Missing or invalid session/token.',
-})
-@ApiForbiddenResponse({
-  type: ApiErrorResponseDto,
-  description: 'Module, feature or required permission is unavailable.',
-})
+@ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
+@ApiForbiddenResponse({ type: ApiErrorResponseDto })
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)
 @RequireModule('operations')
 @RequireFeature('operations', 'reinsurance')
 export class BusinessClassSettingsController {
-  constructor(private readonly service: BusinessClassSettingsService) {}
+  constructor(
+    private readonly riskClassService: RiskClassSettingsService,
+    private readonly riskTypeService: RiskTypeSettingsService,
+  ) {}
+
+  // ── Risk Class CRUD ──────────────────────────────────────────────────────
 
   @Get()
-  @RequirePermissions(BusinessClassSettingsPermission.VIEW)
-  @ApiOperation({
-    summary: 'List business classes',
-    description:
-      'Returns non-archived business classes for the authenticated tenant.',
-  })
+  @RequirePermissions(RiskClassSettingsPermission.VIEW)
+  @ApiOperation({ summary: '[Alias] List risk classes' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
-  @ApiQuery({
-    name: 'isActive',
-    required: false,
-    description: 'Filter by active status.',
-  })
-  @ApiOkResponse({ type: PaginatedBusinessClassesResponseDto })
+  @ApiQuery({ name: 'isActive', required: false })
+  @ApiOkResponse({ type: PaginatedRiskClassesResponseDto })
   findAll(
-    @Query() query: QueryBusinessClassesDto,
+    @Query() query: QueryRiskClassesDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.findAll(request.user.tenantId, query);
+    return this.riskClassService.findAll(request.user.tenantId, query);
   }
 
   @Post()
-  @RequirePermissions(BusinessClassSettingsPermission.CREATE)
-  @ApiOperation({ summary: 'Create a business class' })
-  @ApiCreatedResponse({ type: BusinessClassResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Invalid payload.',
-  })
-  @ApiConflictResponse({
-    type: ApiErrorResponseDto,
-    description: 'A business class with this code already exists.',
-  })
+  @RequirePermissions(RiskClassSettingsPermission.CREATE)
+  @ApiOperation({ summary: '[Alias] Create a risk class' })
+  @ApiCreatedResponse({ type: RiskClassResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
   create(
-    @Body() dto: CreateBusinessClassDto,
+    @Body() dto: CreateRiskClassDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.create(request.user, dto);
+    return this.riskClassService.create(request.user, dto);
   }
 
   @Get(':id')
-  @RequirePermissions(BusinessClassSettingsPermission.VIEW)
-  @ApiOperation({ summary: 'Get a business class by ID' })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Business class ID.' })
-  @ApiOkResponse({ type: BusinessClassResponseDto })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description: 'Business class not found or belongs to another tenant.',
-  })
+  @RequirePermissions(RiskClassSettingsPermission.VIEW)
+  @ApiOperation({ summary: '[Alias] Get a risk class by ID' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: RiskClassResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.findOne(request.user.tenantId, id);
+    return this.riskClassService.findOne(request.user.tenantId, id);
   }
 
   @Patch(':id')
-  @RequirePermissions(BusinessClassSettingsPermission.EDIT)
-  @ApiOperation({ summary: 'Update a business class' })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Business class ID.' })
-  @ApiOkResponse({ type: BusinessClassResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Invalid or empty update payload.',
-  })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description: 'Business class not found.',
-  })
+  @RequirePermissions(RiskClassSettingsPermission.EDIT)
+  @ApiOperation({ summary: '[Alias] Update a risk class' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: RiskClassResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   update(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: UpdateBusinessClassDto,
+    @Body() dto: UpdateRiskClassDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.update(request.user, id, dto);
+    return this.riskClassService.update(request.user, id, dto);
   }
 
   @Delete(':id')
-  @RequirePermissions(BusinessClassSettingsPermission.DELETE)
-  @ApiOperation({
-    summary: 'Archive a business class',
-    description:
-      'Soft-archives the business class. Rejected if active placements reference this class code.',
-  })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Business class ID.' })
-  @ApiOkResponse({ type: BusinessClassResponseDto })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Active placements reference this business class.',
-  })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description: 'Business class not found.',
-  })
+  @RequirePermissions(RiskClassSettingsPermission.DELETE)
+  @ApiOperation({ summary: '[Alias] Archive a risk class' })
+  @ApiParam({ name: 'id', format: 'uuid' })
+  @ApiOkResponse({ type: RiskClassResponseDto })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   archive(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.archive(request.user, id);
+    return this.riskClassService.archive(request.user, id);
   }
 
+  // ── RiskTypeField operations (treats :id as riskTypeId) ─────────────────
+
   @Post(':id/fields')
-  @RequirePermissions(BusinessClassSettingsPermission.EDIT)
+  @RequirePermissions(RiskClassSettingsPermission.EDIT)
   @ApiOperation({
-    summary: 'Add a field to a business class',
-    description:
-      'Adds a field definition to the BUSINESS_DETAILS or OFFER_DETAILS section.',
+    summary: '[Alias] Add a field to a risk type (id = riskTypeId)',
   })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Business class ID.' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
   @ApiCreatedResponse({ description: 'Field created.' })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Invalid payload or SELECT field missing options.',
-  })
-  @ApiConflictResponse({
-    type: ApiErrorResponseDto,
-    description: 'Field key already exists in this section.',
-  })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description: 'Business class not found.',
-  })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiConflictResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   createField(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: CreateBusinessClassFieldDto,
+    @Body() dto: CreateRiskTypeFieldDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.createField(request.user, id, dto);
+    return this.riskTypeService.createField(request.user, id, dto);
   }
 
   @Patch(':id/fields/:fieldId')
-  @RequirePermissions(BusinessClassSettingsPermission.EDIT)
-  @ApiOperation({ summary: 'Update a field on a business class' })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Business class ID.' })
-  @ApiParam({ name: 'fieldId', format: 'uuid', description: 'Field ID.' })
+  @RequirePermissions(RiskClassSettingsPermission.EDIT)
+  @ApiOperation({ summary: '[Alias] Update a field on a risk type' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
+  @ApiParam({ name: 'fieldId', format: 'uuid' })
   @ApiOkResponse({ description: 'Field updated.' })
-  @ApiBadRequestResponse({
-    type: ApiErrorResponseDto,
-    description: 'Invalid or empty update payload.',
-  })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description: 'Business class or field not found.',
-  })
+  @ApiBadRequestResponse({ type: ApiErrorResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   updateField(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('fieldId', ParseUUIDPipe) fieldId: string,
-    @Body() dto: UpdateBusinessClassFieldDto,
+    @Body() dto: UpdateRiskTypeFieldDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.updateField(request.user, id, fieldId, dto);
+    return this.riskTypeService.updateField(request.user, id, fieldId, dto);
   }
 
   @Delete(':id/fields/:fieldId')
-  @RequirePermissions(BusinessClassSettingsPermission.DELETE)
-  @ApiOperation({ summary: 'Delete a field from a business class' })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Business class ID.' })
-  @ApiParam({ name: 'fieldId', format: 'uuid', description: 'Field ID.' })
+  @RequirePermissions(RiskClassSettingsPermission.DELETE)
+  @ApiOperation({ summary: '[Alias] Delete a field from a risk type' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
+  @ApiParam({ name: 'fieldId', format: 'uuid' })
   @ApiOkResponse({ description: 'Field deleted.' })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description: 'Business class or field not found.',
-  })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   deleteField(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('fieldId', ParseUUIDPipe) fieldId: string,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.deleteField(request.user, id, fieldId);
+    return this.riskTypeService.deleteField(request.user, id, fieldId);
   }
 
   @Get(':id/form-schema')
-  @RequirePermissions(BusinessClassSettingsPermission.VIEW)
+  @RequirePermissions(RiskClassSettingsPermission.VIEW)
   @ApiOperation({
-    summary: 'Get the form schema for a business class',
-    description:
-      'Returns active field definitions split into businessDetails and offerDetails sections. Used by the placement form to render dynamic fields.',
+    summary: '[Alias] Get form schema for a risk type (id = riskTypeId)',
   })
-  @ApiParam({ name: 'id', format: 'uuid', description: 'Business class ID.' })
-  @ApiOkResponse({ type: BusinessClassFormSchemaResponseDto })
-  @ApiNotFoundResponse({
-    type: ApiErrorResponseDto,
-    description: 'Business class not found.',
-  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
+  @ApiOkResponse({ type: RiskTypeFormSchemaResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   getFormSchema(
     @Param('id', ParseUUIDPipe) id: string,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.service.getFormSchema(request.user.tenantId, id);
+    return this.riskTypeService.getFormSchema(request.user.tenantId, id);
+  }
+
+  // ── Risk Type sub-resource ────────────────────────────────────────────────
+
+  @Get(':id/risk-types')
+  @RequirePermissions(RiskClassSettingsPermission.VIEW)
+  @ApiOperation({ summary: '[Alias] List risk types under a risk class' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Risk class ID.' })
+  @ApiOkResponse({ type: [RiskTypeResponseDto] })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  async listRiskTypes(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const rc = await this.riskClassService.findOne(request.user.tenantId, id);
+    return rc.riskTypes;
   }
 }

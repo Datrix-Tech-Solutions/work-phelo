@@ -49,10 +49,19 @@ export class QueryPlacementsDto {
   cedantId?: string;
 
   @ApiPropertyOptional({
-    example: 'MOTOR',
+    format: 'uuid',
+    description: 'Filter by risk type ID (exact match).',
+  })
+  @IsOptional()
+  @IsUUID()
+  riskTypeId?: string;
+
+  @ApiPropertyOptional({
+    example: 'Marine Cargo',
     maxLength: 100,
     description:
-      'Filter by class of business code (exact match, case-insensitive).',
+      'Filter by class of business name (partial match, case-insensitive). ' +
+      'Use riskTypeId for exact structured filtering.',
   })
   @TrimmedString()
   @IsOptional()

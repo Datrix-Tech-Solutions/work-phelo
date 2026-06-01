@@ -7,13 +7,13 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
-  BusinessClassFieldSection,
-  BusinessClassFieldType,
   CounterpartyType,
   PlacementParticipantRole,
   PlacementStatus,
   PlacementType,
   Prisma,
+  RiskTypeFieldSection,
+  RiskTypeFieldType,
 } from '../../prisma/generated/client';
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
@@ -79,10 +79,11 @@ export class PlacementsService {
       ...(query.status ? { status: query.status } : {}),
       ...(query.placementType ? { placementType: query.placementType } : {}),
       ...(query.cedantId ? { cedantId: query.cedantId } : {}),
+      ...(query.riskTypeId ? { riskTypeId: query.riskTypeId } : {}),
       ...(query.classOfBusiness
         ? {
             classOfBusiness: {
-              equals: query.classOfBusiness,
+              contains: query.classOfBusiness,
               mode: 'insensitive' as const,
             },
           }
@@ -151,10 +152,27 @@ export class PlacementsService {
     await this.assertCedant(user.tenantId, dto.cedantId);
     await this.assertParticipants(user.tenantId, dto.participants ?? []);
 
-    const classOfBusiness = this.cleanOptional(dto.classOfBusiness);
+    // Resolve riskTypeId and derive classOfBusiness from RiskType.name
+    let resolvedRiskTypeId: string | null = null;
+    let resolvedClassOfBusiness = this.cleanOptional(dto.classOfBusiness);
+
+    if (dto.riskTypeId) {
+      const rt = await this.prisma.riskType.findFirst({
+        where: {
+          id: dto.riskTypeId,
+          tenantId: user.tenantId,
+          archivedAt: null,
+        },
+        select: { id: true, name: true },
+      });
+      if (!rt) throw new NotFoundException('Risk type not found');
+      resolvedRiskTypeId = rt.id;
+      resolvedClassOfBusiness = rt.name;
+    }
+
     await this.validateDynamicFields(
       user.tenantId,
-      classOfBusiness,
+      resolvedRiskTypeId,
       dto.businessDetails,
       dto.offerDetails,
     );
@@ -174,7 +192,8 @@ export class PlacementsService {
       placementType: dto.placementType ?? PlacementType.FACULTATIVE,
       status: PlacementStatus.DRAFT,
       cedantId: dto.cedantId,
-      classOfBusiness,
+      riskTypeId: resolvedRiskTypeId,
+      classOfBusiness: resolvedClassOfBusiness,
       businessDetails:
         this.normalizeJsonObject(dto.businessDetails, 'businessDetails') ??
         Prisma.JsonNull,
@@ -187,6 +206,11 @@ export class PlacementsService {
       currency: cleanCurrency,
       exchangeRateToBase: exchangeRateToBase ?? undefined,
       sumInsured: dto.sumInsured,
+      rate: dto.rate,
+      premium: dto.premium,
+      commission: dto.commission,
+      facultativeOffer: dto.facultativeOffer,
+      preliminaryBrokerage: dto.preliminaryBrokerage,
       createdByUserId: user.id,
       updatedByUserId: user.id,
       participants: this.participantsCreateInput(dto.participants),
@@ -237,24 +261,45 @@ export class PlacementsService {
     }
     this.assertEditable(existing);
 
+    // Resolve riskTypeId update
+    let riskTypePatch:
+      | { riskTypeId: string | null; classOfBusiness?: string | null }
+      | undefined;
+
+    if (dto.riskTypeId !== undefined) {
+      if (dto.riskTypeId === null) {
+        riskTypePatch = { riskTypeId: null };
+      } else {
+        const rt = await this.prisma.riskType.findFirst({
+          where: {
+            id: dto.riskTypeId,
+            tenantId: user.tenantId,
+            archivedAt: null,
+          },
+          select: { id: true, name: true },
+        });
+        if (!rt) throw new NotFoundException('Risk type not found');
+        riskTypePatch = { riskTypeId: rt.id, classOfBusiness: rt.name };
+      }
+    }
+
     if (
       dto.businessDetails !== undefined ||
       dto.offerDetails !== undefined ||
-      dto.classOfBusiness !== undefined
+      dto.riskTypeId !== undefined
     ) {
-      const effectiveClass =
-        dto.classOfBusiness !== undefined
-          ? this.cleanOptional(dto.classOfBusiness)
-          : existing.classOfBusiness;
+      const effectiveRiskTypeId =
+        riskTypePatch !== undefined
+          ? riskTypePatch.riskTypeId
+          : existing.riskTypeId;
       await this.validateDynamicFields(
         user.tenantId,
-        effectiveClass,
+        effectiveRiskTypeId,
         dto.businessDetails,
         dto.offerDetails,
       );
     }
 
-    // Pre-compute currency patch: only resnapshot exchangeRateToBase when the ISO code is changing.
     let currencyPatch:
       | { currency: string | null; exchangeRateToBase?: Prisma.Decimal | null }
       | undefined;
@@ -293,7 +338,8 @@ export class PlacementsService {
             },
           }
         : {}),
-      ...(dto.classOfBusiness !== undefined
+      ...(riskTypePatch ?? {}),
+      ...(dto.classOfBusiness !== undefined && riskTypePatch === undefined
         ? { classOfBusiness: this.cleanOptional(dto.classOfBusiness) }
         : {}),
       ...(dto.businessDetails !== undefined
@@ -323,6 +369,15 @@ export class PlacementsService {
         : {}),
       ...(currencyPatch ?? {}),
       ...(dto.sumInsured !== undefined ? { sumInsured: dto.sumInsured } : {}),
+      ...(dto.rate !== undefined ? { rate: dto.rate } : {}),
+      ...(dto.premium !== undefined ? { premium: dto.premium } : {}),
+      ...(dto.commission !== undefined ? { commission: dto.commission } : {}),
+      ...(dto.facultativeOffer !== undefined
+        ? { facultativeOffer: dto.facultativeOffer }
+        : {}),
+      ...(dto.preliminaryBrokerage !== undefined
+        ? { preliminaryBrokerage: dto.preliminaryBrokerage }
+        : {}),
       updatedByUserId: user.id,
       ...(dto.participants !== undefined
         ? {
@@ -763,14 +818,14 @@ export class PlacementsService {
 
   private async validateDynamicFields(
     tenantId: string,
-    classCode: string | undefined | null,
+    riskTypeId: string | null | undefined,
     businessDetails: Record<string, unknown> | undefined,
     offerDetails: Record<string, unknown> | undefined,
   ): Promise<void> {
-    if (!classCode) return;
+    if (!riskTypeId) return;
 
-    const bc = await this.prisma.businessClass.findFirst({
-      where: { tenantId, code: classCode, archivedAt: null, isActive: true },
+    const rt = await this.prisma.riskType.findFirst({
+      where: { tenantId, id: riskTypeId, archivedAt: null, isActive: true },
       select: {
         fields: {
           where: { isActive: true },
@@ -785,13 +840,13 @@ export class PlacementsService {
       },
     });
 
-    if (!bc || !bc.fields.length) return;
+    if (!rt || !rt.fields.length) return;
 
-    const bdFields = bc.fields.filter(
-      (f) => f.section === BusinessClassFieldSection.BUSINESS_DETAILS,
+    const bdFields = rt.fields.filter(
+      (f) => f.section === RiskTypeFieldSection.BUSINESS_DETAILS,
     );
-    const odFields = bc.fields.filter(
-      (f) => f.section === BusinessClassFieldSection.OFFER_DETAILS,
+    const odFields = rt.fields.filter(
+      (f) => f.section === RiskTypeFieldSection.OFFER_DETAILS,
     );
 
     if (bdFields.length > 0) {
@@ -805,7 +860,7 @@ export class PlacementsService {
   private validateSection(
     fields: Array<{
       fieldKey: string;
-      fieldType: BusinessClassFieldType;
+      fieldType: RiskTypeFieldType;
       required: boolean;
       options: Prisma.JsonValue;
     }>,
@@ -835,36 +890,36 @@ export class PlacementsService {
       if (value === undefined || value === null) continue;
 
       switch (field.fieldType) {
-        case BusinessClassFieldType.NUMBER:
+        case RiskTypeFieldType.NUMBER:
           if (typeof value !== 'number') {
             throw new BadRequestException(
               `Field '${field.fieldKey}' must be a number`,
             );
           }
           break;
-        case BusinessClassFieldType.CHECKBOX:
+        case RiskTypeFieldType.CHECKBOX:
           if (typeof value !== 'boolean') {
             throw new BadRequestException(
               `Field '${field.fieldKey}' must be a boolean`,
             );
           }
           break;
-        case BusinessClassFieldType.TEXT:
-        case BusinessClassFieldType.TEXTAREA:
+        case RiskTypeFieldType.TEXT:
+        case RiskTypeFieldType.TEXTAREA:
           if (typeof value !== 'string') {
             throw new BadRequestException(
               `Field '${field.fieldKey}' must be a string`,
             );
           }
           break;
-        case BusinessClassFieldType.DATE:
+        case RiskTypeFieldType.DATE:
           if (typeof value !== 'string' || isNaN(Date.parse(value))) {
             throw new BadRequestException(
               `Field '${field.fieldKey}' must be a valid ISO date string`,
             );
           }
           break;
-        case BusinessClassFieldType.SELECT: {
+        case RiskTypeFieldType.SELECT: {
           if (typeof value !== 'string') {
             throw new BadRequestException(
               `Field '${field.fieldKey}' must be a string`,

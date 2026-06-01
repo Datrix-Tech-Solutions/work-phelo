@@ -112,31 +112,43 @@ export class PlacementResponseDto {
   @ApiProperty({ format: 'uuid' })
   cedantId!: string;
 
-  @ApiPropertyOptional({ type: String, nullable: true, example: 'MOTOR' })
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    format: 'uuid',
+    description: 'FK to RiskType. Drives dynamic field validation.',
+  })
+  riskTypeId!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'Marine Cargo',
+    description: 'Denormalized from RiskType.name for display and search.',
+  })
   classOfBusiness!: string | null;
 
   @ApiPropertyOptional({
     type: Object,
     nullable: true,
-    example: { vehicle_make: 'Toyota', vehicle_model: 'Camry' },
+    example: {
+      vessel_name: 'MV Ocean Pioneer',
+      voyage_route: 'Tema → Rotterdam',
+    },
     description:
-      'Business-class-specific risk details keyed by field definitions.',
+      'Risk-type-specific details keyed by RiskTypeField definitions.',
   })
   businessDetails!: Record<string, unknown> | null;
 
   @ApiPropertyOptional({
     type: Object,
     nullable: true,
-    example: { coverage_type: 'comprehensive', deductible: 5000 },
-    description: 'Offer-specific details keyed by field definitions.',
+    example: { coverage_type: 'All Risk', deductible: 5000 },
+    description: 'Offer-specific details keyed by RiskTypeField definitions.',
   })
   offerDetails!: Record<string, unknown> | null;
 
-  @ApiPropertyOptional({
-    type: String,
-    nullable: true,
-    example: 'Facultative placement for upstream energy risk.',
-  })
+  @ApiPropertyOptional({ type: String, nullable: true })
   description!: string | null;
 
   @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
@@ -153,7 +165,7 @@ export class PlacementResponseDto {
     nullable: true,
     example: '16.500000',
     description:
-      'Exchange rate to the tenant base currency, snapshotted at placement creation or when currency was last changed. Decimal returned as a JSON string by Prisma.',
+      'Exchange rate snapshotted at placement creation or last currency change.',
   })
   exchangeRateToBase!: string | null;
 
@@ -161,9 +173,51 @@ export class PlacementResponseDto {
     type: String,
     nullable: true,
     example: '5000000.00',
-    description: 'Decimal value returned as a JSON string by Prisma.',
+    description: 'Decimal returned as JSON string by Prisma.',
   })
   sumInsured!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '1.5000',
+    description: 'Risk rate as a percentage. Decimal returned as JSON string.',
+  })
+  rate!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '75000.00',
+    description: 'Gross premium. Decimal returned as JSON string.',
+  })
+  premium!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '15.0000',
+    description: 'Commission percentage. Decimal returned as JSON string.',
+  })
+  commission!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '60.0000',
+    description:
+      'Facultative offer percentage. Decimal returned as JSON string.',
+  })
+  facultativeOffer!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '5.0000',
+    description:
+      'Preliminary brokerage percentage. Decimal returned as JSON string.',
+  })
+  preliminaryBrokerage!: string | null;
 
   @ApiProperty({ type: PlacementCounterpartySummaryDto })
   cedant!: PlacementCounterpartySummaryDto;

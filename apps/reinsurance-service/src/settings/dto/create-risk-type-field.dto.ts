@@ -14,21 +14,21 @@ import {
   MinLength,
 } from 'class-validator';
 import {
-  BusinessClassFieldSection,
-  BusinessClassFieldType,
+  RiskTypeFieldSection,
+  RiskTypeFieldType,
 } from '../../../prisma/generated/client';
 import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
-export class CreateBusinessClassFieldDto {
+export class CreateRiskTypeFieldDto {
   @ApiProperty({
-    enum: BusinessClassFieldSection,
-    example: BusinessClassFieldSection.BUSINESS_DETAILS,
+    enum: RiskTypeFieldSection,
+    example: RiskTypeFieldSection.BUSINESS_DETAILS,
   })
-  @IsEnum(BusinessClassFieldSection)
-  section!: BusinessClassFieldSection;
+  @IsEnum(RiskTypeFieldSection)
+  section!: RiskTypeFieldSection;
 
   @ApiProperty({
-    example: 'vehicle_make',
+    example: 'vessel_name',
     description:
       'JSON-safe key: lowercase alphanumeric and underscores, starting with a letter.',
     minLength: 1,
@@ -45,19 +45,16 @@ export class CreateBusinessClassFieldDto {
   })
   fieldKey!: string;
 
-  @ApiProperty({ example: 'Vehicle Make', minLength: 1, maxLength: 100 })
+  @ApiProperty({ example: 'Vessel Name', minLength: 1, maxLength: 100 })
   @TrimmedString()
   @IsString()
   @MinLength(1)
   @MaxLength(100)
   label!: string;
 
-  @ApiProperty({
-    enum: BusinessClassFieldType,
-    example: BusinessClassFieldType.TEXT,
-  })
-  @IsEnum(BusinessClassFieldType)
-  fieldType!: BusinessClassFieldType;
+  @ApiProperty({ enum: RiskTypeFieldType, example: RiskTypeFieldType.TEXT })
+  @IsEnum(RiskTypeFieldType)
+  fieldType!: RiskTypeFieldType;
 
   @ApiPropertyOptional({ example: false, default: false })
   @IsOptional()
@@ -66,7 +63,7 @@ export class CreateBusinessClassFieldDto {
 
   @ApiPropertyOptional({
     type: [String],
-    example: ['Toyota', 'Honda', 'Ford'],
+    example: ['Bulk Carrier', 'Container Ship', 'Tanker'],
     description: 'Required when fieldType is SELECT.',
   })
   @IsOptional()
@@ -83,7 +80,7 @@ export class CreateBusinessClassFieldDto {
   @IsObject()
   validationRules?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ example: 'e.g. Toyota', maxLength: 200 })
+  @ApiPropertyOptional({ example: 'e.g. MV Ocean Pioneer', maxLength: 200 })
   @TrimmedString()
   @IsOptional()
   @IsString()
@@ -91,7 +88,7 @@ export class CreateBusinessClassFieldDto {
   placeholder?: string;
 
   @ApiPropertyOptional({
-    example: 'Enter the vehicle make as shown on the registration.',
+    example: 'Enter the vessel name as shown on the bill of lading.',
     maxLength: 500,
   })
   @TrimmedString()
