@@ -38,7 +38,7 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
         <Badge label={placement.status} variant={STATUS_VARIANT_MAP[placement.status]} />
       </div>
 
-      <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
         <DetailField label="Class of Risk" value={placement.riskType} />
         <DetailField label="Policy No." value={placement.policyNumber} />
         <DetailField label="Reinsured" value={placement.insuranceCompany} />
@@ -50,7 +50,6 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
         <DetailField label="Rate (%)" value={`${placement.rate}%`} />
         <DetailField label="Commission (%)" value={`${placement.commission}%`} />
         <DetailField label="Fac. Offer (%)" value={`${placement.facultativeOffer}%`} />
-        <DetailField label="Brokerage Fee (%)" value={`${placement.preliminaryBrokerage}%`} />
         <DetailField label="Premium" value={fmtAmount(placement.premium, placement.currency)} />
         <DetailField
           label="Sum Insured"

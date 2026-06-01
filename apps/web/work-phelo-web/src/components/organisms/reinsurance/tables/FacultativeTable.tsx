@@ -143,7 +143,7 @@ export function FacultativeTable() {
               router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.id}`),
           },
           {
-            label: 'Preview Quotation Slip',
+            label: 'Generate Slip',
             onClick: () => {
               /* TODO */
             },

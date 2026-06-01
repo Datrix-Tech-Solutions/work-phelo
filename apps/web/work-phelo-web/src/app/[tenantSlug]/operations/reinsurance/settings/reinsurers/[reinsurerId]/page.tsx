@@ -12,7 +12,7 @@ import { PremiumTrendChart } from '@/components/molecules/reinsurance/PremiumTre
 import {
   ReinsurerPoliciesTable,
   type ReinsurerPolicy,
-} from '@/components/molecules/reinsurance/ReinsurerPoliciesTable';
+} from '@/components/molecules/reinsurance/tables/ReinsurerPoliciesTable';
 
 /* ── Placeholder until API provides per-reinsurer policy data ── */
 const EMPTY_POLICIES: ReinsurerPolicy[] = [];

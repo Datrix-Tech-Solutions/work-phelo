@@ -8,7 +8,7 @@ import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { Icons } from '@/components/atoms/icons';
-import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/CounterpartyAddressFields';
+import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/forms/CounterpartyAddressFields';
 import { CONTACT_PERSON_DEFAULTS } from '@/types/reinsurance';
 import type { ReinsurerFormValues } from '@/types/reinsurance';
 import { inputClass } from '@/lib/utils';

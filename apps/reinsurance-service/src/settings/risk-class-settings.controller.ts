@@ -46,7 +46,7 @@ import { UpdateRiskClassDto } from './dto/update-risk-class.dto';
 import { RiskClassSettingsPermission } from './risk-class-settings.permissions';
 import { RiskClassSettingsService } from './risk-class-settings.service';
 
-@Controller('risk-classes')
+@Controller('settings/risk-classes')
 @ApiTags('Risk Classes')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')

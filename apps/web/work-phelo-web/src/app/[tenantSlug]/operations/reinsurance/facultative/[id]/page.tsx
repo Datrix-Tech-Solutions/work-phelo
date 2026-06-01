@@ -52,27 +52,20 @@ export default function FacultativeDetailPage({
             Placement not found.
           </div>
         ) : (
-          <div className="flex gap-6 items-start">
-            {/* Left — Overview */}
-            <div className="w-72 shrink-0">
-              <FacultativeOverview placement={placement} />
-            </div>
+          <div className="flex flex-col gap-6">
+            {/* Overview */}
+            <FacultativeOverview placement={placement} />
 
-            {/* Right — Tabs */}
-            <div className="flex-1 min-w-0 flex flex-col">
+            {/* Tabs */}
+            <div className="flex flex-col">
               <TabBar
                 tabs={TABS}
                 activeTab={activeTab}
                 onTabChange={(t) => setActiveTab(t as FacultativeTab)}
               />
 
-              <div className="flex-1 pt-5">
-                {activeTab === 'distribution' && (
-                  <DistributionListTab
-                    facOffer={placement.facultativeOffer}
-                    premium={placement.premium}
-                  />
-                )}
+              <div className="pt-5">
+                {activeTab === 'distribution' && <DistributionListTab placement={placement} />}
                 {activeTab === 'closings' && (
                   <div className="flex items-center justify-center h-40 text-sm text-gray-400">
                     No placement closings yet.

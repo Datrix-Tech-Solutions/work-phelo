@@ -6,7 +6,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { Icons } from '@/components/atoms/icons';
-import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/CounterpartyAddressFields';
+import { CounterpartyAddressFields } from '@/components/molecules/reinsurance/forms/CounterpartyAddressFields';
 import { CONTACT_PERSON_DEFAULTS } from '@/types/reinsurance';
 import type { CedantFormValues } from '@/types/reinsurance';
 

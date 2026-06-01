@@ -7,7 +7,8 @@ import {
   DistributionTable,
   DistributionEntry,
   INITIAL_DISTRIBUTION_ENTRIES,
-} from '@/components/molecules/reinsurance/DistributionTable';
+} from '@/components/molecules/reinsurance/tables/DistributionTable';
+import { Facultative } from '@/types/reinsurance';
 
 const SEGMENT_COLORS = [
   '#3b82f6', // blue
@@ -21,13 +22,15 @@ const SEGMENT_COLORS = [
 ];
 
 interface DistributionListTabProps {
-  facOffer: number;
-  premium: number;
+  placement: Facultative;
 }
 
-export function DistributionListTab({ facOffer, premium }: DistributionListTabProps) {
+export function DistributionListTab({ placement }: DistributionListTabProps) {
+  const { facultativeOffer: facOffer, premium } = placement;
   const [panelOpen, setPanelOpen] = useState(false);
-  const [entries, setEntries] = useState<DistributionEntry[]>(INITIAL_DISTRIBUTION_ENTRIES);
+  const [entries, setEntries] = useState<DistributionEntry[]>(
+    INITIAL_DISTRIBUTION_ENTRIES.map((e) => ({ ...e, shareLine: facOffer })),
+  );
 
   const facPremium = premium * (facOffer / 100);
 
@@ -115,7 +118,12 @@ export function DistributionListTab({ facOffer, premium }: DistributionListTabPr
       </div>
 
       <div className="mt-4">
-        <DistributionTable entries={entries} onEntriesChange={setEntries} facPremium={facPremium} />
+        <DistributionTable
+          entries={entries}
+          onEntriesChange={setEntries}
+          facPremium={facPremium}
+          placement={placement}
+        />
       </div>
 
       <CreateDistributionPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />

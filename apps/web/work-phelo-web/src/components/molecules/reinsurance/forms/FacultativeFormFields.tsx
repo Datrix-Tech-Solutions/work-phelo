@@ -23,6 +23,7 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
 
   const periodFrom = watch('periodFrom');
   const periodTo = watch('periodTo');
+  const riskClassId = watch('riskClassId');
 
   const durationDays =
     periodFrom && periodTo
@@ -30,7 +31,7 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
       : null;
 
   const { options: cedantOptions } = useCedantOptions();
-  const { data: riskTypeOptions = [] } = useRiskTypeOptions();
+  const { data: riskTypeOptions = [] } = useRiskTypeOptions(riskClassId);
   const { data: currencyOptions = [] } = useCurrencyOptions();
 
   return (
@@ -61,7 +62,7 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
             render={({ field }) => (
               <SearchSelect
                 label="Risk Type"
-                placeholder="Type to search risk type…"
+                placeholder={riskClassId ? 'Select risk type…' : 'Select a risk class first…'}
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.riskType?.message}
@@ -93,7 +94,7 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
 
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="Sum Insured"
+              label="100% Sum Insured"
               type="number"
               registration={register('sumInsured', {
                 required: 'Sum insured is required',
@@ -120,7 +121,7 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
 
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="Premium"
+              label="100% Premium"
               type="number"
               registration={register('premium', {
                 required: 'Premium is required',
@@ -159,35 +160,22 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
               placeholder="e.g. 15"
             />
 
-            <FormField
-              label="Preliminary Brokerage (%)"
-              type="number"
-              registration={register('preliminaryBrokerage', {
-                required: 'Preliminary brokerage is required',
-                min: { value: 0, message: 'Cannot be negative' },
-                max: { value: 100, message: 'Cannot exceed 100%' },
-                valueAsNumber: true,
-              })}
-              error={errors.preliminaryBrokerage}
-              placeholder="e.g. 5"
+            <Controller
+              name="currency"
+              control={control}
+              rules={{ required: 'Currency is required' }}
+              render={({ field }) => (
+                <SearchSelect
+                  label="Currency"
+                  placeholder="Select currency…"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.currency?.message}
+                  options={currencyOptions}
+                />
+              )}
             />
           </div>
-
-          <Controller
-            name="currency"
-            control={control}
-            rules={{ required: 'Currency is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Currency"
-                placeholder="Select currency…"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.currency?.message}
-                options={currencyOptions}
-              />
-            )}
-          />
         </div>
       </FormSection>
 
