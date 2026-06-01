@@ -101,6 +101,24 @@ Participant role validation is tied to Counterparty type:
 | `BROKER`                                      | `BROKER`                   |
 | `REINSURER`, `LEAD_REINSURER`, `CO_REINSURER` | `REINSURER`                |
 
+## Risk Class Settings API
+
+The current public settings route remains the compatibility endpoint:
+
+```text
+/api/v1/operations/reinsurance/settings/business-classes
+```
+
+Internally, this route now maps to the renamed `RiskClassSettingsService` and
+the new `RiskTypeSettingsService`. The storage model has moved from
+BusinessClass/BusinessClassField to RiskClass/RiskType/RiskTypeField, but the
+HTTP route is intentionally unchanged in this PR so existing frontend calls do
+not break.
+
+Dedicated `/settings/risk-classes` and `/settings/risk-types` routes are
+deferred to the next Reinsurance PR, where the public route split can be added
+with a coordinated frontend migration.
+
 ## OpenAPI Documentation
 
 Swagger is enabled only when `ENABLE_SWAGGER=true`. The dev deployment writes

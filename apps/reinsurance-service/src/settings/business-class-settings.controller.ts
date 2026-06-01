@@ -3,9 +3,9 @@
  *
  * Route: /settings/business-classes
  *
- * Retained so that existing frontend calls to /settings/business-classes do not 404
- * while the frontend migrates to the new /settings/risk-classes and /settings/risk-types
- * routes (added in PR2). Remove this controller in PR3 after the frontend is updated.
+ * Current public compatibility route for risk-class settings. Internally this
+ * delegates to RiskClass/RiskType services. Dedicated /settings/risk-classes
+ * and /settings/risk-types routes are deferred to the next PR.
  *
  * Delegation:
  *   - Main entity CRUD  → RiskClassSettingsService
@@ -65,9 +65,7 @@ import { CreateRiskTypeFieldDto } from './dto/create-risk-type-field.dto';
 import { UpdateRiskTypeFieldDto } from './dto/update-risk-type-field.dto';
 
 @Controller('settings/business-classes')
-@ApiTags(
-  'Business Class Settings (Alias — use /settings/risk-classes in new code)',
-)
+@ApiTags('Business Class Settings (Compatibility route for RiskClass/RiskType)')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
