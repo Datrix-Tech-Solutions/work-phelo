@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { CedantFormFields } from '@/components/molecules/reinsurance/CedantFormFields';
+import { CedantFormFields } from '@/components/molecules/reinsurance/forms/CedantFormFields';
 import {
   CedantFormValues,
   CEDANT_FORM_DEFAULTS,

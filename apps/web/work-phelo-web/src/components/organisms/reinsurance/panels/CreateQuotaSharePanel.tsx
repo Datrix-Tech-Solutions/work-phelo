@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { QuotaShareFormFields } from '@/components/molecules/reinsurance/QuotaShareFormFields';
+import { QuotaShareFormFields } from '@/components/molecules/reinsurance/forms/QuotaShareFormFields';
 import { QuotaShareFormValues, QUOTA_SHARE_DEFAULTS } from '@/types/reinsurance';
 
 interface CreateQuotaSharePanelProps {

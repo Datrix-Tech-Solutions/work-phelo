@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -62,6 +63,8 @@ const COLUMNS: Column<Counterparty>[] = [
 
 export function ReinsurersTable() {
   const toast = useToast();
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -111,6 +114,11 @@ export function ReinsurersTable() {
         }}
         actionButton={{ label: 'Add Reinsurer', onClick: () => setPanelOpen(true) }}
         rowActions={(row) => [
+          {
+            label: 'View',
+            onClick: () =>
+              router.push(`/${tenantSlug}/operations/reinsurance/settings/reinsurers/${row.id}`),
+          },
           {
             label: 'Edit',
             onClick: () => setEditTarget(row),

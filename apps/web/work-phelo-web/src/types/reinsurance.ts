@@ -197,28 +197,46 @@ export type UpdateRiskTypePayload = Partial<CreateRiskTypePayload>;
 export interface CreateCurrencyPayload {
   name: string;
   isoCode: string;
-  rate: number;
+  symbol?: string;
+  exchangeRateToBase?: number;
+  isBaseCurrency?: boolean;
+  isActive?: boolean;
+  displayOrder?: number;
 }
-export type UpdateCurrencyPayload = Partial<CreateCurrencyPayload>;
+export type UpdateCurrencyPayload = Partial<Omit<CreateCurrencyPayload, 'isoCode'>>;
 
 /* ── Currency ── */
 export interface Currency {
   id: string;
-  name: string;
+  tenantId: string;
   isoCode: string;
-  rate: number;
+  name: string;
+  symbol: string | null;
+  exchangeRateToBase: string | null;
+  isBaseCurrency: boolean;
+  isActive: boolean;
+  displayOrder: number;
+  createdByUserId: string;
+  updatedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CurrencyFormValues {
   name: string;
   isoCode: string;
-  rate: number | '';
+  symbol: string;
+  exchangeRateToBase: number | '';
+  isBaseCurrency: boolean;
 }
 
 export const CURRENCY_FORM_DEFAULTS: CurrencyFormValues = {
   name: '',
   isoCode: '',
-  rate: '',
+  symbol: '',
+  exchangeRateToBase: '',
+  isBaseCurrency: false,
 };
 
 /* ── Risk Type ── */

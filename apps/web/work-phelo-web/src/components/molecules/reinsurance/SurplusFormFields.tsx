@@ -10,10 +10,9 @@ import {
   SurplusFormValues,
   TERRITORIAL_SCOPE_OPTIONS,
   ACCOUNTING_ARRANGEMENT_OPTIONS,
-  CURRENCY_OPTIONS,
 } from '@/types/reinsurance';
 import { inputClass } from '@/lib/utils';
-import { useCedantOptions, useBrokerOptions } from '@/hooks';
+import { useCedantOptions, useBrokerOptions, useCurrencyOptions } from '@/hooks';
 
 /* Year options: 2000 → current year + 5 */
 const currentYear = new Date().getFullYear();
@@ -53,6 +52,7 @@ export function SurplusFormFields({ form }: SurplusFormFieldsProps) {
 
   const { options: cedantOptions } = useCedantOptions();
   const { options: brokerOptions } = useBrokerOptions();
+  const { data: currencyOptions = [] } = useCurrencyOptions();
 
   /* Compute total capacity — only when both fields have valid numbers */
   const totalCapacity =
@@ -147,7 +147,7 @@ export function SurplusFormFields({ form }: SurplusFormFieldsProps) {
               <SearchSelect
                 label="Currency"
                 placeholder="Select currency…"
-                options={CURRENCY_OPTIONS}
+                options={currencyOptions}
                 value={field.value}
                 onChange={field.onChange}
                 error={errors.currency?.message}

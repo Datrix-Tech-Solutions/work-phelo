@@ -7,6 +7,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FacultativeFormValues } from '@/types/reinsurance';
 import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions } from '@/hooks';
+import { inputClass } from '@/lib/utils';
 
 interface FacultativeFormFieldsProps {
   form: UseFormReturn<FacultativeFormValues>;
@@ -21,6 +22,12 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
   } = form;
 
   const periodFrom = watch('periodFrom');
+  const periodTo = watch('periodTo');
+
+  const durationDays =
+    periodFrom && periodTo
+      ? Math.round((new Date(periodTo).getTime() - new Date(periodFrom).getTime()) / 86_400_000)
+      : null;
 
   const { options: cedantOptions } = useCedantOptions();
   const { data: riskTypeOptions = [] } = useRiskTypeOptions();
@@ -186,35 +193,52 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
 
       {/* ── Period of Insurance ── */}
       <FormSection title="Period of Insurance">
-        <div className="grid grid-cols-2 gap-3">
-          <Controller
-            name="periodFrom"
-            control={control}
-            rules={{ required: 'Start date is required' }}
-            render={({ field }) => (
-              <DatePicker
-                label="From"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.periodFrom?.message}
-              />
-            )}
-          />
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <Controller
+              name="periodFrom"
+              control={control}
+              rules={{ required: 'Start date is required' }}
+              render={({ field }) => (
+                <DatePicker
+                  label="Inception"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.periodFrom?.message}
+                />
+              )}
+            />
 
-          <Controller
-            name="periodTo"
-            control={control}
-            rules={{ required: 'End date is required' }}
-            render={({ field }) => (
-              <DatePicker
-                label="To"
-                value={field.value}
-                onChange={field.onChange}
-                minDate={periodFrom || undefined}
-                error={errors.periodTo?.message}
-              />
-            )}
-          />
+            <Controller
+              name="periodTo"
+              control={control}
+              rules={{ required: 'End date is required' }}
+              render={({ field }) => (
+                <DatePicker
+                  label="Expiry"
+                  value={field.value}
+                  onChange={field.onChange}
+                  minDate={periodFrom || undefined}
+                  error={errors.periodTo?.message}
+                />
+              )}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div
+              className={inputClass(
+                undefined,
+                'bg-gray-50 text-gray-500 cursor-default select-none',
+              )}
+            >
+              {durationDays !== null && durationDays >= 0 ? (
+                `${durationDays} days`
+              ) : (
+                <span className="text-gray-300">—</span>
+              )}
+            </div>
+          </div>
         </div>
       </FormSection>
 

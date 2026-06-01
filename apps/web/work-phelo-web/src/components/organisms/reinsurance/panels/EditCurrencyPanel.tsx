@@ -1,22 +1,34 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { CurrencyFormValues, CURRENCY_FORM_DEFAULTS } from '@/types/reinsurance';
-import { useCreateCurrency } from '@/hooks';
+import { Currency, CurrencyFormValues, CURRENCY_FORM_DEFAULTS } from '@/types/reinsurance';
+import { useUpdateCurrency } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { inputClass } from '@/lib/utils';
 
-interface AddCurrencyPanelProps {
-  isOpen: boolean;
+interface EditCurrencyPanelProps {
+  currency: Currency | null;
   onClose: () => void;
 }
 
-export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
+function toFormValues(c: Currency): CurrencyFormValues {
+  return {
+    name: c.name,
+    isoCode: c.isoCode,
+    symbol: c.symbol ?? '',
+    exchangeRateToBase: c.exchangeRateToBase ? parseFloat(c.exchangeRateToBase) : '',
+    isBaseCurrency: c.isBaseCurrency,
+  };
+}
+
+export function EditCurrencyPanel({ currency, onClose }: EditCurrencyPanelProps) {
   const toast = useToast();
-  const { mutateAsync: createCurrency, isPending } = useCreateCurrency();
+  const { mutateAsync: updateCurrency, isPending } = useUpdateCurrency();
 
   const {
     register,
@@ -24,11 +36,13 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
     reset,
     control,
     formState: { errors },
-  } = useForm<CurrencyFormValues>({
-    defaultValues: CURRENCY_FORM_DEFAULTS,
-  });
+  } = useForm<CurrencyFormValues>({ defaultValues: CURRENCY_FORM_DEFAULTS });
 
   const isBaseCurrency = useWatch({ control, name: 'isBaseCurrency' });
+
+  useEffect(() => {
+    if (currency) reset(toFormValues(currency));
+  }, [currency, reset]);
 
   const handleClose = () => {
     reset(CURRENCY_FORM_DEFAULTS);
@@ -36,34 +50,35 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
   };
 
   const onSubmit = async (data: CurrencyFormValues) => {
+    if (!currency) return;
     try {
-      await createCurrency({
+      await updateCurrency({
+        id: currency.id,
         name: data.name,
-        isoCode: data.isoCode,
         symbol: data.symbol || undefined,
         exchangeRateToBase: data.isBaseCurrency ? undefined : (data.exchangeRateToBase as number),
         isBaseCurrency: data.isBaseCurrency || undefined,
       });
-      toast.success('Currency created successfully');
+      toast.success('Currency updated successfully');
       handleClose();
     } catch (err) {
-      toast.error(extractError(err, 'Failed to create currency'));
+      toast.error(extractError(err, 'Failed to update currency'));
     }
   };
 
   return (
     <SidePanel
-      isOpen={isOpen}
+      isOpen={!!currency}
       onClose={handleClose}
-      title="Add Currency"
-      description="Add a new currency and set its exchange rate."
+      title="Update Currency"
+      description="Update the details for this currency."
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isPending}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving…" onClick={handleSubmit(onSubmit)}>
-            Save Currency
+            Save Changes
           </Button>
         </div>
       }
@@ -76,17 +91,15 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
           placeholder="e.g. Ghana Cedi"
         />
 
-        <FormField
-          label="ISO Code"
-          registration={register('isoCode', {
-            required: 'ISO code is required',
-            maxLength: { value: 3, message: 'ISO code must be 3 characters' },
-            minLength: { value: 3, message: 'ISO code must be 3 characters' },
-            setValueAs: (v: string) => v.toUpperCase(),
-          })}
-          error={errors.isoCode}
-          placeholder="e.g. GHS"
-        />
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-bold text-gray-900">ISO Code</label>
+          <div
+            className={inputClass(undefined, 'bg-gray-50 text-gray-500 cursor-default select-none')}
+          >
+            {currency?.isoCode}
+          </div>
+          <p className="text-xs text-gray-400">ISO code cannot be changed after creation.</p>
+        </div>
 
         <FormField
           label="Symbol"
@@ -98,11 +111,11 @@ export function AddCurrencyPanel({ isOpen, onClose }: AddCurrencyPanelProps) {
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
-            id="isBaseCurrency"
+            id="edit-isBaseCurrency"
             {...register('isBaseCurrency')}
             className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
           />
-          <label htmlFor="isBaseCurrency" className="text-sm text-gray-700">
+          <label htmlFor="edit-isBaseCurrency" className="text-sm text-gray-700">
             Set as base currency
           </label>
         </div>

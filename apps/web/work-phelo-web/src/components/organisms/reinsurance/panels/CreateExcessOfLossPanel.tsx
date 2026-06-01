@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { ExcessOfLossFormFields } from '@/components/molecules/reinsurance/ExcessOfLossFormFields';
+import { ExcessOfLossFormFields } from '@/components/molecules/reinsurance/forms/ExcessOfLossFormFields';
 import {
   ExcessOfLossFormValues,
   EXCESS_OF_LOSS_DEFAULTS,
