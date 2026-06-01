@@ -4,26 +4,44 @@ import {
   IsArray,
   IsEmail,
   IsEnum,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
   IsUrl,
+  Length,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CounterpartyType } from '../../../prisma/generated/client';
+import {
+  CounterpartyOrigin,
+  CounterpartyType,
+} from '../../../prisma/generated/client';
 import { CreateCounterpartyAddressDto } from './create-counterparty-address.dto';
 import { CreateCounterpartyContactDto } from './create-counterparty-contact.dto';
-import { TrimmedString } from './string.transforms';
+import { TrimmedString, UppercaseTrimmedString } from './string.transforms';
 
 export class CreateCounterpartyDto {
   @ApiProperty({ enum: CounterpartyType, example: CounterpartyType.CEDANT })
   @IsEnum(CounterpartyType)
   type!: CounterpartyType;
+
+  @ApiPropertyOptional({
+    enum: CounterpartyOrigin,
+    example: CounterpartyOrigin.LOCAL,
+    default: CounterpartyOrigin.LOCAL,
+    description:
+      'LOCAL for domestically registered entities; FOREIGN for overseas companies. ' +
+      'When FOREIGN, country is required.',
+  })
+  @IsOptional()
+  @IsEnum(CounterpartyOrigin)
+  origin?: CounterpartyOrigin;
 
   @ApiProperty({ example: 'Acme Insurance Ltd', minLength: 2, maxLength: 200 })
   @TrimmedString()
@@ -32,12 +50,57 @@ export class CreateCounterpartyDto {
   @MaxLength(200)
   name!: string;
 
-  @ApiPropertyOptional({ example: 'C-00123', maxLength: 100 })
+  @ApiPropertyOptional({
+    example: 'C-00123',
+    maxLength: 100,
+    description: 'Company registration number issued by the regulatory body.',
+  })
   @TrimmedString()
   @IsOptional()
   @IsString()
   @MaxLength(100)
   registrationNumber?: string;
+
+  @ApiPropertyOptional({
+    example: 'GH',
+    minLength: 2,
+    maxLength: 2,
+    description:
+      'ISO 3166-1 alpha-2 country code. Required when origin is FOREIGN.',
+  })
+  @UppercaseTrimmedString()
+  @ValidateIf(
+    (o: CreateCounterpartyDto) => o.origin === CounterpartyOrigin.FOREIGN,
+  )
+  @IsNotEmpty({ message: 'country is required for FOREIGN counterparties' })
+  @IsString()
+  @Length(2, 2, {
+    message: 'country must be a 2-character ISO 3166-1 alpha-2 code',
+  })
+  country?: string;
+
+  @ApiPropertyOptional({
+    example: 'C0042024',
+    maxLength: 100,
+    description: 'Tax identification number or TIN.',
+  })
+  @TrimmedString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  taxId?: string;
+
+  @ApiPropertyOptional({
+    example: 'NIC/2024/001',
+    maxLength: 100,
+    description:
+      'Insurance or business licence number issued by the regulator.',
+  })
+  @TrimmedString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  licenseNumber?: string;
 
   @ApiPropertyOptional({ example: 'operations@acme.example', maxLength: 200 })
   @TrimmedString()

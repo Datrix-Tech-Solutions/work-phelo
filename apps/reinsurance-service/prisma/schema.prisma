@@ -18,6 +18,13 @@ enum CounterpartyType {
   @@schema("reinsurance")
 }
 
+enum CounterpartyOrigin {
+  LOCAL
+  FOREIGN
+
+  @@schema("reinsurance")
+}
+
 enum PlacementType {
   FACULTATIVE
 
@@ -90,9 +97,13 @@ model Counterparty {
   id                 String                 @id @default(uuid())
   tenantId           String
   type               CounterpartyType
+  origin             CounterpartyOrigin     @default(LOCAL)
   name               String
   normalizedName     String
   registrationNumber String?
+  country            String?
+  taxId              String?
+  licenseNumber      String?
   email              String?
   phone              String?
   website            String?
@@ -111,6 +122,7 @@ model Counterparty {
 
   @@unique([id, tenantId])
   @@index([tenantId, type, archivedAt, name])
+  @@index([tenantId, origin, archivedAt])
   @@index([tenantId, archivedAt, createdAt])
   @@schema("reinsurance")
 }

@@ -77,6 +77,18 @@ export class CounterpartiesController {
     required: false,
     enum: ['CEDANT', 'REINSURER', 'BROKER'],
   })
+  @ApiQuery({
+    name: 'origin',
+    required: false,
+    enum: ['LOCAL', 'FOREIGN'],
+    description: 'Filter local or foreign counterparties.',
+  })
+  @ApiQuery({
+    name: 'country',
+    required: false,
+    example: 'GH',
+    description: 'ISO 3166-1 alpha-2 country filter.',
+  })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiOkResponse({ type: PaginatedCounterpartiesResponseDto })

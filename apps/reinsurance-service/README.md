@@ -42,12 +42,14 @@ The gateway forwards these routes under
 | `PATCH`  | `/api/counterparties/:id` | `operations.reinsurance.counterparties:EDIT`   |
 | `DELETE` | `/api/counterparties/:id` | `operations.reinsurance.counterparties:DELETE` |
 
-List requests support `search`, `type`, `page` and `limit`. Deletion is a
-soft archive. Every record lookup and mutation is scoped by authenticated
-`tenantId`; the service does not accept tenant ownership from request bodies.
-When a `PATCH` body supplies `contacts` or `addresses`, the supplied child
-collection replaces the stored collection within the same tenant-scoped
-parent update.
+List requests support `search`, `type`, `origin`, `country`, `page` and
+`limit`. Deletion is a soft archive. Every record lookup and mutation is
+scoped by authenticated `tenantId`; the service does not accept tenant
+ownership from request bodies. Counterparties default to `LOCAL`. `FOREIGN`
+counterparties require a two-letter ISO-style `country` code, normalized to
+uppercase. When a `PATCH` body supplies `contacts` or `addresses`, the
+supplied child collection replaces the stored collection within the same
+tenant-scoped parent update.
 
 ## Placements API
 
@@ -155,11 +157,12 @@ Frontend handling expectations:
 List active records:
 
 ```http
-GET /api/v1/operations/reinsurance/counterparties?search=ghana&type=REINSURER&page=1&limit=20
+GET /api/v1/operations/reinsurance/counterparties?search=ghana&type=REINSURER&origin=FOREIGN&country=NG&page=1&limit=20
 ```
 
 ```ts
 type CounterpartyType = 'CEDANT' | 'REINSURER' | 'BROKER';
+type CounterpartyOrigin = 'LOCAL' | 'FOREIGN';
 
 interface CounterpartiesResponse {
   items: Counterparty[];
@@ -172,8 +175,11 @@ Create payload:
 ```json
 {
   "type": "CEDANT",
+  "origin": "LOCAL",
   "name": "Acme Insurance Ltd",
   "registrationNumber": "C-00123",
+  "taxId": "TIN-0042024",
+  "licenseNumber": "NIC/2024/001",
   "email": "operations@acme.example",
   "contacts": [
     {
@@ -192,6 +198,18 @@ Create payload:
       "isPrimary": true
     }
   ]
+}
+```
+
+For foreign counterparties, include `country`:
+
+```json
+{
+  "type": "REINSURER",
+  "origin": "FOREIGN",
+  "name": "Continental Re Nigeria",
+  "country": "NG",
+  "licenseNumber": "NAICOM/2024/001"
 }
 ```
 

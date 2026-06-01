@@ -9,7 +9,7 @@ import {
   RequestUser,
   ReinsuranceCounterpartyAuditEvent,
 } from '@work-phelo/types';
-import { Prisma } from '../../prisma/generated/client';
+import { CounterpartyOrigin, Prisma } from '../../prisma/generated/client';
 import { CounterpartyEventPublisher } from '../messaging/counterparty-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCounterpartyAddressDto } from './dto/create-counterparty-address.dto';
@@ -46,6 +46,8 @@ export class CounterpartiesService {
       tenantId,
       archivedAt: null,
       ...(query.type ? { type: query.type } : {}),
+      ...(query.origin ? { origin: query.origin } : {}),
+      ...(query.country ? { country: query.country } : {}),
       ...(search
         ? {
             OR: [
@@ -104,15 +106,22 @@ export class CounterpartiesService {
   ): Promise<CounterpartyRecord> {
     this.validateChildren(dto.contacts, dto.addresses);
     const name = this.requiredText(dto.name);
+    const origin = dto.origin ?? CounterpartyOrigin.LOCAL;
+    const country = this.optionalCountry(dto.country);
+    this.validateOriginDetails(origin, country);
 
     try {
       const created = await this.prisma.counterparty.create({
         data: {
           tenantId: user.tenantId,
           type: dto.type,
+          origin,
           name,
           normalizedName: this.normalizeName(name),
           registrationNumber: this.optionalText(dto.registrationNumber),
+          country,
+          taxId: this.optionalText(dto.taxId),
+          licenseNumber: this.optionalText(dto.licenseNumber),
           email: this.optionalText(dto.email),
           phone: this.optionalText(dto.phone),
           website: this.optionalText(dto.website),
@@ -158,17 +167,32 @@ export class CounterpartiesService {
 
     this.validateChildren(dto.contacts, dto.addresses);
     const existing = await this.findOne(user.tenantId, id);
+    const nextOrigin = dto.origin ?? existing.origin;
+    const nextCountry =
+      dto.country !== undefined
+        ? this.optionalCountry(dto.country)
+        : existing.country;
+    this.validateOriginDetails(nextOrigin, nextCountry);
+
     const data: Prisma.CounterpartyUpdateInput = {
       updatedByUserId: user.id,
     };
 
     if (dto.type !== undefined) data.type = dto.type;
+    if (dto.origin !== undefined) data.origin = dto.origin;
     if (dto.name !== undefined) {
       data.name = this.requiredText(dto.name);
       data.normalizedName = this.normalizeName(data.name);
     }
     if (dto.registrationNumber !== undefined) {
       data.registrationNumber = this.optionalText(dto.registrationNumber);
+    }
+    if (dto.country !== undefined) {
+      data.country = this.optionalCountry(dto.country);
+    }
+    if (dto.taxId !== undefined) data.taxId = this.optionalText(dto.taxId);
+    if (dto.licenseNumber !== undefined) {
+      data.licenseNumber = this.optionalText(dto.licenseNumber);
     }
     if (dto.email !== undefined) data.email = this.optionalText(dto.email);
     if (dto.phone !== undefined) data.phone = this.optionalText(dto.phone);
@@ -325,8 +349,12 @@ export class CounterpartiesService {
   private auditSnapshot(counterparty: CounterpartyRecord) {
     return {
       type: counterparty.type,
+      origin: counterparty.origin,
       name: counterparty.name,
       registrationNumber: counterparty.registrationNumber,
+      country: counterparty.country,
+      taxId: counterparty.taxId,
+      licenseNumber: counterparty.licenseNumber,
       archivedAt: counterparty.archivedAt?.toISOString() ?? null,
       contactCount: counterparty.contacts.length,
       addressCount: counterparty.addresses.length,
@@ -340,6 +368,32 @@ export class CounterpartiesService {
   private optionalText(value?: string): string | null {
     const normalized = value?.trim();
     return normalized ? normalized : null;
+  }
+
+  private optionalCountry(value?: string): string | null {
+    const normalized = this.optionalText(value);
+    if (!normalized) {
+      return null;
+    }
+
+    const country = normalized.toUpperCase();
+    if (country.length !== 2) {
+      throw new BadRequestException(
+        'country must be a 2-character ISO 3166-1 alpha-2 code',
+      );
+    }
+    return country;
+  }
+
+  private validateOriginDetails(
+    origin: CounterpartyOrigin,
+    country: string | null,
+  ): void {
+    if (origin === CounterpartyOrigin.FOREIGN && !country) {
+      throw new BadRequestException(
+        'country is required for FOREIGN counterparties',
+      );
+    }
   }
 
   private normalizeName(name: string): string {
