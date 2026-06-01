@@ -163,6 +163,14 @@ export class PaginatedRiskClassesResponseDto {
   meta!: RiskClassesPageMetaDto;
 }
 
+export class PaginatedRiskTypesResponseDto {
+  @ApiProperty({ type: [RiskTypeResponseDto] })
+  items!: RiskTypeResponseDto[];
+
+  @ApiProperty({ type: RiskClassesPageMetaDto })
+  meta!: RiskClassesPageMetaDto;
+}
+
 export class RiskTypeFormSchemaFieldDto {
   @ApiProperty({ example: 'vessel_name' })
   fieldKey!: string;

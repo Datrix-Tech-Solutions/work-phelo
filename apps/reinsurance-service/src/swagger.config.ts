@@ -20,9 +20,14 @@ tenant context and signed dynamic permissions are forwarded to this service.
 ### Authorization
 Counterparty, placement and email endpoints require the tenant to have the \`operations\` module and
 \`operations.reinsurance\` feature enabled, plus the endpoint-specific
-\`operations.reinsurance.counterparties:*\` or
+\`operations.reinsurance.counterparties:*\`, \`operations.reinsurance.settings:*\` or
 \`operations.reinsurance.placements:*\`, \`operations.reinsurance.email:*\` or
 \`operations.reinsurance.email-settings:*\` permission.
+
+### Risk settings integration
+New frontend work should use \`/risk-classes\` for RiskClass CRUD and
+\`/settings/risk-types\` for RiskType CRUD, fields and form schemas. The older
+\`/settings/business-classes\` route remains available as a compatibility alias.
 
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:
@@ -44,6 +49,8 @@ pipeline enables it for development only.
     .addTag('Access', 'Authenticated entitlement and permission verification')
     .addTag('Counterparties', 'Cedants, reinsurers and brokers')
     .addTag('Placements', 'Facultative placement lifecycle foundation')
+    .addTag('Risk Classes', 'Risk class settings and nested risk type lists')
+    .addTag('Risk Types', 'Risk types, dynamic fields and form schemas')
     .addTag(
       'Email Mailboxes',
       'Mailbox connectivity, provider verification and metadata sync',

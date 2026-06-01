@@ -101,9 +101,30 @@ Participant role validation is tied to Counterparty type:
 | `BROKER`                                      | `BROKER`                   |
 | `REINSURER`, `LEAD_REINSURER`, `CO_REINSURER` | `REINSURER`                |
 
-## Risk Class Settings API
+## Risk Settings API
 
-The current public settings route remains the compatibility endpoint:
+Frontend integrations should use the explicit Risk Class and Risk Type routes:
+
+```text
+GET    /api/v1/operations/reinsurance/risk-classes
+POST   /api/v1/operations/reinsurance/risk-classes
+GET    /api/v1/operations/reinsurance/risk-classes/:id
+PATCH  /api/v1/operations/reinsurance/risk-classes/:id
+DELETE /api/v1/operations/reinsurance/risk-classes/:id
+
+GET    /api/v1/operations/reinsurance/settings/risk-types
+POST   /api/v1/operations/reinsurance/settings/risk-types
+GET    /api/v1/operations/reinsurance/settings/risk-types/:id
+PATCH  /api/v1/operations/reinsurance/settings/risk-types/:id
+DELETE /api/v1/operations/reinsurance/settings/risk-types/:id
+
+POST   /api/v1/operations/reinsurance/settings/risk-types/:id/fields
+PATCH  /api/v1/operations/reinsurance/settings/risk-types/:id/fields/:fieldId
+DELETE /api/v1/operations/reinsurance/settings/risk-types/:id/fields/:fieldId
+GET    /api/v1/operations/reinsurance/settings/risk-types/:id/form-schema
+```
+
+The legacy settings route remains available as a compatibility endpoint:
 
 ```text
 /api/v1/operations/reinsurance/settings/business-classes
@@ -111,13 +132,60 @@ The current public settings route remains the compatibility endpoint:
 
 Internally, this route now maps to the renamed `RiskClassSettingsService` and
 the new `RiskTypeSettingsService`. The storage model has moved from
-BusinessClass/BusinessClassField to RiskClass/RiskType/RiskTypeField, but the
-HTTP route is intentionally unchanged in this PR so existing frontend calls do
-not break.
+BusinessClass/BusinessClassField to RiskClass/RiskType/RiskTypeField.
 
-Dedicated `/settings/risk-classes` and `/settings/risk-types` routes are
-deferred to the next Reinsurance PR, where the public route split can be added
-with a coordinated frontend migration.
+Compatibility routes are retained for now so older frontend calls do not break.
+New frontend work should not call `/settings/business-classes/:id/fields`
+because that route treats `:id` as a risk type ID even though the route name is
+business-class oriented. Use `/settings/risk-types/:id/fields` instead.
+
+Recommended setup flow:
+
+1. Create a risk class with `POST /risk-classes`.
+2. Create one or more risk types with `POST /settings/risk-types`.
+3. Add dynamic fields with `POST /settings/risk-types/:riskTypeId/fields`.
+4. Fetch the dynamic form schema with
+   `GET /settings/risk-types/:riskTypeId/form-schema`.
+5. Create placements with `riskTypeId` plus `businessDetails` and
+   `offerDetails`.
+
+Example create risk class payload:
+
+```json
+{
+  "name": "Marine",
+  "description": "Marine insurance risks",
+  "isActive": true,
+  "displayOrder": 0
+}
+```
+
+Example create risk type payload:
+
+```json
+{
+  "riskClassId": "5af43f8f-ec68-41c4-9096-1a89c9fcb23b",
+  "name": "Marine Cargo",
+  "description": "Cargo transported by sea",
+  "isActive": true,
+  "displayOrder": 0
+}
+```
+
+Example create risk type field payload:
+
+```json
+{
+  "section": "BUSINESS_DETAILS",
+  "fieldKey": "vessel_name",
+  "label": "Vessel Name",
+  "fieldType": "TEXT",
+  "required": true,
+  "placeholder": "e.g. MV Ocean Pioneer",
+  "displayOrder": 0,
+  "isActive": true
+}
+```
 
 ## OpenAPI Documentation
 
@@ -286,7 +354,7 @@ Create payload:
   "reference": "FAC-2026-0001",
   "title": "Acme Energy Facultative Placement",
   "cedantId": "7c2d7cae-1dd2-4a7c-9332-4a23f2e1b9a9",
-  "classOfBusiness": "Energy",
+  "riskTypeId": "5f28e76c-35b0-4bf2-95e3-7cf143feef15",
   "businessDetails": {
     "projectType": "Offshore drilling",
     "equipmentValue": 12000000,
@@ -331,11 +399,13 @@ on responses and convert only at display/form boundaries.
 
 Placement fields are split into:
 
-- Fixed fields: `cedantId`, `placementType`, `classOfBusiness`, `status`,
+- Fixed fields: `cedantId`, `placementType`, `riskTypeId`, `classOfBusiness`, `status`,
   `currency`, `sumInsured`, `inceptionDate`, `expiryDate`, `participants`.
 - Dynamic fields: `businessDetails` and `offerDetails` (JSON objects) that are
-  driven by `classOfBusiness` and should be rendered as class-specific form
-  sections in the frontend.
+  driven by `riskTypeId` and should be rendered from the risk type form schema.
+  When `riskTypeId` is supplied, the backend validates these JSON keys against
+  active RiskTypeField definitions and denormalizes `classOfBusiness` from the
+  selected RiskType name.
 
 Recommended placement frontend structure:
 
@@ -372,11 +442,10 @@ placement endpoints; retrieve those through `/counterparties?type=...`.
 
 Frontend mapping guidance:
 
-- Use a simple mapping to render class-specific sections:
-  `classOfBusiness -> BusinessDetails component` and
-  `classOfBusiness -> OfferDetails component`.
-- Submit the values from those sections under `businessDetails` and
-  `offerDetails` respectively.
+- Use `GET /settings/risk-types/:riskTypeId/form-schema` to render
+  class-specific `businessDetails` and `offerDetails` sections.
+- Submit the values from those dynamic sections under `businessDetails` and
+  `offerDetails` respectively, together with the selected `riskTypeId`.
 - Keep search/reportable fields in fixed columns; do not push UI labels into
   backend status enums.
 
