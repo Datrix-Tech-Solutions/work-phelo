@@ -4,13 +4,17 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  Length,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { CounterpartyType } from '../../../prisma/generated/client';
-import { TrimmedString } from './string.transforms';
+import {
+  CounterpartyOrigin,
+  CounterpartyType,
+} from '../../../prisma/generated/client';
+import { TrimmedString, UppercaseTrimmedString } from './string.transforms';
 
 export class QueryCounterpartiesDto {
   @ApiPropertyOptional({ example: 'ghana re', maxLength: 100 })
@@ -27,6 +31,21 @@ export class QueryCounterpartiesDto {
   @IsOptional()
   @IsEnum(CounterpartyType)
   type?: CounterpartyType;
+
+  @ApiPropertyOptional({
+    enum: CounterpartyOrigin,
+    example: CounterpartyOrigin.FOREIGN,
+  })
+  @IsOptional()
+  @IsEnum(CounterpartyOrigin)
+  origin?: CounterpartyOrigin;
+
+  @ApiPropertyOptional({ example: 'NG', minLength: 2, maxLength: 2 })
+  @UppercaseTrimmedString()
+  @IsOptional()
+  @IsString()
+  @Length(2, 2)
+  country?: string;
 
   @ApiPropertyOptional({ example: 1, default: 1, minimum: 1 })
   @IsOptional()

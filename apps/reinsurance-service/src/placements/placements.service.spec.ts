@@ -61,6 +61,9 @@ describe('PlacementsService', () => {
       findFirst: PrismaMethod;
       findMany: PrismaMethod;
     };
+    riskType: {
+      findFirst: PrismaMethod;
+    };
     placement: {
       findMany: PrismaMethod;
       count: PrismaMethod;
@@ -86,6 +89,9 @@ describe('PlacementsService', () => {
       counterparty: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      riskType: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placement: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),

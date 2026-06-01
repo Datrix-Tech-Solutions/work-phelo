@@ -6,16 +6,16 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
-  BusinessClassFieldSection,
-  BusinessClassFieldType,
   Prisma,
+  RiskTypeFieldSection,
+  RiskTypeFieldType,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateBusinessClassDto } from './dto/create-business-class.dto';
-import { CreateBusinessClassFieldDto } from './dto/create-business-class-field.dto';
-import { QueryBusinessClassesDto } from './dto/query-business-classes.dto';
-import { UpdateBusinessClassDto } from './dto/update-business-class.dto';
-import { UpdateBusinessClassFieldDto } from './dto/update-business-class-field.dto';
+import { CreateRiskTypeDto } from './dto/create-risk-type.dto';
+import { CreateRiskTypeFieldDto } from './dto/create-risk-type-field.dto';
+import { QueryRiskClassesDto } from './dto/query-risk-classes.dto';
+import { UpdateRiskTypeDto } from './dto/update-risk-type.dto';
+import { UpdateRiskTypeFieldDto } from './dto/update-risk-type-field.dto';
 
 const fieldOrderBy = [
   { section: 'asc' as const },
@@ -23,76 +23,78 @@ const fieldOrderBy = [
   { fieldKey: 'asc' as const },
 ];
 
-const businessClassInclude = {
+const riskTypeInclude = {
   fields: { orderBy: fieldOrderBy },
-} satisfies Prisma.BusinessClassInclude;
+} satisfies Prisma.RiskTypeInclude;
 
-type BusinessClassRecord = Prisma.BusinessClassGetPayload<{
-  include: typeof businessClassInclude;
+type RiskTypeRecord = Prisma.RiskTypeGetPayload<{
+  include: typeof riskTypeInclude;
 }>;
 
 @Injectable()
-export class BusinessClassSettingsService {
+export class RiskTypeSettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(tenantId: string, query: QueryBusinessClassesDto) {
+  async findAll(tenantId: string, query: QueryRiskClassesDto) {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const where: Prisma.BusinessClassWhereInput = {
+    const where: Prisma.RiskTypeWhereInput = {
       tenantId,
       archivedAt: null,
       ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
     };
 
     const [items, total] = await Promise.all([
-      this.prisma.businessClass.findMany({
+      this.prisma.riskType.findMany({
         where,
-        include: businessClassInclude,
+        include: riskTypeInclude,
         orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
       }),
-      this.prisma.businessClass.count({ where }),
+      this.prisma.riskType.count({ where }),
     ]);
 
     return {
       items,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 
-  async findOne(tenantId: string, id: string): Promise<BusinessClassRecord> {
-    const bc = await this.prisma.businessClass.findFirst({
+  async findOne(tenantId: string, id: string): Promise<RiskTypeRecord> {
+    const rt = await this.prisma.riskType.findFirst({
       where: { id, tenantId, archivedAt: null },
-      include: businessClassInclude,
+      include: riskTypeInclude,
     });
 
-    if (!bc) throw new NotFoundException('Business class not found');
-    return bc;
+    if (!rt) throw new NotFoundException('Risk type not found');
+    return rt;
   }
 
   async create(
     user: RequestUser,
-    dto: CreateBusinessClassDto,
-  ): Promise<BusinessClassRecord> {
+    dto: CreateRiskTypeDto,
+  ): Promise<RiskTypeRecord> {
+    // FK existence check (CLAUDE.md pattern)
+    const riskClass = await this.prisma.riskClass.findFirst({
+      where: { id: dto.riskClassId, tenantId: user.tenantId, archivedAt: null },
+      select: { id: true },
+    });
+    if (!riskClass) throw new NotFoundException('Risk class not found');
+
     try {
-      return await this.prisma.businessClass.create({
+      return await this.prisma.riskType.create({
         data: {
           tenantId: user.tenantId,
+          riskClassId: dto.riskClassId,
           name: dto.name,
-          code: dto.code,
           description: dto.description?.trim() || null,
           isActive: dto.isActive ?? true,
           displayOrder: dto.displayOrder ?? 0,
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
-        include: businessClassInclude,
+        include: riskTypeInclude,
       });
     } catch (error) {
       this.rethrowWriteError(error);
@@ -103,8 +105,8 @@ export class BusinessClassSettingsService {
   async update(
     user: RequestUser,
     id: string,
-    dto: UpdateBusinessClassDto,
-  ): Promise<BusinessClassRecord> {
+    dto: UpdateRiskTypeDto,
+  ): Promise<RiskTypeRecord> {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException('At least one field is required');
     }
@@ -112,7 +114,7 @@ export class BusinessClassSettingsService {
     await this.assertExists(user.tenantId, id);
 
     try {
-      return await this.prisma.businessClass.update({
+      return await this.prisma.riskType.update({
         where: {
           id_tenantId: { id, tenantId: user.tenantId },
           archivedAt: null,
@@ -128,7 +130,7 @@ export class BusinessClassSettingsService {
             : {}),
           updatedByUserId: user.id,
         },
-        include: businessClassInclude,
+        include: riskTypeInclude,
       });
     } catch (error) {
       this.rethrowWriteError(error);
@@ -136,49 +138,42 @@ export class BusinessClassSettingsService {
     }
   }
 
-  async archive(user: RequestUser, id: string): Promise<BusinessClassRecord> {
-    const bc = await this.assertExists(user.tenantId, id);
+  async archive(user: RequestUser, id: string): Promise<RiskTypeRecord> {
+    await this.assertExists(user.tenantId, id);
 
     const activePlacementCount = await this.prisma.placement.count({
-      where: {
-        tenantId: user.tenantId,
-        classOfBusiness: bc.code,
-        archivedAt: null,
-      },
+      where: { tenantId: user.tenantId, riskTypeId: id, archivedAt: null },
     });
 
     if (activePlacementCount > 0) {
       throw new BadRequestException(
-        `Cannot archive business class '${bc.code}': ${activePlacementCount} active placement(s) reference it`,
+        `Cannot archive risk type: ${activePlacementCount} active placement(s) reference it`,
       );
     }
 
-    return this.prisma.businessClass.update({
+    return this.prisma.riskType.update({
       where: {
         id_tenantId: { id, tenantId: user.tenantId },
         archivedAt: null,
       },
-      data: {
-        archivedAt: new Date(),
-        updatedByUserId: user.id,
-      },
-      include: businessClassInclude,
+      data: { archivedAt: new Date(), updatedByUserId: user.id },
+      include: riskTypeInclude,
     });
   }
 
   async createField(
     user: RequestUser,
-    businessClassId: string,
-    dto: CreateBusinessClassFieldDto,
+    riskTypeId: string,
+    dto: CreateRiskTypeFieldDto,
   ) {
-    await this.assertExists(user.tenantId, businessClassId);
+    await this.assertExists(user.tenantId, riskTypeId);
     this.assertSelectHasOptions(dto.fieldType, dto.options);
 
     try {
-      return await this.prisma.businessClassField.create({
+      return await this.prisma.riskTypeField.create({
         data: {
           tenantId: user.tenantId,
-          businessClassId,
+          riskTypeId,
           section: dto.section,
           fieldKey: dto.fieldKey,
           label: dto.label,
@@ -202,7 +197,7 @@ export class BusinessClassSettingsService {
         error.code === 'P2002'
       ) {
         throw new ConflictException(
-          `Field key '${dto.fieldKey}' already exists in section ${dto.section} for this business class`,
+          `Field key '${dto.fieldKey}' already exists in section ${dto.section} for this risk type`,
         );
       }
       throw error;
@@ -211,22 +206,22 @@ export class BusinessClassSettingsService {
 
   async updateField(
     user: RequestUser,
-    businessClassId: string,
+    riskTypeId: string,
     fieldId: string,
-    dto: UpdateBusinessClassFieldDto,
+    dto: UpdateRiskTypeFieldDto,
   ) {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException('At least one field is required');
     }
 
-    await this.assertFieldExists(user.tenantId, businessClassId, fieldId);
+    await this.assertFieldExists(user.tenantId, riskTypeId, fieldId);
 
     if (
-      dto.fieldType === BusinessClassFieldType.SELECT ||
+      dto.fieldType === RiskTypeFieldType.SELECT ||
       dto.options !== undefined
     ) {
-      const current = await this.prisma.businessClassField.findFirst({
-        where: { id: fieldId, tenantId: user.tenantId, businessClassId },
+      const current = await this.prisma.riskTypeField.findFirst({
+        where: { id: fieldId, tenantId: user.tenantId, riskTypeId },
         select: { fieldType: true, options: true },
       });
       if (current) {
@@ -240,7 +235,7 @@ export class BusinessClassSettingsService {
       }
     }
 
-    return this.prisma.businessClassField.update({
+    return this.prisma.riskTypeField.update({
       where: { id: fieldId },
       data: {
         ...(dto.label !== undefined ? { label: dto.label } : {}),
@@ -276,44 +271,33 @@ export class BusinessClassSettingsService {
 
   async deleteField(
     user: RequestUser,
-    businessClassId: string,
+    riskTypeId: string,
     fieldId: string,
   ): Promise<void> {
-    await this.assertFieldExists(user.tenantId, businessClassId, fieldId);
-    await this.prisma.businessClassField.delete({ where: { id: fieldId } });
+    await this.assertFieldExists(user.tenantId, riskTypeId, fieldId);
+    await this.prisma.riskTypeField.delete({ where: { id: fieldId } });
   }
 
   async getFormSchema(tenantId: string, id: string) {
-    const bc = await this.findOne(tenantId, id);
-    const activeFields = bc.fields.filter((f) => f.isActive);
+    const rt = await this.findOne(tenantId, id);
+    const activeFields = rt.fields.filter((f) => f.isActive);
 
     return {
-      id: bc.id,
-      name: bc.name,
-      code: bc.code,
-      description: bc.description,
+      id: rt.id,
+      name: rt.name,
+      description: rt.description,
       businessDetails: activeFields
-        .filter((f) => f.section === BusinessClassFieldSection.BUSINESS_DETAILS)
+        .filter((f) => f.section === RiskTypeFieldSection.BUSINESS_DETAILS)
         .sort((a, b) => a.displayOrder - b.displayOrder)
         .map((f) => this.toFormSchemaField(f)),
       offerDetails: activeFields
-        .filter((f) => f.section === BusinessClassFieldSection.OFFER_DETAILS)
+        .filter((f) => f.section === RiskTypeFieldSection.OFFER_DETAILS)
         .sort((a, b) => a.displayOrder - b.displayOrder)
         .map((f) => this.toFormSchemaField(f)),
     };
   }
 
-  private toFormSchemaField(field: BusinessClassRecord['fields'][number]): {
-    fieldKey: string;
-    label: string;
-    fieldType: BusinessClassFieldType;
-    required: boolean;
-    options: string[] | null;
-    validationRules: Record<string, unknown> | null;
-    placeholder: string | null;
-    helpText: string | null;
-    displayOrder: number;
-  } {
+  private toFormSchemaField(field: RiskTypeRecord['fields'][number]) {
     return {
       fieldKey: field.fieldKey,
       label: field.label,
@@ -331,33 +315,33 @@ export class BusinessClassSettingsService {
   private async assertExists(
     tenantId: string,
     id: string,
-  ): Promise<BusinessClassRecord> {
-    const bc = await this.prisma.businessClass.findFirst({
+  ): Promise<RiskTypeRecord> {
+    const rt = await this.prisma.riskType.findFirst({
       where: { id, tenantId, archivedAt: null },
-      include: businessClassInclude,
+      include: riskTypeInclude,
     });
-    if (!bc) throw new NotFoundException('Business class not found');
-    return bc;
+    if (!rt) throw new NotFoundException('Risk type not found');
+    return rt;
   }
 
   private async assertFieldExists(
     tenantId: string,
-    businessClassId: string,
+    riskTypeId: string,
     fieldId: string,
   ) {
-    const field = await this.prisma.businessClassField.findFirst({
-      where: { id: fieldId, tenantId, businessClassId },
+    const field = await this.prisma.riskTypeField.findFirst({
+      where: { id: fieldId, tenantId, riskTypeId },
     });
-    if (!field) throw new NotFoundException('Business class field not found');
+    if (!field) throw new NotFoundException('Risk type field not found');
     return field;
   }
 
   private assertSelectHasOptions(
-    fieldType: BusinessClassFieldType,
+    fieldType: RiskTypeFieldType,
     options?: string[],
   ): void {
     if (
-      fieldType === BusinessClassFieldType.SELECT &&
+      fieldType === RiskTypeFieldType.SELECT &&
       (!options || options.length === 0)
     ) {
       throw new BadRequestException(
@@ -372,14 +356,14 @@ export class BusinessClassSettingsService {
       error.code === 'P2002'
     ) {
       throw new ConflictException(
-        'A business class with this code already exists for this tenant',
+        'A risk type with this name already exists for this class',
       );
     }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2025'
     ) {
-      throw new NotFoundException('Business class not found');
+      throw new NotFoundException('Risk type not found');
     }
   }
 }

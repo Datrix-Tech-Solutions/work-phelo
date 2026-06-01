@@ -1,6 +1,9 @@
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
-import { CounterpartyType } from '../../prisma/generated/client';
+import {
+  CounterpartyOrigin,
+  CounterpartyType,
+} from '../../prisma/generated/client';
 import { CounterpartyEventPublisher } from '../messaging/counterparty-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { CounterpartiesService } from './counterparties.service';
@@ -24,9 +27,13 @@ describe('CounterpartiesService', () => {
     id: 'counterparty-1',
     tenantId: 'tenant-1',
     type: CounterpartyType.CEDANT,
+    origin: CounterpartyOrigin.LOCAL,
     name: 'Acme Cedant',
     normalizedName: 'acme cedant',
     registrationNumber: null,
+    country: null,
+    taxId: null,
+    licenseNumber: null,
     email: null,
     phone: null,
     website: null,
@@ -85,6 +92,8 @@ describe('CounterpartiesService', () => {
     const result = await service.findAll('tenant-1', {
       search: 'Acme',
       type: CounterpartyType.CEDANT,
+      origin: CounterpartyOrigin.LOCAL,
+      country: 'GH',
       page: 2,
       limit: 10,
     });
@@ -94,6 +103,8 @@ describe('CounterpartiesService', () => {
         tenantId: 'tenant-1',
         archivedAt: null,
         type: CounterpartyType.CEDANT,
+        origin: CounterpartyOrigin.LOCAL,
+        country: 'GH',
       },
       skip: 10,
       take: 10,
@@ -153,6 +164,7 @@ describe('CounterpartiesService', () => {
     expect(prisma.counterparty.create.mock.calls[0]?.[0]).toMatchObject({
       data: {
         tenantId: 'tenant-1',
+        origin: CounterpartyOrigin.LOCAL,
         name: 'Acme Cedant',
         normalizedName: 'acme cedant',
         contacts: {
@@ -170,6 +182,73 @@ describe('CounterpartiesService', () => {
         counterpartyId: 'counterparty-1',
       }),
     );
+  });
+
+  it('creates a local counterparty without country', async () => {
+    prisma.counterparty.create.mockResolvedValue(counterparty);
+
+    await service.create(user, {
+      type: CounterpartyType.CEDANT,
+      name: 'Local Cedant',
+    });
+
+    expect(prisma.counterparty.create.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        origin: CounterpartyOrigin.LOCAL,
+        country: null,
+      },
+    });
+  });
+
+  it('rejects a foreign counterparty without country', async () => {
+    await expect(
+      service.create(user, {
+        type: CounterpartyType.REINSURER,
+        origin: CounterpartyOrigin.FOREIGN,
+        name: 'Foreign Re',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.counterparty.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid country codes before creating records', async () => {
+    await expect(
+      service.create(user, {
+        type: CounterpartyType.REINSURER,
+        origin: CounterpartyOrigin.FOREIGN,
+        name: 'Foreign Re',
+        country: 'ghana',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.counterparty.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a foreign counterparty with normalized country and origin details', async () => {
+    prisma.counterparty.create.mockResolvedValue({
+      ...counterparty,
+      origin: CounterpartyOrigin.FOREIGN,
+      country: 'NG',
+      taxId: 'TIN-001',
+      licenseNumber: 'LIC-001',
+    });
+
+    await service.create(user, {
+      type: CounterpartyType.REINSURER,
+      origin: CounterpartyOrigin.FOREIGN,
+      name: 'Foreign Re',
+      country: 'ng',
+      taxId: ' TIN-001 ',
+      licenseNumber: ' LIC-001 ',
+    });
+
+    expect(prisma.counterparty.create.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        origin: CounterpartyOrigin.FOREIGN,
+        country: 'NG',
+        taxId: 'TIN-001',
+        licenseNumber: 'LIC-001',
+      },
+    });
   });
 
   it('rejects multiple primary contacts before creating records', async () => {
@@ -247,6 +326,59 @@ describe('CounterpartiesService', () => {
       }),
     );
     expect(publisher.updated).toHaveBeenCalled();
+  });
+
+  it('rejects changing a local counterparty to foreign without country', async () => {
+    prisma.counterparty.findFirst.mockResolvedValue(counterparty);
+
+    await expect(
+      service.update(user, 'counterparty-1', {
+        origin: CounterpartyOrigin.FOREIGN,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.counterparty.update).not.toHaveBeenCalled();
+  });
+
+  it('changes a local counterparty to foreign when country is provided', async () => {
+    prisma.counterparty.findFirst.mockResolvedValue(counterparty);
+    prisma.counterparty.update.mockResolvedValue({
+      ...counterparty,
+      origin: CounterpartyOrigin.FOREIGN,
+      country: 'CI',
+    });
+
+    await service.update(user, 'counterparty-1', {
+      origin: CounterpartyOrigin.FOREIGN,
+      country: 'ci',
+    });
+
+    expect(prisma.counterparty.update.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        origin: CounterpartyOrigin.FOREIGN,
+        country: 'CI',
+      },
+    });
+  });
+
+  it('updates tax and licence details', async () => {
+    prisma.counterparty.findFirst.mockResolvedValue(counterparty);
+    prisma.counterparty.update.mockResolvedValue({
+      ...counterparty,
+      taxId: 'TIN-002',
+      licenseNumber: 'LIC-002',
+    });
+
+    await service.update(user, 'counterparty-1', {
+      taxId: ' TIN-002 ',
+      licenseNumber: ' LIC-002 ',
+    });
+
+    expect(prisma.counterparty.update.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        taxId: 'TIN-002',
+        licenseNumber: 'LIC-002',
+      },
+    });
   });
 
   it('archives only an active record in the current tenant', async () => {

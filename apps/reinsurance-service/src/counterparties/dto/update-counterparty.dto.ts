@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   IsUrl,
+  Length,
   Max,
   MaxLength,
   Min,
@@ -15,10 +16,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { CounterpartyType } from '../../../prisma/generated/client';
+import {
+  CounterpartyOrigin,
+  CounterpartyType,
+} from '../../../prisma/generated/client';
 import { CreateCounterpartyAddressDto } from './create-counterparty-address.dto';
 import { CreateCounterpartyContactDto } from './create-counterparty-contact.dto';
-import { TrimmedString } from './string.transforms';
+import { TrimmedString, UppercaseTrimmedString } from './string.transforms';
 
 export class UpdateCounterpartyDto {
   @ApiPropertyOptional({
@@ -28,6 +32,16 @@ export class UpdateCounterpartyDto {
   @IsOptional()
   @IsEnum(CounterpartyType)
   type?: CounterpartyType;
+
+  @ApiPropertyOptional({
+    enum: CounterpartyOrigin,
+    example: CounterpartyOrigin.FOREIGN,
+    description:
+      'LOCAL for domestically registered entities; FOREIGN for overseas companies. Country must be present after the update when origin is FOREIGN.',
+  })
+  @IsOptional()
+  @IsEnum(CounterpartyOrigin)
+  origin?: CounterpartyOrigin;
 
   @ApiPropertyOptional({
     example: 'Acme Insurance Ltd',
@@ -47,6 +61,44 @@ export class UpdateCounterpartyDto {
   @IsString()
   @MaxLength(100)
   registrationNumber?: string;
+
+  @ApiPropertyOptional({
+    example: 'NG',
+    minLength: 2,
+    maxLength: 2,
+    description:
+      'ISO 3166-1 alpha-2 country code. Required after update when origin is FOREIGN.',
+  })
+  @UppercaseTrimmedString()
+  @IsOptional()
+  @IsString()
+  @Length(2, 2, {
+    message: 'country must be a 2-character ISO 3166-1 alpha-2 code',
+  })
+  country?: string;
+
+  @ApiPropertyOptional({
+    example: 'TIN-0042024',
+    maxLength: 100,
+    description: 'Tax identification number or TIN.',
+  })
+  @TrimmedString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  taxId?: string;
+
+  @ApiPropertyOptional({
+    example: 'NAICOM/2024/001',
+    maxLength: 100,
+    description:
+      'Insurance or business licence number issued by the regulator.',
+  })
+  @TrimmedString()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  licenseNumber?: string;
 
   @ApiPropertyOptional({ example: 'operations@acme.example', maxLength: 200 })
   @TrimmedString()

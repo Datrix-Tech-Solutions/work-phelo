@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CounterpartyType } from '../../../prisma/generated/client';
+import {
+  CounterpartyOrigin,
+  CounterpartyType,
+} from '../../../prisma/generated/client';
 
 export class ApiErrorResponseDto {
   @ApiProperty({ example: 403 })
@@ -98,6 +101,14 @@ export class CounterpartyResponseDto {
   @ApiProperty({ enum: CounterpartyType, example: CounterpartyType.CEDANT })
   type!: CounterpartyType;
 
+  @ApiProperty({
+    enum: CounterpartyOrigin,
+    example: CounterpartyOrigin.LOCAL,
+    description:
+      'LOCAL for domestically registered entities; FOREIGN for overseas companies.',
+  })
+  origin!: CounterpartyOrigin;
+
   @ApiProperty({ example: 'Acme Insurance Ltd' })
   name!: string;
 
@@ -106,6 +117,25 @@ export class CounterpartyResponseDto {
 
   @ApiPropertyOptional({ type: String, nullable: true, example: 'C-00123' })
   registrationNumber!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'GH',
+    description:
+      'ISO 3166-1 alpha-2 country code. Required for FOREIGN counterparties.',
+  })
+  country!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true, example: 'TIN-0042024' })
+  taxId!: string | null;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'NIC/2024/001',
+  })
+  licenseNumber!: string | null;
 
   @ApiPropertyOptional({
     type: String,

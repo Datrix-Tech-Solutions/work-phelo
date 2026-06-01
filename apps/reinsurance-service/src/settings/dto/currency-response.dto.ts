@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ApiErrorResponseDto } from './business-class-response.dto';
+import { ApiErrorResponseDto } from './risk-class-response.dto';
 
 export { ApiErrorResponseDto };
 

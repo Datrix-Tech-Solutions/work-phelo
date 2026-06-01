@@ -1,10 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
-  BusinessClassFieldSection,
-  BusinessClassFieldType,
+  RiskTypeFieldSection,
+  RiskTypeFieldType,
 } from '../../../prisma/generated/client';
 
-export class BusinessClassFieldResponseDto {
+export class RiskTypeFieldResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
@@ -12,19 +12,19 @@ export class BusinessClassFieldResponseDto {
   tenantId!: string;
 
   @ApiProperty({ format: 'uuid' })
-  businessClassId!: string;
+  riskTypeId!: string;
 
-  @ApiProperty({ enum: BusinessClassFieldSection })
-  section!: BusinessClassFieldSection;
+  @ApiProperty({ enum: RiskTypeFieldSection })
+  section!: RiskTypeFieldSection;
 
-  @ApiProperty({ example: 'vehicle_make' })
+  @ApiProperty({ example: 'vessel_name' })
   fieldKey!: string;
 
-  @ApiProperty({ example: 'Vehicle Make' })
+  @ApiProperty({ example: 'Vessel Name' })
   label!: string;
 
-  @ApiProperty({ enum: BusinessClassFieldType })
-  fieldType!: BusinessClassFieldType;
+  @ApiProperty({ enum: RiskTypeFieldType })
+  fieldType!: RiskTypeFieldType;
 
   @ApiProperty({ example: false })
   required!: boolean;
@@ -32,21 +32,21 @@ export class BusinessClassFieldResponseDto {
   @ApiPropertyOptional({
     type: [String],
     nullable: true,
-    example: ['Toyota', 'Honda'],
+    example: ['Bulk Carrier', 'Tanker'],
   })
   options!: string[] | null;
 
   @ApiPropertyOptional({ type: Object, nullable: true })
   validationRules!: Record<string, unknown> | null;
 
-  @ApiPropertyOptional({ type: String, nullable: true, example: 'e.g. Toyota' })
-  placeholder!: string | null;
-
   @ApiPropertyOptional({
     type: String,
     nullable: true,
-    example: 'Enter the vehicle make.',
+    example: 'e.g. MV Ocean Pioneer',
   })
+  placeholder!: string | null;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
   helpText!: string | null;
 
   @ApiProperty({ example: 0 })
@@ -62,24 +62,20 @@ export class BusinessClassFieldResponseDto {
   updatedAt!: string;
 }
 
-export class BusinessClassResponseDto {
+export class RiskTypeResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
   @ApiProperty({ format: 'uuid' })
   tenantId!: string;
 
-  @ApiProperty({ example: 'Motor' })
+  @ApiProperty({ format: 'uuid' })
+  riskClassId!: string;
+
+  @ApiProperty({ example: 'Marine Cargo' })
   name!: string;
 
-  @ApiProperty({ example: 'MOTOR' })
-  code!: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    nullable: true,
-    example: 'Motor vehicle insurance class of business.',
-  })
+  @ApiPropertyOptional({ type: String, nullable: true })
   description!: string | null;
 
   @ApiProperty({ example: true })
@@ -88,8 +84,8 @@ export class BusinessClassResponseDto {
   @ApiProperty({ example: 0 })
   displayOrder!: number;
 
-  @ApiProperty({ type: [BusinessClassFieldResponseDto] })
-  fields!: BusinessClassFieldResponseDto[];
+  @ApiProperty({ type: [RiskTypeFieldResponseDto] })
+  fields!: RiskTypeFieldResponseDto[];
 
   @ApiProperty({ format: 'uuid' })
   createdByUserId!: string;
@@ -107,7 +103,45 @@ export class BusinessClassResponseDto {
   updatedAt!: string;
 }
 
-export class BusinessClassesPageMetaDto {
+export class RiskClassResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  tenantId!: string;
+
+  @ApiProperty({ example: 'Marine' })
+  name!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true })
+  description!: string | null;
+
+  @ApiProperty({ example: true })
+  isActive!: boolean;
+
+  @ApiProperty({ example: 0 })
+  displayOrder!: number;
+
+  @ApiProperty({ type: [RiskTypeResponseDto] })
+  riskTypes!: RiskTypeResponseDto[];
+
+  @ApiProperty({ format: 'uuid' })
+  createdByUserId!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  updatedByUserId!: string;
+
+  @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
+  archivedAt!: string | null;
+
+  @ApiProperty({ format: 'date-time' })
+  createdAt!: string;
+
+  @ApiProperty({ format: 'date-time' })
+  updatedAt!: string;
+}
+
+export class RiskClassesPageMetaDto {
   @ApiProperty({ example: 1, minimum: 1 })
   page!: number;
 
@@ -121,23 +155,23 @@ export class BusinessClassesPageMetaDto {
   totalPages!: number;
 }
 
-export class PaginatedBusinessClassesResponseDto {
-  @ApiProperty({ type: [BusinessClassResponseDto] })
-  items!: BusinessClassResponseDto[];
+export class PaginatedRiskClassesResponseDto {
+  @ApiProperty({ type: [RiskClassResponseDto] })
+  items!: RiskClassResponseDto[];
 
-  @ApiProperty({ type: BusinessClassesPageMetaDto })
-  meta!: BusinessClassesPageMetaDto;
+  @ApiProperty({ type: RiskClassesPageMetaDto })
+  meta!: RiskClassesPageMetaDto;
 }
 
-export class BusinessClassFormSchemaFieldDto {
-  @ApiProperty({ example: 'vehicle_make' })
+export class RiskTypeFormSchemaFieldDto {
+  @ApiProperty({ example: 'vessel_name' })
   fieldKey!: string;
 
-  @ApiProperty({ example: 'Vehicle Make' })
+  @ApiProperty({ example: 'Vessel Name' })
   label!: string;
 
-  @ApiProperty({ enum: BusinessClassFieldType })
-  fieldType!: BusinessClassFieldType;
+  @ApiProperty({ enum: RiskTypeFieldType })
+  fieldType!: RiskTypeFieldType;
 
   @ApiProperty({ example: false })
   required!: boolean;
@@ -158,24 +192,21 @@ export class BusinessClassFormSchemaFieldDto {
   displayOrder!: number;
 }
 
-export class BusinessClassFormSchemaResponseDto {
+export class RiskTypeFormSchemaResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
 
-  @ApiProperty({ example: 'Motor' })
+  @ApiProperty({ example: 'Marine Cargo' })
   name!: string;
-
-  @ApiProperty({ example: 'MOTOR' })
-  code!: string;
 
   @ApiPropertyOptional({ type: String, nullable: true })
   description!: string | null;
 
-  @ApiProperty({ type: [BusinessClassFormSchemaFieldDto] })
-  businessDetails!: BusinessClassFormSchemaFieldDto[];
+  @ApiProperty({ type: [RiskTypeFormSchemaFieldDto] })
+  businessDetails!: RiskTypeFormSchemaFieldDto[];
 
-  @ApiProperty({ type: [BusinessClassFormSchemaFieldDto] })
-  offerDetails!: BusinessClassFormSchemaFieldDto[];
+  @ApiProperty({ type: [RiskTypeFormSchemaFieldDto] })
+  offerDetails!: RiskTypeFormSchemaFieldDto[];
 }
 
 export class ApiErrorResponseDto {
@@ -187,7 +218,7 @@ export class ApiErrorResponseDto {
 
   @ApiProperty({
     oneOf: [
-      { type: 'string', example: 'Business class not found' },
+      { type: 'string', example: 'Risk class not found' },
       { type: 'array', items: { type: 'string' } },
     ],
   })

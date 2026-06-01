@@ -61,7 +61,23 @@ export class CreatePlacementDto {
   @IsUUID()
   cedantId!: string;
 
-  @ApiPropertyOptional({ example: 'Energy', maxLength: 100 })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Risk type that drives dynamic businessDetails/offerDetails field validation. ' +
+      'Must belong to the authenticated tenant.',
+  })
+  @IsOptional()
+  @IsUUID()
+  riskTypeId?: string;
+
+  @ApiPropertyOptional({
+    example: 'Marine Cargo',
+    maxLength: 100,
+    description:
+      'Denormalized display label. When riskTypeId is supplied this is auto-populated ' +
+      'from RiskType.name; may also be supplied directly.',
+  })
   @TrimmedString()
   @IsOptional()
   @IsString()
@@ -71,8 +87,12 @@ export class CreatePlacementDto {
   @ApiPropertyOptional({
     type: Object,
     description:
-      'Business-class-specific risk details. Keys must match active BusinessClassField definitions for the BUSINESS_DETAILS section of the selected classOfBusiness.',
-    example: { vehicle_make: 'Toyota', vehicle_model: 'Camry', year: 2022 },
+      'Risk-type-specific details. Keys must match active RiskTypeField definitions ' +
+      'for the BUSINESS_DETAILS section of the selected riskTypeId.',
+    example: {
+      vessel_name: 'MV Ocean Pioneer',
+      voyage_route: 'Tema → Rotterdam',
+    },
   })
   @IsOptional()
   @IsObject()
@@ -81,8 +101,9 @@ export class CreatePlacementDto {
   @ApiPropertyOptional({
     type: Object,
     description:
-      'Offer-specific details. Keys must match active BusinessClassField definitions for the OFFER_DETAILS section of the selected classOfBusiness.',
-    example: { coverage_type: 'comprehensive', deductible: 5000 },
+      'Offer-specific details. Keys must match active RiskTypeField definitions ' +
+      'for the OFFER_DETAILS section of the selected riskTypeId.',
+    example: { coverage_type: 'All Risk', deductible: 5000 },
   })
   @IsOptional()
   @IsObject()
@@ -121,6 +142,66 @@ export class CreatePlacementDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   sumInsured?: number;
+
+  @ApiPropertyOptional({
+    example: 1.5,
+    minimum: 0,
+    maximum: 100,
+    description: 'Risk rate as a percentage (0–100).',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  rate?: number;
+
+  @ApiPropertyOptional({
+    example: 75000,
+    minimum: 0,
+    description: 'Gross premium amount in the placement currency.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  premium?: number;
+
+  @ApiPropertyOptional({
+    example: 15,
+    minimum: 0,
+    maximum: 100,
+    description: 'Reinsurance commission as a percentage (0–100).',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  commission?: number;
+
+  @ApiPropertyOptional({
+    example: 60,
+    minimum: 0,
+    maximum: 100,
+    description:
+      'Facultative offer percentage — the share of the risk being ceded to the market (0–100).',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  facultativeOffer?: number;
+
+  @ApiPropertyOptional({
+    example: 5,
+    minimum: 0,
+    maximum: 100,
+    description: 'Preliminary brokerage as a percentage (0–100).',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  preliminaryBrokerage?: number;
 
   @ApiPropertyOptional({
     type: [CreatePlacementParticipantDto],

@@ -1,7 +1,10 @@
 import 'reflect-metadata';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CounterpartyType } from '../../../prisma/generated/client';
+import {
+  CounterpartyOrigin,
+  CounterpartyType,
+} from '../../../prisma/generated/client';
 import { CreateCounterpartyDto } from './create-counterparty.dto';
 
 describe('CreateCounterpartyDto', () => {
@@ -38,6 +41,46 @@ describe('CreateCounterpartyDto', () => {
     expect(dto.addresses?.[0]?.line1).toBe('1 High Street');
     expect(dto.addresses?.[0]?.city).toBe('Accra');
     expect(dto.addresses?.[0]?.country).toBe('GH');
+    await expect(validate(dto)).resolves.toEqual([]);
+  });
+
+  it('allows local counterparties without country', async () => {
+    const dto = plainToInstance(CreateCounterpartyDto, {
+      type: CounterpartyType.CEDANT,
+      origin: CounterpartyOrigin.LOCAL,
+      name: 'Local Cedant',
+    });
+
+    await expect(validate(dto)).resolves.toEqual([]);
+  });
+
+  it('requires country for foreign counterparties', async () => {
+    const dto = plainToInstance(CreateCounterpartyDto, {
+      type: CounterpartyType.REINSURER,
+      origin: CounterpartyOrigin.FOREIGN,
+      name: 'Foreign Re',
+    });
+
+    const errors = await validate(dto);
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          property: 'country',
+        }),
+      ]),
+    );
+  });
+
+  it('normalizes foreign country codes to uppercase', async () => {
+    const dto = plainToInstance(CreateCounterpartyDto, {
+      type: CounterpartyType.REINSURER,
+      origin: CounterpartyOrigin.FOREIGN,
+      name: 'Foreign Re',
+      country: ' ng ',
+    });
+
+    expect(dto.country).toBe('NG');
     await expect(validate(dto)).resolves.toEqual([]);
   });
 });

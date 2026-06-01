@@ -11,12 +11,8 @@ import {
 } from 'class-validator';
 import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
-export class UpdateBusinessClassDto {
-  @ApiPropertyOptional({
-    example: 'Motor Insurance',
-    minLength: 2,
-    maxLength: 100,
-  })
+export class UpdateRiskTypeDto {
+  @ApiPropertyOptional({ example: 'Marine Hull', minLength: 2, maxLength: 100 })
   @TrimmedString()
   @IsOptional()
   @IsString()
@@ -24,10 +20,7 @@ export class UpdateBusinessClassDto {
   @MaxLength(100)
   name?: string;
 
-  @ApiPropertyOptional({
-    example: 'Updated description for motor class.',
-    maxLength: 500,
-  })
+  @ApiPropertyOptional({ example: 'Updated description.', maxLength: 500 })
   @TrimmedString()
   @IsOptional()
   @IsString()

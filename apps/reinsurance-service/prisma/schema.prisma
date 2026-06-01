@@ -18,6 +18,13 @@ enum CounterpartyType {
   @@schema("reinsurance")
 }
 
+enum CounterpartyOrigin {
+  LOCAL
+  FOREIGN
+
+  @@schema("reinsurance")
+}
+
 enum PlacementType {
   FACULTATIVE
 
@@ -66,14 +73,16 @@ enum EmailMessageDirection {
   @@schema("reinsurance")
 }
 
-enum BusinessClassFieldSection {
+// Renamed from BusinessClassFieldSection
+enum RiskTypeFieldSection {
   BUSINESS_DETAILS
   OFFER_DETAILS
 
   @@schema("reinsurance")
 }
 
-enum BusinessClassFieldType {
+// Renamed from BusinessClassFieldType
+enum RiskTypeFieldType {
   TEXT
   NUMBER
   DATE
@@ -88,14 +97,18 @@ model Counterparty {
   id                 String                 @id @default(uuid())
   tenantId           String
   type               CounterpartyType
+  origin             CounterpartyOrigin     @default(LOCAL)
   name               String
   normalizedName     String
   registrationNumber String?
+  country            String?
+  taxId              String?
+  licenseNumber      String?
   email              String?
   phone              String?
   website            String?
   notes              String?
-  brokerageFee       Decimal?  @db.Decimal(5, 2)
+  brokerageFee       Decimal?               @db.Decimal(5, 2)
   createdByUserId    String
   updatedByUserId    String
   archivedByUserId   String?
@@ -109,6 +122,7 @@ model Counterparty {
 
   @@unique([id, tenantId])
   @@index([tenantId, type, archivedAt, name])
+  @@index([tenantId, origin, archivedAt])
   @@index([tenantId, archivedAt, createdAt])
   @@schema("reinsurance")
 }
@@ -131,38 +145,46 @@ model CounterpartyContact {
 }
 
 model Placement {
-  id                  String                   @id @default(uuid())
-  tenantId            String
-  reference           String
-  normalizedReference String
-  title               String
-  placementType       PlacementType            @default(FACULTATIVE)
-  status              PlacementStatus          @default(DRAFT)
-  cedantId            String
-  classOfBusiness     String?
-  businessDetails     Json?
-  offerDetails        Json?
-  description         String?
-  inceptionDate       DateTime?
-  expiryDate          DateTime?
-  currency            String?
-  exchangeRateToBase  Decimal?                 @db.Decimal(18, 6)
-  sumInsured          Decimal?                 @db.Decimal(18, 2)
-  createdByUserId     String
-  updatedByUserId     String
-  archivedByUserId    String?
-  archivedAt          DateTime?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  cedant              Counterparty             @relation("PlacementCedant", fields: [cedantId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  participants        PlacementParticipant[]
-  statusHistory       PlacementStatusHistory[]
-  emailLinks          PlacementEmailLink[]
+  id                   String                   @id @default(uuid())
+  tenantId             String
+  reference            String
+  normalizedReference  String
+  title                String
+  placementType        PlacementType            @default(FACULTATIVE)
+  status               PlacementStatus          @default(DRAFT)
+  cedantId             String
+  // riskTypeId is validated at service layer (tenant-scoped FK existence check)
+  riskTypeId           String?
+  classOfBusiness      String?
+  businessDetails      Json?
+  offerDetails         Json?
+  description          String?
+  inceptionDate        DateTime?
+  expiryDate           DateTime?
+  currency             String?
+  exchangeRateToBase   Decimal?                 @db.Decimal(18, 6)
+  sumInsured           Decimal?                 @db.Decimal(18, 2)
+  rate                 Decimal?                 @db.Decimal(7, 4)
+  premium              Decimal?                 @db.Decimal(18, 2)
+  commission           Decimal?                 @db.Decimal(7, 4)
+  facultativeOffer     Decimal?                 @db.Decimal(7, 4)
+  preliminaryBrokerage Decimal?                 @db.Decimal(7, 4)
+  createdByUserId      String
+  updatedByUserId      String
+  archivedByUserId     String?
+  archivedAt           DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  cedant               Counterparty             @relation("PlacementCedant", fields: [cedantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participants         PlacementParticipant[]
+  statusHistory        PlacementStatusHistory[]
+  emailLinks           PlacementEmailLink[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
   @@index([tenantId, status, archivedAt, createdAt])
   @@index([tenantId, cedantId, archivedAt])
+  @@index([tenantId, riskTypeId, archivedAt])
   @@index([tenantId, archivedAt, createdAt])
   @@schema("reinsurance")
 }
@@ -190,49 +212,77 @@ model Currency {
   @@schema("reinsurance")
 }
 
-model BusinessClass {
-  id              String               @id @default(uuid())
+// Renamed from BusinessClass; code field dropped; uniqueness on name
+model RiskClass {
+  id              String      @id @default(uuid())
   tenantId        String
   name            String
-  code            String
   description     String?
-  isActive        Boolean              @default(true)
-  displayOrder    Int                  @default(0)
+  isActive        Boolean     @default(true)
+  displayOrder    Int         @default(0)
   createdByUserId String
   updatedByUserId String
   archivedAt      DateTime?
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-  fields          BusinessClassField[]
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  riskTypes       RiskType[]
 
   @@unique([id, tenantId])
-  @@unique([tenantId, code])
+  @@unique([tenantId, name])
   @@index([tenantId, isActive, displayOrder])
   @@index([tenantId, archivedAt, createdAt])
+  @@map("risk_class")
   @@schema("reinsurance")
 }
 
-model BusinessClassField {
-  id              String                    @id @default(uuid())
+// New intermediate model between RiskClass and RiskTypeField
+model RiskType {
+  id              String          @id @default(uuid())
   tenantId        String
-  businessClassId String
-  section         BusinessClassFieldSection
+  riskClassId     String
+  name            String
+  description     String?
+  isActive        Boolean         @default(true)
+  displayOrder    Int             @default(0)
+  createdByUserId String
+  updatedByUserId String
+  archivedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  riskClass       RiskClass       @relation(fields: [riskClassId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  fields          RiskTypeField[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, riskClassId, name])
+  @@index([tenantId, riskClassId, isActive, displayOrder])
+  @@index([tenantId, archivedAt, createdAt])
+  @@map("risk_type")
+  @@schema("reinsurance")
+}
+
+// Renamed from BusinessClassField; parent FK moved from RiskClass to RiskType
+model RiskTypeField {
+  id              String               @id @default(uuid())
+  tenantId        String
+  riskTypeId      String
+  section         RiskTypeFieldSection
   fieldKey        String
   label           String
-  fieldType       BusinessClassFieldType
-  required        Boolean                   @default(false)
+  fieldType       RiskTypeFieldType
+  required        Boolean              @default(false)
   options         Json?
   validationRules Json?
   placeholder     String?
   helpText        String?
-  displayOrder    Int                       @default(0)
-  isActive        Boolean                   @default(true)
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
-  businessClass   BusinessClass             @relation(fields: [businessClassId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  displayOrder    Int                  @default(0)
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  riskType        RiskType             @relation(fields: [riskTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
 
-  @@unique([tenantId, businessClassId, section, fieldKey])
-  @@index([tenantId, businessClassId, section, isActive])
+  @@unique([tenantId, riskTypeId, section, fieldKey])
+  @@index([tenantId, riskTypeId, section, isActive])
+  @@map("risk_type_field")
   @@schema("reinsurance")
 }
 
