@@ -185,6 +185,9 @@ export interface CreateRiskClassPayload {
 }
 export type UpdateRiskClassPayload = Partial<CreateRiskClassPayload>;
 
+export type RiskTypeFieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT' | 'CHECKBOX' | 'TEXTAREA';
+export type RiskTypeFieldSection = 'BUSINESS_DETAILS' | 'OFFER_DETAILS';
+
 export interface RiskTypeCustomField {
   label: string;
   value: string;
@@ -198,6 +201,17 @@ export interface CreateRiskTypePayload {
   displayOrder?: number;
 }
 export type UpdateRiskTypePayload = Partial<Omit<CreateRiskTypePayload, 'riskClassId'>>;
+
+export interface CreateRiskTypeFieldPayload {
+  section: RiskTypeFieldSection;
+  fieldKey: string;
+  label: string;
+  fieldType: RiskTypeFieldType;
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+  displayOrder?: number;
+}
 
 export interface CreateCurrencyPayload {
   name: string;
@@ -341,12 +355,29 @@ export interface Facultative {
   status: FacultativeStatus;
 }
 
+/* ── Facultative API payloads ── */
+export interface CreateFacultativePayload {
+  cedantId: string;
+  riskTypeId: string;
+  reference: string;
+  title: string;
+  sumInsured: number;
+  rate: number;
+  premium: number;
+  facultativeOffer: number;
+  commission: number;
+  currency: string;
+}
+
+export type UpdateFacultativePayload = Partial<Omit<CreateFacultativePayload, 'cedantId'>>;
+
 /* ── Facultative form ── */
 export interface FacultativeFormValues {
   insuranceCompany: string;
   riskClassId: string;
   riskType: string;
-  policyNo: string;
+  reference: string;
+  title: string;
   insured: string;
   sumInsured: number | '';
   rate: number | '';
@@ -357,13 +388,15 @@ export interface FacultativeFormValues {
   periodFrom: string;
   periodTo: string;
   comment: string;
+  riskDetails: Record<string, string>;
 }
 
 export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   insuranceCompany: '',
   riskClassId: '',
   riskType: '',
-  policyNo: '',
+  reference: '',
+  title: '',
   insured: '',
   sumInsured: '',
   rate: '',
@@ -374,6 +407,7 @@ export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   periodFrom: '',
   periodTo: '',
   comment: '',
+  riskDetails: {},
 };
 
 export const TREATY_TYPES = [

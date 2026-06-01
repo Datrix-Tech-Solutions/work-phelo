@@ -6,7 +6,7 @@ import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FacultativeFormValues } from '@/types/reinsurance';
-import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions } from '@/hooks';
+import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions, useRiskTypes } from '@/hooks';
 import { inputClass } from '@/lib/utils';
 
 interface FacultativeFormFieldsProps {
@@ -30,9 +30,15 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
       ? Math.round((new Date(periodTo).getTime() - new Date(periodFrom).getTime()) / 86_400_000)
       : null;
 
+  const selectedRiskTypeId = watch('riskType');
+
   const { options: cedantOptions } = useCedantOptions();
   const { data: riskTypeOptions = [] } = useRiskTypeOptions(riskClassId);
   const { data: currencyOptions = [] } = useCurrencyOptions();
+  const { data: allRiskTypes = [] } = useRiskTypes();
+
+  const selectedRiskType = allRiskTypes.find((rt) => rt.id === selectedRiskTypeId);
+  const riskFields = selectedRiskType?.fields?.filter((f) => f.isActive) ?? [];
 
   return (
     <div className="flex flex-col gap-7">
@@ -73,22 +79,117 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
         </div>
       </FormSection>
 
+      {/* ── Risk Details ── */}
+      {riskFields.length > 0 && (
+        <FormSection title="Risk Details">
+          <div className="grid grid-cols-2 gap-3">
+            {riskFields.map((field) => {
+              const name = `riskDetails.${field.fieldKey}` as const;
+              if (field.fieldType === 'TEXTAREA') {
+                return (
+                  <div key={field.id} className="col-span-2">
+                    <FormField
+                      label={field.label}
+                      type="textarea"
+                      rows={3}
+                      registration={register(name as 'riskDetails', {
+                        required: field.required ? `${field.label} is required` : false,
+                      })}
+                      placeholder={field.placeholder ?? ''}
+                    />
+                  </div>
+                );
+              }
+              if (field.fieldType === 'SELECT' && field.options?.length) {
+                return (
+                  <Controller
+                    key={field.id}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    name={name as any}
+                    control={control}
+                    rules={{ required: field.required ? `${field.label} is required` : false }}
+                    render={({ field: f }) => (
+                      <SearchSelect
+                        label={field.label}
+                        placeholder={field.placeholder ?? `Select ${field.label}…`}
+                        options={field.options!.map((o) => ({ value: o, label: o }))}
+                        value={String(f.value ?? '')}
+                        onChange={f.onChange}
+                      />
+                    )}
+                  />
+                );
+              }
+              if (field.fieldType === 'DATE') {
+                return (
+                  <Controller
+                    key={field.id}
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    name={name as any}
+                    control={control}
+                    rules={{ required: field.required ? `${field.label} is required` : false }}
+                    render={({ field: f }) => (
+                      <DatePicker
+                        label={field.label}
+                        value={String(f.value ?? '')}
+                        onChange={f.onChange}
+                      />
+                    )}
+                  />
+                );
+              }
+              if (field.fieldType === 'CHECKBOX') {
+                return (
+                  <div key={field.id} className="flex flex-col gap-1.5">
+                    <label className="text-sm font-bold text-gray-900">{field.label}</label>
+                    <input
+                      type="checkbox"
+                      {...register(name as 'riskDetails')}
+                      className="w-4 h-4 accent-orange-500"
+                    />
+                  </div>
+                );
+              }
+              return (
+                <FormField
+                  key={field.id}
+                  label={field.label}
+                  type={field.fieldType === 'NUMBER' ? 'number' : 'text'}
+                  registration={register(name as 'riskDetails', {
+                    required: field.required ? `${field.label} is required` : false,
+                  })}
+                  placeholder={field.placeholder ?? ''}
+                />
+              );
+            })}
+          </div>
+        </FormSection>
+      )}
+
       {/* ── Offer Details ── */}
       <FormSection title="Offer Details">
         <div className="flex flex-col gap-5">
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="Policy No."
-              registration={register('policyNo', { required: 'Policy number is required' })}
-              error={errors.policyNo}
+              label="Reference"
+              registration={register('reference', {
+                required: 'Reference is required',
+                minLength: { value: 2, message: 'Min 2 characters' },
+                maxLength: { value: 80, message: 'Max 80 characters' },
+              })}
+              error={errors.reference}
               placeholder="e.g. POL-2024-001"
             />
 
             <FormField
-              label="Insured"
-              registration={register('insured', { required: 'Insured is required' })}
-              error={errors.insured}
-              placeholder="e.g. Accra Breweries Ltd"
+              label="Title"
+              registration={register('title', {
+                required: 'Title is required',
+                minLength: { value: 2, message: 'Min 2 characters' },
+                maxLength: { value: 200, message: 'Max 200 characters' },
+              })}
+              error={errors.title}
+              placeholder="e.g. Property All Risk – Accra Breweries"
             />
           </div>
 
