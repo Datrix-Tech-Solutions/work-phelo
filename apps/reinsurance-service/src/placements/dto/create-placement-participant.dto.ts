@@ -54,6 +54,19 @@ export class CreatePlacementParticipantDto {
   @Max(100)
   signedLinePercent?: number;
 
+  @ApiPropertyOptional({
+    example: 7.5,
+    minimum: 0,
+    maximum: 100,
+    description: 'Brokerage fee percentage for this participant.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  brokerageFee?: number;
+
   @ApiPropertyOptional({ example: 'Lead market indication', maxLength: 1000 })
   @TrimmedString()
   @IsOptional()

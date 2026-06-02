@@ -5,7 +5,13 @@ import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panels/CreateFacultativePanel';
-import { Facultative, FacultativeStatus, FACULTATIVE_STATUSES } from '@/types/reinsurance';
+import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
+import {
+  Facultative,
+  PlacementDisplayStatus,
+  PLACEMENT_DISPLAY_STATUSES,
+  toDisplayStatus,
+} from '@/types/reinsurance';
 import { useFacultatives } from '@/hooks';
 
 const PAGE_SIZE = 10;
@@ -23,64 +29,74 @@ function fmtAmount(val: number) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neutral' | 'danger'> =
-  {
-    Open: 'success',
-    Closed: 'warning',
-    Expired: 'neutral',
-    Cancelled: 'danger',
-  };
+const DISPLAY_STATUS_VARIANT_MAP: Record<
+  PlacementDisplayStatus,
+  'success' | 'warning' | 'neutral' | 'danger'
+> = {
+  Open: 'warning',
+  Closed: 'success',
+  Cancelled: 'danger',
+};
 
-const STATUS_FILTER_OPTIONS = FACULTATIVE_STATUSES.map((s) => ({ value: s, label: s }));
+const STATUS_FILTER_OPTIONS = PLACEMENT_DISPLAY_STATUSES.map((s) => ({ value: s, label: s }));
 
 const COLUMNS: Column<Facultative>[] = [
   {
-    key: 'policyNumber',
+    key: 'reference',
     label: 'Policy Number',
     width: '1.2fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.policyNumber}</span>,
+    render: (row) => <span className="font-medium text-gray-900">{row.reference}</span>,
   },
   {
-    key: 'insuranceCompany',
+    key: 'cedant',
     label: 'Insurance Company',
     width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{row.insuranceCompany}</span>,
+    render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
   },
   {
-    key: 'insured',
+    key: 'title',
     label: 'Insured',
     width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{row.insured}</span>,
+    render: (row) => <span className="text-gray-700">{row.title}</span>,
   },
   {
-    key: 'riskType',
+    key: 'classOfBusiness',
     label: 'Risk Type',
     width: '1.2fr',
-    render: (row) => <span className="text-gray-600">{row.riskType}</span>,
+    render: (row) => <span className="text-gray-600">{row.classOfBusiness ?? '—'}</span>,
   },
   {
     key: 'sumInsured',
     label: 'Sum Insured',
     width: '1.1fr',
-    render: (row) => <span className="text-gray-700">{fmtAmount(row.sumInsured)}</span>,
+    render: (row) => (
+      <span className="text-gray-700">
+        {row.sumInsured != null ? fmtAmount(row.sumInsured) : '—'}
+      </span>
+    ),
   },
   {
     key: 'rate',
     label: 'Rate (%)',
     width: '90px',
-    render: (row) => <span className="text-gray-700">{row.rate}%</span>,
+    render: (row) => (
+      <span className="text-gray-700">{row.rate != null ? `${row.rate}%` : '—'}</span>
+    ),
   },
   {
-    key: 'offerDate',
+    key: 'createdAt',
     label: 'Offer Date',
     width: '1.1fr',
-    render: (row) => <span className="text-gray-600">{fmtDate(row.offerDate)}</span>,
+    render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
   },
   {
     key: 'status',
     label: 'Status',
     width: '110px',
-    render: (row) => <Badge label={row.status} variant={STATUS_VARIANT_MAP[row.status]} />,
+    render: (row) => {
+      const display = toDisplayStatus(row.status);
+      return <Badge label={display} variant={DISPLAY_STATUS_VARIANT_MAP[display]} />;
+    },
   },
 ];
 
@@ -91,6 +107,7 @@ export function FacultativeTable() {
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Facultative | null>(null);
 
   const { data: allRows = [], isLoading } = useFacultatives();
 
@@ -100,14 +117,16 @@ export function FacultativeTable() {
       const q = search.toLowerCase();
       rows = rows.filter(
         (r) =>
-          r.policyNumber.toLowerCase().includes(q) ||
-          r.insuranceCompany.toLowerCase().includes(q) ||
-          r.insured.toLowerCase().includes(q) ||
-          r.riskType.toLowerCase().includes(q),
+          r.reference.toLowerCase().includes(q) ||
+          r.cedant.name.toLowerCase().includes(q) ||
+          r.title.toLowerCase().includes(q) ||
+          (r.classOfBusiness?.toLowerCase().includes(q) ?? false),
       );
     }
     if (statusFilter) {
-      rows = rows.filter((r) => r.status === (statusFilter as FacultativeStatus));
+      rows = rows.filter(
+        (r) => toDisplayStatus(r.status) === (statusFilter as PlacementDisplayStatus),
+      );
     }
     return rows;
   }, [allRows, search, statusFilter]);
@@ -150,9 +169,7 @@ export function FacultativeTable() {
           },
           {
             label: 'Edit Slip',
-            onClick: () => {
-              /* TODO */
-            },
+            onClick: () => setEditTarget(row),
           },
           {
             label: 'Delete',
@@ -170,6 +187,14 @@ export function FacultativeTable() {
       />
 
       <CreateFacultativePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+
+      {editTarget && (
+        <EditFacultativePanel
+          isOpen={!!editTarget}
+          placement={editTarget}
+          onClose={() => setEditTarget(null)}
+        />
+      )}
     </>
   );
 }

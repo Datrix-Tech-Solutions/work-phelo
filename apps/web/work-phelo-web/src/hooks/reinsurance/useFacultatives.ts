@@ -9,10 +9,31 @@ import {
 const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
 
+function parseDecimal(val: unknown): number | null {
+  if (val == null) return null;
+  const n = typeof val === 'string' ? parseFloat(val) : typeof val === 'number' ? val : NaN;
+  return isNaN(n) ? null : n;
+}
+
+function transformPlacement(raw: unknown): Facultative {
+  const p = raw as Record<string, unknown>;
+  return {
+    ...(p as unknown as Facultative),
+    sumInsured: parseDecimal(p.sumInsured),
+    rate: parseDecimal(p.rate),
+    premium: parseDecimal(p.premium),
+    commission: parseDecimal(p.commission),
+    facultativeOffer: parseDecimal(p.facultativeOffer),
+  };
+}
+
 function extractList(data: unknown): Facultative[] {
-  if (Array.isArray(data)) return data as Facultative[];
-  const paginated = data as { items?: Facultative[]; data?: Facultative[] };
-  return paginated?.items ?? paginated?.data ?? [];
+  const raw = Array.isArray(data)
+    ? data
+    : ((data as { items?: unknown[]; data?: unknown[] })?.items ??
+      (data as { items?: unknown[]; data?: unknown[] })?.data ??
+      []);
+  return raw.map(transformPlacement);
 }
 
 export function useFacultatives() {
@@ -29,8 +50,8 @@ export function useFacultativePlacement(id: string) {
   return useQuery({
     queryKey: [...FACULTATIVES_KEY, id],
     queryFn: async () => {
-      const res = await api.get<Facultative>(`${BASE}/${id}`);
-      return res.data;
+      const res = await api.get(`${BASE}/${id}`);
+      return transformPlacement(res.data);
     },
     enabled: !!id,
   });

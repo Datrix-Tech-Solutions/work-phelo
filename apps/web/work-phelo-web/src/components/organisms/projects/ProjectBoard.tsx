@@ -312,7 +312,7 @@ export function ProjectBoard({ projectId }: Props) {
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4 min-h-0">
+      <div className="flex gap-4 overflow-x-auto pb-4">
         {COLUMNS.map((col) => (
           <KanbanColumn
             key={col.key}

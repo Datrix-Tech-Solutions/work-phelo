@@ -1,6 +1,16 @@
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
-import { Facultative, FacultativeStatus } from '@/types/reinsurance';
+import { Facultative, PlacementDisplayStatus, toDisplayStatus } from '@/types/reinsurance';
+
+function toLabel(key: string) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function fmtFieldValue(val: unknown): string {
+  if (val == null) return '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  return String(val);
+}
 
 function fmtDate(iso: string) {
   if (!iso) return '—';
@@ -11,45 +21,63 @@ function fmtDate(iso: string) {
   });
 }
 
-function fmtAmount(val: number, currency: string) {
-  return `${currency} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtAmount(val: number | null, currency: string | null) {
+  if (val == null) return '—';
+  return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neutral' | 'danger'> =
-  {
-    Open: 'success',
-    Closed: 'warning',
-    Expired: 'neutral',
-    Cancelled: 'danger',
-  };
+const DISPLAY_STATUS_VARIANT_MAP: Record<
+  PlacementDisplayStatus,
+  'success' | 'warning' | 'neutral' | 'danger'
+> = {
+  Open: 'warning',
+  Closed: 'success',
+  Cancelled: 'danger',
+};
 
 interface FacultativeOverviewProps {
   placement: Facultative;
 }
 
 export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
-  const facSumInsured = placement.sumInsured * (placement.facultativeOffer / 100);
-  const facPremium = placement.premium * (placement.facultativeOffer / 100);
+  const facOffer = placement.facultativeOffer ?? 0;
+  const facSumInsured =
+    placement.sumInsured != null ? placement.sumInsured * (facOffer / 100) : null;
+  const facPremium = placement.premium != null ? placement.premium * (facOffer / 100) : null;
+
+  const riskEntries = [
+    ...Object.entries(placement.businessDetails ?? {}),
+    ...Object.entries(placement.offerDetails ?? {}),
+  ];
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold text-gray-900">Overview</h2>
-        <Badge label={placement.status} variant={STATUS_VARIANT_MAP[placement.status]} />
+        {(() => {
+          const display = toDisplayStatus(placement.status);
+          return <Badge label={display} variant={DISPLAY_STATUS_VARIANT_MAP[display]} />;
+        })()}
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
-        <DetailField label="Class of Risk" value={placement.riskType} />
-        <DetailField label="Policy No." value={placement.policyNumber} />
-        <DetailField label="Reinsured" value={placement.insuranceCompany} />
-        <DetailField label="Insured" value={placement.insured} />
+        <DetailField label="Class of Risk" value={placement.classOfBusiness ?? '—'} />
+        <DetailField label="Policy No." value={placement.reference} />
+        <DetailField label="Reinsured" value={placement.cedant.name} />
+        <DetailField label="Insured" value={placement.title} />
         <DetailField
           label="Period of Insurance"
-          value={`${fmtDate(placement.periodFrom)} – ${fmtDate(placement.periodTo)}`}
+          value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
         />
-        <DetailField label="Rate (%)" value={`${placement.rate}%`} />
-        <DetailField label="Commission (%)" value={`${placement.commission}%`} />
-        <DetailField label="Fac. Offer (%)" value={`${placement.facultativeOffer}%`} />
+        {riskEntries.map(([key, val]) => (
+          <DetailField key={key} label={toLabel(key)} value={fmtFieldValue(val)} />
+        ))}
+        <DetailField label="Rate (%)" value={placement.rate != null ? `${placement.rate}%` : '—'} />
+        <DetailField
+          label="Commission (%)"
+          value={placement.commission != null ? `${placement.commission}%` : '—'}
+        />
+        <DetailField label="Fac. Offer (%)" value={`${facOffer}%`} />
         <DetailField label="Premium" value={fmtAmount(placement.premium, placement.currency)} />
         <DetailField
           label="Sum Insured"

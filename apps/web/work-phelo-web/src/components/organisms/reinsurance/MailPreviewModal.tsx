@@ -66,7 +66,7 @@ export function MailPreviewModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`Mail — ${placement.insuranceCompany}`}
+      title={`Mail — ${placement.cedant.name}`}
       width="sm:w-[30vw] sm:max-w-[40vw]"
       height="sm:h-[70vh] sm:max-h-[90vh]"
       fullScreenMobile
@@ -161,7 +161,7 @@ export function MailPreviewModal({
             type="text"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            placeholder={`Facultative Offer — ${placement.policyNumber}`}
+            placeholder={`Facultative Offer — ${placement.reference}`}
             className={inputClass()}
           />
         </div>

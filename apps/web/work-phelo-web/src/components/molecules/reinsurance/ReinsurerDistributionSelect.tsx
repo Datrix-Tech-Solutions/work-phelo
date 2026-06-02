@@ -20,14 +20,21 @@ interface EditingState {
 interface ReinsurerDistributionSelectProps {
   value: ReinsurerEntry[];
   onChange: (entries: ReinsurerEntry[]) => void;
+  excludeIds?: string[];
 }
 
-export function ReinsurerDistributionSelect({ value, onChange }: ReinsurerDistributionSelectProps) {
+export function ReinsurerDistributionSelect({
+  value,
+  onChange,
+  excludeIds = [],
+}: ReinsurerDistributionSelectProps) {
   const { data: reinsurers = [] } = useReinsurers();
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [draft, setDraft] = useState('');
 
-  const multiSelectOptions = reinsurers.map((r) => ({ value: r.id, label: r.name }));
+  const multiSelectOptions = reinsurers
+    .filter((r) => !excludeIds.includes(r.id))
+    .map((r) => ({ value: r.id, label: r.name }));
   const selectedIds = value.map((e) => e.id);
 
   const handleSelectionChange = (ids: string[]) => {

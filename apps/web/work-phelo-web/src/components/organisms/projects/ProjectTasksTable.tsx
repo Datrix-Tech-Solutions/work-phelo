@@ -173,6 +173,7 @@ export function ProjectTasksTable({ projectId }: Props) {
         columns={COLUMNS}
         data={filtered}
         isLoading={isLoading}
+        noInternalScroll
         searchPlaceholder="Search tasks or assignee…"
         searchValue={search}
         onSearch={setSearch}

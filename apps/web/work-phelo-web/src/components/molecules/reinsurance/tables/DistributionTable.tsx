@@ -19,33 +19,6 @@ export interface DistributionEntry {
   status: DistributionStatus;
 }
 
-export const INITIAL_DISTRIBUTION_ENTRIES: DistributionEntry[] = [
-  {
-    id: '1',
-    reinsurerCompany: 'Swiss Re',
-    emails: ['john.doe@swissre.com', 'jane.smith@swissre.com'],
-    shareLine: 0,
-    brokerageFee: 0,
-    status: 'Pending',
-  },
-  {
-    id: '2',
-    reinsurerCompany: 'Munich Re',
-    emails: [],
-    shareLine: 0,
-    brokerageFee: 0,
-    status: 'Pending',
-  },
-  {
-    id: '3',
-    reinsurerCompany: 'Hannover Re',
-    emails: [],
-    shareLine: 0,
-    brokerageFee: 0,
-    status: 'Pending',
-  },
-];
-
 const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'danger'> = {
   Pending: 'warning',
   Accepted: 'success',
@@ -210,6 +183,19 @@ export function DistributionTable({
       render: (row) => (
         <span className="text-gray-700">{fmtAmount((row.shareLine / 100) * facPremium)}</span>
       ),
+    },
+    {
+      key: 'brokerageAmount',
+      label: 'Brokerage Amount',
+      width: '1.2fr',
+      render: (row) => {
+        const premiumShare = (row.shareLine / 100) * facPremium;
+        return (
+          <span className="text-gray-700">
+            {fmtAmount((row.brokerageFee / 100) * premiumShare)}
+          </span>
+        );
+      },
     },
     {
       key: 'status',

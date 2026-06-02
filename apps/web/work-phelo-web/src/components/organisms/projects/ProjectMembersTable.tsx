@@ -156,6 +156,7 @@ export function ProjectMembersTable({ projectId }: Props) {
         columns={COLUMNS}
         data={filtered}
         isLoading={isLoading}
+        noInternalScroll
         searchPlaceholder="Search members…"
         searchValue={search}
         onSearch={setSearch}

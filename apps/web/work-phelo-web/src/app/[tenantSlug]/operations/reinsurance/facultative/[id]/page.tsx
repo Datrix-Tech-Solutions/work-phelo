@@ -3,11 +3,13 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
+import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement } from '@/hooks';
 import { FacultativeOverview } from '@/components/molecules/reinsurance/FacultativeOverview';
 import { DistributionListTab } from '@/components/molecules/reinsurance/DistributionListTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 
 type FacultativeTab = 'distribution' | 'closings';
 
@@ -24,11 +26,12 @@ export default function FacultativeDetailPage({
   const { tenantSlug, id } = use(params);
   const { data: placement, isLoading } = useFacultativePlacement(id);
   const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
+  const [editOpen, setEditOpen] = useState(false);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Breadcrumb */}
-      <div className={`${pageBreadcrumb} shrink-0`}>
+      <div className={`${pageBreadcrumb} shrink-0 flex items-center justify-between`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link
             href={`/${tenantSlug}/operations/reinsurance/facultative`}
@@ -37,8 +40,13 @@ export default function FacultativeDetailPage({
             Facultative
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">{placement?.policyNumber ?? '—'}</span>
+          <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
         </nav>
+        {placement && (
+          <Button size="sm" onClick={() => setEditOpen(true)}>
+            Edit
+          </Button>
+        )}
       </div>
 
       {/* Content */}
@@ -76,6 +84,14 @@ export default function FacultativeDetailPage({
           </div>
         )}
       </div>
+
+      {placement && (
+        <EditFacultativePanel
+          isOpen={editOpen}
+          placement={placement}
+          onClose={() => setEditOpen(false)}
+        />
+      )}
     </div>
   );
 }
