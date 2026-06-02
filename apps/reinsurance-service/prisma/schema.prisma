@@ -294,6 +294,7 @@ model PlacementParticipant {
   role              PlacementParticipantRole
   sharePercent      Decimal?                 @db.Decimal(7, 4)
   signedLinePercent Decimal?                 @db.Decimal(7, 4)
+  brokerageFee      Decimal?                 @db.Decimal(5, 2)
   notes             String?
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt

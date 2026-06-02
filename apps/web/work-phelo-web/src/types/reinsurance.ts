@@ -333,26 +333,67 @@ export const RISK_CLASS_FORM_DEFAULTS: RiskClassFormValues = {
 };
 
 /* ── Facultative ── */
-export const FACULTATIVE_STATUSES = ['Open', 'Closed', 'Expired', 'Cancelled'] as const;
+export const FACULTATIVE_STATUSES = [
+  'DRAFT',
+  'MARKETING',
+  'QUOTED',
+  'BOUND',
+  'DECLINED',
+  'CANCELLED',
+] as const;
 export type FacultativeStatus = (typeof FACULTATIVE_STATUSES)[number];
+
+export const PLACEMENT_DISPLAY_STATUSES = ['Open', 'Closed', 'Cancelled'] as const;
+export type PlacementDisplayStatus = (typeof PLACEMENT_DISPLAY_STATUSES)[number];
+
+export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStatus {
+  if (status === 'BOUND') return 'Closed';
+  if (status === 'CANCELLED') return 'Cancelled';
+  return 'Open';
+}
+
+export type PlacementParticipantRole = 'BROKER' | 'REINSURER' | 'LEAD_REINSURER' | 'CO_REINSURER';
+
+export interface PlacementParticipant {
+  id: string;
+  counterpartyId: string;
+  role: PlacementParticipantRole;
+  sharePercent: string | null;
+  signedLinePercent: string | null;
+  brokerageFee: string | null;
+  notes: string | null;
+  counterparty: { id: string; name: string };
+}
+
+export interface PlacementParticipantPayload {
+  counterpartyId: string;
+  role: PlacementParticipantRole;
+  sharePercent?: number;
+  signedLinePercent?: number;
+  brokerageFee?: number;
+  notes?: string;
+}
 
 export interface Facultative {
   id: string;
-  policyNumber: string;
-  insuranceCompany: string;
-  insured: string;
-  riskType: string;
-  sumInsured: number;
-  rate: number;
-  commission: number;
-  facultativeOffer: number;
-  premium: number;
-  currency: string;
-  periodFrom: string; // ISO date
-  periodTo: string; // ISO date
-  year: number;
-  offerDate: string; // ISO date
+  reference: string;
+  title: string;
+  classOfBusiness: string | null;
+  riskTypeId: string | null;
+  cedant: { id: string; name: string };
+  businessDetails: Record<string, unknown> | null;
+  offerDetails: Record<string, unknown> | null;
+  sumInsured: number | null;
+  rate: number | null;
+  commission: number | null;
+  facultativeOffer: number | null;
+  premium: number | null;
+  currency: string | null;
+  inceptionDate: string | null;
+  expiryDate: string | null;
+  createdAt: string;
   status: FacultativeStatus;
+  participants: PlacementParticipant[];
 }
 
 /* ── Facultative API payloads ── */
@@ -367,6 +408,11 @@ export interface CreateFacultativePayload {
   facultativeOffer: number;
   commission: number;
   currency: string;
+  inceptionDate?: string;
+  expiryDate?: string;
+  businessDetails?: Record<string, unknown>;
+  offerDetails?: Record<string, unknown>;
+  participants?: PlacementParticipantPayload[];
 }
 
 export type UpdateFacultativePayload = Partial<Omit<CreateFacultativePayload, 'cedantId'>>;

@@ -653,6 +653,7 @@ export class PlacementsService {
         role: participant.role,
         sharePercent: participant.sharePercent,
         signedLinePercent: participant.signedLinePercent,
+        brokerageFee: participant.brokerageFee,
         notes: this.cleanOptional(participant.notes),
       })),
     };

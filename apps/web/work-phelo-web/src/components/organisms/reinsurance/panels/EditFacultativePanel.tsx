@@ -1,21 +1,34 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import {
+  Facultative,
   FacultativeFormValues,
   FACULTATIVE_FORM_DEFAULTS,
   RiskTypeField,
 } from '@/types/reinsurance';
-import { useCreateFacultative, useRiskTypes } from '@/hooks';
+import { useUpdateFacultative, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
-interface CreateFacultativePanelProps {
+interface EditFacultativePanelProps {
   isOpen: boolean;
+  placement: Facultative;
   onClose: () => void;
+}
+
+function mergeRiskDetails(
+  businessDetails: Record<string, unknown> | null,
+  offerDetails: Record<string, unknown> | null,
+): Record<string, string> {
+  const merged: Record<string, string> = {};
+  for (const [k, v] of Object.entries(businessDetails ?? {})) merged[k] = String(v ?? '');
+  for (const [k, v] of Object.entries(offerDetails ?? {})) merged[k] = String(v ?? '');
+  return merged;
 }
 
 function splitRiskDetails(
@@ -44,9 +57,28 @@ function splitRiskDetails(
   };
 }
 
-export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePanelProps) {
+function placementToFormValues(placement: Facultative): FacultativeFormValues {
+  return {
+    ...FACULTATIVE_FORM_DEFAULTS,
+    insuranceCompany: placement.cedant.id,
+    riskType: placement.riskTypeId ?? '',
+    reference: placement.reference,
+    title: placement.title,
+    sumInsured: placement.sumInsured ?? '',
+    rate: placement.rate ?? '',
+    premium: placement.premium ?? '',
+    facultativeOffer: placement.facultativeOffer ?? '',
+    commission: placement.commission ?? '',
+    currency: placement.currency ?? '',
+    periodFrom: placement.inceptionDate ?? '',
+    periodTo: placement.expiryDate ?? '',
+    riskDetails: mergeRiskDetails(placement.businessDetails, placement.offerDetails),
+  };
+}
+
+export function EditFacultativePanel({ isOpen, placement, onClose }: EditFacultativePanelProps) {
   const form = useForm<FacultativeFormValues>({
-    defaultValues: FACULTATIVE_FORM_DEFAULTS,
+    defaultValues: placementToFormValues(placement),
   });
 
   const {
@@ -55,7 +87,13 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
     formState: { isSubmitting },
   } = form;
 
-  const { mutateAsync: createFacultative } = useCreateFacultative();
+  useEffect(() => {
+    if (isOpen) {
+      reset(placementToFormValues(placement));
+    }
+  }, [isOpen, placement, reset]);
+
+  const { mutateAsync: updateFacultative } = useUpdateFacultative();
   const { data: allRiskTypes = [] } = useRiskTypes();
 
   const handleClose = () => {
@@ -71,9 +109,9 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
         selectedRiskType?.fields ?? [],
       );
 
-      await createFacultative({
-        cedantId: values.insuranceCompany,
-        riskTypeId: values.riskType,
+      await updateFacultative({
+        id: placement.id,
+        riskTypeId: values.riskType || undefined,
         reference: values.reference,
         title: values.title,
         sumInsured: values.sumInsured as number,
@@ -89,7 +127,7 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
       });
       useToastStore
         .getState()
-        .addToast({ message: 'Placement created successfully', type: 'success' });
+        .addToast({ message: 'Placement updated successfully', type: 'success' });
       handleClose();
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
@@ -100,14 +138,14 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Facultative Placement Slip"
+      title="Edit Facultative Placement"
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
             Cancel
           </Button>
           <Button onClick={handleSubmit(onSubmit)} isLoading={isSubmitting} loadingText="Saving…">
-            Save
+            Save Changes
           </Button>
         </div>
       }

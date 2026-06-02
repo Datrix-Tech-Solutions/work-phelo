@@ -52,6 +52,15 @@ export class PlacementParticipantResponseDto {
   })
   signedLinePercent!: string | null;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: '7.50',
+    description:
+      'Brokerage fee percentage. Decimal returned as JSON string by Prisma.',
+  })
+  brokerageFee!: string | null;
+
   @ApiPropertyOptional({ type: String, nullable: true, example: 'Lead market' })
   notes!: string | null;
 

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { pageWrapper } from '@/lib/layout';
+import { pageBreadcrumb, pagePx } from '@/lib/layout';
 import { ProjectBanner } from '@/components/molecules/projects/ProjectBanner';
 import { useProject } from '@/hooks';
 
@@ -29,7 +29,7 @@ export default function ProjectDetailLayout({
 
   if (isLoading) {
     return (
-      <div className={cn(pageWrapper, 'flex flex-col gap-6 animate-pulse')}>
+      <div className={cn(pageBreadcrumb, 'flex flex-col gap-6 flex-1 min-h-0 animate-pulse')}>
         <div className="h-4 w-48 bg-gray-200 rounded" />
         <div className="h-24 bg-gray-200 rounded-card" />
         <div className="h-10 bg-gray-100 rounded" />
@@ -38,7 +38,7 @@ export default function ProjectDetailLayout({
   }
 
   if (!project) {
-    return <div className={cn(pageWrapper, 'text-sm text-gray-500')}>Project not found.</div>;
+    return <div className={cn(pageBreadcrumb, 'text-sm text-gray-500')}>Project not found.</div>;
   }
 
   const tabs = [
@@ -48,38 +48,45 @@ export default function ProjectDetailLayout({
   ];
 
   return (
-    <div className={cn(pageWrapper, 'flex flex-col gap-6')}>
-      {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-gray-400">
-        <Link href={base} className="hover:text-gray-700 transition-colors">
-          Projects
-        </Link>
-        <ChevronRight className="w-4 h-4" />
-        <span className="text-gray-700 font-medium">{project.name}</span>
-      </nav>
-
-      <ProjectBanner project={project} />
-
-      {/* Tabs */}
-      <div className="flex items-end gap-1 border-b border-gray-200 shrink-0">
-        {tabs.map((tab) => {
-          const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
-          return (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              className={cn(
-                'relative px-6 py-3 text-sm transition-colors whitespace-nowrap',
-                isActive ? TAB_ACTIVE : TAB_IDLE,
-              )}
-            >
-              {tab.label}
-            </Link>
-          );
-        })}
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Fixed breadcrumb */}
+      <div className={`${pageBreadcrumb} shrink-0`}>
+        <nav className="flex items-center gap-2 text-sm text-gray-400">
+          <Link href={base} className="hover:text-gray-700 transition-colors">
+            Projects
+          </Link>
+          <ChevronRight className="w-4 h-4" />
+          <span className="text-gray-700 font-medium">{project.name}</span>
+        </nav>
       </div>
 
-      {children}
+      {/* Scroll container — not a flex container so children grow to full natural height */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className={cn(pagePx, 'flex flex-col gap-6 pt-4 pb-8')}>
+          <ProjectBanner project={project} />
+
+          {/* Tabs */}
+          <div className="flex items-end gap-1 border-b border-gray-200">
+            {tabs.map((tab) => {
+              const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={cn(
+                    'relative px-6 py-3 text-sm transition-colors whitespace-nowrap',
+                    isActive ? TAB_ACTIVE : TAB_IDLE,
+                  )}
+                >
+                  {tab.label}
+                </Link>
+              );
+            })}
+          </div>
+
+          {children}
+        </div>
+      </div>
     </div>
   );
 }
