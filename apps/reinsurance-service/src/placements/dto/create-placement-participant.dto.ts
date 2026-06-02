@@ -43,10 +43,15 @@ export class CreatePlacementParticipantDto {
   status?: PlacementParticipantStatus;
 
   @ApiPropertyOptional({
-    example: 45,
+    example: 30,
     minimum: 0,
     maximum: 100,
-    description: 'Target or offered participation percentage.',
+    description:
+      'Offered participation percentage (0–100). ' +
+      'Represents the share of the available offer extended to this participant. ' +
+      'Multiple participants may each be offered the full available share during the ' +
+      'marketing phase — the aggregate totalOfferedPercent can therefore exceed 100% and that is expected. ' +
+      'No global cap is enforced on totalOfferedPercent.',
   })
   @IsOptional()
   @Type(() => Number)
@@ -59,7 +64,12 @@ export class CreatePlacementParticipantDto {
     example: 25,
     minimum: 0,
     maximum: 100,
-    description: 'Signed line percentage after bind.',
+    description:
+      'Signed line percentage — the share this participant actually accepts (0–100). ' +
+      'Required when status is ACCEPTED (must be > 0). ' +
+      'Cannot exceed sharePercent when both are provided. ' +
+      'The combined signedLinePercent of all ACCEPTED participants must not exceed ' +
+      'the placement facultativeOffer (or 100 when absent).',
   })
   @IsOptional()
   @Type(() => Number)

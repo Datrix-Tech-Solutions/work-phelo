@@ -173,21 +173,37 @@ the placement is not `CLOSED`.
 
 ### Participant capacity validation rules
 
-The backend enforces these rules on every participant write:
+**Offered share (`sharePercent`) vs accepted/signed line (`signedLinePercent`)
+are separate concepts.**
+
+`sharePercent` is the percentage of the available offer being extended to a
+participant. During the marketing phase the broker may extend the same available
+share to multiple reinsurers simultaneously — for example, if `facultativeOffer`
+is 30%, three separate reinsurers can each be offered 30% while only one (or a
+combination) will ultimately accept. The aggregate `totalOfferedPercent` can
+therefore exceed 100% and that is expected.
+
+`signedLinePercent` is the amount a reinsurer actually agrees to take. Only
+`ACCEPTED` participants' signed lines count against the facultative offer cap.
+
+**Rules enforced on every participant write:**
 
 - `ACCEPTED` participants **must** have `signedLinePercent > 0`.
-- `signedLinePercent` cannot exceed `sharePercent` when both are supplied.
-- Total `sharePercent` across all participants cannot exceed `100`.
-- Total `signedLinePercent` across all participants cannot exceed `100`.
-- Only `ACCEPTED` participants contribute to `totalAcceptedPercent`.
-- All participants contribute to `totalOfferedPercent` via their `sharePercent`
-  regardless of status.
+- `signedLinePercent` cannot exceed `sharePercent` when both are explicitly
+  provided.
+- Total `signedLinePercent` of **ACCEPTED-only** participants must not exceed
+  `facultativeOffer` (or `100` when `facultativeOffer` is not set). Attempting
+  to add or accept beyond the cap returns `400 Bad Request`.
+- `DECLINED` participants never contribute to the accepted capacity cap,
+  regardless of their `signedLinePercent`.
+- No global cap on `totalOfferedPercent` — the same share can be offered to as
+  many participants as needed.
 
 The three computed aggregates returned on every placement response are
 authoritative — treat them as the source of truth, not derived values:
 
 ```
-totalOfferedPercent  = sum of sharePercent for ALL participants
+totalOfferedPercent  = sum of sharePercent for ALL participants (may exceed 100)
 totalAcceptedPercent = sum of signedLinePercent for ACCEPTED participants only
 remainingPercent     = max(0, facultativeOffer (or 100) − totalAcceptedPercent)
 ```
@@ -218,13 +234,11 @@ The following items are **not yet enforced** by the backend. They are
 documented here so the frontend does not build assumptions that conflict with
 future enforcement, and to serve as a tracked follow-up.
 
-**Gap 1 — Accepted capacity may exceed `facultativeOffer`.**
-`assertCapacity()` validates that total `signedLinePercent` ≤ 100 but does not
-block ACCEPTED participants whose combined `signedLinePercent` exceeds the
-`facultativeOffer` percentage. Accepting beyond the target triggers
-`PLACED` but is not rejected. Recommended fix: add a cap check against
-`facultativeOffer` inside `assertCapacity` when `facultativeOffer` is set.
-Impact: low-blast-radius data quality issue, no data loss. Target: follow-up PR.
+**Gap 1 — ~~Accepted capacity may exceed `facultativeOffer`.~~ Fixed.**
+`assertAcceptedCap()` now enforces that the combined `signedLinePercent` of
+`ACCEPTED` participants cannot exceed `facultativeOffer` (or 100 when absent).
+The previous global `totalSignedLinePercent ≤ 100` check (which applied to all
+participants regardless of status) has been replaced with this targeted cap.
 
 **Gap 2 — `CANCELLED` placements can currently be archived.**
 `assertArchivable()` guards against archiving `CLOSED` placements but not

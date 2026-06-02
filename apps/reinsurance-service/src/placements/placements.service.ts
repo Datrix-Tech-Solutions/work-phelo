@@ -175,6 +175,7 @@ export class PlacementsService {
     this.validateDates(dto.inceptionDate, dto.expiryDate);
     await this.assertCedant(user.tenantId, dto.cedantId);
     await this.assertParticipants(user.tenantId, dto.participants ?? []);
+    this.assertAcceptedCap(dto.participants ?? [], dto.facultativeOffer);
 
     // Resolve riskTypeId and derive classOfBusiness from RiskType.name
     let resolvedRiskTypeId: string | null = null;
@@ -282,6 +283,11 @@ export class PlacementsService {
     }
     if (dto.participants) {
       await this.assertParticipants(user.tenantId, dto.participants);
+      const effectiveCap =
+        dto.facultativeOffer !== undefined
+          ? dto.facultativeOffer
+          : existing.facultativeOffer;
+      this.assertAcceptedCap(dto.participants, effectiveCap);
     }
     this.assertEditable(existing);
 
@@ -526,10 +532,10 @@ export class PlacementsService {
     const existing = await this.findOne(user.tenantId, placementId);
     this.assertEditable(existing);
     await this.assertParticipants(user.tenantId, [dto]);
-    this.assertParticipantCollection([
-      ...existing.participants,
-      this.toCapacityInput(dto),
-    ]);
+    this.assertParticipantCollection(
+      [...existing.participants, this.toCapacityInput(dto)],
+      existing.facultativeOffer,
+    );
 
     try {
       await this.prisma.placementParticipant.create({
@@ -585,6 +591,7 @@ export class PlacementsService {
       existing.participants.map((item) =>
         item.id === participantId ? nextParticipant : item,
       ),
+      existing.facultativeOffer,
     );
 
     try {
@@ -677,6 +684,7 @@ export class PlacementsService {
       existing.participants.map((item) =>
         item.id === participantId ? nextParticipant : item,
       ),
+      existing.facultativeOffer,
     );
 
     await this.prisma.placementParticipant.update({
@@ -770,6 +778,7 @@ export class PlacementsService {
 
   private assertParticipantCollection(
     participants: ParticipantCapacityInput[],
+    facultativeOffer?: number | Prisma.Decimal | null,
   ): void {
     const keys = new Set<string>();
     for (const participant of participants) {
@@ -782,6 +791,7 @@ export class PlacementsService {
       keys.add(duplicateKey);
     }
     this.assertCapacity(participants);
+    this.assertAcceptedCap(participants, facultativeOffer);
   }
 
   private assertParticipantRoleMatchesType(
@@ -807,26 +817,6 @@ export class PlacementsService {
   }
 
   private assertCapacity(participants: ParticipantCapacityInput[]): void {
-    const totalOffered = participants.reduce(
-      (sum, item) => sum + this.decimalToNumber(item.sharePercent),
-      0,
-    );
-    const totalSigned = participants.reduce(
-      (sum, item) => sum + this.decimalToNumber(item.signedLinePercent),
-      0,
-    );
-
-    if (totalOffered > 100) {
-      throw new BadRequestException(
-        'Total offered participant share cannot exceed 100%',
-      );
-    }
-    if (totalSigned > 100) {
-      throw new BadRequestException(
-        'Total signed participant line cannot exceed 100%',
-      );
-    }
-
     for (const participant of participants) {
       if (
         participant.status === PlacementParticipantStatus.ACCEPTED &&
@@ -839,7 +829,9 @@ export class PlacementsService {
 
       if (
         participant.sharePercent !== undefined &&
+        participant.sharePercent !== null &&
         participant.signedLinePercent !== undefined &&
+        participant.signedLinePercent !== null &&
         this.decimalToNumber(participant.signedLinePercent) >
           this.decimalToNumber(participant.sharePercent)
       ) {
@@ -847,6 +839,23 @@ export class PlacementsService {
           'Signed line cannot exceed offered participant share',
         );
       }
+    }
+  }
+
+  private assertAcceptedCap(
+    participants: ParticipantCapacityInput[],
+    facultativeOffer: number | Prisma.Decimal | null | undefined,
+  ): void {
+    const cap = this.decimalToNumber(facultativeOffer) || 100;
+    const totalAccepted = this.roundPercent(
+      participants
+        .filter((p) => p.status === PlacementParticipantStatus.ACCEPTED)
+        .reduce((sum, p) => sum + this.decimalToNumber(p.signedLinePercent), 0),
+    );
+    if (totalAccepted > cap) {
+      throw new BadRequestException(
+        `Total accepted signed line (${totalAccepted}%) cannot exceed the facultative offer cap (${cap}%)`,
+      );
     }
   }
 

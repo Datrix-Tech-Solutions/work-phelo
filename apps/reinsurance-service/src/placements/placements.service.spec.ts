@@ -272,13 +272,13 @@ describe('PlacementsService', () => {
     expect(prisma.placement.create).not.toHaveBeenCalled();
   });
 
-  it('rejects signed lines above offered shares or total capacity', async () => {
+  it('rejects a signed line percentage that exceeds the participant offered share', async () => {
     prisma.counterparty.findFirst.mockResolvedValue({ id: 'cedant-1' });
 
     await expect(
       service.create(user, {
         reference: 'FAC-2026-0004',
-        title: 'Invalid Capacity',
+        title: 'Invalid Signed Line',
         cedantId: 'cedant-1',
         participants: [
           {
@@ -290,27 +290,355 @@ describe('PlacementsService', () => {
         ],
       }),
     ).rejects.toThrow(BadRequestException);
+    expect(prisma.placement.create).not.toHaveBeenCalled();
+  });
+
+  it('allows multiple participants to be offered the same share before any acceptance', async () => {
+    prisma.counterparty.findFirst.mockResolvedValue({ id: 'cedant-1' });
+    prisma.counterparty.findMany.mockResolvedValue([
+      { id: 'reinsurer-1', type: CounterpartyType.REINSURER, name: 'Ghana Re' },
+      {
+        id: 'reinsurer-2',
+        type: CounterpartyType.REINSURER,
+        name: 'Continental Re',
+      },
+      {
+        id: 'reinsurer-3',
+        type: CounterpartyType.REINSURER,
+        name: 'Africa Re',
+      },
+    ]);
+    prisma.placement.create.mockResolvedValue({
+      ...placement,
+      facultativeOffer: 30,
+      participants: [],
+    });
 
     await expect(
       service.create(user, {
-        reference: 'FAC-2026-0005',
-        title: 'Too Much Capacity',
+        reference: 'FAC-2026-0010',
+        title: 'Multi-Market Offer',
         cedantId: 'cedant-1',
+        facultativeOffer: 30,
         participants: [
           {
             counterpartyId: 'reinsurer-1',
-            role: PlacementParticipantRole.REINSURER,
-            signedLinePercent: 60,
+            role: PlacementParticipantRole.LEAD_REINSURER,
+            sharePercent: 30,
           },
           {
             counterpartyId: 'reinsurer-2',
             role: PlacementParticipantRole.CO_REINSURER,
-            signedLinePercent: 50,
+            sharePercent: 30,
+          },
+          {
+            counterpartyId: 'reinsurer-3',
+            role: PlacementParticipantRole.CO_REINSURER,
+            sharePercent: 30,
           },
         ],
       }),
+    ).resolves.toBeDefined();
+    expect(prisma.placement.create).toHaveBeenCalled();
+  });
+
+  it('rejects adding an ACCEPTED participant that would push accepted total above the facultative offer cap', async () => {
+    const existingWithAccepted = {
+      ...placement,
+      status: PlacementStatus.MARKETING,
+      facultativeOffer: 30,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.LEAD_REINSURER,
+          status: PlacementParticipantStatus.ACCEPTED,
+          sharePercent: 30,
+          signedLinePercent: 25,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    prisma.placement.findFirst.mockResolvedValue(existingWithAccepted);
+    prisma.counterparty.findMany.mockResolvedValue([
+      {
+        id: 'reinsurer-2',
+        type: CounterpartyType.REINSURER,
+        name: 'Continental Re',
+      },
+    ]);
+
+    await expect(
+      service.addParticipant(user, 'placement-1', {
+        counterpartyId: 'reinsurer-2',
+        role: PlacementParticipantRole.CO_REINSURER,
+        sharePercent: 30,
+        signedLinePercent: 10,
+        status: PlacementParticipantStatus.ACCEPTED,
+      }),
     ).rejects.toThrow(BadRequestException);
-    expect(prisma.placement.create).not.toHaveBeenCalled();
+    expect(prisma.placementParticipant.create).not.toHaveBeenCalled();
+  });
+
+  it('allows ACCEPTED signed capacity that exactly meets the facultative offer cap', async () => {
+    const emptyMarketing = {
+      ...placement,
+      status: PlacementStatus.MARKETING,
+      facultativeOffer: 30,
+      participants: [],
+    };
+    const acceptedParticipant = {
+      id: 'participant-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      counterpartyId: 'reinsurer-1',
+      role: PlacementParticipantRole.LEAD_REINSURER,
+      status: PlacementParticipantStatus.ACCEPTED,
+      sharePercent: 30,
+      signedLinePercent: 30,
+      brokerageFee: null,
+      notes: null,
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Ghana Re',
+        registrationNumber: null,
+      },
+    };
+    const withAccepted = {
+      ...emptyMarketing,
+      participants: [acceptedParticipant],
+    };
+    const placed = { ...withAccepted, status: PlacementStatus.PLACED };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(emptyMarketing)
+      .mockResolvedValueOnce(withAccepted);
+    prisma.counterparty.findMany.mockResolvedValue([
+      { id: 'reinsurer-1', type: CounterpartyType.REINSURER, name: 'Ghana Re' },
+    ]);
+    prisma.placementParticipant.create.mockResolvedValue({
+      id: 'participant-1',
+    });
+    prisma.placementStatusHistory.create.mockResolvedValue({ id: 'sh-1' });
+    prisma.placement.update.mockResolvedValue(placed);
+
+    const result = await service.addParticipant(user, 'placement-1', {
+      counterpartyId: 'reinsurer-1',
+      role: PlacementParticipantRole.LEAD_REINSURER,
+      sharePercent: 30,
+      signedLinePercent: 30,
+      status: PlacementParticipantStatus.ACCEPTED,
+    });
+
+    expect(prisma.placementParticipant.create).toHaveBeenCalled();
+    expect(result.totalAcceptedPercent).toBe(30);
+    expect(result.remainingPercent).toBe(0);
+  });
+
+  it('does not count a DECLINED participant signed line toward the accepted capacity cap', async () => {
+    const withAccepted = {
+      ...placement,
+      status: PlacementStatus.PARTIALLY_PLACED,
+      facultativeOffer: 30,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.LEAD_REINSURER,
+          status: PlacementParticipantStatus.ACCEPTED,
+          sharePercent: 30,
+          signedLinePercent: 25,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    const withDeclined = {
+      ...withAccepted,
+      status: PlacementStatus.PARTIALLY_PLACED,
+      participants: [
+        withAccepted.participants[0],
+        {
+          id: 'participant-2',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-2',
+          role: PlacementParticipantRole.CO_REINSURER,
+          status: PlacementParticipantStatus.DECLINED,
+          sharePercent: 30,
+          signedLinePercent: 10,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-2',
+            type: CounterpartyType.REINSURER,
+            name: 'Continental Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(withAccepted)
+      .mockResolvedValueOnce(withDeclined);
+    prisma.counterparty.findMany.mockResolvedValue([
+      {
+        id: 'reinsurer-2',
+        type: CounterpartyType.REINSURER,
+        name: 'Continental Re',
+      },
+    ]);
+    prisma.placementParticipant.create.mockResolvedValue({
+      id: 'participant-2',
+    });
+
+    const result = await service.addParticipant(user, 'placement-1', {
+      counterpartyId: 'reinsurer-2',
+      role: PlacementParticipantRole.CO_REINSURER,
+      sharePercent: 30,
+      signedLinePercent: 10,
+      status: PlacementParticipantStatus.DECLINED,
+    });
+
+    expect(prisma.placementParticipant.create).toHaveBeenCalled();
+    expect(result.totalAcceptedPercent).toBe(25);
+    expect(result.remainingPercent).toBe(5);
+  });
+
+  it('rejects changing participant status to ACCEPTED when accepted total would exceed the facultative offer cap', async () => {
+    const twoParticipants = {
+      ...placement,
+      status: PlacementStatus.MARKETING,
+      facultativeOffer: 30,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.LEAD_REINSURER,
+          status: PlacementParticipantStatus.ACCEPTED,
+          sharePercent: 30,
+          signedLinePercent: 25,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+        {
+          id: 'participant-2',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-2',
+          role: PlacementParticipantRole.CO_REINSURER,
+          status: PlacementParticipantStatus.QUOTED,
+          sharePercent: 30,
+          signedLinePercent: 10,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-2',
+            type: CounterpartyType.REINSURER,
+            name: 'Continental Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    prisma.placement.findFirst.mockResolvedValue(twoParticipants);
+
+    await expect(
+      service.changeParticipantStatus(user, 'placement-1', 'participant-2', {
+        status: PlacementParticipantStatus.ACCEPTED,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placementParticipant.update).not.toHaveBeenCalled();
+  });
+
+  it('returns totalOfferedPercent above 100 and remainingPercent based on accepted not offered', async () => {
+    const makeParticipant = (
+      id: string,
+      cid: string,
+      sharePercent: number,
+      status: PlacementParticipantStatus,
+    ) => ({
+      id,
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      counterpartyId: cid,
+      role: PlacementParticipantRole.CO_REINSURER,
+      status,
+      sharePercent,
+      signedLinePercent: null,
+      brokerageFee: null,
+      notes: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      counterparty: {
+        id: cid,
+        type: CounterpartyType.REINSURER,
+        name: `Re ${id}`,
+        registrationNumber: null,
+      },
+    });
+
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      facultativeOffer: 30,
+      participants: [
+        makeParticipant(
+          'p-1',
+          'r-1',
+          30,
+          PlacementParticipantStatus.OFFER_SENT,
+        ),
+        makeParticipant(
+          'p-2',
+          'r-2',
+          30,
+          PlacementParticipantStatus.OFFER_SENT,
+        ),
+        makeParticipant(
+          'p-3',
+          'r-3',
+          30,
+          PlacementParticipantStatus.OFFER_SENT,
+        ),
+        makeParticipant(
+          'p-4',
+          'r-4',
+          30,
+          PlacementParticipantStatus.OFFER_SENT,
+        ),
+      ],
+    });
+
+    const result = await service.findOne('tenant-1', 'placement-1');
+
+    expect(result.totalOfferedPercent).toBe(120);
+    expect(result.totalAcceptedPercent).toBe(0);
+    expect(result.remainingPercent).toBe(30);
   });
 
   it('updates only an active record using the tenant-qualified compound key', async () => {
