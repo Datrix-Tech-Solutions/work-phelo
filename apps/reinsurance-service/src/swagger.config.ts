@@ -26,8 +26,7 @@ Counterparty, placement and email endpoints require the tenant to have the \`ope
 
 ### Risk settings integration
 New frontend work should use \`/risk-classes\` for RiskClass CRUD and
-\`/settings/risk-types\` for RiskType CRUD, fields and form schemas. The older
-\`/settings/business-classes\` route remains available as a compatibility alias.
+\`/settings/risk-types\` for RiskType CRUD, fields and form schemas.
 
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:

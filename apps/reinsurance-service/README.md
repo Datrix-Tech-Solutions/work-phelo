@@ -142,20 +142,9 @@ DELETE /api/v1/operations/reinsurance/settings/risk-types/:id/fields/:fieldId
 GET    /api/v1/operations/reinsurance/settings/risk-types/:id/form-schema
 ```
 
-The legacy settings route remains available as a compatibility endpoint:
-
-```text
-/api/v1/operations/reinsurance/settings/business-classes
-```
-
-Internally, this route now maps to the renamed `RiskClassSettingsService` and
-the new `RiskTypeSettingsService`. The storage model has moved from
-BusinessClass/BusinessClassField to RiskClass/RiskType/RiskTypeField.
-
-Compatibility routes are retained for now so older frontend calls do not break.
-New frontend work should not call `/settings/business-classes/:id/fields`
-because that route treats `:id` as a risk type ID even though the route name is
-business-class oriented. Use `/settings/risk-types/:id/fields` instead.
+The storage model has moved from BusinessClass/BusinessClassField to
+RiskClass/RiskType/RiskTypeField. Frontend integrations should use the explicit
+Risk Class and Risk Type routes listed above.
 
 Recommended setup flow:
 
