@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -12,7 +13,10 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { AnnouncementAudienceType } from '../../../prisma/generated/client';
+import {
+  AnnouncementAudienceType,
+  AnnouncementDeliveryChannel,
+} from '../../../prisma/generated/client';
 
 export class CreateAnnouncementDto {
   @ApiProperty({
@@ -81,6 +85,23 @@ export class CreateAnnouncementDto {
   @Type(() => Boolean)
   @IsBoolean()
   sendEmail?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Delivery channels for this announcement. IN_APP is always applied internally. If omitted, sendEmail controls EMAIL compatibility.',
+    enum: AnnouncementDeliveryChannel,
+    isArray: true,
+    example: [
+      AnnouncementDeliveryChannel.IN_APP,
+      AnnouncementDeliveryChannel.EMAIL,
+    ],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(3)
+  @ArrayUnique()
+  @IsEnum(AnnouncementDeliveryChannel, { each: true })
+  deliveryChannels?: AnnouncementDeliveryChannel[];
 
   @ApiPropertyOptional({
     description: 'Optional expiry date after which the announcement is hidden',
