@@ -300,8 +300,10 @@ export interface ReinsuranceCounterpartyAuditEvent {
 export type ReinsurancePlacementStatus =
   | 'DRAFT'
   | 'MARKETING'
-  | 'QUOTED'
-  | 'BOUND'
+  | 'PARTIALLY_PLACED'
+  | 'PLACED'
+  | 'CLOSING'
+  | 'CLOSED'
   | 'DECLINED'
   | 'CANCELLED';
 

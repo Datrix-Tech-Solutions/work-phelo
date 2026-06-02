@@ -28,6 +28,7 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { RequestUser } from '@work-phelo/types';
+import { PlacementStatus } from '../../prisma/generated/client';
 import { RequireFeature } from '../auth/decorators/feature.decorator';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -79,7 +80,7 @@ export class PlacementsController {
   @ApiQuery({
     name: 'status',
     required: false,
-    enum: ['DRAFT', 'MARKETING', 'QUOTED', 'BOUND', 'DECLINED', 'CANCELLED'],
+    enum: PlacementStatus,
   })
   @ApiQuery({
     name: 'placementType',

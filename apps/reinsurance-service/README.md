@@ -76,15 +76,23 @@ by the authenticated `tenantId`; request bodies cannot choose tenant ownership.
 Placements currently support the broker-only facultative lifecycle foundation:
 
 ```text
-DRAFT -> MARKETING -> QUOTED -> BOUND
+DRAFT -> MARKETING -> PARTIALLY_PLACED -> PLACED -> CLOSING -> CLOSED
                    -> DECLINED
                    -> CANCELLED
 ```
 
-`DECLINED` can return to `MARKETING`; `BOUND` and `CANCELLED` are terminal in
+`DECLINED` can return to `MARKETING`; `CLOSED` and `CANCELLED` are terminal in
 the MVP foundation. Status changes are recorded in `PlacementStatusHistory`.
-`BOUND` and `CANCELLED` placements cannot be edited through the header/market
-participant update endpoint. `BOUND` placements also cannot be archived.
+`CLOSED` and `CANCELLED` placements cannot be edited through the header/market
+participant update endpoint. `CLOSED` placements also cannot be archived.
+Participant mutations automatically recalculate active market placement status
+for `MARKETING`, `PARTIALLY_PLACED` and `PLACED` records:
+
+- no accepted signed line => `MARKETING`
+- accepted signed line below `facultativeOffer` (or `100` when absent) =>
+  `PARTIALLY_PLACED`
+- accepted signed line at or above the target => `PLACED`
+
 When a `PATCH /placements/:id` body supplies `participants`, the supplied
 array replaces the complete stored participant collection. Omit
 `participants` when editing only placement header fields. New frontend work
@@ -482,8 +490,9 @@ rollback more complex than the MVP needs.
 Current frontend note: the initial Facultative UI uses placeholder labels like
 `Pending`, `Active`, `Expired` and `Cancelled`. When wiring it to this API,
 use the backend lifecycle statuses directly in API calls and map labels in the
-view layer, for example `DRAFT`/`MARKETING`/`QUOTED` as work-in-progress,
-`BOUND` as active, `DECLINED` as declined and `CANCELLED` as cancelled.
+view layer, for example `DRAFT`/`MARKETING` as open work-in-progress states,
+`PARTIALLY_PLACED`/`PLACED`/`CLOSING` as active placement states, `CLOSED` as
+closed, `DECLINED` as declined and `CANCELLED` as cancelled.
 The backend does not expose split `/cedants`, `/reinsurers` or `/brokers`
 placement endpoints; retrieve those through `/counterparties?type=...`.
 

@@ -333,10 +333,10 @@ describe('PlacementsService', () => {
     expect(publisher.updated).toHaveBeenCalled();
   });
 
-  it('does not silently mutate a bound placement', async () => {
+  it('does not silently mutate a closed placement', async () => {
     prisma.placement.findFirst.mockResolvedValue({
       ...placement,
-      status: PlacementStatus.BOUND,
+      status: PlacementStatus.CLOSED,
     });
 
     await expect(
@@ -543,6 +543,158 @@ describe('PlacementsService', () => {
       totalOfferedPercent: 30,
       totalAcceptedPercent: 20,
       remainingPercent: 40,
+    });
+  });
+
+  it('moves a marketing placement to partially placed when accepted capacity is below target', async () => {
+    const existingPlacement = {
+      ...placement,
+      status: PlacementStatus.MARKETING,
+      facultativeOffer: 60,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.OFFER_SENT,
+          sharePercent: 30,
+          signedLinePercent: null,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    const acceptedPlacement = {
+      ...existingPlacement,
+      participants: [
+        {
+          ...existingPlacement.participants[0],
+          status: PlacementParticipantStatus.ACCEPTED,
+          signedLinePercent: 20,
+        },
+      ],
+    };
+    const partiallyPlaced = {
+      ...acceptedPlacement,
+      status: PlacementStatus.PARTIALLY_PLACED,
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(acceptedPlacement);
+    prisma.counterparty.findMany.mockResolvedValue([
+      {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Ghana Re',
+      },
+    ]);
+    prisma.placementParticipant.update.mockResolvedValue({
+      id: 'participant-1',
+    });
+    prisma.placement.update.mockResolvedValue(partiallyPlaced);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+
+    const result = await service.updateParticipant(
+      user,
+      'placement-1',
+      'participant-1',
+      {
+        signedLinePercent: 20,
+        status: PlacementParticipantStatus.ACCEPTED,
+      },
+    );
+
+    expect(result.status).toBe(PlacementStatus.PARTIALLY_PLACED);
+    const partialHistoryArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as { data?: Record<string, unknown> } | undefined;
+    expect(partialHistoryArgs?.data).toMatchObject({
+      fromStatus: PlacementStatus.MARKETING,
+      toStatus: PlacementStatus.PARTIALLY_PLACED,
+    });
+    expect(publisher.statusChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousStatus: PlacementStatus.MARKETING,
+        nextStatus: PlacementStatus.PARTIALLY_PLACED,
+      }),
+    );
+  });
+
+  it('moves a partially placed placement to placed when accepted capacity reaches target', async () => {
+    const existingPlacement = {
+      ...placement,
+      status: PlacementStatus.PARTIALLY_PLACED,
+      facultativeOffer: 60,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.QUOTED,
+          sharePercent: 60,
+          signedLinePercent: 30,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    const acceptedPlacement = {
+      ...existingPlacement,
+      participants: [
+        {
+          ...existingPlacement.participants[0],
+          status: PlacementParticipantStatus.ACCEPTED,
+          signedLinePercent: 60,
+        },
+      ],
+    };
+    const placed = {
+      ...acceptedPlacement,
+      status: PlacementStatus.PLACED,
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(acceptedPlacement);
+    prisma.placementParticipant.update.mockResolvedValue({
+      id: 'participant-1',
+    });
+    prisma.placement.update.mockResolvedValue(placed);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+
+    const result = await service.changeParticipantStatus(
+      user,
+      'placement-1',
+      'participant-1',
+      {
+        status: PlacementParticipantStatus.ACCEPTED,
+      },
+    );
+
+    expect(result.status).toBe(PlacementStatus.PLACED);
+    const placedHistoryArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as { data?: Record<string, unknown> } | undefined;
+    expect(placedHistoryArgs?.data).toMatchObject({
+      fromStatus: PlacementStatus.PARTIALLY_PLACED,
+      toStatus: PlacementStatus.PLACED,
     });
   });
 
