@@ -51,6 +51,17 @@ enum PlacementParticipantRole {
   @@schema("reinsurance")
 }
 
+enum PlacementParticipantStatus {
+  INVITED
+  OFFER_SENT
+  QUOTED
+  ACCEPTED
+  DECLINED
+  CLOSED
+
+  @@schema("reinsurance")
+}
+
 enum MailboxProvider {
   MICROSOFT_GRAPH
   GOOGLE_GMAIL
@@ -292,6 +303,7 @@ model PlacementParticipant {
   placementId       String
   counterpartyId    String
   role              PlacementParticipantRole
+  status            PlacementParticipantStatus @default(INVITED)
   sharePercent      Decimal?                 @db.Decimal(7, 4)
   signedLinePercent Decimal?                 @db.Decimal(7, 4)
   brokerageFee      Decimal?                 @db.Decimal(5, 2)
@@ -303,6 +315,7 @@ model PlacementParticipant {
 
   @@unique([tenantId, placementId, counterpartyId, role])
   @@index([tenantId, placementId])
+  @@index([tenantId, placementId, status])
   @@index([tenantId, counterpartyId])
   @@schema("reinsurance")
 }
