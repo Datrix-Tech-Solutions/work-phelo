@@ -505,6 +505,8 @@ export interface AnnouncementRecipientEvent {
   lastName: string;
 }
 
+export type AnnouncementDeliveryChannel = 'IN_APP' | 'EMAIL' | 'SMS';
+
 export interface PayrollApprovalRequestedRecipientEvent {
   userId: string;
   email: string;
@@ -553,6 +555,7 @@ export interface AnnouncementPublishedEvent {
   title: string;
   body: string;
   publishedAt: string;
+  deliveryChannels?: AnnouncementDeliveryChannel[];
   platformLink?: string;
   recipients: AnnouncementRecipientEvent[];
 }
