@@ -151,7 +151,13 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Update an active placement',
     description:
-      'If participants are supplied, the supplied array replaces the complete stored participant collection. Status changes must use the status endpoint. businessDetails and offerDetails are stored as JSON objects keyed by classOfBusiness.',
+      'Updates placement header fields. ' +
+      'CLOSED and CANCELLED placements cannot be edited — a 400 is returned. ' +
+      'If participants are supplied, the supplied array replaces the complete stored participant collection; ' +
+      'omit participants when editing only header fields and prefer the participant-specific endpoints instead. ' +
+      'Status changes must use the dedicated status endpoint. ' +
+      'businessDetails and offerDetails are JSON objects validated against RiskTypeField definitions ' +
+      'when riskTypeId is set.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiOkResponse({ type: PlacementResponseDto })
@@ -178,12 +184,29 @@ export class PlacementsController {
 
   @Patch(':id/status')
   @RequirePermissions(PlacementPermission.EDIT)
-  @ApiOperation({ summary: 'Change placement lifecycle status' })
+  @ApiOperation({
+    summary: 'Change placement lifecycle status',
+    description:
+      'Advances or reverses the placement through its lifecycle. ' +
+      'Only transitions listed in the allowed matrix are accepted; an invalid move returns 400.\n\n' +
+      'Allowed transitions: DRAFT→MARKETING|CANCELLED, ' +
+      'MARKETING→PARTIALLY_PLACED|PLACED|DECLINED|CANCELLED, ' +
+      'PARTIALLY_PLACED→MARKETING|PLACED|DECLINED|CANCELLED, ' +
+      'PLACED→PARTIALLY_PLACED|CLOSING|CANCELLED, ' +
+      'CLOSING→PLACED|CLOSED|CANCELLED, ' +
+      'DECLINED→MARKETING. ' +
+      'CLOSED and CANCELLED are terminal.\n\n' +
+      'MARKETING, PARTIALLY_PLACED and PLACED are also set automatically by participant ' +
+      'capacity recalculation — use this endpoint only when a manual override is needed ' +
+      '(e.g. advancing to DECLINED before participant statuses are updated, or ' +
+      'manually entering CLOSING once the placement is ready to bind). ' +
+      'Every status change is recorded in statusHistory.',
+  })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiOkResponse({ type: PlacementResponseDto })
   @ApiBadRequestResponse({
     type: ApiErrorResponseDto,
-    description: 'Invalid status transition.',
+    description: 'Invalid status transition or terminal placement.',
   })
   @ApiNotFoundResponse({
     type: ApiErrorResponseDto,
@@ -203,7 +226,10 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Add a participant to a placement',
     description:
-      'Adds a tenant-owned reinsurer or broker participant without replacing the existing participant collection. Participant status defaults to INVITED.',
+      'Adds a tenant-owned reinsurer or broker participant without replacing the existing participant collection. ' +
+      'Participant status defaults to INVITED when omitted. ' +
+      'CLOSED and CANCELLED placements block this action. ' +
+      'After adding, placement status is automatically recalculated for MARKETING, PARTIALLY_PLACED and PLACED placements.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiCreatedResponse({ type: PlacementResponseDto })
@@ -268,7 +294,16 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Change one placement participant workflow status',
     description:
-      'Moves a participant through INVITED, OFFER_SENT, QUOTED, ACCEPTED, DECLINED and CLOSED. ACCEPTED participants must already have a signedLinePercent.',
+      'Moves a participant through its workflow: INVITED → OFFER_SENT → QUOTED → ACCEPTED → CLOSED, ' +
+      'with DECLINED available from most states and re-entry via OFFER_SENT. ' +
+      'Moving to ACCEPTED requires signedLinePercent to already be set and greater than 0 on the participant — ' +
+      'update it via PATCH /participants/:id first if needed. ' +
+      'After the status change, placement status is automatically recalculated when the placement is ' +
+      'MARKETING, PARTIALLY_PLACED or PLACED: ' +
+      'no accepted capacity → MARKETING, ' +
+      'partial capacity → PARTIALLY_PLACED, ' +
+      'full capacity → PLACED. ' +
+      'The response always reflects the final recalculated placement state.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({

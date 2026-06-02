@@ -124,7 +124,20 @@ export class PlacementResponseDto {
   @ApiProperty({ enum: PlacementType, example: PlacementType.FACULTATIVE })
   placementType!: PlacementType;
 
-  @ApiProperty({ enum: PlacementStatus, example: PlacementStatus.DRAFT })
+  @ApiProperty({
+    enum: PlacementStatus,
+    example: PlacementStatus.DRAFT,
+    description:
+      'Current placement lifecycle status.\n\n' +
+      'DRAFT — being prepared, not yet submitted to market.\n' +
+      'MARKETING — submitted to market, no accepted capacity yet.\n' +
+      'PARTIALLY_PLACED — some capacity accepted, below the facultativeOffer target.\n' +
+      'PLACED — accepted capacity has reached or exceeded the facultativeOffer target.\n' +
+      'CLOSING — placed and entering formal bind/close; avoid major structural changes.\n' +
+      'CLOSED — formally closed, terminal, no edits or archive allowed.\n' +
+      'DECLINED — all markets declined; can return to MARKETING.\n' +
+      'CANCELLED — cancelled before close, terminal, no edits allowed.',
+  })
   status!: PlacementStatus;
 
   @ApiProperty({ format: 'uuid' })
