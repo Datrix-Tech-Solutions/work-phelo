@@ -56,14 +56,18 @@ tenant-scoped parent update.
 The gateway forwards these routes under
 `/api/v1/operations/reinsurance/placements`:
 
-| Method   | Service route                | Permission                                 |
-| -------- | ---------------------------- | ------------------------------------------ |
-| `GET`    | `/api/placements`            | `operations.reinsurance.placements:VIEW`   |
-| `POST`   | `/api/placements`            | `operations.reinsurance.placements:CREATE` |
-| `GET`    | `/api/placements/:id`        | `operations.reinsurance.placements:VIEW`   |
-| `PATCH`  | `/api/placements/:id`        | `operations.reinsurance.placements:EDIT`   |
-| `PATCH`  | `/api/placements/:id/status` | `operations.reinsurance.placements:EDIT`   |
-| `DELETE` | `/api/placements/:id`        | `operations.reinsurance.placements:DELETE` |
+| Method   | Service route                                            | Permission                                 |
+| -------- | -------------------------------------------------------- | ------------------------------------------ |
+| `GET`    | `/api/placements`                                        | `operations.reinsurance.placements:VIEW`   |
+| `POST`   | `/api/placements`                                        | `operations.reinsurance.placements:CREATE` |
+| `GET`    | `/api/placements/:id`                                    | `operations.reinsurance.placements:VIEW`   |
+| `PATCH`  | `/api/placements/:id`                                    | `operations.reinsurance.placements:EDIT`   |
+| `PATCH`  | `/api/placements/:id/status`                             | `operations.reinsurance.placements:EDIT`   |
+| `POST`   | `/api/placements/:id/participants`                       | `operations.reinsurance.placements:EDIT`   |
+| `PATCH`  | `/api/placements/:id/participants/:participantId`        | `operations.reinsurance.placements:EDIT`   |
+| `PATCH`  | `/api/placements/:id/participants/:participantId/status` | `operations.reinsurance.placements:EDIT`   |
+| `DELETE` | `/api/placements/:id/participants/:participantId`        | `operations.reinsurance.placements:EDIT`   |
+| `DELETE` | `/api/placements/:id`                                    | `operations.reinsurance.placements:DELETE` |
 
 List requests support `search`, `status`, `placementType`, `cedantId`, `page`
 and `limit`. Deletion is a soft archive. Every lookup and mutation is scoped
@@ -83,7 +87,20 @@ the MVP foundation. Status changes are recorded in `PlacementStatusHistory`.
 participant update endpoint. `BOUND` placements also cannot be archived.
 When a `PATCH /placements/:id` body supplies `participants`, the supplied
 array replaces the complete stored participant collection. Omit
-`participants` when editing only placement header fields.
+`participants` when editing only placement header fields. New frontend work
+should prefer the participant-specific endpoints above so adding, updating,
+removing and changing participant workflow status does not replace the whole
+market snapshot.
+
+Participant workflow status is first-class and no longer inferred from
+`notes` JSON. Supported participant statuses are `INVITED`, `OFFER_SENT`,
+`QUOTED`, `ACCEPTED`, `DECLINED` and `CLOSED`. An `ACCEPTED` participant must
+have a `signedLinePercent` so the placement response can expose accurate
+capacity aggregates:
+
+- `totalOfferedPercent`
+- `totalAcceptedPercent`
+- `remainingPercent`
 
 Capacity validation is intentionally conservative for Sprint 1:
 
@@ -91,6 +108,7 @@ Capacity validation is intentionally conservative for Sprint 1:
   `sharePercent` when both are supplied.
 - Total `sharePercent` cannot exceed `100`.
 - Total `signedLinePercent` cannot exceed `100`.
+- Accepted participants require a `signedLinePercent`.
 - Cedants are linked through the placement `cedantId`; they are not allowed in
   the market participant collection.
 
@@ -389,6 +407,46 @@ PATCH /api/v1/operations/reinsurance/placements/:id/status
 {
   "status": "MARKETING",
   "note": "Submitted to selected markets."
+}
+```
+
+Add a participant without replacing the full participant list:
+
+```http
+POST /api/v1/operations/reinsurance/placements/:id/participants
+```
+
+```json
+{
+  "counterpartyId": "2ee7957a-5a47-472b-95d1-983c2d86be16",
+  "role": "REINSURER",
+  "sharePercent": 30,
+  "brokerageFee": 7.5
+}
+```
+
+Record a participant's accepted/taken line:
+
+```http
+PATCH /api/v1/operations/reinsurance/placements/:id/participants/:participantId
+```
+
+```json
+{
+  "signedLinePercent": 20
+}
+```
+
+Then move the participant to accepted:
+
+```http
+PATCH /api/v1/operations/reinsurance/placements/:id/participants/:participantId/status
+```
+
+```json
+{
+  "status": "ACCEPTED",
+  "note": "Accepted by email."
 }
 ```
 

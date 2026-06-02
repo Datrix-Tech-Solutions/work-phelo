@@ -40,8 +40,11 @@ import {
   PaginatedPlacementsResponseDto,
   PlacementResponseDto,
 } from './dto/placement-response.dto';
+import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
+import { UpdatePlacementParticipantStatusDto } from './dto/update-placement-participant-status.dto';
+import { UpdatePlacementParticipantDto } from './dto/update-placement-participant.dto';
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
 import { PlacementPermission } from './placement.permissions';
@@ -192,6 +195,139 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.placementsService.changeStatus(request.user, id, dto);
+  }
+
+  @Post(':id/participants')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Add a participant to a placement',
+    description:
+      'Adds a tenant-owned reinsurer or broker participant without replacing the existing participant collection. Participant status defaults to INVITED.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiCreatedResponse({ type: PlacementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Invalid participant, duplicate counterparty/role or invalid capacity.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  addParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePlacementParticipantDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.addParticipant(request.user, id, dto);
+  }
+
+  @Patch(':id/participants/:participantId')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Update one placement participant',
+    description:
+      'Updates a single participant without replacing the whole collection. Use the status endpoint for workflow state changes when possible.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiOkResponse({ type: PlacementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Invalid participant patch, duplicate counterparty/role or invalid capacity.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  updateParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Body() dto: UpdatePlacementParticipantDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.updateParticipant(
+      request.user,
+      id,
+      participantId,
+      dto,
+    );
+  }
+
+  @Patch(':id/participants/:participantId/status')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Change one placement participant workflow status',
+    description:
+      'Moves a participant through INVITED, OFFER_SENT, QUOTED, ACCEPTED, DECLINED and CLOSED. ACCEPTED participants must already have a signedLinePercent.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiOkResponse({ type: PlacementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Invalid participant status transition.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  changeParticipantStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Body() dto: UpdatePlacementParticipantStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.changeParticipantStatus(
+      request.user,
+      id,
+      participantId,
+      dto,
+    );
+  }
+
+  @Delete(':id/participants/:participantId')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Remove one placement participant',
+    description:
+      'Deletes a participant from an editable placement without archiving the placement itself.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiOkResponse({ type: PlacementResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  deleteParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.deleteParticipant(
+      request.user,
+      id,
+      participantId,
+    );
   }
 
   @Delete(':id')

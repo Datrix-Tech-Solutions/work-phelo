@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   CounterpartyType,
   PlacementParticipantRole,
+  PlacementParticipantStatus,
   PlacementStatus,
   PlacementType,
 } from '../../../prisma/generated/client';
@@ -35,6 +36,14 @@ export class PlacementParticipantResponseDto {
     example: PlacementParticipantRole.LEAD_REINSURER,
   })
   role!: PlacementParticipantRole;
+
+  @ApiProperty({
+    enum: PlacementParticipantStatus,
+    example: PlacementParticipantStatus.INVITED,
+    description:
+      'Participant workflow status. This replaces status stored in notes JSON.',
+  })
+  status!: PlacementParticipantStatus;
 
   @ApiPropertyOptional({
     type: String,
@@ -233,6 +242,26 @@ export class PlacementResponseDto {
 
   @ApiProperty({ type: [PlacementParticipantResponseDto] })
   participants!: PlacementParticipantResponseDto[];
+
+  @ApiProperty({
+    example: 60,
+    description: 'Total offered participant share percentage.',
+  })
+  totalOfferedPercent!: number;
+
+  @ApiProperty({
+    example: 40,
+    description:
+      'Total accepted/taken percentage based on ACCEPTED participants and signed lines.',
+  })
+  totalAcceptedPercent!: number;
+
+  @ApiProperty({
+    example: 20,
+    description:
+      'Remaining percentage against facultativeOffer when present, otherwise against 100%.',
+  })
+  remainingPercent!: number;
 
   @ApiProperty({ type: [PlacementStatusHistoryResponseDto] })
   statusHistory!: PlacementStatusHistoryResponseDto[];

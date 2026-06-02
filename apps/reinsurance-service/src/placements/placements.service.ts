@@ -9,6 +9,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementParticipantRole,
+  PlacementParticipantStatus,
   PlacementStatus,
   PlacementType,
   Prisma,
@@ -20,6 +21,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
+import { UpdatePlacementParticipantStatusDto } from './dto/update-placement-participant-status.dto';
+import { UpdatePlacementParticipantDto } from './dto/update-placement-participant.dto';
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
 
@@ -54,6 +57,24 @@ const placementInclude = {
 type PlacementRecord = Prisma.PlacementGetPayload<{
   include: typeof placementInclude;
 }>;
+
+type PlacementWithAggregates = PlacementRecord & {
+  totalOfferedPercent: number;
+  totalAcceptedPercent: number;
+  remainingPercent: number;
+};
+
+type PlacementParticipantRecord = PlacementRecord['participants'][number];
+
+type ParticipantCapacityInput = {
+  counterpartyId: string;
+  role: PlacementParticipantRole;
+  status?: PlacementParticipantStatus;
+  sharePercent?: number | Prisma.Decimal | null;
+  signedLinePercent?: number | Prisma.Decimal | null;
+  brokerageFee?: number | Prisma.Decimal | null;
+  notes?: string | null;
+};
 
 type CounterpartySummary = {
   id: string;
@@ -121,7 +142,7 @@ export class PlacementsService {
     ]);
 
     return {
-      items,
+      items: items.map((item) => this.withAggregates(item)),
       meta: {
         page,
         limit,
@@ -131,7 +152,10 @@ export class PlacementsService {
     };
   }
 
-  async findOne(tenantId: string, id: string): Promise<PlacementRecord> {
+  async findOne(
+    tenantId: string,
+    id: string,
+  ): Promise<PlacementWithAggregates> {
     const placement = await this.prisma.placement.findFirst({
       where: { id, tenantId, archivedAt: null },
       include: placementInclude,
@@ -141,13 +165,13 @@ export class PlacementsService {
       throw new NotFoundException('Placement not found');
     }
 
-    return placement;
+    return this.withAggregates(placement);
   }
 
   async create(
     user: RequestUser,
     dto: CreatePlacementDto,
-  ): Promise<PlacementRecord> {
+  ): Promise<PlacementWithAggregates> {
     this.validateDates(dto.inceptionDate, dto.expiryDate);
     await this.assertCedant(user.tenantId, dto.cedantId);
     await this.assertParticipants(user.tenantId, dto.participants ?? []);
@@ -231,7 +255,7 @@ export class PlacementsService {
       this.publish('created', placement, user, {
         after: this.auditSnapshot(placement),
       });
-      return placement;
+      return this.withAggregates(placement);
     } catch (error) {
       this.rethrowWriteError(error);
       throw error;
@@ -242,7 +266,7 @@ export class PlacementsService {
     user: RequestUser,
     id: string,
     dto: UpdatePlacementDto,
-  ): Promise<PlacementRecord> {
+  ): Promise<PlacementWithAggregates> {
     if (Object.keys(dto).length === 0) {
       throw new BadRequestException('At least one field is required');
     }
@@ -402,7 +426,7 @@ export class PlacementsService {
         before: this.auditSnapshot(existing),
         after: this.auditSnapshot(placement),
       });
-      return placement;
+      return this.withAggregates(placement);
     } catch (error) {
       this.rethrowWriteError(error);
       throw error;
@@ -413,10 +437,10 @@ export class PlacementsService {
     user: RequestUser,
     id: string,
     dto: UpdatePlacementStatusDto,
-  ): Promise<PlacementRecord> {
+  ): Promise<PlacementWithAggregates> {
     const existing = await this.findOne(user.tenantId, id);
     if (existing.status === dto.status) {
-      return existing;
+      return this.withAggregates(existing);
     }
     this.assertStatusTransition(existing.status, dto.status);
 
@@ -457,10 +481,13 @@ export class PlacementsService {
       dto.status,
       dto.note,
     );
-    return placement;
+    return this.withAggregates(placement);
   }
 
-  async archive(user: RequestUser, id: string): Promise<PlacementRecord> {
+  async archive(
+    user: RequestUser,
+    id: string,
+  ): Promise<PlacementWithAggregates> {
     const existing = await this.findOne(user.tenantId, id);
     this.assertArchivable(existing);
     const placement = await this.prisma.placement.update({
@@ -477,6 +504,173 @@ export class PlacementsService {
     });
 
     this.publish('deleted', placement, user, {
+      before: this.auditSnapshot(existing),
+      after: this.auditSnapshot(placement),
+    });
+    return this.withAggregates(placement);
+  }
+
+  async addParticipant(
+    user: RequestUser,
+    placementId: string,
+    dto: CreatePlacementParticipantDto,
+  ): Promise<PlacementWithAggregates> {
+    const existing = await this.findOne(user.tenantId, placementId);
+    this.assertEditable(existing);
+    await this.assertParticipants(user.tenantId, [dto]);
+    this.assertParticipantCollection([
+      ...existing.participants,
+      this.toCapacityInput(dto),
+    ]);
+
+    try {
+      await this.prisma.placementParticipant.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId,
+          counterpartyId: dto.counterpartyId,
+          role: dto.role,
+          status: dto.status ?? PlacementParticipantStatus.INVITED,
+          sharePercent: dto.sharePercent,
+          signedLinePercent: dto.signedLinePercent,
+          brokerageFee: dto.brokerageFee,
+          notes: this.cleanOptional(dto.notes),
+        },
+      });
+    } catch (error) {
+      this.rethrowWriteError(error);
+      throw error;
+    }
+
+    const placement = await this.findOne(user.tenantId, placementId);
+    this.publish('updated', placement, user, {
+      before: this.auditSnapshot(existing),
+      after: this.auditSnapshot(placement),
+    });
+    return placement;
+  }
+
+  async updateParticipant(
+    user: RequestUser,
+    placementId: string,
+    participantId: string,
+    dto: UpdatePlacementParticipantDto,
+  ): Promise<PlacementWithAggregates> {
+    if (Object.keys(dto).length === 0) {
+      throw new BadRequestException('At least one field is required');
+    }
+
+    const existing = await this.findOne(user.tenantId, placementId);
+    this.assertEditable(existing);
+    const participant = this.assertPlacementParticipant(
+      existing,
+      participantId,
+    );
+
+    const nextParticipant = this.mergeParticipant(participant, dto);
+    await this.assertParticipants(user.tenantId, [nextParticipant]);
+    this.assertParticipantCollection(
+      existing.participants.map((item) =>
+        item.id === participantId ? nextParticipant : item,
+      ),
+    );
+
+    try {
+      await this.prisma.placementParticipant.update({
+        where: { id: participant.id },
+        data: {
+          ...(dto.counterpartyId !== undefined
+            ? { counterpartyId: dto.counterpartyId }
+            : {}),
+          ...(dto.role !== undefined ? { role: dto.role } : {}),
+          ...(dto.status !== undefined ? { status: dto.status } : {}),
+          ...(dto.sharePercent !== undefined
+            ? { sharePercent: dto.sharePercent }
+            : {}),
+          ...(dto.signedLinePercent !== undefined
+            ? { signedLinePercent: dto.signedLinePercent }
+            : {}),
+          ...(dto.brokerageFee !== undefined
+            ? { brokerageFee: dto.brokerageFee }
+            : {}),
+          ...(dto.notes !== undefined
+            ? { notes: this.cleanOptional(dto.notes) }
+            : {}),
+        },
+      });
+    } catch (error) {
+      this.rethrowWriteError(error);
+      throw error;
+    }
+
+    const placement = await this.findOne(user.tenantId, placementId);
+    this.publish('updated', placement, user, {
+      before: this.auditSnapshot(existing),
+      after: this.auditSnapshot(placement),
+    });
+    return placement;
+  }
+
+  async deleteParticipant(
+    user: RequestUser,
+    placementId: string,
+    participantId: string,
+  ): Promise<PlacementWithAggregates> {
+    const existing = await this.findOne(user.tenantId, placementId);
+    this.assertEditable(existing);
+    const participant = this.assertPlacementParticipant(
+      existing,
+      participantId,
+    );
+
+    await this.prisma.placementParticipant.delete({
+      where: { id: participant.id },
+    });
+
+    const placement = await this.findOne(user.tenantId, placementId);
+    this.publish('updated', placement, user, {
+      before: this.auditSnapshot(existing),
+      after: this.auditSnapshot(placement),
+    });
+    return placement;
+  }
+
+  async changeParticipantStatus(
+    user: RequestUser,
+    placementId: string,
+    participantId: string,
+    dto: UpdatePlacementParticipantStatusDto,
+  ): Promise<PlacementWithAggregates> {
+    const existing = await this.findOne(user.tenantId, placementId);
+    this.assertEditable(existing);
+    const participant = this.assertPlacementParticipant(
+      existing,
+      participantId,
+    );
+    this.assertParticipantStatusTransition(participant.status, dto.status);
+
+    const nextParticipant = this.mergeParticipant(participant, {
+      status: dto.status,
+      notes: dto.note ?? participant.notes ?? undefined,
+    });
+    this.assertParticipantCollection(
+      existing.participants.map((item) =>
+        item.id === participantId ? nextParticipant : item,
+      ),
+    );
+
+    await this.prisma.placementParticipant.update({
+      where: { id: participant.id },
+      data: {
+        status: dto.status,
+        ...(dto.note !== undefined
+          ? { notes: this.cleanOptional(dto.note) }
+          : {}),
+      },
+    });
+
+    const placement = await this.findOne(user.tenantId, placementId);
+    this.publish('updated', placement, user, {
       before: this.auditSnapshot(existing),
       after: this.auditSnapshot(placement),
     });
@@ -504,7 +698,7 @@ export class PlacementsService {
 
   private async assertParticipants(
     tenantId: string,
-    participants: CreatePlacementParticipantDto[],
+    participants: ParticipantCapacityInput[],
   ): Promise<void> {
     this.assertCapacity(participants);
     const keys = new Set<string>();
@@ -535,6 +729,37 @@ export class PlacementsService {
     }
   }
 
+  private assertPlacementParticipant(
+    placement: PlacementRecord,
+    participantId: string,
+  ): PlacementParticipantRecord {
+    const participant = placement.participants.find(
+      (item) => item.id === participantId,
+    );
+
+    if (!participant) {
+      throw new NotFoundException('Placement participant not found');
+    }
+
+    return participant;
+  }
+
+  private assertParticipantCollection(
+    participants: ParticipantCapacityInput[],
+  ): void {
+    const keys = new Set<string>();
+    for (const participant of participants) {
+      const duplicateKey = `${participant.counterpartyId}:${participant.role}`;
+      if (keys.has(duplicateKey)) {
+        throw new BadRequestException(
+          'Duplicate placement participant role for counterparty',
+        );
+      }
+      keys.add(duplicateKey);
+    }
+    this.assertCapacity(participants);
+  }
+
   private assertParticipantRoleMatchesType(
     role: PlacementParticipantRole,
     counterparty: CounterpartySummary,
@@ -557,13 +782,13 @@ export class PlacementsService {
     }
   }
 
-  private assertCapacity(participants: CreatePlacementParticipantDto[]): void {
+  private assertCapacity(participants: ParticipantCapacityInput[]): void {
     const totalOffered = participants.reduce(
-      (sum, item) => sum + (item.sharePercent ?? 0),
+      (sum, item) => sum + this.decimalToNumber(item.sharePercent),
       0,
     );
     const totalSigned = participants.reduce(
-      (sum, item) => sum + (item.signedLinePercent ?? 0),
+      (sum, item) => sum + this.decimalToNumber(item.signedLinePercent),
       0,
     );
 
@@ -580,14 +805,65 @@ export class PlacementsService {
 
     for (const participant of participants) {
       if (
+        participant.status === PlacementParticipantStatus.ACCEPTED &&
+        this.decimalToNumber(participant.signedLinePercent) <= 0
+      ) {
+        throw new BadRequestException(
+          'Accepted participants require a signed line percentage',
+        );
+      }
+
+      if (
         participant.sharePercent !== undefined &&
         participant.signedLinePercent !== undefined &&
-        participant.signedLinePercent > participant.sharePercent
+        this.decimalToNumber(participant.signedLinePercent) >
+          this.decimalToNumber(participant.sharePercent)
       ) {
         throw new BadRequestException(
           'Signed line cannot exceed offered participant share',
         );
       }
+    }
+  }
+
+  private assertParticipantStatusTransition(
+    from: PlacementParticipantStatus,
+    to: PlacementParticipantStatus,
+  ): void {
+    const allowed: Record<
+      PlacementParticipantStatus,
+      PlacementParticipantStatus[]
+    > = {
+      [PlacementParticipantStatus.INVITED]: [
+        PlacementParticipantStatus.OFFER_SENT,
+        PlacementParticipantStatus.DECLINED,
+      ],
+      [PlacementParticipantStatus.OFFER_SENT]: [
+        PlacementParticipantStatus.QUOTED,
+        PlacementParticipantStatus.ACCEPTED,
+        PlacementParticipantStatus.DECLINED,
+      ],
+      [PlacementParticipantStatus.QUOTED]: [
+        PlacementParticipantStatus.OFFER_SENT,
+        PlacementParticipantStatus.ACCEPTED,
+        PlacementParticipantStatus.DECLINED,
+      ],
+      [PlacementParticipantStatus.ACCEPTED]: [
+        PlacementParticipantStatus.QUOTED,
+        PlacementParticipantStatus.DECLINED,
+        PlacementParticipantStatus.CLOSED,
+      ],
+      [PlacementParticipantStatus.DECLINED]: [
+        PlacementParticipantStatus.OFFER_SENT,
+      ],
+      [PlacementParticipantStatus.CLOSED]: [],
+    };
+
+    if (from === to) return;
+    if (!allowed[from].includes(to)) {
+      throw new BadRequestException(
+        `Cannot move placement participant from ${from} to ${to}`,
+      );
     }
   }
 
@@ -651,12 +927,94 @@ export class PlacementsService {
       create: (participants ?? []).map((participant) => ({
         counterpartyId: participant.counterpartyId,
         role: participant.role,
+        status: participant.status ?? PlacementParticipantStatus.INVITED,
         sharePercent: participant.sharePercent,
         signedLinePercent: participant.signedLinePercent,
         brokerageFee: participant.brokerageFee,
         notes: this.cleanOptional(participant.notes),
       })),
     };
+  }
+
+  private mergeParticipant(
+    participant: PlacementParticipantRecord,
+    dto: UpdatePlacementParticipantDto,
+  ): ParticipantCapacityInput {
+    return {
+      counterpartyId: dto.counterpartyId ?? participant.counterpartyId,
+      role: dto.role ?? participant.role,
+      status: dto.status ?? participant.status,
+      sharePercent:
+        dto.sharePercent !== undefined
+          ? dto.sharePercent
+          : participant.sharePercent,
+      signedLinePercent:
+        dto.signedLinePercent !== undefined
+          ? dto.signedLinePercent
+          : participant.signedLinePercent,
+      brokerageFee:
+        dto.brokerageFee !== undefined
+          ? dto.brokerageFee
+          : participant.brokerageFee,
+      notes: dto.notes !== undefined ? dto.notes : participant.notes,
+    };
+  }
+
+  private toCapacityInput(
+    participant: CreatePlacementParticipantDto,
+  ): ParticipantCapacityInput {
+    return {
+      counterpartyId: participant.counterpartyId,
+      role: participant.role,
+      status: participant.status ?? PlacementParticipantStatus.INVITED,
+      sharePercent: participant.sharePercent,
+      signedLinePercent: participant.signedLinePercent,
+      brokerageFee: participant.brokerageFee,
+      notes: participant.notes,
+    };
+  }
+
+  private withAggregates(placement: PlacementRecord): PlacementWithAggregates {
+    const totalOfferedPercent = this.roundPercent(
+      placement.participants.reduce(
+        (sum, item) => sum + this.decimalToNumber(item.sharePercent),
+        0,
+      ),
+    );
+    const totalAcceptedPercent = this.roundPercent(
+      placement.participants.reduce((sum, item) => {
+        if (item.status !== PlacementParticipantStatus.ACCEPTED) return sum;
+        return sum + this.decimalToNumber(item.signedLinePercent);
+      }, 0),
+    );
+    const targetPercent =
+      this.decimalToNumber(placement.facultativeOffer) || 100;
+
+    return {
+      ...placement,
+      totalOfferedPercent,
+      totalAcceptedPercent,
+      remainingPercent: this.roundPercent(
+        Math.max(0, targetPercent - totalAcceptedPercent),
+      ),
+    };
+  }
+
+  private decimalToNumber(
+    value: number | Prisma.Decimal | string | null | undefined,
+  ): number {
+    if (value === null || value === undefined) return 0;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+    const parsed = Number(value.toString());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private roundPercent(value: number): number {
+    return Math.round(value * 10000) / 10000;
   }
 
   private validateDates(start?: string, end?: string): void {

@@ -10,7 +10,10 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PlacementParticipantRole } from '../../../prisma/generated/client';
+import {
+  PlacementParticipantRole,
+  PlacementParticipantStatus,
+} from '../../../prisma/generated/client';
 import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
 export class CreatePlacementParticipantDto {
@@ -27,6 +30,17 @@ export class CreatePlacementParticipantDto {
   })
   @IsEnum(PlacementParticipantRole)
   role!: PlacementParticipantRole;
+
+  @ApiPropertyOptional({
+    enum: PlacementParticipantStatus,
+    example: PlacementParticipantStatus.INVITED,
+    default: PlacementParticipantStatus.INVITED,
+    description:
+      'Participant workflow status. Defaults to INVITED when omitted.',
+  })
+  @IsOptional()
+  @IsEnum(PlacementParticipantStatus)
+  status?: PlacementParticipantStatus;
 
   @ApiPropertyOptional({
     example: 45,

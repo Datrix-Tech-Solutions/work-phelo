@@ -3,6 +3,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementParticipantRole,
+  PlacementParticipantStatus,
   PlacementStatus,
   PlacementType,
 } from '../../prisma/generated/client';
@@ -71,6 +72,11 @@ describe('PlacementsService', () => {
       create: PrismaMethod;
       update: PrismaMethod;
     };
+    placementParticipant: {
+      create: PrismaMethod;
+      update: PrismaMethod;
+      delete: PrismaMethod;
+    };
     placementStatusHistory: {
       create: PrismaMethod;
     };
@@ -99,6 +105,11 @@ describe('PlacementsService', () => {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementParticipant: {
+        create: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
+        delete: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementStatusHistory: {
         create: jest.fn<Promise<unknown>, [unknown]>(),
@@ -148,6 +159,11 @@ describe('PlacementsService', () => {
       limit: 10,
       total: 1,
       totalPages: 1,
+    });
+    expect(result.items[0]).toMatchObject({
+      totalOfferedPercent: 0,
+      totalAcceptedPercent: 0,
+      remainingPercent: 100,
     });
   });
 
@@ -391,6 +407,278 @@ describe('PlacementsService', () => {
     expect(publisher.deleted).toHaveBeenCalled();
   });
 
+  it('adds one participant without replacing the full participant collection', async () => {
+    const updatedPlacement = {
+      ...placement,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.INVITED,
+          sharePercent: 25,
+          signedLinePercent: null,
+          brokerageFee: 7.5,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(placement)
+      .mockResolvedValueOnce(updatedPlacement);
+    prisma.counterparty.findMany.mockResolvedValue([
+      {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Ghana Re',
+      },
+    ]);
+    prisma.placementParticipant.create.mockResolvedValue({
+      id: 'participant-1',
+    });
+
+    const result = await service.addParticipant(user, 'placement-1', {
+      counterpartyId: 'reinsurer-1',
+      role: PlacementParticipantRole.REINSURER,
+      sharePercent: 25,
+      brokerageFee: 7.5,
+    });
+
+    const createArgs = prisma.placementParticipant.create.mock.calls[0]?.[0] as
+      | { data?: Record<string, unknown> }
+      | undefined;
+    expect(createArgs?.data).toMatchObject({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      counterpartyId: 'reinsurer-1',
+      status: PlacementParticipantStatus.INVITED,
+    });
+    expect(result).toMatchObject({
+      totalOfferedPercent: 25,
+      totalAcceptedPercent: 0,
+      remainingPercent: 100,
+    });
+    expect(publisher.updated).toHaveBeenCalled();
+  });
+
+  it('updates one participant and recalculates accepted capacity aggregates', async () => {
+    const existingPlacement = {
+      ...placement,
+      facultativeOffer: 60,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.INVITED,
+          sharePercent: 30,
+          signedLinePercent: null,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    const acceptedPlacement = {
+      ...existingPlacement,
+      participants: [
+        {
+          ...existingPlacement.participants[0],
+          status: PlacementParticipantStatus.ACCEPTED,
+          signedLinePercent: 20,
+        },
+      ],
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(acceptedPlacement);
+    prisma.counterparty.findMany.mockResolvedValue([
+      {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Ghana Re',
+      },
+    ]);
+    prisma.placementParticipant.update.mockResolvedValue({
+      id: 'participant-1',
+    });
+
+    const result = await service.updateParticipant(
+      user,
+      'placement-1',
+      'participant-1',
+      {
+        signedLinePercent: 20,
+        status: PlacementParticipantStatus.ACCEPTED,
+      },
+    );
+
+    const updateArgs = prisma.placementParticipant.update.mock.calls[0]?.[0] as
+      | {
+          where?: Record<string, unknown>;
+          data?: Record<string, unknown>;
+        }
+      | undefined;
+    expect(updateArgs?.where).toMatchObject({ id: 'participant-1' });
+    expect(updateArgs?.data).toMatchObject({
+      signedLinePercent: 20,
+      status: PlacementParticipantStatus.ACCEPTED,
+    });
+    expect(result).toMatchObject({
+      totalOfferedPercent: 30,
+      totalAcceptedPercent: 20,
+      remainingPercent: 40,
+    });
+  });
+
+  it('changes participant status through the workflow endpoint', async () => {
+    const offeredPlacement = {
+      ...placement,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.INVITED,
+          sharePercent: 30,
+          signedLinePercent: null,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    const sentPlacement = {
+      ...offeredPlacement,
+      participants: [
+        {
+          ...offeredPlacement.participants[0],
+          status: PlacementParticipantStatus.OFFER_SENT,
+          notes: 'Offer slip sent',
+        },
+      ],
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(offeredPlacement)
+      .mockResolvedValueOnce(sentPlacement);
+    prisma.placementParticipant.update.mockResolvedValue({
+      id: 'participant-1',
+    });
+
+    await service.changeParticipantStatus(
+      user,
+      'placement-1',
+      'participant-1',
+      {
+        status: PlacementParticipantStatus.OFFER_SENT,
+        note: 'Offer slip sent',
+      },
+    );
+
+    expect(prisma.placementParticipant.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          status: PlacementParticipantStatus.OFFER_SENT,
+          notes: 'Offer slip sent',
+        },
+      }),
+    );
+  });
+
+  it('rejects accepted participant status when no signed line is recorded', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.OFFER_SENT,
+          sharePercent: 30,
+          signedLinePercent: null,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    });
+
+    await expect(
+      service.changeParticipantStatus(user, 'placement-1', 'participant-1', {
+        status: PlacementParticipantStatus.ACCEPTED,
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placementParticipant.update).not.toHaveBeenCalled();
+  });
+
+  it('deletes one participant without archiving the placement', async () => {
+    const existingPlacement = {
+      ...placement,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.INVITED,
+          sharePercent: 20,
+          signedLinePercent: null,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placement);
+    prisma.placementParticipant.delete.mockResolvedValue({
+      id: 'participant-1',
+    });
+
+    await service.deleteParticipant(user, 'placement-1', 'participant-1');
+
+    expect(prisma.placementParticipant.delete).toHaveBeenCalledWith({
+      where: { id: 'participant-1' },
+    });
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
   it('does not fail a completed write when audit event delivery fails', async () => {
     const loggerWarn = jest
       .spyOn(Logger.prototype, 'warn')
@@ -406,7 +694,7 @@ describe('PlacementsService', () => {
         title: 'Fail Open Audit',
         cedantId: 'cedant-1',
       }),
-    ).resolves.toEqual(placement);
+    ).resolves.toMatchObject(placement);
     await Promise.resolve();
 
     expect(loggerWarn).toHaveBeenCalledWith(
