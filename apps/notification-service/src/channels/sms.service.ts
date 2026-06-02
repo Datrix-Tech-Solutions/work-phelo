@@ -15,7 +15,7 @@ export class SmsService {
     this.senderId = process.env.TERMII_SENDER_ID || 'WorkPhelo';
   }
 
-  async sendOtp(to: string, otp: string, context: string): Promise<boolean> {
+  async sendMessage(to: string, message: string): Promise<boolean> {
     try {
       const response = await fetch(`${this.baseUrl}/sms/send`, {
         method: 'POST',
@@ -23,7 +23,7 @@ export class SmsService {
         body: JSON.stringify({
           to,
           from: this.senderId,
-          sms: `Your WorkPhelo ${context} code is: ${otp}. Valid for 10 minutes. Do not share this code.`,
+          sms: message,
           type: 'plain',
           api_key: this.apiKey,
           channel: 'generic',
@@ -48,5 +48,12 @@ export class SmsService {
       this.logger.error(`Failed to send SMS to ${to}`, error);
       return false;
     }
+  }
+
+  async sendOtp(to: string, otp: string, context: string): Promise<boolean> {
+    return this.sendMessage(
+      to,
+      `Your WorkPhelo ${context} code is: ${otp}. Valid for 10 minutes. Do not share this code.`,
+    );
   }
 }
