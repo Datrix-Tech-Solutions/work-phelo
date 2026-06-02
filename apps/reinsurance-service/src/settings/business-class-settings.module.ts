@@ -1,22 +1,18 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from '../prisma/prisma.module';
-import { BusinessClassSettingsController } from './business-class-settings.controller';
 import { RiskClassSettingsController } from './risk-class-settings.controller';
 import { RiskClassSettingsService } from './risk-class-settings.service';
 import { RiskTypeSettingsController } from './risk-type-settings.controller';
 import { RiskTypeSettingsService } from './risk-type-settings.service';
 
 /**
- * Retained for backward compatibility. Registers the alias controller at
- * /settings/business-classes alongside both new services. Remove in PR3.
+ * Registers explicit RiskClass and RiskType settings routes.
+ * Deprecated BusinessClass compatibility routing has been removed now that
+ * frontend integrations use the RiskClass/RiskType contracts.
  */
 @Module({
   imports: [PrismaModule],
-  controllers: [
-    BusinessClassSettingsController,
-    RiskClassSettingsController,
-    RiskTypeSettingsController,
-  ],
+  controllers: [RiskClassSettingsController, RiskTypeSettingsController],
   providers: [RiskClassSettingsService, RiskTypeSettingsService],
   exports: [RiskClassSettingsService, RiskTypeSettingsService],
 })
