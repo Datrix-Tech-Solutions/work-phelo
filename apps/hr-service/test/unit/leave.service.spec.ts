@@ -87,13 +87,19 @@ const pendingLeaveRequest = {
 describe('LeaveService', () => {
   const prisma: any = {
     employee: { findFirst: jest.fn(), findUnique: jest.fn() },
-    leaveType: { findFirst: jest.fn(), findUnique: jest.fn() },
+    leaveType: {
+      findFirst: jest.fn(),
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      update: jest.fn(),
+    },
     leaveRequest: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       updateMany: jest.fn(),
       findUnique: jest.fn(),
       create: jest.fn(),
+      count: jest.fn(),
     },
     leaveBalance: {
       findUnique: jest.fn(),
@@ -101,6 +107,7 @@ describe('LeaveService', () => {
       updateMany: jest.fn(),
       update: jest.fn(),
       findMany: jest.fn(),
+      count: jest.fn(),
     },
     publicHoliday: { findMany: jest.fn() },
     department: { findFirst: jest.fn() },
@@ -128,6 +135,53 @@ describe('LeaveService', () => {
 
     service = moduleRef.get(LeaveService);
     jest.clearAllMocks();
+  });
+
+  // ── Leave types ───────────────────────────────────────────────────────────
+
+  describe('leave type management', () => {
+    it('does not overwrite tenant-customized seeded leave types on reseed', async () => {
+      prisma.leaveType.upsert.mockResolvedValue({});
+
+      await service.seedDefaultLeaveTypes('tenant-1');
+
+      expect(prisma.leaveType.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            tenantId_name: { tenantId: 'tenant-1', name: 'Annual Leave' },
+          },
+          update: { isDefault: true },
+        }),
+      );
+    });
+
+    it('archives seeded leave types instead of rejecting or hard deleting them', async () => {
+      prisma.leaveType.findFirst.mockResolvedValueOnce({
+        id: 'lt-annual',
+        tenantId: 'tenant-1',
+        name: 'Annual Leave',
+        isDefault: true,
+        isActive: true,
+      });
+      prisma.leaveRequest.count.mockResolvedValueOnce(1);
+      prisma.leaveBalance.count.mockResolvedValueOnce(3);
+      prisma.leaveType.update.mockResolvedValueOnce({
+        id: 'lt-annual',
+        tenantId: 'tenant-1',
+        name: 'Annual Leave',
+        isDefault: true,
+        isActive: false,
+      });
+
+      const result = await service.deleteLeaveType('tenant-1', 'lt-annual');
+
+      expect(prisma.leaveType.update).toHaveBeenCalledWith({
+        where: { id: 'lt-annual' },
+        data: { isActive: false },
+      });
+      expect(result.message).toBe('Leave type archived successfully');
+      expect(result.warning).toContain('archived instead');
+    });
   });
 
   // ── createRequest ──────────────────────────────────────────────────────────

@@ -36,6 +36,7 @@ NEXTJS_IMAGE="$(resolve_image_ref "$COMPOSE_ENV_FILE" "NEXTJS_IMAGE" "nextjs-web
 
 section "Compose Env"
 write_env_file "$COMPOSE_ENV_FILE" \
+  "DEPLOY_ENV=${DEPLOY_ENV}" \
   "COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME}" \
   "IMAGE_PREFIX=${IMAGE_PREFIX}" \
   "REDIS_PASSWORD=${REDIS_PASSWORD}" \
@@ -49,6 +50,7 @@ log "✓ ${COMPOSE_ENV_FILE}"
 section "Service Env Files"
 write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.prod" \
   "PORT=4000" \
+  "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
   "JWT_SECRET=${JWT_SECRET}" \
   "ALLOWED_ORIGINS=${ALLOWED_ORIGINS}" \
@@ -58,6 +60,7 @@ write_env_file "${DEPLOY_PATH}/apps/api-gateway/.env.prod" \
 
 write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.prod" \
   "PORT=4001" \
+  "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema w_auth)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
@@ -78,6 +81,7 @@ write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.prod" \
 
 write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
   "PORT=4002" \
+  "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema hr)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
@@ -90,6 +94,7 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.prod" \
 
 write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.prod" \
   "PORT=4004" \
+  "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
   "DATABASE_URL=$(db_url_for_schema notify)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \

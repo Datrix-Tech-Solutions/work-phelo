@@ -71,13 +71,13 @@ export class LeaveController {
   @Delete('types/:id')
   @RequirePermissions(Permission.MANAGE_LEAVE_TYPES)
   @ApiOperation({
-    summary: 'Delete a custom leave type — default types cannot be deleted',
+    summary: 'Archive a leave type',
   })
   @ApiParam({ name: 'id', description: 'Leave type UUID' })
-  @ApiResponse({ status: 200, description: 'Leave type deleted' })
+  @ApiResponse({ status: 200, description: 'Leave type archived' })
   @ApiResponse({
-    status: 403,
-    description: 'Default leave types cannot be deleted',
+    status: 404,
+    description: 'Leave type not found',
   })
   deleteLeaveType(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.leaveService.deleteLeaveType(req.user.tenantId, id);
@@ -169,7 +169,7 @@ export class LeaveController {
     return this.leaveService.getLeaveBalances(
       req.user.tenantId,
       employeeId,
-      req.user as RequestUser,
+      req.user,
     );
   }
 
@@ -225,11 +225,7 @@ export class LeaveController {
     @Body() dto: CreateLeaveRequestDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.leaveService.createRequest(
-      req.user.tenantId,
-      req.user as RequestUser,
-      dto,
-    );
+    return this.leaveService.createRequest(req.user.tenantId, req.user, dto);
   }
 
   @Get('requests')
@@ -244,11 +240,7 @@ export class LeaveController {
     @Query() query: QueryLeaveRequestsDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.leaveService.getRequests(
-      req.user.tenantId,
-      req.user as RequestUser,
-      query,
-    );
+    return this.leaveService.getRequests(req.user.tenantId, req.user, query);
   }
 
   @Get('requests/all')
@@ -260,11 +252,10 @@ export class LeaveController {
     @Query() query: QueryLeaveRequestsDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.leaveService.getRequests(
-      req.user.tenantId,
-      req.user as RequestUser,
-      { ...query, scope: 'all' },
-    );
+    return this.leaveService.getRequests(req.user.tenantId, req.user, {
+      ...query,
+      scope: 'all',
+    });
   }
 
   @Get('requests/pending-count')
@@ -272,10 +263,7 @@ export class LeaveController {
   @ApiOperation({ summary: 'Get pending leave request count' })
   @ApiResponse({ status: 200, description: 'Count returned' })
   getPendingCount(@Req() req: AuthenticatedRequest) {
-    return this.leaveService.getPendingCount(
-      req.user.tenantId,
-      req.user as RequestUser,
-    );
+    return this.leaveService.getPendingCount(req.user.tenantId, req.user);
   }
 
   @Get('requests/my')
@@ -287,11 +275,9 @@ export class LeaveController {
       req.user.tenantId,
       req.user.id,
     );
-    return this.leaveService.getRequests(
-      req.user.tenantId,
-      req.user as RequestUser,
-      { employeeId: employee?.id },
-    );
+    return this.leaveService.getRequests(req.user.tenantId, req.user, {
+      employeeId: employee?.id,
+    });
   }
 
   @Patch('requests/:id/review')
@@ -308,7 +294,7 @@ export class LeaveController {
     return this.leaveService.reviewRequest(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -333,7 +319,7 @@ export class LeaveController {
     return this.leaveService.updateRequestSupportingDocument(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -344,10 +330,6 @@ export class LeaveController {
   @ApiParam({ name: 'id', description: 'Leave request UUID' })
   @ApiResponse({ status: 200, description: 'Leave request cancelled' })
   cancelRequest(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.leaveService.cancelRequest(
-      req.user.tenantId,
-      id,
-      req.user as RequestUser,
-    );
+    return this.leaveService.cancelRequest(req.user.tenantId, id, req.user);
   }
 }

@@ -114,7 +114,7 @@ async function run() {
 
   let cursor: string | undefined;
 
-  while (true) {
+  for (;;) {
     const batch = (await prisma.employee.findMany({
       take: BATCH,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),

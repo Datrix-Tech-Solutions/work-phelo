@@ -1365,26 +1365,8 @@ export class TimeService {
         );
     }
 
-    // Email notification via RabbitMQ (fire-and-forget)
-    void this.publisher
-      .notificationSchedulePublished({
-        tenantId,
-        employeeId: employee.id,
-        employeeEmail: employee.email,
-        employeeFirstName: employee.firstName,
-        employeeLastName: employee.lastName,
-        effectiveFrom: dto.effectiveFrom,
-        shiftType: dto.shiftType,
-        startTime: dto.startTime,
-        endTime: dto.endTime,
-        scheduleLink,
-      })
-      .catch((err) =>
-        this.logger.error(
-          `Failed to emit schedule_published notification for employee ${employee.id}`,
-          err,
-        ),
-      );
+    // Schedule activity emails are intentionally disabled to control
+    // notification spend; the in-app notification above remains active.
 
     return schedule;
   }

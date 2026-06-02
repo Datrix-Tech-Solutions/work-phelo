@@ -125,20 +125,16 @@ export class TimeController {
     @Query() query: QueryAttendanceDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.timeService.getAttendance(
-      req.user.tenantId,
-      req.user as RequestUser,
-      {
-        employeeId: query.employeeId,
-        from: query.from,
-        to: query.to,
-        departmentId: query.departmentId,
-        status: query.status,
-        search: query.search,
-        page: query.page,
-        mine: query.mine ?? false,
-      },
-    );
+    return this.timeService.getAttendance(req.user.tenantId, req.user, {
+      employeeId: query.employeeId,
+      from: query.from,
+      to: query.to,
+      departmentId: query.departmentId,
+      status: query.status,
+      search: query.search,
+      page: query.page,
+      mine: query.mine ?? false,
+    });
   }
 
   @Post('corrections')
@@ -174,7 +170,7 @@ export class TimeController {
   ) {
     return this.timeService.getTimeCorrections(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       query,
     );
   }
@@ -193,7 +189,7 @@ export class TimeController {
     return this.timeService.reviewTimeCorrection(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -203,10 +199,7 @@ export class TimeController {
   @ApiOperation({ summary: 'Get all employees currently clocked in' })
   @ApiResponse({ status: 200, description: 'Live attendance list' })
   getLiveAttendance(@Req() req: AuthenticatedRequest) {
-    return this.timeService.getLiveAttendance(
-      req.user.tenantId,
-      req.user as RequestUser,
-    );
+    return this.timeService.getLiveAttendance(req.user.tenantId, req.user);
   }
 
   @Get('stats/today')
@@ -214,10 +207,7 @@ export class TimeController {
   @ApiOperation({ summary: "Get today's attendance stats" })
   @ApiResponse({ status: 200, description: 'Attendance stats' })
   getAttendanceStats(@Req() req: AuthenticatedRequest) {
-    return this.timeService.getAttendanceStats(
-      req.user.tenantId,
-      req.user as RequestUser,
-    );
+    return this.timeService.getAttendanceStats(req.user.tenantId, req.user);
   }
 
   @Post('schedules')
@@ -230,11 +220,7 @@ export class TimeController {
     @Body() dto: CreateScheduleDto,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.timeService.createSchedule(
-      req.user.tenantId,
-      req.user as RequestUser,
-      dto,
-    );
+    return this.timeService.createSchedule(req.user.tenantId, req.user, dto);
   }
 
   @Get('schedules')
@@ -247,7 +233,7 @@ export class TimeController {
   ) {
     return this.timeService.getSchedules(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       query.employeeId,
     );
   }
@@ -267,7 +253,7 @@ export class TimeController {
     return this.timeService.updateSchedule(
       req.user.tenantId,
       id,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -280,11 +266,7 @@ export class TimeController {
   @ApiResponse({ status: 200, description: 'Schedule deleted' })
   @ApiResponse({ status: 404, description: 'Schedule not found' })
   deleteSchedule(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
-    return this.timeService.deleteSchedule(
-      req.user.tenantId,
-      id,
-      req.user as RequestUser,
-    );
+    return this.timeService.deleteSchedule(req.user.tenantId, id, req.user);
   }
 
   @Get('shift-swaps/eligible-colleagues')
@@ -312,7 +294,7 @@ export class TimeController {
   ) {
     return this.timeService.getEligibleShiftSwapColleagues(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       query,
     );
   }
@@ -328,7 +310,7 @@ export class TimeController {
   ) {
     return this.timeService.createShiftSwapRequest(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       dto,
     );
   }
@@ -339,10 +321,7 @@ export class TimeController {
   })
   @ApiResponse({ status: 200, description: 'Shift swap requests retrieved' })
   getMyShiftSwaps(@Req() req: AuthenticatedRequest) {
-    return this.timeService.getMyShiftSwapRequests(
-      req.user.tenantId,
-      req.user as RequestUser,
-    );
+    return this.timeService.getMyShiftSwapRequests(req.user.tenantId, req.user);
   }
 
   @Get('shift-swaps/pending-manager')
@@ -365,7 +344,7 @@ export class TimeController {
   ) {
     return this.timeService.getPendingManagerShiftSwaps(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       query.status,
     );
   }
@@ -377,7 +356,7 @@ export class TimeController {
   getShiftSwap(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.timeService.getShiftSwapRequest(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       id,
     );
   }
@@ -396,7 +375,7 @@ export class TimeController {
   ) {
     return this.timeService.respondToShiftSwap(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       id,
       dto,
     );
@@ -420,7 +399,7 @@ export class TimeController {
   ) {
     return this.timeService.reviewShiftSwap(
       req.user.tenantId,
-      req.user as RequestUser,
+      req.user,
       id,
       dto,
     );
@@ -448,10 +427,9 @@ export class TimeController {
     @Query('to') to: string,
     @Req() req: AuthenticatedRequest,
   ) {
-    return this.timeService.getMySchedule(
-      req.user.tenantId,
-      req.user as RequestUser,
-      { from, to },
-    );
+    return this.timeService.getMySchedule(req.user.tenantId, req.user, {
+      from,
+      to,
+    });
   }
 }
