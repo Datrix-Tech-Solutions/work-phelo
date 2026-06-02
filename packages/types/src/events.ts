@@ -501,6 +501,7 @@ export interface AnnouncementRecipientEvent {
   employeeId: string;
   userId: string;
   email: string;
+  phone?: string;
   firstName: string;
   lastName: string;
 }

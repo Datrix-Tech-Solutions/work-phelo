@@ -22,6 +22,7 @@ enum NotificationStatus {
   PENDING
   SENT
   FAILED
+  SKIPPED
 
   @@schema("notify")
 }
