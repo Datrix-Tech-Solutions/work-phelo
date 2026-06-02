@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotificationType, Prisma } from '../../prisma/generated/client';
-import { InviteUserKind } from '@work-phelo/types';
+import { AnnouncementDeliveryChannel, InviteUserKind } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../channels/email.service';
 import { SmsService } from '../channels/sms.service';
@@ -14,6 +14,36 @@ export class NotificationService {
     private readonly email: EmailService,
     private readonly sms: SmsService,
   ) {}
+
+  private shouldDeliverAnnouncementChannel(
+    channels: AnnouncementDeliveryChannel[] | undefined,
+    channel: Extract<AnnouncementDeliveryChannel, 'EMAIL' | 'SMS'>,
+  ): boolean {
+    if (!channels || channels.length === 0) {
+      return channel === 'EMAIL';
+    }
+
+    return channels.includes(channel);
+  }
+
+  private buildAnnouncementSmsMessage(data: {
+    title: string;
+    body: string;
+    platformLink?: string;
+  }): string {
+    const title = data.title.trim();
+    const body = data.body.replace(/\s+/g, ' ').trim();
+    const suffix = data.platformLink
+      ? ` View in WorkPhelo: ${data.platformLink}`
+      : '';
+    const maxBodyLength = Math.max(0, 280 - title.length - suffix.length - 25);
+    const truncatedBody =
+      body.length > maxBodyLength
+        ? `${body.slice(0, Math.max(0, maxBodyLength - 1)).trimEnd()}…`
+        : body;
+
+    return `WorkPhelo announcement: ${title}. ${truncatedBody}${suffix}`;
+  }
 
   private async isDuplicate(
     recipient: string,
@@ -283,41 +313,126 @@ export class NotificationService {
     title: string;
     body: string;
     publishedAt: string;
+    deliveryChannels?: AnnouncementDeliveryChannel[];
     platformLink?: string;
     recipients: {
       employeeId: string;
       userId: string;
       email: string;
+      phone?: string;
       firstName: string;
       lastName: string;
     }[];
   }) {
-    await Promise.all(
-      data.recipients.map(async (recipient) => {
-        const success = await this.email.sendAnnouncementPublishedNotification(
-          recipient.email,
-          recipient.firstName,
-          data.title,
-          data.body,
-          data.publishedAt,
-          data.platformLink,
-        );
-
-        await this.log({
-          userId: recipient.userId,
-          tenantId: data.tenantId,
-          type: 'ANNOUNCEMENT_PUBLISHED',
-          channel: 'EMAIL',
-          recipient: recipient.email,
-          subject: data.title,
-          status: success ? 'SENT' : 'FAILED',
-          metadata: {
-            announcementId: data.announcementId,
-            employeeId: recipient.employeeId,
-          },
-        });
-      }),
+    const shouldSendEmail = this.shouldDeliverAnnouncementChannel(
+      data.deliveryChannels,
+      'EMAIL',
     );
+    const shouldSendSms = this.shouldDeliverAnnouncementChannel(
+      data.deliveryChannels,
+      'SMS',
+    );
+
+    if (data.recipients.length === 0) {
+      this.logger.warn(
+        `[ANNOUNCEMENT_PUBLISHED] No recipients resolved for announcement ${data.announcementId} in tenant ${data.tenantId}`,
+      );
+      const channelsToSkip = [
+        shouldSendEmail ? 'EMAIL' : null,
+        shouldSendSms ? 'SMS' : null,
+      ].filter((channel): channel is 'EMAIL' | 'SMS' => channel !== null);
+
+      await Promise.all(
+        channelsToSkip.map((channel) =>
+          this.log({
+            userId: undefined,
+            tenantId: data.tenantId,
+            type: 'ANNOUNCEMENT_PUBLISHED',
+            channel,
+            recipient: `announcement:${data.announcementId}`,
+            subject: data.title,
+            status: 'SKIPPED',
+            metadata: {
+              announcementId: data.announcementId,
+              reason: 'NO_RECIPIENTS',
+            },
+          }),
+        ),
+      );
+      return;
+    }
+
+    const emailTasks = shouldSendEmail
+      ? data.recipients.map(async (recipient) => {
+          const success =
+            await this.email.sendAnnouncementPublishedNotification(
+              recipient.email,
+              recipient.firstName,
+              data.title,
+              data.body,
+              data.publishedAt,
+              data.platformLink,
+            );
+
+          await this.log({
+            userId: recipient.userId,
+            tenantId: data.tenantId,
+            type: 'ANNOUNCEMENT_PUBLISHED',
+            channel: 'EMAIL',
+            recipient: recipient.email,
+            subject: data.title,
+            status: success ? 'SENT' : 'FAILED',
+            metadata: {
+              announcementId: data.announcementId,
+              employeeId: recipient.employeeId,
+            },
+          });
+        })
+      : [];
+
+    const smsMessage = this.buildAnnouncementSmsMessage(data);
+    const smsTasks = shouldSendSms
+      ? data.recipients.map(async (recipient) => {
+          if (!recipient.phone) {
+            await this.log({
+              userId: recipient.userId,
+              tenantId: data.tenantId,
+              type: 'ANNOUNCEMENT_PUBLISHED',
+              channel: 'SMS',
+              recipient: recipient.email,
+              subject: data.title,
+              status: 'SKIPPED',
+              metadata: {
+                announcementId: data.announcementId,
+                employeeId: recipient.employeeId,
+                reason: 'MISSING_PHONE',
+              },
+            });
+            return;
+          }
+
+          const success = await this.sms.sendMessage(
+            recipient.phone,
+            smsMessage,
+          );
+
+          await this.log({
+            userId: recipient.userId,
+            tenantId: data.tenantId,
+            type: 'ANNOUNCEMENT_PUBLISHED',
+            channel: 'SMS',
+            recipient: recipient.phone,
+            subject: data.title,
+            status: success ? 'SENT' : 'FAILED',
+            metadata: {
+              announcementId: data.announcementId,
+              employeeId: recipient.employeeId,
+            },
+          });
+        })
+      : [];
+
+    await Promise.all([...emailTasks, ...smsTasks]);
   }
 
   async sendPayrollApprovalRequestedNotification(data: {
