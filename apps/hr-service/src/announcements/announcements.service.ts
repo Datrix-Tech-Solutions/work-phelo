@@ -9,6 +9,7 @@ import {
 import {
   Announcement,
   AnnouncementAudienceType,
+  AnnouncementDeliveryChannel,
   EmploymentStatus,
   Prisma,
 } from '../../prisma/generated/client';
@@ -79,6 +80,24 @@ export class AnnouncementsService {
     return [...new Set((values ?? []).map((value) => value.trim()))].filter(
       (value) => value.length > 0,
     );
+  }
+
+  private normalizeDeliveryChannels(
+    dto: CreateAnnouncementDto,
+  ): AnnouncementDeliveryChannel[] {
+    const requestedChannels =
+      dto.deliveryChannels && dto.deliveryChannels.length > 0
+        ? dto.deliveryChannels
+        : dto.sendEmail
+          ? [
+              AnnouncementDeliveryChannel.IN_APP,
+              AnnouncementDeliveryChannel.EMAIL,
+            ]
+          : [AnnouncementDeliveryChannel.IN_APP];
+
+    return [
+      ...new Set([AnnouncementDeliveryChannel.IN_APP, ...requestedChannels]),
+    ];
   }
 
   private async getActorContext(
@@ -421,6 +440,7 @@ export class AnnouncementsService {
     dto: CreateAnnouncementDto,
   ) {
     const audience = await this.normalizeAudienceSelection(tenantId, dto);
+    const deliveryChannels = this.normalizeDeliveryChannels(dto);
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
 
     if (expiresAt && expiresAt <= new Date()) {
@@ -432,14 +452,17 @@ export class AnnouncementsService {
         tenantId,
         title: dto.title.trim(),
         body: dto.body.trim(),
-        sendEmail: dto.sendEmail ?? false,
+        sendEmail: deliveryChannels.includes(AnnouncementDeliveryChannel.EMAIL),
+        deliveryChannels,
         expiresAt,
         createdById: actor.id,
         ...audience,
       },
     });
 
-    if (announcement.sendEmail) {
+    if (
+      announcement.deliveryChannels.includes(AnnouncementDeliveryChannel.EMAIL)
+    ) {
       void this.publishAnnouncementEmails(tenantId, actor, announcement);
     }
 
@@ -637,6 +660,7 @@ export class AnnouncementsService {
         title: announcement.title,
         body: announcement.body,
         publishedAt: announcement.publishedAt.toISOString(),
+        deliveryChannels: announcement.deliveryChannels,
         platformLink: this.buildTenantWorkspaceLink(actor.tenantSlug),
         recipients,
       });
