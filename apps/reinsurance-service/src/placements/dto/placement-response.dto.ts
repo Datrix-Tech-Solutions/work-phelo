@@ -48,8 +48,13 @@ export class PlacementParticipantResponseDto {
   @ApiPropertyOptional({
     type: String,
     nullable: true,
-    example: '45.0000',
-    description: 'Decimal value returned as a JSON string by Prisma.',
+    example: '30.0000',
+    description:
+      'Offered participation percentage for this participant. ' +
+      'Returned as a JSON string by Prisma. ' +
+      'The sum across all participants (totalOfferedPercent) may exceed 100% ' +
+      'because the same available share can be extended to multiple reinsurers ' +
+      'during the marketing phase.',
   })
   sharePercent!: string | null;
 
@@ -57,7 +62,10 @@ export class PlacementParticipantResponseDto {
     type: String,
     nullable: true,
     example: '25.0000',
-    description: 'Decimal value returned as a JSON string by Prisma.',
+    description:
+      'Signed line percentage — the share this participant accepted. ' +
+      'Returned as a JSON string by Prisma. ' +
+      'Only ACCEPTED participants contribute to the placement totalAcceptedPercent.',
   })
   signedLinePercent!: string | null;
 
@@ -124,7 +132,20 @@ export class PlacementResponseDto {
   @ApiProperty({ enum: PlacementType, example: PlacementType.FACULTATIVE })
   placementType!: PlacementType;
 
-  @ApiProperty({ enum: PlacementStatus, example: PlacementStatus.DRAFT })
+  @ApiProperty({
+    enum: PlacementStatus,
+    example: PlacementStatus.DRAFT,
+    description:
+      'Current placement lifecycle status.\n\n' +
+      'DRAFT — being prepared, not yet submitted to market.\n' +
+      'MARKETING — submitted to market, no accepted capacity yet.\n' +
+      'PARTIALLY_PLACED — some capacity accepted, below the facultativeOffer target.\n' +
+      'PLACED — accepted capacity has reached or exceeded the facultativeOffer target.\n' +
+      'CLOSING — placed and entering formal bind/close; avoid major structural changes.\n' +
+      'CLOSED — formally closed, terminal, no edits or archive allowed.\n' +
+      'DECLINED — all markets declined; can return to MARKETING.\n' +
+      'CANCELLED — cancelled before close, terminal, no edits allowed.',
+  })
   status!: PlacementStatus;
 
   @ApiProperty({ format: 'uuid' })
@@ -244,22 +265,28 @@ export class PlacementResponseDto {
   participants!: PlacementParticipantResponseDto[];
 
   @ApiProperty({
-    example: 60,
-    description: 'Total offered participant share percentage.',
+    example: 90,
+    description:
+      'Sum of sharePercent across all participants regardless of status. ' +
+      'May exceed 100% because the same available share can be offered to multiple ' +
+      'reinsurers during the marketing phase. Treat this as the total distribution sent to market.',
   })
   totalOfferedPercent!: number;
 
   @ApiProperty({
-    example: 40,
+    example: 20,
     description:
-      'Total accepted/taken percentage based on ACCEPTED participants and signed lines.',
+      'Sum of signedLinePercent for ACCEPTED participants only. ' +
+      'This is the binding accepted capacity and drives auto-recalculation of placement status. ' +
+      'Must not exceed facultativeOffer (or 100 when absent).',
   })
   totalAcceptedPercent!: number;
 
   @ApiProperty({
-    example: 20,
+    example: 10,
     description:
-      'Remaining percentage against facultativeOffer when present, otherwise against 100%.',
+      'Remaining capacity: max(0, facultativeOffer (or 100) − totalAcceptedPercent). ' +
+      'Based on accepted capacity, not offered. Never returns negative.',
   })
   remainingPercent!: number;
 

@@ -73,44 +73,18 @@ List requests support `search`, `status`, `placementType`, `cedantId`, `page`
 and `limit`. Deletion is a soft archive. Every lookup and mutation is scoped
 by the authenticated `tenantId`; request bodies cannot choose tenant ownership.
 
-Placements currently support the broker-only facultative lifecycle foundation:
+Placements currently support the broker-only facultative lifecycle. See the
+[Placement Lifecycle Reference](#placement-lifecycle-reference) section below
+for the full status reference, transition matrix, edit rules, participant
+workflow and auto-recalculation rules.
 
-```text
-DRAFT -> MARKETING -> QUOTED -> BOUND
-                   -> DECLINED
-                   -> CANCELLED
-```
-
-`DECLINED` can return to `MARKETING`; `BOUND` and `CANCELLED` are terminal in
-the MVP foundation. Status changes are recorded in `PlacementStatusHistory`.
-`BOUND` and `CANCELLED` placements cannot be edited through the header/market
-participant update endpoint. `BOUND` placements also cannot be archived.
-When a `PATCH /placements/:id` body supplies `participants`, the supplied
-array replaces the complete stored participant collection. Omit
-`participants` when editing only placement header fields. New frontend work
-should prefer the participant-specific endpoints above so adding, updating,
-removing and changing participant workflow status does not replace the whole
-market snapshot.
-
-Participant workflow status is first-class and no longer inferred from
-`notes` JSON. Supported participant statuses are `INVITED`, `OFFER_SENT`,
-`QUOTED`, `ACCEPTED`, `DECLINED` and `CLOSED`. An `ACCEPTED` participant must
-have a `signedLinePercent` so the placement response can expose accurate
-capacity aggregates:
-
-- `totalOfferedPercent`
-- `totalAcceptedPercent`
-- `remainingPercent`
-
-Capacity validation is intentionally conservative for Sprint 1:
-
-- Individual `signedLinePercent` cannot exceed that participant's
-  `sharePercent` when both are supplied.
-- Total `sharePercent` cannot exceed `100`.
-- Total `signedLinePercent` cannot exceed `100`.
-- Accepted participants require a `signedLinePercent`.
-- Cedants are linked through the placement `cedantId`; they are not allowed in
-  the market participant collection.
+When a `PATCH /placements/:id` body supplies `participants`, the supplied array
+replaces the complete stored participant collection. Omit `participants` when
+editing only placement header fields. Prefer the participant-specific endpoints
+(`POST /participants`, `PATCH /participants/:id`,
+`PATCH /participants/:id/status`, `DELETE /participants/:id`) so adding,
+updating, removing and changing participant workflow status does not replace the
+whole market snapshot.
 
 Participant role validation is tied to Counterparty type:
 
@@ -118,6 +92,179 @@ Participant role validation is tied to Counterparty type:
 | --------------------------------------------- | -------------------------- |
 | `BROKER`                                      | `BROKER`                   |
 | `REINSURER`, `LEAD_REINSURER`, `CO_REINSURER` | `REINSURER`                |
+
+## Placement Lifecycle Reference
+
+### Placement status meanings
+
+| Status             | Description                                                                                                          |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `DRAFT`            | Being prepared. Not yet submitted to market. Fully editable.                                                         |
+| `MARKETING`        | Submitted to the facultative market. No accepted capacity yet.                                                       |
+| `PARTIALLY_PLACED` | At least one reinsurer has accepted a signed line but total accepted capacity is below the facultative offer target. |
+| `PLACED`           | Total accepted signed capacity has reached or exceeded the facultative offer target.                                 |
+| `CLOSING`          | Fully placed and entering the formal bind/close process. Avoid major structural edits.                               |
+| `CLOSED`           | Formally closed. Terminal — no edits, no archive.                                                                    |
+| `DECLINED`         | All approached markets declined. Can return to `MARKETING` if re-marketed.                                           |
+| `CANCELLED`        | Cancelled before close. Terminal — no edits.                                                                         |
+
+### Allowed placement transitions
+
+The backend enforces a strict transition matrix. An invalid transition returns
+`400 Bad Request`.
+
+| From               | Allowed next statuses                                 |
+| ------------------ | ----------------------------------------------------- |
+| `DRAFT`            | `MARKETING`, `CANCELLED`                              |
+| `MARKETING`        | `PARTIALLY_PLACED`, `PLACED`, `DECLINED`, `CANCELLED` |
+| `PARTIALLY_PLACED` | `MARKETING`, `PLACED`, `DECLINED`, `CANCELLED`        |
+| `PLACED`           | `PARTIALLY_PLACED`, `CLOSING`, `CANCELLED`            |
+| `CLOSING`          | `PLACED`, `CLOSED`, `CANCELLED`                       |
+| `CLOSED`           | — (terminal)                                          |
+| `DECLINED`         | `MARKETING`                                           |
+| `CANCELLED`        | — (terminal)                                          |
+
+Transitions between `MARKETING`, `PARTIALLY_PLACED` and `PLACED` are also
+triggered automatically by participant capacity recalculation. The
+`PATCH /placements/:id/status` endpoint can advance these statuses manually
+when needed (for example, to manually mark `DECLINED` after all markets have
+declined before any participant status has been updated).
+
+Every status change is recorded in `PlacementStatusHistory` with the actor,
+timestamp, from/to status and an optional note.
+
+### Edit validation by placement status
+
+| Status             | Header edit (`PATCH /placements/:id`)                         | Participant edits     |
+| ------------------ | ------------------------------------------------------------- | --------------------- |
+| `DRAFT`            | Full edit allowed                                             | Full edit allowed     |
+| `MARKETING`        | Full edit allowed                                             | Full edit allowed     |
+| `PARTIALLY_PLACED` | Full edit allowed; accepted shares must remain valid          | Full edit allowed     |
+| `PLACED`           | Full edit allowed; accepted capacity should remain consistent | Full edit allowed     |
+| `CLOSING`          | Structurally editable — avoid major capacity changes          | Structurally editable |
+| `CLOSED`           | **Blocked — 400**                                             | **Blocked — 400**     |
+| `DECLINED`         | Full edit allowed                                             | Full edit allowed     |
+| `CANCELLED`        | **Blocked — 400**                                             | **Blocked — 400**     |
+
+`CLOSED` placements cannot be archived either. Archive is only permitted when
+the placement is not `CLOSED`.
+
+### Participant status meanings
+
+| Status       | Description                                                            |
+| ------------ | ---------------------------------------------------------------------- |
+| `INVITED`    | Reinsurer identified but not yet formally approached.                  |
+| `OFFER_SENT` | Slip or offer terms sent to the reinsurer.                             |
+| `QUOTED`     | Reinsurer has returned an indication or quote.                         |
+| `ACCEPTED`   | Reinsurer accepted a signed line. Requires `signedLinePercent > 0`.    |
+| `DECLINED`   | Reinsurer declined. Does not contribute to accepted capacity.          |
+| `CLOSED`     | Participant's line formally closed. Terminal — no further transitions. |
+
+### Participant status transitions
+
+| From         | Allowed next statuses                |
+| ------------ | ------------------------------------ |
+| `INVITED`    | `OFFER_SENT`, `DECLINED`             |
+| `OFFER_SENT` | `QUOTED`, `ACCEPTED`, `DECLINED`     |
+| `QUOTED`     | `OFFER_SENT`, `ACCEPTED`, `DECLINED` |
+| `ACCEPTED`   | `QUOTED`, `DECLINED`, `CLOSED`       |
+| `DECLINED`   | `OFFER_SENT`                         |
+| `CLOSED`     | — (terminal)                         |
+
+### Participant capacity validation rules
+
+**Offered share (`sharePercent`) vs accepted/signed line (`signedLinePercent`)
+are separate concepts.**
+
+`sharePercent` is the percentage of the available offer being extended to a
+participant. During the marketing phase the broker may extend the same available
+share to multiple reinsurers simultaneously — for example, if `facultativeOffer`
+is 30%, three separate reinsurers can each be offered 30% while only one (or a
+combination) will ultimately accept. The aggregate `totalOfferedPercent` can
+therefore exceed 100% and that is expected.
+
+`signedLinePercent` is the amount a reinsurer actually agrees to take. Only
+`ACCEPTED` participants' signed lines count against the facultative offer cap.
+
+**Rules enforced on every participant write:**
+
+- `ACCEPTED` participants **must** have `signedLinePercent > 0`.
+- `signedLinePercent` cannot exceed `sharePercent` when both are explicitly
+  provided.
+- Total `signedLinePercent` of **ACCEPTED-only** participants must not exceed
+  `facultativeOffer` (or `100` when `facultativeOffer` is not set). Attempting
+  to add or accept beyond the cap returns `400 Bad Request`.
+- `DECLINED` participants never contribute to the accepted capacity cap,
+  regardless of their `signedLinePercent`.
+- No global cap on `totalOfferedPercent` — the same share can be offered to as
+  many participants as needed.
+
+The three computed aggregates returned on every placement response are
+authoritative — treat them as the source of truth, not derived values:
+
+```
+totalOfferedPercent  = sum of sharePercent for ALL participants (may exceed 100)
+totalAcceptedPercent = sum of signedLinePercent for ACCEPTED participants only
+remainingPercent     = max(0, facultativeOffer (or 100) − totalAcceptedPercent)
+```
+
+### Auto-recalculation rules
+
+When any participant is added, updated or deleted on a placement whose current
+status is `MARKETING`, `PARTIALLY_PLACED` or `PLACED`, the backend derives the
+new placement status automatically from `totalAcceptedPercent`:
+
+| `totalAcceptedPercent` condition              | Derived placement status |
+| --------------------------------------------- | ------------------------ |
+| `<= 0`                                        | `MARKETING`              |
+| `> 0` and below `facultativeOffer` (or `100`) | `PARTIALLY_PLACED`       |
+| `>= facultativeOffer` (or `100`)              | `PLACED`                 |
+
+Auto-recalculation is **skipped** for `DRAFT`, `CLOSING`, `CLOSED`,
+`DECLINED` and `CANCELLED` placements. Participant changes on these statuses
+are persisted normally; only the placement status derivation is skipped.
+
+When recalculation changes the placement status a `PlacementStatusHistory`
+entry is written automatically with note
+`"Participant capacity recalculated placement status"`.
+
+### Known validation gaps (Sprint 1)
+
+The following items are **not yet enforced** by the backend. They are
+documented here so the frontend does not build assumptions that conflict with
+future enforcement, and to serve as a tracked follow-up.
+
+**Gap 1 — ~~Accepted capacity may exceed `facultativeOffer`.~~ Fixed.**
+`assertAcceptedCap()` now enforces that the combined `signedLinePercent` of
+`ACCEPTED` participants cannot exceed `facultativeOffer` (or 100 when absent).
+The previous global `totalSignedLinePercent ≤ 100` check (which applied to all
+participants regardless of status) has been replaced with this targeted cap.
+
+**Gap 2 — `CANCELLED` placements can currently be archived.**
+`assertArchivable()` guards against archiving `CLOSED` placements but not
+`CANCELLED` ones. Since `CANCELLED` is also terminal, archiving it is
+unintended. Recommended fix: add `CANCELLED` to the archive guard alongside
+`CLOSED`. Impact: low-blast-radius edge case. Target: follow-up PR.
+
+### Frontend integration guidance
+
+- Use backend enum values directly in API calls (`DRAFT`, `MARKETING`, etc.).
+  Map to display labels in the view layer only. Do not use old placeholder
+  values like `Open`, `Closed`, `Pending` or `Expired` as API values.
+- Display backend validation errors (`400` response `message` field) directly
+  to the user for status transition and capacity errors — they are written for
+  end-user readability.
+- Use `PATCH /placements/:id/participants/:participantId/status` for participant
+  workflow state changes. Do not store workflow status in `notes` JSON.
+- Treat `totalOfferedPercent`, `totalAcceptedPercent` and `remainingPercent`
+  from the placement response as the authoritative source — do not recompute
+  them in the frontend.
+- After a participant mutation the response already contains the updated
+  placement (including the auto-recalculated status). No extra `GET` is needed.
+- For `CLOSED` and `CANCELLED` placements, hide or disable all edit and archive
+  actions entirely; do not rely on backend rejection as the first gate.
+- A `409` on placement create or update means a duplicate `reference` already
+  exists for this tenant — surface field-level feedback.
 
 ## Risk Settings API
 
@@ -482,8 +629,9 @@ rollback more complex than the MVP needs.
 Current frontend note: the initial Facultative UI uses placeholder labels like
 `Pending`, `Active`, `Expired` and `Cancelled`. When wiring it to this API,
 use the backend lifecycle statuses directly in API calls and map labels in the
-view layer, for example `DRAFT`/`MARKETING`/`QUOTED` as work-in-progress,
-`BOUND` as active, `DECLINED` as declined and `CANCELLED` as cancelled.
+view layer, for example `DRAFT`/`MARKETING` as open work-in-progress states,
+`PARTIALLY_PLACED`/`PLACED`/`CLOSING` as active placement states, `CLOSED` as
+closed, `DECLINED` as declined and `CANCELLED` as cancelled.
 The backend does not expose split `/cedants`, `/reinsurers` or `/brokers`
 placement endpoints; retrieve those through `/counterparties?type=...`.
 

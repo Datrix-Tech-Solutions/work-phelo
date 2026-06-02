@@ -175,6 +175,7 @@ export class PlacementsService {
     this.validateDates(dto.inceptionDate, dto.expiryDate);
     await this.assertCedant(user.tenantId, dto.cedantId);
     await this.assertParticipants(user.tenantId, dto.participants ?? []);
+    this.assertAcceptedCap(dto.participants ?? [], dto.facultativeOffer);
 
     // Resolve riskTypeId and derive classOfBusiness from RiskType.name
     let resolvedRiskTypeId: string | null = null;
@@ -282,6 +283,11 @@ export class PlacementsService {
     }
     if (dto.participants) {
       await this.assertParticipants(user.tenantId, dto.participants);
+      const effectiveCap =
+        dto.facultativeOffer !== undefined
+          ? dto.facultativeOffer
+          : existing.facultativeOffer;
+      this.assertAcceptedCap(dto.participants, effectiveCap);
     }
     this.assertEditable(existing);
 
@@ -422,11 +428,19 @@ export class PlacementsService {
         data,
         include: placementInclude,
       });
-      this.publish('updated', placement, user, {
+      const finalPlacement =
+        dto.participants !== undefined
+          ? await this.syncParticipantDrivenStatus(
+              user,
+              existing,
+              this.withAggregates(placement),
+            )
+          : this.withAggregates(placement);
+      this.publish('updated', finalPlacement, user, {
         before: this.auditSnapshot(existing),
-        after: this.auditSnapshot(placement),
+        after: this.auditSnapshot(finalPlacement),
       });
-      return this.withAggregates(placement);
+      return finalPlacement;
     } catch (error) {
       this.rethrowWriteError(error);
       throw error;
@@ -518,10 +532,10 @@ export class PlacementsService {
     const existing = await this.findOne(user.tenantId, placementId);
     this.assertEditable(existing);
     await this.assertParticipants(user.tenantId, [dto]);
-    this.assertParticipantCollection([
-      ...existing.participants,
-      this.toCapacityInput(dto),
-    ]);
+    this.assertParticipantCollection(
+      [...existing.participants, this.toCapacityInput(dto)],
+      existing.facultativeOffer,
+    );
 
     try {
       await this.prisma.placementParticipant.create({
@@ -542,7 +556,11 @@ export class PlacementsService {
       throw error;
     }
 
-    const placement = await this.findOne(user.tenantId, placementId);
+    const placement = await this.syncParticipantDrivenStatus(
+      user,
+      existing,
+      await this.findOne(user.tenantId, placementId),
+    );
     this.publish('updated', placement, user, {
       before: this.auditSnapshot(existing),
       after: this.auditSnapshot(placement),
@@ -573,6 +591,7 @@ export class PlacementsService {
       existing.participants.map((item) =>
         item.id === participantId ? nextParticipant : item,
       ),
+      existing.facultativeOffer,
     );
 
     try {
@@ -603,7 +622,11 @@ export class PlacementsService {
       throw error;
     }
 
-    const placement = await this.findOne(user.tenantId, placementId);
+    const placement = await this.syncParticipantDrivenStatus(
+      user,
+      existing,
+      await this.findOne(user.tenantId, placementId),
+    );
     this.publish('updated', placement, user, {
       before: this.auditSnapshot(existing),
       after: this.auditSnapshot(placement),
@@ -627,7 +650,11 @@ export class PlacementsService {
       where: { id: participant.id },
     });
 
-    const placement = await this.findOne(user.tenantId, placementId);
+    const placement = await this.syncParticipantDrivenStatus(
+      user,
+      existing,
+      await this.findOne(user.tenantId, placementId),
+    );
     this.publish('updated', placement, user, {
       before: this.auditSnapshot(existing),
       after: this.auditSnapshot(placement),
@@ -657,6 +684,7 @@ export class PlacementsService {
       existing.participants.map((item) =>
         item.id === participantId ? nextParticipant : item,
       ),
+      existing.facultativeOffer,
     );
 
     await this.prisma.placementParticipant.update({
@@ -669,7 +697,11 @@ export class PlacementsService {
       },
     });
 
-    const placement = await this.findOne(user.tenantId, placementId);
+    const placement = await this.syncParticipantDrivenStatus(
+      user,
+      existing,
+      await this.findOne(user.tenantId, placementId),
+    );
     this.publish('updated', placement, user, {
       before: this.auditSnapshot(existing),
       after: this.auditSnapshot(placement),
@@ -746,6 +778,7 @@ export class PlacementsService {
 
   private assertParticipantCollection(
     participants: ParticipantCapacityInput[],
+    facultativeOffer?: number | Prisma.Decimal | null,
   ): void {
     const keys = new Set<string>();
     for (const participant of participants) {
@@ -758,6 +791,7 @@ export class PlacementsService {
       keys.add(duplicateKey);
     }
     this.assertCapacity(participants);
+    this.assertAcceptedCap(participants, facultativeOffer);
   }
 
   private assertParticipantRoleMatchesType(
@@ -783,26 +817,6 @@ export class PlacementsService {
   }
 
   private assertCapacity(participants: ParticipantCapacityInput[]): void {
-    const totalOffered = participants.reduce(
-      (sum, item) => sum + this.decimalToNumber(item.sharePercent),
-      0,
-    );
-    const totalSigned = participants.reduce(
-      (sum, item) => sum + this.decimalToNumber(item.signedLinePercent),
-      0,
-    );
-
-    if (totalOffered > 100) {
-      throw new BadRequestException(
-        'Total offered participant share cannot exceed 100%',
-      );
-    }
-    if (totalSigned > 100) {
-      throw new BadRequestException(
-        'Total signed participant line cannot exceed 100%',
-      );
-    }
-
     for (const participant of participants) {
       if (
         participant.status === PlacementParticipantStatus.ACCEPTED &&
@@ -815,7 +829,9 @@ export class PlacementsService {
 
       if (
         participant.sharePercent !== undefined &&
+        participant.sharePercent !== null &&
         participant.signedLinePercent !== undefined &&
+        participant.signedLinePercent !== null &&
         this.decimalToNumber(participant.signedLinePercent) >
           this.decimalToNumber(participant.sharePercent)
       ) {
@@ -823,6 +839,23 @@ export class PlacementsService {
           'Signed line cannot exceed offered participant share',
         );
       }
+    }
+  }
+
+  private assertAcceptedCap(
+    participants: ParticipantCapacityInput[],
+    facultativeOffer: number | Prisma.Decimal | null | undefined,
+  ): void {
+    const cap = this.decimalToNumber(facultativeOffer) || 100;
+    const totalAccepted = this.roundPercent(
+      participants
+        .filter((p) => p.status === PlacementParticipantStatus.ACCEPTED)
+        .reduce((sum, p) => sum + this.decimalToNumber(p.signedLinePercent), 0),
+    );
+    if (totalAccepted > cap) {
+      throw new BadRequestException(
+        `Total accepted signed line (${totalAccepted}%) cannot exceed the facultative offer cap (${cap}%)`,
+      );
     }
   }
 
@@ -869,7 +902,7 @@ export class PlacementsService {
 
   private assertEditable(placement: PlacementRecord): void {
     if (
-      placement.status === PlacementStatus.BOUND ||
+      placement.status === PlacementStatus.CLOSED ||
       placement.status === PlacementStatus.CANCELLED
     ) {
       throw new BadRequestException(
@@ -879,8 +912,8 @@ export class PlacementsService {
   }
 
   private assertArchivable(placement: PlacementRecord): void {
-    if (placement.status === PlacementStatus.BOUND) {
-      throw new BadRequestException('Cannot archive a bound placement');
+    if (placement.status === PlacementStatus.CLOSED) {
+      throw new BadRequestException('Cannot archive a closed placement');
     }
   }
 
@@ -894,18 +927,28 @@ export class PlacementsService {
         PlacementStatus.CANCELLED,
       ],
       [PlacementStatus.MARKETING]: [
-        PlacementStatus.QUOTED,
-        PlacementStatus.BOUND,
+        PlacementStatus.PARTIALLY_PLACED,
+        PlacementStatus.PLACED,
         PlacementStatus.DECLINED,
         PlacementStatus.CANCELLED,
       ],
-      [PlacementStatus.QUOTED]: [
+      [PlacementStatus.PARTIALLY_PLACED]: [
         PlacementStatus.MARKETING,
-        PlacementStatus.BOUND,
+        PlacementStatus.PLACED,
         PlacementStatus.DECLINED,
         PlacementStatus.CANCELLED,
       ],
-      [PlacementStatus.BOUND]: [],
+      [PlacementStatus.PLACED]: [
+        PlacementStatus.PARTIALLY_PLACED,
+        PlacementStatus.CLOSING,
+        PlacementStatus.CANCELLED,
+      ],
+      [PlacementStatus.CLOSING]: [
+        PlacementStatus.PLACED,
+        PlacementStatus.CLOSED,
+        PlacementStatus.CANCELLED,
+      ],
+      [PlacementStatus.CLOSED]: [],
       [PlacementStatus.DECLINED]: [PlacementStatus.MARKETING],
       [PlacementStatus.CANCELLED]: [],
     };
@@ -915,6 +958,81 @@ export class PlacementsService {
         `Cannot move placement from ${from} to ${to}`,
       );
     }
+  }
+
+  private async syncParticipantDrivenStatus(
+    user: RequestUser,
+    previous: PlacementWithAggregates,
+    placement: PlacementWithAggregates,
+  ): Promise<PlacementWithAggregates> {
+    const nextStatus = this.deriveParticipantDrivenStatus(placement);
+    if (!nextStatus || nextStatus === placement.status) {
+      return placement;
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.placementStatusHistory.create({
+        data: {
+          tenantId: user.tenantId,
+          placementId: placement.id,
+          fromStatus: placement.status,
+          toStatus: nextStatus,
+          changedByUserId: user.id,
+          note: 'Participant capacity recalculated placement status',
+        },
+      });
+
+      return tx.placement.update({
+        where: {
+          id_tenantId: { id: placement.id, tenantId: user.tenantId },
+          archivedAt: null,
+        },
+        data: {
+          status: nextStatus,
+          updatedByUserId: user.id,
+        },
+        include: placementInclude,
+      });
+    });
+    const synced = this.withAggregates(updated);
+
+    this.publish(
+      'statusChanged',
+      synced,
+      user,
+      {
+        before: this.auditSnapshot(previous),
+        after: this.auditSnapshot(synced),
+      },
+      placement.status,
+      nextStatus,
+      'Participant capacity recalculated placement status',
+    );
+
+    return synced;
+  }
+
+  private deriveParticipantDrivenStatus(
+    placement: PlacementWithAggregates,
+  ): PlacementStatus | null {
+    const participantDrivenStatuses: PlacementStatus[] = [
+      PlacementStatus.MARKETING,
+      PlacementStatus.PARTIALLY_PLACED,
+      PlacementStatus.PLACED,
+    ];
+    if (!participantDrivenStatuses.includes(placement.status)) {
+      return null;
+    }
+
+    const targetPercent =
+      this.decimalToNumber(placement.facultativeOffer) || 100;
+    if (placement.totalAcceptedPercent <= 0) {
+      return PlacementStatus.MARKETING;
+    }
+    if (placement.totalAcceptedPercent >= targetPercent) {
+      return PlacementStatus.PLACED;
+    }
+    return PlacementStatus.PARTIALLY_PLACED;
   }
 
   private participantsCreateInput(

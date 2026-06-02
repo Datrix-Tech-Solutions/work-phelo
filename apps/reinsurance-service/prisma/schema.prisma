@@ -34,8 +34,10 @@ enum PlacementType {
 enum PlacementStatus {
   DRAFT
   MARKETING
-  QUOTED
-  BOUND
+  PARTIALLY_PLACED
+  PLACED
+  CLOSING
+  CLOSED
   DECLINED
   CANCELLED
 
