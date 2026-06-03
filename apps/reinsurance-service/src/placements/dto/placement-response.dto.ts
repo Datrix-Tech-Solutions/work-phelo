@@ -278,14 +278,14 @@ export class PlacementResponseDto {
     description:
       'Sum of signedLinePercent for ACCEPTED participants only. ' +
       'This is the binding accepted capacity and drives auto-recalculation of placement status. ' +
-      'Must not exceed facultativeOffer (or 100 when absent).',
+      'Validation permits up to 100 when facultativeOffer is absent, but placement preview/display calculations treat an absent facultativeOffer as 0 to match the frontend.',
   })
   totalAcceptedPercent!: number;
 
   @ApiProperty({
     example: 10,
     description:
-      'Remaining capacity: max(0, facultativeOffer (or 100) − totalAcceptedPercent). ' +
+      'Remaining capacity: max(0, (facultativeOffer ?? 0) − totalAcceptedPercent). ' +
       'Based on accepted capacity, not offered. Never returns negative.',
   })
   remainingPercent!: number;
