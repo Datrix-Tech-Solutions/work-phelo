@@ -121,6 +121,7 @@ All endpoints require a valid JWT token via:
     swaggerOptions: {
       persistAuthorization: true,
       tagsSorter: 'alpha',
+      url: 'docs-json',
     },
   });
 

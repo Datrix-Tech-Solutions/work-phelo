@@ -1,6 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
+import { isSwaggerEnabled } from '@work-phelo/config';
 import { AppModule } from './app.module';
 import { assertReinsuranceRuntimeEnv } from './config/runtime-env';
 import { setupSwagger } from './swagger.config';
@@ -19,7 +20,7 @@ async function bootstrap() {
   );
   app.setGlobalPrefix('api');
 
-  if (process.env.ENABLE_SWAGGER === 'true') {
+  if (isSwaggerEnabled()) {
     setupSwagger(app);
   }
 

@@ -36,8 +36,14 @@ export function setupSwagger(app: INestApplication) {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
-    swaggerOptions: { persistAuthorization: true, tagsSorter: 'alpha' },
+    useGlobalPrefix: true,
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      url: 'docs-json',
+    },
+    customSiteTitle: 'WorkPhelo Subscription API Docs',
   });
 
-  console.log('📖 Subscription service docs: http://localhost:4005/docs');
+  console.log('📖 Subscription service docs: http://localhost:4005/api/docs');
 }
