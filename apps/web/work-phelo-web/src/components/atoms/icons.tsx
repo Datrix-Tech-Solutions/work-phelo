@@ -68,6 +68,7 @@ import {
   GripVertical,
   Pencil,
   Check,
+  SendHorizonal,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -128,6 +129,7 @@ export const Icons = {
   // Contact
   Phone,
   Mail,
+  SendHorizonal,
 
   // Other modules
   Activity,

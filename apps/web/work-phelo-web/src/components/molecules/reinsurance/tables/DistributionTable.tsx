@@ -11,7 +11,8 @@ import { SlipPreviewModal } from '@/components/organisms/reinsurance/SlipPreview
 export type DistributionStatus = 'Pending' | 'Accepted' | 'Declined';
 
 export interface DistributionEntry {
-  id: string;
+  id: string; // participant record ID
+  counterpartyId: string;
   reinsurerCompany: string;
   emails: string[];
   shareLine: number;
@@ -31,17 +32,25 @@ function fmtAmount(val: number) {
 
 interface DistributionTableProps {
   entries: DistributionEntry[];
-  onEntriesChange: (entries: DistributionEntry[]) => void;
   facPremium: number;
   placement: Facultative;
+  onShareCommit: (row: DistributionEntry, share: number) => void;
+  onBrokerageCommit: (row: DistributionEntry, brokerage: number) => void;
+  onMailSent: (row: DistributionEntry) => void;
+  onAccept: (row: DistributionEntry) => void;
+  onDecline: (row: DistributionEntry) => void;
   onDelete?: (row: DistributionEntry) => void;
 }
 
 export function DistributionTable({
   entries,
-  onEntriesChange,
   facPremium,
   placement,
+  onShareCommit,
+  onBrokerageCommit,
+  onMailSent,
+  onAccept,
+  onDecline,
   onDelete,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
@@ -52,23 +61,15 @@ export function DistributionTable({
   const [editingBrokerageId, setEditingBrokerageId] = useState<string | null>(null);
   const [draftBrokerage, setDraftBrokerage] = useState('');
 
-  const updateEntry = (id: string, patch: Partial<DistributionEntry>) =>
-    onEntriesChange(entries.map((e) => (e.id === id ? { ...e, ...patch } : e)));
-
   const startEdit = (row: DistributionEntry) => {
     setEditingId(row.id);
     setDraftShare(String(row.shareLine));
   };
 
-  const commitEdit = (id: string) => {
+  const commitEdit = (row: DistributionEntry) => {
     const parsed = parseFloat(draftShare);
     if (!isNaN(parsed)) {
-      updateEntry(id, { shareLine: Math.min(100, Math.max(0, parsed)), status: 'Pending' });
-      setMailedIds((prev) => {
-        const n = new Set(prev);
-        n.delete(id);
-        return n;
-      });
+      onShareCommit(row, Math.min(100, Math.max(0, parsed)));
     }
     setEditingId(null);
     setDraftShare('');
@@ -79,36 +80,35 @@ export function DistributionTable({
     setDraftBrokerage(String(row.brokerageFee));
   };
 
-  const commitBrokerage = (id: string) => {
+  const commitBrokerage = (row: DistributionEntry) => {
     const parsed = parseFloat(draftBrokerage);
-    if (!isNaN(parsed)) updateEntry(id, { brokerageFee: Math.min(100, Math.max(0, parsed)) });
+    if (!isNaN(parsed)) onBrokerageCommit(row, Math.min(100, Math.max(0, parsed)));
     setEditingBrokerageId(null);
     setDraftBrokerage('');
   };
 
-  const handleSlip = (id: string) => setSlipPreviewId(id);
-  const handleMail = (id: string) => setMailPreviewId(id);
-
   const handleSend = () => {
     if (!mailPreviewId) return;
+    const row = entries.find((e) => e.id === mailPreviewId);
+    if (row) onMailSent(row);
     setMailedIds((prev) => new Set([...prev, mailPreviewId]));
     setMailPreviewId(null);
   };
 
-  const handleAccept = (id: string) => {
-    updateEntry(id, { status: 'Accepted' });
+  const handleAccept = (row: DistributionEntry) => {
+    onAccept(row);
     setMailedIds((prev) => {
       const n = new Set(prev);
-      n.delete(id);
+      n.delete(row.id);
       return n;
     });
   };
 
-  const handleDecline = (id: string) => {
-    updateEntry(id, { status: 'Declined' });
+  const handleDecline = (row: DistributionEntry) => {
+    onDecline(row);
     setMailedIds((prev) => {
       const n = new Set(prev);
-      n.delete(id);
+      n.delete(row.id);
       return n;
     });
   };
@@ -132,8 +132,8 @@ export function DistributionTable({
             max={100}
             value={draftShare}
             onChange={(e) => setDraftShare(e.target.value)}
-            onBlur={() => commitEdit(row.id)}
-            onKeyDown={(e) => e.key === 'Enter' && commitEdit(row.id)}
+            onBlur={() => commitEdit(row)}
+            onKeyDown={(e) => e.key === 'Enter' && commitEdit(row)}
             autoFocus
             className="w-20 px-2 py-1 text-sm border border-brand ring-1 ring-brand/20 rounded-input bg-white focus:outline-none text-gray-900"
           />
@@ -160,8 +160,8 @@ export function DistributionTable({
             max={100}
             value={draftBrokerage}
             onChange={(e) => setDraftBrokerage(e.target.value)}
-            onBlur={() => commitBrokerage(row.id)}
-            onKeyDown={(e) => e.key === 'Enter' && commitBrokerage(row.id)}
+            onBlur={() => commitBrokerage(row)}
+            onKeyDown={(e) => e.key === 'Enter' && commitBrokerage(row)}
             autoFocus
             className="w-20 px-2 py-1 text-sm border border-brand ring-1 ring-brand/20 rounded-input bg-white focus:outline-none text-gray-900"
           />
@@ -206,17 +206,34 @@ export function DistributionTable({
     {
       key: 'actions',
       label: 'Actions',
-      width: '110px',
+      width: '150px',
       render: (row) => {
         const mailed = mailedIds.has(row.id);
+        const responded = row.status === 'Accepted' || row.status === 'Declined';
         return (
           <div className="flex items-center gap-2">
-            {mailed ? (
+            <button
+              type="button"
+              title="Preview Slip"
+              onClick={() => setSlipPreviewId(row.id)}
+              className="text-blue-500 hover:text-blue-600 transition-colors"
+            >
+              <Icons.Eye className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              title="Send mail"
+              onClick={() => setMailPreviewId(row.id)}
+              className="text-green-500 hover:text-green-700 transition-colors"
+            >
+              <Icons.Mail className="w-4 h-4" />
+            </button>
+            {mailed && !responded && (
               <>
                 <button
                   type="button"
                   title="Accept"
-                  onClick={() => handleAccept(row.id)}
+                  onClick={() => handleAccept(row)}
                   className="text-green-500 hover:text-green-600 transition-colors"
                 >
                   <Icons.Check className="w-4 h-4" />
@@ -224,39 +241,22 @@ export function DistributionTable({
                 <button
                   type="button"
                   title="Decline"
-                  onClick={() => handleDecline(row.id)}
+                  onClick={() => handleDecline(row)}
                   className="text-red-400 hover:text-red-600 transition-colors"
                 >
                   <Icons.X className="w-4 h-4" />
                 </button>
               </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  title="Preview Slip"
-                  onClick={() => handleSlip(row.id)}
-                  className="text-blue-500 hover:text-blue-600 transition-colors"
-                >
-                  <Icons.Eye className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  title="Send mail"
-                  onClick={() => handleMail(row.id)}
-                  className="text-green-500 hover:text-green-700 transition-colors"
-                >
-                  <Icons.Mail className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  title="Delete"
-                  onClick={() => onDelete?.(row)}
-                  className="text-red-400 hover:text-red-600 transition-colors"
-                >
-                  <Icons.Trash2 className="w-4 h-4" />
-                </button>
-              </>
+            )}
+            {!responded && (
+              <button
+                type="button"
+                title="Delete"
+                onClick={() => onDelete?.(row)}
+                className="text-red-400 hover:text-red-600 transition-colors"
+              >
+                <Icons.Trash2 className="w-4 h-4" />
+              </button>
             )}
           </div>
         );

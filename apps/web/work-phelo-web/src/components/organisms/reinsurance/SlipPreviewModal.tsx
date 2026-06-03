@@ -1,9 +1,8 @@
 'use client';
 
-import { Modal } from '@/components/organisms/shared/Modal';
-import { Button } from '@/components/atoms/Button';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
+import { DocumentPreviewModal } from '@/components/organisms/reinsurance/DocumentPreviewModal';
 
 function toLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -18,6 +17,14 @@ function fmtFieldValue(val: unknown): string {
 function fmtDate(iso: string) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function today() {
+  return new Date().toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -56,7 +63,6 @@ export function SlipPreviewModal({
     reference,
     inceptionDate,
     expiryDate,
-    createdAt,
     businessDetails,
     offerDetails,
   } = placement;
@@ -75,30 +81,21 @@ export function SlipPreviewModal({
     reinsurancePremium != null && commissions != null ? reinsurancePremium - commissions : null;
 
   return (
-    <Modal
+    <DocumentPreviewModal
       isOpen={isOpen}
-      onClose={onClose}
       title={`Offer Slip — ${title}`}
-      width="sm:w-[40vw] sm:max-w-[40vw]"
-      height="sm:h-[90vh] sm:max-h-[90vh]"
-      fullScreenMobile
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose}>
-            Close Preview
-          </Button>
-          <Button onClick={onPrint}>Print</Button>
-        </>
-      }
+      documentTitle="Facultative Offer Slip"
+      onPrint={onPrint}
+      onClose={onClose}
     >
       <div className="flex flex-col gap-3">
-        <DetailField horizontal label="Date" value={fmtDate(createdAt)} />
-        <DetailField horizontal label="Cover Type" value={classOfBusiness ?? '—'} />
-        <DetailField horizontal label="Original Insured" value={title} />
-        <DetailField horizontal label="Policy Number" value={reference} />
-        <DetailField horizontal label="Currency" value={currency ?? '—'} />
+        <DetailField inline label="Date" value={today()} />
+        <DetailField inline label="Cover Type" value={classOfBusiness ?? '—'} />
+        <DetailField inline label="Original Insured" value={title} />
+        <DetailField inline label="Policy Number" value={reference} />
+        <DetailField inline label="Currency" value={currency ?? '—'} />
         <DetailField
-          horizontal
+          inline
           label="Insurance Period"
           value={`${fmtDate(inceptionDate ?? '')} – ${fmtDate(expiryDate ?? '')}`}
         />
@@ -107,36 +104,42 @@ export function SlipPreviewModal({
           <>
             <hr className="border-gray-100 my-1" />
             {businessEntries.map(([key, val]) => (
-              <DetailField key={key} horizontal label={toLabel(key)} value={fmtFieldValue(val)} />
+              <DetailField key={key} inline label={toLabel(key)} value={fmtFieldValue(val)} />
             ))}
             {offerEntries.map(([key, val]) => (
-              <DetailField key={key} horizontal label={toLabel(key)} value={fmtFieldValue(val)} />
+              <DetailField key={key} inline label={toLabel(key)} value={fmtFieldValue(val)} />
             ))}
           </>
         )}
 
         <hr className="border-gray-100 my-1" />
 
-        <DetailField horizontal label="100% Sum Insured" value={fmtAmount(sumInsured, currency)} />
-        <DetailField horizontal label="Fac. Offer (%)" value={`${facOffer}%`} />
-        <DetailField horizontal label="Offer" value={fmtAmount(facSumInsured, currency)} />
-        <DetailField horizontal label="Premium Rate" value={rate != null ? `${rate}%` : '—'} />
-        <DetailField horizontal label="100% Gross Premium" value={fmtAmount(premium, currency)} />
+        <DetailField inline label="100% Sum Insured" value={fmtAmount(sumInsured, currency)} />
+        <DetailField inline label="Premium Rate" value={rate != null ? `${rate}%` : '—'} />
+        <DetailField inline label="100% Gross Premium" value={fmtAmount(premium, currency)} />
         <DetailField
-          horizontal
+          inline
+          label="Offer"
+          value={
+            facSumInsured != null ? `${fmtAmount(facSumInsured, currency)} (${facOffer}%)` : '—'
+          }
+        />
+
+        <DetailField
+          inline
           label="Reinsurance Premium"
           value={fmtAmount(reinsurancePremium, currency)}
         />
         <DetailField
-          horizontal
+          inline
           label="Commission"
           value={`${fmtAmount(commissions, currency)} (${commission ?? 0}% + ${brokerageFee}%)`}
         />
 
         <hr className="border-gray-100 my-1" />
 
-        <DetailField horizontal label="Net Premium" value={fmtAmount(netPremium, currency)} />
+        <DetailField inline label="Net Premium" value={fmtAmount(netPremium, currency)} />
       </div>
-    </Modal>
+    </DocumentPreviewModal>
   );
 }
