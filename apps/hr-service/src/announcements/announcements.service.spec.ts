@@ -42,13 +42,21 @@ describe('AnnouncementsService read tracking', () => {
     notificationAnnouncementPublished: jest.fn(),
     authGetUserStatuses: jest.fn(),
   };
+  const encryption = {
+    decrypt: jest.fn((value?: string | null) => value),
+  };
 
   let service: AnnouncementsService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.FRONTEND_BASE_URL = 'https://app.workphelo.test';
-    service = new AnnouncementsService(prisma as any, rabbitmq as any);
+    encryption.decrypt.mockImplementation((value?: string | null) => value);
+    service = new AnnouncementsService(
+      prisma as any,
+      rabbitmq as any,
+      encryption as any,
+    );
   });
 
   it('defaults new announcements to in-app delivery only', async () => {
@@ -149,12 +157,12 @@ describe('AnnouncementsService read tracking', () => {
     });
   });
 
-  it('uses deliveryChannels as source of truth and always includes in-app', async () => {
+  it('publishes valid SMS recipients when SMS is selected', async () => {
     prisma.announcement.create.mockResolvedValueOnce({
       id: 'ann-sms',
       tenantId: 'tenant-1',
       title: 'SMS update',
-      body: 'This announcement stores SMS but does not send yet.',
+      body: 'This announcement should notify employees by SMS.',
       audienceType: AnnouncementAudienceType.ALL,
       targetDepartmentIds: [],
       targetBranchIds: [],
@@ -166,12 +174,27 @@ describe('AnnouncementsService read tracking', () => {
       ],
       publishedAt: new Date('2026-06-02T10:00:00Z'),
     });
+    prisma.employee.findMany.mockResolvedValueOnce([
+      {
+        id: 'emp-1',
+        userId: 'user-1',
+        email: 'ama@acme.test',
+        phone: 'encrypted-phone-1',
+        firstName: 'Ama',
+        lastName: 'Mensah',
+      },
+    ]);
+    rabbitmq.authGetUserStatuses.mockResolvedValueOnce([
+      { userId: 'user-1', status: 'ACTIVE' },
+    ]);
+    encryption.decrypt.mockReturnValueOnce('+233 24-400-0001');
 
     await service.create('tenant-1', adminActor, {
       title: 'SMS update',
-      body: 'This announcement stores SMS but does not send yet.',
+      body: 'This announcement should notify employees by SMS.',
       deliveryChannels: [AnnouncementDeliveryChannel.SMS],
     });
+    await flushAsync();
 
     expect(prisma.announcement.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -182,7 +205,28 @@ describe('AnnouncementsService read tracking', () => {
         ],
       }),
     });
-    expect(rabbitmq.notificationAnnouncementPublished).not.toHaveBeenCalled();
+    expect(rabbitmq.notificationAnnouncementPublished).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      announcementId: 'ann-sms',
+      title: 'SMS update',
+      body: 'This announcement should notify employees by SMS.',
+      publishedAt: '2026-06-02T10:00:00.000Z',
+      deliveryChannels: [
+        AnnouncementDeliveryChannel.IN_APP,
+        AnnouncementDeliveryChannel.SMS,
+      ],
+      platformLink: expect.stringContaining('/acme/login'),
+      recipients: [
+        {
+          employeeId: 'emp-1',
+          userId: 'user-1',
+          email: 'ama@acme.test',
+          phone: '+233244000001',
+          firstName: 'Ama',
+          lastName: 'Mensah',
+        },
+      ],
+    });
   });
 
   it('sets sendEmail=true when deliveryChannels include email and sms', async () => {
@@ -226,6 +270,181 @@ describe('AnnouncementsService read tracking', () => {
         ],
       }),
     });
+  });
+
+  it('publishes email and SMS-capable recipients for combined delivery', async () => {
+    prisma.announcement.create.mockResolvedValueOnce({
+      id: 'ann-email-sms',
+      tenantId: 'tenant-1',
+      title: 'Multi-channel update',
+      body: 'This announcement should use email and SMS.',
+      audienceType: AnnouncementAudienceType.ALL,
+      targetDepartmentIds: [],
+      targetBranchIds: [],
+      targetEmployeeIds: [],
+      sendEmail: true,
+      deliveryChannels: [
+        AnnouncementDeliveryChannel.IN_APP,
+        AnnouncementDeliveryChannel.EMAIL,
+        AnnouncementDeliveryChannel.SMS,
+      ],
+      publishedAt: new Date('2026-06-02T10:00:00Z'),
+    });
+    prisma.employee.findMany.mockResolvedValueOnce([
+      {
+        id: 'emp-1',
+        userId: 'user-1',
+        email: 'ama@acme.test',
+        phone: 'encrypted-phone-1',
+        firstName: 'Ama',
+        lastName: 'Mensah',
+      },
+      {
+        id: 'emp-2',
+        userId: 'user-2',
+        email: 'kwesi@acme.test',
+        phone: null,
+        firstName: 'Kwesi',
+        lastName: 'Owusu',
+      },
+    ]);
+    rabbitmq.authGetUserStatuses.mockResolvedValueOnce([
+      { userId: 'user-1', status: 'ACTIVE' },
+      { userId: 'user-2', status: 'ACTIVE' },
+    ]);
+    encryption.decrypt.mockReturnValueOnce('+233244000001');
+
+    await service.create('tenant-1', adminActor, {
+      title: 'Multi-channel update',
+      body: 'This announcement should use email and SMS.',
+      deliveryChannels: [
+        AnnouncementDeliveryChannel.EMAIL,
+        AnnouncementDeliveryChannel.SMS,
+      ],
+    });
+    await flushAsync();
+
+    const publishedEvent =
+      rabbitmq.notificationAnnouncementPublished.mock.calls[0][0];
+
+    expect(publishedEvent).toEqual(
+      expect.objectContaining({
+        deliveryChannels: [
+          AnnouncementDeliveryChannel.IN_APP,
+          AnnouncementDeliveryChannel.EMAIL,
+          AnnouncementDeliveryChannel.SMS,
+        ],
+        recipients: [
+          expect.objectContaining({
+            employeeId: 'emp-1',
+            phone: '+233244000001',
+          }),
+          expect.objectContaining({
+            employeeId: 'emp-2',
+          }),
+        ],
+      }),
+    );
+    expect(publishedEvent.recipients[1]).not.toHaveProperty('phone');
+  });
+
+  it('excludes inactive auth users from SMS recipient publishing', async () => {
+    prisma.announcement.create.mockResolvedValueOnce({
+      id: 'ann-inactive-user',
+      tenantId: 'tenant-1',
+      title: 'SMS update',
+      body: 'Inactive auth users should not receive SMS.',
+      audienceType: AnnouncementAudienceType.ALL,
+      targetDepartmentIds: [],
+      targetBranchIds: [],
+      targetEmployeeIds: [],
+      sendEmail: false,
+      deliveryChannels: [
+        AnnouncementDeliveryChannel.IN_APP,
+        AnnouncementDeliveryChannel.SMS,
+      ],
+      publishedAt: new Date('2026-06-02T10:00:00Z'),
+    });
+    prisma.employee.findMany.mockResolvedValueOnce([
+      {
+        id: 'emp-1',
+        userId: 'user-1',
+        email: 'ama@acme.test',
+        phone: '+233244000001',
+        firstName: 'Ama',
+        lastName: 'Mensah',
+      },
+    ]);
+    rabbitmq.authGetUserStatuses.mockResolvedValueOnce([
+      { userId: 'user-1', status: 'INACTIVE' },
+    ]);
+
+    await service.create('tenant-1', adminActor, {
+      title: 'SMS update',
+      body: 'Inactive auth users should not receive SMS.',
+      deliveryChannels: [AnnouncementDeliveryChannel.SMS],
+    });
+    await flushAsync();
+
+    expect(rabbitmq.notificationAnnouncementPublished).toHaveBeenCalledWith(
+      expect.objectContaining({ recipients: [] }),
+    );
+    expect(encryption.decrypt).not.toHaveBeenCalled();
+  });
+
+  it('skips missing and invalid SMS phones without failing creation', async () => {
+    prisma.announcement.create.mockResolvedValueOnce({
+      id: 'ann-invalid-phones',
+      tenantId: 'tenant-1',
+      title: 'SMS update',
+      body: 'Invalid SMS phones should be skipped.',
+      audienceType: AnnouncementAudienceType.ALL,
+      targetDepartmentIds: [],
+      targetBranchIds: [],
+      targetEmployeeIds: [],
+      sendEmail: false,
+      deliveryChannels: [
+        AnnouncementDeliveryChannel.IN_APP,
+        AnnouncementDeliveryChannel.SMS,
+      ],
+      publishedAt: new Date('2026-06-02T10:00:00Z'),
+    });
+    prisma.employee.findMany.mockResolvedValueOnce([
+      {
+        id: 'emp-1',
+        userId: 'user-1',
+        email: 'ama@acme.test',
+        phone: null,
+        firstName: 'Ama',
+        lastName: 'Mensah',
+      },
+      {
+        id: 'emp-2',
+        userId: 'user-2',
+        email: 'kwesi@acme.test',
+        phone: 'encrypted-phone-2',
+        firstName: 'Kwesi',
+        lastName: 'Owusu',
+      },
+    ]);
+    rabbitmq.authGetUserStatuses.mockResolvedValueOnce([
+      { userId: 'user-1', status: 'ACTIVE' },
+      { userId: 'user-2', status: 'ACTIVE' },
+    ]);
+    encryption.decrypt.mockImplementation((value?: string | null) =>
+      value === 'encrypted-phone-2' ? '0244000002' : value,
+    );
+
+    await service.create('tenant-1', adminActor, {
+      title: 'SMS update',
+      body: 'Invalid SMS phones should be skipped.',
+      deliveryChannels: [AnnouncementDeliveryChannel.SMS],
+    });
+    await flushAsync();
+
+    expect(rabbitmq.notificationAnnouncementPublished).toHaveBeenCalledWith(
+      expect.objectContaining({ recipients: [] }),
+    );
   });
 
   it('counts only unread announcements visible to the current tenant/user', async () => {

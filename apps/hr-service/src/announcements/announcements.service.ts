@@ -16,6 +16,7 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { hasPermissionRule, isCompanyAdminUser } from '../auth/access-scope';
+import { FieldEncryptionService } from '../crypto/field-encryption.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { QueryAnnouncementsDto } from './dto/query-announcements.dto';
@@ -26,12 +27,21 @@ type AnnouncementActorContext = {
   branchId: string | null;
 };
 
-type AnnouncementEmailRecipient = {
+type AnnouncementNotificationRecipient = {
   employeeId: string;
   userId: string;
   email: string;
+  phone?: string;
   firstName: string;
   lastName: string;
+};
+
+type AnnouncementRecipientResolution = {
+  recipients: AnnouncementNotificationRecipient[];
+  skippedSms: {
+    missingPhone: number;
+    invalidPhone: number;
+  };
 };
 
 type AnnouncementAudienceSelection = {
@@ -53,6 +63,7 @@ export class AnnouncementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
+    private readonly encryption: FieldEncryptionService,
   ) {}
 
   private canManageAnnouncements(actor: RequestUser): boolean {
@@ -98,6 +109,24 @@ export class AnnouncementsService {
     return [
       ...new Set([AnnouncementDeliveryChannel.IN_APP, ...requestedChannels]),
     ];
+  }
+
+  private shouldPublishExternalAnnouncementDelivery(
+    deliveryChannels: AnnouncementDeliveryChannel[],
+  ): boolean {
+    return (
+      deliveryChannels.includes(AnnouncementDeliveryChannel.EMAIL) ||
+      deliveryChannels.includes(AnnouncementDeliveryChannel.SMS)
+    );
+  }
+
+  private normalizeSmsPhone(phone: string | null | undefined): string | null {
+    if (!phone) {
+      return null;
+    }
+
+    const normalized = phone.replace(/[\s\-()]/g, '');
+    return /^\+\d{8,15}$/.test(normalized) ? normalized : null;
   }
 
   private async getActorContext(
@@ -371,7 +400,11 @@ export class AnnouncementsService {
       | 'targetBranchIds'
       | 'targetEmployeeIds'
     >,
-  ): Promise<AnnouncementEmailRecipient[]> {
+    options: {
+      includeEmail: boolean;
+      includeSms: boolean;
+    },
+  ): Promise<AnnouncementRecipientResolution> {
     const employeeWhere: Prisma.EmployeeWhereInput = {
       tenantId,
       employmentStatus: {
@@ -399,13 +432,17 @@ export class AnnouncementsService {
         id: true,
         userId: true,
         email: true,
+        phone: true,
         firstName: true,
         lastName: true,
       },
     });
 
     if (employees.length === 0) {
-      return [];
+      return {
+        recipients: [],
+        skippedSms: { missingPhone: 0, invalidPhone: 0 },
+      };
     }
 
     const statuses = await this.rabbitmq.authGetUserStatuses({
@@ -420,18 +457,53 @@ export class AnnouncementsService {
         .map((status) => status.userId),
     );
 
-    return employees
+    const skippedSms = { missingPhone: 0, invalidPhone: 0 };
+    const recipients = employees
       .filter(
         (employee): employee is typeof employee & { userId: string } =>
           !!employee.userId && activeUserIds.has(employee.userId),
       )
-      .map((employee) => ({
-        employeeId: employee.id,
-        userId: employee.userId,
-        email: employee.email,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-      }));
+      .flatMap((employee) => {
+        const recipient: AnnouncementNotificationRecipient = {
+          employeeId: employee.id,
+          userId: employee.userId,
+          email: employee.email,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+        };
+
+        if (options.includeSms) {
+          let decryptedPhone: string | null | undefined;
+          let decryptionFailed = false;
+
+          try {
+            decryptedPhone = this.encryption.decrypt(employee.phone);
+          } catch {
+            skippedSms.invalidPhone += 1;
+            decryptionFailed = true;
+          }
+
+          if (!decryptionFailed && decryptedPhone == null) {
+            skippedSms.missingPhone += 1;
+          } else if (!decryptionFailed) {
+            const phone = this.normalizeSmsPhone(decryptedPhone);
+
+            if (phone) {
+              recipient.phone = phone;
+            } else {
+              skippedSms.invalidPhone += 1;
+            }
+          }
+        }
+
+        if (options.includeEmail || recipient.phone) {
+          return [recipient];
+        }
+
+        return [];
+      });
+
+    return { recipients, skippedSms };
   }
 
   async create(
@@ -461,9 +533,15 @@ export class AnnouncementsService {
     });
 
     if (
-      announcement.deliveryChannels.includes(AnnouncementDeliveryChannel.EMAIL)
+      this.shouldPublishExternalAnnouncementDelivery(
+        announcement.deliveryChannels,
+      )
     ) {
-      void this.publishAnnouncementEmails(tenantId, actor, announcement);
+      void this.publishAnnouncementExternalDelivery(
+        tenantId,
+        actor,
+        announcement,
+      );
     }
 
     return announcement;
@@ -636,22 +714,37 @@ export class AnnouncementsService {
     return { message: 'Announcement deleted successfully' };
   }
 
-  private async publishAnnouncementEmails(
+  private async publishAnnouncementExternalDelivery(
     tenantId: string,
     actor: RequestUser,
     announcement: Announcement,
   ) {
     try {
-      const recipients = await this.resolveAnnouncementRecipients(
-        tenantId,
-        announcement,
+      const shouldSendEmail = announcement.deliveryChannels.includes(
+        AnnouncementDeliveryChannel.EMAIL,
       );
+      const shouldSendSms = announcement.deliveryChannels.includes(
+        AnnouncementDeliveryChannel.SMS,
+      );
+      const { recipients, skippedSms } =
+        await this.resolveAnnouncementRecipients(tenantId, announcement, {
+          includeEmail: shouldSendEmail,
+          includeSms: shouldSendSms,
+        });
 
       if (recipients.length === 0) {
         this.logger.warn(
-          `Announcement ${announcement.id} was marked sendEmail=true but no active recipients were resolved.`,
+          `Announcement ${announcement.id} requested external delivery but no active recipients were resolved.`,
         );
-        return;
+        if (!shouldSendSms) {
+          return;
+        }
+      }
+
+      if (shouldSendSms) {
+        this.logger.log(
+          `Announcement ${announcement.id} SMS recipient resolution skipped ${skippedSms.missingPhone} missing phone(s) and ${skippedSms.invalidPhone} invalid phone(s).`,
+        );
       }
 
       await this.rabbitmq.notificationAnnouncementPublished({
@@ -666,7 +759,7 @@ export class AnnouncementsService {
       });
     } catch (error) {
       this.logger.error(
-        `Failed to publish announcement email fanout for ${announcement.id}`,
+        `Failed to publish announcement external delivery fanout for ${announcement.id}`,
         error instanceof Error ? error.stack : undefined,
       );
     }
