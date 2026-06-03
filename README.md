@@ -166,7 +166,8 @@ In the development deployment, Reinsurance Operations OpenAPI documentation
 is exposed through `/api/v1/operations/reinsurance/docs` when enabled by its
 deployment flag. The
 `apps/reinsurance-service/README.md` contract includes frontend integration
-guidance for Counterparties.
+guidance for Counterparties, Risk Settings, Currency Settings, Placements,
+participant workflow, slip previews and the current UAT flow.
 
 ---
 

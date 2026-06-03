@@ -25,8 +25,14 @@ Counterparty, placement and email endpoints require the tenant to have the \`ope
 \`operations.reinsurance.email-settings:*\` permission.
 
 ### Risk settings integration
-New frontend work should use \`/risk-classes\` for RiskClass CRUD and
+New frontend work should use \`/settings/risk-classes\` for RiskClass CRUD and
 \`/settings/risk-types\` for RiskType CRUD, fields and form schemas.
+
+### Slip previews
+Offer and closing slip preview endpoints are read-only. They return preview
+payloads only and do not create PDFs, persist document records or send email.
+Preview calculations intentionally use \`facultativeOffer ?? 0\` when the
+facultative offer is not yet known.
 
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:

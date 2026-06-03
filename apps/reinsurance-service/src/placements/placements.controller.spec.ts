@@ -13,6 +13,8 @@ describe('PlacementsController', () => {
     findAll: jest.fn(),
     create: jest.fn(),
     findOne: jest.fn(),
+    getOfferSlipPreview: jest.fn(),
+    getClosingSlipPreview: jest.fn(),
     update: jest.fn(),
     changeStatus: jest.fn(),
     addParticipant: jest.fn(),
@@ -43,6 +45,8 @@ describe('PlacementsController', () => {
   it.each([
     ['findAll', PlacementPermission.VIEW],
     ['findOne', PlacementPermission.VIEW],
+    ['getOfferSlipPreview', PlacementPermission.VIEW],
+    ['getClosingSlipPreview', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
     ['update', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
@@ -108,6 +112,27 @@ describe('PlacementsController', () => {
     );
     expect(service.deleteParticipant).toHaveBeenCalledWith(
       user,
+      'placement-1',
+      'participant-1',
+    );
+  });
+
+  it('delegates slip preview reads with authenticated tenant context', async () => {
+    const controller = new PlacementsController(
+      service as unknown as PlacementsService,
+    );
+
+    await controller.getOfferSlipPreview('placement-1', { user } as never);
+    await controller.getClosingSlipPreview('placement-1', 'participant-1', {
+      user,
+    } as never);
+
+    expect(service.getOfferSlipPreview).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    expect(service.getClosingSlipPreview).toHaveBeenCalledWith(
+      'tenant-1',
       'placement-1',
       'participant-1',
     );

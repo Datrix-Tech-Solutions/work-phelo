@@ -41,6 +41,10 @@ import {
   PaginatedPlacementsResponseDto,
   PlacementResponseDto,
 } from './dto/placement-response.dto';
+import {
+  ClosingSlipPreviewResponseDto,
+  OfferSlipPreviewResponseDto,
+} from './dto/slip-preview-response.dto';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
@@ -144,6 +148,72 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.placementsService.findOne(request.user.tenantId, id);
+  }
+
+  @Get(':id/slips/offer-preview')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Preview placement offer slip values',
+    description:
+      'Returns read-only slip preview data for the placement. ' +
+      'The calculation fields mirror the current frontend preview formulas exactly. ' +
+      'No PDF, document record or email is created. ' +
+      'Participant-specific preview rows use each participant brokerageFee, matching the current UI.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: OfferSlipPreviewResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  getOfferSlipPreview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.getOfferSlipPreview(
+      request.user.tenantId,
+      id,
+    );
+  }
+
+  @Get(':id/participants/:participantId/slips/closing-preview')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Preview participant closing slip values',
+    description:
+      'Returns read-only closing preview data for an accepted/closed participant. ' +
+      'The calculation fields mirror the current frontend preview formulas exactly. ' +
+      'No PDF, document record or email is created. ' +
+      'Requires signedLinePercent greater than 0 and participant status ACCEPTED or CLOSED.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiOkResponse({ type: ClosingSlipPreviewResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Participant is not ACCEPTED/CLOSED or has no signed line percentage.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  getClosingSlipPreview(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.getClosingSlipPreview(
+      request.user.tenantId,
+      id,
+      participantId,
+    );
   }
 
   @Patch(':id')
