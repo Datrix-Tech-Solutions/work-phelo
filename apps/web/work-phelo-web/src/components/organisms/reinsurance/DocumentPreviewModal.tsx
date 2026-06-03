@@ -2,9 +2,12 @@
 
 import { ReactNode } from 'react';
 import Image from 'next/image';
+import QRCode from 'react-qr-code';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { DocumentPrintLayout } from '@/components/organisms/reinsurance/DocumentPrintLayout';
+
+const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
 
 interface DocumentPreviewModalProps {
   isOpen: boolean;
@@ -13,6 +16,7 @@ interface DocumentPreviewModalProps {
   onPrint: () => void;
   onClose: () => void;
   children: ReactNode;
+  afterContent?: ReactNode;
 }
 
 export function DocumentPreviewModal({
@@ -22,6 +26,7 @@ export function DocumentPreviewModal({
   onPrint,
   onClose,
   children,
+  afterContent,
 }: DocumentPreviewModalProps) {
   const handlePrint = () => {
     const el = document.getElementById('irisk-print-root');
@@ -49,18 +54,21 @@ export function DocumentPreviewModal({
           </>
         }
       >
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col items-center gap-3 pb-4 border-b border-gray-100">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between pb-2 border-b border-gray-100">
             <Image
-              src="/iRisklogo.png"
+              src="/iriskre.png"
               alt="iRisk logo"
-              width={200}
-              height={150}
+              width={120}
+              height={60}
               className="object-contain"
             />
             <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
               {documentTitle}
             </h2>
+            <div className="flex flex-col items-center gap-1">
+              <QRCode value={COMPANY_URL} size={56} />
+            </div>
           </div>
 
           {children}
@@ -68,7 +76,9 @@ export function DocumentPreviewModal({
       </Modal>
 
       {isOpen && (
-        <DocumentPrintLayout documentTitle={documentTitle}>{children}</DocumentPrintLayout>
+        <DocumentPrintLayout documentTitle={documentTitle} afterContent={afterContent}>
+          {children}
+        </DocumentPrintLayout>
       )}
     </>
   );

@@ -3,6 +3,17 @@
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/DocumentPreviewModal';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
+import { useReinsurers } from '@/hooks';
+
+function toLabel(key: string) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function fmtFieldValue(val: unknown): string {
+  if (val == null) return '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  return String(val);
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
@@ -21,6 +32,8 @@ function fmtAmount(val: number | null, currency: string | null) {
 interface GuaranteeNoteModalProps {
   isOpen: boolean;
   placement: Facultative;
+  counterpartyId: string;
+  reinsurerCompany: string;
   onPrint: () => void;
   onClose: () => void;
 }
@@ -28,9 +41,16 @@ interface GuaranteeNoteModalProps {
 export function GuaranteeNoteModal({
   isOpen,
   placement,
+  counterpartyId,
+  reinsurerCompany,
   onPrint,
   onClose,
 }: GuaranteeNoteModalProps) {
+  const { data: reinsurers = [] } = useReinsurers();
+  const reinsurer = reinsurers.find((r) => r.id === counterpartyId);
+  const addr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
+  const reinsurerCity = addr?.city ?? null;
+  const reinsurerRegionCountry = [addr?.state, addr?.country].filter(Boolean).join(' - ') || null;
   const {
     currency,
     facultativeOffer,
@@ -44,7 +64,14 @@ export function GuaranteeNoteModal({
     expiryDate,
     cedant,
     participants,
+    businessDetails,
+    offerDetails,
   } = placement;
+
+  const riskEntries = [
+    ...Object.entries(businessDetails ?? {}),
+    ...Object.entries(offerDetails ?? {}),
+  ];
 
   const facOffer = facultativeOffer ?? 0;
   const facSumInsured = sumInsured != null ? (facOffer / 100) * sumInsured : null;
@@ -68,12 +95,33 @@ export function GuaranteeNoteModal({
       onClose={onClose}
     >
       <div className="flex flex-col gap-3">
+        {/* Address block */}
+        <div className="flex flex-col gap-0.5 text-sm mb-2">
+          <p className="text-gray-500">
+            {new Date().toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: 'long',
+              year: 'numeric',
+            })}
+          </p>
+          <p className="font-medium text-gray-900 mt-2">The Managing Director</p>
+          <p className="text-gray-800">{reinsurerCompany}</p>
+          {reinsurerCity && <p className="text-gray-600">{reinsurerCity}</p>}
+          {reinsurerRegionCountry && <p className="text-gray-600">{reinsurerRegionCountry}</p>}
+          <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
+        </div>
+
+        <hr className="border-gray-100 mb-1" />
+
         {/* Section heading */}
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-1">
           Policy Details &amp; Risk Description
         </p>
 
         <DetailField inline label="Cover Type" value={classOfBusiness ?? '—'} />
+        {riskEntries.map(([key, val]) => (
+          <DetailField key={key} inline label={toLabel(key)} value={fmtFieldValue(val)} />
+        ))}
         <DetailField inline label="Reinsured" value={cedant.name} />
         <DetailField inline label="Policy Number" value={reference} />
         <DetailField inline label="Original Insured" value={title} />

@@ -11,6 +11,7 @@ import { Facultative, PlacementParticipant } from '@/types/reinsurance';
 
 interface ClosingRow {
   id: string;
+  counterpartyId: string;
   reinsurerCompany: string;
   signedShare: number;
   signedGrossPremium: number;
@@ -29,6 +30,7 @@ function toClosingRow(p: PlacementParticipant, premium: number): ClosingRow {
   const signedShare = parseFloat(p.signedLinePercent ?? p.sharePercent ?? '0');
   return {
     id: p.id,
+    counterpartyId: p.counterpartyId,
     reinsurerCompany: p.counterparty.name,
     signedShare,
     signedGrossPremium: (signedShare / 100) * premium,
@@ -42,7 +44,7 @@ interface PlacementClosingsTabProps {
 
 export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [slipPreviewId, setSlipPreviewId] = useState<string | null>(null);
-  const [guaranteeOpen, setGuaranteeOpen] = useState(false);
+  const [guaranteeNoteRow, setGuaranteeNoteRow] = useState<ClosingRow | null>(null);
   const [creditNoteRow, setCreditNoteRow] = useState<ClosingRow | null>(null);
   const [debitNoteOpen, setDebitNoteOpen] = useState(false);
 
@@ -82,16 +84,22 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       label: 'Actions',
       width: '2.5fr',
       render: (row) => (
-        <div className="flex items-center gap-2 w-full pr-10">
+        <div className="flex items-center gap-5 w-full justify-end">
           <button
             type="button"
-            onClick={() => {
-              /* TODO */
-            }}
+            onClick={() => setCreditNoteRow(row)}
             className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
           >
             <Icons.Mail className="w-3.5 h-3.5 shrink-0" />
-            Mail cedant
+            View Credit Note
+          </button>
+          <button
+            type="button"
+            onClick={() => setDebitNoteOpen(true)}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
+          >
+            <Icons.Mail className="w-3.5 h-3.5 shrink-0" />
+            View Debit Note
           </button>
           <button
             type="button"
@@ -116,12 +124,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         totalPages={1}
         onPageChange={() => {}}
         noInternalScroll
-        rowActions={(row) => [
-          { label: 'View Closings', onClick: () => {} },
-          { label: 'View Credit Note', onClick: () => setCreditNoteRow(row) },
-          { label: 'View Debit Note', onClick: () => setDebitNoteOpen(true) },
-          { label: 'View Guarantee Note', onClick: () => setGuaranteeOpen(true) },
-        ]}
       />
 
       <SlipPreviewModal
@@ -132,12 +134,16 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         onClose={() => setSlipPreviewId(null)}
       />
 
-      <GuaranteeNoteModal
-        isOpen={guaranteeOpen}
-        placement={placement}
-        onPrint={() => setGuaranteeOpen(false)}
-        onClose={() => setGuaranteeOpen(false)}
-      />
+      {guaranteeNoteRow && (
+        <GuaranteeNoteModal
+          isOpen={!!guaranteeNoteRow}
+          placement={placement}
+          counterpartyId={guaranteeNoteRow.counterpartyId}
+          reinsurerCompany={guaranteeNoteRow.reinsurerCompany}
+          onPrint={() => setGuaranteeNoteRow(null)}
+          onClose={() => setGuaranteeNoteRow(null)}
+        />
+      )}
 
       <DebitNoteModal
         isOpen={debitNoteOpen}
@@ -152,6 +158,8 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           placement={placement}
           sharePercent={creditNoteRow.signedShare}
           brokerageFee={creditNoteRow.brokerageFee}
+          counterpartyId={creditNoteRow.counterpartyId}
+          reinsurerCompany={creditNoteRow.reinsurerCompany}
           onPrint={() => setCreditNoteRow(null)}
           onClose={() => setCreditNoteRow(null)}
         />

@@ -171,9 +171,9 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
         <div className="flex flex-col gap-5">
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="Reference"
+              label="Policy Number"
               registration={register('reference', {
-                required: 'Reference is required',
+                required: 'Policy Number is required',
                 minLength: { value: 2, message: 'Min 2 characters' },
                 maxLength: { value: 80, message: 'Max 80 characters' },
               })}
@@ -182,9 +182,9 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
             />
 
             <FormField
-              label="Title"
+              label="Insured"
               registration={register('title', {
-                required: 'Title is required',
+                required: 'Insured is required',
                 minLength: { value: 2, message: 'Min 2 characters' },
                 maxLength: { value: 200, message: 'Max 200 characters' },
               })}
