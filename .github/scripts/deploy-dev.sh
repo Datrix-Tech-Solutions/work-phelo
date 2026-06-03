@@ -71,6 +71,7 @@ write_env_file "${DEPLOY_PATH}/apps/auth-service/.env.dev" \
   "PORT=4001" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
+  "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema w_auth)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
@@ -92,6 +93,7 @@ write_env_file "${DEPLOY_PATH}/apps/hr-service/.env.dev" \
   "PORT=4002" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
+  "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema hr)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
   "REDIS_URL=redis://redis:6379" \
@@ -105,6 +107,7 @@ write_env_file "${DEPLOY_PATH}/apps/notification-service/.env.dev" \
   "PORT=4004" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
+  "ENABLE_SWAGGER=true" \
   "DATABASE_URL=$(db_url_for_schema notify)" \
   "RABBITMQ_URL=${RABBITMQ_URL}" \
   "JWT_SECRET=${JWT_SECRET}" \
@@ -118,6 +121,7 @@ write_env_file "${DEPLOY_PATH}/apps/subscription-service/.env.dev" \
   "PORT=4005" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
+  "ENABLE_SWAGGER=true" \
   "DATABASE_URL=${DATABASE_URL}" \
   "RABBITMQ_URL=${RABBITMQ_URL}"
 
@@ -125,6 +129,7 @@ write_env_file "${DEPLOY_PATH}/apps/marketing-service/.env.dev" \
   "PORT=4006" \
   "DEPLOY_ENV=${DEPLOY_ENV}" \
   "NODE_ENV=production" \
+  "ENABLE_SWAGGER=true" \
   "DATABASE_URL=${DATABASE_URL}" \
   "RABBITMQ_URL=${RABBITMQ_URL}"
 

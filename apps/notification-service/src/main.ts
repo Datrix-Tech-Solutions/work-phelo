@@ -4,8 +4,10 @@ import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { join } from 'path';
+import { isSwaggerEnabled } from '@work-phelo/config';
 import { GlobalExceptionFilter } from './common/prisma-exception.filter';
 import { assertNotificationRuntimeEnv } from './config/runtime-env';
+import { setupSwagger } from './swagger.config';
 
 async function bootstrap() {
   assertNotificationRuntimeEnv();
@@ -37,6 +39,9 @@ async function bootstrap() {
     },
   });
   app.setGlobalPrefix('api');
+  if (isSwaggerEnabled()) {
+    setupSwagger(app);
+  }
   const port = process.env.PORT || 4004;
   await app.listen(port);
   console.log(`Notification service running on port ${port}`);

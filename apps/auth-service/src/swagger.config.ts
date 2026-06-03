@@ -93,6 +93,7 @@ Use seeded local test accounts or your own tenant credentials. Avoid publishing 
     swaggerOptions: {
       persistAuthorization: true,
       tagsSorter: 'alpha',
+      url: 'docs-json',
     },
   });
 

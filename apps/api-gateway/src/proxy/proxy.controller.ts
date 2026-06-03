@@ -4,6 +4,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as jwt from 'jsonwebtoken';
 import { createHmac } from 'crypto';
+import { isSwaggerEnabled } from '@work-phelo/config';
 import { JwtPayload } from '@work-phelo/types';
 import {
   GatewayServiceName,
@@ -36,6 +37,11 @@ const PUBLIC_PATTERNS = [
 ];
 
 const SWAGGER_PUBLIC_PATTERNS = [
+  /^\/api\/v1\/auth\/docs(?:\/.*|-json|-yaml)?$/,
+  /^\/api\/v1\/hr\/docs(?:\/.*|-json|-yaml)?$/,
+  /^\/api\/v1\/notification\/docs(?:\/.*|-json|-yaml)?$/,
+  /^\/api\/v1\/subscription\/docs(?:\/.*|-json|-yaml)?$/,
+  /^\/api\/v1\/marketing\/docs(?:\/.*|-json|-yaml)?$/,
   /^\/api\/v1\/operations\/reinsurance\/docs(?:\/.*|-json|-yaml)?$/,
 ];
 
@@ -115,7 +121,7 @@ export class ProxyController {
     }
 
     return (
-      process.env.ENABLE_SWAGGER === 'true' &&
+      isSwaggerEnabled() &&
       SWAGGER_PUBLIC_PATTERNS.some((pattern) => pattern.test(path))
     );
   }

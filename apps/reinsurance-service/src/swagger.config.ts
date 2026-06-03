@@ -81,6 +81,7 @@ pipeline enables it for development only.
       persistAuthorization: true,
       tagsSorter: 'alpha',
       operationsSorter: 'method',
+      url: 'docs-json',
     },
     customSiteTitle: 'WorkPhelo Reinsurance API Docs',
   });
