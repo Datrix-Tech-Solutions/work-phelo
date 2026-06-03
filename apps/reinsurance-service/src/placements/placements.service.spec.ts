@@ -163,7 +163,7 @@ describe('PlacementsService', () => {
     expect(result.items[0]).toMatchObject({
       totalOfferedPercent: 0,
       totalAcceptedPercent: 0,
-      remainingPercent: 100,
+      remainingPercent: 0,
     });
   });
 
@@ -792,9 +792,78 @@ describe('PlacementsService', () => {
     expect(result).toMatchObject({
       totalOfferedPercent: 25,
       totalAcceptedPercent: 0,
-      remainingPercent: 100,
+      remainingPercent: 0,
     });
     expect(publisher.updated).toHaveBeenCalled();
+  });
+
+  it('does not auto-place accepted capacity when facultative offer is not yet known', async () => {
+    const existingPlacement = {
+      ...placement,
+      status: PlacementStatus.MARKETING,
+      facultativeOffer: null,
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.QUOTED,
+          sharePercent: 40,
+          signedLinePercent: 30,
+          brokerageFee: null,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+          },
+        },
+      ],
+    };
+    const acceptedPlacement = {
+      ...existingPlacement,
+      participants: [
+        {
+          ...existingPlacement.participants[0],
+          status: PlacementParticipantStatus.ACCEPTED,
+        },
+      ],
+    };
+    const partiallyPlaced = {
+      ...acceptedPlacement,
+      status: PlacementStatus.PARTIALLY_PLACED,
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(acceptedPlacement);
+    prisma.placementParticipant.update.mockResolvedValue({
+      id: 'participant-1',
+    });
+    prisma.placement.update.mockResolvedValue(partiallyPlaced);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+
+    const result = await service.changeParticipantStatus(
+      user,
+      'placement-1',
+      'participant-1',
+      {
+        status: PlacementParticipantStatus.ACCEPTED,
+      },
+    );
+
+    expect(result.status).toBe(PlacementStatus.PARTIALLY_PLACED);
+    expect(result.remainingPercent).toBe(0);
+    const statusHistoryArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as { data?: Record<string, unknown> } | undefined;
+    expect(statusHistoryArgs?.data).toMatchObject({
+      fromStatus: PlacementStatus.MARKETING,
+      toStatus: PlacementStatus.PARTIALLY_PLACED,
+    });
   });
 
   it('updates one participant and recalculates accepted capacity aggregates', async () => {
@@ -1383,6 +1452,71 @@ describe('PlacementsService', () => {
       withholdingTaxAmount: 0,
       netPremium: 2550,
     });
+  });
+
+  it('generates slip preview with zeroed offer calculations when facultativeOffer is omitted', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      classOfBusiness: 'Marine Cargo',
+      businessDetails: {},
+      offerDetails: {},
+      currency: 'USD',
+      sumInsured: 500000,
+      premium: 10000,
+      commission: 10,
+      facultativeOffer: null,
+      cedant: {
+        ...placement.cedant,
+        email: null,
+        phone: null,
+        country: 'GH',
+        contacts: [],
+        addresses: [],
+      },
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.OFFER_SENT,
+          sharePercent: 40,
+          signedLinePercent: null,
+          brokerageFee: 5,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+            email: null,
+            phone: null,
+            country: 'GH',
+            contacts: [],
+            addresses: [],
+          },
+        },
+      ],
+    });
+
+    const result = await service.getOfferSlipPreview('tenant-1', 'placement-1');
+
+    expect(result.participantPreviews[0]?.slipFinancials).toMatchObject({
+      facOffer: 0,
+      facSumInsured: 0,
+      reinsurancePremium: 0,
+      commissions: 0,
+      netPremium: 0,
+    });
+    expect(result.participantPreviews[0]?.distributionFinancials).toMatchObject(
+      {
+        facPremium: 0,
+        premiumShare: 0,
+        brokerageAmount: 0,
+      },
+    );
+    expect(result.remainingPercent).toBe(0);
   });
 
   it('rejects closing preview for participants that are not accepted or closed', async () => {

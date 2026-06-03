@@ -1407,10 +1407,14 @@ export class PlacementsService {
       return null;
     }
 
-    const targetPercent =
-      this.decimalToNumber(placement.facultativeOffer) || 100;
+    const targetPercent = this.nullableDecimalToNumber(
+      placement.facultativeOffer,
+    );
     if (placement.totalAcceptedPercent <= 0) {
       return PlacementStatus.MARKETING;
+    }
+    if (targetPercent === null || targetPercent <= 0) {
+      return PlacementStatus.PARTIALLY_PLACED;
     }
     if (placement.totalAcceptedPercent >= targetPercent) {
       return PlacementStatus.PLACED;
@@ -1505,7 +1509,7 @@ export class PlacementsService {
       }, 0),
     );
     const targetPercent =
-      this.decimalToNumber(placement.facultativeOffer) || 100;
+      this.nullableDecimalToNumber(placement.facultativeOffer) ?? 0;
 
     return {
       totalOfferedPercent,
