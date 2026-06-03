@@ -140,17 +140,16 @@ export function LeaveTypesList({ tenantSlug }: Props) {
       key: '_delete',
       label: '',
       width: '72px',
-      render: (row) =>
-        row.isDefault ? null : (
-          <div className="flex justify-center">
-            <button
-              onClick={() => setDeleteTarget(row)}
-              className="text-sm font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        ),
+      render: (row) => (
+        <div className="flex justify-center">
+          <button
+            onClick={() => setDeleteTarget(row)}
+            className="text-sm font-medium px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+          >
+            Delete
+          </button>
+        </div>
+      ),
     },
   ];
 
