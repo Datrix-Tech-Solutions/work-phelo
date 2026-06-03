@@ -5,7 +5,7 @@ Operations. It is intentionally separate from HR and platform Core domains.
 
 ## Current Surface
 
-The service foundation and Counterparties domain provide:
+The service foundation currently provides:
 
 - Service bootstrapping on port `4007`.
 - Runtime validation for `DATABASE_URL`, `JWT_SECRET` and `RABBITMQ_URL`.
@@ -16,8 +16,13 @@ The service foundation and Counterparties domain provide:
 - JWT, tenant module, tenant feature and resource-action guard foundations.
 - Tenant-scoped Counterparty, CounterpartyContact and CounterpartyAddress
   persistence for cedants, reinsurers and brokers.
+- Tenant-scoped RiskClass, RiskType, RiskTypeField and Currency settings.
 - Tenant-scoped facultative Placement, PlacementParticipant and
   PlacementStatusHistory persistence built on active Counterparties.
+- Participant workflow, placement lifecycle transitions and capacity
+  validation.
+- Read-only offer and closing slip preview endpoints that mirror the current
+  frontend formulas.
 - Email technical foundation for mailbox connection metadata, provider
   verification, sync proof-of-concept, thread/message metadata, attachment
   metadata and manual placement email links.
@@ -56,18 +61,20 @@ tenant-scoped parent update.
 The gateway forwards these routes under
 `/api/v1/operations/reinsurance/placements`:
 
-| Method   | Service route                                            | Permission                                 |
-| -------- | -------------------------------------------------------- | ------------------------------------------ |
-| `GET`    | `/api/placements`                                        | `operations.reinsurance.placements:VIEW`   |
-| `POST`   | `/api/placements`                                        | `operations.reinsurance.placements:CREATE` |
-| `GET`    | `/api/placements/:id`                                    | `operations.reinsurance.placements:VIEW`   |
-| `PATCH`  | `/api/placements/:id`                                    | `operations.reinsurance.placements:EDIT`   |
-| `PATCH`  | `/api/placements/:id/status`                             | `operations.reinsurance.placements:EDIT`   |
-| `POST`   | `/api/placements/:id/participants`                       | `operations.reinsurance.placements:EDIT`   |
-| `PATCH`  | `/api/placements/:id/participants/:participantId`        | `operations.reinsurance.placements:EDIT`   |
-| `PATCH`  | `/api/placements/:id/participants/:participantId/status` | `operations.reinsurance.placements:EDIT`   |
-| `DELETE` | `/api/placements/:id/participants/:participantId`        | `operations.reinsurance.placements:EDIT`   |
-| `DELETE` | `/api/placements/:id`                                    | `operations.reinsurance.placements:DELETE` |
+| Method   | Service route                                                           | Permission                                 |
+| -------- | ----------------------------------------------------------------------- | ------------------------------------------ |
+| `GET`    | `/api/placements`                                                       | `operations.reinsurance.placements:VIEW`   |
+| `POST`   | `/api/placements`                                                       | `operations.reinsurance.placements:CREATE` |
+| `GET`    | `/api/placements/:id`                                                   | `operations.reinsurance.placements:VIEW`   |
+| `PATCH`  | `/api/placements/:id`                                                   | `operations.reinsurance.placements:EDIT`   |
+| `PATCH`  | `/api/placements/:id/status`                                            | `operations.reinsurance.placements:EDIT`   |
+| `POST`   | `/api/placements/:id/participants`                                      | `operations.reinsurance.placements:EDIT`   |
+| `PATCH`  | `/api/placements/:id/participants/:participantId`                       | `operations.reinsurance.placements:EDIT`   |
+| `PATCH`  | `/api/placements/:id/participants/:participantId/status`                | `operations.reinsurance.placements:EDIT`   |
+| `DELETE` | `/api/placements/:id/participants/:participantId`                       | `operations.reinsurance.placements:EDIT`   |
+| `GET`    | `/api/placements/:id/slips/offer-preview`                               | `operations.reinsurance.placements:VIEW`   |
+| `GET`    | `/api/placements/:id/participants/:participantId/slips/closing-preview` | `operations.reinsurance.placements:VIEW`   |
+| `DELETE` | `/api/placements/:id`                                                   | `operations.reinsurance.placements:DELETE` |
 
 List requests support `search`, `status`, `placementType`, `cedantId`, `page`
 and `limit`. Deletion is a soft archive. Every lookup and mutation is scoped
@@ -205,8 +212,15 @@ authoritative — treat them as the source of truth, not derived values:
 ```
 totalOfferedPercent  = sum of sharePercent for ALL participants (may exceed 100)
 totalAcceptedPercent = sum of signedLinePercent for ACCEPTED participants only
-remainingPercent     = max(0, facultativeOffer (or 100) − totalAcceptedPercent)
+remainingPercent     = max(0, (facultativeOffer ?? 0) − totalAcceptedPercent)
 ```
+
+When `facultativeOffer` is absent, accepted-capacity validation and automatic
+status derivation use `100` as the temporary maximum so brokers can record
+market acceptances before the final facultative offer is known. Preview and
+display calculations intentionally use `facultativeOffer ?? 0`; therefore
+`remainingPercent` in API responses is calculated as
+`max(0, (facultativeOffer ?? 0) - totalAcceptedPercent)`.
 
 ### Auto-recalculation rules
 
@@ -214,11 +228,11 @@ When any participant is added, updated or deleted on a placement whose current
 status is `MARKETING`, `PARTIALLY_PLACED` or `PLACED`, the backend derives the
 new placement status automatically from `totalAcceptedPercent`:
 
-| `totalAcceptedPercent` condition              | Derived placement status |
-| --------------------------------------------- | ------------------------ |
-| `<= 0`                                        | `MARKETING`              |
-| `> 0` and below `facultativeOffer` (or `100`) | `PARTIALLY_PLACED`       |
-| `>= facultativeOffer` (or `100`)              | `PLACED`                 |
+| `totalAcceptedPercent` condition                                    | Derived placement status |
+| ------------------------------------------------------------------- | ------------------------ |
+| `<= 0`                                                              | `MARKETING`              |
+| `> 0` and below `facultativeOffer` (or temporary `100` when absent) | `PARTIALLY_PLACED`       |
+| `>= facultativeOffer` (or temporary `100` when absent)              | `PLACED`                 |
 
 Auto-recalculation is **skipped** for `DRAFT`, `CLOSING`, `CLOSED`,
 `DECLINED` and `CANCELLED` placements. Participant changes on these statuses
@@ -228,19 +242,12 @@ When recalculation changes the placement status a `PlacementStatusHistory`
 entry is written automatically with note
 `"Participant capacity recalculated placement status"`.
 
-### Known validation gaps (Sprint 1)
+### Known follow-ups
 
-The following items are **not yet enforced** by the backend. They are
-documented here so the frontend does not build assumptions that conflict with
-future enforcement, and to serve as a tracked follow-up.
+The following items are documented so the frontend does not build assumptions
+that conflict with future enforcement, and to serve as tracked follow-ups.
 
-**Gap 1 — ~~Accepted capacity may exceed `facultativeOffer`.~~ Fixed.**
-`assertAcceptedCap()` now enforces that the combined `signedLinePercent` of
-`ACCEPTED` participants cannot exceed `facultativeOffer` (or 100 when absent).
-The previous global `totalSignedLinePercent ≤ 100` check (which applied to all
-participants regardless of status) has been replaced with this targeted cap.
-
-**Gap 2 — `CANCELLED` placements can currently be archived.**
+**`CANCELLED` placements can currently be archived.**
 `assertArchivable()` guards against archiving `CLOSED` placements but not
 `CANCELLED` ones. Since `CANCELLED` is also terminal, archiving it is
 unintended. Recommended fix: add `CANCELLED` to the archive guard alongside
@@ -266,16 +273,52 @@ unintended. Recommended fix: add `CANCELLED` to the archive guard alongside
 - A `409` on placement create or update means a duplicate `reference` already
   exists for this tenant — surface field-level feedback.
 
+## Slip Preview API
+
+Slip preview endpoints are read-only and do not create PDFs, persist document
+records or send email. They return server-side preview data using the same
+formulas that the current frontend modals use.
+
+```text
+GET /api/v1/operations/reinsurance/placements/:id/slips/offer-preview
+GET /api/v1/operations/reinsurance/placements/:id/participants/:participantId/slips/closing-preview
+```
+
+Offer preview returns:
+
+- Placement summary and cedant details.
+- Dynamic `businessEntries` and `offerEntries`.
+- Debit/guarantee-note financials.
+- Participant preview rows with each participant's brokerage fee.
+- `totalOfferedPercent`, `totalAcceptedPercent` and `remainingPercent`.
+
+Closing preview returns:
+
+- Placement summary, cedant and participant details.
+- Dynamic `businessEntries` and `offerEntries`.
+- Participant-specific slip financials.
+- Closing row values.
+- Credit-note financials.
+- Debit/guarantee-note financials.
+
+Closing preview requires:
+
+- Participant status is `ACCEPTED` or `CLOSED`.
+- Participant `signedLinePercent > 0`.
+
+If `facultativeOffer` is omitted, preview calculations use
+`facultativeOffer ?? 0`.
+
 ## Risk Settings API
 
 Frontend integrations should use the explicit Risk Class and Risk Type routes:
 
 ```text
-GET    /api/v1/operations/reinsurance/risk-classes
-POST   /api/v1/operations/reinsurance/risk-classes
-GET    /api/v1/operations/reinsurance/risk-classes/:id
-PATCH  /api/v1/operations/reinsurance/risk-classes/:id
-DELETE /api/v1/operations/reinsurance/risk-classes/:id
+GET    /api/v1/operations/reinsurance/settings/risk-classes
+POST   /api/v1/operations/reinsurance/settings/risk-classes
+GET    /api/v1/operations/reinsurance/settings/risk-classes/:id
+PATCH  /api/v1/operations/reinsurance/settings/risk-classes/:id
+DELETE /api/v1/operations/reinsurance/settings/risk-classes/:id
 
 GET    /api/v1/operations/reinsurance/settings/risk-types
 POST   /api/v1/operations/reinsurance/settings/risk-types
@@ -295,7 +338,7 @@ Risk Class and Risk Type routes listed above.
 
 Recommended setup flow:
 
-1. Create a risk class with `POST /risk-classes`.
+1. Create a risk class with `POST /settings/risk-classes`.
 2. Create one or more risk types with `POST /settings/risk-types`.
 3. Add dynamic fields with `POST /settings/risk-types/:riskTypeId/fields`.
 4. Fetch the dynamic form schema with
@@ -367,6 +410,10 @@ The Next.js application should call only the gateway surface:
 
 ```ts
 const COUNTERPARTIES_PATH = '/operations/reinsurance/counterparties';
+const PLACEMENTS_PATH = '/operations/reinsurance/placements';
+const RISK_CLASSES_PATH = '/operations/reinsurance/settings/risk-classes';
+const RISK_TYPES_PATH = '/operations/reinsurance/settings/risk-types';
+const CURRENCIES_PATH = '/operations/reinsurance/settings/currencies';
 ```
 
 The existing Axios instance in `apps/web/work-phelo-web/src/lib/api.ts`
@@ -591,6 +638,11 @@ Decimal values such as `sumInsured`, `sharePercent` and
 Prisma as JSON strings. Frontend types should model them as `string | null`
 on responses and convert only at display/form boundaries.
 
+`facultativeOffer` is optional in create and update payloads. If omitted, the
+placement can still be created and preview endpoints still return data. The
+backend uses `facultativeOffer ?? 0` for preview/display calculations and uses
+temporary `100` as the acceptance cap until an offer value is known.
+
 Placement fields are split into:
 
 - Fixed fields: `cedantId`, `placementType`, `riskTypeId`, `classOfBusiness`, `status`,
@@ -643,6 +695,85 @@ Frontend mapping guidance:
   `offerDetails` respectively, together with the selected `riskTypeId`.
 - Keep search/reportable fields in fixed columns; do not push UI labels into
   backend status enums.
+
+### Current Frontend Catch-up Checklist
+
+- Replace old placement statuses (`QUOTED`, `BOUND`) with the current backend
+  placement lifecycle values.
+- Add a mutation for `PATCH /placements/:id/status`.
+- Drive participant action buttons from persisted participant status, not
+  local-only mail state.
+- Add hooks for `offer-preview` and `closing-preview` and hydrate the preview
+  modals from backend responses.
+- Treat `facultativeOffer` as optional where the product flow allows draft
+  placements before the offer is known.
+- Add or restore a Risk Class selector before Risk Type selection, or fetch
+  risk types without an empty class filter.
+- Use backend `totalOfferedPercent`, `totalAcceptedPercent` and
+  `remainingPercent` instead of recomputing placement aggregates client-side.
+
+## Reinsurance UAT Guide
+
+Use this path to validate the current broker-only MVP before adding document,
+email distribution or endorsement work.
+
+1. Create setup data:
+   - Currency.
+   - Cedant.
+   - Reinsurers.
+   - Broker if needed.
+   - Risk Class.
+   - Risk Type.
+   - Risk Type Fields.
+2. Create a placement without `facultativeOffer`.
+   - Expected: placement is accepted.
+   - Expected: preview values use `facultativeOffer ?? 0`.
+3. Create or update a placement with `facultativeOffer`.
+   - Expected: capacity target uses the supplied offer value.
+4. Move placement from `DRAFT` to `MARKETING`.
+5. Add multiple reinsurer participants.
+   - Expected: total offered capacity may exceed 100.
+6. Mark one participant `OFFER_SENT`, then record a `signedLinePercent` and
+   move that participant to `ACCEPTED`.
+   - Expected: placement recalculates to `PARTIALLY_PLACED` when accepted
+     capacity is below the target.
+7. Accept enough signed lines to reach the offer target.
+   - Expected: placement recalculates to `PLACED`.
+8. Generate offer preview.
+   - Expected: no PDF/document/email is created.
+9. Generate closing preview for an accepted participant.
+   - Expected: accepted/closed participant with signed line succeeds.
+   - Expected: non-accepted participant or zero signed line returns `400`.
+10. Move placement from `PLACED` to `CLOSING`, then `CLOSED`.
+    - Expected: closed placements are read-only.
+
+## Future Roadmap
+
+Current:
+
+- Core broker-only placement workflow complete.
+- Counterparties complete for cedants, reinsurers and brokers.
+- Risk Classes, Risk Types, Risk Type Fields and Currency Settings complete.
+- Participant workflow and placement lifecycle complete.
+- Capacity validation complete.
+- Slip Preview MVP complete.
+- Email technical foundation complete.
+
+Deferred:
+
+- Slip/document generation and storage.
+- Offer slip distribution.
+- Closing slip distribution.
+- Full send/reply/forward email workflow.
+- Endorsements.
+- Payments & Covers.
+- Claims.
+
+Endorsements are a future roadmap item only. Do not model them as direct silent
+mutations of a closed placement. UAT should capture examples such as sum
+insured changes, premium adjustments, participant share changes, participant
+additions/removals, risk detail amendments and coverage amendments before the
+endorsement domain is designed.
 
 ## Email Foundation API
 
