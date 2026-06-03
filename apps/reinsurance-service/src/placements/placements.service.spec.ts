@@ -1182,4 +1182,249 @@ describe('PlacementsService', () => {
     );
     loggerWarn.mockRestore();
   });
+
+  it('returns offer slip preview values using the current frontend formulas', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      riskTypeId: 'risk-type-1',
+      classOfBusiness: 'Marine Cargo',
+      businessDetails: { vessel_name: 'MV Ocean Pioneer' },
+      offerDetails: { coverage_type: 'All Risk' },
+      currency: 'USD',
+      sumInsured: 500000,
+      rate: 2,
+      premium: 10000,
+      commission: 10,
+      facultativeOffer: 40,
+      preliminaryBrokerage: null,
+      cedant: {
+        ...placement.cedant,
+        email: 'cedant@example.com',
+        phone: '+233240000000',
+        country: 'GH',
+        contacts: [
+          {
+            id: 'contact-1',
+            fullName: 'Ama Cedant',
+            jobTitle: 'Manager',
+            email: 'ama@example.com',
+            phone: '+233240000001',
+            isPrimary: true,
+          },
+        ],
+        addresses: [
+          {
+            id: 'address-1',
+            label: 'Head office',
+            line1: '1 High Street',
+            line2: null,
+            city: 'Accra',
+            state: 'Greater Accra',
+            postalCode: null,
+            country: 'GH',
+            isPrimary: true,
+          },
+        ],
+      },
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.OFFER_SENT,
+          sharePercent: 40,
+          signedLinePercent: null,
+          brokerageFee: 5,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: 'RE-001',
+            email: 're@example.com',
+            phone: '+233240000002',
+            country: 'GH',
+            contacts: [],
+            addresses: [],
+          },
+        },
+      ],
+    });
+
+    const result = await service.getOfferSlipPreview('tenant-1', 'placement-1');
+
+    expect(prisma.placement.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'placement-1',
+          tenantId: 'tenant-1',
+          archivedAt: null,
+        },
+      }),
+    );
+    expect(result.businessEntries).toEqual([
+      { key: 'vessel_name', label: 'Vessel Name', value: 'MV Ocean Pioneer' },
+    ]);
+    expect(result.offerEntries).toEqual([
+      { key: 'coverage_type', label: 'Coverage Type', value: 'All Risk' },
+    ]);
+    expect(result.debitGuaranteeFinancials).toMatchObject({
+      facSumInsured: 200000,
+      facPremium: 4000,
+      commissionAmount: 400,
+      netPremium: 3600,
+    });
+    expect(result.participantPreviews[0]).toMatchObject({
+      participant: {
+        id: 'participant-1',
+        brokerageFee: 5,
+        counterparty: {
+          email: 're@example.com',
+          phone: '+233240000002',
+          country: 'GH',
+          registrationNumber: 'RE-001',
+        },
+      },
+      slipFinancials: {
+        brokerageFee: 5,
+        facOffer: 40,
+        facSumInsured: 200000,
+        reinsurancePremium: 4000,
+        commissions: 600,
+        netPremium: 3400,
+      },
+      distributionFinancials: {
+        shareLine: 40,
+        brokerageFee: 5,
+        facPremium: 4000,
+        premiumShare: 1600,
+        brokerageAmount: 80,
+      },
+    });
+  });
+
+  it('returns closing preview values using the current frontend formulas', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      classOfBusiness: 'Marine Cargo',
+      businessDetails: {},
+      offerDetails: {},
+      currency: 'USD',
+      sumInsured: 500000,
+      premium: 10000,
+      commission: 10,
+      facultativeOffer: 40,
+      cedant: {
+        ...placement.cedant,
+        email: null,
+        phone: null,
+        country: 'GH',
+        contacts: [],
+        addresses: [],
+      },
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.ACCEPTED,
+          sharePercent: 40,
+          signedLinePercent: 30,
+          brokerageFee: 5,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: 'RE-001',
+            email: 're@example.com',
+            phone: '+233240000002',
+            country: 'GH',
+            contacts: [],
+            addresses: [],
+          },
+        },
+      ],
+    });
+
+    const result = await service.getClosingSlipPreview(
+      'tenant-1',
+      'placement-1',
+      'participant-1',
+    );
+
+    expect(result.slipFinancials).toMatchObject({
+      brokerageFee: 5,
+      facOffer: 40,
+      facSumInsured: 200000,
+      reinsurancePremium: 4000,
+      commissions: 600,
+      netPremium: 3400,
+    });
+    expect(result.closingRow).toMatchObject({
+      signedShare: 30,
+      signedGrossPremium: 3000,
+      brokerageFee: 5,
+    });
+    expect(result.creditNoteFinancials).toMatchObject({
+      sharePercent: 30,
+      brokerageFee: 5,
+      yourSumInsured: 150000,
+      yourPremium: 3000,
+      totalCommissionPct: 15,
+      commissionAmount: 450,
+      nicLevyPct: 0,
+      nicLevyAmount: 0,
+      withholdingTaxPct: 0,
+      withholdingTaxAmount: 0,
+      netPremium: 2550,
+    });
+  });
+
+  it('rejects closing preview for participants that are not accepted or closed', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      cedant: {
+        ...placement.cedant,
+        email: null,
+        phone: null,
+        country: 'GH',
+        contacts: [],
+        addresses: [],
+      },
+      participants: [
+        {
+          id: 'participant-1',
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.OFFER_SENT,
+          sharePercent: 40,
+          signedLinePercent: 30,
+          brokerageFee: 5,
+          notes: null,
+          counterparty: {
+            id: 'reinsurer-1',
+            type: CounterpartyType.REINSURER,
+            name: 'Ghana Re',
+            registrationNumber: null,
+            email: null,
+            phone: null,
+            country: 'GH',
+            contacts: [],
+            addresses: [],
+          },
+        },
+      ],
+    });
+
+    await expect(
+      service.getClosingSlipPreview('tenant-1', 'placement-1', 'participant-1'),
+    ).rejects.toThrow(BadRequestException);
+  });
 });

@@ -54,8 +54,56 @@ const placementInclude = {
   },
 } satisfies Prisma.PlacementInclude;
 
+const slipPreviewInclude = {
+  cedant: {
+    include: {
+      contacts: {
+        orderBy: [
+          { isPrimary: 'desc' as const },
+          { createdAt: 'asc' as const },
+        ],
+      },
+      addresses: {
+        orderBy: [
+          { isPrimary: 'desc' as const },
+          { createdAt: 'asc' as const },
+        ],
+      },
+    },
+  },
+  participants: {
+    include: {
+      counterparty: {
+        include: {
+          contacts: {
+            orderBy: [
+              { isPrimary: 'desc' as const },
+              { createdAt: 'asc' as const },
+            ],
+          },
+          addresses: {
+            orderBy: [
+              { isPrimary: 'desc' as const },
+              { createdAt: 'asc' as const },
+            ],
+          },
+        },
+      },
+    },
+    orderBy: [{ role: 'asc' as const }, { createdAt: 'asc' as const }],
+  },
+  statusHistory: {
+    orderBy: { createdAt: 'desc' as const },
+    take: 20,
+  },
+} satisfies Prisma.PlacementInclude;
+
 type PlacementRecord = Prisma.PlacementGetPayload<{
   include: typeof placementInclude;
+}>;
+
+type SlipPreviewPlacementRecord = Prisma.PlacementGetPayload<{
+  include: typeof slipPreviewInclude;
 }>;
 
 type PlacementWithAggregates = PlacementRecord & {
@@ -166,6 +214,82 @@ export class PlacementsService {
     }
 
     return this.withAggregates(placement);
+  }
+
+  async getOfferSlipPreview(tenantId: string, id: string) {
+    const placement = await this.findSlipPreviewPlacement(tenantId, id);
+    const aggregates = this.calculateAggregates(placement);
+    const reinsurerParticipants = placement.participants.filter((participant) =>
+      this.isReinsurerParticipant(participant.role),
+    );
+
+    return {
+      placement: this.slipPlacementSummary(placement),
+      cedant: this.slipCounterparty(placement.cedant),
+      businessEntries: this.detailEntries(placement.businessDetails),
+      offerEntries: this.detailEntries(placement.offerDetails),
+      debitGuaranteeFinancials:
+        this.calculateDebitGuaranteeFinancials(placement),
+      participantPreviews: reinsurerParticipants.map((participant) => ({
+        participant: this.slipParticipant(participant),
+        slipFinancials: this.calculateSlipFinancials(
+          placement,
+          this.decimalToNumber(participant.brokerageFee),
+        ),
+        distributionFinancials: this.calculateDistributionFinancials(
+          placement,
+          participant,
+        ),
+      })),
+      totalOfferedPercent: aggregates.totalOfferedPercent,
+      totalAcceptedPercent: aggregates.totalAcceptedPercent,
+      remainingPercent: aggregates.remainingPercent,
+    };
+  }
+
+  async getClosingSlipPreview(
+    tenantId: string,
+    id: string,
+    participantId: string,
+  ) {
+    const placement = await this.findSlipPreviewPlacement(tenantId, id);
+    const participant = placement.participants.find(
+      (item) => item.id === participantId,
+    );
+    if (!participant) {
+      throw new NotFoundException('Placement participant not found');
+    }
+    if (
+      participant.status !== PlacementParticipantStatus.ACCEPTED &&
+      participant.status !== PlacementParticipantStatus.CLOSED
+    ) {
+      throw new BadRequestException(
+        'Closing slip preview requires an accepted or closed participant',
+      );
+    }
+    if (this.decimalToNumber(participant.signedLinePercent) <= 0) {
+      throw new BadRequestException(
+        'Closing slip preview requires a signed line percentage',
+      );
+    }
+
+    const brokerageFee = this.decimalToNumber(participant.brokerageFee);
+
+    return {
+      placement: this.slipPlacementSummary(placement),
+      cedant: this.slipCounterparty(placement.cedant),
+      participant: this.slipParticipant(participant),
+      businessEntries: this.detailEntries(placement.businessDetails),
+      offerEntries: this.detailEntries(placement.offerDetails),
+      slipFinancials: this.calculateSlipFinancials(placement, brokerageFee),
+      closingRow: this.calculateClosingRow(placement, participant),
+      creditNoteFinancials: this.calculateCreditNoteFinancials(
+        placement,
+        participant,
+      ),
+      debitGuaranteeFinancials:
+        this.calculateDebitGuaranteeFinancials(placement),
+    };
   }
 
   async create(
@@ -709,6 +833,265 @@ export class PlacementsService {
     return placement;
   }
 
+  private async findSlipPreviewPlacement(
+    tenantId: string,
+    id: string,
+  ): Promise<SlipPreviewPlacementRecord> {
+    const placement = await this.prisma.placement.findFirst({
+      where: { id, tenantId, archivedAt: null },
+      include: slipPreviewInclude,
+    });
+
+    if (!placement) {
+      throw new NotFoundException('Placement not found');
+    }
+
+    return placement;
+  }
+
+  private slipPlacementSummary(placement: SlipPreviewPlacementRecord) {
+    return {
+      id: placement.id,
+      reference: placement.reference,
+      title: placement.title,
+      placementType: placement.placementType,
+      status: placement.status,
+      riskTypeId: placement.riskTypeId,
+      classOfBusiness: placement.classOfBusiness,
+      currency: placement.currency,
+      inceptionDate: placement.inceptionDate,
+      expiryDate: placement.expiryDate,
+      sumInsured: this.nullableDecimalToNumber(placement.sumInsured),
+      rate: this.nullableDecimalToNumber(placement.rate),
+      premium: this.nullableDecimalToNumber(placement.premium),
+      commission: this.nullableDecimalToNumber(placement.commission),
+      facultativeOffer: this.nullableDecimalToNumber(
+        placement.facultativeOffer,
+      ),
+      preliminaryBrokerage: this.nullableDecimalToNumber(
+        placement.preliminaryBrokerage,
+      ),
+    };
+  }
+
+  private slipCounterparty(
+    counterparty:
+      | SlipPreviewPlacementRecord['cedant']
+      | SlipPreviewPlacementRecord['participants'][number]['counterparty'],
+  ) {
+    return {
+      id: counterparty.id,
+      type: counterparty.type,
+      name: counterparty.name,
+      registrationNumber: counterparty.registrationNumber,
+      email: counterparty.email,
+      phone: counterparty.phone,
+      country: counterparty.country,
+      contacts: counterparty.contacts.map((contact) => ({
+        id: contact.id,
+        fullName: contact.fullName,
+        jobTitle: contact.jobTitle,
+        email: contact.email,
+        phone: contact.phone,
+        isPrimary: contact.isPrimary,
+      })),
+      addresses: counterparty.addresses.map((address) => ({
+        id: address.id,
+        label: address.label,
+        line1: address.line1,
+        line2: address.line2,
+        city: address.city,
+        state: address.state,
+        postalCode: address.postalCode,
+        country: address.country,
+        isPrimary: address.isPrimary,
+      })),
+    };
+  }
+
+  private slipParticipant(
+    participant: SlipPreviewPlacementRecord['participants'][number],
+  ) {
+    return {
+      id: participant.id,
+      counterpartyId: participant.counterpartyId,
+      role: participant.role,
+      status: participant.status,
+      sharePercent: this.nullableDecimalToNumber(participant.sharePercent),
+      signedLinePercent: this.nullableDecimalToNumber(
+        participant.signedLinePercent,
+      ),
+      brokerageFee: this.nullableDecimalToNumber(participant.brokerageFee),
+      notes: participant.notes,
+      counterparty: this.slipCounterparty(participant.counterparty),
+    };
+  }
+
+  private detailEntries(value: Prisma.JsonValue | null) {
+    if (!value || Array.isArray(value) || typeof value !== 'object') {
+      return [];
+    }
+
+    return Object.entries(value as Record<string, unknown>).map(
+      ([key, entryValue]) => ({
+        key,
+        label: this.toFrontendLabel(key),
+        value: entryValue,
+      }),
+    );
+  }
+
+  private toFrontendLabel(key: string): string {
+    return key
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
+
+  private calculateSlipFinancials(
+    placement: SlipPreviewPlacementRecord,
+    brokerageFee: number,
+  ) {
+    const facOffer = this.decimalToNumber(placement.facultativeOffer);
+    const sumInsured = this.nullableDecimalToNumber(placement.sumInsured);
+    const premium = this.nullableDecimalToNumber(placement.premium);
+    const commission = this.decimalToNumber(placement.commission);
+    const facSumInsured =
+      sumInsured !== null ? (facOffer / 100) * sumInsured : null;
+    const reinsurancePremium =
+      premium !== null ? (facOffer / 100) * premium : null;
+    const commissions =
+      reinsurancePremium !== null
+        ? ((commission + brokerageFee) / 100) * reinsurancePremium
+        : null;
+    const netPremium =
+      reinsurancePremium !== null && commissions !== null
+        ? reinsurancePremium - commissions
+        : null;
+
+    return {
+      brokerageFee,
+      facOffer,
+      facSumInsured,
+      reinsurancePremium,
+      commissions,
+      netPremium,
+    };
+  }
+
+  private calculateDebitGuaranteeFinancials(
+    placement: SlipPreviewPlacementRecord,
+  ) {
+    const facOffer = this.decimalToNumber(placement.facultativeOffer);
+    const sumInsured = this.nullableDecimalToNumber(placement.sumInsured);
+    const premium = this.nullableDecimalToNumber(placement.premium);
+    const commission = this.decimalToNumber(placement.commission);
+    const facSumInsured =
+      sumInsured !== null ? (facOffer / 100) * sumInsured : null;
+    const facPremium = premium !== null ? (facOffer / 100) * premium : null;
+    const commissionAmount =
+      facPremium !== null ? (commission / 100) * facPremium : null;
+    const netPremium =
+      facPremium !== null && commissionAmount !== null
+        ? facPremium - commissionAmount
+        : null;
+
+    return {
+      facSumInsured,
+      facPremium,
+      commissionAmount,
+      netPremium,
+    };
+  }
+
+  private calculateDistributionFinancials(
+    placement: SlipPreviewPlacementRecord,
+    participant: SlipPreviewPlacementRecord['participants'][number],
+  ) {
+    const facOffer = this.decimalToNumber(placement.facultativeOffer);
+    const premium = this.decimalToNumber(placement.premium);
+    const shareLine = this.decimalToNumber(participant.sharePercent);
+    const brokerageFee = this.decimalToNumber(participant.brokerageFee);
+    const facPremium = premium * (facOffer / 100);
+    const premiumShare = (shareLine / 100) * facPremium;
+    const brokerageAmount = (brokerageFee / 100) * premiumShare;
+
+    return {
+      shareLine,
+      brokerageFee,
+      facPremium,
+      premiumShare,
+      brokerageAmount,
+    };
+  }
+
+  private calculateClosingRow(
+    placement: SlipPreviewPlacementRecord,
+    participant: SlipPreviewPlacementRecord['participants'][number],
+  ) {
+    const signedShare =
+      this.decimalToNumber(participant.signedLinePercent) ||
+      this.decimalToNumber(participant.sharePercent);
+    const premium = this.decimalToNumber(placement.premium);
+
+    return {
+      signedShare,
+      signedGrossPremium: (signedShare / 100) * premium,
+      brokerageFee: this.decimalToNumber(participant.brokerageFee),
+    };
+  }
+
+  private calculateCreditNoteFinancials(
+    placement: SlipPreviewPlacementRecord,
+    participant: SlipPreviewPlacementRecord['participants'][number],
+  ) {
+    const sharePercent =
+      this.decimalToNumber(participant.signedLinePercent) ||
+      this.decimalToNumber(participant.sharePercent);
+    const brokerageFee = this.decimalToNumber(participant.brokerageFee);
+    const sumInsured = this.nullableDecimalToNumber(placement.sumInsured);
+    const premium = this.nullableDecimalToNumber(placement.premium);
+    const commission = this.decimalToNumber(placement.commission);
+    const yourSumInsured =
+      sumInsured !== null ? (sharePercent / 100) * sumInsured : null;
+    const yourPremium =
+      premium !== null ? (sharePercent / 100) * premium : null;
+    const totalCommissionPct = commission + brokerageFee;
+    const commissionAmount =
+      yourPremium !== null ? (totalCommissionPct / 100) * yourPremium : null;
+    const nicLevyPct = 0;
+    const withholdingTaxPct = 0;
+    const nicLevyAmount =
+      yourPremium !== null ? (nicLevyPct / 100) * yourPremium : 0;
+    const withholdingTaxAmount =
+      yourPremium !== null ? (withholdingTaxPct / 100) * yourPremium : 0;
+    const netPremium =
+      yourPremium !== null && commissionAmount !== null
+        ? yourPremium - commissionAmount - nicLevyAmount - withholdingTaxAmount
+        : null;
+
+    return {
+      sharePercent,
+      brokerageFee,
+      yourSumInsured,
+      yourPremium,
+      totalCommissionPct,
+      commissionAmount,
+      nicLevyPct,
+      nicLevyAmount,
+      withholdingTaxPct,
+      withholdingTaxAmount,
+      netPremium,
+    };
+  }
+
+  private isReinsurerParticipant(role: PlacementParticipantRole): boolean {
+    return (
+      role === PlacementParticipantRole.REINSURER ||
+      role === PlacementParticipantRole.LEAD_REINSURER ||
+      role === PlacementParticipantRole.CO_REINSURER
+    );
+  }
+
   private async assertCedant(
     tenantId: string,
     cedantId: string,
@@ -1093,6 +1476,22 @@ export class PlacementsService {
   }
 
   private withAggregates(placement: PlacementRecord): PlacementWithAggregates {
+    const aggregates = this.calculateAggregates(placement);
+
+    return {
+      ...placement,
+      ...aggregates,
+    };
+  }
+
+  private calculateAggregates(placement: {
+    facultativeOffer?: number | Prisma.Decimal | string | null;
+    participants: Array<{
+      status: PlacementParticipantStatus;
+      sharePercent?: number | Prisma.Decimal | string | null;
+      signedLinePercent?: number | Prisma.Decimal | string | null;
+    }>;
+  }) {
     const totalOfferedPercent = this.roundPercent(
       placement.participants.reduce(
         (sum, item) => sum + this.decimalToNumber(item.sharePercent),
@@ -1109,7 +1508,6 @@ export class PlacementsService {
       this.decimalToNumber(placement.facultativeOffer) || 100;
 
     return {
-      ...placement,
       totalOfferedPercent,
       totalAcceptedPercent,
       remainingPercent: this.roundPercent(
@@ -1129,6 +1527,13 @@ export class PlacementsService {
     }
     const parsed = Number(value.toString());
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private nullableDecimalToNumber(
+    value: number | Prisma.Decimal | string | null | undefined,
+  ): number | null {
+    if (value === null || value === undefined) return null;
+    return this.decimalToNumber(value);
   }
 
   private roundPercent(value: number): number {
