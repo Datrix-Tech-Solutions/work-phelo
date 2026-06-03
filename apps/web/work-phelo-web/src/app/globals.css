@@ -66,19 +66,23 @@ body {
   font-family: var(--font-app), sans-serif;
 }
 
-@media print {
-  @page {
-    margin: 0;
-    size: A4;
-  }
+/* Must be top-level — @page inside @media is ignored by Chrome */
+@page {
+  size: A4;
+  margin: 0;
+}
 
+@media print {
   body > *:not(#irisk-print-root) {
     display: none !important;
   }
   #irisk-print-root {
     display: block !important;
-    position: fixed;
-    inset: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    min-height: 100%;
     background: white;
   }
 }

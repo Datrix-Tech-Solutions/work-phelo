@@ -2,6 +2,17 @@
 
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/DocumentPreviewModal';
 import { Facultative } from '@/types/reinsurance';
+import { useReinsurers } from '@/hooks';
+
+function toLabel(key: string) {
+  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function fmtFieldValue(val: unknown): string {
+  if (val == null) return '—';
+  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  return String(val);
+}
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
@@ -30,6 +41,8 @@ interface CreditNoteModalProps {
   placement: Facultative;
   sharePercent: number;
   brokerageFee: number;
+  counterpartyId: string;
+  reinsurerCompany: string;
   nicLevyPct?: number;
   withholdingTaxPct?: number;
   onPrint: () => void;
@@ -41,11 +54,18 @@ export function CreditNoteModal({
   placement,
   sharePercent,
   brokerageFee,
+  counterpartyId,
+  reinsurerCompany,
   nicLevyPct = 0,
   withholdingTaxPct = 0,
   onPrint,
   onClose,
 }: CreditNoteModalProps) {
+  const { data: reinsurers = [] } = useReinsurers();
+  const reinsurer = reinsurers.find((r) => r.id === counterpartyId);
+  const addr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
+  const reinsurerCity = addr?.city ?? null;
+  const reinsurerRegionCountry = [addr?.state, addr?.country].filter(Boolean).join(' - ') || null;
   const {
     currency,
     sumInsured,
@@ -57,7 +77,14 @@ export function CreditNoteModal({
     inceptionDate,
     expiryDate,
     cedant,
+    businessDetails,
+    offerDetails,
   } = placement;
+
+  const riskDetailRows: CreditNoteRow[] = [
+    ...Object.entries(businessDetails ?? {}),
+    ...Object.entries(offerDetails ?? {}),
+  ].map(([key, val]) => ({ label: toLabel(key), value: fmtFieldValue(val) }));
 
   const yourSumInsured = sumInsured != null ? (sharePercent / 100) * sumInsured : null;
   const yourPremium = premium != null ? (sharePercent / 100) * premium : null;
@@ -75,6 +102,7 @@ export function CreditNoteModal({
     { label: 'Insured', value: title },
     { label: 'Policy Number', value: reference },
     { label: 'Class of Insurance', value: classOfBusiness ?? '—' },
+    ...riskDetailRows,
     {
       label: 'Period of Insurance',
       value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`,
@@ -113,6 +141,22 @@ export function CreditNoteModal({
       onPrint={onPrint}
       onClose={onClose}
     >
+      {/* Address block */}
+      <div className="flex flex-col gap-0.5 text-sm mb-4">
+        <p className="text-gray-500">
+          {new Date().toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'long',
+            year: 'numeric',
+          })}
+        </p>
+        <p className="font-medium text-gray-900 mt-2">The Managing Director</p>
+        <p className="text-gray-800">{reinsurerCompany}</p>
+        {reinsurerCity && <p className="text-gray-600">{reinsurerCity}</p>}
+        {reinsurerRegionCountry && <p className="text-gray-600">{reinsurerRegionCountry}</p>}
+        <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
+      </div>
+
       <table className="w-full text-sm border-collapse">
         <tbody>
           {rows.map((row, i) =>

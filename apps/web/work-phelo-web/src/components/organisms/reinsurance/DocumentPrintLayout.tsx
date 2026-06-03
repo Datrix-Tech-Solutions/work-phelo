@@ -6,6 +6,8 @@ import Image from 'next/image';
 import QRCode from 'react-qr-code';
 
 const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
+const HEADER_H = 100; // px — must match the fixed header height
+const FOOTER_H = 56; // px — must match the fixed footer height
 
 const FOOTER_LINES = [
   'Location: No. D17 Boundary Road, Near Kaiser Kitchen Appliances, East Legon, Accra',
@@ -16,81 +18,172 @@ const FOOTER_LINES = [
 interface DocumentPrintLayoutProps {
   documentTitle: string;
   children: ReactNode;
+  afterContent?: ReactNode;
 }
 
-export function DocumentPrintLayout({ documentTitle, children }: DocumentPrintLayoutProps) {
+export function DocumentPrintLayout({
+  documentTitle,
+  children,
+  afterContent,
+}: DocumentPrintLayoutProps) {
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div
-      id="irisk-print-root"
-      style={{ display: 'none' }}
-      className="bg-white font-sans text-sm text-gray-900"
-    >
+    <div id="irisk-print-root" style={{ display: 'none' }}>
       {/* Watermark */}
       <div
-        className="fixed inset-0 flex items-center justify-center pointer-events-none"
-        style={{ zIndex: 0 }}
+        style={{
+          position: 'fixed',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
       >
         <Image
           src="/iRiskwatermark.png"
           alt=""
-          width={600}
+          width={900}
           height={600}
-          className="object-contain opacity-30"
+          style={{ objectFit: 'contain', opacity: 0.3 }}
         />
       </div>
 
-      {/* Page content */}
-      <div className="relative min-h-screen flex flex-col p-12" style={{ zIndex: 1 }}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8 pb-6 border-b border-gray-200">
-          <Image
-            src="/iRisklogo.png"
-            alt="iRisk logo"
-            width={160}
-            height={80}
-            className="object-contain"
-          />
-          <div className="flex flex-col items-center gap-1">
-            <h1 className="text-lg font-bold uppercase tracking-widest text-gray-900">
-              {documentTitle}
-            </h1>
-          </div>
-          <div className="flex flex-col items-center gap-1">
-            <QRCode value={COMPANY_URL} size={72} />
-          </div>
-        </div>
-
-        {/* Document body */}
-        <div className="flex-1">{children}</div>
-
-        {/* Acceptance section */}
-        <div className="mt-12 pt-6 border-t border-gray-200 flex flex-col gap-4">
-          <p className="text-sm text-gray-700 italic">
-            Kindly confirm your acceptance or otherwise
-          </p>
-          <div className="flex gap-16">
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-gray-500">Accepted by</span>
-              <div className="w-56 border-b border-gray-400 mt-6" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs text-gray-500">Signature</span>
-              <div className="w-56 border-b border-gray-400 mt-6" />
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="mt-8 pt-4 border-t border-gray-100 flex flex-col items-center gap-1">
-          {FOOTER_LINES.map((line) => (
-            <p key={line} className="text-[10px] text-gray-500 text-center">
-              {line}
-            </p>
-          ))}
-        </div>
+      {/* Fixed header — repeats on every page */}
+      <div
+        style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: `${HEADER_H}px`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 48px',
+          borderBottom: '1px solid #e5e7eb',
+          backgroundColor: 'white',
+          zIndex: 2,
+        }}
+      >
+        <Image
+          src="/iriskre.png"
+          alt="iRisk logo"
+          width={130}
+          height={65}
+          style={{ objectFit: 'contain' }}
+        />
+        <h1
+          style={{
+            fontSize: '14px',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            color: '#111827',
+            margin: 0,
+          }}
+        >
+          {documentTitle}
+        </h1>
+        <QRCode value={COMPANY_URL} size={60} />
       </div>
+
+      {/* Fixed footer — sticks to bottom of every page */}
+      <div
+        style={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: `${FOOTER_H}px`,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '2px',
+          borderTop: '1px solid #f3f4f6',
+          backgroundColor: 'white',
+          padding: '6px 48px',
+          zIndex: 2,
+        }}
+      >
+        {FOOTER_LINES.map((line) => (
+          <p
+            key={line}
+            style={{ fontSize: '9px', color: '#6b7280', margin: 0, textAlign: 'center' }}
+          >
+            {line}
+          </p>
+        ))}
+      </div>
+
+      {/*
+        Table with transparent thead/tfoot spacers — these reserve exactly the
+        same height as the fixed header/footer on every page, so content never
+        flows behind them.
+      */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', position: 'relative', zIndex: 1 }}>
+        <thead>
+          <tr>
+            <td style={{ height: `${HEADER_H}px`, padding: 0 }} />
+          </tr>
+        </thead>
+
+        <tfoot>
+          <tr>
+            <td style={{ height: `${FOOTER_H}px`, padding: 0 }} />
+          </tr>
+        </tfoot>
+
+        <tbody>
+          <tr>
+            <td style={{ padding: '16px 48px 0' }}>
+              <div>{children}</div>
+
+              {afterContent ?? (
+                <div
+                  style={{
+                    marginTop: '48px',
+                    paddingTop: '24px',
+                    borderTop: '1px solid #e5e7eb',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '16px',
+                  }}
+                >
+                  <p style={{ fontSize: '14px', color: '#374151', fontStyle: 'italic', margin: 0 }}>
+                    Kindly confirm your acceptance or otherwise
+                  </p>
+                  <div style={{ display: 'flex', gap: '64px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '10px', color: '#6b7280' }}>Accepted by</span>
+                      <div
+                        style={{
+                          width: '224px',
+                          borderBottom: '1px solid #9ca3af',
+                          marginTop: '24px',
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '10px', color: '#6b7280' }}>Signature</span>
+                      <div
+                        style={{
+                          width: '224px',
+                          borderBottom: '1px solid #9ca3af',
+                          marginTop: '24px',
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>,
     document.body,
   );
