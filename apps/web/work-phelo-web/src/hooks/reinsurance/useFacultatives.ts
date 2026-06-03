@@ -4,6 +4,9 @@ import {
   Facultative,
   CreateFacultativePayload,
   UpdateFacultativePayload,
+  PlacementParticipantPayload,
+  UpdateParticipantPayload,
+  UpdateParticipantStatusPayload,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
@@ -92,6 +95,67 @@ export function useDeleteFacultative() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+    },
+  });
+}
+
+export function useAddParticipant(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: PlacementParticipantPayload) => {
+      const res = await api.post(`${BASE}/${placementId}/participants`, payload);
+      return transformPlacement(res.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    },
+  });
+}
+
+export function useUpdateParticipant(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      participantId,
+      ...payload
+    }: UpdateParticipantPayload & { participantId: string }) => {
+      const res = await api.patch(`${BASE}/${placementId}/participants/${participantId}`, payload);
+      return transformPlacement(res.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    },
+  });
+}
+
+export function useUpdateParticipantStatus(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      participantId,
+      ...payload
+    }: UpdateParticipantStatusPayload & { participantId: string }) => {
+      const res = await api.patch(
+        `${BASE}/${placementId}/participants/${participantId}/status`,
+        payload,
+      );
+      return transformPlacement(res.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    },
+  });
+}
+
+export function useDeleteParticipant(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (participantId: string) => {
+      const res = await api.delete(`${BASE}/${placementId}/participants/${participantId}`);
+      return transformPlacement(res.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
     },
   });
 }

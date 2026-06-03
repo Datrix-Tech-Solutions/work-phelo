@@ -8,6 +8,7 @@ import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement } from '@/hooks';
 import { FacultativeOverview } from '@/components/molecules/reinsurance/FacultativeOverview';
 import { DistributionListTab } from '@/components/molecules/reinsurance/DistributionListTab';
+import { PlacementClosingsTab } from '@/components/molecules/reinsurance/PlacementClosingsTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 
@@ -74,11 +75,7 @@ export default function FacultativeDetailPage({
 
               <div className="pt-5">
                 {activeTab === 'distribution' && <DistributionListTab placement={placement} />}
-                {activeTab === 'closings' && (
-                  <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-                    No placement closings yet.
-                  </div>
-                )}
+                {activeTab === 'closings' && <PlacementClosingsTab placement={placement} />}
               </div>
             </div>
           </div>

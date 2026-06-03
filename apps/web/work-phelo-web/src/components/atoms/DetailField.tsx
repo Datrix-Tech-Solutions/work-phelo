@@ -4,9 +4,24 @@ interface DetailFieldProps {
   label: string;
   value: ReactNode;
   horizontal?: boolean;
+  inline?: boolean;
 }
 
-export function DetailField({ label, value, horizontal = false }: DetailFieldProps) {
+export function DetailField({
+  label,
+  value,
+  horizontal = false,
+  inline = false,
+}: DetailFieldProps) {
+  if (inline) {
+    return (
+      <div className="flex items-baseline gap-6">
+        <span className="text-sm font-semibold text-gray-700 shrink-0 min-w-60">{label}:</span>
+        <span className="text-sm text-gray-800">{value ?? '—'}</span>
+      </div>
+    );
+  }
+
   if (horizontal) {
     return (
       <div className="flex items-baseline justify-between gap-4">

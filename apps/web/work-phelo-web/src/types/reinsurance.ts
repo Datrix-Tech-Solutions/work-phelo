@@ -353,11 +353,19 @@ export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStat
 }
 
 export type PlacementParticipantRole = 'BROKER' | 'REINSURER' | 'LEAD_REINSURER' | 'CO_REINSURER';
+export type PlacementParticipantStatus =
+  | 'INVITED'
+  | 'OFFER_SENT'
+  | 'QUOTED'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'CLOSED';
 
 export interface PlacementParticipant {
   id: string;
   counterpartyId: string;
   role: PlacementParticipantRole;
+  status: PlacementParticipantStatus;
   sharePercent: string | null;
   signedLinePercent: string | null;
   brokerageFee: string | null;
@@ -368,10 +376,23 @@ export interface PlacementParticipant {
 export interface PlacementParticipantPayload {
   counterpartyId: string;
   role: PlacementParticipantRole;
+  status?: PlacementParticipantStatus;
   sharePercent?: number;
   signedLinePercent?: number;
   brokerageFee?: number;
   notes?: string;
+}
+
+export interface UpdateParticipantPayload {
+  sharePercent?: number;
+  signedLinePercent?: number;
+  brokerageFee?: number;
+  notes?: string;
+}
+
+export interface UpdateParticipantStatusPayload {
+  status: PlacementParticipantStatus;
+  note?: string;
 }
 
 export interface Facultative {
@@ -394,6 +415,9 @@ export interface Facultative {
   createdAt: string;
   status: FacultativeStatus;
   participants: PlacementParticipant[];
+  totalOfferedPercent: number;
+  totalAcceptedPercent: number;
+  remainingPercent: number;
 }
 
 /* ── Facultative API payloads ── */

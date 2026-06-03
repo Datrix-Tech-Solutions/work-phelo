@@ -1,19 +1,22 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { CreateDistributionPanel } from '@/components/organisms/reinsurance/panels/CreateDistributionPanel';
 import {
   DistributionTable,
   DistributionEntry,
+  DistributionStatus,
 } from '@/components/molecules/reinsurance/tables/DistributionTable';
-import {
-  Facultative,
-  PlacementParticipant,
-  PlacementParticipantPayload,
-} from '@/types/reinsurance';
+import { Facultative, PlacementParticipant, PlacementParticipantStatus } from '@/types/reinsurance';
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
-import { useReinsurers, useUpdateFacultative } from '@/hooks';
+import {
+  useReinsurers,
+  useAddParticipant,
+  useUpdateParticipant,
+  useUpdateParticipantStatus,
+  useDeleteParticipant,
+} from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -32,49 +35,39 @@ interface DistributionListTabProps {
   placement: Facultative;
 }
 
+function participantStatus(s: PlacementParticipantStatus): DistributionStatus {
+  if (s === 'ACCEPTED' || s === 'CLOSED') return 'Accepted';
+  if (s === 'DECLINED') return 'Declined';
+  return 'Pending';
+}
+
 function participantToEntry(
   p: PlacementParticipant,
   reinsurerEmails: Record<string, string[]>,
 ): DistributionEntry {
-  let emails: string[] = reinsurerEmails[p.counterpartyId] ?? [];
-  let status: DistributionEntry['status'] = 'Pending';
-
-  try {
-    const parsed = JSON.parse(p.notes ?? '{}') as { status?: string; emails?: string[] };
-    if (Array.isArray(parsed.emails) && parsed.emails.length > 0) emails = parsed.emails;
-    if (parsed.status === 'Accepted') status = 'Accepted';
-    else if (parsed.status === 'Declined') status = 'Declined';
-  } catch {
-    // notes is plain text or empty
-  }
-
   return {
-    id: p.counterpartyId,
+    id: p.id,
+    counterpartyId: p.counterpartyId,
     reinsurerCompany: p.counterparty.name,
-    emails,
+    emails: reinsurerEmails[p.counterpartyId] ?? [],
     shareLine: parseFloat(p.sharePercent ?? '0'),
     brokerageFee: parseFloat(p.brokerageFee ?? '0'),
-    status,
-  };
-}
-
-function entryToParticipant(e: DistributionEntry): PlacementParticipantPayload {
-  return {
-    counterpartyId: e.id,
-    role: 'REINSURER',
-    sharePercent: e.shareLine,
-    signedLinePercent: e.status === 'Accepted' ? e.shareLine : undefined,
-    brokerageFee: e.brokerageFee,
-    notes: JSON.stringify({ status: e.status, emails: e.emails }),
+    status: participantStatus(p.status),
   };
 }
 
 export function DistributionListTab({ placement }: DistributionListTabProps) {
   const facOffer = placement.facultativeOffer ?? 0;
   const premium = placement.premium ?? 0;
+  const facPremium = premium * (facOffer / 100);
 
   const { data: reinsurers = [] } = useReinsurers();
-  const { mutateAsync: updateFacultative, isPending: isSaving } = useUpdateFacultative();
+  const { mutateAsync: addParticipant, isPending: isAdding } = useAddParticipant(placement.id);
+  const { mutateAsync: updateParticipant } = useUpdateParticipant(placement.id);
+  const { mutateAsync: updateParticipantStatus } = useUpdateParticipantStatus(placement.id);
+  const { mutateAsync: deleteParticipant } = useDeleteParticipant(placement.id);
+
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const reinsurerEmails: Record<string, string[]> = Object.fromEntries(
     reinsurers.map((r) => {
@@ -87,55 +80,91 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     }),
   );
 
-  const [entries, setEntries] = useState<DistributionEntry[]>(() =>
-    placement.participants
+  const toEntries = (participants: typeof placement.participants) =>
+    participants
       .filter(
         (p) => p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER',
       )
-      .map((p) => participantToEntry(p, reinsurerEmails)),
-  );
-  const [panelOpen, setPanelOpen] = useState(false);
+      .map((p) => participantToEntry(p, reinsurerEmails));
 
-  const saveEntries = useCallback(
-    async (next: DistributionEntry[]) => {
-      setEntries(next);
-      try {
-        await updateFacultative({
-          id: placement.id,
-          participants: next.map(entryToParticipant),
-        });
-      } catch (error) {
-        useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
-      }
-    },
-    [placement.id, updateFacultative],
+  const [entries, setEntries] = useState<DistributionEntry[]>(() =>
+    toEntries(placement.participants),
   );
 
-  const handleAdd = useCallback(
-    async (newEntries: ReinsurerEntry[]) => {
-      const existingIds = new Set(entries.map((e) => e.id));
-      const reinsurersById = Object.fromEntries(reinsurers.map((r) => [r.id, r]));
-      const toAdd: DistributionEntry[] = newEntries
-        .filter((e) => !existingIds.has(e.id))
-        .map((e) => ({
-          id: e.id,
-          reinsurerCompany: e.name,
-          emails: e.emails,
-          shareLine: facOffer,
-          brokerageFee: reinsurersById[e.id]?.brokerageFee ?? 0,
-          status: 'Pending' as const,
-        }));
-      if (toAdd.length === 0) return;
-      await saveEntries([...entries, ...toAdd]);
-    },
-    [entries, reinsurers, saveEntries, facOffer],
-  );
+  // Sync from server after refetch (background reconciliation)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setEntries(toEntries(placement.participants));
+  }, [placement.participants]);
 
-  const facPremium = premium * (facOffer / 100);
+  const toast = useToastStore.getState;
+
+  const patch = (id: string, update: Partial<DistributionEntry>) =>
+    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...update } : e)));
+
+  const handleAdd = async (newEntries: ReinsurerEntry[]) => {
+    const existingIds = new Set(placement.participants.map((p) => p.counterpartyId));
+    const reinsurersById = Object.fromEntries(reinsurers.map((r) => [r.id, r]));
+    for (const e of newEntries.filter((e) => !existingIds.has(e.id))) {
+      addParticipant({
+        counterpartyId: e.id,
+        role: 'REINSURER',
+        sharePercent: facOffer,
+        brokerageFee: parseFloat(String(reinsurersById[e.id]?.brokerageFee ?? 0)) || 0,
+      }).catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
+    }
+  };
+
+  const handleShareCommit = (row: DistributionEntry, share: number) => {
+    patch(row.id, { shareLine: share });
+    updateParticipant({ participantId: row.id, sharePercent: share }).catch((error) =>
+      toast().addToast({ message: extractError(error), type: 'error' }),
+    );
+  };
+
+  const handleBrokerageCommit = (row: DistributionEntry, brokerage: number) => {
+    patch(row.id, { brokerageFee: brokerage });
+    updateParticipant({ participantId: row.id, brokerageFee: brokerage }).catch((error) =>
+      toast().addToast({ message: extractError(error), type: 'error' }),
+    );
+  };
+
+  const handleMailSent = (row: DistributionEntry) => {
+    updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) =>
+      toast().addToast({ message: extractError(error), type: 'error' }),
+    );
+  };
+
+  const handleAccept = (row: DistributionEntry) => {
+    patch(row.id, { status: 'Accepted' });
+    updateParticipant({ participantId: row.id, signedLinePercent: row.shareLine })
+      .then(() => updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' }))
+      .catch((error) => {
+        patch(row.id, { status: 'Pending' });
+        toast().addToast({ message: extractError(error), type: 'error' });
+      });
+  };
+
+  const handleDecline = (row: DistributionEntry) => {
+    patch(row.id, { status: 'Declined', shareLine: 0 });
+    updateParticipant({ participantId: row.id, sharePercent: 0 })
+      .then(() => updateParticipantStatus({ participantId: row.id, status: 'DECLINED' }))
+      .catch((error) => {
+        patch(row.id, { status: 'Pending', shareLine: row.shareLine });
+        toast().addToast({ message: extractError(error), type: 'error' });
+      });
+  };
+
+  const handleDelete = (row: DistributionEntry) => {
+    setEntries((prev) => prev.filter((e) => e.id !== row.id));
+    deleteParticipant(row.id).catch((error) => {
+      toast().addToast({ message: extractError(error), type: 'error' });
+    });
+  };
 
   const acceptedEntries = entries.filter((e) => e.status === 'Accepted');
-  const placedPct = acceptedEntries.reduce((sum, e) => sum + e.shareLine, 0);
-  const availablePct = Math.max(0, facOffer - placedPct);
+  const placedPct = +acceptedEntries.reduce((sum, e) => sum + e.shareLine, 0).toFixed(4);
+  const availablePct = Math.max(0, +(facOffer - placedPct).toFixed(4));
 
   const colorMap = Object.fromEntries(
     entries.map((e, i) => [e.id, SEGMENT_COLORS[i % SEGMENT_COLORS.length]]),
@@ -152,7 +181,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
               <span className="font-semibold text-gray-600">{facOffer}%</span>
             </p>
           </div>
-          <Button size="sm" onClick={() => setPanelOpen(true)} isLoading={isSaving}>
+          <Button size="sm" onClick={() => setPanelOpen(true)} isLoading={isAdding}>
             Add Reinsurers
           </Button>
         </div>
@@ -214,9 +243,14 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       <div className="mt-4">
         <DistributionTable
           entries={entries}
-          onEntriesChange={saveEntries}
           facPremium={facPremium}
           placement={placement}
+          onShareCommit={handleShareCommit}
+          onBrokerageCommit={handleBrokerageCommit}
+          onMailSent={handleMailSent}
+          onAccept={handleAccept}
+          onDecline={handleDecline}
+          onDelete={handleDelete}
         />
       </div>
 
@@ -224,7 +258,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
         onAdd={handleAdd}
-        existingIds={entries.map((e) => e.id)}
+        existingIds={placement.participants.map((p) => p.counterpartyId)}
       />
     </>
   );
