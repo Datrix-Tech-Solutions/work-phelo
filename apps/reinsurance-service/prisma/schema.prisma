@@ -64,6 +64,15 @@ enum PlacementParticipantStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementClosingStatus {
+  DRAFT
+  ISSUED
+  CONFIRMED
+  VOID
+
+  @@schema("reinsurance")
+}
+
 enum MailboxProvider {
   MICROSOFT_GRAPH
   GOOGLE_GMAIL
@@ -192,6 +201,7 @@ model Placement {
   participants         PlacementParticipant[]
   statusHistory        PlacementStatusHistory[]
   emailLinks           PlacementEmailLink[]
+  closings             PlacementClosing[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
@@ -314,11 +324,44 @@ model PlacementParticipant {
   updatedAt         DateTime                 @updatedAt
   placement         Placement                @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
   counterparty      Counterparty             @relation("PlacementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closings          PlacementClosing[]
 
+  @@unique([id, tenantId])
   @@unique([tenantId, placementId, counterpartyId, role])
   @@index([tenantId, placementId])
   @@index([tenantId, placementId, status])
   @@index([tenantId, counterpartyId])
+  @@schema("reinsurance")
+}
+
+model PlacementClosing {
+  id                String                 @id @default(uuid())
+  tenantId          String
+  placementId       String
+  participantId     String
+  closingNumber     String
+  status            PlacementClosingStatus @default(DRAFT)
+  signedLinePercent Decimal                @db.Decimal(7, 4)
+  sharePercent      Decimal?               @db.Decimal(7, 4)
+  grossPremium      Decimal?               @db.Decimal(18, 2)
+  commissionPercent Decimal?               @db.Decimal(7, 4)
+  commissionAmount  Decimal?               @db.Decimal(18, 2)
+  brokeragePercent  Decimal?               @db.Decimal(5, 2)
+  brokerageAmount   Decimal?               @db.Decimal(18, 2)
+  netPremium        Decimal?               @db.Decimal(18, 2)
+  currency          String?
+  issuedAt          DateTime?
+  confirmedAt       DateTime?
+  createdByUserId   String
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  placement         Placement              @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  participant       PlacementParticipant   @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([tenantId, placementId, closingNumber])
+  @@index([tenantId, placementId])
+  @@index([tenantId, participantId])
+  @@index([tenantId, placementId, status])
   @@schema("reinsurance")
 }
 

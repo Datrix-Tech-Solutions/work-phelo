@@ -41,6 +41,12 @@ import {
   PaginatedPlacementsResponseDto,
   PlacementResponseDto,
 } from './dto/placement-response.dto';
+import {
+  PlacementClosingListResponseDto,
+  PlacementClosingResponseDto,
+} from './dto/placement-closing-response.dto';
+import { UpdatePlacementClosingStatusDto } from './dto/update-placement-closing-status.dto';
+import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
 import {
   ClosingSlipPreviewResponseDto,
@@ -72,7 +78,10 @@ import { PlacementsService } from './placements.service';
 @RequireModule('operations')
 @RequireFeature('operations', 'reinsurance')
 export class PlacementsController {
-  constructor(private readonly placementsService: PlacementsService) {}
+  constructor(
+    private readonly placementsService: PlacementsService,
+    private readonly closingsService: PlacementClosingsService,
+  ) {}
 
   @Get()
   @RequirePermissions(PlacementPermission.VIEW)
@@ -239,6 +248,129 @@ export class PlacementsController {
       id,
       participantId,
     );
+  }
+
+  @Get(':id/closings')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List placement closings',
+    description:
+      'Returns closing records for the placement in the authenticated tenant. ' +
+      'Closings are persisted financial snapshots; no PDF, document registry entry, payment, debit note, credit note or email is created by this endpoint.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementClosingListResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  async findClosings(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.closingsService.findAll(request.user.tenantId, id);
+    return { items };
+  }
+
+  @Get(':id/closings/:closingId')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get a placement closing',
+    description:
+      'Returns one closing snapshot by ID. The closing must belong to the placement and authenticated tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Placement closing ID.',
+  })
+  @ApiOkResponse({ type: PlacementClosingResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or closing is archived, missing or belongs to another tenant.',
+  })
+  findClosing(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.closingsService.findOne(request.user.tenantId, id, closingId);
+  }
+
+  @Post(':id/participants/:participantId/closings')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create a participant closing snapshot',
+    description:
+      'Creates a DRAFT closing for an ACCEPTED participant with signedLinePercent greater than 0. ' +
+      'placement.premium is required because closing financial values are snapshotted at creation. ' +
+      'Only one active closing is allowed per participant per placement; VOID closings are inactive. ' +
+      'No payment, endorsement, claim, debit note, credit note, PDF, document record or email is created.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementClosingResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Placement premium is missing, participant is not ACCEPTED, or signedLinePercent is not greater than 0.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'An active non-VOID closing already exists for this participant.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  createClosing(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.closingsService.create(request.user, id, participantId);
+  }
+
+  @Patch(':id/closings/:closingId/status')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Change placement closing status',
+    description:
+      'Moves a closing through the MVP lifecycle: DRAFT → ISSUED → CONFIRMED, with VOID available from DRAFT or ISSUED. ' +
+      'CONFIRMED and VOID are terminal states.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Placement closing ID.',
+  })
+  @ApiOkResponse({ type: PlacementClosingResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Invalid closing status transition.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or closing is archived, missing or belongs to another tenant.',
+  })
+  changeClosingStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Body() dto: UpdatePlacementClosingStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.closingsService.changeStatus(request.user, id, closingId, dto);
   }
 
   @Patch(':id')

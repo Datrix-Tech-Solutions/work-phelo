@@ -1,10 +1,12 @@
 import { RequestUser } from '@work-phelo/types';
 import {
+  PlacementClosingStatus,
   PlacementParticipantRole,
   PlacementParticipantStatus,
 } from '../../prisma/generated/client';
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
+import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
 
@@ -24,6 +26,12 @@ describe('PlacementsController', () => {
     deleteParticipant: jest.fn(),
     archive: jest.fn(),
   };
+  const closingsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    changeStatus: jest.fn(),
+  };
   const user = {
     tenantId: 'tenant-1',
   } as RequestUser;
@@ -32,10 +40,14 @@ describe('PlacementsController', () => {
     jest.clearAllMocks();
   });
 
-  it('delegates list queries using only the authenticated tenant context', async () => {
-    const controller = new PlacementsController(
+  const createController = () =>
+    new PlacementsController(
       service as unknown as PlacementsService,
+      closingsService as unknown as PlacementClosingsService,
     );
+
+  it('delegates list queries using only the authenticated tenant context', async () => {
+    const controller = createController();
     const query = { page: 1, limit: 20 };
 
     await controller.findAll(query, { user } as never);
@@ -49,6 +61,8 @@ describe('PlacementsController', () => {
     ['getLockStatus', PlacementPermission.VIEW],
     ['getOfferSlipPreview', PlacementPermission.VIEW],
     ['getClosingSlipPreview', PlacementPermission.VIEW],
+    ['findClosings', PlacementPermission.VIEW],
+    ['findClosing', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
     ['update', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
@@ -56,6 +70,8 @@ describe('PlacementsController', () => {
     ['updateParticipant', PlacementPermission.EDIT],
     ['changeParticipantStatus', PlacementPermission.EDIT],
     ['deleteParticipant', PlacementPermission.EDIT],
+    ['createClosing', PlacementPermission.EDIT],
+    ['changeClosingStatus', PlacementPermission.EDIT],
     ['archive', PlacementPermission.DELETE],
   ])('requires %s permission on %s', (method, permission) => {
     expect(
@@ -67,9 +83,7 @@ describe('PlacementsController', () => {
   });
 
   it('delegates participant mutations with authenticated user context', async () => {
-    const controller = new PlacementsController(
-      service as unknown as PlacementsService,
-    );
+    const controller = createController();
 
     await controller.addParticipant(
       'placement-1',
@@ -120,9 +134,7 @@ describe('PlacementsController', () => {
   });
 
   it('delegates slip preview reads with authenticated tenant context', async () => {
-    const controller = new PlacementsController(
-      service as unknown as PlacementsService,
-    );
+    const controller = createController();
 
     await controller.getOfferSlipPreview('placement-1', { user } as never);
     await controller.getClosingSlipPreview('placement-1', 'participant-1', {
@@ -141,15 +153,62 @@ describe('PlacementsController', () => {
   });
 
   it('delegates lock status reads with authenticated tenant context', async () => {
-    const controller = new PlacementsController(
-      service as unknown as PlacementsService,
-    );
+    const controller = createController();
 
     await controller.getLockStatus('placement-1', { user } as never);
 
     expect(service.getLockStatus).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
+    );
+  });
+
+  it('delegates closing reads with authenticated tenant context', async () => {
+    const controller = createController();
+    closingsService.findAll.mockResolvedValue([]);
+
+    const listResult = await controller.findClosings('placement-1', {
+      user,
+    } as never);
+    await controller.findClosing('placement-1', 'closing-1', {
+      user,
+    } as never);
+
+    expect(closingsService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    expect(listResult).toEqual({ items: [] });
+    expect(closingsService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'closing-1',
+    );
+  });
+
+  it('delegates closing mutations with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.createClosing('placement-1', 'participant-1', {
+      user,
+    } as never);
+    await controller.changeClosingStatus(
+      'placement-1',
+      'closing-1',
+      { status: PlacementClosingStatus.ISSUED },
+      { user } as never,
+    );
+
+    expect(closingsService.create).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+    expect(closingsService.changeStatus).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'closing-1',
+      expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
     );
   });
 });

@@ -3,6 +3,7 @@ import { RabbitMQModule } from '../messaging/rabbitmq.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
 
@@ -11,6 +12,7 @@ import { PlacementsService } from './placements.service';
   controllers: [PlacementsController],
   providers: [
     PlacementsService,
+    PlacementClosingsService,
     PlacementFinancialActivityReader,
     PlacementFinancialLockPolicy,
   ],

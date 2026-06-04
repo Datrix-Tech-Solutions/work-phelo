@@ -34,6 +34,12 @@ payloads only and do not create PDFs, persist document records or send email.
 Preview calculations intentionally use \`facultativeOffer ?? 0\` when the
 facultative offer is not yet known.
 
+### Placement closings
+Placement closing endpoints persist participant-specific closing snapshots for
+accepted participants. Closings use the lifecycle \`DRAFT → ISSUED → CONFIRMED\`,
+with \`VOID\` available from \`DRAFT\` or \`ISSUED\`. They do not create PDFs,
+document registry entries, emails, payments, debit notes or credit notes.
+
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
 are distinct: \`CLOSED\` placements block direct edits but may reopen to
