@@ -13,6 +13,7 @@ describe('PlacementsController', () => {
     findAll: jest.fn(),
     create: jest.fn(),
     findOne: jest.fn(),
+    getLockStatus: jest.fn(),
     getOfferSlipPreview: jest.fn(),
     getClosingSlipPreview: jest.fn(),
     update: jest.fn(),
@@ -45,6 +46,7 @@ describe('PlacementsController', () => {
   it.each([
     ['findAll', PlacementPermission.VIEW],
     ['findOne', PlacementPermission.VIEW],
+    ['getLockStatus', PlacementPermission.VIEW],
     ['getOfferSlipPreview', PlacementPermission.VIEW],
     ['getClosingSlipPreview', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
@@ -135,6 +137,19 @@ describe('PlacementsController', () => {
       'tenant-1',
       'placement-1',
       'participant-1',
+    );
+  });
+
+  it('delegates lock status reads with authenticated tenant context', async () => {
+    const controller = new PlacementsController(
+      service as unknown as PlacementsService,
+    );
+
+    await controller.getLockStatus('placement-1', { user } as never);
+
+    expect(service.getLockStatus).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
     );
   });
 });

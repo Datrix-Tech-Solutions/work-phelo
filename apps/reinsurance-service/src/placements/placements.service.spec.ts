@@ -1,4 +1,9 @@
-import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
@@ -9,6 +14,7 @@ import {
 } from '../../prisma/generated/client';
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementsService } from './placements.service';
 
 describe('PlacementsService', () => {
@@ -88,6 +94,11 @@ describe('PlacementsService', () => {
     deleted: jest.Mock;
     statusChanged: jest.Mock;
   };
+  let financialLockPolicy: {
+    evaluate: jest.Mock;
+    assertEditable: jest.Mock;
+    assertArchivable: jest.Mock;
+  };
   let service: PlacementsService;
 
   beforeEach(() => {
@@ -124,9 +135,38 @@ describe('PlacementsService', () => {
       deleted: jest.fn().mockResolvedValue(undefined),
       statusChanged: jest.fn().mockResolvedValue(undefined),
     };
+    financialLockPolicy = {
+      evaluate: jest.fn().mockResolvedValue({
+        editable: true,
+        locked: false,
+        endorsementRequired: false,
+        reason: 'Placement has no financial activity and can be edited.',
+        lockSource: 'NONE',
+      }),
+      assertEditable: jest.fn((item: { status: PlacementStatus }) => {
+        if (
+          item.status === PlacementStatus.CLOSED ||
+          item.status === PlacementStatus.CANCELLED
+        ) {
+          return Promise.reject(
+            new BadRequestException(`Cannot edit a ${item.status} placement.`),
+          );
+        }
+        return Promise.resolve();
+      }),
+      assertArchivable: jest.fn((item: { status: PlacementStatus }) => {
+        if (item.status === PlacementStatus.CLOSED) {
+          return Promise.reject(
+            new BadRequestException('Cannot archive a closed placement'),
+          );
+        }
+        return Promise.resolve();
+      }),
+    };
     service = new PlacementsService(
       prisma as unknown as PrismaService,
       publisher as unknown as PlacementEventPublisher,
+      financialLockPolicy as unknown as PlacementFinancialLockPolicy,
     );
   });
 
@@ -182,6 +222,49 @@ describe('PlacementsService', () => {
         },
       }),
     );
+  });
+
+  it('includes lock status on placement detail responses', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+
+    const result = await service.findOne('tenant-1', 'placement-1');
+
+    expect(financialLockPolicy.evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'placement-1',
+        tenantId: 'tenant-1',
+      }),
+    );
+    expect(result.lockStatus).toMatchObject({
+      editable: true,
+      locked: false,
+      endorsementRequired: false,
+    });
+  });
+
+  it('returns tenant-scoped lock status without exposing financial internals', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      id: 'placement-1',
+      tenantId: 'tenant-1',
+      status: PlacementStatus.MARKETING,
+    });
+
+    const result = await service.getLockStatus('tenant-1', 'placement-1');
+
+    expect(prisma.placement.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'placement-1',
+        tenantId: 'tenant-1',
+        archivedAt: null,
+      },
+      select: { id: true, tenantId: true, status: true },
+    });
+    expect(result).toMatchObject({
+      editable: true,
+      locked: false,
+      endorsementRequired: false,
+      lockSource: 'NONE',
+    });
   });
 
   it('creates a draft placement with tenant-owned cedant and participant data', async () => {
@@ -661,6 +744,20 @@ describe('PlacementsService', () => {
     expect(publisher.updated).toHaveBeenCalled();
   });
 
+  it('blocks placement updates when financial activity has locked the placement', async () => {
+    financialLockPolicy.assertEditable.mockRejectedValueOnce(
+      new ConflictException(
+        'Placement is financially locked. Changes require endorsement.',
+      ),
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+
+    await expect(
+      service.update(user, 'placement-1', { title: 'Locked Update' }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
   it('does not silently mutate a closed placement', async () => {
     prisma.placement.findFirst.mockResolvedValue({
       ...placement,
@@ -713,6 +810,125 @@ describe('PlacementsService', () => {
     );
   });
 
+  it('blocks placement status changes when financial activity has locked the placement', async () => {
+    financialLockPolicy.evaluate.mockResolvedValue({
+      editable: false,
+      locked: true,
+      endorsementRequired: true,
+      reason: 'Placement is financially locked. Changes require endorsement.',
+      lockSource: 'PREMIUM_PAYMENT',
+    });
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      status: PlacementStatus.MARKETING,
+    });
+
+    await expect(
+      service.changeStatus(user, 'placement-1', {
+        status: PlacementStatus.CLOSING,
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows an unpaid closed placement to reopen to closing', async () => {
+    const closed = {
+      ...placement,
+      status: PlacementStatus.CLOSED,
+    };
+    const reopened = {
+      ...placement,
+      status: PlacementStatus.CLOSING,
+    };
+    prisma.placement.findFirst.mockResolvedValue(closed);
+    prisma.placement.update.mockResolvedValue(reopened);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+
+    const result = await service.changeStatus(user, 'placement-1', {
+      status: PlacementStatus.CLOSING,
+      note: 'Reopen unpaid placement for correction',
+    });
+
+    expect(result.status).toBe(PlacementStatus.CLOSING);
+    const historyArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as {
+      data: {
+        fromStatus: PlacementStatus;
+        toStatus: PlacementStatus;
+      };
+    };
+    expect(historyArgs.data).toMatchObject({
+      fromStatus: PlacementStatus.CLOSED,
+      toStatus: PlacementStatus.CLOSING,
+    });
+    expect(publisher.statusChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousStatus: PlacementStatus.CLOSED,
+        nextStatus: PlacementStatus.CLOSING,
+      }),
+    );
+  });
+
+  it('blocks reopening a closed placement when financial activity exists', async () => {
+    financialLockPolicy.evaluate.mockResolvedValue({
+      editable: false,
+      locked: true,
+      endorsementRequired: true,
+      reason: 'Placement is financially locked. Changes require endorsement.',
+      lockSource: 'PREMIUM_PAYMENT',
+    });
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      status: PlacementStatus.CLOSED,
+    });
+
+    await expect(
+      service.changeStatus(user, 'placement-1', {
+        status: PlacementStatus.CLOSING,
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows edits after a closed unpaid placement is reopened to closing', async () => {
+    const closed = {
+      ...placement,
+      status: PlacementStatus.CLOSED,
+    };
+    const reopened = {
+      ...placement,
+      status: PlacementStatus.CLOSING,
+    };
+    const updated = {
+      ...reopened,
+      title: 'Corrected Placement',
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(closed)
+      .mockResolvedValueOnce(reopened);
+    prisma.placement.update
+      .mockResolvedValueOnce(reopened)
+      .mockResolvedValueOnce(updated);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+
+    await service.changeStatus(user, 'placement-1', {
+      status: PlacementStatus.CLOSING,
+    });
+    const result = await service.update(user, 'placement-1', {
+      title: 'Corrected Placement',
+    });
+
+    expect(result.title).toBe('Corrected Placement');
+    const updateArgs = prisma.placement.update.mock.calls.at(-1)?.[0] as {
+      data: { title?: string };
+    };
+    expect(updateArgs.data.title).toBe('Corrected Placement');
+  });
+
   it('archives only an active record in the current tenant', async () => {
     const archived = {
       ...placement,
@@ -733,6 +949,20 @@ describe('PlacementsService', () => {
       },
     });
     expect(publisher.deleted).toHaveBeenCalled();
+  });
+
+  it('blocks archive when financial activity has locked the placement', async () => {
+    financialLockPolicy.assertArchivable.mockRejectedValueOnce(
+      new ConflictException(
+        'Placement is financially locked. Changes require endorsement.',
+      ),
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+
+    await expect(service.archive(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.placement.update).not.toHaveBeenCalled();
   });
 
   it('adds one participant without replacing the full participant collection', async () => {
@@ -795,6 +1025,61 @@ describe('PlacementsService', () => {
       remainingPercent: 0,
     });
     expect(publisher.updated).toHaveBeenCalled();
+  });
+
+  it('blocks participant mutations when financial activity has locked the placement', async () => {
+    const participant = {
+      id: 'participant-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      counterpartyId: 'reinsurer-1',
+      role: PlacementParticipantRole.REINSURER,
+      status: PlacementParticipantStatus.OFFER_SENT,
+      sharePercent: 25,
+      signedLinePercent: null,
+      brokerageFee: null,
+      notes: null,
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+        name: 'Ghana Re',
+        registrationNumber: null,
+      },
+    };
+    financialLockPolicy.assertEditable.mockRejectedValue(
+      new ConflictException(
+        'Placement is financially locked. Changes require endorsement.',
+      ),
+    );
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      status: PlacementStatus.MARKETING,
+      participants: [participant],
+    });
+
+    await expect(
+      service.addParticipant(user, 'placement-1', {
+        counterpartyId: 'reinsurer-2',
+        role: PlacementParticipantRole.CO_REINSURER,
+      }),
+    ).rejects.toThrow(ConflictException);
+    await expect(
+      service.updateParticipant(user, 'placement-1', 'participant-1', {
+        sharePercent: 30,
+      }),
+    ).rejects.toThrow(ConflictException);
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow(ConflictException);
+    await expect(
+      service.changeParticipantStatus(user, 'placement-1', 'participant-1', {
+        status: PlacementParticipantStatus.QUOTED,
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(prisma.placementParticipant.create).not.toHaveBeenCalled();
+    expect(prisma.placementParticipant.update).not.toHaveBeenCalled();
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
   });
 
   it('does not auto-place accepted capacity when facultative offer is not yet known', async () => {
@@ -1372,6 +1657,40 @@ describe('PlacementsService', () => {
         brokerageAmount: 80,
       },
     });
+  });
+
+  it('keeps slip previews readable when financial activity has locked mutations', async () => {
+    financialLockPolicy.assertEditable.mockRejectedValue(
+      new ConflictException(
+        'Placement is financially locked. Changes require endorsement.',
+      ),
+    );
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      businessDetails: {},
+      offerDetails: {},
+      sumInsured: 500000,
+      premium: 10000,
+      commission: 10,
+      facultativeOffer: 40,
+      cedant: {
+        ...placement.cedant,
+        email: null,
+        phone: null,
+        country: 'GH',
+        contacts: [],
+        addresses: [],
+      },
+      participants: [],
+    });
+
+    await expect(
+      service.getOfferSlipPreview('tenant-1', 'placement-1'),
+    ).resolves.toMatchObject({
+      placement: { id: 'placement-1' },
+      totalOfferedPercent: 0,
+    });
+    expect(financialLockPolicy.assertEditable).not.toHaveBeenCalled();
   });
 
   it('returns closing preview values using the current frontend formulas', async () => {
