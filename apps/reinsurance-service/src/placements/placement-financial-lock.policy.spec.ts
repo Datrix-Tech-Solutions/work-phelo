@@ -18,7 +18,9 @@ describe('PlacementFinancialLockPolicy', () => {
     reader = {
       findLockingActivity: jest.fn().mockResolvedValue(null),
     };
-    policy = new PlacementFinancialLockPolicy(reader);
+    policy = new PlacementFinancialLockPolicy(
+      reader as unknown as PlacementFinancialActivityReader,
+    );
   });
 
   it('allows direct edits when no financial activity exists', async () => {

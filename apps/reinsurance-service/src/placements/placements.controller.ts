@@ -47,6 +47,12 @@ import {
 } from './dto/placement-closing-response.dto';
 import { UpdatePlacementClosingStatusDto } from './dto/update-placement-closing-status.dto';
 import { PlacementClosingsService } from './placement-closings.service';
+import {
+  PlacementPaymentListResponseDto,
+  PlacementPaymentResponseDto,
+} from './dto/placement-payment-response.dto';
+import { CreatePlacementPaymentDto } from './dto/create-placement-payment.dto';
+import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
 import {
   ClosingSlipPreviewResponseDto,
@@ -80,6 +86,7 @@ export class PlacementsController {
   constructor(
     private readonly placementsService: PlacementsService,
     private readonly closingsService: PlacementClosingsService,
+    private readonly paymentsService: PlacementPaymentsService,
   ) {}
 
   @Get()
@@ -163,7 +170,7 @@ export class PlacementsController {
   }
 
   @Get(':id/lock-status')
-  @ApiTags('Reinsurance - Placements')
+  @ApiTags('Reinsurance - Financial Locking')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
     summary: 'Get placement financial lock status',
@@ -185,6 +192,126 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.placementsService.getLockStatus(request.user.tenantId, id);
+  }
+
+  @Get(':id/payments')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List placement payments',
+    description:
+      'Returns immutable payment and reversal records for a placement. ' +
+      'Read-only payment history remains available after the placement is financially locked.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementPaymentListResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  async findPayments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.paymentsService.findAll(request.user.tenantId, id);
+    return { items };
+  }
+
+  @Get(':id/payments/:paymentId')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get a placement payment',
+    description:
+      'Returns one payment or reversal record. The payment must belong to the placement and authenticated tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'paymentId',
+    format: 'uuid',
+    description: 'Placement payment ID.',
+  })
+  @ApiOkResponse({ type: PlacementPaymentResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or payment is archived, missing or belongs to another tenant.',
+  })
+  findPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.paymentsService.findOne(request.user.tenantId, id, paymentId);
+  }
+
+  @Post(':id/payments')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.CREATE)
+  @ApiOperation({
+    summary: 'Record a placement payment',
+    description:
+      'Records the first payment foundation financial fact for a placement. ' +
+      'The first recorded payment financially locks the placement and future direct placement/participant edits return 409 until endorsements are implemented. ' +
+      'Payment creation remains allowed after lock so additional receipts/disbursements can be recorded. ' +
+      'Premium received is placement-level and must come from the cedant. Reinsurer disbursement requires a matching CONFIRMED closing and participant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiCreatedResponse({ type: PlacementPaymentResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Invalid payment type/direction, missing confirmed closing, currency mismatch or invalid counterparty relationship.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement, counterparty, closing or participant is missing or belongs to another tenant.',
+  })
+  createPayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePlacementPaymentDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.paymentsService.create(request.user, id, dto);
+  }
+
+  @Post(':id/payments/:paymentId/reverse')
+  @ApiTags('Reinsurance - Payments')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Reverse a placement payment',
+    description:
+      'Creates an auditable reversal payment record and marks the original payment as REVERSED. ' +
+      'Reversal never unlocks the placement; once financial activity exists, business changes require the future endorsement workflow.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'paymentId',
+    format: 'uuid',
+    description: 'Placement payment ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementPaymentResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'The payment is already a reversal or cannot be reversed.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'The payment has already been reversed.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or payment is archived, missing or belongs to another tenant.',
+  })
+  reversePayment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('paymentId', ParseUUIDPipe) paymentId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.paymentsService.reverse(request.user, id, paymentId);
   }
 
   @Get(':id/slips/offer-preview')

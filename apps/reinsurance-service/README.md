@@ -191,16 +191,17 @@ Lifecycle locks and financial locks are intentionally separate:
 
 - `CLOSED` and `CANCELLED` block direct edits. `CLOSED` can reopen to
   `CLOSING` only when no financial lock exists.
-- Actual payment or settlement activity will financially lock a placement.
+- The first recorded placement payment financially locks a placement.
 - Debit note issuance alone is not a hard lock in the MVP policy; issued notes
   may be cancelled/reissued before payment.
+- Reversal records do not unlock a placement; they preserve financial history.
 - Offer and closing slip previews are read-only and remain available even when
   mutation actions are blocked.
 - When `locked=true`, direct placement and participant mutations return `409`
   with `Placement is financially locked. Changes require endorsement.`
 
-The current PR only introduces the policy seam. Payment, receivable, payable,
-debit note, credit note, claim and endorsement entities are deferred.
+Payment records now provide the lock source. Receivable, payable, debit note,
+credit note, claim and endorsement entities are still deferred.
 
 ### Participant status meanings
 
@@ -377,6 +378,49 @@ Closing creation rules:
 - Active means `status !== VOID`; a new closing can be created after the
   previous one is voided.
 - Closing numbers use `CLO-001`, `CLO-002`, etc. scoped to the placement.
+
+## Placement Payment API
+
+Placement payments record the first MVP financial activity for a placement.
+Payments are immutable after creation: there is no `PATCH` or `DELETE`.
+Corrections are represented with reversal records.
+
+```text
+GET  /api/v1/operations/reinsurance/placements/:id/payments
+GET  /api/v1/operations/reinsurance/placements/:id/payments/:paymentId
+POST /api/v1/operations/reinsurance/placements/:id/payments
+POST /api/v1/operations/reinsurance/placements/:id/payments/:paymentId/reverse
+```
+
+Supported payment types:
+
+- `PREMIUM_RECEIVED` — inbound premium received from the placement cedant.
+- `REINSURER_DISBURSEMENT` — outbound premium paid to a reinsurer participant.
+- `CLAIM_SETTLEMENT` — reserved until the claims domain is implemented.
+
+Payment creation rules:
+
+- The placement must be active in the authenticated tenant.
+- At least one `CONFIRMED` closing must exist before payment can be recorded.
+- `amount` must be greater than `0`.
+- `currency` is required and must match the placement currency for MVP.
+- `PREMIUM_RECEIVED` must use `direction=INBOUND`, the placement cedant as
+  `counterpartyId`, and no `closingId` or `participantId`.
+- `REINSURER_DISBURSEMENT` must use `direction=OUTBOUND`, a reinsurer
+  counterparty, and matching `closingId` plus `participantId` for a
+  `CONFIRMED` closing.
+
+Financial locking behavior:
+
+- The first recorded payment locks the placement.
+- Payment creation remains allowed after lock so additional receipts or
+  disbursements can be recorded.
+- Placement updates, archive, participant add/update/delete and participant
+  status changes return `409` after lock.
+- Read-only endpoints remain available, including placement detail, closings,
+  slip previews, lock status and payments list/detail.
+- Reversing a payment creates an auditable negative reversal record, may mark
+  the original as `REVERSED`, and does not unlock the placement.
 
 Closing lifecycle:
 
