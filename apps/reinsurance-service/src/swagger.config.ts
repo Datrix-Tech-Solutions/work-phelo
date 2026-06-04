@@ -34,6 +34,13 @@ payloads only and do not create PDFs, persist document records or send email.
 Preview calculations intentionally use \`facultativeOffer ?? 0\` when the
 facultative offer is not yet known.
 
+Financial lock status is available on placement detail responses and
+\`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
+are distinct: \`CLOSED\` placements block direct edits but may reopen to
+\`CLOSING\` when no financial lock exists. Payment/settlement activity will
+hard-lock future direct mutations and require the future endorsement workflow,
+while debit note issuance alone is not a hard lock in the MVP policy.
+
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:
 connection metadata, provider verification, sync proof-of-concept, thread/message

@@ -41,6 +41,7 @@ import {
   PaginatedPlacementsResponseDto,
   PlacementResponseDto,
 } from './dto/placement-response.dto';
+import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
 import {
   ClosingSlipPreviewResponseDto,
   OfferSlipPreviewResponseDto,
@@ -150,6 +151,30 @@ export class PlacementsController {
     return this.placementsService.findOne(request.user.tenantId, id);
   }
 
+  @Get(':id/lock-status')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get placement financial lock status',
+    description:
+      'Returns the current direct-edit policy decision for this placement. ' +
+      'Lifecycle locks (for example CLOSED/CANCELLED) are distinct from financial locks. ' +
+      'Only actual payment or settlement activity will hard-lock a placement; debit note issuance alone is not a hard lock in the MVP policy. ' +
+      'When locked=true, future business changes require the future endorsement workflow.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementLockStatusDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  getLockStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.getLockStatus(request.user.tenantId, id);
+  }
+
   @Get(':id/slips/offer-preview')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
@@ -223,6 +248,7 @@ export class PlacementsController {
     description:
       'Updates placement header fields. ' +
       'CLOSED and CANCELLED placements cannot be edited — a 400 is returned. ' +
+      'Financially locked placements cannot be edited directly — a 409 is returned and a future endorsement workflow is required. ' +
       'If participants are supplied, the supplied array replaces the complete stored participant collection; ' +
       'omit participants when editing only header fields and prefer the participant-specific endpoints instead. ' +
       'Status changes must use the dedicated status endpoint. ' +
@@ -242,7 +268,8 @@ export class PlacementsController {
   })
   @ApiConflictResponse({
     type: ApiErrorResponseDto,
-    description: 'An active placement with this reference already exists.',
+    description:
+      'An active placement with this reference already exists, or the placement is financially locked.',
   })
   update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -264,8 +291,11 @@ export class PlacementsController {
       'PARTIALLY_PLACED→MARKETING|PLACED|DECLINED|CANCELLED, ' +
       'PLACED→PARTIALLY_PLACED|CLOSING|CANCELLED, ' +
       'CLOSING→PLACED|CLOSED|CANCELLED, ' +
+      'CLOSED→CLOSING when no financial lock exists, ' +
       'DECLINED→MARKETING. ' +
-      'CLOSED and CANCELLED are terminal.\n\n' +
+      'CANCELLED is terminal.\n\n' +
+      'CLOSED remains directly non-editable. Reopen unpaid CLOSED placements to CLOSING first, then apply edits through normal placement/participant endpoints. ' +
+      'Financially locked placements return 409 and require endorsement.\n\n' +
       'MARKETING, PARTIALLY_PLACED and PLACED are also set automatically by participant ' +
       'capacity recalculation — use this endpoint only when a manual override is needed ' +
       '(e.g. advancing to DECLINED before participant statuses are updated, or ' +
@@ -283,6 +313,11 @@ export class PlacementsController {
     description:
       'The placement is archived, missing or belongs to another tenant.',
   })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is financially locked and requires endorsement for business-state changes.',
+  })
   changeStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdatePlacementStatusDto,
@@ -299,6 +334,7 @@ export class PlacementsController {
       'Adds a tenant-owned reinsurer or broker participant without replacing the existing participant collection. ' +
       'Participant status defaults to INVITED when omitted. ' +
       'CLOSED and CANCELLED placements block this action. ' +
+      'Financially locked placements return 409 and require endorsement. ' +
       'After adding, placement status is automatically recalculated for MARKETING, PARTIALLY_PLACED and PLACED placements.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
@@ -313,6 +349,11 @@ export class PlacementsController {
     description:
       'The placement is archived, missing or belongs to another tenant.',
   })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is financially locked and participant changes require endorsement.',
+  })
   addParticipant(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreatePlacementParticipantDto,
@@ -326,7 +367,9 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Update one placement participant',
     description:
-      'Updates a single participant without replacing the whole collection. Use the status endpoint for workflow state changes when possible.',
+      'Updates a single participant without replacing the whole collection. ' +
+      'Financially locked placements return 409 and require endorsement. ' +
+      'Use the status endpoint for workflow state changes when possible.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -344,6 +387,11 @@ export class PlacementsController {
     type: ApiErrorResponseDto,
     description:
       'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is financially locked and participant changes require endorsement.',
   })
   updateParticipant(
     @Param('id', ParseUUIDPipe) id: string,
@@ -391,6 +439,11 @@ export class PlacementsController {
     description:
       'The placement or participant is archived, missing or belongs to another tenant.',
   })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is financially locked and participant workflow changes require endorsement.',
+  })
   changeParticipantStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('participantId', ParseUUIDPipe) participantId: string,
@@ -410,7 +463,8 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Remove one placement participant',
     description:
-      'Deletes a participant from an editable placement without archiving the placement itself.',
+      'Deletes a participant from an editable placement without archiving the placement itself. ' +
+      'Financially locked placements return 409 and require endorsement.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -423,6 +477,11 @@ export class PlacementsController {
     type: ApiErrorResponseDto,
     description:
       'The placement or participant is archived, missing or belongs to another tenant.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is financially locked and participant changes require endorsement.',
   })
   deleteParticipant(
     @Param('id', ParseUUIDPipe) id: string,
@@ -441,7 +500,8 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Archive a placement',
     description:
-      'Soft-archives the active record. Archived records are excluded from standard list and detail requests.',
+      'Soft-archives the active record. Archived records are excluded from standard list and detail requests. ' +
+      'Financially locked placements return 409 and cannot be archived directly.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiOkResponse({ type: PlacementResponseDto })
@@ -449,6 +509,10 @@ export class PlacementsController {
     type: ApiErrorResponseDto,
     description:
       'The placement is archived, missing or belongs to another tenant.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'The placement is financially locked and cannot be archived.',
   })
   archive(
     @Param('id', ParseUUIDPipe) id: string,
