@@ -23,6 +23,7 @@ describe('NotificationService announcement delivery channels', () => {
   };
   const sms = {
     sendMessage: jest.fn(),
+    sendOtp: jest.fn(),
   };
 
   let service: NotificationService;
@@ -31,7 +32,18 @@ describe('NotificationService announcement delivery channels', () => {
     jest.clearAllMocks();
     notificationLogCreate.mockResolvedValue({});
     email.sendAnnouncementPublishedNotification.mockResolvedValue(true);
-    sms.sendMessage.mockResolvedValue(true);
+    sms.sendMessage.mockResolvedValue({
+      success: true,
+      status: 'SENT',
+      provider: 'termii',
+      providerStatus: 'ok',
+    });
+    sms.sendOtp.mockResolvedValue({
+      success: true,
+      status: 'SENT',
+      provider: 'termii',
+      providerStatus: 'ok',
+    });
     service = new NotificationService(
       prisma as unknown as PrismaService,
       email as unknown as EmailService,
@@ -110,6 +122,8 @@ describe('NotificationService announcement delivery channels', () => {
         metadata: {
           announcementId: baseAnnouncement.announcementId,
           employeeId: recipient.employeeId,
+          provider: 'termii',
+          providerStatus: 'ok',
         },
       }),
     );
@@ -188,7 +202,14 @@ describe('NotificationService announcement delivery channels', () => {
   });
 
   it('logs failed SMS sends without failing processing', async () => {
-    sms.sendMessage.mockResolvedValueOnce(false);
+    sms.sendMessage.mockResolvedValueOnce({
+      success: false,
+      status: 'FAILED',
+      provider: 'pilosms',
+      providerStatus: '1005',
+      providerDetail: 'Insufficient balance',
+      error: 'Insufficient balance',
+    });
 
     await service.sendAnnouncementPublishedNotification({
       ...baseAnnouncement,
@@ -201,6 +222,53 @@ describe('NotificationService announcement delivery channels', () => {
         channel: 'SMS',
         recipient: recipient.phone,
         status: 'FAILED',
+        error: 'Insufficient balance',
+        metadata: {
+          announcementId: baseAnnouncement.announcementId,
+          employeeId: recipient.employeeId,
+          provider: 'pilosms',
+          providerStatus: '1005',
+          providerDetail: 'Insufficient balance',
+        },
+      }),
+    );
+  });
+
+  it('uses generic SmsService for SMS OTP delivery logs', async () => {
+    sms.sendOtp.mockResolvedValueOnce({
+      success: true,
+      status: 'SENT',
+      provider: 'pilosms',
+      providerStatus: '1001',
+      providerDetail: 'Message(s) processed successfully',
+    });
+
+    await service.sendSmsOtp({
+      userId: recipient.userId,
+      tenantId: baseAnnouncement.tenantId,
+      phone: recipient.phone,
+      otp: '123456',
+      context: 'login',
+    });
+
+    expect(sms.sendOtp).toHaveBeenCalledWith(
+      recipient.phone,
+      '123456',
+      'login',
+    );
+    expect(notificationLogEntries()).toContainEqual(
+      expect.objectContaining({
+        userId: recipient.userId,
+        tenantId: baseAnnouncement.tenantId,
+        type: 'SMS_OTP',
+        channel: 'SMS',
+        recipient: recipient.phone,
+        status: 'SENT',
+        metadata: {
+          provider: 'pilosms',
+          providerStatus: '1001',
+          providerDetail: 'Message(s) processed successfully',
+        },
       }),
     );
   });

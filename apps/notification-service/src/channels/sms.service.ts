@@ -1,59 +1,58 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { PiloSmsProvider } from './pilosms.provider';
+import type {
+  SmsProvider,
+  SmsProviderName,
+  SmsSendResult,
+} from './sms-provider.interface';
+import { TermiiSmsProvider } from './termii-sms.provider';
 
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
-  private readonly apiKey: string;
-  private readonly senderId: string;
-  private readonly baseUrl = 'https://api.ng.termii.com/api';
+  private readonly provider: SmsProvider;
 
-  constructor() {
-    if (!process.env.TERMII_API_KEY) {
-      throw new Error('TERMII_API_KEY is required');
+  constructor(
+    termiiProvider: TermiiSmsProvider,
+    piloSmsProvider: PiloSmsProvider,
+  ) {
+    const providerName = this.resolveProviderName();
+
+    if (providerName === 'termii') {
+      this.provider = termiiProvider;
+    } else {
+      this.provider = piloSmsProvider;
     }
-    this.apiKey = process.env.TERMII_API_KEY;
-    this.senderId = process.env.TERMII_SENDER_ID || 'WorkPhelo';
+
+    this.logger.log(`SMS provider selected: ${this.provider.provider}`);
   }
 
-  async sendMessage(to: string, message: string): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.baseUrl}/sms/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          to,
-          from: this.senderId,
-          sms: message,
-          type: 'plain',
-          api_key: this.apiKey,
-          channel: 'generic',
-        }),
-      });
-
-      const data: unknown = await response.json();
-      const statusCode =
-        data && typeof data === 'object' && 'code' in data
-          ? String(data.code)
-          : undefined;
-
-      if (!response.ok || statusCode !== 'ok') {
-        this.logger.error(
-          `Termii SMS failed for ${to}: ${JSON.stringify(data)}`,
-        );
-        return false;
-      }
-
-      return true;
-    } catch (error) {
-      this.logger.error(`Failed to send SMS to ${to}`, error);
-      return false;
-    }
+  async sendMessage(to: string, message: string): Promise<SmsSendResult> {
+    return this.provider.sendMessage(to, message);
   }
 
-  async sendOtp(to: string, otp: string, context: string): Promise<boolean> {
+  async sendOtp(
+    to: string,
+    otp: string,
+    context: string,
+  ): Promise<SmsSendResult> {
     return this.sendMessage(
       to,
       `Your WorkPhelo ${context} code is: ${otp}. Valid for 10 minutes. Do not share this code.`,
+    );
+  }
+
+  private resolveProviderName(): SmsProviderName {
+    const provider = (process.env.SMS_PROVIDER ?? 'termii')
+      .trim()
+      .toLowerCase();
+
+    if (provider === 'termii' || provider === 'pilosms') {
+      return provider;
+    }
+
+    throw new Error(
+      `Unsupported SMS_PROVIDER "${process.env.SMS_PROVIDER}". Expected "termii" or "pilosms".`,
     );
   }
 }

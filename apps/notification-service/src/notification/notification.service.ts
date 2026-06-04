@@ -4,6 +4,7 @@ import { AnnouncementDeliveryChannel, InviteUserKind } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../channels/email.service';
 import { SmsService } from '../channels/sms.service';
+import type { SmsSendResult } from '../channels/sms-provider.interface';
 
 @Injectable()
 export class NotificationService {
@@ -411,7 +412,7 @@ export class NotificationService {
             return;
           }
 
-          const success = await this.sms.sendMessage(
+          const smsResult = await this.sms.sendMessage(
             recipient.phone,
             smsMessage,
           );
@@ -423,10 +424,12 @@ export class NotificationService {
             channel: 'SMS',
             recipient: recipient.phone,
             subject: data.title,
-            status: success ? 'SENT' : 'FAILED',
+            status: smsResult.status,
+            error: smsResult.error,
             metadata: {
               announcementId: data.announcementId,
               employeeId: recipient.employeeId,
+              ...this.smsProviderMetadata(smsResult),
             },
           });
         })
@@ -1333,15 +1336,33 @@ export class NotificationService {
       this.logger.warn(`Duplicate SMS_OTP suppressed for ${data.phone}`);
       return;
     }
-    const success = await this.sms.sendOtp(data.phone, data.otp, data.context);
+    const smsResult = await this.sms.sendOtp(
+      data.phone,
+      data.otp,
+      data.context,
+    );
     await this.log({
       userId: data.userId ?? 'system',
       tenantId: data.tenantId ?? 'system',
       type: 'SMS_OTP',
       channel: 'SMS',
       recipient: data.phone,
-      status: success ? 'SENT' : 'FAILED',
+      status: smsResult.status,
+      error: smsResult.error,
+      metadata: this.smsProviderMetadata(smsResult),
     });
+  }
+
+  private smsProviderMetadata(result: SmsSendResult): Prisma.InputJsonObject {
+    return {
+      provider: result.provider,
+      ...(result.providerStatus
+        ? { providerStatus: result.providerStatus }
+        : {}),
+      ...(result.providerDetail
+        ? { providerDetail: result.providerDetail }
+        : {}),
+    };
   }
 
   private async log(entry: {
