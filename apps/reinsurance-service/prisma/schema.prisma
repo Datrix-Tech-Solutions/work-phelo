@@ -95,6 +95,30 @@ enum PlacementPaymentStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementNoteType {
+  DEBIT_NOTE
+  CREDIT_NOTE
+
+  @@schema("reinsurance")
+}
+
+enum PlacementNoteDirection {
+  CEDANT_TO_BROKER
+  BROKER_TO_REINSURER
+  BROKER_TO_CEDANT
+  REINSURER_TO_BROKER
+
+  @@schema("reinsurance")
+}
+
+enum PlacementNoteStatus {
+  DRAFT
+  ISSUED
+  VOID
+
+  @@schema("reinsurance")
+}
+
 enum MailboxProvider {
   MICROSOFT_GRAPH
   GOOGLE_GMAIL
@@ -164,6 +188,7 @@ model Counterparty {
   cededPlacements    Placement[]            @relation("PlacementCedant")
   placementRoles     PlacementParticipant[] @relation("PlacementParticipantCounterparty")
   placementPayments   PlacementPayment[]     @relation("PlacementPaymentCounterparty")
+  placementNotes      PlacementNote[]        @relation("PlacementNoteCounterparty")
 
   @@unique([id, tenantId])
   @@index([tenantId, type, archivedAt, name])
@@ -226,6 +251,7 @@ model Placement {
   emailLinks           PlacementEmailLink[]
   closings             PlacementClosing[]
   payments             PlacementPayment[]
+  notes                PlacementNote[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
@@ -350,6 +376,7 @@ model PlacementParticipant {
   counterparty      Counterparty             @relation("PlacementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
   closings          PlacementClosing[]
   payments          PlacementPayment[]
+  placementNotes    PlacementNote[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, counterpartyId, role])
@@ -383,6 +410,7 @@ model PlacementClosing {
   placement         Placement              @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
   participant       PlacementParticipant   @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
   payments          PlacementPayment[]
+  notes             PlacementNote[]
 
   @@unique([tenantId, placementId, closingNumber])
   @@index([tenantId, placementId])
@@ -416,6 +444,7 @@ model PlacementPayment {
   counterparty        Counterparty              @relation("PlacementPaymentCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalOfPayment   PlacementPayment?         @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
   reversalPayments    PlacementPayment[]        @relation("PlacementPaymentReversal")
+  settledNotes         PlacementNote[]           @relation("PlacementNoteSettlement")
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, status, createdAt])
@@ -424,6 +453,53 @@ model PlacementPayment {
   @@index([tenantId, participantId, createdAt])
   @@index([tenantId, closingId, createdAt])
   @@index([tenantId, reversalOfPaymentId])
+  @@schema("reinsurance")
+}
+
+model PlacementNote {
+  id                   String                 @id @default(uuid())
+  tenantId             String
+  placementId          String
+  closingId            String?
+  participantId        String?
+  counterpartyId       String
+  settledByPaymentId   String?
+  type                 PlacementNoteType
+  direction            PlacementNoteDirection
+  noteNumber           String
+  status               PlacementNoteStatus    @default(DRAFT)
+  currency             String
+  grossAmount          Decimal                @db.Decimal(18, 2)
+  commissionPercent    Decimal?               @db.Decimal(7, 4)
+  commissionAmount     Decimal?               @db.Decimal(18, 2)
+  brokeragePercent     Decimal?               @db.Decimal(5, 2)
+  brokerageAmount      Decimal?               @db.Decimal(18, 2)
+  nicLevyPercent       Decimal                @default(0) @db.Decimal(7, 4)
+  nicLevyAmount        Decimal                @default(0) @db.Decimal(18, 2)
+  withholdingTaxPercent Decimal               @default(0) @db.Decimal(7, 4)
+  withholdingTaxAmount Decimal                @default(0) @db.Decimal(18, 2)
+  netAmount            Decimal                @db.Decimal(18, 2)
+  noteDate             DateTime
+  issuedAt             DateTime?
+  voidedAt             DateTime?
+  voidReason           String?
+  createdByUserId      String
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  placement            Placement              @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closing              PlacementClosing?      @relation(fields: [closingId], references: [id], onDelete: Restrict)
+  participant          PlacementParticipant?  @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty         Counterparty           @relation("PlacementNoteCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  settledByPayment     PlacementPayment?      @relation("PlacementNoteSettlement", fields: [settledByPaymentId], references: [id], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, noteNumber])
+  @@index([tenantId, placementId, status, createdAt])
+  @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, closingId, status])
+  @@index([tenantId, participantId, createdAt])
+  @@index([tenantId, counterpartyId, createdAt])
+  @@index([tenantId, settledByPaymentId])
   @@schema("reinsurance")
 }
 

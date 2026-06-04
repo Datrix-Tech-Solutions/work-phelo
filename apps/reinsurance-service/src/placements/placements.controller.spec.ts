@@ -1,6 +1,7 @@
 import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClosingStatus,
+  PlacementNoteStatus,
   PlacementPaymentDirection,
   PlacementPaymentType,
   PlacementParticipantRole,
@@ -9,6 +10,7 @@ import {
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
 import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
@@ -35,6 +37,14 @@ describe('PlacementsController', () => {
     create: jest.fn(),
     changeStatus: jest.fn(),
   };
+  const notesService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    createDebitNote: jest.fn(),
+    createCreditNote: jest.fn(),
+    issue: jest.fn(),
+    void: jest.fn(),
+  };
   const paymentsService = {
     findAll: jest.fn(),
     findOne: jest.fn(),
@@ -53,6 +63,7 @@ describe('PlacementsController', () => {
     new PlacementsController(
       service as unknown as PlacementsService,
       closingsService as unknown as PlacementClosingsService,
+      notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
     );
 
@@ -73,6 +84,8 @@ describe('PlacementsController', () => {
     ['getClosingSlipPreview', PlacementPermission.VIEW],
     ['findClosings', PlacementPermission.VIEW],
     ['findClosing', PlacementPermission.VIEW],
+    ['findNotes', PlacementPermission.VIEW],
+    ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
     ['findPayment', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
@@ -85,6 +98,10 @@ describe('PlacementsController', () => {
     ['deleteParticipant', PlacementPermission.EDIT],
     ['createClosing', PlacementPermission.EDIT],
     ['changeClosingStatus', PlacementPermission.EDIT],
+    ['createDebitNote', PlacementPermission.EDIT],
+    ['createCreditNote', PlacementPermission.EDIT],
+    ['issueNote', PlacementPermission.EDIT],
+    ['voidNote', PlacementPermission.EDIT],
     ['reversePayment', PlacementPermission.EDIT],
     ['archive', PlacementPermission.DELETE],
   ])('requires %s permission on %s', (method, permission) => {
@@ -223,6 +240,70 @@ describe('PlacementsController', () => {
       'placement-1',
       'closing-1',
       expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
+    );
+  });
+
+  it('delegates note reads with authenticated tenant context', async () => {
+    const controller = createController();
+    notesService.findAll.mockResolvedValue([]);
+
+    const listResult = await controller.findNotes('placement-1', {
+      user,
+    } as never);
+    await controller.findNote('placement-1', 'note-1', { user } as never);
+
+    expect(notesService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    expect(listResult).toEqual({ items: [] });
+    expect(notesService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'note-1',
+    );
+  });
+
+  it('delegates note create, issue and void with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.createDebitNote('placement-1', { user } as never);
+    await controller.createCreditNote('placement-1', 'closing-1', {
+      user,
+    } as never);
+    await controller.issueNote(
+      'placement-1',
+      'note-1',
+      { status: PlacementNoteStatus.ISSUED },
+      { user } as never,
+    );
+    await controller.voidNote(
+      'placement-1',
+      'note-1',
+      { voidReason: 'Issued in error' },
+      { user } as never,
+    );
+
+    expect(notesService.createDebitNote).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+    );
+    expect(notesService.createCreditNote).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'closing-1',
+    );
+    expect(notesService.issue).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'note-1',
+      expect.objectContaining({ status: PlacementNoteStatus.ISSUED }),
+    );
+    expect(notesService.void).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'note-1',
+      expect.objectContaining({ voidReason: 'Issued in error' }),
     );
   });
 
