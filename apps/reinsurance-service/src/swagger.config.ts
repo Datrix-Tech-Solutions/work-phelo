@@ -40,6 +40,13 @@ accepted participants. Closings use the lifecycle \`DRAFT → ISSUED → CONFIRM
 with \`VOID\` available from \`DRAFT\` or \`ISSUED\`. They do not create PDFs,
 document registry entries, emails, payments, debit notes or credit notes.
 
+### Debit and credit notes
+Debit and credit note endpoints persist financial note records generated from
+confirmed closing snapshots. Debit notes are placement-level cedant notes.
+Credit notes are per confirmed reinsurer closing. NIC levy and withholding tax
+are fixed at 0 in the MVP. Note generation, issuing and voiding do not
+financially lock a placement; payments remain the only hard-lock trigger.
+
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
 are distinct: \`CLOSED\` placements block direct edits but may reopen to
@@ -92,6 +99,18 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Payments',
       'Placement payment recording, payment history and reversal records',
+    )
+    .addTag(
+      'Reinsurance - Notes',
+      'Debit/credit note listing, detail, issue and void lifecycle endpoints',
+    )
+    .addTag(
+      'Reinsurance - Debit Notes',
+      'Placement-level cedant debit notes generated from confirmed closings',
+    )
+    .addTag(
+      'Reinsurance - Credit Notes',
+      'Reinsurer credit notes generated per confirmed closing',
     )
     .addTag(
       'Reinsurance - Financial Locking',

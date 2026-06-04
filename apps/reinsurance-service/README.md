@@ -379,6 +379,65 @@ Closing creation rules:
   previous one is voided.
 - Closing numbers use `CLO-001`, `CLO-002`, etc. scoped to the placement.
 
+## Placement Debit/Credit Note API
+
+Placement notes persist debit and credit note records generated from confirmed
+closing snapshots. Notes are not PDFs, do not create document registry entries,
+do not send emails, and do not financially lock a placement.
+
+```text
+GET   /api/v1/operations/reinsurance/placements/:id/notes
+GET   /api/v1/operations/reinsurance/placements/:id/notes/:noteId
+POST  /api/v1/operations/reinsurance/placements/:id/notes/debit
+POST  /api/v1/operations/reinsurance/placements/:id/closings/:closingId/notes/credit
+PATCH /api/v1/operations/reinsurance/placements/:id/notes/:noteId/status
+POST  /api/v1/operations/reinsurance/placements/:id/notes/:noteId/void
+```
+
+Debit notes:
+
+- Use `DEBIT_NOTE` and `CEDANT_TO_BROKER`.
+- Are generated at placement level for the placement cedant.
+- Require at least one `CONFIRMED` closing.
+- Use all confirmed closings as the source of truth.
+- `grossAmount` is the sum of confirmed closing `grossPremium`.
+- `commissionAmount` is the sum of confirmed closing `commissionAmount`.
+- `brokerageAmount` is `null` for the MVP debit note.
+- NIC levy and withholding tax are fixed at `0` in the MVP.
+- `netAmount = grossAmount - commissionAmount - nicLevyAmount - withholdingTaxAmount`.
+
+Credit notes:
+
+- Use `CREDIT_NOTE` and `BROKER_TO_REINSURER`.
+- Are generated per confirmed closing and reinsurer participant.
+- Use the `PlacementClosing` snapshot as the source of truth.
+- Copy `grossPremium`, `commissionPercent`, `commissionAmount`,
+  `brokeragePercent`, `brokerageAmount`, `netPremium` and `currency` from the
+  closing snapshot.
+- Do not recalculate from live placement or participant values.
+
+Note lifecycle:
+
+| Status   | Meaning                          | Allowed next statuses |
+| -------- | -------------------------------- | --------------------- |
+| `DRAFT`  | Note created but not issued.     | `ISSUED`, `VOID`      |
+| `ISSUED` | Note issued to the counterparty. | `VOID`                |
+| `VOID`   | Note voided and inactive.        | terminal              |
+
+Numbering:
+
+- Debit notes use `DN-001`, `DN-002`, etc. scoped to the placement.
+- Credit notes use `CN-001`, `CN-002`, etc. scoped to the placement.
+- Numbers are never reused; voided notes retain their numbers.
+- Only one active debit note is allowed per placement.
+- Only one active credit note is allowed per closing.
+- Active means `status !== VOID`; a new note can be generated after the
+  previous note is voided.
+
+Settlement is deferred. Payment remains the only hard financial lock trigger.
+Locked placements may still list, view and generate notes from immutable
+closing snapshots.
+
 ## Placement Payment API
 
 Placement payments record the first MVP financial activity for a placement.

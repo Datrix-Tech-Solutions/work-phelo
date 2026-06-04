@@ -48,6 +48,13 @@ import {
 import { UpdatePlacementClosingStatusDto } from './dto/update-placement-closing-status.dto';
 import { PlacementClosingsService } from './placement-closings.service';
 import {
+  PlacementNoteListResponseDto,
+  PlacementNoteResponseDto,
+} from './dto/placement-note-response.dto';
+import { UpdatePlacementNoteStatusDto } from './dto/update-placement-note-status.dto';
+import { VoidPlacementNoteDto } from './dto/void-placement-note.dto';
+import { PlacementNotesService } from './placement-notes.service';
+import {
   PlacementPaymentListResponseDto,
   PlacementPaymentResponseDto,
 } from './dto/placement-payment-response.dto';
@@ -86,6 +93,7 @@ export class PlacementsController {
   constructor(
     private readonly placementsService: PlacementsService,
     private readonly closingsService: PlacementClosingsService,
+    private readonly notesService: PlacementNotesService,
     private readonly paymentsService: PlacementPaymentsService,
   ) {}
 
@@ -192,6 +200,176 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.placementsService.getLockStatus(request.user.tenantId, id);
+  }
+
+  @Get(':id/notes')
+  @ApiTags('Reinsurance - Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List placement debit and credit notes',
+    description:
+      'Returns debit/credit note records generated from confirmed closing snapshots. ' +
+      'Notes do not financially lock placements; payments remain the only hard lock trigger.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementNoteListResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  async findNotes(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.notesService.findAll(request.user.tenantId, id);
+    return { items };
+  }
+
+  @Get(':id/notes/:noteId')
+  @ApiTags('Reinsurance - Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get a placement note',
+    description:
+      'Returns one debit or credit note. The note must belong to the placement and authenticated tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Placement note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or note is archived, missing or belongs to another tenant.',
+  })
+  findNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.findOne(request.user.tenantId, id, noteId);
+  }
+
+  @Post(':id/notes/debit')
+  @ApiTags('Reinsurance - Debit Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create placement debit note',
+    description:
+      'Creates a DRAFT placement-level debit note for the cedant from all CONFIRMED closing snapshots. ' +
+      'A debit note does not create a payment and does not financially lock the placement. ' +
+      'Only one active debit note is allowed per placement; VOID notes are inactive and retain their numbers.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiCreatedResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'No confirmed closing exists or required closing currency/amount data is missing.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'An active debit note already exists for this placement.',
+  })
+  createDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.createDebitNote(request.user, id);
+  }
+
+  @Post(':id/closings/:closingId/notes/credit')
+  @ApiTags('Reinsurance - Credit Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create placement closing credit note',
+    description:
+      'Creates a DRAFT credit note for one CONFIRMED closing and its reinsurer participant. ' +
+      'Values are copied from PlacementClosing snapshots; live participant values are not recalculated. ' +
+      'Only one active credit note is allowed per closing; VOID notes are inactive and retain their numbers.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Confirmed placement closing ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Closing is not CONFIRMED, is missing snapshot data, or does not belong to a reinsurer.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'An active credit note already exists for this closing.',
+  })
+  createCreditNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.createCreditNote(request.user, id, closingId);
+  }
+
+  @Patch(':id/notes/:noteId/status')
+  @ApiTags('Reinsurance - Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Issue a draft placement note',
+    description:
+      'Only DRAFT → ISSUED is supported. VOID uses the dedicated void endpoint. Settlement is deferred.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Placement note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Unsupported note status transition.',
+  })
+  issueNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: UpdatePlacementNoteStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.issue(request.user, id, noteId, dto);
+  }
+
+  @Post(':id/notes/:noteId/void')
+  @ApiTags('Reinsurance - Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Void a draft or issued placement note',
+    description:
+      'Moves DRAFT or ISSUED notes to VOID with a required void reason. VOID is terminal. Voiding a note does not unlock a placement.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Placement note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Void reason is missing or note is already terminal.',
+  })
+  voidNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: VoidPlacementNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.void(request.user, id, noteId, dto);
   }
 
   @Get(':id/payments')
