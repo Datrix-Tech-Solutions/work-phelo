@@ -204,9 +204,8 @@ export function calculatePayrollForCountry(
     case PayrollCountry.NG: {
       employeeStatutory = basicSalary.times(NIGERIA.employeePensionRate);
       employerStatutory = basicSalary.times(NIGERIA.employerPensionRate);
-      taxableIncome = maxZero(
-        grossSalary.minus(employeeStatutory).minus(otherDeductions),
-      );
+      // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base
+      taxableIncome = maxZero(grossSalary.minus(employeeStatutory));
       payeTax = calculateNigeriaMonthlyPaye(taxableIncome, grossSalary);
       break;
     }
@@ -214,9 +213,8 @@ export function calculatePayrollForCountry(
     case PayrollCountry.KE: {
       employeeStatutory = calculateKenyaNssf(basicSalary);
       employerStatutory = employeeStatutory;
-      taxableIncome = maxZero(
-        grossSalary.minus(employeeStatutory).minus(otherDeductions),
-      );
+      // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base
+      taxableIncome = maxZero(grossSalary.minus(employeeStatutory));
       payeTax = Decimal.max(
         new Decimal(0),
         calculateProgressiveTax(taxableIncome, KENYA.payeBands).minus(
@@ -239,12 +237,14 @@ export function calculatePayrollForCountry(
           ? basicSalary.times(new Decimal(settings.tier3Rate).div(100))
           : new Decimal(0);
 
+      // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base.
+      // Transport allowance is PAYE-exempt so it is excluded from taxableIncome,
+      // but remains in gross and therefore in netSalary.
       taxableIncome = maxZero(
         grossSalary
           .minus(employeeStatutory)
           .minus(tier3Employee)
-          .minus(transportAmount)
-          .minus(otherDeductions),
+          .minus(transportAmount),
       );
       payeTax = calculateProgressiveTax(taxableIncome, GHANA.payeBands);
       break;

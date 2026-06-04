@@ -4,25 +4,15 @@ import { useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import type { AllowanceItem } from '@/lib/payrollCalculations';
 import { usePayrollSettings } from '@/hooks';
 import { formatPayrollMoney } from '@/lib/payrollDisplay';
-
-const COMMON_ALLOWANCES: SearchSelectOption[] = [
-  { value: 'Transport Allowance', label: 'Transport Allowance' },
-  { value: 'Housing Allowance', label: 'Housing Allowance' },
-  { value: 'Medical Allowance', label: 'Medical Allowance' },
-  { value: 'Lunch Allowance', label: 'Lunch Allowance' },
-  { value: 'Fuel Allowance', label: 'Fuel Allowance' },
-  { value: 'Entertainment Allowance', label: 'Entertainment Allowance' },
-  { value: 'Communication Allowance', label: 'Communication Allowance' },
-  { value: '__other__', label: 'Other' },
-];
+import { COMMON_ALLOWANCE_NAMES } from '@/lib/payrollUtils';
 
 const KNOWN_VALUES = new Set(
-  COMMON_ALLOWANCES.map((o) => o.value).filter((v) => v !== '__other__'),
+  COMMON_ALLOWANCE_NAMES.map((o) => o.value).filter((v) => v !== '__other__'),
 );
 
 interface Props {
@@ -113,7 +103,7 @@ function PayrollItemsForm({
               <div className="flex-1">
                 <SearchSelect
                   placeholder="Select allowance type…"
-                  options={COMMON_ALLOWANCES}
+                  options={COMMON_ALLOWANCE_NAMES}
                   value={item.selectedOption}
                   onChange={(v) => {
                     update(item._key, 'selectedOption', v);

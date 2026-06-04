@@ -101,7 +101,14 @@ export default function EmployeeDashboardPage({
 
   /* ── Derived: announcements ── */
   const announcements = (dashboard?.announcements ?? []).map(
-    (a: { id: string; title: string; publishedAt: string; body?: string; preview?: string }) => ({
+    (a: {
+      id: string;
+      title: string;
+      publishedAt: string;
+      body?: string;
+      preview?: string;
+      isRead?: boolean;
+    }) => ({
       id: a.id,
       title: a.title,
       date: new Date(a.publishedAt).toLocaleDateString('en-GB', {
@@ -110,6 +117,7 @@ export default function EmployeeDashboardPage({
         year: 'numeric',
       }),
       body: a.body ?? a.preview ?? '',
+      isRead: a.isRead,
     }),
   );
 

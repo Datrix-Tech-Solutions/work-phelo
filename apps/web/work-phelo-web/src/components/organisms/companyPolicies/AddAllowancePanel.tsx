@@ -8,13 +8,7 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import type { AllowanceType } from '@/types/hr';
-
-const ALLOWANCE_TYPE_OPTIONS: { value: AllowanceType; label: string }[] = [
-  { value: 'TRANSPORT', label: 'Transport' },
-  { value: 'HOUSING', label: 'Housing' },
-  { value: 'MEDICAL', label: 'Medical' },
-  { value: 'OTHER', label: 'Other' },
-];
+import { ALLOWANCE_TYPE_OPTIONS } from '@/lib/payrollUtils';
 
 export interface AllowanceFormValues {
   name: string;

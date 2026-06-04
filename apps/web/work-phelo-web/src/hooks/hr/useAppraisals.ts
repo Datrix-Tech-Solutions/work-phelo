@@ -11,6 +11,7 @@ import type {
   CreateAppraisalKpiDto,
   CreateAppraisalTemplateDto,
   CycleResultsSummary,
+  UpdateAppraisalSettingsDto,
 } from '@/types/hr';
 
 type ListParams = { page?: number; search?: string };
@@ -114,6 +115,17 @@ export function useAppraisalSettings() {
   return useQuery<AppraisalSettings>({
     queryKey: ['appraisal-settings'],
     queryFn: () => api.get('/hr/settings/appraisal').then((r) => r.data),
+  });
+}
+
+export function useUpdateAppraisalSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: UpdateAppraisalSettingsDto) =>
+      api.patch('/hr/settings/appraisal', dto).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appraisal-settings'] });
+    },
   });
 }
 

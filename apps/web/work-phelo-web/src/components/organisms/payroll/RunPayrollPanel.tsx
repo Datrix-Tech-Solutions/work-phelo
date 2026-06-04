@@ -11,44 +11,16 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { MetricPreview } from '@/components/molecules/shared/MetricPreview';
+import { MONTH_OPTIONS } from '@/lib/payrollUtils';
+import type { EmployeeOverride } from '@/types/payroll';
 
-const MONTHS = [
-  { value: '1', label: 'January' },
-  { value: '2', label: 'February' },
-  { value: '3', label: 'March' },
-  { value: '4', label: 'April' },
-  { value: '5', label: 'May' },
-  { value: '6', label: 'June' },
-  { value: '7', label: 'July' },
-  { value: '8', label: 'August' },
-  { value: '9', label: 'September' },
-  { value: '10', label: 'October' },
-  { value: '11', label: 'November' },
-  { value: '12', label: 'December' },
-];
+export type { EmployeeOverride };
 
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 3 }, (_, i) => {
   const y = currentYear - 1 + i;
   return { value: String(y), label: String(y) };
 });
-
-export interface EmployeeOverride {
-  basicSalary?: number;
-  totalAllowances?: number;
-  transportAmount?: number;
-  otherDeductions?: number;
-  allowanceItems?: Array<{
-    name: string;
-    type?: string | null;
-    amount: number;
-  }>;
-  deductionItems?: Array<{
-    employeeDeductionId?: string | null;
-    name: string;
-    amount: number;
-  }>;
-}
 
 interface Totals {
   gross: number;
@@ -85,7 +57,7 @@ export function RunPayrollPanel({
   const { mutateAsync: updateItem, isPending: isUpdating } = useUpdatePayrollItem();
   const isPending = isRunning || isUpdating || isSubmitting;
 
-  const selectedMonthLabel = MONTHS.find((m) => m.value === month)?.label ?? '';
+  const selectedMonthLabel = MONTH_OPTIONS.find((m) => m.value === month)?.label ?? '';
   const money = (value: number) => formatPayrollMoney(value, payrollCurrency, payrollCountry);
 
   const handleClose = () => {
@@ -101,13 +73,13 @@ export function RunPayrollPanel({
         notes: notes.trim() || undefined,
       });
 
-      const itemsToUpdate = run.items.filter((item) => overrides[item.employeeId]);
-      if (itemsToUpdate.length > 0) {
-        for (const item of itemsToUpdate) {
+      for (const item of run.items) {
+        const override = overrides[item.employeeId];
+        if (override) {
           await updateItem({
             payrollRunId: run.id,
             itemId: item.id,
-            data: overrides[item.employeeId],
+            data: override,
           });
         }
       }
@@ -139,7 +111,7 @@ export function RunPayrollPanel({
         }
       >
         <div className="flex flex-col gap-5">
-          <SearchSelect label="Month" options={MONTHS} value={month} onChange={setMonth} />
+          <SearchSelect label="Month" options={MONTH_OPTIONS} value={month} onChange={setMonth} />
           <SearchSelect label="Year" options={YEARS} value={year} onChange={setYear} />
 
           <div className="flex flex-col gap-1.5">

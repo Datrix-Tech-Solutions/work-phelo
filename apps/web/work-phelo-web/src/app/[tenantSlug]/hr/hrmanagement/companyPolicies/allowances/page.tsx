@@ -8,21 +8,14 @@ import {
   CompanyAllowance,
   AllowanceFormValues,
 } from '@/components/organisms/companyPolicies/AddAllowancePanel';
-import type { AllowanceType } from '@/types/hr';
-
-const ALLOWANCE_TYPE_LABELS: Record<AllowanceType, string> = {
-  TRANSPORT: 'Transport',
-  HOUSING: 'Housing',
-  MEDICAL: 'Medical',
-  OTHER: 'Other',
-};
+import { ALLOWANCE_TYPE_LABEL } from '@/lib/payrollUtils';
 
 const COLUMNS: Column<CompanyAllowance>[] = [
   { key: 'name', label: 'Name' },
   {
     key: 'type',
     label: 'Type',
-    render: (row) => ALLOWANCE_TYPE_LABELS[row.type] ?? row.type,
+    render: (row) => ALLOWANCE_TYPE_LABEL[row.type] ?? row.type,
   },
   {
     key: 'description',
@@ -53,7 +46,7 @@ export default function AllowancesPage() {
   const filtered = allowances.filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) ||
-      (ALLOWANCE_TYPE_LABELS[a.type] ?? a.type).toLowerCase().includes(search.toLowerCase()),
+      (ALLOWANCE_TYPE_LABEL[a.type] ?? a.type).toLowerCase().includes(search.toLowerCase()),
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));

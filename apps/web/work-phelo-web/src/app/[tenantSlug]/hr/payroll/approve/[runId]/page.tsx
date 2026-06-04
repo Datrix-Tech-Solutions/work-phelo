@@ -78,25 +78,29 @@ export default function ApprovePayrollDetailPage({
     { key: 'totalAllowances', label: 'Allowances', render: (row) => money(totalAllowances(row)) },
     { key: 'otherDeductions', label: 'Deductions', render: (row) => money(totalDeductions(row)) },
     { key: 'grossSalary', label: 'Gross', render: (row) => money(row.grossSalary) },
-    {
-      key: 'employeeSSNIT',
-      label: payrollLabels.employeeLabel,
-      render: (row) => money(row.employeeSSNIT),
-    },
+    // For Ghana show Tier 1 (0.5%) and Tier 2 (5%) separately; for other countries show the
+    // combined statutory contribution. Both represent the same employee-side deduction — never show
+    // the combined column alongside the tier breakdown or the total will appear doubled.
     ...(showGhanaTiers
       ? [
           {
             key: 'tier1Contribution',
-            label: 'Tier 1',
+            label: 'Tier 1 (0.5%)',
             render: (row: PayrollItem) => money(row.tier1Contribution),
           },
           {
             key: 'tier2Contribution',
-            label: 'Tier 2',
+            label: 'Tier 2 (5%)',
             render: (row: PayrollItem) => money(row.tier2Contribution),
           },
         ]
-      : []),
+      : [
+          {
+            key: 'employeeSSNIT',
+            label: payrollLabels.employeeLabel,
+            render: (row: PayrollItem) => money(row.employeeSSNIT),
+          },
+        ]),
     { key: 'payeTax', label: 'PAYE', render: (row) => money(row.payeTax) },
     {
       key: 'netSalary',

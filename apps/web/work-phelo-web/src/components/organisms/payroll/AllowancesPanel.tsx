@@ -19,30 +19,11 @@ import { formatPayrollMoney } from '@/lib/payrollDisplay';
 import { EmployeeAllowance, AllowanceType } from '@/types/hr';
 import type { AllowanceItem } from '@/lib/payrollCalculations';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
-
-const ALLOWANCE_TYPE_OPTIONS = [
-  { value: 'TRANSPORT' as AllowanceType, label: 'Transport' },
-  { value: 'HOUSING' as AllowanceType, label: 'Housing' },
-  { value: 'MEDICAL' as AllowanceType, label: 'Medical' },
-  { value: 'CLOTHING' as AllowanceType, label: 'Clothing' },
-  { value: 'OTHER' as AllowanceType, label: 'Other' },
-];
-
-const TYPE_LABEL: Record<string, string> = {
-  TRANSPORT: 'Transport',
-  HOUSING: 'Housing',
-  MEDICAL: 'Medical',
-  CLOTHING: 'Clothing',
-  OTHER: 'Other',
-};
-
-const TYPE_COLOR: Record<string, string> = {
-  TRANSPORT: 'bg-orange-50 text-orange-600',
-  HOUSING: 'bg-blue-50 text-blue-600',
-  MEDICAL: 'bg-emerald-50 text-emerald-600',
-  CLOTHING: 'bg-purple-50 text-purple-600',
-  OTHER: 'bg-gray-100 text-gray-500',
-};
+import {
+  ALLOWANCE_TYPE_OPTIONS,
+  ALLOWANCE_TYPE_LABEL,
+  ALLOWANCE_TYPE_COLOR,
+} from '@/lib/payrollUtils';
 
 function toPayrollItems(allowances: EmployeeAllowance[]): AllowanceItem[] {
   return allowances.map((a) => ({
@@ -77,8 +58,8 @@ function AllowanceCard({
   payrollCurrency?: string;
   payrollCountry?: string;
 }) {
-  const typeColor = TYPE_COLOR[item.type] ?? TYPE_COLOR.OTHER;
-  const typeLabel = TYPE_LABEL[item.type] ?? item.type;
+  const typeColor = ALLOWANCE_TYPE_COLOR[item.type] ?? ALLOWANCE_TYPE_COLOR.OTHER;
+  const typeLabel = ALLOWANCE_TYPE_LABEL[item.type] ?? item.type;
 
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-4">

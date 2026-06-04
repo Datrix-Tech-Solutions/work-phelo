@@ -189,6 +189,11 @@ function validateInput(input: PayrollInput): void {
   }
 }
 
+/** Round to 2 decimal places — matches backend Decimal.toDecimalPlaces(2, ROUND_HALF_UP). */
+function r2(x: number): number {
+  return Math.round(x * 100) / 100;
+}
+
 /* ── PAYE Calculators ── */
 
 /**
@@ -222,7 +227,7 @@ function calculatePAYE_GH(taxableIncome: number): number {
   r -= b6;
   if (r > 0) tax += r * 0.35;
 
-  return Math.round(tax);
+  return r2(tax);
 }
 
 /** Nigeria PAYE — PITA 2011 annual bands applied to post-CRA taxable income. Returns annual tax. */
@@ -247,7 +252,7 @@ function calculatePAYE_NG(annualTaxable: number): number {
     if (annualTaxable <= band.threshold) break;
   }
 
-  return Math.round(tax);
+  return r2(tax);
 }
 
 /** Kenya NSSF — tiered 6% each side. */
@@ -255,7 +260,7 @@ function calculateNSSF_KE(basicSalary: number): { employee: number; employer: nu
   const { nssfLowerLimit, nssfUpperLimit } = PAYROLL_CONFIG.KE;
   const tier1 = Math.min(basicSalary, nssfLowerLimit);
   const tier2 = Math.max(0, Math.min(basicSalary, nssfUpperLimit) - nssfLowerLimit);
-  const contrib = Math.round((tier1 + tier2) * 0.06);
+  const contrib = r2((tier1 + tier2) * 0.06);
   return { employee: contrib, employer: contrib };
 }
 
@@ -280,7 +285,7 @@ function calculatePAYE_KE(taxableIncome: number, personalRelief: number): number
   r -= b4;
   if (r > 0) grossTax += r * 0.35;
 
-  return Math.round(Math.max(0, grossTax - personalRelief));
+  return r2(Math.max(0, grossTax - personalRelief));
 }
 
 /* ── Main Payroll Calculator ── */
@@ -322,18 +327,18 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       const insurable = Math.min(basicSalary, cfg.maxInsurableEarnings);
 
       // Tier 1 — SSNIT (employee 0.5%, employer 13%)
-      const tier1Employee = Math.round(insurable * cfg.tier1EmployeeRate);
-      employerStatutoryContrib = Math.round(insurable * cfg.tier1EmployerRate);
+      const tier1Employee = r2(insurable * cfg.tier1EmployeeRate);
+      employerStatutoryContrib = r2(insurable * cfg.tier1EmployerRate);
       tier1Contribution = tier1Employee;
 
       // Tier 2 — employee occupational pension (5%)
-      tier2Contribution = Math.round(insurable * cfg.tier2EmployeeRate);
+      tier2Contribution = r2(insurable * cfg.tier2EmployeeRate);
       tier2FundName = ghanaPension.tier2FundName;
-      employeeStatutoryContrib = tier1Employee + tier2Contribution;
+      employeeStatutoryContrib = r2(tier1Employee + tier2Contribution);
 
       // Tier 3 — voluntary provident fund (both sides tax-deductible for employee)
-      const pfEmployee = Math.round(basicSalary * (ghanaPension.providentFundEmployeeRate ?? 0));
-      const pfEmployer = Math.round(basicSalary * (ghanaPension.providentFundEmployerRate ?? 0));
+      const pfEmployee = r2(basicSalary * (ghanaPension.providentFundEmployeeRate ?? 0));
+      const pfEmployer = r2(basicSalary * (ghanaPension.providentFundEmployerRate ?? 0));
 
       if (pfEmployee > 0 || pfEmployer > 0) {
         voluntaryPensionEmployee = pfEmployee;
@@ -342,10 +347,11 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       }
 
       // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax); transport is exempt
+      // otherDeductions (loans, advances) are post-tax and do not reduce the PAYE base
       taxExemptTransport = transportAllowance;
       taxableIncome = Math.max(
         0,
-        grossSalary - employeeStatutoryContrib - pfEmployee - taxExemptTransport - otherDeductions,
+        grossSalary - employeeStatutoryContrib - pfEmployee - taxExemptTransport,
       );
       paye = calculatePAYE_GH(taxableIncome);
       break;
@@ -353,11 +359,11 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
 
     case 'NG': {
       const cfg = PAYROLL_CONFIG.NG;
-      employeeStatutoryContrib = Math.round(basicSalary * cfg.statutoryEmployeeRate);
-      employerStatutoryContrib = Math.round(basicSalary * cfg.statutoryEmployerRate);
+      employeeStatutoryContrib = r2(basicSalary * cfg.statutoryEmployeeRate);
+      employerStatutoryContrib = r2(basicSalary * cfg.statutoryEmployerRate);
 
-      const volEmployee = Math.round(basicSalary * (nigeriaPension.voluntaryEmployeeRate ?? 0));
-      const volEmployer = Math.round(basicSalary * (nigeriaPension.voluntaryEmployerRate ?? 0));
+      const volEmployee = r2(basicSalary * (nigeriaPension.voluntaryEmployeeRate ?? 0));
+      const volEmployer = r2(basicSalary * (nigeriaPension.voluntaryEmployerRate ?? 0));
 
       if (volEmployee > 0 || volEmployer > 0) {
         voluntaryPensionEmployee = volEmployee;
@@ -366,18 +372,16 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       }
 
       // taxableIncome for net salary: transport stays in (taxable in Nigeria)
-      taxableIncome = Math.max(
-        0,
-        grossSalary - employeeStatutoryContrib - volEmployee - otherDeductions,
-      );
+      // otherDeductions (loans, advances) are post-tax and do not reduce the PAYE base
+      taxableIncome = Math.max(0, grossSalary - employeeStatutoryContrib - volEmployee);
       // CRA (Consolidated Relief Allowance) reduces the PAYE tax base only, not take-home
       const annualGross = grossSalary * 12;
       const annualCRA = Math.max(200_000, annualGross * 0.01) + annualGross * 0.2;
       const annualTaxBase = Math.max(0, taxableIncome * 12 - annualCRA);
       const computedAnnualPAYE = calculatePAYE_NG(annualTaxBase);
       // Minimum tax: 1% of monthly gross (applies when income is very low)
-      const minimumMonthlyPAYE = Math.round(grossSalary * 0.01);
-      paye = Math.max(Math.round(computedAnnualPAYE / 12), minimumMonthlyPAYE);
+      const minimumMonthlyPAYE = r2(grossSalary * 0.01);
+      paye = Math.max(r2(computedAnnualPAYE / 12), minimumMonthlyPAYE);
       break;
     }
 
@@ -386,8 +390,8 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       employeeStatutoryContrib = nssf.employee;
       employerStatutoryContrib = nssf.employer;
 
-      const occEmployeeRaw = Math.round(basicSalary * (kenyaPension.occupationalEmployeeRate ?? 0));
-      const occEmployer = Math.round(basicSalary * (kenyaPension.occupationalEmployerRate ?? 0));
+      const occEmployeeRaw = r2(basicSalary * (kenyaPension.occupationalEmployeeRate ?? 0));
+      const occEmployer = r2(basicSalary * (kenyaPension.occupationalEmployerRate ?? 0));
       // Cap the deductible portion at the KES 20,000/month statutory exempt limit
       const occEmployeeDeductible = Math.min(
         occEmployeeRaw,
@@ -400,25 +404,23 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         voluntaryPensionName = kenyaPension.schemeName;
       }
 
-      taxableIncome = Math.max(
-        0,
-        grossSalary - employeeStatutoryContrib - occEmployeeDeductible - otherDeductions,
-      );
+      // otherDeductions (loans, advances) are post-tax and do not reduce the PAYE base
+      taxableIncome = Math.max(0, grossSalary - employeeStatutoryContrib - occEmployeeDeductible);
       paye = calculatePAYE_KE(taxableIncome, PAYROLL_CONFIG.KE.personalRelief);
       break;
     }
   }
 
-  const netSalary = Math.round(taxableIncome + taxExemptTransport - paye);
-  const totalEmployerCost = Math.round(
+  const netSalary = r2(taxableIncome + taxExemptTransport - paye - otherDeductions);
+  const totalEmployerCost = r2(
     grossSalary + employerStatutoryContrib + (voluntaryPensionEmployer ?? 0),
   );
 
   return {
-    basicSalary: Math.round(basicSalary),
+    basicSalary,
     allowances,
-    totalAllowances: Math.round(totalAllowances),
-    grossSalary: Math.round(grossSalary),
+    totalAllowances,
+    grossSalary,
     employeeStatutoryContrib,
     employerStatutoryContrib,
     tier1Contribution,
@@ -427,7 +429,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     voluntaryPensionEmployee,
     voluntaryPensionEmployer,
     voluntaryPensionName,
-    taxableIncome: Math.round(taxableIncome),
+    taxableIncome,
     paye,
     netSalary,
     totalEmployerCost,
