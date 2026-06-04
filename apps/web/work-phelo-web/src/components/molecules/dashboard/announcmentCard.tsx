@@ -3,12 +3,18 @@
 import { useState } from 'react';
 import { Megaphone } from 'lucide-react';
 import { Modal } from '@/components/organisms/shared/Modal';
+import {
+  useMarkAnnouncementRead,
+  useMarkAllAnnouncementsRead,
+  useAnnouncementsUnreadCount,
+} from '@/hooks';
 
 interface Announcement {
   id: string;
   title: string;
   body: string;
   date: string;
+  isRead?: boolean;
 }
 
 interface AnnouncementCardProps {
@@ -16,15 +22,25 @@ interface AnnouncementCardProps {
 }
 
 export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
-  const [readIds, setReadIds] = useState<Set<string>>(new Set());
+  const [pendingReadIds, setPendingReadIds] = useState<Set<string>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const { mutate: markRead } = useMarkAnnouncementRead();
+  const { mutate: markAllRead } = useMarkAllAnnouncementsRead();
+  const { data: unreadData } = useAnnouncementsUnreadCount();
 
-  const unreadCount = announcements.filter((a) => !readIds.has(a.id)).length;
+  const unreadCount =
+    unreadData?.count ?? announcements.filter((a) => !a.isRead && !pendingReadIds.has(a.id)).length;
   const selected = announcements.find((a) => a.id === selectedId) ?? null;
 
   const handleSelect = (id: string) => {
-    setReadIds((prev) => new Set([...prev, id]));
+    setPendingReadIds((prev) => new Set([...prev, id]));
+    markRead(id);
     setSelectedId(id);
+  };
+
+  const handleMarkAllRead = () => {
+    setPendingReadIds(new Set(announcements.map((a) => a.id)));
+    markAllRead();
   };
 
   if (announcements.length === 0) {
@@ -48,12 +64,22 @@ export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
     <>
       <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col min-h-100">
         {/* Header */}
-        <div className="flex items-center gap-2 shrink-0">
-          <h2 className="text-base font-bold text-gray-900">General Announcements</h2>
+        <div className="flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-gray-900">General Announcements</h2>
+            {unreadCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </div>
           {unreadCount > 0 && (
-            <span className="inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-[10px] font-bold">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
+            <button
+              onClick={handleMarkAllRead}
+              className="text-xs text-gray-400 hover:text-orange-500 transition-colors"
+            >
+              Mark all read
+            </button>
           )}
         </div>
 
@@ -63,7 +89,7 @@ export function AnnouncementCard({ announcements }: AnnouncementCardProps) {
         {/* List */}
         <div className="flex flex-col divide-y divide-gray-100 overflow-y-auto max-h-225">
           {announcements.map((a) => {
-            const isRead = readIds.has(a.id);
+            const isRead = (a.isRead ?? false) || pendingReadIds.has(a.id);
             return (
               <button
                 key={a.id}
