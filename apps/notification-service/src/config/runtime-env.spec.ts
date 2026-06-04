@@ -15,7 +15,9 @@ describe('assertNotificationRuntimeEnv', () => {
     process.env = { ...originalEnv, ...baseEnv };
     delete process.env.SMS_PROVIDER;
     delete process.env.TERMII_API_KEY;
+    delete process.env.TERMII_SENDER_ID;
     delete process.env.PILOSMS_API_KEY;
+    delete process.env.PILOSMS_SENDER_ID;
   });
 
   afterEach(() => {
@@ -26,10 +28,11 @@ describe('assertNotificationRuntimeEnv', () => {
     process.env.SMS_PROVIDER = 'termii';
 
     expect(() => assertNotificationRuntimeEnv()).toThrow(
-      'Notification service missing required environment variables: TERMII_API_KEY',
+      'Notification service missing required environment variables: TERMII_API_KEY, TERMII_SENDER_ID',
     );
 
     process.env.TERMII_API_KEY = 'termii-key';
+    process.env.TERMII_SENDER_ID = 'WorkPhelo';
     expect(() => assertNotificationRuntimeEnv()).not.toThrow();
   });
 
@@ -37,16 +40,17 @@ describe('assertNotificationRuntimeEnv', () => {
     process.env.SMS_PROVIDER = 'pilosms';
 
     expect(() => assertNotificationRuntimeEnv()).toThrow(
-      'Notification service missing required environment variables: PILOSMS_API_KEY',
+      'Notification service missing required environment variables: PILOSMS_API_KEY, PILOSMS_SENDER_ID',
     );
 
     process.env.PILOSMS_API_KEY = 'pilo-key';
+    process.env.PILOSMS_SENDER_ID = 'WorkPhelo';
     expect(() => assertNotificationRuntimeEnv()).not.toThrow();
   });
 
   it('defaults to Termii credentials for backward compatibility', () => {
     expect(() => assertNotificationRuntimeEnv()).toThrow(
-      'Notification service missing required environment variables: TERMII_API_KEY',
+      'Notification service missing required environment variables: TERMII_API_KEY, TERMII_SENDER_ID',
     );
   });
 
