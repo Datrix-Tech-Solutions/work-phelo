@@ -4,6 +4,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
@@ -15,6 +16,7 @@ import { PlacementsService } from './placements.service';
   providers: [
     PlacementsService,
     PlacementClosingsService,
+    PlacementEndorsementsService,
     PlacementNotesService,
     PlacementPaymentsService,
     PlacementFinancialActivityReader,
