@@ -44,6 +44,9 @@ work-phelo/
 - Prisma ORM
 - JWT authentication (httpOnly cookies)
 - Resend (transactional email)
+- Notification-service SMS providers are configurable (`termii` or `pilosms`);
+  PiloSMS support is available in code, with deployment activation handled in a
+  separate environment/secrets PR.
 
 **Frontend**
 

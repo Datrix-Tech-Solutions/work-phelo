@@ -19,7 +19,9 @@ export function assertNotificationRuntimeEnv(): void {
   }
 
   const providerRequiredEnvVars =
-    smsProvider === 'termii' ? ['TERMII_API_KEY'] : ['PILOSMS_API_KEY'];
+    smsProvider === 'termii'
+      ? ['TERMII_API_KEY', 'TERMII_SENDER_ID']
+      : ['PILOSMS_API_KEY', 'PILOSMS_SENDER_ID'];
   const missing = [
     ...notificationRequiredEnvVars,
     ...providerRequiredEnvVars,
