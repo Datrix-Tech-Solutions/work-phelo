@@ -8,7 +8,7 @@ export function setupSwagger(app: INestApplication): void {
       `
 ## Notification API
 
-Owns in-app notification storage, notification delivery logs and email/SMS delivery consumers.
+Owns in-app notification storage, notification delivery logs, email delivery, and provider-backed SMS delivery consumers.
 
 ### Routes
 - Through the API Gateway: \`/api/v1/notification/*\`
