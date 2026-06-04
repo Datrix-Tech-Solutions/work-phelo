@@ -1,12 +1,15 @@
 import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClosingStatus,
+  PlacementPaymentDirection,
+  PlacementPaymentType,
   PlacementParticipantRole,
   PlacementParticipantStatus,
 } from '../../prisma/generated/client';
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
 import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
 
@@ -32,6 +35,12 @@ describe('PlacementsController', () => {
     create: jest.fn(),
     changeStatus: jest.fn(),
   };
+  const paymentsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    reverse: jest.fn(),
+  };
   const user = {
     tenantId: 'tenant-1',
   } as RequestUser;
@@ -44,6 +53,7 @@ describe('PlacementsController', () => {
     new PlacementsController(
       service as unknown as PlacementsService,
       closingsService as unknown as PlacementClosingsService,
+      paymentsService as unknown as PlacementPaymentsService,
     );
 
   it('delegates list queries using only the authenticated tenant context', async () => {
@@ -63,7 +73,10 @@ describe('PlacementsController', () => {
     ['getClosingSlipPreview', PlacementPermission.VIEW],
     ['findClosings', PlacementPermission.VIEW],
     ['findClosing', PlacementPermission.VIEW],
+    ['findPayments', PlacementPermission.VIEW],
+    ['findPayment', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
+    ['createPayment', PlacementPermission.CREATE],
     ['update', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
     ['addParticipant', PlacementPermission.EDIT],
@@ -72,6 +85,7 @@ describe('PlacementsController', () => {
     ['deleteParticipant', PlacementPermission.EDIT],
     ['createClosing', PlacementPermission.EDIT],
     ['changeClosingStatus', PlacementPermission.EDIT],
+    ['reversePayment', PlacementPermission.EDIT],
     ['archive', PlacementPermission.DELETE],
   ])('requires %s permission on %s', (method, permission) => {
     expect(
@@ -209,6 +223,57 @@ describe('PlacementsController', () => {
       'placement-1',
       'closing-1',
       expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
+    );
+  });
+
+  it('delegates payment reads with authenticated tenant context', async () => {
+    const controller = createController();
+    paymentsService.findAll.mockResolvedValue([]);
+
+    const listResult = await controller.findPayments('placement-1', {
+      user,
+    } as never);
+    await controller.findPayment('placement-1', 'payment-1', {
+      user,
+    } as never);
+
+    expect(paymentsService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    expect(listResult).toEqual({ items: [] });
+    expect(paymentsService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'payment-1',
+    );
+  });
+
+  it('delegates payment create and reverse with authenticated user context', async () => {
+    const controller = createController();
+    const dto = {
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      direction: PlacementPaymentDirection.INBOUND,
+      counterpartyId: 'cedant-1',
+      amount: 1000,
+      currency: 'USD',
+      paymentDate: '2026-06-04T12:00:00.000Z',
+    };
+
+    await controller.createPayment('placement-1', dto, { user } as never);
+    await controller.reversePayment('placement-1', 'payment-1', {
+      user,
+    } as never);
+
+    expect(paymentsService.create).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      dto,
+    );
+    expect(paymentsService.reverse).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'payment-1',
     );
   });
 });

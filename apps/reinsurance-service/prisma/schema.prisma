@@ -73,6 +73,28 @@ enum PlacementClosingStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementPaymentType {
+  PREMIUM_RECEIVED
+  REINSURER_DISBURSEMENT
+  CLAIM_SETTLEMENT
+
+  @@schema("reinsurance")
+}
+
+enum PlacementPaymentDirection {
+  INBOUND
+  OUTBOUND
+
+  @@schema("reinsurance")
+}
+
+enum PlacementPaymentStatus {
+  RECORDED
+  REVERSED
+
+  @@schema("reinsurance")
+}
+
 enum MailboxProvider {
   MICROSOFT_GRAPH
   GOOGLE_GMAIL
@@ -141,6 +163,7 @@ model Counterparty {
   addresses          CounterpartyAddress[]
   cededPlacements    Placement[]            @relation("PlacementCedant")
   placementRoles     PlacementParticipant[] @relation("PlacementParticipantCounterparty")
+  placementPayments   PlacementPayment[]     @relation("PlacementPaymentCounterparty")
 
   @@unique([id, tenantId])
   @@index([tenantId, type, archivedAt, name])
@@ -202,6 +225,7 @@ model Placement {
   statusHistory        PlacementStatusHistory[]
   emailLinks           PlacementEmailLink[]
   closings             PlacementClosing[]
+  payments             PlacementPayment[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
@@ -325,6 +349,7 @@ model PlacementParticipant {
   placement         Placement                @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
   counterparty      Counterparty             @relation("PlacementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
   closings          PlacementClosing[]
+  payments          PlacementPayment[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, counterpartyId, role])
@@ -357,11 +382,48 @@ model PlacementClosing {
   updatedAt         DateTime               @updatedAt
   placement         Placement              @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
   participant       PlacementParticipant   @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  payments          PlacementPayment[]
 
   @@unique([tenantId, placementId, closingNumber])
   @@index([tenantId, placementId])
   @@index([tenantId, participantId])
   @@index([tenantId, placementId, status])
+  @@schema("reinsurance")
+}
+
+model PlacementPayment {
+  id                  String                    @id @default(uuid())
+  tenantId            String
+  placementId         String
+  closingId           String?
+  participantId       String?
+  counterpartyId      String
+  type                PlacementPaymentType
+  direction           PlacementPaymentDirection
+  amount              Decimal                   @db.Decimal(18, 2)
+  currency            String
+  paymentDate         DateTime
+  reference           String?
+  notes               String?
+  status              PlacementPaymentStatus    @default(RECORDED)
+  reversalOfPaymentId String?
+  createdByUserId     String
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  placement           Placement                 @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closing             PlacementClosing?         @relation(fields: [closingId], references: [id], onDelete: Restrict)
+  participant         PlacementParticipant?     @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty        Counterparty              @relation("PlacementPaymentCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfPayment   PlacementPayment?         @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
+  reversalPayments    PlacementPayment[]        @relation("PlacementPaymentReversal")
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, status, createdAt])
+  @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, counterpartyId, createdAt])
+  @@index([tenantId, participantId, createdAt])
+  @@index([tenantId, closingId, createdAt])
+  @@index([tenantId, reversalOfPaymentId])
   @@schema("reinsurance")
 }
 

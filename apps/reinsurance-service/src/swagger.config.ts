@@ -43,9 +43,10 @@ document registry entries, emails, payments, debit notes or credit notes.
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
 are distinct: \`CLOSED\` placements block direct edits but may reopen to
-\`CLOSING\` when no financial lock exists. Payment/settlement activity will
-hard-lock future direct mutations and require the future endorsement workflow,
-while debit note issuance alone is not a hard lock in the MVP policy.
+\`CLOSING\` when no financial lock exists. The first recorded placement payment
+hard-locks future direct mutations and requires the future endorsement workflow.
+Reversal records do not unlock placements. Debit note issuance alone is not a
+hard lock in the MVP policy.
 
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:
@@ -87,6 +88,14 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Slip Previews',
       'Read-only offer and closing slip preview endpoints',
+    )
+    .addTag(
+      'Reinsurance - Payments',
+      'Placement payment recording, payment history and reversal records',
+    )
+    .addTag(
+      'Reinsurance - Financial Locking',
+      'Direct-edit lock status used to gate future endorsement-required changes',
     )
     .addTag(
       'Reinsurance - Risk Classes',
