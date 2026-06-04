@@ -247,7 +247,8 @@ export class PlacementsController {
   @ApiCreatedResponse({ type: PlacementEndorsementResponseDto })
   @ApiBadRequestResponse({
     type: ApiErrorResponseDto,
-    description: 'Invalid endorsement payload.',
+    description:
+      'Invalid endorsement payload or the placement has no closing yet.',
   })
   @ApiNotFoundResponse({
     type: ApiErrorResponseDto,

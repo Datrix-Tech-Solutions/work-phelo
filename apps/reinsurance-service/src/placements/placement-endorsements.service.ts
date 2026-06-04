@@ -300,6 +300,11 @@ export class PlacementEndorsementsService {
       },
     });
     if (!placement) throw new NotFoundException('Placement not found');
+    if (placement.closings.length === 0) {
+      throw new BadRequestException(
+        'At least one placement closing is required before creating an endorsement',
+      );
+    }
     return placement;
   }
 

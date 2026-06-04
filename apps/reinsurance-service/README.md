@@ -213,10 +213,13 @@ deferred.
 ## Placement Endorsement API
 
 Endorsements are versioned child adjustment records linked to an original
-placement. They are the foundation for business changes after payment has
-financially locked direct placement edits. PR1 creates the endorsement seam
-only; it does not add endorsement participants, closings, notes, payments,
-claims, accounting, PDFs, emails or frontend changes.
+placement. They may be created once at least one placement closing exists. Before
+payment, direct placement edits are still allowed but a broker may create an
+endorsement to formally version/document a change. After first payment, direct
+edits are financially locked and endorsement becomes mandatory for business
+changes. PR1 creates the endorsement seam only; it does not add endorsement
+participants, closings, notes, payments, claims, accounting, PDFs, emails or
+frontend changes.
 
 ```text
 GET   /api/v1/operations/reinsurance/placements/:id/endorsements
@@ -228,6 +231,8 @@ PATCH /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/
 
 Core rules:
 
+- At least one placement closing must exist before an endorsement can be
+  created.
 - Endorsements never mutate the original placement, participants, closings,
   payments or notes.
 - The backend captures `originalSnapshot` when the endorsement is created.
@@ -993,6 +998,7 @@ Current:
 - Capacity validation complete.
 - Slip Preview MVP complete.
 - Email technical foundation complete.
+- Endorsement foundation complete.
 
 Deferred:
 
@@ -1000,15 +1006,15 @@ Deferred:
 - Offer slip distribution.
 - Closing slip distribution.
 - Full send/reply/forward email workflow.
-- Endorsements.
+- Endorsement participants, closings, notes and payments.
 - Payments & Covers.
 - Claims.
 
-Endorsements are a future roadmap item only. Do not model them as direct silent
-mutations of a closed placement. UAT should capture examples such as sum
-insured changes, premium adjustments, participant share changes, participant
-additions/removals, risk detail amendments and coverage amendments before the
-endorsement domain is designed.
+Endorsements must not be modeled as direct silent mutations of a closed or
+financially locked placement. UAT should continue capturing examples such as
+sum insured changes, premium adjustments, participant share changes,
+participant additions/removals, risk detail amendments and coverage amendments
+before endorsement participants and endorsement closings are implemented.
 
 ## Email Foundation API
 

@@ -233,6 +233,23 @@ describe('PlacementEndorsementsService', () => {
     expect(result.endorsementNumber).toBe('END-002');
   });
 
+  it('rejects endorsement creation before any placement closing exists', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      closings: [],
+    });
+
+    await expect(
+      service.create(user, 'placement-1', {
+        type: PlacementEndorsementType.PREMIUM_ADJUSTMENT,
+        effectiveDate: '2026-06-04T00:00:00.000Z',
+        reason: 'Formal premium adjustment',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.placementEndorsement.create).not.toHaveBeenCalled();
+  });
+
   it('does not expose endorsements for another tenant placement', async () => {
     prisma.placement.findFirst.mockResolvedValue(null);
 

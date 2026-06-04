@@ -58,8 +58,11 @@ hard lock in the MVP policy.
 ### Endorsements
 Endorsement endpoints create versioned placement adjustment records. The backend
 captures \`originalSnapshot\` at creation and stores proposed changes separately.
-Endorsements do not mutate the original placement, participants, closings,
-payments or notes.
+Endorsements may be created once at least one placement closing exists. Before
+payment they are optional formal version records; after first payment they are
+the mandatory path for business changes because direct edits are financially
+locked. Endorsements do not mutate the original placement, participants,
+closings, payments or notes.
 
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:
