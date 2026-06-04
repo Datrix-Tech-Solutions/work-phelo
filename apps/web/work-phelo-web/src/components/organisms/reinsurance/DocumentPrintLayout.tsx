@@ -29,7 +29,10 @@ export function DocumentPrintLayout({
   if (typeof document === 'undefined') return null;
 
   return createPortal(
-    <div id="irisk-print-root" style={{ display: 'none' }}>
+    <div
+      id="irisk-print-root"
+      style={{ display: 'none', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
+    >
       {/* Watermark */}
       <div
         style={{
@@ -48,6 +51,7 @@ export function DocumentPrintLayout({
           width={900}
           height={600}
           style={{ objectFit: 'contain', opacity: 0.3 }}
+          priority
         />
       </div>
 
@@ -74,6 +78,7 @@ export function DocumentPrintLayout({
           width={130}
           height={65}
           style={{ objectFit: 'contain' }}
+          priority
         />
         <h1
           style={{

@@ -88,20 +88,6 @@ export function RiskTypesTable() {
 
   return (
     <>
-      <div className="mb-4 max-w-xs">
-        <SearchSelect
-          label="Filter by Risk Class"
-          placeholder="Select a risk class…"
-          value={selectedClassId}
-          onChange={(v) => {
-            setSelectedClassId(v);
-            setPage(1);
-            setSearch('');
-          }}
-          options={riskClassOptions}
-        />
-      </div>
-
       <DataTable
         columns={columns}
         data={paged}
@@ -112,6 +98,21 @@ export function RiskTypesTable() {
           setSearch(q);
           setPage(1);
         }}
+        extraFilters={
+          <div className="w-52">
+            <SearchSelect
+              placeholder="Filter by risk class…"
+              size="sm"
+              value={selectedClassId}
+              onChange={(v) => {
+                setSelectedClassId(v);
+                setPage(1);
+                setSearch('');
+              }}
+              options={riskClassOptions}
+            />
+          </div>
+        }
         actionButton={{
           label: 'Add Risk Type',
           onClick: () => setPanelOpen(true),

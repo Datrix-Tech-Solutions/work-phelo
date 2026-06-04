@@ -396,6 +396,8 @@ export interface UpdateParticipantStatusPayload {
 }
 
 export interface Facultative {
+  insuranceCompany: any;
+  policyNumber: any;
   id: string;
   reference: string;
   title: string;

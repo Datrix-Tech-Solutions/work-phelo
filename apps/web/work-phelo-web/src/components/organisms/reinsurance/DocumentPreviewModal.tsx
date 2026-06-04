@@ -62,6 +62,7 @@ export function DocumentPreviewModal({
               width={120}
               height={60}
               className="object-contain"
+              priority
             />
             <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
               {documentTitle}

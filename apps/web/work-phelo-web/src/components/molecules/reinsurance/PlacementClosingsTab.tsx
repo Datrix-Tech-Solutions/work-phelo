@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { TableActionButton } from '@/components/atoms/TableActionButton';
 import { Icons } from '@/components/atoms/icons';
-import { SlipPreviewModal } from '@/components/organisms/reinsurance/SlipPreviewModal';
 import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/GuaranteeNoteModal';
 import { CreditNoteModal } from '@/components/organisms/reinsurance/CreditNoteModal';
 import { DebitNoteModal } from '@/components/organisms/reinsurance/DebitNoteModal';
+import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
+import { useCedants, useReinsurers } from '@/hooks';
 import { Facultative, PlacementParticipant } from '@/types/reinsurance';
 
 interface ClosingRow {
@@ -43,18 +45,33 @@ interface PlacementClosingsTabProps {
 }
 
 export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
-  const [slipPreviewId, setSlipPreviewId] = useState<string | null>(null);
-  const [guaranteeNoteRow, setGuaranteeNoteRow] = useState<ClosingRow | null>(null);
+  const [guaranteeNoteOpen, setGuaranteeNoteOpen] = useState(false);
   const [creditNoteRow, setCreditNoteRow] = useState<ClosingRow | null>(null);
   const [debitNoteOpen, setDebitNoteOpen] = useState(false);
+  const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
+  const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
+
+  const { data: cedants = [] } = useCedants();
+  const { data: reinsurers = [] } = useReinsurers();
+
+  const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
+
+  const reinsurerEmails: Record<string, string[]> = Object.fromEntries(
+    reinsurers.map((r) => {
+      const emails: string[] = [];
+      if (r.email) emails.push(r.email);
+      r.contacts.forEach((c) => {
+        if (c.email) emails.push(c.email);
+      });
+      return [r.id, emails];
+    }),
+  );
 
   const premium = placement.premium ?? 0;
 
   const rows: ClosingRow[] = placement.participants
     .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
     .map((p) => toClosingRow(p, premium));
-
-  const slipRow = rows.find((r) => r.id === slipPreviewId);
 
   const columns: Column<ClosingRow>[] = [
     {
@@ -85,30 +102,24 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       width: '2.5fr',
       render: (row) => (
         <div className="flex items-center gap-5 w-full justify-end">
-          <button
-            type="button"
+          <TableActionButton
+            icon={<Icons.Mail className="w-3.5 h-3.5 shrink-0" />}
             onClick={() => setCreditNoteRow(row)}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
           >
-            <Icons.Mail className="w-3.5 h-3.5 shrink-0" />
             View Credit Note
-          </button>
-          <button
-            type="button"
+          </TableActionButton>
+          <TableActionButton
+            icon={<Icons.Mail className="w-3.5 h-3.5 shrink-0" />}
             onClick={() => setDebitNoteOpen(true)}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
           >
-            <Icons.Mail className="w-3.5 h-3.5 shrink-0" />
             View Debit Note
-          </button>
-          <button
-            type="button"
-            onClick={() => setSlipPreviewId(row.id)}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-900 border border-gray-300 rounded-lg hover:bg-orange-50 hover:text-orange-600 hover:border-orange-200 transition-colors"
+          </TableActionButton>
+          <TableActionButton
+            icon={<Icons.SendHorizonal className="w-3.5 h-3.5 shrink-0" />}
+            onClick={() => setMailToReinsurerRow(row)}
           >
-            <Icons.SendHorizonal className="w-3.5 h-3.5 shrink-0" />
             Mail reinsurer
-          </button>
+          </TableActionButton>
         </div>
       ),
     },
@@ -124,26 +135,21 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         totalPages={1}
         onPageChange={() => {}}
         noInternalScroll
+        secondaryButton={{
+          label: 'View Guarantee Note',
+          onClick: () => setGuaranteeNoteOpen(true),
+        }}
+        actionButton={{ label: 'Mail to cedant', onClick: () => setMailToCedantOpen(true) }}
       />
 
-      <SlipPreviewModal
-        isOpen={!!slipPreviewId}
+      <GuaranteeNoteModal
+        isOpen={guaranteeNoteOpen}
         placement={placement}
-        brokerageFee={slipRow?.brokerageFee ?? 0}
-        onPrint={() => setSlipPreviewId(null)}
-        onClose={() => setSlipPreviewId(null)}
+        counterpartyId=""
+        reinsurerCompany=""
+        onPrint={() => setGuaranteeNoteOpen(false)}
+        onClose={() => setGuaranteeNoteOpen(false)}
       />
-
-      {guaranteeNoteRow && (
-        <GuaranteeNoteModal
-          isOpen={!!guaranteeNoteRow}
-          placement={placement}
-          counterpartyId={guaranteeNoteRow.counterpartyId}
-          reinsurerCompany={guaranteeNoteRow.reinsurerCompany}
-          onPrint={() => setGuaranteeNoteRow(null)}
-          onClose={() => setGuaranteeNoteRow(null)}
-        />
-      )}
 
       <DebitNoteModal
         isOpen={debitNoteOpen}
@@ -162,6 +168,26 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           reinsurerCompany={creditNoteRow.reinsurerCompany}
           onPrint={() => setCreditNoteRow(null)}
           onClose={() => setCreditNoteRow(null)}
+        />
+      )}
+
+      <MailPreviewModal
+        isOpen={mailToCedantOpen}
+        placement={placement}
+        brokerageFee={0}
+        recipients={fullCedant?.email ? [fullCedant.email] : []}
+        onSend={() => setMailToCedantOpen(false)}
+        onClose={() => setMailToCedantOpen(false)}
+      />
+
+      {mailToReinsurerRow && (
+        <MailPreviewModal
+          isOpen={!!mailToReinsurerRow}
+          placement={placement}
+          brokerageFee={mailToReinsurerRow.brokerageFee}
+          recipients={reinsurerEmails[mailToReinsurerRow.counterpartyId] ?? []}
+          onSend={() => setMailToReinsurerRow(null)}
+          onClose={() => setMailToReinsurerRow(null)}
         />
       )}
     </>
