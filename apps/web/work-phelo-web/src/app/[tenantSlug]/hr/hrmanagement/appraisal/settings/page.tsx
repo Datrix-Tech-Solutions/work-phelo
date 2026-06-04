@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { use } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { FormSection } from '@/components/atoms/FormSection';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -174,7 +174,6 @@ export default function AppraisalSettingsPage({
     handleSubmit,
     control,
     reset,
-    watch,
     setValue,
     formState: { isDirty },
   } = useForm<SettingsForm>({
@@ -205,12 +204,10 @@ export default function AppraisalSettingsPage({
     }
   }, [appraisalSettings, companySettings, reset]);
 
-  const [outstanding, veryGood, good, satisfactory] = watch([
-    'outstandingThreshold',
-    'veryGoodThreshold',
-    'goodThreshold',
-    'satisfactoryThreshold',
-  ]);
+  const [outstanding, veryGood, good, satisfactory] = useWatch({
+    control,
+    name: ['outstandingThreshold', 'veryGoodThreshold', 'goodThreshold', 'satisfactoryThreshold'],
+  });
 
   // Derive the constraint config for each band from current live form values
   const getBandConfig = (key: ThresholdKey): BandConfig => {
@@ -388,7 +385,7 @@ export default function AppraisalSettingsPage({
             <div>
               <h3 className="text-sm font-bold text-gray-900">Performance Bands</h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                Score thresholds that determine each employee's final rating
+                Score thresholds that determine each employee&apos;s final rating
               </p>
             </div>
             <DataTable
