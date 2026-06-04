@@ -291,8 +291,11 @@ export class PlacementsController {
       'PARTIALLY_PLACED→MARKETING|PLACED|DECLINED|CANCELLED, ' +
       'PLACED→PARTIALLY_PLACED|CLOSING|CANCELLED, ' +
       'CLOSING→PLACED|CLOSED|CANCELLED, ' +
+      'CLOSED→CLOSING when no financial lock exists, ' +
       'DECLINED→MARKETING. ' +
-      'CLOSED and CANCELLED are terminal.\n\n' +
+      'CANCELLED is terminal.\n\n' +
+      'CLOSED remains directly non-editable. Reopen unpaid CLOSED placements to CLOSING first, then apply edits through normal placement/participant endpoints. ' +
+      'Financially locked placements return 409 and require endorsement.\n\n' +
       'MARKETING, PARTIALLY_PLACED and PLACED are also set automatically by participant ' +
       'capacity recalculation — use this endpoint only when a manual override is needed ' +
       '(e.g. advancing to DECLINED before participant statuses are updated, or ' +

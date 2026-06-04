@@ -811,11 +811,13 @@ describe('PlacementsService', () => {
   });
 
   it('blocks placement status changes when financial activity has locked the placement', async () => {
-    financialLockPolicy.assertEditable.mockRejectedValueOnce(
-      new ConflictException(
-        'Placement is financially locked. Changes require endorsement.',
-      ),
-    );
+    financialLockPolicy.evaluate.mockResolvedValue({
+      editable: false,
+      locked: true,
+      endorsementRequired: true,
+      reason: 'Placement is financially locked. Changes require endorsement.',
+      lockSource: 'PREMIUM_PAYMENT',
+    });
     prisma.placement.findFirst.mockResolvedValue({
       ...placement,
       status: PlacementStatus.MARKETING,
@@ -827,6 +829,104 @@ describe('PlacementsService', () => {
       }),
     ).rejects.toThrow(ConflictException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows an unpaid closed placement to reopen to closing', async () => {
+    const closed = {
+      ...placement,
+      status: PlacementStatus.CLOSED,
+    };
+    const reopened = {
+      ...placement,
+      status: PlacementStatus.CLOSING,
+    };
+    prisma.placement.findFirst.mockResolvedValue(closed);
+    prisma.placement.update.mockResolvedValue(reopened);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+
+    const result = await service.changeStatus(user, 'placement-1', {
+      status: PlacementStatus.CLOSING,
+      note: 'Reopen unpaid placement for correction',
+    });
+
+    expect(result.status).toBe(PlacementStatus.CLOSING);
+    const historyArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as {
+      data: {
+        fromStatus: PlacementStatus;
+        toStatus: PlacementStatus;
+      };
+    };
+    expect(historyArgs.data).toMatchObject({
+      fromStatus: PlacementStatus.CLOSED,
+      toStatus: PlacementStatus.CLOSING,
+    });
+    expect(publisher.statusChanged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        previousStatus: PlacementStatus.CLOSED,
+        nextStatus: PlacementStatus.CLOSING,
+      }),
+    );
+  });
+
+  it('blocks reopening a closed placement when financial activity exists', async () => {
+    financialLockPolicy.evaluate.mockResolvedValue({
+      editable: false,
+      locked: true,
+      endorsementRequired: true,
+      reason: 'Placement is financially locked. Changes require endorsement.',
+      lockSource: 'PREMIUM_PAYMENT',
+    });
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      status: PlacementStatus.CLOSED,
+    });
+
+    await expect(
+      service.changeStatus(user, 'placement-1', {
+        status: PlacementStatus.CLOSING,
+      }),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows edits after a closed unpaid placement is reopened to closing', async () => {
+    const closed = {
+      ...placement,
+      status: PlacementStatus.CLOSED,
+    };
+    const reopened = {
+      ...placement,
+      status: PlacementStatus.CLOSING,
+    };
+    const updated = {
+      ...reopened,
+      title: 'Corrected Placement',
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(closed)
+      .mockResolvedValueOnce(reopened);
+    prisma.placement.update
+      .mockResolvedValueOnce(reopened)
+      .mockResolvedValueOnce(updated);
+    prisma.placementStatusHistory.create.mockResolvedValue({
+      id: 'status-history-1',
+    });
+
+    await service.changeStatus(user, 'placement-1', {
+      status: PlacementStatus.CLOSING,
+    });
+    const result = await service.update(user, 'placement-1', {
+      title: 'Corrected Placement',
+    });
+
+    expect(result.title).toBe('Corrected Placement');
+    const updateArgs = prisma.placement.update.mock.calls.at(-1)?.[0] as {
+      data: { title?: string };
+    };
+    expect(updateArgs.data.title).toBe('Corrected Placement');
   });
 
   it('archives only an active record in the current tenant', async () => {

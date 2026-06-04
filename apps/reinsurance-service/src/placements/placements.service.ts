@@ -600,7 +600,7 @@ export class PlacementsService {
     if (existing.status === dto.status) {
       return this.withAggregates(existing);
     }
-    await this.assertEditable(existing);
+    await this.assertStatusChangeAllowed(existing);
     this.assertStatusTransition(existing.status, dto.status);
 
     const placement = await this.prisma.$transaction(async (tx) => {
@@ -1312,6 +1312,15 @@ export class PlacementsService {
     await this.financialLockPolicy.assertArchivable(placement);
   }
 
+  private async assertStatusChangeAllowed(
+    placement: PlacementRecord,
+  ): Promise<void> {
+    const lockStatus = await this.financialLockPolicy.evaluate(placement);
+    if (lockStatus.locked) {
+      throw new ConflictException(lockStatus.reason);
+    }
+  }
+
   private assertStatusTransition(
     from: PlacementStatus,
     to: PlacementStatus,
@@ -1343,7 +1352,7 @@ export class PlacementsService {
         PlacementStatus.CLOSED,
         PlacementStatus.CANCELLED,
       ],
-      [PlacementStatus.CLOSED]: [],
+      [PlacementStatus.CLOSED]: [PlacementStatus.CLOSING],
       [PlacementStatus.DECLINED]: [PlacementStatus.MARKETING],
       [PlacementStatus.CANCELLED]: [],
     };
