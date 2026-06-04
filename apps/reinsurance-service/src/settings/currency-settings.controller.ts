@@ -47,7 +47,7 @@ import { QueryCurrenciesDto } from './dto/query-currencies.dto';
 import { UpdateCurrencyDto } from './dto/update-currency.dto';
 
 @Controller('settings/currencies')
-@ApiTags('Currency Settings')
+@ApiTags('Reinsurance - Currencies')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({

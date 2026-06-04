@@ -63,7 +63,6 @@ import { PlacementPermission } from './placement.permissions';
 import { PlacementsService } from './placements.service';
 
 @Controller('placements')
-@ApiTags('Placements')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({
@@ -84,6 +83,7 @@ export class PlacementsController {
   ) {}
 
   @Get()
+  @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
     summary: 'List active facultative placements',
@@ -121,6 +121,7 @@ export class PlacementsController {
   }
 
   @Post()
+  @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.CREATE)
   @ApiOperation({
     summary: 'Create a facultative placement',
@@ -144,6 +145,7 @@ export class PlacementsController {
   }
 
   @Get(':id')
+  @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({ summary: 'Get an active placement by ID' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
@@ -161,6 +163,7 @@ export class PlacementsController {
   }
 
   @Get(':id/lock-status')
+  @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
     summary: 'Get placement financial lock status',
@@ -185,6 +188,7 @@ export class PlacementsController {
   }
 
   @Get(':id/slips/offer-preview')
+  @ApiTags('Reinsurance - Slip Previews')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
     summary: 'Preview placement offer slip values',
@@ -212,6 +216,7 @@ export class PlacementsController {
   }
 
   @Get(':id/participants/:participantId/slips/closing-preview')
+  @ApiTags('Reinsurance - Slip Previews')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
     summary: 'Preview participant closing slip values',
@@ -251,6 +256,7 @@ export class PlacementsController {
   }
 
   @Get(':id/closings')
+  @ApiTags('Reinsurance - Placement Closings')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
     summary: 'List placement closings',
@@ -274,6 +280,7 @@ export class PlacementsController {
   }
 
   @Get(':id/closings/:closingId')
+  @ApiTags('Reinsurance - Placement Closings')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
     summary: 'Get a placement closing',
@@ -301,6 +308,7 @@ export class PlacementsController {
   }
 
   @Post(':id/participants/:participantId/closings')
+  @ApiTags('Reinsurance - Placement Closings')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
     summary: 'Create a participant closing snapshot',
@@ -341,6 +349,7 @@ export class PlacementsController {
   }
 
   @Patch(':id/closings/:closingId/status')
+  @ApiTags('Reinsurance - Placement Closings')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
     summary: 'Change placement closing status',
@@ -374,6 +383,7 @@ export class PlacementsController {
   }
 
   @Patch(':id')
+  @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
     summary: 'Update an active placement',
@@ -412,6 +422,7 @@ export class PlacementsController {
   }
 
   @Patch(':id/status')
+  @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
     summary: 'Change placement lifecycle status',
@@ -459,6 +470,7 @@ export class PlacementsController {
   }
 
   @Post(':id/participants')
+  @ApiTags('Reinsurance - Placement Participants')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
     summary: 'Add a participant to a placement',
@@ -495,6 +507,7 @@ export class PlacementsController {
   }
 
   @Patch(':id/participants/:participantId')
+  @ApiTags('Reinsurance - Placement Participants')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
     summary: 'Update one placement participant',
@@ -540,6 +553,7 @@ export class PlacementsController {
   }
 
   @Patch(':id/participants/:participantId/status')
+  @ApiTags('Reinsurance - Placement Participants')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
     summary: 'Change one placement participant workflow status',
@@ -591,6 +605,7 @@ export class PlacementsController {
   }
 
   @Delete(':id/participants/:participantId')
+  @ApiTags('Reinsurance - Placement Participants')
   @RequirePermissions(PlacementPermission.EDIT)
   @ApiOperation({
     summary: 'Remove one placement participant',
@@ -628,6 +643,7 @@ export class PlacementsController {
   }
 
   @Delete(':id')
+  @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.DELETE)
   @ApiOperation({
     summary: 'Archive a placement',

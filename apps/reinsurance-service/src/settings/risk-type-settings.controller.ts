@@ -51,7 +51,6 @@ import { RiskClassSettingsPermission } from './risk-class-settings.permissions';
 import { RiskTypeSettingsService } from './risk-type-settings.service';
 
 @Controller('settings/risk-types')
-@ApiTags('Risk Types')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })
@@ -63,6 +62,7 @@ export class RiskTypeSettingsController {
   constructor(private readonly riskTypeService: RiskTypeSettingsService) {}
 
   @Get()
+  @ApiTags('Reinsurance - Risk Types')
   @RequirePermissions(RiskClassSettingsPermission.VIEW)
   @ApiOperation({ summary: 'List risk types' })
   @ApiQuery({ name: 'page', required: false, example: 1 })
@@ -77,6 +77,7 @@ export class RiskTypeSettingsController {
   }
 
   @Post()
+  @ApiTags('Reinsurance - Risk Types')
   @RequirePermissions(RiskClassSettingsPermission.CREATE)
   @ApiOperation({
     summary: 'Create a risk type',
@@ -95,6 +96,7 @@ export class RiskTypeSettingsController {
   }
 
   @Get(':id')
+  @ApiTags('Reinsurance - Risk Types')
   @RequirePermissions(RiskClassSettingsPermission.VIEW)
   @ApiOperation({ summary: 'Get a risk type by ID' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
@@ -108,6 +110,7 @@ export class RiskTypeSettingsController {
   }
 
   @Patch(':id')
+  @ApiTags('Reinsurance - Risk Types')
   @RequirePermissions(RiskClassSettingsPermission.EDIT)
   @ApiOperation({ summary: 'Update a risk type' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
@@ -123,6 +126,7 @@ export class RiskTypeSettingsController {
   }
 
   @Delete(':id')
+  @ApiTags('Reinsurance - Risk Types')
   @RequirePermissions(RiskClassSettingsPermission.DELETE)
   @ApiOperation({ summary: 'Archive a risk type' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
@@ -137,6 +141,7 @@ export class RiskTypeSettingsController {
   }
 
   @Post(':id/fields')
+  @ApiTags('Reinsurance - Risk Type Fields')
   @RequirePermissions(RiskClassSettingsPermission.EDIT)
   @ApiOperation({ summary: 'Add a field to a risk type' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
@@ -153,6 +158,7 @@ export class RiskTypeSettingsController {
   }
 
   @Patch(':id/fields/:fieldId')
+  @ApiTags('Reinsurance - Risk Type Fields')
   @RequirePermissions(RiskClassSettingsPermission.EDIT)
   @ApiOperation({ summary: 'Update a field on a risk type' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
@@ -170,6 +176,7 @@ export class RiskTypeSettingsController {
   }
 
   @Delete(':id/fields/:fieldId')
+  @ApiTags('Reinsurance - Risk Type Fields')
   @RequirePermissions(RiskClassSettingsPermission.DELETE)
   @ApiOperation({ summary: 'Delete a field from a risk type' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
@@ -185,6 +192,7 @@ export class RiskTypeSettingsController {
   }
 
   @Get(':id/form-schema')
+  @ApiTags('Reinsurance - Risk Type Fields')
   @RequirePermissions(RiskClassSettingsPermission.VIEW)
   @ApiOperation({ summary: 'Get form schema for a risk type' })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Risk type ID.' })
