@@ -15,6 +15,7 @@ import {
   downloadPayrollBankFormat,
   downloadPayrollFullFormat,
   downloadPayrollPDFFormat,
+  MONTH_OPTIONS,
 } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
@@ -158,21 +159,6 @@ function DownloadMenu({ run }: { run: PayrollRun }) {
 
 const PAGE_SIZE = 10;
 
-const MONTH_OPTIONS = [
-  { value: '1', label: 'January' },
-  { value: '2', label: 'February' },
-  { value: '3', label: 'March' },
-  { value: '4', label: 'April' },
-  { value: '5', label: 'May' },
-  { value: '6', label: 'June' },
-  { value: '7', label: 'July' },
-  { value: '8', label: 'August' },
-  { value: '9', label: 'September' },
-  { value: '10', label: 'October' },
-  { value: '11', label: 'November' },
-  { value: '12', label: 'December' },
-];
-
 export function PayrollHistoryTab() {
   const router = useRouter();
   const params = useParams<{ tenantSlug: string }>();
@@ -296,6 +282,7 @@ export function PayrollHistoryTab() {
             <div className="w-40">
               <SearchSelect
                 placeholder="Month"
+                size="sm"
                 options={MONTH_OPTIONS}
                 value={monthFilter}
                 onChange={(val) => {
@@ -307,6 +294,7 @@ export function PayrollHistoryTab() {
             <div className="w-32">
               <SearchSelect
                 placeholder="Year"
+                size="sm"
                 options={yearOptions}
                 value={yearFilter}
                 onChange={(val) => {

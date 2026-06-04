@@ -103,6 +103,7 @@ export default function HRManagementLayout({ children }: { children: React.React
         ? [
             { label: 'Appraisal Templates', href: `${base}/appraisal/templates` },
             { label: 'Appraisal Cycles', href: `${base}/appraisal/cycles` },
+            { label: 'Appraisal Settings', href: `${base}/appraisal/settings` },
           ]
         : [],
     },

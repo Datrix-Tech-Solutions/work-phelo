@@ -160,7 +160,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, email, job title..."
-            className="w-full h-9 pl-9 pr-4 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+            className="w-full h-9 pl-9 pr-4 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
           />
         </div>
 

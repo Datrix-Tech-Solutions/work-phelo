@@ -1,5 +1,8 @@
-import type { PayrollRunDetail, PayrollItem } from '@/types/hr';
+import type { PayrollRunDetail, PayrollItem, AllowanceType } from '@/types/hr';
+import type { PayslipCompanyInfo, PayslipEmployeeInfo, PayslipYTD } from '@/types/payroll';
+export type { PayslipCompanyInfo, PayslipEmployeeInfo, PayslipYTD };
 import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
+import type { SearchSelectOption } from '@/components/atoms/SearchSelect';
 
 export const MONTH_NAMES = [
   '',
@@ -20,6 +23,53 @@ export const MONTH_NAMES = [
 export function payrollMonthLabel(month: number, year: number): string {
   return `${MONTH_NAMES[month]} ${year}`;
 }
+
+/** Shared month options for SearchSelect / select fields across payroll UI. */
+export const MONTH_OPTIONS = MONTH_NAMES.slice(1).map((label, i) => ({
+  value: String(i + 1),
+  label,
+}));
+
+// ── Allowance type lists ───────────────────────────────────────────────────────
+
+/** Options for allowance-type SearchSelects (payroll items & company policy forms). */
+export const ALLOWANCE_TYPE_OPTIONS: { value: AllowanceType; label: string }[] = [
+  { value: 'TRANSPORT', label: 'Transport' },
+  { value: 'HOUSING', label: 'Housing' },
+  { value: 'MEDICAL', label: 'Medical' },
+  { value: 'CLOTHING', label: 'Clothing' },
+  { value: 'OTHER', label: 'Other' },
+];
+
+/** Human-readable label for each allowance type. */
+export const ALLOWANCE_TYPE_LABEL: Record<AllowanceType, string> = {
+  TRANSPORT: 'Transport',
+  HOUSING: 'Housing',
+  MEDICAL: 'Medical',
+  CLOTHING: 'Clothing',
+  OTHER: 'Other',
+};
+
+/** Tailwind badge classes for each allowance type. */
+export const ALLOWANCE_TYPE_COLOR: Record<AllowanceType, string> = {
+  TRANSPORT: 'bg-orange-50 text-orange-600',
+  HOUSING: 'bg-blue-50 text-blue-600',
+  MEDICAL: 'bg-emerald-50 text-emerald-600',
+  CLOTHING: 'bg-purple-50 text-purple-600',
+  OTHER: 'bg-gray-100 text-gray-500',
+};
+
+/** Preset allowance name suggestions used in the payroll items panel. */
+export const COMMON_ALLOWANCE_NAMES: SearchSelectOption[] = [
+  { value: 'Transport Allowance', label: 'Transport Allowance' },
+  { value: 'Housing Allowance', label: 'Housing Allowance' },
+  { value: 'Medical Allowance', label: 'Medical Allowance' },
+  { value: 'Lunch Allowance', label: 'Lunch Allowance' },
+  { value: 'Fuel Allowance', label: 'Fuel Allowance' },
+  { value: 'Entertainment Allowance', label: 'Entertainment Allowance' },
+  { value: 'Communication Allowance', label: 'Communication Allowance' },
+  { value: '__other__', label: 'Other' },
+];
 
 function fmtNum(value: string | number | null | undefined): string {
   if (value == null) return '—';
@@ -239,38 +289,6 @@ export async function downloadPayrollPDFFormat(
   }
 
   doc.save(`payroll-${format}-${label}.pdf`);
-}
-
-export interface PayslipCompanyInfo {
-  name: string;
-  email?: string;
-  phone?: string;
-  address?: string;
-}
-
-export interface PayslipEmployeeInfo {
-  firstName: string;
-  lastName: string;
-  employeeNumber?: string;
-  jobTitle?: string;
-  department?: string;
-  tinNumber?: string;
-  ssnit?: string;
-  branchName?: string;
-  branchAddress?: string;
-  branchCity?: string;
-  branchRegion?: string;
-  branchCountry?: string;
-  bankName?: string;
-  bankBranch?: string;
-  bankAccountNumber?: string;
-}
-
-export interface PayslipYTD {
-  grossEarnings: number;
-  ssnitContribution: number;
-  payeTax: number;
-  netPay: number;
 }
 
 function numberToWords(n: number): string {

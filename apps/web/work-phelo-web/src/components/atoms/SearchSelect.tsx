@@ -17,6 +17,8 @@ interface SearchSelectProps {
   value?: string;
   onChange?: (value: string) => void;
   error?: string;
+  /** 'md' (default) keeps the standard py-3 height; 'sm' matches the DataTable search input (py-2). */
+  size?: 'sm' | 'md';
 }
 
 function ChevronDown({ open }: { open: boolean }) {
@@ -32,6 +34,7 @@ export function SearchSelect({
   value,
   onChange,
   error,
+  size = 'md',
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -125,7 +128,10 @@ export function SearchSelect({
           onChange={handleInputChange}
           onFocus={handleFocus}
           placeholder={placeholder}
-          className="flex-1 py-3 text-sm bg-transparent focus:outline-none text-gray-900 placeholder:text-gray-400 min-w-0"
+          className={cn(
+            'flex-1 text-sm bg-transparent focus:outline-none text-gray-900 placeholder:text-gray-400 min-w-0',
+            size === 'sm' ? 'py-2' : 'py-3',
+          )}
         />
 
         <div className="flex items-center gap-1 shrink-0 ml-2">

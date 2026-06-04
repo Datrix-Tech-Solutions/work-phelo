@@ -11,7 +11,6 @@ import { Permission } from '@/lib/permissionMap';
 
 const TABS = [
   { label: 'Employment & Resignation', slug: 'employment' },
-  { label: 'Appraisal Cycle Recipients', slug: 'recipients' },
   { label: 'Company Agreements', slug: 'agreements' },
   { label: 'Finances', slug: 'finances' },
 ];
