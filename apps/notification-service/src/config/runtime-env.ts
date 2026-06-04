@@ -5,13 +5,27 @@ export const notificationRequiredEnvVars = [
   'FRONTEND_BASE_URL',
   'RESEND_API_KEY',
   'RESEND_FROM_EMAIL',
-  'TERMII_API_KEY',
 ] as const;
 
 export function assertNotificationRuntimeEnv(): void {
-  const missing = notificationRequiredEnvVars.filter(
-    (name) => !process.env[name],
-  );
+  const smsProvider = (process.env.SMS_PROVIDER ?? 'termii')
+    .trim()
+    .toLowerCase();
+
+  if (smsProvider !== 'termii' && smsProvider !== 'pilosms') {
+    throw new Error(
+      `Unsupported SMS_PROVIDER "${process.env.SMS_PROVIDER}". Expected "termii" or "pilosms".`,
+    );
+  }
+
+  const providerRequiredEnvVars =
+    smsProvider === 'termii'
+      ? ['TERMII_API_KEY', 'TERMII_SENDER_ID']
+      : ['PILOSMS_API_KEY', 'PILOSMS_SENDER_ID'];
+  const missing = [
+    ...notificationRequiredEnvVars,
+    ...providerRequiredEnvVars,
+  ].filter((name) => !process.env[name]);
 
   if (missing.length > 0) {
     throw new Error(
