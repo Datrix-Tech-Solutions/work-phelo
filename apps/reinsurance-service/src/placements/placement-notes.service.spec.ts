@@ -9,9 +9,13 @@ import {
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
+  PlacementPaymentType,
+  PlacementStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
+import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementNotesService } from './placement-notes.service';
 
 describe('PlacementNotesService', () => {
@@ -127,9 +131,11 @@ describe('PlacementNotesService', () => {
       create: PrismaMethod;
       update: PrismaMethod;
     };
+    placementPayment: { findFirst: PrismaMethod };
     $transaction: jest.Mock;
   };
   let service: PlacementNotesService;
+  let lockPolicy: PlacementFinancialLockPolicy;
 
   beforeEach(() => {
     prisma = {
@@ -145,11 +151,17 @@ describe('PlacementNotesService', () => {
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
       },
+      placementPayment: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+      },
       $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) =>
         callback(prisma),
       ),
     };
     service = new PlacementNotesService(prisma as unknown as PrismaService);
+    lockPolicy = new PlacementFinancialLockPolicy(
+      new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
+    );
   });
 
   it('lists notes for an active tenant placement', async () => {
@@ -211,6 +223,51 @@ describe('PlacementNotesService', () => {
       netAmount: 6750,
     });
     expect(result.noteNumber).toBe('DN-001');
+  });
+
+  it('allows locked placements to generate notes from confirmed closings without unlocking them', async () => {
+    const lockedPlacement = {
+      id: 'placement-1',
+      tenantId: 'tenant-1',
+      status: PlacementStatus.MARKETING,
+    };
+    const paymentDate = new Date('2026-06-04T13:00:00.000Z');
+    prisma.placementPayment.findFirst.mockResolvedValue({
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      paymentDate,
+      createdAt: paymentDate,
+    });
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        grossPremium: new Prisma.Decimal('4500.00'),
+        commissionAmount: new Prisma.Decimal('450.00'),
+        currency: 'USD',
+      },
+    ]);
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue(note);
+
+    await expect(lockPolicy.evaluate(lockedPlacement)).resolves.toMatchObject({
+      locked: true,
+      endorsementRequired: true,
+      lockSource: 'PREMIUM_PAYMENT',
+    });
+
+    await expect(
+      service.createDebitNote(user, 'placement-1'),
+    ).resolves.toMatchObject({
+      id: 'note-1',
+      noteNumber: 'DN-001',
+      type: PlacementNoteType.DEBIT_NOTE,
+    });
+
+    await expect(lockPolicy.evaluate(lockedPlacement)).resolves.toMatchObject({
+      locked: true,
+      endorsementRequired: true,
+      lockSource: 'PREMIUM_PAYMENT',
+    });
   });
 
   it('rejects debit note when no confirmed closing exists', async () => {
