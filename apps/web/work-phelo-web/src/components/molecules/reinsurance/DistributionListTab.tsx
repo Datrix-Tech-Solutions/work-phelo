@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { CreateDistributionPanel } from '@/components/organisms/reinsurance/panels/CreateDistributionPanel';
 import {
@@ -69,38 +69,51 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const [panelOpen, setPanelOpen] = useState(false);
 
-  const reinsurerEmails: Record<string, string[]> = Object.fromEntries(
-    reinsurers.map((r) => {
-      const emails: string[] = [];
-      if (r.email) emails.push(r.email);
-      r.contacts.forEach((c) => {
-        if (c.email) emails.push(c.email);
-      });
-      return [r.id, emails];
-    }),
+  const reinsurerEmails = useMemo<Record<string, string[]>>(
+    () =>
+      Object.fromEntries(
+        reinsurers.map((r) => {
+          const emails: string[] = [];
+          if (r.email) emails.push(r.email);
+          r.contacts.forEach((c) => {
+            if (c.email) emails.push(c.email);
+          });
+          return [r.id, emails];
+        }),
+      ),
+    [reinsurers],
   );
 
-  const toEntries = (participants: typeof placement.participants) =>
-    participants
-      .filter(
-        (p) => p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER',
-      )
-      .map((p) => participantToEntry(p, reinsurerEmails));
-
-  const [entries, setEntries] = useState<DistributionEntry[]>(() =>
-    toEntries(placement.participants),
+  const toEntries = useCallback(
+    (participants: PlacementParticipant[]) =>
+      participants
+        .filter(
+          (p) => p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER',
+        )
+        .map((p) => participantToEntry(p, reinsurerEmails)),
+    [reinsurerEmails],
   );
 
-  // Sync from server after refetch (background reconciliation)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    setEntries(toEntries(placement.participants));
-  }, [placement.participants]);
+  const serverEntries = useMemo(
+    () => toEntries(placement.participants),
+    [placement.participants, toEntries],
+  );
+
+  const [patches, setPatches] = useState<Record<string, Partial<DistributionEntry>>>({});
+  const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+
+  const entries = useMemo(
+    () =>
+      serverEntries
+        .filter((e) => !deletedIds.has(e.id))
+        .map((e) => ({ ...e, ...(patches[e.id] ?? {}) })),
+    [serverEntries, patches, deletedIds],
+  );
 
   const toast = useToastStore.getState;
 
   const patch = (id: string, update: Partial<DistributionEntry>) =>
-    setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, ...update } : e)));
+    setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
 
   const handleAdd = async (newEntries: ReinsurerEntry[]) => {
     const existingIds = new Set(placement.participants.map((p) => p.counterpartyId));
@@ -156,8 +169,13 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleDelete = (row: DistributionEntry) => {
-    setEntries((prev) => prev.filter((e) => e.id !== row.id));
+    setDeletedIds((prev) => new Set([...prev, row.id]));
     deleteParticipant(row.id).catch((error) => {
+      setDeletedIds((prev) => {
+        const s = new Set(prev);
+        s.delete(row.id);
+        return s;
+      });
       toast().addToast({ message: extractError(error), type: 'error' });
     });
   };

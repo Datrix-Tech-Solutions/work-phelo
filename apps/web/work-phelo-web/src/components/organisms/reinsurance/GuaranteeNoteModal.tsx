@@ -3,7 +3,7 @@
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/DocumentPreviewModal';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
-import { useReinsurers } from '@/hooks';
+import { useReinsurers, useCedants } from '@/hooks';
 
 function toLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -47,10 +47,20 @@ export function GuaranteeNoteModal({
   onClose,
 }: GuaranteeNoteModalProps) {
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: cedants = [] } = useCedants();
+
   const reinsurer = reinsurers.find((r) => r.id === counterpartyId);
-  const addr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
-  const reinsurerCity = addr?.city ?? null;
-  const reinsurerRegionCountry = [addr?.state, addr?.country].filter(Boolean).join(' - ') || null;
+  const reinsurerAddr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
+
+  const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
+  const cedantAddr = fullCedant?.addresses?.find((a) => a.isPrimary) ?? fullCedant?.addresses?.[0];
+
+  const displayName = reinsurerCompany || placement.cedant.name;
+  const displayCity = reinsurerAddr?.city ?? cedantAddr?.city ?? null;
+  const displayRegionCountry =
+    [reinsurerAddr?.state, reinsurerAddr?.country].filter(Boolean).join(' - ') ||
+    [cedantAddr?.state, cedantAddr?.country].filter(Boolean).join(' - ') ||
+    null;
   const {
     currency,
     facultativeOffer,
@@ -105,9 +115,9 @@ export function GuaranteeNoteModal({
             })}
           </p>
           <p className="font-medium text-gray-900 mt-2">The Managing Director</p>
-          <p className="text-gray-800">{reinsurerCompany}</p>
-          {reinsurerCity && <p className="text-gray-600">{reinsurerCity}</p>}
-          {reinsurerRegionCountry && <p className="text-gray-600">{reinsurerRegionCountry}</p>}
+          <p className="text-gray-800">{displayName}</p>
+          {displayCity && <p className="text-gray-600">{displayCity}</p>}
+          {displayRegionCountry && <p className="text-gray-600">{displayRegionCountry}</p>}
           <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
         </div>
 
