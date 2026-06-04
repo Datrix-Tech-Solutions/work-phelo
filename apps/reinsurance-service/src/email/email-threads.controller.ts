@@ -44,7 +44,7 @@ import { EmailPermission } from './email.permissions';
 import { EmailThreadsService } from './email-threads.service';
 
 @Controller('email')
-@ApiTags('Email Threads')
+@ApiTags('Reinsurance - Email Threads')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({

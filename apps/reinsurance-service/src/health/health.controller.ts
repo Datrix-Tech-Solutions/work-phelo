@@ -8,7 +8,7 @@ import {
 import { DatabaseReadinessService } from './database-readiness.service';
 
 @Controller('health')
-@ApiTags('Health')
+@ApiTags('Reinsurance - Health')
 export class HealthController {
   constructor(private readonly database: DatabaseReadinessService) {}
 

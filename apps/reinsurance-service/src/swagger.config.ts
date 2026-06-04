@@ -34,6 +34,12 @@ payloads only and do not create PDFs, persist document records or send email.
 Preview calculations intentionally use \`facultativeOffer ?? 0\` when the
 facultative offer is not yet known.
 
+### Placement closings
+Placement closing endpoints persist participant-specific closing snapshots for
+accepted participants. Closings use the lifecycle \`DRAFT → ISSUED → CONFIRMED\`,
+with \`VOID\` available from \`DRAFT\` or \`ISSUED\`. They do not create PDFs,
+document registry entries, emails, payments, debit notes or credit notes.
+
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
 are distinct: \`CLOSED\` placements block direct edits but may reopen to
@@ -57,18 +63,47 @@ pipeline enables it for development only.
       'API Gateway (select when opening docs through the gateway)',
     )
     .addServer('/api', 'Direct reinsurance-service (local development)')
-    .addTag('Health', 'Development and deployment health verification')
-    .addTag('Access', 'Authenticated entitlement and permission verification')
-    .addTag('Counterparties', 'Cedants, reinsurers and brokers')
-    .addTag('Placements', 'Facultative placement lifecycle foundation')
-    .addTag('Risk Classes', 'Risk class settings and nested risk type lists')
-    .addTag('Risk Types', 'Risk types, dynamic fields and form schemas')
     .addTag(
-      'Email Mailboxes',
+      'Reinsurance - Health',
+      'Development and deployment health verification',
+    )
+    .addTag(
+      'Reinsurance - Access',
+      'Authenticated entitlement and permission verification',
+    )
+    .addTag('Reinsurance - Counterparties', 'Cedants, reinsurers and brokers')
+    .addTag(
+      'Reinsurance - Placements',
+      'High-level facultative placement CRUD, detail, status and archive endpoints',
+    )
+    .addTag(
+      'Reinsurance - Placement Participants',
+      'Placement market participant management and participant workflow states',
+    )
+    .addTag(
+      'Reinsurance - Placement Closings',
+      'Persisted participant closing snapshots and closing lifecycle endpoints',
+    )
+    .addTag(
+      'Reinsurance - Slip Previews',
+      'Read-only offer and closing slip preview endpoints',
+    )
+    .addTag(
+      'Reinsurance - Risk Classes',
+      'Risk class settings and nested risk type lists',
+    )
+    .addTag('Reinsurance - Risk Types', 'Risk type CRUD endpoints')
+    .addTag(
+      'Reinsurance - Risk Type Fields',
+      'Dynamic risk type fields and form schema endpoints',
+    )
+    .addTag('Reinsurance - Currencies', 'Tenant currency settings')
+    .addTag(
+      'Reinsurance - Email Mailboxes',
       'Mailbox connectivity, provider verification and metadata sync',
     )
     .addTag(
-      'Email Threads',
+      'Reinsurance - Email Threads',
       'Thread/message metadata and manual placement email links',
     )
     .addCookieAuth('access_token')

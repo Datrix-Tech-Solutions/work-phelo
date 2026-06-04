@@ -19,7 +19,7 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 
 @Controller('access')
-@ApiTags('Access')
+@ApiTags('Reinsurance - Access')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard, ModuleGuard, FeatureGuard, PermissionsGuard)

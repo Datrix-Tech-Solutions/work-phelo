@@ -47,7 +47,7 @@ import { RiskClassSettingsPermission } from './risk-class-settings.permissions';
 import { RiskClassSettingsService } from './risk-class-settings.service';
 
 @Controller('settings/risk-classes')
-@ApiTags('Risk Classes')
+@ApiTags('Reinsurance - Risk Classes')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({ type: ApiErrorResponseDto })

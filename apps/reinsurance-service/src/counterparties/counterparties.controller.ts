@@ -47,7 +47,7 @@ import { QueryCounterpartiesDto } from './dto/query-counterparties.dto';
 import { UpdateCounterpartyDto } from './dto/update-counterparty.dto';
 
 @Controller('counterparties')
-@ApiTags('Counterparties')
+@ApiTags('Reinsurance - Counterparties')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({

@@ -46,7 +46,7 @@ import { EmailSettingsPermission } from './email.permissions';
 import { EmailMailboxService } from './email-mailbox.service';
 
 @Controller('email/mailboxes')
-@ApiTags('Email Mailboxes')
+@ApiTags('Reinsurance - Email Mailboxes')
 @ApiCookieAuth('access_token')
 @ApiBearerAuth('access-token')
 @ApiUnauthorizedResponse({

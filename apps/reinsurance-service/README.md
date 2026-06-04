@@ -355,6 +355,45 @@ Closing preview requires:
 If `facultativeOffer` is omitted, preview calculations use
 `facultativeOffer ?? 0`.
 
+## Placement Closing API
+
+Placement closings persist participant-specific financial snapshots after a
+participant has accepted a signed line. They are not PDFs and they do not create
+document registry entries, emails, payments, debit notes or credit notes.
+
+```text
+GET    /api/v1/operations/reinsurance/placements/:id/closings
+GET    /api/v1/operations/reinsurance/placements/:id/closings/:closingId
+POST   /api/v1/operations/reinsurance/placements/:id/participants/:participantId/closings
+PATCH  /api/v1/operations/reinsurance/placements/:id/closings/:closingId/status
+```
+
+Closing creation rules:
+
+- `placement.premium` is required because premium values are snapshotted.
+- Participant status must be `ACCEPTED`.
+- Participant `signedLinePercent` must be greater than `0`.
+- Only one active closing is allowed per participant per placement.
+- Active means `status !== VOID`; a new closing can be created after the
+  previous one is voided.
+- Closing numbers use `CLO-001`, `CLO-002`, etc. scoped to the placement.
+
+Closing lifecycle:
+
+| Status      | Meaning                                     | Allowed next statuses |
+| ----------- | ------------------------------------------- | --------------------- |
+| `DRAFT`     | Snapshot created, not issued.               | `ISSUED`, `VOID`      |
+| `ISSUED`    | Closing has been issued to the participant. | `CONFIRMED`, `VOID`   |
+| `CONFIRMED` | Closing is confirmed by the participant.    | terminal              |
+| `VOID`      | Closing was voided and is no longer active. | terminal              |
+
+Closing responses include participant and reinsurer summaries plus decimal-safe
+snapshot values as strings: `signedLinePercent`, `sharePercent`,
+`grossPremium`, `commissionPercent`, `commissionAmount`, `brokeragePercent`,
+`brokerageAmount`, `netPremium` and `currency`. These values are captured at
+creation time and should be displayed as the closing record, not recomputed from
+the current placement or participant.
+
 ## Risk Settings API
 
 Frontend integrations should use the explicit Risk Class and Risk Type routes:
