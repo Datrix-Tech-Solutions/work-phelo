@@ -21,6 +21,8 @@ The service foundation currently provides:
   PlacementStatusHistory persistence built on active Counterparties.
 - Participant workflow, placement lifecycle transitions and capacity
   validation.
+- Financial lock policy foundation for direct-edit gating before payments,
+  endorsements, claims and accounting records are introduced.
 - Read-only offer and closing slip preview endpoints that mirror the current
   frontend formulas.
 - Email technical foundation for mailbox connection metadata, provider
@@ -66,6 +68,7 @@ The gateway forwards these routes under
 | `GET`    | `/api/placements`                                                       | `operations.reinsurance.placements:VIEW`   |
 | `POST`   | `/api/placements`                                                       | `operations.reinsurance.placements:CREATE` |
 | `GET`    | `/api/placements/:id`                                                   | `operations.reinsurance.placements:VIEW`   |
+| `GET`    | `/api/placements/:id/lock-status`                                       | `operations.reinsurance.placements:VIEW`   |
 | `PATCH`  | `/api/placements/:id`                                                   | `operations.reinsurance.placements:EDIT`   |
 | `PATCH`  | `/api/placements/:id/status`                                            | `operations.reinsurance.placements:EDIT`   |
 | `POST`   | `/api/placements/:id/participants`                                      | `operations.reinsurance.placements:EDIT`   |
@@ -155,6 +158,42 @@ timestamp, from/to status and an optional note.
 
 `CLOSED` placements cannot be archived either. Archive is only permitted when
 the placement is not `CLOSED`.
+
+### Financial lock policy
+
+The financial lock policy answers whether a placement can still be directly
+edited or whether a future endorsement workflow is required. It is exposed on
+placement detail responses and through:
+
+```http
+GET /api/v1/operations/reinsurance/placements/:id/lock-status
+```
+
+Response shape:
+
+```json
+{
+  "editable": true,
+  "locked": false,
+  "endorsementRequired": false,
+  "reason": "Placement has no financial activity and can be edited.",
+  "lockSource": "NONE"
+}
+```
+
+Lifecycle locks and financial locks are intentionally separate:
+
+- `CLOSED` and `CANCELLED` remain lifecycle-terminal and block direct edits.
+- Actual payment or settlement activity will financially lock a placement.
+- Debit note issuance alone is not a hard lock in the MVP policy; issued notes
+  may be cancelled/reissued before payment.
+- Offer and closing slip previews are read-only and remain available even when
+  mutation actions are blocked.
+- When `locked=true`, direct placement and participant mutations return `409`
+  with `Placement is financially locked. Changes require endorsement.`
+
+The current PR only introduces the policy seam. Payment, receivable, payable,
+debit note, credit note, claim and endorsement entities are deferred.
 
 ### Participant status meanings
 

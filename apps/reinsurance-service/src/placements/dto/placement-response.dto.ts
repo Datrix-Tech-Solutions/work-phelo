@@ -7,6 +7,7 @@ import {
   PlacementType,
 } from '../../../prisma/generated/client';
 import { ApiErrorResponseDto } from '../../counterparties/dto/counterparty-response.dto';
+import { PlacementLockStatusDto } from './placement-lock-status.dto';
 
 export { ApiErrorResponseDto };
 
@@ -292,6 +293,13 @@ export class PlacementResponseDto {
 
   @ApiProperty({ type: [PlacementStatusHistoryResponseDto] })
   statusHistory!: PlacementStatusHistoryResponseDto[];
+
+  @ApiPropertyOptional({
+    type: PlacementLockStatusDto,
+    description:
+      'Included on placement detail responses. Use for frontend action gating; list responses may omit it.',
+  })
+  lockStatus?: PlacementLockStatusDto;
 
   @ApiProperty({ format: 'uuid' })
   createdByUserId!: string;

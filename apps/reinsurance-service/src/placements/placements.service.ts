@@ -20,11 +20,13 @@ import { PlacementEventPublisher } from '../messaging/placement-event.publisher'
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
+import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
 import { UpdatePlacementParticipantStatusDto } from './dto/update-placement-participant-status.dto';
 import { UpdatePlacementParticipantDto } from './dto/update-placement-participant.dto';
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
+import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 
 const placementInclude = {
   cedant: {
@@ -110,6 +112,7 @@ type PlacementWithAggregates = PlacementRecord & {
   totalOfferedPercent: number;
   totalAcceptedPercent: number;
   remainingPercent: number;
+  lockStatus?: PlacementLockStatusDto;
 };
 
 type PlacementParticipantRecord = PlacementRecord['participants'][number];
@@ -137,6 +140,7 @@ export class PlacementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly publisher: PlacementEventPublisher,
+    private readonly financialLockPolicy: PlacementFinancialLockPolicy,
   ) {}
 
   async findAll(tenantId: string, query: QueryPlacementsDto) {
@@ -213,7 +217,23 @@ export class PlacementsService {
       throw new NotFoundException('Placement not found');
     }
 
-    return this.withAggregates(placement);
+    return this.withLockStatus(
+      this.withAggregates(placement),
+      await this.financialLockPolicy.evaluate(placement),
+    );
+  }
+
+  async getLockStatus(tenantId: string, id: string) {
+    const placement = await this.prisma.placement.findFirst({
+      where: { id, tenantId, archivedAt: null },
+      select: { id: true, tenantId: true, status: true },
+    });
+
+    if (!placement) {
+      throw new NotFoundException('Placement not found');
+    }
+
+    return this.financialLockPolicy.evaluate(placement);
   }
 
   async getOfferSlipPreview(tenantId: string, id: string) {
@@ -413,7 +433,7 @@ export class PlacementsService {
           : existing.facultativeOffer;
       this.assertAcceptedCap(dto.participants, effectiveCap);
     }
-    this.assertEditable(existing);
+    await this.assertEditable(existing);
 
     // Resolve riskTypeId update
     let riskTypePatch:
@@ -580,6 +600,7 @@ export class PlacementsService {
     if (existing.status === dto.status) {
       return this.withAggregates(existing);
     }
+    await this.assertEditable(existing);
     this.assertStatusTransition(existing.status, dto.status);
 
     const placement = await this.prisma.$transaction(async (tx) => {
@@ -627,7 +648,7 @@ export class PlacementsService {
     id: string,
   ): Promise<PlacementWithAggregates> {
     const existing = await this.findOne(user.tenantId, id);
-    this.assertArchivable(existing);
+    await this.assertArchivable(existing);
     const placement = await this.prisma.placement.update({
       where: {
         id_tenantId: { id, tenantId: user.tenantId },
@@ -654,7 +675,7 @@ export class PlacementsService {
     dto: CreatePlacementParticipantDto,
   ): Promise<PlacementWithAggregates> {
     const existing = await this.findOne(user.tenantId, placementId);
-    this.assertEditable(existing);
+    await this.assertEditable(existing);
     await this.assertParticipants(user.tenantId, [dto]);
     this.assertParticipantCollection(
       [...existing.participants, this.toCapacityInput(dto)],
@@ -703,7 +724,7 @@ export class PlacementsService {
     }
 
     const existing = await this.findOne(user.tenantId, placementId);
-    this.assertEditable(existing);
+    await this.assertEditable(existing);
     const participant = this.assertPlacementParticipant(
       existing,
       participantId,
@@ -764,7 +785,7 @@ export class PlacementsService {
     participantId: string,
   ): Promise<PlacementWithAggregates> {
     const existing = await this.findOne(user.tenantId, placementId);
-    this.assertEditable(existing);
+    await this.assertEditable(existing);
     const participant = this.assertPlacementParticipant(
       existing,
       participantId,
@@ -793,7 +814,7 @@ export class PlacementsService {
     dto: UpdatePlacementParticipantStatusDto,
   ): Promise<PlacementWithAggregates> {
     const existing = await this.findOne(user.tenantId, placementId);
-    this.assertEditable(existing);
+    await this.assertEditable(existing);
     const participant = this.assertPlacementParticipant(
       existing,
       participantId,
@@ -1283,21 +1304,12 @@ export class PlacementsService {
     }
   }
 
-  private assertEditable(placement: PlacementRecord): void {
-    if (
-      placement.status === PlacementStatus.CLOSED ||
-      placement.status === PlacementStatus.CANCELLED
-    ) {
-      throw new BadRequestException(
-        `Cannot edit a ${placement.status} placement`,
-      );
-    }
+  private async assertEditable(placement: PlacementRecord): Promise<void> {
+    await this.financialLockPolicy.assertEditable(placement);
   }
 
-  private assertArchivable(placement: PlacementRecord): void {
-    if (placement.status === PlacementStatus.CLOSED) {
-      throw new BadRequestException('Cannot archive a closed placement');
-    }
+  private async assertArchivable(placement: PlacementRecord): Promise<void> {
+    await this.financialLockPolicy.assertArchivable(placement);
   }
 
   private assertStatusTransition(
@@ -1485,6 +1497,16 @@ export class PlacementsService {
     return {
       ...placement,
       ...aggregates,
+    };
+  }
+
+  private withLockStatus(
+    placement: PlacementWithAggregates,
+    lockStatus: PlacementLockStatusDto,
+  ): PlacementWithAggregates {
+    return {
+      ...placement,
+      lockStatus,
     };
   }
 
