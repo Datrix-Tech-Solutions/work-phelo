@@ -11,9 +11,12 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClaimAllocationCalculator } from './claim-allocation.calculator';
+import { ClosingSnapshotReader } from './closing-snapshot.reader';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 
 describe('PlacementClaimsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
@@ -87,6 +90,7 @@ describe('PlacementClaimsService', () => {
   };
   let service: PlacementClaimsService;
   let lockPolicy: PlacementFinancialLockPolicy;
+  let money: ReinsuranceMoneyHelper;
 
   beforeEach(() => {
     prisma = {
@@ -119,7 +123,13 @@ describe('PlacementClaimsService', () => {
         callback(prisma),
       ),
     };
-    service = new PlacementClaimsService(prisma as unknown as PrismaService);
+    money = new ReinsuranceMoneyHelper();
+    service = new PlacementClaimsService(
+      prisma as unknown as PrismaService,
+      new ClosingSnapshotReader(money),
+      new ClaimAllocationCalculator(money),
+      money,
+    );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
     );
@@ -307,6 +317,13 @@ describe('PlacementClaimsService', () => {
         id: 'closing-1',
         participantId: 'participant-1',
         signedLinePercent: new Prisma.Decimal('40.0000'),
+        grossPremium: new Prisma.Decimal('4500.00'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('450.00'),
+        brokeragePercent: new Prisma.Decimal('7.5000'),
+        brokerageAmount: new Prisma.Decimal('337.50'),
+        netPremium: new Prisma.Decimal('3712.50'),
+        currency: 'GHS',
         participant: { counterpartyId: 'reinsurer-1' },
       },
     ]);
@@ -315,6 +332,13 @@ describe('PlacementClaimsService', () => {
         id: 'endorsement-closing-1',
         endorsementParticipantId: 'endorsement-participant-1',
         signedLinePercent: new Prisma.Decimal('10.0000'),
+        premiumSnapshot: new Prisma.Decimal('1200.00'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('120.00'),
+        brokeragePercent: new Prisma.Decimal('7.5000'),
+        brokerageAmount: new Prisma.Decimal('90.00'),
+        netPremium: new Prisma.Decimal('990.00'),
+        currency: 'GHS',
         endorsementParticipant: { counterpartyId: 'reinsurer-2' },
       },
     ]);

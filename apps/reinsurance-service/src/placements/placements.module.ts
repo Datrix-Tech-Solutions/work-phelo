@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { ClaimAllocationCalculator } from './claim-allocation.calculator';
+import { ClosingSnapshotReader } from './closing-snapshot.reader';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementClaimsService } from './placement-claims.service';
@@ -12,6 +14,7 @@ import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
+import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 
 @Module({
   imports: [PrismaModule, RabbitMQModule],
@@ -27,6 +30,9 @@ import { PlacementsService } from './placements.service';
     PlacementPaymentsService,
     PlacementFinancialActivityReader,
     PlacementFinancialLockPolicy,
+    ReinsuranceMoneyHelper,
+    ClosingSnapshotReader,
+    ClaimAllocationCalculator,
   ],
   exports: [PlacementsService],
 })

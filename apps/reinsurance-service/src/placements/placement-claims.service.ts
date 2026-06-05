@@ -8,13 +8,18 @@ import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClaimAllocationStatus,
   PlacementClaimStatus,
-  PlacementClosingStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ClaimAllocationCalculator } from './claim-allocation.calculator';
+import {
+  ClosingSnapshot,
+  ClosingSnapshotReader,
+} from './closing-snapshot.reader';
 import { CreatePlacementClaimDto } from './dto/create-placement-claim.dto';
 import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
 import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
+import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 
 const claimAllocationInclude = {
   counterparty: {
@@ -48,7 +53,12 @@ type PlacementClaimAllocationRecord =
 
 @Injectable()
 export class PlacementClaimsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly closingSnapshotReader: ClosingSnapshotReader,
+    private readonly claimAllocationCalculator: ClaimAllocationCalculator,
+    private readonly money: ReinsuranceMoneyHelper,
+  ) {}
 
   async findAll(
     tenantId: string,
@@ -229,71 +239,30 @@ export class PlacementClaimsService {
         );
       }
 
-      const placementClosings = await tx.placementClosing.findMany({
-        where: {
-          tenantId: user.tenantId,
-          placementId,
-          status: PlacementClosingStatus.CONFIRMED,
-        },
-        select: {
-          id: true,
-          participantId: true,
-          signedLinePercent: true,
-          participant: {
-            select: {
-              counterpartyId: true,
-            },
-          },
-        },
-      });
-      const endorsementClosings = await tx.placementEndorsementClosing.findMany(
-        {
-          where: {
-            tenantId: user.tenantId,
-            placementId,
-            status: PlacementClosingStatus.CONFIRMED,
-          },
-          select: {
-            id: true,
-            endorsementParticipantId: true,
-            signedLinePercent: true,
-            endorsementParticipant: {
-              select: {
-                counterpartyId: true,
-              },
-            },
-          },
-        },
+      const snapshots = await this.closingSnapshotReader.findConfirmedSnapshots(
+        tx,
+        user.tenantId,
+        placementId,
       );
 
-      const estimatedLossAmount = this.toNumber(claim.estimatedLossAmount);
-      const finalLossAmount = this.toOptionalNumber(claim.finalLossAmount);
-      const basisAmount = finalLossAmount ?? estimatedLossAmount;
+      const estimatedLossAmount = this.money.toNumber(
+        claim.estimatedLossAmount,
+      );
+      const finalLossAmount = this.money.toOptionalNumber(
+        claim.finalLossAmount,
+      );
 
-      const data: Prisma.PlacementClaimAllocationCreateManyInput[] = [
-        ...placementClosings.map((closing) =>
-          this.buildPlacementClosingAllocation({
+      const data: Prisma.PlacementClaimAllocationCreateManyInput[] =
+        snapshots.map((snapshot) =>
+          this.buildAllocation({
             tenantId: user.tenantId,
             placementId,
             claimId,
-            closing,
+            snapshot,
             estimatedLossAmount,
             finalLossAmount,
-            basisAmount,
           }),
-        ),
-        ...endorsementClosings.map((closing) =>
-          this.buildEndorsementClosingAllocation({
-            tenantId: user.tenantId,
-            placementId,
-            claimId,
-            closing,
-            estimatedLossAmount,
-            finalLossAmount,
-            basisAmount,
-          }),
-        ),
-      ];
+        );
 
       if (data.length === 0) {
         throw new BadRequestException(
@@ -386,74 +355,36 @@ export class PlacementClaimsService {
     }
   }
 
-  private buildPlacementClosingAllocation(input: {
+  private buildAllocation(input: {
     tenantId: string;
     placementId: string;
     claimId: string;
-    closing: {
-      id: string;
-      participantId: string;
-      signedLinePercent: Prisma.Decimal;
-      participant: { counterpartyId: string };
-    };
+    snapshot: ClosingSnapshot;
     estimatedLossAmount: number;
     finalLossAmount: number | null;
-    basisAmount: number;
   }): Prisma.PlacementClaimAllocationCreateManyInput {
-    const signedLinePercent = this.toNumber(input.closing.signedLinePercent);
-    return {
-      tenantId: input.tenantId,
-      placementId: input.placementId,
-      claimId: input.claimId,
-      placementClosingId: input.closing.id,
-      participantId: input.closing.participantId,
-      counterpartyId: input.closing.participant.counterpartyId,
-      signedLinePercent,
-      basisAmount: this.roundMoney(input.basisAmount),
-      allocatedEstimatedLossAmount: this.roundMoney(
-        (input.estimatedLossAmount * signedLinePercent) / 100,
-      ),
-      allocatedFinalLossAmount:
-        input.finalLossAmount === null
-          ? null
-          : this.roundMoney((input.finalLossAmount * signedLinePercent) / 100),
-      cashCallAmount: null,
-      paidAmount: null,
-      status: PlacementClaimAllocationStatus.DRAFT,
-    };
-  }
+    const calculation = this.claimAllocationCalculator.calculateFromSnapshot({
+      estimatedLossAmount: input.estimatedLossAmount,
+      finalLossAmount: input.finalLossAmount,
+      signedLinePercent: input.snapshot.signedLinePercent,
+    });
 
-  private buildEndorsementClosingAllocation(input: {
-    tenantId: string;
-    placementId: string;
-    claimId: string;
-    closing: {
-      id: string;
-      endorsementParticipantId: string;
-      signedLinePercent: Prisma.Decimal;
-      endorsementParticipant: { counterpartyId: string };
-    };
-    estimatedLossAmount: number;
-    finalLossAmount: number | null;
-    basisAmount: number;
-  }): Prisma.PlacementClaimAllocationCreateManyInput {
-    const signedLinePercent = this.toNumber(input.closing.signedLinePercent);
     return {
       tenantId: input.tenantId,
       placementId: input.placementId,
       claimId: input.claimId,
-      endorsementClosingId: input.closing.id,
-      endorsementParticipantId: input.closing.endorsementParticipantId,
-      counterpartyId: input.closing.endorsementParticipant.counterpartyId,
-      signedLinePercent,
-      basisAmount: this.roundMoney(input.basisAmount),
-      allocatedEstimatedLossAmount: this.roundMoney(
-        (input.estimatedLossAmount * signedLinePercent) / 100,
-      ),
-      allocatedFinalLossAmount:
-        input.finalLossAmount === null
-          ? null
-          : this.roundMoney((input.finalLossAmount * signedLinePercent) / 100),
+      ...(input.snapshot.sourceType === 'PLACEMENT_CLOSING'
+        ? {
+            placementClosingId: input.snapshot.closingId,
+            participantId: input.snapshot.participantId,
+          }
+        : {
+            endorsementClosingId: input.snapshot.closingId,
+            endorsementParticipantId: input.snapshot.endorsementParticipantId,
+          }),
+      counterpartyId: input.snapshot.counterpartyId,
+      signedLinePercent: input.snapshot.signedLinePercent,
+      ...calculation,
       cashCallAmount: null,
       paidAmount: null,
       status: PlacementClaimAllocationStatus.DRAFT,
@@ -484,25 +415,5 @@ export class PlacementClaimsService {
   private cleanOptional(value: string | undefined): string | null {
     const cleaned = value?.trim();
     return cleaned ? cleaned : null;
-  }
-
-  private toNumber(
-    value: Prisma.Decimal | number | string | null | undefined,
-  ): number {
-    if (value === null || value === undefined) return 0;
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    const parsed = Number(value.toString());
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  private toOptionalNumber(
-    value: Prisma.Decimal | number | string | null | undefined,
-  ): number | null {
-    if (value === null || value === undefined) return null;
-    return this.toNumber(value);
-  }
-
-  private roundMoney(value: number): number {
-    return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 }
