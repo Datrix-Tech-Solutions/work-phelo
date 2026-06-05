@@ -101,13 +101,13 @@ export function RunPayrollPanel({
         notes: notes.trim() || undefined,
       });
 
-      const itemsToUpdate = run.items.filter((item) => overrides[item.employeeId]);
-      if (itemsToUpdate.length > 0) {
-        for (const item of itemsToUpdate) {
+      for (const item of run.items) {
+        const override = overrides[item.employeeId];
+        if (override) {
           await updateItem({
             payrollRunId: run.id,
             itemId: item.id,
-            data: overrides[item.employeeId],
+            data: override,
           });
         }
       }
