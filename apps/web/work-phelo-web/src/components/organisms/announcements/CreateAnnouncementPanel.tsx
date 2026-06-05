@@ -9,13 +9,17 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
-import { useCreateAnnouncement, useUpdateAnnouncement } from '@/hooks';
+import { useCreateAnnouncement } from '@/hooks';
 import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import type { Announcement, AnnouncementAudienceType } from '@/types/hr';
+import type {
+  Announcement,
+  AnnouncementAudienceType,
+  AnnouncementDeliveryChannel,
+} from '@/types/hr';
 
 interface AnnouncementForm {
   title: string;
@@ -49,13 +53,24 @@ const AUDIENCE_SUMMARY: Record<AnnouncementAudienceType, string> = {
   EMPLOYEES: 'the selected employees',
 };
 
+const SMS_DELIVERY_ENABLED = process.env.NEXT_PUBLIC_ENABLE_ANNOUNCEMENT_SMS === 'true';
+
+function buildDeliveryChannels(
+  sendEmail: boolean,
+  sendSMS: boolean,
+): AnnouncementDeliveryChannel[] {
+  return [
+    'IN_APP',
+    ...(sendEmail ? (['EMAIL'] as const) : []),
+    ...(sendSMS && SMS_DELIVERY_ENABLED ? (['SMS'] as const) : []),
+  ];
+}
+
 export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props) {
-  const isEdit = !!announcement;
   const [confirmOpen, setConfirmOpen] = useState(false);
   const toast = useToast();
   const { mutate: createAnnouncement, isPending: isCreating } = useCreateAnnouncement();
-  const { mutate: updateAnnouncement, isPending: isUpdating } = useUpdateAnnouncement();
-  const isPending = isCreating || isUpdating;
+  const isPending = isCreating;
 
   const { data: departmentOptions = [] } = useDepartmentOptions();
   const { data: branchOptions = [] } = useBranchOptions();
@@ -82,12 +97,13 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
 
   useEffect(() => {
     if (isOpen) {
+      const channels = announcement?.deliveryChannels ?? ['IN_APP'];
       reset({
         title: announcement?.title ?? '',
         body: announcement?.body ?? '',
         expiresAt: announcement?.expiresAt ?? undefined,
-        sendEmail: announcement?.sendEmail ?? false,
-        sendSMS: announcement?.sendSms ?? false,
+        sendEmail: channels.includes('EMAIL') || announcement?.sendEmail === true,
+        sendSMS: SMS_DELIVERY_ENABLED && channels.includes('SMS'),
         audienceType: announcement?.audienceType ?? 'ALL',
         departmentIds: announcement?.targetDepartmentIds ?? [],
         branchIds: announcement?.targetBranchIds ?? [],
@@ -114,8 +130,7 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
     const payload = {
       title: formValues.title,
       body: formValues.body,
-      sendEmail: formValues.sendEmail,
-      sendSms: formValues.sendSMS,
+      deliveryChannels: buildDeliveryChannels(formValues.sendEmail, formValues.sendSMS),
       audienceType: formValues.audienceType,
       ...(formValues.expiresAt ? { expiresAt: formValues.expiresAt } : {}),
       ...(formValues.audienceType === 'DEPARTMENTS'
@@ -125,27 +140,13 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
       ...(formValues.audienceType === 'EMPLOYEES' ? { employeeIds: formValues.employeeIds } : {}),
     };
 
-    if (isEdit) {
-      updateAnnouncement(
-        { id: announcement!.id, dto: payload },
-        {
-          onSuccess: () => {
-            toast.success('Announcement updated');
-            handleClose();
-          },
-          onError: (err: unknown) =>
-            toast.error(extractError(err, 'Failed to update announcement')),
-        },
-      );
-    } else {
-      createAnnouncement(payload, {
-        onSuccess: () => {
-          toast.success('Announcement created');
-          handleClose();
-        },
-        onError: (err: unknown) => toast.error(extractError(err, 'Failed to create announcement')),
-      });
-    }
+    createAnnouncement(payload, {
+      onSuccess: () => {
+        toast.success('Announcement created');
+        handleClose();
+      },
+      onError: (err: unknown) => toast.error(extractError(err, 'Failed to create announcement')),
+    });
   };
 
   return (
@@ -153,23 +154,15 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
       <SidePanel
         isOpen={isOpen}
         onClose={handleClose}
-        title={isEdit ? 'Edit Announcement' : 'New Announcement'}
-        description={
-          isEdit
-            ? 'Update this announcement.'
-            : 'Compose and send an announcement to your organisation.'
-        }
+        title="New Announcement"
+        description="Compose and send an announcement to your organisation."
         footer={
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button
-              isLoading={isPending}
-              loadingText={isEdit ? 'Saving…' : 'Sending…'}
-              onClick={onSendClick}
-            >
-              {isEdit ? 'Save Changes' : 'Send Message'}
+            <Button isLoading={isPending} loadingText="Sending…" onClick={onSendClick}>
+              Send Message
             </Button>
           </div>
         }
@@ -295,7 +288,12 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
 
           <label className="flex items-start gap-3 cursor-pointer group">
             <div className="relative mt-0.5 shrink-0">
-              <input type="checkbox" className="sr-only peer" {...register('sendSMS')} />
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                disabled={!SMS_DELIVERY_ENABLED}
+                {...register('sendSMS')}
+              />
               <div className="w-5 h-5 rounded border-2 border-gray-300 bg-white peer-checked:bg-brand peer-checked:border-brand transition-colors group-hover:border-gray-400 flex items-center justify-center">
                 {sendSMS && (
                   <svg
@@ -313,7 +311,9 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
             <div>
               <p className="text-sm font-bold text-gray-900">Notify via SMS</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                Send this announcement to employees&apos; phone number.
+                {SMS_DELIVERY_ENABLED
+                  ? "Send this announcement to employees' phone numbers."
+                  : 'SMS delivery will be enabled after provider configuration.'}
               </p>
             </div>
           </label>
@@ -323,19 +323,15 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
       <Modal
         isOpen={confirmOpen}
         onClose={() => !isPending && setConfirmOpen(false)}
-        title={isEdit ? 'Save Changes?' : 'Send Announcement?'}
+        title="Send Announcement?"
         description={`This announcement will be sent to ${AUDIENCE_SUMMARY[audienceType]}. Are you sure you want to proceed?`}
         footer={
           <>
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={isPending}>
               Cancel
             </Button>
-            <Button
-              isLoading={isPending}
-              loadingText={isEdit ? 'Saving…' : 'Sending…'}
-              onClick={onConfirmSend}
-            >
-              {isEdit ? 'Save' : 'Send'}
+            <Button isLoading={isPending} loadingText="Sending…" onClick={onConfirmSend}>
+              Send
             </Button>
           </>
         }
