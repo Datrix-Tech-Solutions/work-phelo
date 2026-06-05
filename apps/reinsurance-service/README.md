@@ -205,10 +205,9 @@ Lifecycle locks and financial locks are intentionally separate:
 - When `locked=true`, direct placement and participant mutations return `409`
   with `Placement is financially locked. Changes require endorsement.`
 
-Payment records now provide the lock source. Debit/credit notes and the
-endorsement foundation are available; receivable, payable, endorsement
-participants, endorsement closings, endorsement financials and claims remain
-deferred.
+Payment records now provide the lock source. Debit/credit notes, endorsement
+foundation, endorsement participants and endorsement closings are available;
+receivable, payable, endorsement notes/payments and claims remain deferred.
 
 ## Placement Endorsement API
 
@@ -217,13 +216,16 @@ placement. They may be created once at least one placement closing exists. Befor
 payment, direct placement edits are still allowed but a broker may create an
 endorsement to formally version/document a change. After first payment, direct
 edits are financially locked and endorsement becomes mandatory for business
-changes. PR1 creates the endorsement seam only; it does not add endorsement
-participants, closings, notes, payments, claims, accounting, PDFs, emails or
-frontend changes.
+changes. Endorsements do not add notes, payments, claims, accounting, PDFs,
+emails or frontend changes.
 
 PR2 adds endorsement-scoped participants. These are separate market response
 records for the endorsement only; they do not alter original placement
 participants.
+
+PR3 adds endorsement-scoped closings created from accepted endorsement
+participants. These closings snapshot endorsement version values and never
+mutate original placement closings, participants, payments or notes.
 
 ```text
 GET   /api/v1/operations/reinsurance/placements/:id/endorsements
@@ -240,8 +242,10 @@ Core rules:
 - Endorsements never mutate the original placement, participants, closings,
   payments or notes.
 - The backend captures `originalSnapshot` when the endorsement is created.
-- `proposedSnapshot` and `changeSummary` are stored as JSON for future workflow
-  and frontend review; PR1 does not calculate from these JSON values.
+- `proposedSnapshot` and `changeSummary` are stored as JSON for workflow and
+  frontend review. Endorsement closings snapshot financial values from
+  `proposedSnapshot` with fallback to `originalSnapshot.placement` for
+  unchanged fields.
 - Endorsement numbers use `END-001`, `END-002`, etc. scoped to the placement.
 - Only `DRAFT` endorsements can be edited directly.
 - `CLOSED`, `DECLINED` and `VOID` endorsements are terminal.
@@ -343,6 +347,49 @@ Validation rules:
 | `ACCEPTED`   | `QUOTED`, `DECLINED`, `CLOSED`       |
 | `DECLINED`   | `OFFER_SENT`                         |
 | `CLOSED`     | — (terminal)                         |
+
+## Placement Endorsement Closings API
+
+Endorsement closings represent accepted endorsement business. They are separate
+endorsement-scoped snapshots and do not mutate original `PlacementClosing`,
+`PlacementParticipant`, `PlacementPayment` or `PlacementNote` records.
+
+```text
+GET   /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/closings
+GET   /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/closings/:closingId
+POST  /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/participants/:participantId/closings
+PATCH /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/closings/:closingId/status
+```
+
+Creation rules:
+
+- The endorsement must belong to the placement and authenticated tenant.
+- `VOID` endorsements cannot create endorsement closings.
+- The endorsement participant must belong to the same endorsement and placement.
+- The endorsement participant must be `ACCEPTED`.
+- `signedLinePercent` must be greater than `0`.
+- Only one active endorsement closing is allowed per endorsement participant.
+  Active means status is not `VOID`; after VOID, a new closing can be issued.
+
+Snapshot rules:
+
+- Endorsement closings use endorsement snapshot values, not live placement
+  values.
+- `proposedSnapshot` takes precedence, with fallback to
+  `originalSnapshot.placement` for unchanged values.
+- `premiumSnapshot` is the accepted participant allocation:
+  `(signedLinePercent / 100) × endorsementPremiumSnapshot`.
+- `commissionAmount`, `brokerageAmount` and `netPremium` follow the same
+  closing math used by placement closings.
+- No PDF, document storage, email, endorsement notes or endorsement payments are
+  created in this foundation.
+
+Numbering and lifecycle:
+
+- Closing numbers use `ENC-001`, `ENC-002`, etc. scoped to the placement.
+- Numbers are never reused. `VOID` closings keep their number.
+- Lifecycle: `DRAFT → ISSUED → CONFIRMED`; `DRAFT`/`ISSUED → VOID`.
+- `CONFIRMED` and `VOID` are terminal.
 
 ### Participant capacity validation rules
 
@@ -1066,6 +1113,7 @@ Current:
 - Slip Preview MVP complete.
 - Email technical foundation complete.
 - Endorsement foundation complete.
+- Endorsement participants and endorsement closings complete.
 
 Deferred:
 
@@ -1073,7 +1121,7 @@ Deferred:
 - Offer slip distribution.
 - Closing slip distribution.
 - Full send/reply/forward email workflow.
-- Endorsement participants, closings, notes and payments.
+- Endorsement notes and payments.
 - Payments & Covers.
 - Claims.
 
@@ -1081,7 +1129,7 @@ Endorsements must not be modeled as direct silent mutations of a closed or
 financially locked placement. UAT should continue capturing examples such as
 sum insured changes, premium adjustments, participant share changes,
 participant additions/removals, risk detail amendments and coverage amendments
-before endorsement participants and endorsement closings are implemented.
+before endorsement notes, payments and application workflows are implemented.
 
 ## Email Foundation API
 

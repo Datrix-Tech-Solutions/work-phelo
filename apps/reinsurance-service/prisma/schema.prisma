@@ -294,6 +294,7 @@ model Placement {
   notes                   PlacementNote[]
   endorsements            PlacementEndorsement[]
   endorsementParticipants PlacementEndorsementParticipant[]
+  endorsementClosings     PlacementEndorsementClosing[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
@@ -568,6 +569,7 @@ model PlacementEndorsement {
   updatedAt         DateTime                          @updatedAt
   placement         Placement                         @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
   participants      PlacementEndorsementParticipant[]
+  closings          PlacementEndorsementClosing[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, endorsementNumber])
@@ -595,6 +597,7 @@ model PlacementEndorsementParticipant {
   endorsement           PlacementEndorsement                  @relation(fields: [endorsementId, tenantId], references: [id, tenantId], onDelete: Cascade)
   originalParticipant   PlacementParticipant?                 @relation("PlacementEndorsementOriginalParticipant", fields: [originalParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
   counterparty          Counterparty                          @relation("PlacementEndorsementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closings              PlacementEndorsementClosing[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, endorsementId])
@@ -602,6 +605,42 @@ model PlacementEndorsementParticipant {
   @@index([tenantId, endorsementId, counterpartyId])
   @@index([tenantId, originalParticipantId])
   @@index([tenantId, counterpartyId, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementEndorsementClosing {
+  id                       String                 @id @default(uuid())
+  tenantId                 String
+  placementId              String
+  endorsementId            String
+  endorsementParticipantId String
+  closingNumber            String
+  status                   PlacementClosingStatus @default(DRAFT)
+  signedLinePercent        Decimal                @db.Decimal(7, 4)
+  sharePercent             Decimal?               @db.Decimal(7, 4)
+  sumInsuredSnapshot       Decimal?               @db.Decimal(18, 2)
+  premiumSnapshot          Decimal                @db.Decimal(18, 2)
+  commissionPercent        Decimal?               @db.Decimal(7, 4)
+  commissionAmount         Decimal?               @db.Decimal(18, 2)
+  brokeragePercent         Decimal?               @db.Decimal(5, 2)
+  brokerageAmount          Decimal?               @db.Decimal(18, 2)
+  netPremium               Decimal?               @db.Decimal(18, 2)
+  currency                 String?
+  issuedAt                 DateTime?
+  confirmedAt              DateTime?
+  createdByUserId          String
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  placement                Placement              @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsement              PlacementEndorsement   @relation(fields: [endorsementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsementParticipant   PlacementEndorsementParticipant @relation(fields: [endorsementParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, closingNumber])
+  @@index([tenantId, placementId])
+  @@index([tenantId, endorsementId])
+  @@index([tenantId, endorsementParticipantId])
+  @@index([tenantId, placementId, status])
   @@schema("reinsurance")
 }
 

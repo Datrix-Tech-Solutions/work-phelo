@@ -44,6 +44,10 @@ import {
 import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
 import { CreatePlacementEndorsementParticipantDto } from './dto/create-placement-endorsement-participant.dto';
 import {
+  PlacementEndorsementClosingListResponseDto,
+  PlacementEndorsementClosingResponseDto,
+} from './dto/placement-endorsement-closing-response.dto';
+import {
   PlacementEndorsementParticipantListResponseDto,
   PlacementEndorsementParticipantResponseDto,
 } from './dto/placement-endorsement-participant-response.dto';
@@ -53,8 +57,10 @@ import {
 } from './dto/placement-endorsement-response.dto';
 import { UpdatePlacementEndorsementParticipantStatusDto } from './dto/update-placement-endorsement-participant-status.dto';
 import { UpdatePlacementEndorsementParticipantDto } from './dto/update-placement-endorsement-participant.dto';
+import { UpdatePlacementEndorsementClosingStatusDto } from './dto/update-placement-endorsement-closing-status.dto';
 import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
+import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import {
@@ -111,6 +117,7 @@ export class PlacementsController {
     private readonly closingsService: PlacementClosingsService,
     private readonly endorsementsService: PlacementEndorsementsService,
     private readonly endorsementParticipantsService: PlacementEndorsementParticipantsService,
+    private readonly endorsementClosingsService: PlacementEndorsementClosingsService,
     private readonly notesService: PlacementNotesService,
     private readonly paymentsService: PlacementPaymentsService,
   ) {}
@@ -362,6 +369,162 @@ export class PlacementsController {
       request.user,
       id,
       endorsementId,
+      dto,
+    );
+  }
+
+  @Get(':id/endorsements/:endorsementId/closings')
+  @ApiTags('Reinsurance - Endorsement Closings')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List endorsement closings',
+    description:
+      'Returns endorsement-scoped closing snapshots for accepted endorsement participants. These records do not mutate original placement closings, participants, payments or notes.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementClosingListResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement endorsement is missing or belongs to another tenant/placement.',
+  })
+  async findEndorsementClosings(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.endorsementClosingsService.findAll(
+      request.user.tenantId,
+      id,
+      endorsementId,
+    );
+    return { items };
+  }
+
+  @Get(':id/endorsements/:endorsementId/closings/:closingId')
+  @ApiTags('Reinsurance - Endorsement Closings')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get endorsement closing by ID',
+    description:
+      'Returns a single endorsement closing scoped to the authenticated tenant, placement and endorsement.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Endorsement closing ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementClosingResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The endorsement closing is missing or belongs to another tenant/placement/endorsement.',
+  })
+  findEndorsementClosing(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementClosingsService.findOne(
+      request.user.tenantId,
+      id,
+      endorsementId,
+      closingId,
+    );
+  }
+
+  @Post(':id/endorsements/:endorsementId/participants/:participantId/closings')
+  @ApiTags('Reinsurance - Endorsement Closings')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create endorsement closing',
+    description:
+      'Creates a DRAFT endorsement closing from an ACCEPTED endorsement participant with signedLinePercent > 0. The closing snapshots endorsement version values and never mutates original placement closing records.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Endorsement participant ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementEndorsementClosingResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Endorsement is VOID, participant is not ACCEPTED, signedLinePercent is missing/zero or endorsement snapshot premium is missing.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'An active endorsement closing already exists for this endorsement participant.',
+  })
+  createEndorsementClosing(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementClosingsService.create(
+      request.user,
+      id,
+      endorsementId,
+      participantId,
+    );
+  }
+
+  @Patch(':id/endorsements/:endorsementId/closings/:closingId/status')
+  @ApiTags('Reinsurance - Endorsement Closings')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Change endorsement closing status',
+    description:
+      'Moves an endorsement closing through DRAFT, ISSUED, CONFIRMED and VOID. CONFIRMED and VOID are terminal.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Endorsement closing ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementClosingResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Unsupported endorsement closing status transition.',
+  })
+  changeEndorsementClosingStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Body() dto: UpdatePlacementEndorsementClosingStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementClosingsService.changeStatus(
+      request.user,
+      id,
+      endorsementId,
+      closingId,
       dto,
     );
   }
