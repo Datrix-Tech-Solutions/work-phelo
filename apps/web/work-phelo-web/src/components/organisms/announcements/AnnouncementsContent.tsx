@@ -78,7 +78,6 @@ const COLUMNS: Column<AnnouncementRow>[] = [
 
 export function AnnouncementsContent() {
   const [panelOpen, setPanelOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Announcement | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -98,14 +97,18 @@ export function AnnouncementsContent() {
 
   const rows = useMemo<AnnouncementRow[]>(
     () =>
-      items.map((announcement: Announcement) => ({
-        id: announcement.id,
-        title: announcement.title,
-        message: announcement.body,
-        expiresAt: announcement.expiresAt,
-        notifyEmail: announcement.sendEmail,
-        notifySms: announcement.sendSms,
-      })),
+      items.map((announcement: Announcement) => {
+        const channels = announcement.deliveryChannels ?? ['IN_APP'];
+
+        return {
+          id: announcement.id,
+          title: announcement.title,
+          message: announcement.body,
+          expiresAt: announcement.expiresAt,
+          notifyEmail: channels.includes('EMAIL') || announcement.sendEmail,
+          notifySms: channels.includes('SMS'),
+        };
+      }),
     [items],
   );
 
@@ -156,10 +159,6 @@ export function AnnouncementsContent() {
           canManageAnnouncements
             ? (row) => [
                 {
-                  label: 'Edit',
-                  onClick: () => setEditTarget(items.find((a) => a.id === row.id) ?? null),
-                },
-                {
                   label: 'Delete',
                   onClick: () => setDeleteTarget({ id: row.id, title: row.title }),
                   danger: true,
@@ -175,14 +174,6 @@ export function AnnouncementsContent() {
 
       {canAccessAnnouncements && canManageAnnouncements && (
         <CreateAnnouncementPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
-      )}
-
-      {editTarget && (
-        <CreateAnnouncementPanel
-          isOpen={!!editTarget}
-          onClose={() => setEditTarget(null)}
-          announcement={editTarget}
-        />
       )}
 
       <Modal
