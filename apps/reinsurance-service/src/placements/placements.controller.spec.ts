@@ -1,5 +1,6 @@
 import { RequestUser } from '@work-phelo/types';
 import {
+  PlacementClaimStatus,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
   PlacementClosingStatus,
@@ -12,6 +13,7 @@ import {
 } from '../../prisma/generated/client';
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
+import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
@@ -78,6 +80,15 @@ describe('PlacementsController', () => {
     create: jest.fn(),
     reverse: jest.fn(),
   };
+  const claimsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    changeStatus: jest.fn(),
+    findAllocations: jest.fn(),
+    generateAllocations: jest.fn(),
+  };
   const user = {
     tenantId: 'tenant-1',
   } as RequestUser;
@@ -95,6 +106,7 @@ describe('PlacementsController', () => {
       endorsementClosingsService as unknown as PlacementEndorsementClosingsService,
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
+      claimsService as unknown as PlacementClaimsService,
     );
 
   it('delegates list queries using only the authenticated tenant context', async () => {
@@ -124,9 +136,13 @@ describe('PlacementsController', () => {
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
     ['findPayment', PlacementPermission.VIEW],
+    ['findClaims', PlacementPermission.VIEW],
+    ['findClaim', PlacementPermission.VIEW],
+    ['findClaimAllocations', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
     ['createEndorsement', PlacementPermission.CREATE],
     ['createPayment', PlacementPermission.CREATE],
+    ['createClaim', PlacementPermission.CREATE],
     ['update', PlacementPermission.EDIT],
     ['updateEndorsement', PlacementPermission.EDIT],
     ['changeEndorsementStatus', PlacementPermission.EDIT],
@@ -145,6 +161,9 @@ describe('PlacementsController', () => {
     ['changeClosingStatus', PlacementPermission.EDIT],
     ['createDebitNote', PlacementPermission.EDIT],
     ['createCreditNote', PlacementPermission.EDIT],
+    ['updateClaim', PlacementPermission.EDIT],
+    ['changeClaimStatus', PlacementPermission.EDIT],
+    ['generateClaimAllocations', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],
     ['voidNote', PlacementPermission.EDIT],
     ['reversePayment', PlacementPermission.EDIT],
@@ -590,6 +609,82 @@ describe('PlacementsController', () => {
       'placement-1',
       'note-1',
       expect.objectContaining({ voidReason: 'Issued in error' }),
+    );
+  });
+
+  it('delegates claim reads and mutations with authenticated context', async () => {
+    const controller = createController();
+    claimsService.findAll.mockResolvedValue([]);
+    claimsService.findAllocations.mockResolvedValue([]);
+    const createDto = {
+      occurrenceDate: '2026-06-03T00:00:00.000Z',
+      reportedDate: '2026-06-05T10:00:00.000Z',
+      claimCause: 'Warehouse fire',
+      currency: 'USD',
+      estimatedLossAmount: 40000,
+    };
+    const updateDto = { finalLossAmount: 37500 };
+
+    const claimList = await controller.findClaims('placement-1', {
+      user,
+    } as never);
+    await controller.findClaim('placement-1', 'claim-1', { user } as never);
+    await controller.createClaim('placement-1', createDto, { user } as never);
+    await controller.updateClaim('placement-1', 'claim-1', updateDto, {
+      user,
+    } as never);
+    await controller.changeClaimStatus(
+      'placement-1',
+      'claim-1',
+      { status: PlacementClaimStatus.NOTIFIED },
+      { user } as never,
+    );
+    const allocationList = await controller.findClaimAllocations(
+      'placement-1',
+      'claim-1',
+      { user } as never,
+    );
+    await controller.generateClaimAllocations('placement-1', 'claim-1', {
+      user,
+    } as never);
+
+    expect(claimsService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    expect(claimList).toEqual({ items: [] });
+    expect(claimsService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+    );
+    expect(claimsService.create).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      createDto,
+    );
+    expect(claimsService.update).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'claim-1',
+      updateDto,
+    );
+    expect(claimsService.changeStatus).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'claim-1',
+      expect.objectContaining({ status: PlacementClaimStatus.NOTIFIED }),
+    );
+    expect(claimsService.findAllocations).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+    );
+    expect(allocationList).toEqual({ items: [] });
+    expect(claimsService.generateAllocations).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'claim-1',
     );
   });
 

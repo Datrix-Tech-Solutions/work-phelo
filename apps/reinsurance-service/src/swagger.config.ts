@@ -47,6 +47,13 @@ Credit notes are per confirmed reinsurer closing. NIC levy and withholding tax
 are fixed at 0 in the MVP. Note generation, issuing and voiding do not
 financially lock a placement; payments remain the only hard-lock trigger.
 
+### Claims
+Claim endpoints record loss events first. They capture occurrence details,
+estimated loss and optional final loss amounts. Claim allocations are generated
+explicitly from immutable CONFIRMED placement and endorsement closing snapshots
+to calculate reinsurer liability. PR1 does not create cash calls, claim notes,
+settlement payments, documents, email workflows or accounting records.
+
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
 are distinct: \`CLOSED\` placements block direct edits but may reopen to
@@ -122,6 +129,14 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Credit Notes',
       'Reinsurer credit notes generated per confirmed closing',
+    )
+    .addTag(
+      'Reinsurance - Claims',
+      'Loss-event claim records, lifecycle and final loss updates',
+    )
+    .addTag(
+      'Reinsurance - Claim Allocations',
+      'Reinsurer liability calculations generated from immutable closing snapshots',
     )
     .addTag(
       'Reinsurance - Financial Locking',

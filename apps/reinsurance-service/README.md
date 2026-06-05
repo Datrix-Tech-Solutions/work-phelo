@@ -604,6 +604,74 @@ Settlement is deferred. Payment remains the only hard financial lock trigger.
 Locked placements may still list, view and generate notes from immutable
 closing snapshots.
 
+## Placement Claims API
+
+Claims represent loss events first, not settlements. PR1 captures occurrence
+details, estimated loss, optional final loss and reinsurer liability allocations.
+It does not create cash calls, claim debit/credit notes, payments, recoveries,
+accounting records, documents, PDFs or email workflows.
+
+```text
+GET   /api/v1/operations/reinsurance/placements/:id/claims
+GET   /api/v1/operations/reinsurance/placements/:id/claims/:claimId
+POST  /api/v1/operations/reinsurance/placements/:id/claims
+PATCH /api/v1/operations/reinsurance/placements/:id/claims/:claimId
+PATCH /api/v1/operations/reinsurance/placements/:id/claims/:claimId/status
+
+GET   /api/v1/operations/reinsurance/placements/:id/claims/:claimId/allocations
+POST  /api/v1/operations/reinsurance/placements/:id/claims/:claimId/allocations/generate
+```
+
+Claim fields:
+
+- `claimNumber` uses `CLM-001`, `CLM-002`, etc. scoped to the placement.
+- `occurrenceDate` is the loss event date.
+- `reportedDate` is when the broker records/receives the claim.
+- `claimCause` and `occurrenceDetails` describe the loss event.
+- `estimatedLossAmount` captures the initial 100% loss estimate.
+- `finalLossAmount` can be set later while the claim is `DRAFT`, `NOTIFIED` or
+  `RESERVED`; setting it stamps `finalizedAt` and `finalizedByUserId`.
+
+Claim lifecycle:
+
+| Status              | Meaning                                        | Allowed next statuses           |
+| ------------------- | ---------------------------------------------- | ------------------------------- |
+| `DRAFT`             | Claim recorded but not notified.               | `NOTIFIED`, `DECLINED`, `VOID`  |
+| `NOTIFIED`          | Claim has been notified internally/externally. | `RESERVED`, `DECLINED`, `VOID`  |
+| `RESERVED`          | Claim reserve/liability review is underway.    | `PARTIALLY_SETTLED`, `DECLINED` |
+| `PARTIALLY_SETTLED` | Reserved for future partial settlement flow.   | `SETTLED`                       |
+| `SETTLED`           | Reserved for future settlement completion.     | `CLOSED`                        |
+| `DECLINED`          | Claim declined.                                | terminal                        |
+| `CLOSED`            | Claim fully closed.                            | terminal                        |
+| `VOID`              | Claim voided and inactive.                     | terminal                        |
+
+Claim allocations:
+
+- Are generated explicitly with
+  `POST /placements/:id/claims/:claimId/allocations/generate`.
+- Use only `CONFIRMED` `PlacementClosing` and `PlacementEndorsementClosing`
+  snapshots.
+- Are generated once per claim. Existing allocations are not automatically
+  recalculated if `finalLossAmount` changes later; future cash call or
+  settlement workflows should add explicit adjustment/reissue behavior.
+- Exclude `DRAFT`, `ISSUED` and `VOID` closings.
+- Do not use live participant or endorsement participant values.
+- Do not mutate placements, participants, closings, notes, payments or
+  endorsements.
+- Use exactly one source per allocation: `placementClosingId` or
+  `endorsementClosingId`.
+- `basisAmount = finalLossAmount ?? estimatedLossAmount`.
+- `allocatedEstimatedLossAmount = estimatedLossAmount * signedLinePercent / 100`.
+- `allocatedFinalLossAmount = finalLossAmount * signedLinePercent / 100` when a
+  final loss amount exists.
+- `cashCallAmount` and `paidAmount` are reserved for future workflows and remain
+  `null` in PR1.
+
+Claim creation and allocation generation do not financially lock placements.
+Payment remains the only hard financial lock trigger. `CLAIM_SETTLEMENT`
+payments remain deferred and guarded until explicit claim settlement APIs are
+implemented.
+
 ## Placement Payment API
 
 Placement payments record the first MVP financial activity for a placement.

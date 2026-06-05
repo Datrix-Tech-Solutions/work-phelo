@@ -303,6 +303,27 @@ describe('PlacementPaymentsService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it('rejects claim settlement payments through the generic payment creation API', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.counterparty.findFirst.mockResolvedValue({
+      id: 'cedant-1',
+      type: CounterpartyType.CEDANT,
+    });
+    prisma.placementClosing.findFirst.mockResolvedValue({ id: 'closing-1' });
+
+    await expect(
+      service.create(user, 'placement-1', {
+        type: PlacementPaymentType.CLAIM_SETTLEMENT,
+        direction: PlacementPaymentDirection.OUTBOUND,
+        counterpartyId: 'cedant-1',
+        amount: 1000,
+        currency: 'USD',
+        paymentDate: '2026-06-04T12:00:00.000Z',
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placementPayment.create).not.toHaveBeenCalled();
+  });
+
   it('creates an auditable reversal record and marks the original reversed', async () => {
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementPayment.findFirst.mockResolvedValue(payment);
