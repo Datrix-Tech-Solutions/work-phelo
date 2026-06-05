@@ -55,6 +55,15 @@ hard-locks future direct mutations and requires the future endorsement workflow.
 Reversal records do not unlock placements. Debit note issuance alone is not a
 hard lock in the MVP policy.
 
+### Endorsements
+Endorsement endpoints create versioned placement adjustment records. The backend
+captures \`originalSnapshot\` at creation and stores proposed changes separately.
+Endorsements may be created once at least one placement closing exists. Before
+payment they are optional formal version records; after first payment they are
+the mandatory path for business changes because direct edits are financially
+locked. Endorsements do not mutate the original placement, participants,
+closings, payments or notes.
+
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:
 connection metadata, provider verification, sync proof-of-concept, thread/message
@@ -115,6 +124,10 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Financial Locking',
       'Direct-edit lock status used to gate future endorsement-required changes',
+    )
+    .addTag(
+      'Reinsurance - Endorsements',
+      'Versioned placement adjustment records for post-payment business changes',
     )
     .addTag(
       'Reinsurance - Risk Classes',

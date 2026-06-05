@@ -41,6 +41,14 @@ import {
   PaginatedPlacementsResponseDto,
   PlacementResponseDto,
 } from './dto/placement-response.dto';
+import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
+import {
+  PlacementEndorsementListResponseDto,
+  PlacementEndorsementResponseDto,
+} from './dto/placement-endorsement-response.dto';
+import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
+import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
+import { PlacementEndorsementsService } from './placement-endorsements.service';
 import {
   PlacementClosingListResponseDto,
   PlacementClosingResponseDto,
@@ -93,6 +101,7 @@ export class PlacementsController {
   constructor(
     private readonly placementsService: PlacementsService,
     private readonly closingsService: PlacementClosingsService,
+    private readonly endorsementsService: PlacementEndorsementsService,
     private readonly notesService: PlacementNotesService,
     private readonly paymentsService: PlacementPaymentsService,
   ) {}
@@ -200,6 +209,152 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.placementsService.getLockStatus(request.user.tenantId, id);
+  }
+
+  @Get(':id/endorsements')
+  @ApiTags('Reinsurance - Endorsements')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List placement endorsements',
+    description:
+      'Returns versioned placement adjustment records. Endorsements are child records and do not mutate the original placement, participants, closings, payments or notes.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementEndorsementListResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  findEndorsements(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementsService
+      .findAll(request.user.tenantId, id)
+      .then((items) => ({ items }));
+  }
+
+  @Post(':id/endorsements')
+  @ApiTags('Reinsurance - Endorsements')
+  @RequirePermissions(PlacementPermission.CREATE)
+  @ApiOperation({
+    summary: 'Create placement endorsement',
+    description:
+      'Creates a DRAFT versioned adjustment linked to the original placement. The backend captures originalSnapshot at creation. No endorsement participants, closings, notes, payments, claims, documents or frontend changes are created in PR1.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiCreatedResponse({ type: PlacementEndorsementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Invalid endorsement payload or the placement has no closing yet.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  createEndorsement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePlacementEndorsementDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementsService.create(request.user, id, dto);
+  }
+
+  @Get(':id/endorsements/:endorsementId')
+  @ApiTags('Reinsurance - Endorsements')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({ summary: 'Get placement endorsement by ID' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement endorsement is missing or belongs to another tenant/placement.',
+  })
+  findEndorsement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementsService.findOne(
+      request.user.tenantId,
+      id,
+      endorsementId,
+    );
+  }
+
+  @Patch(':id/endorsements/:endorsementId')
+  @ApiTags('Reinsurance - Endorsements')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Update draft placement endorsement',
+    description:
+      'Updates editable endorsement metadata and proposedSnapshot. Only DRAFT endorsements can be edited directly. Original placement and financial history remain unchanged.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Endorsement is no longer DRAFT or payload is invalid.',
+  })
+  updateEndorsement(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Body() dto: UpdatePlacementEndorsementDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementsService.update(
+      request.user,
+      id,
+      endorsementId,
+      dto,
+    );
+  }
+
+  @Patch(':id/endorsements/:endorsementId/status')
+  @ApiTags('Reinsurance - Endorsements')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Change placement endorsement status',
+    description:
+      'Moves an endorsement through the PR1 lifecycle. CLOSED, DECLINED and VOID are terminal. Status changes do not mutate the original placement.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Unsupported endorsement status transition.',
+  })
+  changeEndorsementStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Body() dto: UpdatePlacementEndorsementStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementsService.changeStatus(
+      request.user,
+      id,
+      endorsementId,
+      dto,
+    );
   }
 
   @Get(':id/notes')

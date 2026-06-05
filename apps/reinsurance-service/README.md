@@ -75,6 +75,11 @@ The gateway forwards these routes under
 | `PATCH`  | `/api/placements/:id/participants/:participantId`                       | `operations.reinsurance.placements:EDIT`   |
 | `PATCH`  | `/api/placements/:id/participants/:participantId/status`                | `operations.reinsurance.placements:EDIT`   |
 | `DELETE` | `/api/placements/:id/participants/:participantId`                       | `operations.reinsurance.placements:EDIT`   |
+| `GET`    | `/api/placements/:id/endorsements`                                      | `operations.reinsurance.placements:VIEW`   |
+| `POST`   | `/api/placements/:id/endorsements`                                      | `operations.reinsurance.placements:CREATE` |
+| `GET`    | `/api/placements/:id/endorsements/:endorsementId`                       | `operations.reinsurance.placements:VIEW`   |
+| `PATCH`  | `/api/placements/:id/endorsements/:endorsementId`                       | `operations.reinsurance.placements:EDIT`   |
+| `PATCH`  | `/api/placements/:id/endorsements/:endorsementId/status`                | `operations.reinsurance.placements:EDIT`   |
 | `GET`    | `/api/placements/:id/slips/offer-preview`                               | `operations.reinsurance.placements:VIEW`   |
 | `GET`    | `/api/placements/:id/participants/:participantId/slips/closing-preview` | `operations.reinsurance.placements:VIEW`   |
 | `DELETE` | `/api/placements/:id`                                                   | `operations.reinsurance.placements:DELETE` |
@@ -200,8 +205,55 @@ Lifecycle locks and financial locks are intentionally separate:
 - When `locked=true`, direct placement and participant mutations return `409`
   with `Placement is financially locked. Changes require endorsement.`
 
-Payment records now provide the lock source. Receivable, payable, debit note,
-credit note, claim and endorsement entities are still deferred.
+Payment records now provide the lock source. Debit/credit notes and the
+endorsement foundation are available; receivable, payable, endorsement
+participants, endorsement closings, endorsement financials and claims remain
+deferred.
+
+## Placement Endorsement API
+
+Endorsements are versioned child adjustment records linked to an original
+placement. They may be created once at least one placement closing exists. Before
+payment, direct placement edits are still allowed but a broker may create an
+endorsement to formally version/document a change. After first payment, direct
+edits are financially locked and endorsement becomes mandatory for business
+changes. PR1 creates the endorsement seam only; it does not add endorsement
+participants, closings, notes, payments, claims, accounting, PDFs, emails or
+frontend changes.
+
+```text
+GET   /api/v1/operations/reinsurance/placements/:id/endorsements
+POST  /api/v1/operations/reinsurance/placements/:id/endorsements
+GET   /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId
+PATCH /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId
+PATCH /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/status
+```
+
+Core rules:
+
+- At least one placement closing must exist before an endorsement can be
+  created.
+- Endorsements never mutate the original placement, participants, closings,
+  payments or notes.
+- The backend captures `originalSnapshot` when the endorsement is created.
+- `proposedSnapshot` and `changeSummary` are stored as JSON for future workflow
+  and frontend review; PR1 does not calculate from these JSON values.
+- Endorsement numbers use `END-001`, `END-002`, etc. scoped to the placement.
+- Only `DRAFT` endorsements can be edited directly.
+- `CLOSED`, `DECLINED` and `VOID` endorsements are terminal.
+
+Lifecycle:
+
+| Status               | Meaning                                      | Allowed next statuses                                |
+| -------------------- | -------------------------------------------- | ---------------------------------------------------- |
+| `DRAFT`              | Broker is preparing endorsement terms.       | `MARKETING`, `DECLINED`, `VOID`                      |
+| `MARKETING`          | Endorsement is being offered to markets.     | `PARTIALLY_ACCEPTED`, `ACCEPTED`, `DECLINED`, `VOID` |
+| `PARTIALLY_ACCEPTED` | Some endorsement capacity is accepted.       | `ACCEPTED`, `CLOSING`, `DECLINED`, `VOID`            |
+| `ACCEPTED`           | Required endorsement terms are accepted.     | `CLOSING`, `DECLINED`, `VOID`                        |
+| `CLOSING`            | Endorsement is moving toward formal closing. | `CLOSED`, `VOID`                                     |
+| `CLOSED`             | Endorsement is complete.                     | terminal                                             |
+| `DECLINED`           | Endorsement will not proceed.                | terminal                                             |
+| `VOID`               | Endorsement was cancelled administratively.  | terminal                                             |
 
 ### Participant status meanings
 
@@ -946,6 +998,7 @@ Current:
 - Capacity validation complete.
 - Slip Preview MVP complete.
 - Email technical foundation complete.
+- Endorsement foundation complete.
 
 Deferred:
 
@@ -953,15 +1006,15 @@ Deferred:
 - Offer slip distribution.
 - Closing slip distribution.
 - Full send/reply/forward email workflow.
-- Endorsements.
+- Endorsement participants, closings, notes and payments.
 - Payments & Covers.
 - Claims.
 
-Endorsements are a future roadmap item only. Do not model them as direct silent
-mutations of a closed placement. UAT should capture examples such as sum
-insured changes, premium adjustments, participant share changes, participant
-additions/removals, risk detail amendments and coverage amendments before the
-endorsement domain is designed.
+Endorsements must not be modeled as direct silent mutations of a closed or
+financially locked placement. UAT should continue capturing examples such as
+sum insured changes, premium adjustments, participant share changes,
+participant additions/removals, risk detail amendments and coverage amendments
+before endorsement participants and endorsement closings are implemented.
 
 ## Email Foundation API
 

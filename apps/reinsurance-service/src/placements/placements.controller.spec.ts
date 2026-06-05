@@ -1,5 +1,7 @@
 import { RequestUser } from '@work-phelo/types';
 import {
+  PlacementEndorsementStatus,
+  PlacementEndorsementType,
   PlacementClosingStatus,
   PlacementNoteStatus,
   PlacementPaymentDirection,
@@ -10,6 +12,7 @@ import {
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
 import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
@@ -35,6 +38,13 @@ describe('PlacementsController', () => {
     findAll: jest.fn(),
     findOne: jest.fn(),
     create: jest.fn(),
+    changeStatus: jest.fn(),
+  };
+  const endorsementsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
     changeStatus: jest.fn(),
   };
   const notesService = {
@@ -63,6 +73,7 @@ describe('PlacementsController', () => {
     new PlacementsController(
       service as unknown as PlacementsService,
       closingsService as unknown as PlacementClosingsService,
+      endorsementsService as unknown as PlacementEndorsementsService,
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
     );
@@ -84,13 +95,18 @@ describe('PlacementsController', () => {
     ['getClosingSlipPreview', PlacementPermission.VIEW],
     ['findClosings', PlacementPermission.VIEW],
     ['findClosing', PlacementPermission.VIEW],
+    ['findEndorsements', PlacementPermission.VIEW],
+    ['findEndorsement', PlacementPermission.VIEW],
     ['findNotes', PlacementPermission.VIEW],
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
     ['findPayment', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
+    ['createEndorsement', PlacementPermission.CREATE],
     ['createPayment', PlacementPermission.CREATE],
     ['update', PlacementPermission.EDIT],
+    ['updateEndorsement', PlacementPermission.EDIT],
+    ['changeEndorsementStatus', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
     ['addParticipant', PlacementPermission.EDIT],
     ['updateParticipant', PlacementPermission.EDIT],
@@ -240,6 +256,75 @@ describe('PlacementsController', () => {
       'placement-1',
       'closing-1',
       expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
+    );
+  });
+
+  it('delegates endorsement reads with authenticated tenant context', async () => {
+    const controller = createController();
+    endorsementsService.findAll.mockResolvedValue([]);
+
+    const listResult = await controller.findEndorsements('placement-1', {
+      user,
+    } as never);
+    await controller.findEndorsement('placement-1', 'endorsement-1', {
+      user,
+    } as never);
+
+    expect(endorsementsService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    expect(listResult).toEqual({ items: [] });
+    expect(endorsementsService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+  });
+
+  it('delegates endorsement mutations with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.createEndorsement(
+      'placement-1',
+      {
+        type: PlacementEndorsementType.SUM_INSURED_INCREASE,
+        effectiveDate: '2026-06-04T00:00:00.000Z',
+        reason: 'Increase sum insured',
+      },
+      { user } as never,
+    );
+    await controller.updateEndorsement(
+      'placement-1',
+      'endorsement-1',
+      { reason: 'Updated' },
+      { user } as never,
+    );
+    await controller.changeEndorsementStatus(
+      'placement-1',
+      'endorsement-1',
+      { status: PlacementEndorsementStatus.MARKETING },
+      { user } as never,
+    );
+
+    expect(endorsementsService.create).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      expect.objectContaining({
+        type: PlacementEndorsementType.SUM_INSURED_INCREASE,
+      }),
+    );
+    expect(endorsementsService.update).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      expect.objectContaining({ reason: 'Updated' }),
+    );
+    expect(endorsementsService.changeStatus).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      expect.objectContaining({ status: PlacementEndorsementStatus.MARKETING }),
     );
   });
 

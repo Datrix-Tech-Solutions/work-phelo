@@ -119,6 +119,34 @@ enum PlacementNoteStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementEndorsementType {
+  SUM_INSURED_INCREASE
+  SUM_INSURED_DECREASE
+  PREMIUM_ADJUSTMENT
+  COVERAGE_AMENDMENT
+  POLICY_AMENDMENT
+  PARTICIPANT_SHARE_CHANGE
+  PARTICIPANT_ADDITION
+  PARTICIPANT_REMOVAL
+  CANCELLATION
+  OTHER
+
+  @@schema("reinsurance")
+}
+
+enum PlacementEndorsementStatus {
+  DRAFT
+  MARKETING
+  PARTIALLY_ACCEPTED
+  ACCEPTED
+  CLOSING
+  CLOSED
+  DECLINED
+  VOID
+
+  @@schema("reinsurance")
+}
+
 enum MailboxProvider {
   MICROSOFT_GRAPH
   GOOGLE_GMAIL
@@ -252,6 +280,7 @@ model Placement {
   closings             PlacementClosing[]
   payments             PlacementPayment[]
   notes                PlacementNote[]
+  endorsements         PlacementEndorsement[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
@@ -500,6 +529,35 @@ model PlacementNote {
   @@index([tenantId, participantId, createdAt])
   @@index([tenantId, counterpartyId, createdAt])
   @@index([tenantId, settledByPaymentId])
+  @@schema("reinsurance")
+}
+
+model PlacementEndorsement {
+  id                String                     @id @default(uuid())
+  tenantId          String
+  placementId       String
+  endorsementNumber String
+  type              PlacementEndorsementType
+  status            PlacementEndorsementStatus @default(DRAFT)
+  effectiveDate     DateTime
+  reason            String
+  description       String?
+  changeSummary     Json?
+  originalSnapshot  Json
+  proposedSnapshot  Json?
+  createdByUserId   String
+  updatedByUserId   String
+  closedAt          DateTime?
+  voidedAt          DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  placement         Placement                  @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, endorsementNumber])
+  @@index([tenantId, placementId, status, createdAt])
+  @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, status, createdAt])
   @@schema("reinsurance")
 }
 
