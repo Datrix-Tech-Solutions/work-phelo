@@ -171,6 +171,41 @@ describe('PlacementClaimsService', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
+  it('scopes claim list reads by tenant and placement', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findMany.mockResolvedValue([claim]);
+
+    const result = await service.findAll('tenant-1', 'placement-1');
+
+    expect(prisma.placement.findFirst).toHaveBeenCalledWith({
+      where: { id: 'placement-1', tenantId: 'tenant-1', archivedAt: null },
+      select: { id: true, currency: true },
+    });
+    expect(prisma.placementClaim.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { tenantId: 'tenant-1', placementId: 'placement-1' },
+      }),
+    );
+    expect(result).toEqual([claim]);
+  });
+
+  it('scopes claim detail reads by tenant, placement and claim', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+
+    await expect(
+      service.findOne('tenant-1', 'placement-1', 'claim-1'),
+    ).resolves.toBe(claim);
+
+    expect(prisma.placementClaim.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'claim-1',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+      },
+    });
+  });
+
   it('sets finalLossAmount and finalized metadata on editable claim update', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementClaim.findFirst.mockResolvedValue(claim);
@@ -240,6 +275,26 @@ describe('PlacementClaimsService', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it.each([PlacementClaimStatus.CLOSED, PlacementClaimStatus.VOID])(
+    'rejects allocation generation when claim status is %s',
+    async (status) => {
+      prisma.placement.findFirst.mockResolvedValue(placement);
+      prisma.placementClaim.findFirst.mockResolvedValue({
+        ...claim,
+        status,
+      });
+
+      await expect(
+        service.generateAllocations(user, 'placement-1', 'claim-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.placementClaimAllocation.findFirst).not.toHaveBeenCalled();
+      expect(prisma.placementClosing.findMany).not.toHaveBeenCalled();
+      expect(
+        prisma.placementEndorsementClosing.findMany,
+      ).not.toHaveBeenCalled();
+    },
+  );
+
   it('generates allocations from confirmed placement and endorsement closing snapshots', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementClaim.findFirst.mockResolvedValue({
@@ -286,6 +341,18 @@ describe('PlacementClaimsService', () => {
       firstCallArg<Prisma.PlacementClaimAllocationCreateManyArgs>(
         prisma.placementClaimAllocation.createMany,
       );
+    const rows = Array.isArray(createManyArgs.data)
+      ? createManyArgs.data
+      : [createManyArgs.data];
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(
+        Boolean(row.placementClosingId) && Boolean(row.endorsementClosingId),
+      ).toBe(false);
+      expect(
+        Boolean(row.placementClosingId) || Boolean(row.endorsementClosingId),
+      ).toBe(true);
+    }
     expect(createManyArgs.data).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -311,6 +378,33 @@ describe('PlacementClaimsService', () => {
           paidAmount: null,
         }),
       ]),
+    );
+  });
+
+  it('scopes claim allocation reads by tenant, placement and claim', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementClaim.findFirst.mockResolvedValue(claim);
+    prisma.placementClaimAllocation.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.findAllocations('tenant-1', 'placement-1', 'claim-1'),
+    ).resolves.toEqual([]);
+
+    expect(prisma.placementClaim.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'claim-1',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+      },
+    });
+    expect(prisma.placementClaimAllocation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          claimId: 'claim-1',
+        },
+      }),
     );
   });
 

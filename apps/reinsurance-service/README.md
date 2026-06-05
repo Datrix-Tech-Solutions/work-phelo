@@ -651,6 +651,9 @@ Claim allocations:
   `POST /placements/:id/claims/:claimId/allocations/generate`.
 - Use only `CONFIRMED` `PlacementClosing` and `PlacementEndorsementClosing`
   snapshots.
+- Are generated once per claim. Existing allocations are not automatically
+  recalculated if `finalLossAmount` changes later; future cash call or
+  settlement workflows should add explicit adjustment/reissue behavior.
 - Exclude `DRAFT`, `ISSUED` and `VOID` closings.
 - Do not use live participant or endorsement participant values.
 - Do not mutate placements, participants, closings, notes, payments or
@@ -666,7 +669,8 @@ Claim allocations:
 
 Claim creation and allocation generation do not financially lock placements.
 Payment remains the only hard financial lock trigger. `CLAIM_SETTLEMENT`
-payments remain guarded until claim settlement APIs are implemented.
+payments remain deferred and guarded until explicit claim settlement APIs are
+implemented.
 
 ## Placement Payment API
 
