@@ -41,6 +41,7 @@ import {
   PaginatedPlacementsResponseDto,
   PlacementResponseDto,
 } from './dto/placement-response.dto';
+import { CreatePlacementClaimDto } from './dto/create-placement-claim.dto';
 import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
 import { CreatePlacementEndorsementParticipantDto } from './dto/create-placement-endorsement-participant.dto';
 import {
@@ -63,6 +64,14 @@ import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsemen
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
+import {
+  PlacementClaimAllocationListResponseDto,
+  PlacementClaimListResponseDto,
+  PlacementClaimResponseDto,
+} from './dto/placement-claim-response.dto';
+import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
+import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
+import { PlacementClaimsService } from './placement-claims.service';
 import {
   PlacementClosingListResponseDto,
   PlacementClosingResponseDto,
@@ -120,6 +129,7 @@ export class PlacementsController {
     private readonly endorsementClosingsService: PlacementEndorsementClosingsService,
     private readonly notesService: PlacementNotesService,
     private readonly paymentsService: PlacementPaymentsService,
+    private readonly claimsService: PlacementClaimsService,
   ) {}
 
   @Get()
@@ -758,6 +768,175 @@ export class PlacementsController {
       participantId,
     );
     return { deleted: true };
+  }
+
+  @Get(':id/claims')
+  @ApiTags('Reinsurance - Claims')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List placement claims',
+    description:
+      'Returns loss-event claim records for the placement. Claims do not create cash calls, notes, payments or financial locks in PR1.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementClaimListResponseDto })
+  async findClaims(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.claimsService.findAll(request.user.tenantId, id);
+    return { items };
+  }
+
+  @Get(':id/claims/:claimId')
+  @ApiTags('Reinsurance - Claims')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get placement claim',
+    description:
+      'Returns one loss-event claim. The claim must belong to the placement and authenticated tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or claim is missing, archived or belongs to another tenant.',
+  })
+  findClaim(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimsService.findOne(request.user.tenantId, id, claimId);
+  }
+
+  @Post(':id/claims')
+  @ApiTags('Reinsurance - Claims')
+  @RequirePermissions(PlacementPermission.CREATE)
+  @ApiOperation({
+    summary: 'Create placement claim loss event',
+    description:
+      'Creates a DRAFT loss-event claim with CLM-* placement-scoped numbering. This does not generate allocations, cash calls, payments, notes, documents or emails.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiCreatedResponse({ type: PlacementClaimResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Claim currency is invalid, amount is invalid or required loss-event fields are missing.',
+  })
+  createClaim(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreatePlacementClaimDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimsService.create(request.user, id, dto);
+  }
+
+  @Patch(':id/claims/:claimId')
+  @ApiTags('Reinsurance - Claims')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Update editable placement claim',
+    description:
+      'Updates DRAFT, NOTIFIED or RESERVED claims. Setting finalLossAmount stamps finalized metadata. Terminal and settlement-stage claims cannot be edited in PR1.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'The claim is terminal or no longer directly editable.',
+  })
+  updateClaim(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Body() dto: UpdatePlacementClaimDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimsService.update(request.user, id, claimId, dto);
+  }
+
+  @Patch(':id/claims/:claimId/status')
+  @ApiTags('Reinsurance - Claims')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Change placement claim status',
+    description:
+      'Moves a claim through DRAFT, NOTIFIED, RESERVED, PARTIALLY_SETTLED, SETTLED, CLOSED, DECLINED and VOID. CLOSED and VOID are terminal.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Unsupported claim status transition.',
+  })
+  changeClaimStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Body() dto: UpdatePlacementClaimStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimsService.changeStatus(request.user, id, claimId, dto);
+  }
+
+  @Get(':id/claims/:claimId/allocations')
+  @ApiTags('Reinsurance - Claim Allocations')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List claim liability allocations',
+    description:
+      'Returns reinsurer liability allocations generated from immutable confirmed placement and endorsement closing snapshots.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimAllocationListResponseDto })
+  async findClaimAllocations(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.claimsService.findAllocations(
+      request.user.tenantId,
+      id,
+      claimId,
+    );
+    return { items };
+  }
+
+  @Post(':id/claims/:claimId/allocations/generate')
+  @ApiTags('Reinsurance - Claim Allocations')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate claim liability allocations',
+    description:
+      'Creates DRAFT allocation rows from CONFIRMED PlacementClosing and PlacementEndorsementClosing snapshots. DRAFT, ISSUED and VOID closings are excluded. This does not create cash calls, notes or payments.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiCreatedResponse({ type: PlacementClaimAllocationListResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'No confirmed closings exist or the claim is terminal.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'Claim allocations have already been generated.',
+  })
+  async generateClaimAllocations(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.claimsService.generateAllocations(
+      request.user,
+      id,
+      claimId,
+    );
+    return { items };
   }
 
   @Get(':id/notes')
