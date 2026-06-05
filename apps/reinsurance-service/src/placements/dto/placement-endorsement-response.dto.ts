@@ -58,6 +58,14 @@ export class PlacementEndorsementResponseDto {
   })
   proposedSnapshot!: Record<string, unknown> | null;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description:
+      'Endorsement target capacity percentage as a decimal-safe string. Endorsement participant accepted lines are capped only when this value is set.',
+  })
+  targetPercent!: string | null;
+
   @ApiProperty({ format: 'uuid' })
   createdByUserId!: string;
 

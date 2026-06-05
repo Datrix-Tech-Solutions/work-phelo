@@ -6,6 +6,7 @@ import {
   PlacementNoteStatus,
   PlacementPaymentDirection,
   PlacementPaymentType,
+  PlacementEndorsementParticipantStatus,
   PlacementParticipantRole,
   PlacementParticipantStatus,
 } from '../../prisma/generated/client';
@@ -13,6 +14,7 @@ import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
 import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
+import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
@@ -47,6 +49,14 @@ describe('PlacementsController', () => {
     update: jest.fn(),
     changeStatus: jest.fn(),
   };
+  const endorsementParticipantsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    update: jest.fn(),
+    changeStatus: jest.fn(),
+    delete: jest.fn(),
+  };
   const notesService = {
     findAll: jest.fn(),
     findOne: jest.fn(),
@@ -74,6 +84,7 @@ describe('PlacementsController', () => {
       service as unknown as PlacementsService,
       closingsService as unknown as PlacementClosingsService,
       endorsementsService as unknown as PlacementEndorsementsService,
+      endorsementParticipantsService as unknown as PlacementEndorsementParticipantsService,
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
     );
@@ -97,6 +108,8 @@ describe('PlacementsController', () => {
     ['findClosing', PlacementPermission.VIEW],
     ['findEndorsements', PlacementPermission.VIEW],
     ['findEndorsement', PlacementPermission.VIEW],
+    ['findEndorsementParticipants', PlacementPermission.VIEW],
+    ['findEndorsementParticipant', PlacementPermission.VIEW],
     ['findNotes', PlacementPermission.VIEW],
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
@@ -107,6 +120,10 @@ describe('PlacementsController', () => {
     ['update', PlacementPermission.EDIT],
     ['updateEndorsement', PlacementPermission.EDIT],
     ['changeEndorsementStatus', PlacementPermission.EDIT],
+    ['createEndorsementParticipant', PlacementPermission.EDIT],
+    ['updateEndorsementParticipant', PlacementPermission.EDIT],
+    ['changeEndorsementParticipantStatus', PlacementPermission.EDIT],
+    ['deleteEndorsementParticipant', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
     ['addParticipant', PlacementPermission.EDIT],
     ['updateParticipant', PlacementPermission.EDIT],
@@ -325,6 +342,116 @@ describe('PlacementsController', () => {
       'placement-1',
       'endorsement-1',
       expect.objectContaining({ status: PlacementEndorsementStatus.MARKETING }),
+    );
+  });
+
+  it('delegates endorsement participant reads with authenticated tenant context', async () => {
+    const controller = createController();
+    endorsementParticipantsService.findAll.mockResolvedValue({
+      items: [],
+      aggregates: {
+        totalOfferedPercent: 0,
+        totalAcceptedPercent: 0,
+        remainingPercent: null,
+        declinedPercent: 0,
+      },
+    });
+
+    const listResult = await controller.findEndorsementParticipants(
+      'placement-1',
+      'endorsement-1',
+      { user } as never,
+    );
+    await controller.findEndorsementParticipant(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      { user } as never,
+    );
+
+    expect(endorsementParticipantsService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+    expect(listResult).toEqual({
+      items: [],
+      aggregates: {
+        totalOfferedPercent: 0,
+        totalAcceptedPercent: 0,
+        remainingPercent: null,
+        declinedPercent: 0,
+      },
+    });
+    expect(endorsementParticipantsService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+    );
+  });
+
+  it('delegates endorsement participant mutations with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.createEndorsementParticipant(
+      'placement-1',
+      'endorsement-1',
+      {
+        counterpartyId: 'reinsurer-1',
+        originalParticipantId: 'participant-1',
+        sharePercent: 20,
+      },
+      { user } as never,
+    );
+    await controller.updateEndorsementParticipant(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      { signedLinePercent: 15 },
+      { user } as never,
+    );
+    await controller.changeEndorsementParticipantStatus(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      { status: PlacementEndorsementParticipantStatus.OFFER_SENT },
+      { user } as never,
+    );
+    await controller.deleteEndorsementParticipant(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      { user } as never,
+    );
+
+    expect(endorsementParticipantsService.create).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      expect.objectContaining({ counterpartyId: 'reinsurer-1' }),
+    );
+    expect(endorsementParticipantsService.update).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      expect.objectContaining({ signedLinePercent: 15 }),
+    );
+    expect(endorsementParticipantsService.changeStatus).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      expect.objectContaining({
+        status: PlacementEndorsementParticipantStatus.OFFER_SENT,
+      }),
+    );
+    expect(endorsementParticipantsService.delete).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
     );
   });
 

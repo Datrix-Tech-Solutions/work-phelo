@@ -42,12 +42,20 @@ import {
   PlacementResponseDto,
 } from './dto/placement-response.dto';
 import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
+import { CreatePlacementEndorsementParticipantDto } from './dto/create-placement-endorsement-participant.dto';
+import {
+  PlacementEndorsementParticipantListResponseDto,
+  PlacementEndorsementParticipantResponseDto,
+} from './dto/placement-endorsement-participant-response.dto';
 import {
   PlacementEndorsementListResponseDto,
   PlacementEndorsementResponseDto,
 } from './dto/placement-endorsement-response.dto';
+import { UpdatePlacementEndorsementParticipantStatusDto } from './dto/update-placement-endorsement-participant-status.dto';
+import { UpdatePlacementEndorsementParticipantDto } from './dto/update-placement-endorsement-participant.dto';
 import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
+import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import {
   PlacementClosingListResponseDto,
@@ -102,6 +110,7 @@ export class PlacementsController {
     private readonly placementsService: PlacementsService,
     private readonly closingsService: PlacementClosingsService,
     private readonly endorsementsService: PlacementEndorsementsService,
+    private readonly endorsementParticipantsService: PlacementEndorsementParticipantsService,
     private readonly notesService: PlacementNotesService,
     private readonly paymentsService: PlacementPaymentsService,
   ) {}
@@ -355,6 +364,237 @@ export class PlacementsController {
       endorsementId,
       dto,
     );
+  }
+
+  @Get(':id/endorsements/:endorsementId/participants')
+  @ApiTags('Reinsurance - Endorsement Participants')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List endorsement participants',
+    description:
+      'Returns endorsement-scoped reinsurer response records and capacity aggregates. These records do not mutate original placement participants.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementParticipantListResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement endorsement is missing or belongs to another tenant/placement.',
+  })
+  findEndorsementParticipants(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementParticipantsService.findAll(
+      request.user.tenantId,
+      id,
+      endorsementId,
+    );
+  }
+
+  @Post(':id/endorsements/:endorsementId/participants')
+  @ApiTags('Reinsurance - Endorsement Participants')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Add endorsement participant',
+    description:
+      'Adds an existing or new reinsurer to the endorsement market workflow. originalParticipantId is optional and identifies existing reinsurers from the original placement. Original placement participants are never mutated.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementEndorsementParticipantResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Counterparty is not an active reinsurer, original participant does not match, status values are invalid or accepted capacity exceeds targetPercent.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'An active endorsement participant already exists for this reinsurer.',
+  })
+  createEndorsementParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Body() dto: CreatePlacementEndorsementParticipantDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementParticipantsService.create(
+      request.user,
+      id,
+      endorsementId,
+      dto,
+    );
+  }
+
+  @Get(':id/endorsements/:endorsementId/participants/:participantId')
+  @ApiTags('Reinsurance - Endorsement Participants')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({ summary: 'Get endorsement participant by ID' })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Endorsement participant ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementParticipantResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The endorsement participant is missing or belongs to another tenant/placement/endorsement.',
+  })
+  findEndorsementParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementParticipantsService.findOne(
+      request.user.tenantId,
+      id,
+      endorsementId,
+      participantId,
+    );
+  }
+
+  @Patch(':id/endorsements/:endorsementId/participants/:participantId')
+  @ApiTags('Reinsurance - Endorsement Participants')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Update endorsement participant',
+    description:
+      'Updates an endorsement-scoped participant while the endorsement and participant are non-terminal. Original placement participant records remain immutable.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Endorsement participant ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementParticipantResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Participant or endorsement is terminal, values are invalid or accepted capacity exceeds targetPercent.',
+  })
+  updateEndorsementParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Body() dto: UpdatePlacementEndorsementParticipantDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementParticipantsService.update(
+      request.user,
+      id,
+      endorsementId,
+      participantId,
+      dto,
+    );
+  }
+
+  @Patch(':id/endorsements/:endorsementId/participants/:participantId/status')
+  @ApiTags('Reinsurance - Endorsement Participants')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Change endorsement participant status',
+    description:
+      'Moves an endorsement participant through INVITED, OFFER_SENT, QUOTED, ACCEPTED, DECLINED and CLOSED. DECLINED and CLOSED are terminal.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Endorsement participant ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementParticipantResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Unsupported status transition, missing accepted signed line or accepted capacity exceeds targetPercent.',
+  })
+  changeEndorsementParticipantStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Body() dto: UpdatePlacementEndorsementParticipantStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementParticipantsService.changeStatus(
+      request.user,
+      id,
+      endorsementId,
+      participantId,
+      dto,
+    );
+  }
+
+  @Delete(':id/endorsements/:endorsementId/participants/:participantId')
+  @ApiTags('Reinsurance - Endorsement Participants')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Delete non-terminal endorsement participant',
+    description:
+      'Removes an endorsement-scoped participant only while the endorsement and participant are non-terminal. Original placement participants are not changed.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Endorsement participant ID.',
+  })
+  @ApiOkResponse({
+    schema: {
+      example: { deleted: true },
+    },
+  })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Participant or endorsement is terminal.',
+  })
+  async deleteEndorsementParticipant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    await this.endorsementParticipantsService.delete(
+      request.user,
+      id,
+      endorsementId,
+      participantId,
+    );
+    return { deleted: true };
   }
 
   @Get(':id/notes')
