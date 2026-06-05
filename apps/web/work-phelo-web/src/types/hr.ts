@@ -288,6 +288,7 @@ export interface CreatePublicHolidayDto {
 
 // ── Announcements ───────────────────────────────────────
 export type AnnouncementAudienceType = 'ALL' | 'DEPARTMENTS' | 'BRANCHES' | 'EMPLOYEES';
+export type AnnouncementDeliveryChannel = 'IN_APP' | 'EMAIL' | 'SMS';
 
 export interface Announcement {
   id: string;
@@ -299,7 +300,7 @@ export interface Announcement {
   targetBranchIds: string[];
   targetEmployeeIds: string[];
   sendEmail: boolean;
-  sendSms: boolean;
+  deliveryChannels?: AnnouncementDeliveryChannel[];
   publishedAt: string;
   expiresAt?: string | null;
   createdById?: string | null;
@@ -335,8 +336,8 @@ export interface CreateAnnouncementPayload {
   departmentIds?: string[];
   branchIds?: string[];
   employeeIds?: string[];
+  deliveryChannels?: AnnouncementDeliveryChannel[];
   sendEmail?: boolean;
-  sendSms?: boolean;
   expiresAt?: string;
 }
 
