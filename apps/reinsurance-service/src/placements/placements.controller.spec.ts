@@ -13,6 +13,7 @@ import {
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
 import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementNotesService } from './placement-notes.service';
@@ -57,6 +58,12 @@ describe('PlacementsController', () => {
     changeStatus: jest.fn(),
     delete: jest.fn(),
   };
+  const endorsementClosingsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    changeStatus: jest.fn(),
+  };
   const notesService = {
     findAll: jest.fn(),
     findOne: jest.fn(),
@@ -85,6 +92,7 @@ describe('PlacementsController', () => {
       closingsService as unknown as PlacementClosingsService,
       endorsementsService as unknown as PlacementEndorsementsService,
       endorsementParticipantsService as unknown as PlacementEndorsementParticipantsService,
+      endorsementClosingsService as unknown as PlacementEndorsementClosingsService,
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
     );
@@ -110,6 +118,8 @@ describe('PlacementsController', () => {
     ['findEndorsement', PlacementPermission.VIEW],
     ['findEndorsementParticipants', PlacementPermission.VIEW],
     ['findEndorsementParticipant', PlacementPermission.VIEW],
+    ['findEndorsementClosings', PlacementPermission.VIEW],
+    ['findEndorsementClosing', PlacementPermission.VIEW],
     ['findNotes', PlacementPermission.VIEW],
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
@@ -124,6 +134,8 @@ describe('PlacementsController', () => {
     ['updateEndorsementParticipant', PlacementPermission.EDIT],
     ['changeEndorsementParticipantStatus', PlacementPermission.EDIT],
     ['deleteEndorsementParticipant', PlacementPermission.EDIT],
+    ['createEndorsementClosing', PlacementPermission.EDIT],
+    ['changeEndorsementClosingStatus', PlacementPermission.EDIT],
     ['changeStatus', PlacementPermission.EDIT],
     ['addParticipant', PlacementPermission.EDIT],
     ['updateParticipant', PlacementPermission.EDIT],
@@ -452,6 +464,68 @@ describe('PlacementsController', () => {
       'placement-1',
       'endorsement-1',
       'endorsement-participant-1',
+    );
+  });
+
+  it('delegates endorsement closing reads with authenticated tenant context', async () => {
+    const controller = createController();
+    endorsementClosingsService.findAll.mockResolvedValue([]);
+
+    const listResult = await controller.findEndorsementClosings(
+      'placement-1',
+      'endorsement-1',
+      { user } as never,
+    );
+    await controller.findEndorsementClosing(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+      { user } as never,
+    );
+
+    expect(endorsementClosingsService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+    expect(listResult).toEqual({ items: [] });
+    expect(endorsementClosingsService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+  });
+
+  it('delegates endorsement closing mutations with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.createEndorsementClosing(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+      { user } as never,
+    );
+    await controller.changeEndorsementClosingStatus(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+      { status: PlacementClosingStatus.ISSUED },
+      { user } as never,
+    );
+
+    expect(endorsementClosingsService.create).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-participant-1',
+    );
+    expect(endorsementClosingsService.changeStatus).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+      expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
     );
   });
 

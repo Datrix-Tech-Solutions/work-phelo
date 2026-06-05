@@ -59,10 +59,12 @@ hard lock in the MVP policy.
 Endorsement endpoints create versioned placement adjustment records. The backend
 captures \`originalSnapshot\` at creation and stores proposed changes separately.
 Endorsements may be created once at least one placement closing exists. Before
-payment they are optional formal version records; after first payment they are
-the mandatory path for business changes because direct edits are financially
-locked. Endorsements do not mutate the original placement, participants,
-closings, payments or notes.
+	payment they are optional formal version records; after first payment they are
+	the mandatory path for business changes because direct edits are financially
+	locked. Endorsements do not mutate the original placement, participants,
+	closings, payments or notes. Endorsement participants and endorsement closings
+	are endorsement-scoped records for market responses and accepted endorsement
+	business.
 
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:
@@ -132,6 +134,10 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Endorsement Participants',
       'Endorsement-scoped reinsurer market responses and capacity aggregates',
+    )
+    .addTag(
+      'Reinsurance - Endorsement Closings',
+      'Endorsement-scoped closing snapshots created from accepted endorsement participants',
     )
     .addTag(
       'Reinsurance - Risk Classes',
