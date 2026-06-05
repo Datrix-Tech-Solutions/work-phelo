@@ -61,6 +61,7 @@ interface PayrollRow {
   deductions: number;
   grossSalary: number;
   employeeStatutoryContrib: number;
+  employerStatutoryContrib: number;
   tier1Contribution: number;
   tier2Contribution: number;
   taxableIncome: number;
@@ -170,7 +171,8 @@ export function ManagePayrollTab() {
         deductions: otherDeductions,
         grossSalary: calc.grossSalary,
         employeeStatutoryContrib: calc.employeeStatutoryContrib,
-        tier1Contribution: calc.employerStatutoryContrib,
+        employerStatutoryContrib: calc.employerStatutoryContrib,
+        tier1Contribution: calc.tier1Contribution ?? 0,
         tier2Contribution: calc.tier2Contribution ?? 0,
         taxableIncome: calc.taxableIncome,
         paye: calc.paye,
@@ -196,53 +198,62 @@ export function ManagePayrollTab() {
     return payrollRows.filter((r) => r.employeeName.toLowerCase().includes(q));
   }, [payrollRows, searchQuery]);
 
-  const totals = useMemo(
-    () =>
-      filteredData.reduce(
-        (acc, r) => ({
-          gross: acc.gross + r.grossSalary,
-          net: acc.net + r.netSalary,
-          paye: acc.paye + r.paye,
-          statutory: acc.statutory + r.employeeStatutoryContrib + r.tier1Contribution,
-          employerCost: acc.employerCost + r.totalEmployerCost,
-        }),
-        { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
-      ),
-    [filteredData],
-  );
+  const sumRows = (rows: PayrollRow[]) =>
+    rows.reduce(
+      (acc, r) => ({
+        gross: acc.gross + r.grossSalary,
+        net: acc.net + r.netSalary,
+        paye: acc.paye + r.paye,
+        statutory: acc.statutory + r.employeeStatutoryContrib + r.employerStatutoryContrib,
+        employerCost: acc.employerCost + r.totalEmployerCost,
+      }),
+      { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
+    );
+
+  const totals = useMemo(() => sumRows(filteredData), [filteredData]);
+  const allTotals = useMemo(() => sumRows(payrollRows), [payrollRows]);
 
   const overrides = useMemo(() => {
     const result: Record<string, EmployeeOverride> = {};
-    Object.entries(basicMap).forEach(([id, val]) => {
-      result[id] = { ...result[id], basicSalary: val };
-    });
-    Object.entries(allowancesMap).forEach(([id, items]) => {
-      const totalAllowances = items
+    const employees = (empData?.data ?? []).filter(
+      (e) =>
+        PAYROLL_ELIGIBLE.includes(e.employmentStatus) && e.userStatus !== 'PENDING_VERIFICATION',
+    );
+
+    for (const e of employees) {
+      const savedAllowances: AllowanceItem[] =
+        e.allowances?.map((a) => ({
+          name: a.name ?? (a.type as string),
+          type: a.type,
+          amount: Number(a.amount),
+        })) ?? [];
+
+      const allowances = allowancesMap[e.id] ?? savedAllowances;
+      const deductionItems = deductionItemsMap[e.id] ?? profileDeductionItems[e.id] ?? [];
+      const basicSalary = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
+      const totalAllowances = allowances
         .filter((item) => !isTransportAllowance(item))
         .reduce((sum, item) => sum + item.amount, 0);
-      const transportAmount = items
+      const transportAmount = allowances
         .filter(isTransportAllowance)
         .reduce((sum, item) => sum + item.amount, 0);
-      result[id] = {
-        ...result[id],
+
+      result[e.id] = {
+        basicSalary,
         totalAllowances,
         transportAmount,
-        allowanceItems: items.map((item) => ({
+        allowanceItems: allowances.map((item) => ({
           name: item.name,
           type: item.type ?? null,
           amount: item.amount,
         })),
+        otherDeductions: deductionItems.reduce((sum, item) => sum + item.amount, 0),
+        deductionItems,
       };
-    });
-    Object.entries(deductionItemsMap).forEach(([id, items]) => {
-      result[id] = {
-        ...result[id],
-        otherDeductions: items.reduce((sum, item) => sum + item.amount, 0),
-        deductionItems: items,
-      };
-    });
+    }
+
     return result;
-  }, [basicMap, allowancesMap, deductionItemsMap]);
+  }, [empData, basicMap, allowancesMap, deductionItemsMap, profileDeductionItems]);
 
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
@@ -436,7 +447,7 @@ export function ManagePayrollTab() {
       <RunPayrollPanel
         isOpen={runPanelOpen}
         onClose={() => setRunPanelOpen(false)}
-        totals={totals}
+        totals={allTotals}
         overrides={overrides}
         payrollCountry={payrollCountry}
         payrollCurrency={payrollCurrency}
