@@ -655,6 +655,7 @@ export interface PayrollDecisionEvent {
 export interface AnnouncementPublishedEvent {
   tenantId: string;
   announcementId: string;
+  tenantName?: string;
   title: string;
   body: string;
   publishedAt: string;
