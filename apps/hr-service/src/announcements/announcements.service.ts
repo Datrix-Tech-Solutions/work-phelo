@@ -750,6 +750,7 @@ export class AnnouncementsService {
       await this.rabbitmq.notificationAnnouncementPublished({
         tenantId,
         announcementId: announcement.id,
+        tenantName: actor.tenantName,
         title: announcement.title,
         body: announcement.body,
         publishedAt: announcement.publishedAt.toISOString(),

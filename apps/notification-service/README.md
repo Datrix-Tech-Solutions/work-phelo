@@ -83,6 +83,42 @@ PiloSMS response mapping:
 
 Provider status/detail metadata is stored in `NotificationLog.metadata` for SMS deliveries.
 
+## Announcement SMS Format
+
+HR announcement SMS messages are intentionally short to reduce multi-segment SMS costs. The notification-service formats announcement SMS with the tenant/company name, title, and a body preview:
+
+```text
+{CompanyName}: {AnnouncementTitle} - {AnnouncementPreview}
+```
+
+Example:
+
+```text
+Acme: Test Announcement - First announcement test.
+```
+
+The SMS formatter removes URLs and workspace links from SMS content. Email templates may still include workspace links, but SMS messages must not include internal URLs, tenant IDs, workspace identifiers, or `View in WorkPhelo` copy.
+
+The formatter targets a single SMS segment by default:
+
+- Maximum length: `160` characters
+- Company name and title are preserved whenever possible
+- Long body previews are truncated and suffixed with `...`
+
+Before:
+
+```text
+WorkPhelo announcement: Test Announcement. Acme First Announcement test from WorkPhelo ERP
+
+View in WorkPhelo: https://example.workphelo.com/acme/login
+```
+
+After:
+
+```text
+Acme: Test Announcement - First Announcement test from WorkPhelo ERP
+```
+
 ## Validation
 
 Useful local checks:

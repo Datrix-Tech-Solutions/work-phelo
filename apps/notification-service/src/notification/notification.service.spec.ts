@@ -53,6 +53,7 @@ describe('NotificationService announcement delivery channels', () => {
 
   const baseAnnouncement = {
     tenantId: 'tenant-1',
+    tenantName: 'Acme',
     announcementId: 'ann-1',
     title: 'Office closure',
     body: 'The office will be closed on Friday for maintenance.',
@@ -109,7 +110,7 @@ describe('NotificationService announcement delivery channels', () => {
     expect(email.sendAnnouncementPublishedNotification).not.toHaveBeenCalled();
     expect(sms.sendMessage).toHaveBeenCalledWith(
       recipient.phone,
-      expect.stringContaining('WorkPhelo announcement: Office closure.'),
+      'Acme: Office closure - The office will be closed on Friday for maintenance.',
     );
     expect(notificationLogEntries()).toContainEqual(
       expect.objectContaining({

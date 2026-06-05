@@ -137,6 +137,7 @@ describe('AnnouncementsService read tracking', () => {
     expect(rabbitmq.notificationAnnouncementPublished).toHaveBeenCalledWith({
       tenantId: 'tenant-1',
       announcementId: 'ann-email',
+      tenantName: 'Acme',
       title: 'Email update',
       body: 'This announcement should still email employees.',
       publishedAt: '2026-06-02T10:00:00.000Z',
@@ -208,6 +209,7 @@ describe('AnnouncementsService read tracking', () => {
     expect(rabbitmq.notificationAnnouncementPublished).toHaveBeenCalledWith({
       tenantId: 'tenant-1',
       announcementId: 'ann-sms',
+      tenantName: 'Acme',
       title: 'SMS update',
       body: 'This announcement should notify employees by SMS.',
       publishedAt: '2026-06-02T10:00:00.000Z',

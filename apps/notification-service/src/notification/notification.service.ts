@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../channels/email.service';
 import { SmsService } from '../channels/sms.service';
 import type { SmsSendResult } from '../channels/sms-provider.interface';
+import { formatAnnouncementSms } from './announcement-sms.formatter';
 
 @Injectable()
 export class NotificationService {
@@ -25,25 +26,6 @@ export class NotificationService {
     }
 
     return channels.includes(channel);
-  }
-
-  private buildAnnouncementSmsMessage(data: {
-    title: string;
-    body: string;
-    platformLink?: string;
-  }): string {
-    const title = data.title.trim();
-    const body = data.body.replace(/\s+/g, ' ').trim();
-    const suffix = data.platformLink
-      ? ` View in WorkPhelo: ${data.platformLink}`
-      : '';
-    const maxBodyLength = Math.max(0, 280 - title.length - suffix.length - 25);
-    const truncatedBody =
-      body.length > maxBodyLength
-        ? `${body.slice(0, Math.max(0, maxBodyLength - 1)).trimEnd()}…`
-        : body;
-
-    return `WorkPhelo announcement: ${title}. ${truncatedBody}${suffix}`;
   }
 
   private async isDuplicate(
@@ -311,6 +293,7 @@ export class NotificationService {
   async sendAnnouncementPublishedNotification(data: {
     tenantId: string;
     announcementId: string;
+    tenantName?: string;
     title: string;
     body: string;
     publishedAt: string;
@@ -391,7 +374,11 @@ export class NotificationService {
         })
       : [];
 
-    const smsMessage = this.buildAnnouncementSmsMessage(data);
+    const smsMessage = formatAnnouncementSms({
+      companyName: data.tenantName,
+      title: data.title,
+      body: data.body,
+    });
     const smsTasks = shouldSendSms
       ? data.recipients.map(async (recipient) => {
           if (!recipient.phone) {
