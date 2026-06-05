@@ -211,6 +211,7 @@ jobs:
             BUILD_SHA=${{ env.BUILD_SHA }}
             BUILD_REF=${{ env.BUILD_REF }}
             NEXT_PUBLIC_API_URL=${{ env.WEB_PUBLIC_API_URL }}
+            NEXT_PUBLIC_ENABLE_ANNOUNCEMENT_SMS=true
 
 
   deploy:
