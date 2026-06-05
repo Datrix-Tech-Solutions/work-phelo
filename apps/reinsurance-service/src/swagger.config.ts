@@ -127,7 +127,11 @@ pipeline enables it for development only.
     )
     .addTag(
       'Reinsurance - Endorsements',
-      'Versioned placement adjustment records for post-payment business changes',
+      'Versioned placement adjustment records created after placement closing; mandatory after payment lock',
+    )
+    .addTag(
+      'Reinsurance - Endorsement Participants',
+      'Endorsement-scoped reinsurer market responses and capacity aggregates',
     )
     .addTag(
       'Reinsurance - Risk Classes',

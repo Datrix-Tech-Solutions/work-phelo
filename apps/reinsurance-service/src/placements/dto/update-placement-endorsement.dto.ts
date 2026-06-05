@@ -2,10 +2,13 @@ import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
+  IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PlacementEndorsementType } from '../../../prisma/generated/client';
@@ -66,4 +69,18 @@ export class UpdatePlacementEndorsementDto {
   @IsObject()
   @Type(() => Object)
   proposedSnapshot?: Record<string, unknown>;
+
+  @ApiPropertyOptional({
+    example: 25,
+    minimum: 0,
+    maximum: 100,
+    description:
+      'Replacement endorsement target capacity percentage. Accepted endorsement participant signed lines are capped only when this value is set.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0)
+  @Max(100)
+  targetPercent?: number;
 }

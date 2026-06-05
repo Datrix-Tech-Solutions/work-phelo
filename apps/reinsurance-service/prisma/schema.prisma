@@ -147,6 +147,17 @@ enum PlacementEndorsementStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementEndorsementParticipantStatus {
+  INVITED
+  OFFER_SENT
+  QUOTED
+  ACCEPTED
+  DECLINED
+  CLOSED
+
+  @@schema("reinsurance")
+}
+
 enum MailboxProvider {
   MICROSOFT_GRAPH
   GOOGLE_GMAIL
@@ -190,33 +201,34 @@ enum RiskTypeFieldType {
 }
 
 model Counterparty {
-  id                 String                 @id @default(uuid())
-  tenantId           String
-  type               CounterpartyType
-  origin             CounterpartyOrigin     @default(LOCAL)
-  name               String
-  normalizedName     String
-  registrationNumber String?
-  country            String?
-  taxId              String?
-  licenseNumber      String?
-  email              String?
-  phone              String?
-  website            String?
-  notes              String?
-  brokerageFee       Decimal?               @db.Decimal(5, 2)
-  createdByUserId    String
-  updatedByUserId    String
-  archivedByUserId   String?
-  archivedAt         DateTime?
-  createdAt          DateTime               @default(now())
-  updatedAt          DateTime               @updatedAt
-  contacts           CounterpartyContact[]
-  addresses          CounterpartyAddress[]
-  cededPlacements    Placement[]            @relation("PlacementCedant")
-  placementRoles     PlacementParticipant[] @relation("PlacementParticipantCounterparty")
-  placementPayments   PlacementPayment[]     @relation("PlacementPaymentCounterparty")
-  placementNotes      PlacementNote[]        @relation("PlacementNoteCounterparty")
+  id                      String                            @id @default(uuid())
+  tenantId                String
+  type                    CounterpartyType
+  origin                  CounterpartyOrigin                @default(LOCAL)
+  name                    String
+  normalizedName          String
+  registrationNumber      String?
+  country                 String?
+  taxId                   String?
+  licenseNumber           String?
+  email                   String?
+  phone                   String?
+  website                 String?
+  notes                   String?
+  brokerageFee            Decimal?                          @db.Decimal(5, 2)
+  createdByUserId         String
+  updatedByUserId         String
+  archivedByUserId        String?
+  archivedAt              DateTime?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  contacts                CounterpartyContact[]
+  addresses               CounterpartyAddress[]
+  cededPlacements         Placement[]                       @relation("PlacementCedant")
+  placementRoles          PlacementParticipant[]            @relation("PlacementParticipantCounterparty")
+  placementPayments       PlacementPayment[]                @relation("PlacementPaymentCounterparty")
+  placementNotes          PlacementNote[]                   @relation("PlacementNoteCounterparty")
+  endorsementParticipants PlacementEndorsementParticipant[] @relation("PlacementEndorsementParticipantCounterparty")
 
   @@unique([id, tenantId])
   @@index([tenantId, type, archivedAt, name])
@@ -243,44 +255,45 @@ model CounterpartyContact {
 }
 
 model Placement {
-  id                   String                   @id @default(uuid())
-  tenantId             String
-  reference            String
-  normalizedReference  String
-  title                String
-  placementType        PlacementType            @default(FACULTATIVE)
-  status               PlacementStatus          @default(DRAFT)
-  cedantId             String
+  id                      String                            @id @default(uuid())
+  tenantId                String
+  reference               String
+  normalizedReference     String
+  title                   String
+  placementType           PlacementType                     @default(FACULTATIVE)
+  status                  PlacementStatus                   @default(DRAFT)
+  cedantId                String
   // riskTypeId is validated at service layer (tenant-scoped FK existence check)
-  riskTypeId           String?
-  classOfBusiness      String?
-  businessDetails      Json?
-  offerDetails         Json?
-  description          String?
-  inceptionDate        DateTime?
-  expiryDate           DateTime?
-  currency             String?
-  exchangeRateToBase   Decimal?                 @db.Decimal(18, 6)
-  sumInsured           Decimal?                 @db.Decimal(18, 2)
-  rate                 Decimal?                 @db.Decimal(7, 4)
-  premium              Decimal?                 @db.Decimal(18, 2)
-  commission           Decimal?                 @db.Decimal(7, 4)
-  facultativeOffer     Decimal?                 @db.Decimal(7, 4)
-  preliminaryBrokerage Decimal?                 @db.Decimal(7, 4)
-  createdByUserId      String
-  updatedByUserId      String
-  archivedByUserId     String?
-  archivedAt           DateTime?
-  createdAt            DateTime                 @default(now())
-  updatedAt            DateTime                 @updatedAt
-  cedant               Counterparty             @relation("PlacementCedant", fields: [cedantId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  participants         PlacementParticipant[]
-  statusHistory        PlacementStatusHistory[]
-  emailLinks           PlacementEmailLink[]
-  closings             PlacementClosing[]
-  payments             PlacementPayment[]
-  notes                PlacementNote[]
-  endorsements         PlacementEndorsement[]
+  riskTypeId              String?
+  classOfBusiness         String?
+  businessDetails         Json?
+  offerDetails            Json?
+  description             String?
+  inceptionDate           DateTime?
+  expiryDate              DateTime?
+  currency                String?
+  exchangeRateToBase      Decimal?                          @db.Decimal(18, 6)
+  sumInsured              Decimal?                          @db.Decimal(18, 2)
+  rate                    Decimal?                          @db.Decimal(7, 4)
+  premium                 Decimal?                          @db.Decimal(18, 2)
+  commission              Decimal?                          @db.Decimal(7, 4)
+  facultativeOffer        Decimal?                          @db.Decimal(7, 4)
+  preliminaryBrokerage    Decimal?                          @db.Decimal(7, 4)
+  createdByUserId         String
+  updatedByUserId         String
+  archivedByUserId        String?
+  archivedAt              DateTime?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  cedant                  Counterparty                      @relation("PlacementCedant", fields: [cedantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participants            PlacementParticipant[]
+  statusHistory           PlacementStatusHistory[]
+  emailLinks              PlacementEmailLink[]
+  closings                PlacementClosing[]
+  payments                PlacementPayment[]
+  notes                   PlacementNote[]
+  endorsements            PlacementEndorsement[]
+  endorsementParticipants PlacementEndorsementParticipant[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementType, archivedAt])
@@ -316,17 +329,17 @@ model Currency {
 
 // Renamed from BusinessClass; code field dropped; uniqueness on name
 model RiskClass {
-  id              String      @id @default(uuid())
+  id              String     @id @default(uuid())
   tenantId        String
   name            String
   description     String?
-  isActive        Boolean     @default(true)
-  displayOrder    Int         @default(0)
+  isActive        Boolean    @default(true)
+  displayOrder    Int        @default(0)
   createdByUserId String
   updatedByUserId String
   archivedAt      DateTime?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
   riskTypes       RiskType[]
 
   @@unique([id, tenantId])
@@ -389,23 +402,24 @@ model RiskTypeField {
 }
 
 model PlacementParticipant {
-  id                String                   @id @default(uuid())
-  tenantId          String
-  placementId       String
-  counterpartyId    String
-  role              PlacementParticipantRole
-  status            PlacementParticipantStatus @default(INVITED)
-  sharePercent      Decimal?                 @db.Decimal(7, 4)
-  signedLinePercent Decimal?                 @db.Decimal(7, 4)
-  brokerageFee      Decimal?                 @db.Decimal(5, 2)
-  notes             String?
-  createdAt         DateTime                 @default(now())
-  updatedAt         DateTime                 @updatedAt
-  placement         Placement                @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  counterparty      Counterparty             @relation("PlacementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  closings          PlacementClosing[]
-  payments          PlacementPayment[]
-  placementNotes    PlacementNote[]
+  id                      String                            @id @default(uuid())
+  tenantId                String
+  placementId             String
+  counterpartyId          String
+  role                    PlacementParticipantRole
+  status                  PlacementParticipantStatus        @default(INVITED)
+  sharePercent            Decimal?                          @db.Decimal(7, 4)
+  signedLinePercent       Decimal?                          @db.Decimal(7, 4)
+  brokerageFee            Decimal?                          @db.Decimal(5, 2)
+  notes                   String?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  placement               Placement                         @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  counterparty            Counterparty                      @relation("PlacementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closings                PlacementClosing[]
+  payments                PlacementPayment[]
+  placementNotes          PlacementNote[]
+  endorsementParticipants PlacementEndorsementParticipant[] @relation("PlacementEndorsementOriginalParticipant")
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, counterpartyId, role])
@@ -473,7 +487,7 @@ model PlacementPayment {
   counterparty        Counterparty              @relation("PlacementPaymentCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
   reversalOfPayment   PlacementPayment?         @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
   reversalPayments    PlacementPayment[]        @relation("PlacementPaymentReversal")
-  settledNotes         PlacementNote[]           @relation("PlacementNoteSettlement")
+  settledNotes        PlacementNote[]           @relation("PlacementNoteSettlement")
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, status, createdAt])
@@ -486,40 +500,40 @@ model PlacementPayment {
 }
 
 model PlacementNote {
-  id                   String                 @id @default(uuid())
-  tenantId             String
-  placementId          String
-  closingId            String?
-  participantId        String?
-  counterpartyId       String
-  settledByPaymentId   String?
-  type                 PlacementNoteType
-  direction            PlacementNoteDirection
-  noteNumber           String
-  status               PlacementNoteStatus    @default(DRAFT)
-  currency             String
-  grossAmount          Decimal                @db.Decimal(18, 2)
-  commissionPercent    Decimal?               @db.Decimal(7, 4)
-  commissionAmount     Decimal?               @db.Decimal(18, 2)
-  brokeragePercent     Decimal?               @db.Decimal(5, 2)
-  brokerageAmount      Decimal?               @db.Decimal(18, 2)
-  nicLevyPercent       Decimal                @default(0) @db.Decimal(7, 4)
-  nicLevyAmount        Decimal                @default(0) @db.Decimal(18, 2)
-  withholdingTaxPercent Decimal               @default(0) @db.Decimal(7, 4)
-  withholdingTaxAmount Decimal                @default(0) @db.Decimal(18, 2)
-  netAmount            Decimal                @db.Decimal(18, 2)
-  noteDate             DateTime
-  issuedAt             DateTime?
-  voidedAt             DateTime?
-  voidReason           String?
-  createdByUserId      String
-  createdAt            DateTime               @default(now())
-  updatedAt            DateTime               @updatedAt
-  placement            Placement              @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  closing              PlacementClosing?      @relation(fields: [closingId], references: [id], onDelete: Restrict)
-  participant          PlacementParticipant?  @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  counterparty         Counterparty           @relation("PlacementNoteCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  settledByPayment     PlacementPayment?      @relation("PlacementNoteSettlement", fields: [settledByPaymentId], references: [id], onDelete: Restrict)
+  id                    String                 @id @default(uuid())
+  tenantId              String
+  placementId           String
+  closingId             String?
+  participantId         String?
+  counterpartyId        String
+  settledByPaymentId    String?
+  type                  PlacementNoteType
+  direction             PlacementNoteDirection
+  noteNumber            String
+  status                PlacementNoteStatus    @default(DRAFT)
+  currency              String
+  grossAmount           Decimal                @db.Decimal(18, 2)
+  commissionPercent     Decimal?               @db.Decimal(7, 4)
+  commissionAmount      Decimal?               @db.Decimal(18, 2)
+  brokeragePercent      Decimal?               @db.Decimal(5, 2)
+  brokerageAmount       Decimal?               @db.Decimal(18, 2)
+  nicLevyPercent        Decimal                @default(0) @db.Decimal(7, 4)
+  nicLevyAmount         Decimal                @default(0) @db.Decimal(18, 2)
+  withholdingTaxPercent Decimal                @default(0) @db.Decimal(7, 4)
+  withholdingTaxAmount  Decimal                @default(0) @db.Decimal(18, 2)
+  netAmount             Decimal                @db.Decimal(18, 2)
+  noteDate              DateTime
+  issuedAt              DateTime?
+  voidedAt              DateTime?
+  voidReason            String?
+  createdByUserId       String
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  placement             Placement              @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closing               PlacementClosing?      @relation(fields: [closingId], references: [id], onDelete: Restrict)
+  participant           PlacementParticipant?  @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty          Counterparty           @relation("PlacementNoteCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  settledByPayment      PlacementPayment?      @relation("PlacementNoteSettlement", fields: [settledByPaymentId], references: [id], onDelete: Restrict)
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, noteNumber])
@@ -533,31 +547,61 @@ model PlacementNote {
 }
 
 model PlacementEndorsement {
-  id                String                     @id @default(uuid())
+  id                String                            @id @default(uuid())
   tenantId          String
   placementId       String
   endorsementNumber String
   type              PlacementEndorsementType
-  status            PlacementEndorsementStatus @default(DRAFT)
+  status            PlacementEndorsementStatus        @default(DRAFT)
   effectiveDate     DateTime
   reason            String
   description       String?
   changeSummary     Json?
   originalSnapshot  Json
   proposedSnapshot  Json?
+  targetPercent     Decimal?                          @db.Decimal(7, 4)
   createdByUserId   String
   updatedByUserId   String
   closedAt          DateTime?
   voidedAt          DateTime?
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  placement         Placement                  @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  createdAt         DateTime                          @default(now())
+  updatedAt         DateTime                          @updatedAt
+  placement         Placement                         @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participants      PlacementEndorsementParticipant[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, endorsementNumber])
   @@index([tenantId, placementId, status, createdAt])
   @@index([tenantId, placementId, type, createdAt])
   @@index([tenantId, status, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementEndorsementParticipant {
+  id                    String                                @id @default(uuid())
+  tenantId              String
+  placementId           String
+  endorsementId         String
+  originalParticipantId String?
+  counterpartyId        String
+  status                PlacementEndorsementParticipantStatus @default(INVITED)
+  sharePercent          Decimal?                              @db.Decimal(7, 4)
+  signedLinePercent     Decimal?                              @db.Decimal(7, 4)
+  notes                 String?
+  createdByUserId       String
+  createdAt             DateTime                              @default(now())
+  updatedAt             DateTime                              @updatedAt
+  placement             Placement                             @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsement           PlacementEndorsement                  @relation(fields: [endorsementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  originalParticipant   PlacementParticipant?                 @relation("PlacementEndorsementOriginalParticipant", fields: [originalParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty          Counterparty                          @relation("PlacementEndorsementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, endorsementId])
+  @@index([tenantId, endorsementId, status])
+  @@index([tenantId, endorsementId, counterpartyId])
+  @@index([tenantId, originalParticipantId])
+  @@index([tenantId, counterpartyId, createdAt])
   @@schema("reinsurance")
 }
 

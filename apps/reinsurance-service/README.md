@@ -221,6 +221,10 @@ changes. PR1 creates the endorsement seam only; it does not add endorsement
 participants, closings, notes, payments, claims, accounting, PDFs, emails or
 frontend changes.
 
+PR2 adds endorsement-scoped participants. These are separate market response
+records for the endorsement only; they do not alter original placement
+participants.
+
 ```text
 GET   /api/v1/operations/reinsurance/placements/:id/endorsements
 POST  /api/v1/operations/reinsurance/placements/:id/endorsements
@@ -242,6 +246,10 @@ Core rules:
 - Only `DRAFT` endorsements can be edited directly.
 - `CLOSED`, `DECLINED` and `VOID` endorsements are terminal.
 
+`targetPercent` is optional on the endorsement. When supplied, accepted
+endorsement participant signed lines cannot exceed that target. When omitted,
+the backend does not enforce a total accepted endorsement cap yet.
+
 Lifecycle:
 
 | Status               | Meaning                                      | Allowed next statuses                                |
@@ -254,6 +262,65 @@ Lifecycle:
 | `CLOSED`             | Endorsement is complete.                     | terminal                                             |
 | `DECLINED`           | Endorsement will not proceed.                | terminal                                             |
 | `VOID`               | Endorsement was cancelled administratively.  | terminal                                             |
+
+## Placement Endorsement Participants API
+
+Endorsement participants represent reinsurer responses to a specific
+endorsement. They are endorsement-scoped child records. They never mutate the
+original `PlacementParticipant` rows captured on the placement.
+
+```text
+GET    /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/participants
+POST   /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/participants
+GET    /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/participants/:participantId
+PATCH  /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/participants/:participantId
+PATCH  /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/participants/:participantId/status
+DELETE /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/participants/:participantId
+```
+
+Existing reinsurer flow:
+
+- Use `originalParticipantId` when the reinsurer already has a participant row
+  on the original placement.
+- The `originalParticipantId` must belong to the same placement and the same
+  counterparty as the endorsement participant.
+- The original participant is read for validation only; it is not updated.
+
+New reinsurer flow:
+
+- Omit `originalParticipantId` when introducing a reinsurer that did not
+  participate in the original placement.
+- `counterpartyId` must still point to an active same-tenant `REINSURER`.
+- New reinsurers remain endorsement-scoped until future endorsement closing and
+  application workflows are implemented.
+
+Endorsement participant duplicate rule:
+
+- Only one active endorsement participant is allowed for a reinsurer in the same
+  endorsement.
+- `DECLINED` is inactive for duplicate checks, so a reinsurer can be re-added
+  after declining if the broker needs to remarket revised terms.
+- `CLOSED` remains historical and cannot be duplicated in this PR.
+
+Capacity aggregates returned by the list endpoint:
+
+```text
+totalOfferedPercent  = sum of sharePercent for all endorsement participants
+totalAcceptedPercent = sum of signedLinePercent for ACCEPTED/CLOSED participants
+remainingPercent     = targetPercent - totalAcceptedPercent when targetPercent exists, otherwise null
+declinedPercent      = sum of sharePercent for DECLINED participants
+```
+
+Validation rules:
+
+- `sharePercent`, when supplied, must be greater than `0` and at most `100`.
+- `ACCEPTED` requires `signedLinePercent > 0`.
+- `signedLinePercent` cannot exceed `sharePercent` when both are supplied.
+- If endorsement `targetPercent` is set, total accepted signed lines cannot
+  exceed it.
+- `DECLINED` participants do not contribute to accepted capacity.
+- Participant mutations are blocked when the endorsement status is `CLOSED`,
+  `DECLINED` or `VOID`.
 
 ### Participant status meanings
 

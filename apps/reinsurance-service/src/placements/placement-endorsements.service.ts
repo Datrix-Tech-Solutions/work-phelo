@@ -143,6 +143,7 @@ export class PlacementEndorsementsService {
             this.buildOriginalSnapshot(placement),
           )!,
           proposedSnapshot: this.toJsonInput(dto.proposedSnapshot),
+          targetPercent: this.toDecimalInput(dto.targetPercent),
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
@@ -181,6 +182,9 @@ export class PlacementEndorsementsService {
           : {}),
         ...(dto.proposedSnapshot !== undefined
           ? { proposedSnapshot: this.toJsonInput(dto.proposedSnapshot) }
+          : {}),
+        ...(dto.targetPercent !== undefined
+          ? { targetPercent: this.toDecimalInput(dto.targetPercent) }
           : {}),
         updatedByUserId: user.id,
       },
@@ -418,6 +422,11 @@ export class PlacementEndorsementsService {
     if (value === undefined) return undefined;
     const cleaned = value.trim();
     return cleaned ? cleaned : null;
+  }
+
+  private toDecimalInput(value?: number): Prisma.Decimal | undefined {
+    if (value === undefined) return undefined;
+    return new Prisma.Decimal(value);
   }
 
   private toJsonInput(
