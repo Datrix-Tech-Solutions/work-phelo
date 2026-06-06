@@ -6,7 +6,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { Facultative } from '@/types/reinsurance';
-import { SlipPreviewModal } from '@/components/organisms/reinsurance/SlipPreviewModal';
+import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
 
 export type DistributionStatus = 'Pending' | 'Accepted' | 'Declined';
 
@@ -34,6 +34,7 @@ interface DistributionTableProps {
   entries: DistributionEntry[];
   facPremium: number;
   placement: Facultative;
+  hasActiveEndorsement?: boolean;
   onShareCommit: (row: DistributionEntry, share: number) => void;
   onBrokerageCommit: (row: DistributionEntry, brokerage: number) => void;
   onMailSent: (row: DistributionEntry) => void;
@@ -46,6 +47,7 @@ export function DistributionTable({
   entries,
   facPremium,
   placement,
+  hasActiveEndorsement = false,
   onShareCommit,
   onBrokerageCommit,
   onMailSent,
@@ -210,6 +212,10 @@ export function DistributionTable({
       render: (row) => {
         const mailed = mailedIds.has(row.id);
         const responded = row.status === 'Accepted' || row.status === 'Declined';
+        // In endorsement mode, pending participants re-confirm (no decline allowed)
+        const isReconfirming = hasActiveEndorsement && row.status === 'Pending';
+        const showAccept = isReconfirming || (mailed && !responded);
+        const showDecline = !isReconfirming && mailed && !responded;
         return (
           <div className="flex items-center gap-2">
             <button
@@ -228,25 +234,25 @@ export function DistributionTable({
             >
               <Icons.Mail className="w-4 h-4" />
             </button>
-            {mailed && !responded && (
-              <>
-                <button
-                  type="button"
-                  title="Accept"
-                  onClick={() => handleAccept(row)}
-                  className="text-green-500 hover:text-green-600 transition-colors"
-                >
-                  <Icons.Check className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  title="Decline"
-                  onClick={() => handleDecline(row)}
-                  className="text-red-400 hover:text-red-600 transition-colors"
-                >
-                  <Icons.X className="w-4 h-4" />
-                </button>
-              </>
+            {showAccept && (
+              <button
+                type="button"
+                title="Accept"
+                onClick={() => handleAccept(row)}
+                className="text-green-500 hover:text-green-600 transition-colors"
+              >
+                <Icons.Check className="w-4 h-4" />
+              </button>
+            )}
+            {showDecline && (
+              <button
+                type="button"
+                title="Decline"
+                onClick={() => handleDecline(row)}
+                className="text-red-400 hover:text-red-600 transition-colors"
+              >
+                <Icons.X className="w-4 h-4" />
+              </button>
             )}
             {!responded && (
               <button

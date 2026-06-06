@@ -1,6 +1,6 @@
 'use client';
 
-import { DocumentPreviewModal } from '@/components/organisms/reinsurance/DocumentPreviewModal';
+import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { useReinsurers, useCedants } from '@/hooks';

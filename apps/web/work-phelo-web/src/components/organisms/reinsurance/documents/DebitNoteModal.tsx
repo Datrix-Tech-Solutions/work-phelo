@@ -1,6 +1,6 @@
 'use client';
 
-import { DocumentPreviewModal } from '@/components/organisms/reinsurance/DocumentPreviewModal';
+import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative } from '@/types/reinsurance';
 import { useCedants } from '@/hooks';
 
@@ -130,13 +130,13 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
         </div>
 
         {/* Table */}
-        <table className="w-full border-collapse border border-gray-200 rounded-lg overflow-hidden text-sm">
+        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-sm">
           <tbody>
             {/* Description heading */}
-            <tr className="bg-gray-300">
+            <tr className="bg-blue-900">
               <td
                 colSpan={2}
-                className="py-2 px-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wide border-b border-gray-200"
+                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
               >
                 Description
               </td>
@@ -177,10 +177,10 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
             ))}
 
             {/* Particulars heading */}
-            <tr className="bg-gray-300">
+            <tr className="bg-blue-900">
               <td
                 colSpan={2}
-                className="py-2 px-4 text-center text-xs font-semibold text-gray-700 uppercase tracking-wide border-y border-gray-200"
+                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-y border-blue-900"
               >
                 Particulars
               </td>

@@ -55,19 +55,19 @@ export function DocumentPreviewModal({
         }
       >
         <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+          <div className="grid grid-cols-3 items-center pb-2 border-b border-gray-100">
             <Image
               src="/iriskre.png"
               alt="iRisk logo"
               width={120}
               height={60}
-              className="object-contain"
+              className="object-contain justify-self-start"
               priority
             />
-            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
+            <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wide text-center">
               {documentTitle}
             </h2>
-            <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-col items-center gap-1 justify-self-end">
               <QRCode value={COMPANY_URL} size={56} />
             </div>
           </div>

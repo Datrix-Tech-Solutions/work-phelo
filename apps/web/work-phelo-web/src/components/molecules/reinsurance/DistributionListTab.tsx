@@ -16,7 +16,10 @@ import {
   useUpdateParticipant,
   useUpdateParticipantStatus,
   useDeleteParticipant,
+  useCreateClosing,
+  usePlacementEndorsements,
 } from '@/hooks';
+import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -66,6 +69,12 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const { mutateAsync: updateParticipant } = useUpdateParticipant(placement.id);
   const { mutateAsync: updateParticipantStatus } = useUpdateParticipantStatus(placement.id);
   const { mutateAsync: deleteParticipant } = useDeleteParticipant(placement.id);
+  const { mutateAsync: createClosing } = useCreateClosing(placement.id);
+  const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
+
+  const hasActiveEndorsement = endorsements.some(
+    (e) => !TERMINAL_ENDORSEMENT_STATUSES.includes(e.status),
+  );
 
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -152,6 +161,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     patch(row.id, { status: 'Accepted' });
     updateParticipant({ participantId: row.id, signedLinePercent: row.shareLine })
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' }))
+      .then(() => createClosing(row.id))
       .catch((error) => {
         patch(row.id, { status: 'Pending' });
         toast().addToast({ message: extractError(error), type: 'error' });
@@ -263,6 +273,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           entries={entries}
           facPremium={facPremium}
           placement={placement}
+          hasActiveEndorsement={hasActiveEndorsement}
           onShareCommit={handleShareCommit}
           onBrokerageCommit={handleBrokerageCommit}
           onMailSent={handleMailSent}

@@ -1,6 +1,6 @@
 'use client';
 
-import { DocumentPreviewModal } from '@/components/organisms/reinsurance/DocumentPreviewModal';
+import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative } from '@/types/reinsurance';
 import { useReinsurers } from '@/hooks';
 

@@ -2,7 +2,7 @@
 
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
-import { DocumentPreviewModal } from '@/components/organisms/reinsurance/DocumentPreviewModal';
+import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 
 function toLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());

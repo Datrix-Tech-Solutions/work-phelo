@@ -11,12 +11,15 @@ import { DistributionListTab } from '@/components/molecules/reinsurance/Distribu
 import { PlacementClosingsTab } from '@/components/molecules/reinsurance/PlacementClosingsTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
+import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
+import { EndorsementTab } from '@/components/molecules/reinsurance/EndorsmentTab';
 
-type FacultativeTab = 'distribution' | 'closings';
+type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
 
 const TABS = [
   { key: 'distribution', label: 'Distribution List' },
   { key: 'closings', label: 'Placement Closings' },
+  { key: 'endorsement', label: 'Endorsement' },
 ];
 
 export default function FacultativeDetailPage({
@@ -28,6 +31,7 @@ export default function FacultativeDetailPage({
   const { data: placement, isLoading } = useFacultativePlacement(id);
   const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
   const [editOpen, setEditOpen] = useState(false);
+  const [endorsementOpen, setEndorsementOpen] = useState(false);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -44,9 +48,18 @@ export default function FacultativeDetailPage({
           <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
         </nav>
         {placement && (
-          <Button size="sm" onClick={() => setEditOpen(true)}>
-            Edit
-          </Button>
+          <div className="flex items-center gap-2">
+            {placement.participants.some(
+              (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
+            ) && (
+              <Button size="sm" variant="outline" onClick={() => setEndorsementOpen(true)}>
+                Endorse Policy
+              </Button>
+            )}
+            <Button size="sm" onClick={() => setEditOpen(true)}>
+              Edit
+            </Button>
+          </div>
         )}
       </div>
 
@@ -76,6 +89,7 @@ export default function FacultativeDetailPage({
               <div className="pt-5">
                 {activeTab === 'distribution' && <DistributionListTab placement={placement} />}
                 {activeTab === 'closings' && <PlacementClosingsTab placement={placement} />}
+                {activeTab === 'endorsement' && <EndorsementTab placement={placement} />}
               </div>
             </div>
           </div>
@@ -87,6 +101,13 @@ export default function FacultativeDetailPage({
           isOpen={editOpen}
           placement={placement}
           onClose={() => setEditOpen(false)}
+        />
+      )}
+      {placement && (
+        <EndorsementPanel
+          isOpen={endorsementOpen}
+          placement={placement}
+          onClose={() => setEndorsementOpen(false)}
         />
       )}
     </div>

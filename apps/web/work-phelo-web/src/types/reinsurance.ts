@@ -443,6 +443,75 @@ export interface CreateFacultativePayload {
 
 export type UpdateFacultativePayload = Partial<Omit<CreateFacultativePayload, 'cedantId'>>;
 
+/* ── Placement Endorsements ── */
+export type PlacementEndorsementStatus =
+  | 'DRAFT'
+  | 'MARKETING'
+  | 'PARTIALLY_ACCEPTED'
+  | 'ACCEPTED'
+  | 'CLOSING'
+  | 'CLOSED'
+  | 'DECLINED'
+  | 'VOID';
+
+export type PlacementEndorsementType =
+  | 'SUM_INSURED_INCREASE'
+  | 'SUM_INSURED_DECREASE'
+  | 'PREMIUM_ADJUSTMENT'
+  | 'COVERAGE_AMENDMENT'
+  | 'POLICY_AMENDMENT'
+  | 'PARTICIPANT_SHARE_CHANGE'
+  | 'PARTICIPANT_ADDITION'
+  | 'PARTICIPANT_REMOVAL'
+  | 'CANCELLATION'
+  | 'OTHER';
+
+export const ENDORSEMENT_TYPE_LABELS: Record<PlacementEndorsementType, string> = {
+  SUM_INSURED_INCREASE: 'Sum Insured Increase',
+  SUM_INSURED_DECREASE: 'Sum Insured Decrease',
+  PREMIUM_ADJUSTMENT: 'Premium Adjustment',
+  COVERAGE_AMENDMENT: 'Coverage Amendment',
+  POLICY_AMENDMENT: 'Policy Amendment',
+  PARTICIPANT_SHARE_CHANGE: 'Participant Share Change',
+  PARTICIPANT_ADDITION: 'Participant Addition',
+  PARTICIPANT_REMOVAL: 'Participant Removal',
+  CANCELLATION: 'Cancellation',
+  OTHER: 'Other',
+};
+
+export const TERMINAL_ENDORSEMENT_STATUSES: PlacementEndorsementStatus[] = [
+  'CLOSED',
+  'DECLINED',
+  'VOID',
+];
+
+export interface PlacementEndorsement {
+  id: string;
+  placementId: string;
+  endorsementNumber: string;
+  type: PlacementEndorsementType;
+  status: PlacementEndorsementStatus;
+  effectiveDate: string;
+  reason: string;
+  description: string | null;
+  changeSummary: Record<string, unknown> | null;
+  originalSnapshot: Record<string, unknown>;
+  proposedSnapshot: Record<string, unknown> | null;
+  createdByUserId: string;
+  closedAt: string | null;
+  voidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEndorsementPayload {
+  type: PlacementEndorsementType;
+  effectiveDate: string;
+  reason: string;
+  description?: string;
+  proposedSnapshot?: Record<string, unknown>;
+}
+
 /* ── Facultative form ── */
 export interface FacultativeFormValues {
   insuranceCompany: string;

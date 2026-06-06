@@ -7,6 +7,8 @@ import {
   PlacementParticipantPayload,
   UpdateParticipantPayload,
   UpdateParticipantStatusPayload,
+  PlacementEndorsement,
+  CreateEndorsementPayload,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
@@ -156,6 +158,46 @@ export function useDeleteParticipant(placementId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    },
+  });
+}
+
+export function useCreateClosing(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (participantId: string) => {
+      const res = await api.post(`${BASE}/${placementId}/participants/${participantId}/closings`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    },
+  });
+}
+
+const endorsementKey = (placementId: string) => [...FACULTATIVES_KEY, placementId, 'endorsements'];
+
+export function usePlacementEndorsements(placementId: string) {
+  return useQuery({
+    queryKey: endorsementKey(placementId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/endorsements`);
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as PlacementEndorsement[];
+    },
+    enabled: !!placementId,
+  });
+}
+
+export function useCreateEndorsement(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateEndorsementPayload) => {
+      const res = await api.post(`${BASE}/${placementId}/endorsements`, payload);
+      return res.data as PlacementEndorsement;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
     },
   });
 }

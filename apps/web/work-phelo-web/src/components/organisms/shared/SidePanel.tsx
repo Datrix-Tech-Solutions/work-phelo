@@ -69,10 +69,10 @@ export function SidePanel({
         )}
       >
         {/* Header */}
-        <div className="shrink-0 px-5 sm:px-8 pt-5 sm:pt-7 pb-4 sm:pb-5 border-b border-gray-100">
+        <div className="shrink-0 px-5 sm:px-8 pt-5 sm:pt-7 pb-4 sm:pb-0 border-b border-gray-100">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl sm:text-2xl font-semibold text-gray-900 tracking-tight">
+              <h2 className="text-xl sm:text-xl font-semibold text-gray-900 tracking-tight">
                 {title}
               </h2>
               {description && <p className="text-sm text-gray-500 mt-1.5">{description}</p>}
