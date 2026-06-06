@@ -63,9 +63,9 @@ export function DocumentPrintLayout({
           left: 0,
           right: 0,
           height: `${HEADER_H}px`,
-          display: 'flex',
+          display: 'grid',
+          gridTemplateColumns: '1fr auto 1fr',
           alignItems: 'center',
-          justifyContent: 'space-between',
           padding: '12px 48px',
           borderBottom: '1px solid #e5e7eb',
           backgroundColor: 'white',
@@ -88,11 +88,14 @@ export function DocumentPrintLayout({
             letterSpacing: '0.1em',
             color: '#111827',
             margin: 0,
+            textAlign: 'center',
           }}
         >
           {documentTitle}
         </h1>
-        <QRCode value={COMPANY_URL} size={60} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <QRCode value={COMPANY_URL} size={60} />
+        </div>
       </div>
 
       {/* Fixed footer — sticks to bottom of every page */}

@@ -11,9 +11,13 @@ import { inputClass } from '@/lib/utils';
 
 interface FacultativeFormFieldsProps {
   form: UseFormReturn<FacultativeFormValues>;
+  commentLabel?: string;
 }
 
-export default function FacultativeFormFields({ form }: FacultativeFormFieldsProps) {
+export default function FacultativeFormFields({
+  form,
+  commentLabel = 'Comment',
+}: FacultativeFormFieldsProps) {
   const {
     register,
     control,
@@ -332,9 +336,9 @@ export default function FacultativeFormFields({ form }: FacultativeFormFieldsPro
       </FormSection>
 
       {/* ── Comment ── */}
-      <FormSection title="Comment">
+      <FormSection title={commentLabel}>
         <FormField
-          label="Comment"
+          label={commentLabel}
           type="textarea"
           rows={4}
           registration={register('comment')}
