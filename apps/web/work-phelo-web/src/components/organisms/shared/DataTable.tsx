@@ -50,10 +50,11 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
   const [menuPos, setMenuPos] = useState({ top: 0, bottom: 0, right: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const handleToggle = () => {
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setOpenUpward(window.innerHeight - rect.bottom < 120);
+      setOpenUpward(window.innerHeight - rect.bottom < 200);
       setMenuPos({
         top: rect.bottom + 4,
         bottom: window.innerHeight - rect.top + 4,
@@ -75,7 +76,13 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="fixed inset-0 z-40"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+          />
           <div
             style={{
               position: 'fixed',
@@ -88,7 +95,8 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
             {actions.map((action) => (
               <button
                 key={action.label}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   action.onClick();
                   setOpen(false);
                 }}

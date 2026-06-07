@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
+import { useSearchParams } from 'next/navigation';
 import { FormSection } from '@/components/atoms/FormSection';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -50,6 +52,12 @@ export function AddPaymentFormFields({ form }: AddPaymentFormFieldsProps) {
   } = form;
 
   const { data: facultatives = [] } = useFacultatives();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const placementId = searchParams.get('placementId');
+    if (placementId) setValue('placementId', placementId);
+  }, [searchParams, setValue]);
 
   const policyOptions = facultatives.map((f) => ({
     value: f.id,

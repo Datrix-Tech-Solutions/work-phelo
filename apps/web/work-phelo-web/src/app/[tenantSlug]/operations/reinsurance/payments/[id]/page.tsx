@@ -3,15 +3,19 @@
 import { use } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
-import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
+import { pageBreadcrumb } from '@/lib/layout';
+import { useFacultativePlacement } from '@/hooks';
 
-export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
-  const { tenantSlug } = use(params);
+export default function PaymentDetailPage({
+  params,
+}: {
+  params: Promise<{ tenantSlug: string; id: string }>;
+}) {
+  const { tenantSlug, id } = use(params);
+  const { data: placement } = useFacultativePlacement(id);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Breadcrumb */}
       <div className={`${pageBreadcrumb} shrink-0`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link
@@ -21,15 +25,8 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
             Payments
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">Make Payment</span>
+          <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
         </nav>
-      </div>
-
-      {/* Content */}
-      <div className={`${pageContent} flex-1 overflow-y-auto`}>
-        <div className="max-w-2xl">
-          <AddPaymentForm />
-        </div>
       </div>
     </div>
   );
