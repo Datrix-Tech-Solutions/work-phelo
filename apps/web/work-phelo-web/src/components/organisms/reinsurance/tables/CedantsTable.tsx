@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { AddCedantPanel } from '@/components/organisms/reinsurance/panels/AddCedantPanel';
+import { EditCedantPanel } from '@/components/organisms/reinsurance/panels/EditCedantPanel';
 import { AddContactPanel } from '@/components/organisms/reinsurance/panels/AddContactPanel';
 import { useCedants, useDeleteCedant } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
@@ -50,10 +52,13 @@ const COLUMNS: Column<Counterparty>[] = [
 ];
 
 export function CedantsTable() {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Counterparty | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Counterparty | null>(null);
   const [contactTarget, setContactTarget] = useState<Counterparty | null>(null);
 
@@ -97,13 +102,19 @@ export function CedantsTable() {
           setSearch(q);
           setPage(1);
         }}
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/operations/reinsurance/settings/cedants/${row.id}`)
+        }
         actionButton={{ label: 'Add Cedant', onClick: () => setPanelOpen(true) }}
         rowActions={(row) => [
           {
+            label: 'View',
+            onClick: () =>
+              router.push(`/${tenantSlug}/operations/reinsurance/settings/cedants/${row.id}`),
+          },
+          {
             label: 'Edit',
-            onClick: () => {
-              /* TODO: open edit panel */
-            },
+            onClick: () => setEditTarget(row),
           },
           {
             label: 'Add Contact',
@@ -123,6 +134,8 @@ export function CedantsTable() {
       />
 
       <AddCedantPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+
+      <EditCedantPanel cedant={editTarget} onClose={() => setEditTarget(null)} />
 
       <AddContactPanel counterparty={contactTarget} onClose={() => setContactTarget(null)} />
 

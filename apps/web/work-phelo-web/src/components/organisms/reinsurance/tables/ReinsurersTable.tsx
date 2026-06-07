@@ -108,6 +108,9 @@ export function ReinsurersTable() {
         isLoading={isLoading}
         searchPlaceholder="Search reinsurers…"
         searchValue={search}
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/operations/reinsurance/settings/reinsurers/${row.id}`)
+        }
         onSearch={(q) => {
           setSearch(q);
           setPage(1);

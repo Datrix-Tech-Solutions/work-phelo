@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
@@ -48,6 +49,8 @@ function buildColumns(classMap: Map<string, string>): Column<RiskType>[] {
 }
 
 export function RiskTypesTable() {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const toast = useToast();
   const [selectedClassId, setSelectedClassId] = useState('');
   const [search, setSearch] = useState('');
@@ -113,11 +116,19 @@ export function RiskTypesTable() {
             />
           </div>
         }
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/operations/reinsurance/settings/risk-types/${row.id}`)
+        }
         actionButton={{
           label: 'Add Risk Type',
           onClick: () => setPanelOpen(true),
         }}
         rowActions={(row) => [
+          {
+            label: 'View',
+            onClick: () =>
+              router.push(`/${tenantSlug}/operations/reinsurance/settings/risk-types/${row.id}`),
+          },
           {
             label: 'Edit',
             onClick: () => setEditTarget(row),

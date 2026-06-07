@@ -98,9 +98,14 @@ export class LeaveController {
 
   @Get('public-holidays')
   @ApiOperation({ summary: 'List all public holidays for the company' })
+  @ApiQuery({ name: 'year', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Public holidays retrieved' })
-  getPublicHolidays(@Req() req: AuthenticatedRequest) {
-    return this.leaveService.getPublicHolidays(req.user.tenantId);
+  getPublicHolidays(
+    @Req() req: AuthenticatedRequest,
+    @Query('year') year?: string,
+  ) {
+    const parsedYear = year ? parseInt(year, 10) : undefined;
+    return this.leaveService.getPublicHolidays(req.user.tenantId, parsedYear);
   }
 
   @Patch('public-holidays/:id')

@@ -1,21 +1,31 @@
-import { Badge } from '@/components/atoms/Badge';
+'use client';
 
-export interface ReinsurerPolicy {
+import { useState } from 'react';
+import { Badge } from '@/components/atoms/Badge';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+
+export interface ReinsurerParticipation {
   id: string;
-  kind: 'Treaty' | 'Facultative';
-  name: string;
-  share: number;
-  status: string;
-  periodFrom: string;
-  periodTo: string;
+  reference: string;
+  title: string;
+  cedant: string;
+  role: string;
+  sharePercent: string | null;
+  participantStatus: string;
+  inceptionDate: string | null;
+  expiryDate: string | null;
 }
 
 interface ReinsurerPoliciesTableProps {
-  data: ReinsurerPolicy[];
+  data: ReinsurerParticipation[];
   isLoading?: boolean;
+  onRowClick?: (id: string) => void;
 }
 
-function formatDate(iso: string): string {
+const PAGE_SIZE = 10;
+
+function formatDate(iso: string | null): string {
+  if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
     day: 'numeric',
     month: 'short',
@@ -23,90 +33,120 @@ function formatDate(iso: string): string {
   });
 }
 
+function statusLabel(status: string): string {
+  return status
+    .split('_')
+    .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
+    .join(' ');
+}
+
 function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
   switch (status) {
-    case 'Active':
-    case 'Closed':
+    case 'ACCEPTED':
+    case 'CLOSED':
       return 'success';
-    case 'Pending':
-    case 'Open':
+    case 'QUOTED':
       return 'warning';
-    case 'Expired':
-    case 'Cancelled':
-    case 'Rejected':
+    case 'DECLINED':
       return 'danger';
     default:
       return 'neutral';
   }
 }
 
-function kindBadge(kind: ReinsurerPolicy['kind']) {
-  return (
-    <span
-      className={
-        kind === 'Treaty'
-          ? 'inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-xs font-medium text-blue-700'
-          : 'inline-flex items-center px-2 py-0.5 rounded-md bg-purple-50 text-xs font-medium text-purple-700'
-      }
-    >
-      {kind}
-    </span>
-  );
+function formatRole(role: string): string {
+  switch (role) {
+    case 'LEAD_REINSURER':
+      return 'Lead';
+    case 'CO_REINSURER':
+      return 'Co-Reinsurer';
+    case 'REINSURER':
+      return 'Reinsurer';
+    case 'BROKER':
+      return 'Broker';
+    default:
+      return role;
+  }
 }
 
-export function ReinsurerPoliciesTable({ data, isLoading }: ReinsurerPoliciesTableProps) {
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-24 text-sm text-gray-400">Loading…</div>
-    );
-  }
+const COLUMNS: Column<ReinsurerParticipation>[] = [
+  {
+    key: 'reference',
+    label: 'Reference',
+    width: '1fr',
+    render: (row) => <span className="font-medium text-gray-900">{row.reference}</span>,
+  },
+  {
+    key: 'title',
+    label: 'Insured',
+    width: '1.5fr',
+    render: (row) => <span className="text-gray-700">{row.title}</span>,
+  },
+  {
+    key: 'cedant',
+    label: 'Cedant',
+    width: '1.5fr',
+    render: (row) => <span className="text-gray-600">{row.cedant}</span>,
+  },
+  {
+    key: 'role',
+    label: 'Role',
+    width: '120px',
+    render: (row) => <span className="text-gray-600">{formatRole(row.role)}</span>,
+  },
+  {
+    key: 'sharePercent',
+    label: 'Share (%)',
+    width: '100px',
+    render: (row) => (
+      <span className="text-gray-700">
+        {row.sharePercent != null ? `${row.sharePercent}%` : '—'}
+      </span>
+    ),
+  },
+  {
+    key: 'participantStatus',
+    label: 'Status',
+    width: '120px',
+    render: (row) => (
+      <Badge
+        label={statusLabel(row.participantStatus)}
+        variant={statusVariant(row.participantStatus)}
+      />
+    ),
+  },
+  {
+    key: 'period',
+    label: 'Period',
+    width: '1.2fr',
+    render: (row) => (
+      <span className="text-gray-500 whitespace-nowrap">
+        {formatDate(row.inceptionDate)} – {formatDate(row.expiryDate)}
+      </span>
+    ),
+  },
+];
 
-  if (data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-24 rounded-xl border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-400">
-        No policies found for this reinsurer.
-      </div>
-    );
-  }
+export function ReinsurerPoliciesTable({
+  data,
+  isLoading,
+  onRowClick,
+}: ReinsurerPoliciesTableProps) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
+  const paged = data.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-gray-100 bg-gray-50">
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Type
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Name / Policy No.
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Share (%)
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Status
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              Period
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {data.map((row) => (
-            <tr key={row.id} className="hover:bg-gray-50 transition-colors">
-              <td className="px-4 py-3">{kindBadge(row.kind)}</td>
-              <td className="px-4 py-3 font-medium text-gray-900">{row.name}</td>
-              <td className="px-4 py-3 text-gray-700">{row.share}%</td>
-              <td className="px-4 py-3">
-                <Badge label={row.status} variant={statusVariant(row.status)} />
-              </td>
-              <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                {formatDate(row.periodFrom)} – {formatDate(row.periodTo)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <DataTable
+      columns={COLUMNS}
+      data={paged}
+      isLoading={isLoading}
+      emptyMessage="No placements found for this reinsurer"
+      onRowClick={onRowClick ? (row) => onRowClick(row.id) : undefined}
+      currentPage={page}
+      totalPages={totalPages}
+      onPageChange={setPage}
+      noInternalScroll
+    />
   );
 }

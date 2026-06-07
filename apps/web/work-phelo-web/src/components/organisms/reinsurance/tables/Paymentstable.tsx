@@ -189,6 +189,7 @@ export function PaymentsTable() {
       isLoading={isLoading}
       searchPlaceholder="Search payments…"
       searchValue={search}
+      onRowClick={(row) => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`)}
       onSearch={(q) => {
         setSearch(q);
         setPage(1);
@@ -203,9 +204,12 @@ export function PaymentsTable() {
         label: 'Make Payment',
         onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/new`),
       }}
-      rowActions={() => [
+      rowActions={(row) => [
+        {
+          label: 'Record Payment',
+          onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
+        },
         { label: 'View', onClick: () => {} },
-        { label: 'Record Payment', onClick: () => {} },
       ]}
       emptyMessage="No payment records found"
       currentPage={page}

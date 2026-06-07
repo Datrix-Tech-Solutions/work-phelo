@@ -1,21 +1,26 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
-import { StatCard } from '@/components/atoms/StatCard';
+import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useReinsurers } from '@/hooks';
+import { useReinsurers, useFacultatives, useCurrencies } from '@/hooks';
 import { EditReinsurancePanel } from '@/components/organisms/reinsurance/panels/EditReinsurancePanel';
-import { ReinsurerInfoCard } from '@/components/molecules/reinsurance/ReinsurerInfoCard';
-import { PremiumTrendChart } from '@/components/molecules/reinsurance/PremiumTrendChart';
-import {
-  ReinsurerPoliciesTable,
-  type ReinsurerPolicy,
-} from '@/components/molecules/reinsurance/tables/ReinsurerPoliciesTable';
+import { ReinsurerOverview } from '@/components/molecules/reinsurance/ReinsurerOverview';
+import { CedantContactsTab } from '@/components/molecules/reinsurance/CedantContactsTab';
+import { ReinsurerPlacementsTab } from '@/components/molecules/reinsurance/ReinsurerPlacementsTab';
+import { ReinsurerRevenueTab } from '@/components/molecules/reinsurance/ReinsurerRevenueTab';
+import { TabBar } from '@/components/molecules/shared/TabBar';
+import { type ReinsurerParticipation } from '@/components/molecules/reinsurance/tables/ReinsurerPoliciesTable';
 
-/* ── Placeholder until API provides per-reinsurer policy data ── */
-const EMPTY_POLICIES: ReinsurerPolicy[] = [];
+type ReinsurerTab = 'contacts' | 'placements' | 'revenue';
+
+const TABS = [
+  { key: 'contacts', label: 'Contacts' },
+  { key: 'placements', label: 'Placements' },
+  { key: 'revenue', label: 'Revenue' },
+];
 
 export default function ReinsurerDetailPage({
   params,
@@ -23,27 +28,41 @@ export default function ReinsurerDetailPage({
   params: Promise<{ tenantSlug: string; reinsurerId: string }>;
 }) {
   const { tenantSlug, reinsurerId } = use(params);
-  const { data: reinsurers = [], isLoading } = useReinsurers();
+
+  const { data: reinsurers = [], isLoading: reinsurersLoading } = useReinsurers();
+  const { data: placements = [], isLoading: placementsLoading } = useFacultatives();
+  const { data: currencies = [] } = useCurrencies();
+
   const reinsurer = reinsurers.find((r) => r.id === reinsurerId) ?? null;
 
   const [editOpen, setEditOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<ReinsurerTab>('contacts');
 
   const settingsBase = `/${tenantSlug}/operations/reinsurance/settings/reinsurers`;
 
-  /* ── Derived stats from policies ── */
-  const policies = EMPTY_POLICIES;
-  const accepted = policies.filter((p) => p.status === 'Closed' || p.status === 'Active').length;
-  const pending = policies.filter((p) => p.status === 'Open' || p.status === 'Pending').length;
-  const rejected = policies.filter(
-    (p) => p.status === 'Cancelled' || p.status === 'Rejected' || p.status === 'Expired',
-  ).length;
-  const total = accepted + rejected;
-  const acceptanceRate = total > 0 ? Math.round((accepted / total) * 100) : null;
+  const participations = useMemo<ReinsurerParticipation[]>(() => {
+    return placements.flatMap((p) => {
+      const participant = p.participants.find((pt) => pt.counterpartyId === reinsurerId);
+      if (!participant) return [];
+      return [
+        {
+          id: p.id,
+          reference: p.reference,
+          title: p.title,
+          cedant: p.cedant.name,
+          role: participant.role,
+          sharePercent: participant.sharePercent,
+          participantStatus: participant.status,
+          inceptionDate: p.inceptionDate,
+          expiryDate: p.expiryDate,
+        },
+      ];
+    });
+  }, [placements, reinsurerId]);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      {/* Breadcrumb */}
-      <div className={`${pageBreadcrumb} shrink-0`}>
+      <div className={`${pageBreadcrumb} shrink-0 flex items-center justify-between`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link href={settingsBase} className="hover:text-gray-700 transition-colors">
             Reinsurers
@@ -51,11 +70,15 @@ export default function ReinsurerDetailPage({
           <Icons.ChevronRight className="w-5 h-5" />
           <span className="text-gray-700 font-medium">{reinsurer?.name ?? '—'}</span>
         </nav>
+        {reinsurer && (
+          <Button size="sm" onClick={() => setEditOpen(true)}>
+            Edit
+          </Button>
+        )}
       </div>
 
-      {/* Content */}
       <div className={`${pageContent} flex-1 overflow-y-auto`}>
-        {isLoading ? (
+        {reinsurersLoading ? (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
           </div>
@@ -64,44 +87,35 @@ export default function ReinsurerDetailPage({
             Reinsurer not found.
           </div>
         ) : (
-          <div className="flex gap-6 items-start">
-            {/* Left: info card (fixed width) */}
-            <div className="w-72 shrink-0">
-              <ReinsurerInfoCard reinsurer={reinsurer} onUpdate={() => setEditOpen(true)} />
-            </div>
+          <div className="flex flex-col gap-6">
+            <ReinsurerOverview reinsurer={reinsurer} />
 
-            {/* Right: stats + chart + table */}
-            <div className="flex-1 min-w-0 flex flex-col gap-6">
-              {/* Stat cards */}
-              <div className="grid grid-cols-2 gap-4">
-                <StatCard
-                  label="Accepted Offers"
-                  value={accepted}
-                  sub="Closed & active placements"
-                />
-                <StatCard label="Pending Offers" value={pending} sub="Awaiting response" />
-                <StatCard
-                  label="Rejected Offers"
-                  value={rejected}
-                  sub="Cancelled, rejected or expired"
-                />
-                <StatCard
-                  label="Acceptance Rate"
-                  value={acceptanceRate !== null ? `${acceptanceRate}%` : '—'}
-                  sub="Accepted / total decided"
-                />
-              </div>
+            <div className="flex flex-col">
+              <TabBar
+                tabs={TABS}
+                activeTab={activeTab}
+                onTabChange={(t) => setActiveTab(t as ReinsurerTab)}
+              />
 
-              {/* Premium trend */}
-              <div className="rounded-2xl border border-gray-100 bg-white p-5">
-                <h3 className="text-sm font-semibold text-gray-900 mb-4">Premium Ceded Trend</h3>
-                <PremiumTrendChart data={[]} />
-              </div>
+              <div className="pt-5">
+                {activeTab === 'contacts' && <CedantContactsTab contacts={reinsurer.contacts} />}
 
-              {/* Policies table */}
-              <div className="flex flex-col gap-3">
-                <h3 className="text-sm font-semibold text-gray-900">Policies &amp; Treaties</h3>
-                <ReinsurerPoliciesTable data={policies} />
+                {activeTab === 'placements' && (
+                  <ReinsurerPlacementsTab
+                    participations={participations}
+                    isLoading={placementsLoading}
+                    tenantSlug={tenantSlug}
+                  />
+                )}
+
+                {activeTab === 'revenue' && (
+                  <ReinsurerRevenueTab
+                    placements={placements}
+                    reinsurerId={reinsurerId}
+                    reinsurerDefaultBrokerageFee={reinsurer.brokerageFee}
+                    currencies={currencies}
+                  />
+                )}
               </div>
             </div>
           </div>
