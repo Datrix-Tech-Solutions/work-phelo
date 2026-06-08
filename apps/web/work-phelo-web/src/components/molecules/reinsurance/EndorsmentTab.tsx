@@ -4,8 +4,14 @@ import { useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { Facultative, PlacementEndorsement, ENDORSEMENT_TYPE_LABELS } from '@/types/reinsurance';
-import { usePlacementEndorsements, useReinsurers } from '@/hooks';
+import {
+  Facultative,
+  PlacementEndorsement,
+  ENDORSEMENT_TYPE_LABELS,
+  ENDORSEMENT_STATUS_LABELS,
+  ENDORSEMENT_STATUS_VARIANT,
+} from '@/types/reinsurance';
+import { usePlacementEndorsements, useReinsurers, useUpdateEndorsementStatus } from '@/hooks';
 import { EndorsementCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementCertificateModal';
 import { EndorsementReinsurerCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementReinsurerCertificateModal';
 
@@ -115,6 +121,9 @@ function EndorsementCard({
   const [reinsurerDocOpen, setReinsurerDocOpen] = useState(false);
 
   const { data: reinsurers = [] } = useReinsurers();
+  const { mutate: updateStatus, isPending: isUpdatingStatus } = useUpdateEndorsementStatus(
+    placement.id,
+  );
 
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = endorsement.proposedSnapshot
@@ -149,9 +158,22 @@ function EndorsementCard({
               {endorsement.endorsementNumber}
             </span>
             <Badge label={ENDORSEMENT_TYPE_LABELS[endorsement.type]} variant="neutral" />
+            <Badge
+              label={ENDORSEMENT_STATUS_LABELS[endorsement.status]}
+              variant={ENDORSEMENT_STATUS_VARIANT[endorsement.status]}
+            />
             <span className="text-xs text-gray-400">{fmtDate(endorsement.effectiveDate)}</span>
           </div>
           <div className="flex items-center gap-2">
+            {endorsement.status === 'DRAFT' && (
+              <Button
+                size="sm"
+                isLoading={isUpdatingStatus}
+                onClick={() => updateStatus({ endorsementId: endorsement.id, status: 'MARKETING' })}
+              >
+                Send to Market
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={() => setCedantDocOpen(true)}>
               Cedant Document
             </Button>

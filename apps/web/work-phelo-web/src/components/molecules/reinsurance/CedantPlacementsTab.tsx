@@ -33,7 +33,7 @@ function fmtAmount(val: number | null, currency: string | null): string {
 const PLACEMENT_COLUMNS: Column<Facultative>[] = [
   {
     key: 'reference',
-    label: 'Reference',
+    label: 'Policy Number',
     width: '1fr',
     render: (row) => <span className="font-medium text-gray-900">{row.reference}</span>,
   },
@@ -45,7 +45,7 @@ const PLACEMENT_COLUMNS: Column<Facultative>[] = [
   },
   {
     key: 'classOfBusiness',
-    label: 'Class of Risk',
+    label: 'Risk Type',
     width: '1.2fr',
     render: (row) => <span className="text-gray-600">{row.classOfBusiness ?? '—'}</span>,
   },

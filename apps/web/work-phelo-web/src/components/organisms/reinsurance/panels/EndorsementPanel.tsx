@@ -11,12 +11,7 @@ import {
   FACULTATIVE_FORM_DEFAULTS,
   RiskTypeField,
 } from '@/types/reinsurance';
-import {
-  useCreateEndorsement,
-  useUpdateFacultative,
-  useUpdateParticipantStatus,
-  useRiskTypes,
-} from '@/hooks';
+import { useCreateEndorsement, useUpdateFacultative, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -80,7 +75,6 @@ function placementToFormValues(placement: Facultative): FacultativeFormValues {
 export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPanelProps) {
   const { mutateAsync: createEndorsement, isPending } = useCreateEndorsement(placement.id);
   const { mutateAsync: updateFacultative } = useUpdateFacultative();
-  const { mutateAsync: updateParticipantStatus } = useUpdateParticipantStatus(placement.id);
   const { data: allRiskTypes = [] } = useRiskTypes();
   const toast = useToastStore.getState;
 
@@ -150,16 +144,6 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
       });
 
       await updateFacultative(placementUpdate);
-
-      // Reset accepted participants to pending so they re-confirm under the endorsement
-      const acceptedParticipants = placement.participants.filter(
-        (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
-      );
-      await Promise.all(
-        acceptedParticipants.map((p) =>
-          updateParticipantStatus({ participantId: p.id, status: 'OFFER_SENT' }),
-        ),
-      );
 
       toast().addToast({ message: 'Endorsement created successfully', type: 'success' });
       handleClose();

@@ -18,6 +18,8 @@ import {
   useDeleteParticipant,
   useCreateClosing,
   usePlacementEndorsements,
+  usePlacementEndorsementParticipants,
+  useCreateEndorsementParticipant,
 } from '@/hooks';
 import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
 import { extractError } from '@/lib/extractError';
@@ -72,8 +74,24 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const { mutateAsync: createClosing } = useCreateClosing(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
 
-  const hasActiveEndorsement = endorsements.some(
+  const activeEndorsement = endorsements.find(
     (e) => !TERMINAL_ENDORSEMENT_STATUSES.includes(e.status),
+  );
+  const hasActiveEndorsement = !!activeEndorsement;
+
+  const { data: endorsementParticipants = [] } = usePlacementEndorsementParticipants(
+    placement.id,
+    activeEndorsement?.id,
+  );
+  const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
+    placement.id,
+    activeEndorsement?.id,
+  );
+
+  const confirmedCounterpartyIds = new Set(
+    endorsementParticipants
+      .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
+      .map((p) => p.counterpartyId),
   );
 
   const [panelOpen, setPanelOpen] = useState(false);
@@ -152,20 +170,47 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleMailSent = (row: DistributionEntry) => {
+    // Skip status update when already accepted — ACCEPTED → OFFER_SENT is not a valid transition
+    if (row.status === 'Accepted') return;
     updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) =>
       toast().addToast({ message: extractError(error), type: 'error' }),
     );
   };
 
   const handleAccept = (row: DistributionEntry) => {
+    const isReconfirm = row.status === 'Accepted';
     patch(row.id, { status: 'Accepted' });
-    updateParticipant({ participantId: row.id, signedLinePercent: row.shareLine })
-      .then(() => updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' }))
-      .then(() => createClosing(row.id))
-      .catch((error) => {
-        patch(row.id, { status: 'Pending' });
-        toast().addToast({ message: extractError(error), type: 'error' });
-      });
+    // Always set both sharePercent and signedLinePercent together to avoid
+    // race conditions with the inline share editor and to keep them in sync.
+    if (isReconfirm) {
+      updateParticipant({
+        participantId: row.id,
+        sharePercent: row.shareLine,
+        signedLinePercent: row.shareLine,
+      })
+        .then(() =>
+          createEndorsementParticipant({
+            counterpartyId: row.counterpartyId,
+            originalParticipantId: row.id,
+            sharePercent: row.shareLine,
+            signedLinePercent: row.shareLine,
+            status: 'ACCEPTED',
+          }),
+        )
+        .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
+    } else {
+      updateParticipant({
+        participantId: row.id,
+        sharePercent: row.shareLine,
+        signedLinePercent: row.shareLine,
+      })
+        .then(() => updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' }))
+        .then(() => createClosing(row.id))
+        .catch((error) => {
+          patch(row.id, { status: 'Pending' });
+          toast().addToast({ message: extractError(error), type: 'error' });
+        });
+    }
   };
 
   const handleDecline = (row: DistributionEntry) => {
@@ -274,6 +319,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           facPremium={facPremium}
           placement={placement}
           hasActiveEndorsement={hasActiveEndorsement}
+          confirmedCounterpartyIds={confirmedCounterpartyIds}
           onShareCommit={handleShareCommit}
           onBrokerageCommit={handleBrokerageCommit}
           onMailSent={handleMailSent}

@@ -46,8 +46,8 @@ interface PlacementClosingsTabProps {
 
 export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [guaranteeNoteOpen, setGuaranteeNoteOpen] = useState(false);
-  const [creditNoteRow, setCreditNoteRow] = useState<ClosingRow | null>(null);
   const [debitNoteOpen, setDebitNoteOpen] = useState(false);
+  const [creditNoteRow, setCreditNoteRow] = useState<ClosingRow | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
   const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
 
@@ -109,12 +109,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
             View Credit Note
           </TableActionButton>
           <TableActionButton
-            icon={<Icons.Mail className="w-3.5 h-3.5 shrink-0" />}
-            onClick={() => setDebitNoteOpen(true)}
-          >
-            View Debit Note
-          </TableActionButton>
-          <TableActionButton
             icon={<Icons.SendHorizonal className="w-3.5 h-3.5 shrink-0" />}
             onClick={() => setMailToReinsurerRow(row)}
           >
@@ -135,10 +129,10 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         totalPages={1}
         onPageChange={() => {}}
         noInternalScroll
-        secondaryButton={{
-          label: 'View Guarantee Note',
-          onClick: () => setGuaranteeNoteOpen(true),
-        }}
+        secondaryButtons={[
+          { label: 'View Guarantee Note', onClick: () => setGuaranteeNoteOpen(true) },
+          { label: 'View Debit Note', onClick: () => setDebitNoteOpen(true) },
+        ]}
         actionButton={{ label: 'Mail to cedant', onClick: () => setMailToCedantOpen(true) }}
       />
 

@@ -35,6 +35,7 @@ interface DataTableProps<T extends { id: string | number }> {
   onExport?: () => void;
   extraFilters?: React.ReactNode;
   secondaryButton?: { label: React.ReactNode; onClick: () => void };
+  secondaryButtons?: { label: React.ReactNode; onClick: () => void }[];
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
   onRowClick?: (row: T) => void;
@@ -129,6 +130,7 @@ export function DataTable<T extends { id: string | number }>({
   onExport,
   extraFilters,
   secondaryButton,
+  secondaryButtons,
   actionButton,
   rowActions,
   onRowClick,
@@ -143,6 +145,7 @@ export function DataTable<T extends { id: string | number }>({
     (filterOptions && onFilter) ||
     onExport ||
     secondaryButton ||
+    (secondaryButtons && secondaryButtons.length > 0) ||
     actionButton
   );
 
@@ -203,6 +206,15 @@ export function DataTable<T extends { id: string | number }>({
               {secondaryButton.label}
             </button>
           )}
+          {secondaryButtons?.map((btn, i) => (
+            <button
+              key={i}
+              onClick={btn.onClick}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              {btn.label}
+            </button>
+          ))}
 
           {actionButton && (
             <button
