@@ -72,7 +72,7 @@ function formatRole(role: string): string {
 const COLUMNS: Column<ReinsurerParticipation>[] = [
   {
     key: 'reference',
-    label: 'Reference',
+    label: 'Policy Number',
     width: '1fr',
     render: (row) => <span className="font-medium text-gray-900">{row.reference}</span>,
   },

@@ -8,7 +8,10 @@ import {
   UpdateParticipantPayload,
   UpdateParticipantStatusPayload,
   PlacementEndorsement,
+  PlacementEndorsementStatus,
+  PlacementEndorsementParticipant,
   CreateEndorsementPayload,
+  CreateEndorsementParticipantPayload,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
@@ -198,6 +201,71 @@ export function useCreateEndorsement(placementId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
+    },
+  });
+}
+
+export function useUpdateEndorsementStatus(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      endorsementId,
+      status,
+    }: {
+      endorsementId: string;
+      status: PlacementEndorsementStatus;
+    }) => {
+      const res = await api.patch(`${BASE}/${placementId}/endorsements/${endorsementId}/status`, {
+        status,
+      });
+      return res.data as PlacementEndorsement;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
+    },
+  });
+}
+
+const endorsementParticipantKey = (placementId: string, endorsementId: string) => [
+  ...endorsementKey(placementId),
+  endorsementId,
+  'participants',
+];
+
+export function usePlacementEndorsementParticipants(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  return useQuery({
+    queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+    queryFn: async () => {
+      const res = await api.get(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants`,
+      );
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as PlacementEndorsementParticipant[];
+    },
+    enabled: !!placementId && !!endorsementId,
+  });
+}
+
+export function useCreateEndorsementParticipant(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: CreateEndorsementParticipantPayload) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants`,
+        payload,
+      );
+      return res.data as PlacementEndorsementParticipant;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+      });
     },
   });
 }

@@ -1,0 +1,80 @@
+'use client';
+
+import { Facultative } from '@/types/reinsurance';
+import { DetailField } from '@/components/atoms/DetailField';
+
+const NIC_RATE = 0.01;
+const WHT_RATE = 0.1;
+
+function fmt(val: number, currency: string | null) {
+  const prefix = currency ? `${currency} ` : '';
+  return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+interface PaymentBreakdownProps {
+  placement?: Facultative | null;
+  paidAmount?: number;
+}
+
+export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProps) {
+  const { premium, commission, currency, reference, policyNumber } = placement ?? {
+    premium: 0,
+    commission: 0,
+    currency: null,
+    reference: null,
+    policyNumber: null,
+  };
+
+  const grossPremium = premium ?? 0;
+  const cedantCommission = commission ?? 0;
+  const premiumToBePaid = paidAmount ?? 0;
+  const premiumBalance = grossPremium - premiumToBePaid;
+
+  const nic = premiumToBePaid * NIC_RATE;
+  const wht = premiumToBePaid * WHT_RATE;
+  const bankBalance = premiumToBePaid - nic - wht;
+  const reinsurers = bankBalance;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3">
+      {reference && (
+        <>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-900">{reference}</span>
+            {policyNumber && <span className="text-xs text-gray-400">{policyNumber}</span>}
+          </div>
+          <hr className="border-gray-100" />
+        </>
+      )}
+      <DetailField horizontal label="Gross Premium" value={fmt(grossPremium, currency)} />
+      <DetailField horizontal label="Cedant's Commission" value={fmt(cedantCommission, currency)} />
+      <DetailField
+        horizontal
+        label="Premium to be Paid"
+        value={
+          <span className="font-semibold text-gray-900">{fmt(premiumToBePaid, currency)}</span>
+        }
+      />
+      <DetailField horizontal label="Premium Balance" value={fmt(premiumBalance, currency)} />
+
+      <hr className="border-gray-100" />
+
+      <DetailField horizontal label={`NIC (${NIC_RATE * 100}%)`} value={fmt(nic, currency)} />
+      <DetailField
+        horizontal
+        label={`Withholding Tax (${WHT_RATE * 100}%)`}
+        value={fmt(wht, currency)}
+      />
+      <DetailField
+        horizontal
+        label="Bank Balance"
+        value={<span className="font-semibold text-gray-900">{fmt(bankBalance, currency)}</span>}
+      />
+      <DetailField
+        horizontal
+        label="Reinsurers"
+        value={<span className="font-semibold text-brand">{fmt(reinsurers, currency)}</span>}
+      />
+    </div>
+  );
+}

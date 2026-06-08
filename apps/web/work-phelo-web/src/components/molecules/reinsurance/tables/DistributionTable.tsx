@@ -35,6 +35,7 @@ interface DistributionTableProps {
   facPremium: number;
   placement: Facultative;
   hasActiveEndorsement?: boolean;
+  confirmedCounterpartyIds?: Set<string>;
   onShareCommit: (row: DistributionEntry, share: number) => void;
   onBrokerageCommit: (row: DistributionEntry, brokerage: number) => void;
   onMailSent: (row: DistributionEntry) => void;
@@ -48,6 +49,7 @@ export function DistributionTable({
   facPremium,
   placement,
   hasActiveEndorsement = false,
+  confirmedCounterpartyIds,
   onShareCommit,
   onBrokerageCommit,
   onMailSent,
@@ -56,6 +58,7 @@ export function DistributionTable({
   onDelete,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
+  const [reconfirmedIds, setReconfirmedIds] = useState<Set<string>>(new Set());
   const [mailPreviewId, setMailPreviewId] = useState<string | null>(null);
   const [slipPreviewId, setSlipPreviewId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -99,6 +102,7 @@ export function DistributionTable({
 
   const handleAccept = (row: DistributionEntry) => {
     onAccept(row);
+    setReconfirmedIds((prev) => new Set([...prev, row.id]));
     setMailedIds((prev) => {
       const n = new Set(prev);
       n.delete(row.id);
@@ -211,9 +215,12 @@ export function DistributionTable({
       width: '150px',
       render: (row) => {
         const mailed = mailedIds.has(row.id);
-        const responded = row.status === 'Accepted' || row.status === 'Declined';
-        // In endorsement mode, pending participants re-confirm (no decline allowed)
-        const isReconfirming = hasActiveEndorsement && row.status === 'Pending';
+        // Server state (persists across navigation) takes priority; session state gives instant feedback
+        const hasReconfirmed =
+          confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
+        const responded = row.status === 'Declined' || row.status === 'Accepted';
+        // In endorsement mode, accepted participants re-confirm (no decline allowed)
+        const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
         const showAccept = isReconfirming || (mailed && !responded);
         const showDecline = !isReconfirming && mailed && !responded;
         return (

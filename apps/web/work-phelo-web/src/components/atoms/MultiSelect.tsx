@@ -7,6 +7,7 @@ import { Icons } from '@/components/atoms/icons';
 export interface MultiSelectOption {
   value: string;
   label: string;
+  sublabel?: string;
 }
 
 interface MultiSelectProps {
@@ -112,17 +113,22 @@ export function MultiSelect({
                     type="button"
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => toggle(opt.value)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
+                    className="w-full flex items-start gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50 text-left"
                   >
                     <span
                       className={cn(
-                        'w-4 h-4 rounded border flex items-center justify-center shrink-0',
+                        'w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5',
                         checked ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
                       )}
                     >
                       {checked && <Icons.Check className="w-2.5 h-2.5 text-white" />}
                     </span>
-                    {opt.label}
+                    <span className="flex flex-col min-w-0">
+                      <span>{opt.label}</span>
+                      {opt.sublabel && (
+                        <span className="text-xs text-gray-400 mt-0.5">{opt.sublabel}</span>
+                      )}
+                    </span>
                   </button>
                 );
               })

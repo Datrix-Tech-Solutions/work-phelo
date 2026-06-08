@@ -479,6 +479,31 @@ export const ENDORSEMENT_TYPE_LABELS: Record<PlacementEndorsementType, string> =
   OTHER: 'Other',
 };
 
+export const ENDORSEMENT_STATUS_LABELS: Record<PlacementEndorsementStatus, string> = {
+  DRAFT: 'Draft',
+  MARKETING: 'In Market',
+  PARTIALLY_ACCEPTED: 'Partially Accepted',
+  ACCEPTED: 'Accepted',
+  CLOSING: 'Closing',
+  CLOSED: 'Closed',
+  DECLINED: 'Declined',
+  VOID: 'Void',
+};
+
+export const ENDORSEMENT_STATUS_VARIANT: Record<
+  PlacementEndorsementStatus,
+  'neutral' | 'warning' | 'success' | 'danger'
+> = {
+  DRAFT: 'neutral',
+  MARKETING: 'warning',
+  PARTIALLY_ACCEPTED: 'warning',
+  ACCEPTED: 'success',
+  CLOSING: 'warning',
+  CLOSED: 'success',
+  DECLINED: 'danger',
+  VOID: 'danger',
+};
+
 export const TERMINAL_ENDORSEMENT_STATUSES: PlacementEndorsementStatus[] = [
   'CLOSED',
   'DECLINED',
@@ -502,6 +527,36 @@ export interface PlacementEndorsement {
   voidedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type PlacementEndorsementParticipantStatus =
+  | 'INVITED'
+  | 'OFFER_SENT'
+  | 'QUOTED'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'CLOSED';
+
+export interface PlacementEndorsementParticipant {
+  id: string;
+  placementId: string;
+  endorsementId: string;
+  originalParticipantId: string | null;
+  counterpartyId: string;
+  status: PlacementEndorsementParticipantStatus;
+  sharePercent: string | null;
+  signedLinePercent: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEndorsementParticipantPayload {
+  counterpartyId: string;
+  originalParticipantId?: string;
+  sharePercent?: number;
+  signedLinePercent?: number;
+  status?: PlacementEndorsementParticipantStatus;
 }
 
 export interface CreateEndorsementPayload {
