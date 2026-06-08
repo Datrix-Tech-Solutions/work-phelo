@@ -48,4 +48,8 @@ export class QueryAnnouncementsDto {
   @IsOptional()
   @IsIn(['visible', 'all'])
   view?: 'visible' | 'all';
+
+  @IsOptional()
+  @IsIn(['read', 'unread'])
+  read?: 'read' | 'unread';
 }

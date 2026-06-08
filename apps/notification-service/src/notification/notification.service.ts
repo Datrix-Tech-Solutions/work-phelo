@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { NotificationType, Prisma } from '../../prisma/generated/client';
-import { InviteUserKind } from '@work-phelo/types';
+import { AnnouncementDeliveryChannel, InviteUserKind } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../channels/email.service';
 import { SmsService } from '../channels/sms.service';
+import type { SmsSendResult } from '../channels/sms-provider.interface';
+import { formatAnnouncementSms } from './announcement-sms.formatter';
 
 @Injectable()
 export class NotificationService {
@@ -14,6 +16,17 @@ export class NotificationService {
     private readonly email: EmailService,
     private readonly sms: SmsService,
   ) {}
+
+  private shouldDeliverAnnouncementChannel(
+    channels: AnnouncementDeliveryChannel[] | undefined,
+    channel: Extract<AnnouncementDeliveryChannel, 'EMAIL' | 'SMS'>,
+  ): boolean {
+    if (!channels || channels.length === 0) {
+      return channel === 'EMAIL';
+    }
+
+    return channels.includes(channel);
+  }
 
   private async isDuplicate(
     recipient: string,
@@ -280,44 +293,136 @@ export class NotificationService {
   async sendAnnouncementPublishedNotification(data: {
     tenantId: string;
     announcementId: string;
+    tenantName?: string;
     title: string;
     body: string;
     publishedAt: string;
+    deliveryChannels?: AnnouncementDeliveryChannel[];
     platformLink?: string;
     recipients: {
       employeeId: string;
       userId: string;
       email: string;
+      phone?: string;
       firstName: string;
       lastName: string;
     }[];
   }) {
-    await Promise.all(
-      data.recipients.map(async (recipient) => {
-        const success = await this.email.sendAnnouncementPublishedNotification(
-          recipient.email,
-          recipient.firstName,
-          data.title,
-          data.body,
-          data.publishedAt,
-          data.platformLink,
-        );
-
-        await this.log({
-          userId: recipient.userId,
-          tenantId: data.tenantId,
-          type: 'ANNOUNCEMENT_PUBLISHED',
-          channel: 'EMAIL',
-          recipient: recipient.email,
-          subject: data.title,
-          status: success ? 'SENT' : 'FAILED',
-          metadata: {
-            announcementId: data.announcementId,
-            employeeId: recipient.employeeId,
-          },
-        });
-      }),
+    const shouldSendEmail = this.shouldDeliverAnnouncementChannel(
+      data.deliveryChannels,
+      'EMAIL',
     );
+    const shouldSendSms = this.shouldDeliverAnnouncementChannel(
+      data.deliveryChannels,
+      'SMS',
+    );
+
+    if (data.recipients.length === 0) {
+      this.logger.warn(
+        `[ANNOUNCEMENT_PUBLISHED] No recipients resolved for announcement ${data.announcementId} in tenant ${data.tenantId}`,
+      );
+      const channelsToSkip = [
+        shouldSendEmail ? 'EMAIL' : null,
+        shouldSendSms ? 'SMS' : null,
+      ].filter((channel): channel is 'EMAIL' | 'SMS' => channel !== null);
+
+      await Promise.all(
+        channelsToSkip.map((channel) =>
+          this.log({
+            userId: undefined,
+            tenantId: data.tenantId,
+            type: 'ANNOUNCEMENT_PUBLISHED',
+            channel,
+            recipient: `announcement:${data.announcementId}`,
+            subject: data.title,
+            status: 'SKIPPED',
+            metadata: {
+              announcementId: data.announcementId,
+              reason: 'NO_RECIPIENTS',
+            },
+          }),
+        ),
+      );
+      return;
+    }
+
+    const emailTasks = shouldSendEmail
+      ? data.recipients.map(async (recipient) => {
+          const success =
+            await this.email.sendAnnouncementPublishedNotification(
+              recipient.email,
+              recipient.firstName,
+              data.title,
+              data.body,
+              data.publishedAt,
+              data.platformLink,
+            );
+
+          await this.log({
+            userId: recipient.userId,
+            tenantId: data.tenantId,
+            type: 'ANNOUNCEMENT_PUBLISHED',
+            channel: 'EMAIL',
+            recipient: recipient.email,
+            subject: data.title,
+            status: success ? 'SENT' : 'FAILED',
+            metadata: {
+              announcementId: data.announcementId,
+              employeeId: recipient.employeeId,
+            },
+          });
+        })
+      : [];
+
+    const smsMessage = formatAnnouncementSms({
+      companyName: data.tenantName,
+      title: data.title,
+      body: data.body,
+    });
+    const smsTasks = shouldSendSms
+      ? data.recipients.map(async (recipient) => {
+          if (!recipient.phone) {
+            await this.log({
+              userId: recipient.userId,
+              tenantId: data.tenantId,
+              type: 'ANNOUNCEMENT_PUBLISHED',
+              channel: 'SMS',
+              recipient: recipient.email,
+              subject: data.title,
+              status: 'SKIPPED',
+              metadata: {
+                announcementId: data.announcementId,
+                employeeId: recipient.employeeId,
+                reason: 'MISSING_PHONE',
+              },
+            });
+            return;
+          }
+
+          const smsResult = await this.sms.sendMessage(
+            recipient.phone,
+            smsMessage,
+          );
+
+          await this.log({
+            userId: recipient.userId,
+            tenantId: data.tenantId,
+            type: 'ANNOUNCEMENT_PUBLISHED',
+            channel: 'SMS',
+            recipient: recipient.phone,
+            subject: data.title,
+            status: smsResult.status,
+            error: smsResult.error,
+            metadata: {
+              announcementId: data.announcementId,
+              employeeId: recipient.employeeId,
+              ...this.smsProviderMetadata(smsResult),
+            },
+          });
+        })
+      : [];
+
+    await Promise.all([...emailTasks, ...smsTasks]);
   }
 
   async sendPayrollApprovalRequestedNotification(data: {
@@ -1218,15 +1323,33 @@ export class NotificationService {
       this.logger.warn(`Duplicate SMS_OTP suppressed for ${data.phone}`);
       return;
     }
-    const success = await this.sms.sendOtp(data.phone, data.otp, data.context);
+    const smsResult = await this.sms.sendOtp(
+      data.phone,
+      data.otp,
+      data.context,
+    );
     await this.log({
       userId: data.userId ?? 'system',
       tenantId: data.tenantId ?? 'system',
       type: 'SMS_OTP',
       channel: 'SMS',
       recipient: data.phone,
-      status: success ? 'SENT' : 'FAILED',
+      status: smsResult.status,
+      error: smsResult.error,
+      metadata: this.smsProviderMetadata(smsResult),
     });
+  }
+
+  private smsProviderMetadata(result: SmsSendResult): Prisma.InputJsonObject {
+    return {
+      provider: result.provider,
+      ...(result.providerStatus
+        ? { providerStatus: result.providerStatus }
+        : {}),
+      ...(result.providerDetail
+        ? { providerDetail: result.providerDetail }
+        : {}),
+    };
   }
 
   private async log(entry: {

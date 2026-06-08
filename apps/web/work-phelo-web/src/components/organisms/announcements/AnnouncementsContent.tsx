@@ -4,10 +4,14 @@ import { useMemo, useState } from 'react';
 import { Megaphone } from 'lucide-react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateAnnouncementPanel } from '@/components/organisms/announcements/CreateAnnouncementPanel';
-import { useAnnouncementsPage } from '@/hooks';
+import { useAnnouncementsPage, useDeleteAnnouncement } from '@/hooks';
 import { usePermission } from '@/hooks/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 import type { Announcement } from '@/types/hr';
 
 interface AnnouncementRow {
@@ -16,6 +20,7 @@ interface AnnouncementRow {
   message: string;
   expiresAt?: string | null;
   notifyEmail: boolean;
+  notifySms: boolean;
 }
 
 const COLUMNS: Column<AnnouncementRow>[] = [
@@ -49,10 +54,21 @@ const COLUMNS: Column<AnnouncementRow>[] = [
   },
   {
     key: 'notifyEmail',
-    label: 'Notify Email',
-    width: '120px',
+    label: 'Email',
+    width: '90px',
     render: (row) =>
       row.notifyEmail ? (
+        <Badge label="Yes" variant="success" />
+      ) : (
+        <Badge label="No" variant="neutral" />
+      ),
+  },
+  {
+    key: 'notifySms',
+    label: 'SMS',
+    width: '90px',
+    render: (row) =>
+      row.notifySms ? (
         <Badge label="Yes" variant="success" />
       ) : (
         <Badge label="No" variant="neutral" />
@@ -62,11 +78,13 @@ const COLUMNS: Column<AnnouncementRow>[] = [
 
 export function AnnouncementsContent() {
   const [panelOpen, setPanelOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const canReadAnnouncements = usePermission(Permission.READ_ANNOUNCEMENTS);
   const canManageAnnouncements = usePermission(Permission.MANAGE_ANNOUNCEMENTS);
   const canAccessAnnouncements = canReadAnnouncements || canManageAnnouncements;
+  const toast = useToast();
 
   const { items, meta, isLoading } = useAnnouncementsPage({
     page,
@@ -75,17 +93,35 @@ export function AnnouncementsContent() {
     view: canManageAnnouncements ? 'all' : 'visible',
   });
 
+  const { mutate: deleteAnnouncement, isPending: isDeleting } = useDeleteAnnouncement();
+
   const rows = useMemo<AnnouncementRow[]>(
     () =>
-      items.map((announcement: Announcement) => ({
-        id: announcement.id,
-        title: announcement.title,
-        message: announcement.body,
-        expiresAt: announcement.expiresAt,
-        notifyEmail: announcement.sendEmail,
-      })),
+      items.map((announcement: Announcement) => {
+        const channels = announcement.deliveryChannels ?? ['IN_APP'];
+
+        return {
+          id: announcement.id,
+          title: announcement.title,
+          message: announcement.body,
+          expiresAt: announcement.expiresAt,
+          notifyEmail: channels.includes('EMAIL') || announcement.sendEmail,
+          notifySms: channels.includes('SMS'),
+        };
+      }),
     [items],
   );
+
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    deleteAnnouncement(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success('Announcement deleted');
+        setDeleteTarget(null);
+      },
+      onError: (err: unknown) => toast.error(extractError(err, 'Failed to delete announcement')),
+    });
+  };
 
   return (
     <>
@@ -119,6 +155,17 @@ export function AnnouncementsContent() {
             ? { label: '+ New Announcement', onClick: () => setPanelOpen(true) }
             : undefined
         }
+        rowActions={
+          canManageAnnouncements
+            ? (row) => [
+                {
+                  label: 'Delete',
+                  onClick: () => setDeleteTarget({ id: row.id, title: row.title }),
+                  danger: true,
+                },
+              ]
+            : undefined
+        }
         currentPage={page}
         totalPages={Math.max(1, meta.totalPages)}
         onPageChange={setPage}
@@ -128,6 +175,28 @@ export function AnnouncementsContent() {
       {canAccessAnnouncements && canManageAnnouncements && (
         <CreateAnnouncementPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
       )}
+
+      <Modal
+        isOpen={!!deleteTarget}
+        onClose={() => !isDeleting && setDeleteTarget(null)}
+        title="Delete Announcement?"
+        description={`Are you sure you want to delete "${deleteTarget?.title}"? This cannot be undone.`}
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteConfirm}
+              isLoading={isDeleting}
+              loadingText="Deleting…"
+              className="bg-red-600 hover:bg-red-700 text-white border-red-600"
+            >
+              Delete
+            </Button>
+          </>
+        }
+      />
     </>
   );
 }

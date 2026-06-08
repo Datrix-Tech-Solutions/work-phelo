@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type {
   CreateAnnouncementPayload,
+  UpdateAnnouncementPayload,
   PaginatedAnnouncementsResponse,
   QueryAnnouncementsParams,
 } from '@/types/hr';
@@ -70,5 +71,46 @@ export function useDeleteAnnouncement() {
   return useMutation({
     mutationFn: (id: string) => api.delete(`/hr/announcements/${id}`).then((r) => r.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
+  });
+}
+
+export function useUpdateAnnouncement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: UpdateAnnouncementPayload }) =>
+      api.patch(`/hr/announcements/${id}`, dto).then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
+  });
+}
+
+export function useMarkAnnouncementRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.patch(`/hr/announcements/${id}/read`).then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+      qc.invalidateQueries({ queryKey: ['announcements-unread-count'] });
+      qc.invalidateQueries({ queryKey: ['employee-dashboard'] });
+    },
+  });
+}
+
+export function useMarkAllAnnouncementsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.patch('/hr/announcements/mark-all-read').then((r) => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['announcements'] });
+      qc.invalidateQueries({ queryKey: ['announcements-unread-count'] });
+      qc.invalidateQueries({ queryKey: ['employee-dashboard'] });
+    },
+  });
+}
+
+export function useAnnouncementsUnreadCount() {
+  return useQuery({
+    queryKey: ['announcements-unread-count'],
+    queryFn: () => api.get<{ count: number }>('/hr/announcements/unread-count').then((r) => r.data),
+    refetchInterval: 30000,
   });
 }

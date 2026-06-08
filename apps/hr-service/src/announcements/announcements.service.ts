@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -8,12 +9,14 @@ import {
 import {
   Announcement,
   AnnouncementAudienceType,
+  AnnouncementDeliveryChannel,
   EmploymentStatus,
   Prisma,
 } from '../../prisma/generated/client';
 import { RequestUser } from '@work-phelo/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { hasPermissionRule, isCompanyAdminUser } from '../auth/access-scope';
+import { FieldEncryptionService } from '../crypto/field-encryption.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { CreateAnnouncementDto } from './dto/create-announcement.dto';
 import { QueryAnnouncementsDto } from './dto/query-announcements.dto';
@@ -24,12 +27,21 @@ type AnnouncementActorContext = {
   branchId: string | null;
 };
 
-type AnnouncementEmailRecipient = {
+type AnnouncementNotificationRecipient = {
   employeeId: string;
   userId: string;
   email: string;
+  phone?: string;
   firstName: string;
   lastName: string;
+};
+
+type AnnouncementRecipientResolution = {
+  recipients: AnnouncementNotificationRecipient[];
+  skippedSms: {
+    missingPhone: number;
+    invalidPhone: number;
+  };
 };
 
 type AnnouncementAudienceSelection = {
@@ -39,6 +51,11 @@ type AnnouncementAudienceSelection = {
   targetEmployeeIds: string[];
 };
 
+type AnnouncementReadState = {
+  isRead: boolean;
+  readAt: Date | null;
+};
+
 @Injectable()
 export class AnnouncementsService {
   private readonly logger = new Logger(AnnouncementsService.name);
@@ -46,6 +63,7 @@ export class AnnouncementsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rabbitmq: RabbitMQPublisher,
+    private readonly encryption: FieldEncryptionService,
   ) {}
 
   private canManageAnnouncements(actor: RequestUser): boolean {
@@ -73,6 +91,42 @@ export class AnnouncementsService {
     return [...new Set((values ?? []).map((value) => value.trim()))].filter(
       (value) => value.length > 0,
     );
+  }
+
+  private normalizeDeliveryChannels(
+    dto: CreateAnnouncementDto,
+  ): AnnouncementDeliveryChannel[] {
+    const requestedChannels =
+      dto.deliveryChannels && dto.deliveryChannels.length > 0
+        ? dto.deliveryChannels
+        : dto.sendEmail
+          ? [
+              AnnouncementDeliveryChannel.IN_APP,
+              AnnouncementDeliveryChannel.EMAIL,
+            ]
+          : [AnnouncementDeliveryChannel.IN_APP];
+
+    return [
+      ...new Set([AnnouncementDeliveryChannel.IN_APP, ...requestedChannels]),
+    ];
+  }
+
+  private shouldPublishExternalAnnouncementDelivery(
+    deliveryChannels: AnnouncementDeliveryChannel[],
+  ): boolean {
+    return (
+      deliveryChannels.includes(AnnouncementDeliveryChannel.EMAIL) ||
+      deliveryChannels.includes(AnnouncementDeliveryChannel.SMS)
+    );
+  }
+
+  private normalizeSmsPhone(phone: string | null | undefined): string | null {
+    if (!phone) {
+      return null;
+    }
+
+    const normalized = phone.replace(/[\s\-()]/g, '');
+    return /^\+\d{8,15}$/.test(normalized) ? normalized : null;
   }
 
   private async getActorContext(
@@ -275,6 +329,68 @@ export class AnnouncementsService {
     return where;
   }
 
+  private applyReadFilter(
+    where: Prisma.AnnouncementWhereInput,
+    tenantId: string,
+    userId: string,
+    read?: QueryAnnouncementsDto['read'],
+  ) {
+    if (read === 'read') {
+      where.readReceipts = { some: { tenantId, userId } };
+    }
+
+    if (read === 'unread') {
+      where.readReceipts = { none: { tenantId, userId } };
+    }
+  }
+
+  private async buildVisibleWhereForActor(
+    tenantId: string,
+    actor: RequestUser,
+    query: QueryAnnouncementsDto = {},
+  ): Promise<Prisma.AnnouncementWhereInput> {
+    const canManage = this.canManageAnnouncements(actor);
+    if (!this.canReadAnnouncements(actor)) {
+      throw new ForbiddenException(
+        "You don't have permission to access this. Contact your administrator.",
+      );
+    }
+
+    const actorContext = await this.getActorContext(tenantId, actor);
+    return this.buildVisibilityWhere(tenantId, actorContext, query, canManage);
+  }
+
+  private async attachReadState<T extends Announcement>(
+    tenantId: string,
+    userId: string,
+    announcements: T[],
+  ): Promise<Array<T & AnnouncementReadState>> {
+    if (announcements.length === 0) {
+      return [];
+    }
+
+    const receipts = await this.prisma.announcementReadReceipt.findMany({
+      where: {
+        tenantId,
+        userId,
+        announcementId: { in: announcements.map((item) => item.id) },
+      },
+      select: { announcementId: true, readAt: true },
+    });
+    const readAtByAnnouncementId = new Map(
+      receipts.map((receipt) => [receipt.announcementId, receipt.readAt]),
+    );
+
+    return announcements.map((announcement) => {
+      const readAt = readAtByAnnouncementId.get(announcement.id) ?? null;
+      return {
+        ...announcement,
+        isRead: readAt !== null,
+        readAt,
+      };
+    });
+  }
+
   private async resolveAnnouncementRecipients(
     tenantId: string,
     announcement: Pick<
@@ -284,7 +400,11 @@ export class AnnouncementsService {
       | 'targetBranchIds'
       | 'targetEmployeeIds'
     >,
-  ): Promise<AnnouncementEmailRecipient[]> {
+    options: {
+      includeEmail: boolean;
+      includeSms: boolean;
+    },
+  ): Promise<AnnouncementRecipientResolution> {
     const employeeWhere: Prisma.EmployeeWhereInput = {
       tenantId,
       employmentStatus: {
@@ -312,13 +432,17 @@ export class AnnouncementsService {
         id: true,
         userId: true,
         email: true,
+        phone: true,
         firstName: true,
         lastName: true,
       },
     });
 
     if (employees.length === 0) {
-      return [];
+      return {
+        recipients: [],
+        skippedSms: { missingPhone: 0, invalidPhone: 0 },
+      };
     }
 
     const statuses = await this.rabbitmq.authGetUserStatuses({
@@ -333,18 +457,53 @@ export class AnnouncementsService {
         .map((status) => status.userId),
     );
 
-    return employees
+    const skippedSms = { missingPhone: 0, invalidPhone: 0 };
+    const recipients = employees
       .filter(
         (employee): employee is typeof employee & { userId: string } =>
           !!employee.userId && activeUserIds.has(employee.userId),
       )
-      .map((employee) => ({
-        employeeId: employee.id,
-        userId: employee.userId,
-        email: employee.email,
-        firstName: employee.firstName,
-        lastName: employee.lastName,
-      }));
+      .flatMap((employee) => {
+        const recipient: AnnouncementNotificationRecipient = {
+          employeeId: employee.id,
+          userId: employee.userId,
+          email: employee.email,
+          firstName: employee.firstName,
+          lastName: employee.lastName,
+        };
+
+        if (options.includeSms) {
+          let decryptedPhone: string | null | undefined;
+          let decryptionFailed = false;
+
+          try {
+            decryptedPhone = this.encryption.decrypt(employee.phone);
+          } catch {
+            skippedSms.invalidPhone += 1;
+            decryptionFailed = true;
+          }
+
+          if (!decryptionFailed && decryptedPhone == null) {
+            skippedSms.missingPhone += 1;
+          } else if (!decryptionFailed) {
+            const phone = this.normalizeSmsPhone(decryptedPhone);
+
+            if (phone) {
+              recipient.phone = phone;
+            } else {
+              skippedSms.invalidPhone += 1;
+            }
+          }
+        }
+
+        if (options.includeEmail || recipient.phone) {
+          return [recipient];
+        }
+
+        return [];
+      });
+
+    return { recipients, skippedSms };
   }
 
   async create(
@@ -353,6 +512,7 @@ export class AnnouncementsService {
     dto: CreateAnnouncementDto,
   ) {
     const audience = await this.normalizeAudienceSelection(tenantId, dto);
+    const deliveryChannels = this.normalizeDeliveryChannels(dto);
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
 
     if (expiresAt && expiresAt <= new Date()) {
@@ -364,15 +524,24 @@ export class AnnouncementsService {
         tenantId,
         title: dto.title.trim(),
         body: dto.body.trim(),
-        sendEmail: dto.sendEmail ?? false,
+        sendEmail: deliveryChannels.includes(AnnouncementDeliveryChannel.EMAIL),
+        deliveryChannels,
         expiresAt,
         createdById: actor.id,
         ...audience,
       },
     });
 
-    if (announcement.sendEmail) {
-      void this.publishAnnouncementEmails(tenantId, actor, announcement);
+    if (
+      this.shouldPublishExternalAnnouncementDelivery(
+        announcement.deliveryChannels,
+      )
+    ) {
+      void this.publishAnnouncementExternalDelivery(
+        tenantId,
+        actor,
+        announcement,
+      );
     }
 
     return announcement;
@@ -383,20 +552,9 @@ export class AnnouncementsService {
     actor: RequestUser,
     query: QueryAnnouncementsDto,
   ) {
-    const canManage = this.canManageAnnouncements(actor);
-    if (!this.canReadAnnouncements(actor)) {
-      throw new ForbiddenException(
-        "You don't have permission to access this. Contact your administrator.",
-      );
-    }
+    const where = await this.buildVisibleWhereForActor(tenantId, actor, query);
+    this.applyReadFilter(where, tenantId, actor.id, query.read);
 
-    const actorContext = await this.getActorContext(tenantId, actor);
-    const where = this.buildVisibilityWhere(
-      tenantId,
-      actorContext,
-      query,
-      canManage,
-    );
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
     const skip = (page - 1) * limit;
@@ -412,7 +570,7 @@ export class AnnouncementsService {
     ]);
 
     return {
-      items,
+      items: await this.attachReadState(tenantId, actor.id, items),
       meta: {
         page,
         limit,
@@ -431,15 +589,9 @@ export class AnnouncementsService {
       return [];
     }
 
-    const actorContext = await this.getActorContext(tenantId, actor);
-    const where = this.buildVisibilityWhere(
-      tenantId,
-      actorContext,
-      {},
-      this.canManageAnnouncements(actor),
-    );
+    const where = await this.buildVisibleWhereForActor(tenantId, actor);
 
-    return this.prisma.announcement.findMany({
+    const announcements = await this.prisma.announcement.findMany({
       where,
       orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
       take: limit,
@@ -450,6 +602,107 @@ export class AnnouncementsService {
         publishedAt: true,
       },
     });
+
+    const receipts = await this.prisma.announcementReadReceipt.findMany({
+      where: {
+        tenantId,
+        userId: actor.id,
+        announcementId: { in: announcements.map((item) => item.id) },
+      },
+      select: { announcementId: true, readAt: true },
+    });
+    const readAtByAnnouncementId = new Map(
+      receipts.map((receipt) => [receipt.announcementId, receipt.readAt]),
+    );
+
+    return announcements.map((announcement) => {
+      const readAt = readAtByAnnouncementId.get(announcement.id) ?? null;
+      return {
+        ...announcement,
+        isRead: readAt !== null,
+        readAt,
+      };
+    });
+  }
+
+  async getUnreadCount(tenantId: string, actor: RequestUser) {
+    const visibleWhere = await this.buildVisibleWhereForActor(tenantId, actor);
+    const count = await this.prisma.announcement.count({
+      where: {
+        AND: [
+          visibleWhere,
+          {
+            readReceipts: {
+              none: { tenantId, userId: actor.id },
+            },
+          },
+        ],
+      },
+    });
+
+    return { count };
+  }
+
+  async markRead(tenantId: string, actor: RequestUser, id: string) {
+    const visibleWhere = await this.buildVisibleWhereForActor(tenantId, actor);
+    const announcement = await this.prisma.announcement.findFirst({
+      where: { AND: [visibleWhere, { id, tenantId }] },
+      select: { id: true },
+    });
+
+    if (!announcement) throw new NotFoundException('Announcement not found');
+
+    const receipt = await this.prisma.announcementReadReceipt.upsert({
+      where: {
+        tenantId_announcementId_userId: {
+          tenantId,
+          announcementId: id,
+          userId: actor.id,
+        },
+      },
+      update: { readAt: new Date() },
+      create: { tenantId, announcementId: id, userId: actor.id },
+    });
+
+    return { message: 'Announcement marked as read', readAt: receipt.readAt };
+  }
+
+  async markAllRead(tenantId: string, actor: RequestUser) {
+    const visibleWhere = await this.buildVisibleWhereForActor(tenantId, actor);
+    const announcements = await this.prisma.announcement.findMany({
+      where: {
+        AND: [
+          visibleWhere,
+          {
+            readReceipts: {
+              none: { tenantId, userId: actor.id },
+            },
+          },
+        ],
+      },
+      select: { id: true },
+    });
+
+    if (announcements.length === 0) {
+      return { message: 'All announcements marked as read', count: 0 };
+    }
+
+    const now = new Date();
+    const result = await this.prisma.announcementReadReceipt.createMany({
+      data: announcements.map((announcement) => ({
+        id: randomUUID(),
+        tenantId,
+        announcementId: announcement.id,
+        userId: actor.id,
+        readAt: now,
+      })),
+      skipDuplicates: true,
+    });
+
+    return {
+      message: 'All announcements marked as read',
+      count: result.count,
+    };
   }
 
   async remove(tenantId: string, id: string) {
@@ -461,36 +714,53 @@ export class AnnouncementsService {
     return { message: 'Announcement deleted successfully' };
   }
 
-  private async publishAnnouncementEmails(
+  private async publishAnnouncementExternalDelivery(
     tenantId: string,
     actor: RequestUser,
     announcement: Announcement,
   ) {
     try {
-      const recipients = await this.resolveAnnouncementRecipients(
-        tenantId,
-        announcement,
+      const shouldSendEmail = announcement.deliveryChannels.includes(
+        AnnouncementDeliveryChannel.EMAIL,
       );
+      const shouldSendSms = announcement.deliveryChannels.includes(
+        AnnouncementDeliveryChannel.SMS,
+      );
+      const { recipients, skippedSms } =
+        await this.resolveAnnouncementRecipients(tenantId, announcement, {
+          includeEmail: shouldSendEmail,
+          includeSms: shouldSendSms,
+        });
 
       if (recipients.length === 0) {
         this.logger.warn(
-          `Announcement ${announcement.id} was marked sendEmail=true but no active recipients were resolved.`,
+          `Announcement ${announcement.id} requested external delivery but no active recipients were resolved.`,
         );
-        return;
+        if (!shouldSendSms) {
+          return;
+        }
+      }
+
+      if (shouldSendSms) {
+        this.logger.log(
+          `Announcement ${announcement.id} SMS recipient resolution skipped ${skippedSms.missingPhone} missing phone(s) and ${skippedSms.invalidPhone} invalid phone(s).`,
+        );
       }
 
       await this.rabbitmq.notificationAnnouncementPublished({
         tenantId,
         announcementId: announcement.id,
+        tenantName: actor.tenantName,
         title: announcement.title,
         body: announcement.body,
         publishedAt: announcement.publishedAt.toISOString(),
+        deliveryChannels: announcement.deliveryChannels,
         platformLink: this.buildTenantWorkspaceLink(actor.tenantSlug),
         recipients,
       });
     } catch (error) {
       this.logger.error(
-        `Failed to publish announcement email fanout for ${announcement.id}`,
+        `Failed to publish announcement external delivery fanout for ${announcement.id}`,
         error instanceof Error ? error.stack : undefined,
       );
     }

@@ -501,9 +501,12 @@ export interface AnnouncementRecipientEvent {
   employeeId: string;
   userId: string;
   email: string;
+  phone?: string;
   firstName: string;
   lastName: string;
 }
+
+export type AnnouncementDeliveryChannel = 'IN_APP' | 'EMAIL' | 'SMS';
 
 export interface PayrollApprovalRequestedRecipientEvent {
   userId: string;
@@ -550,9 +553,11 @@ export interface PayrollDecisionEvent {
 export interface AnnouncementPublishedEvent {
   tenantId: string;
   announcementId: string;
+  tenantName?: string;
   title: string;
   body: string;
   publishedAt: string;
+  deliveryChannels?: AnnouncementDeliveryChannel[];
   platformLink?: string;
   recipients: AnnouncementRecipientEvent[];
 }
