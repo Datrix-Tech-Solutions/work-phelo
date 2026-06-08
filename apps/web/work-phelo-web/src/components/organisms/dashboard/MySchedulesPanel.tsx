@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { useMyScheduleOverview } from '@/hooks/useScheduling';
+import { useMyScheduleOverview } from '@/hooks/hr/useScheduling';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';

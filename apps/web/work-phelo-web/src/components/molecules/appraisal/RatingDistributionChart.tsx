@@ -13,9 +13,9 @@ interface Props {
   data: DistributionItem[];
 }
 
-const BAR_DEFAULT = '#1e3358';
-const BAR_HOVER = '#f97316';
-const TOOLTIP_BORDER = '#f97316';
+const BAR_DEFAULT = '#0D2244'; /* --brand */
+const BAR_HOVER = '#f97316'; /* orange-500 */
+const TOOLTIP_BORDER = '#f97316'; /* orange-500 */
 
 function yTicks(maxVal: number): number[] {
   if (maxVal === 0) return [0, 10, 20, 30, 40, 50];

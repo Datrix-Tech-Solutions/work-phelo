@@ -17,7 +17,7 @@ import {
   useGrantPermission,
   useRevokePermission,
   useUserPermissions,
-} from '@/hooks/useRoles';
+} from '@/hooks/hr/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import type { PermissionAction } from '@/types/roles';

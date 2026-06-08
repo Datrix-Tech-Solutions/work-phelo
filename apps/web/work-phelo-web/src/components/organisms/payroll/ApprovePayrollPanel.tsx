@@ -98,16 +98,20 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
 
             <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5 flex flex-col gap-4">
               <p className="text-sm font-medium text-gray-600">Payroll Summary</p>
-              <div className="grid grid-cols-3 gap-0 divide-x divide-gray-200">
-                <div className="flex flex-col gap-1 pr-4">
+              <div className="grid grid-cols-2 gap-y-4 gap-x-0 divide-y divide-gray-200">
+                <div className="flex flex-col gap-1 pb-4 pr-4 border-r border-gray-200">
                   <p className="text-xs text-gray-500">Total Gross</p>
                   <p className="text-sm font-semibold text-gray-900">{money(run.totalGross)}</p>
                 </div>
-                <div className="flex flex-col gap-1 px-4">
+                <div className="flex flex-col gap-1 pb-4 pl-4">
+                  <p className="text-xs text-gray-500">Total Net Pay</p>
+                  <p className="text-sm font-semibold text-emerald-600">{money(run.totalNet)}</p>
+                </div>
+                <div className="flex flex-col gap-1 pt-4 pr-4 border-r border-gray-200">
                   <p className="text-xs text-gray-500">Total PAYE</p>
                   <p className="text-sm font-semibold text-gray-900">{money(run.totalPAYE)}</p>
                 </div>
-                <div className="flex flex-col gap-1 pl-4">
+                <div className="flex flex-col gap-1 pt-4 pl-4">
                   <p className="text-xs text-gray-500">Employer Cost</p>
                   <p className="text-sm font-semibold text-orange-500">
                     {money(run.totalEmployerCost)}

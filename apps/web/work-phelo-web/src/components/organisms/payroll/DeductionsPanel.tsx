@@ -19,6 +19,8 @@ import { EmployeeDeduction } from '@/types/hr';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
 
 export type { EmployeeDeduction as DeductionItem };
+import type { DeductionLineItem } from '@/types/payroll';
+export type { DeductionLineItem };
 
 interface Props {
   isOpen: boolean;
@@ -27,12 +29,6 @@ interface Props {
   employeeName: string;
   onActiveTotal?: (total: number) => void;
   onActiveItems?: (items: DeductionLineItem[]) => void;
-}
-
-export interface DeductionLineItem {
-  employeeDeductionId?: string | null;
-  name: string;
-  amount: number;
 }
 
 interface FormState {

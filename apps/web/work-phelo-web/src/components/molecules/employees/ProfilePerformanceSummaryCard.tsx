@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { TrendingUp, TrendingDown, Award, BarChart3 } from 'lucide-react';
-import { useMyAppraisals } from '@/hooks/useAppraisals';
+import { useMyAppraisals } from '@/hooks/hr/useAppraisals';
 import { SectionCard } from '@/components/molecules/shared/sectionCard';
 import { cn } from '@/lib/utils';
 

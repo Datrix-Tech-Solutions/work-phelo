@@ -43,6 +43,22 @@ export const EventPatterns = {
   NOTIFICATION_SMS_OTP: 'notification.sms_otp',
   NOTIFICATION_IN_APP_CREATE: 'notification.in_app.create',
 
+  // Reinsurance Operations domain events
+  REINSURANCE_COUNTERPARTY_CREATED: 'reinsurance.counterparty.created',
+  REINSURANCE_COUNTERPARTY_UPDATED: 'reinsurance.counterparty.updated',
+  REINSURANCE_COUNTERPARTY_DELETED: 'reinsurance.counterparty.deleted',
+  REINSURANCE_PLACEMENT_CREATED: 'reinsurance.placement.created',
+  REINSURANCE_PLACEMENT_UPDATED: 'reinsurance.placement.updated',
+  REINSURANCE_PLACEMENT_DELETED: 'reinsurance.placement.deleted',
+  REINSURANCE_PLACEMENT_STATUS_CHANGED: 'reinsurance.placement.status_changed',
+  REINSURANCE_MAILBOX_CONNECTED: 'reinsurance.mailbox.connected',
+  REINSURANCE_MAILBOX_SYNCED: 'reinsurance.mailbox.synced',
+  REINSURANCE_MAILBOX_ARCHIVED: 'reinsurance.mailbox.archived',
+  REINSURANCE_EMAIL_RECEIVED: 'reinsurance.email.received',
+  REINSURANCE_EMAIL_SENT: 'reinsurance.email.sent',
+  REINSURANCE_EMAIL_LINKED: 'reinsurance.email.linked',
+  REINSURANCE_CLAIM_CREATED: 'reinsurance.claim.created',
+
   // HR → Notification
   NOTIFY_EMPLOYEE_TERMINATION: 'notify.employee_termination',
   NOTIFY_RESIGNATION_SUBMITTED: 'notify.resignation_submitted',
@@ -261,6 +277,92 @@ export interface InAppNotificationCreateEvent {
   entityId?: string;
   sourceService?: string;
   priority?: InAppNotificationPriority;
+}
+
+// ── Reinsurance → Core Audit Events ───────────────────────────────────────
+
+export type ReinsuranceCounterpartyType = 'CEDANT' | 'REINSURER' | 'BROKER';
+
+export interface ReinsuranceCounterpartyAuditEvent {
+  tenantId: string;
+  counterpartyId: string;
+  counterpartyType: ReinsuranceCounterpartyType;
+  counterpartyName: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export type ReinsurancePlacementStatus =
+  | 'DRAFT'
+  | 'MARKETING'
+  | 'PARTIALLY_PLACED'
+  | 'PLACED'
+  | 'CLOSING'
+  | 'CLOSED'
+  | 'DECLINED'
+  | 'CANCELLED';
+
+export interface ReinsurancePlacementAuditEvent {
+  tenantId: string;
+  placementId: string;
+  reference: string;
+  title: string;
+  status: ReinsurancePlacementStatus;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export interface ReinsurancePlacementStatusAuditEvent extends ReinsurancePlacementAuditEvent {
+  previousStatus: ReinsurancePlacementStatus;
+  nextStatus: ReinsurancePlacementStatus;
+  note?: string;
+}
+
+export type ReinsuranceMailboxProvider = 'MICROSOFT_GRAPH' | 'GOOGLE_GMAIL';
+
+export interface ReinsuranceMailboxAuditEvent {
+  tenantId: string;
+  mailboxConnectionId: string;
+  provider: ReinsuranceMailboxProvider;
+  emailAddress: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}
+
+export interface ReinsuranceMailboxSyncAuditEvent extends ReinsuranceMailboxAuditEvent {
+  threadsSynced: number;
+  messagesSynced: number;
+  lastSyncedAt: string;
+}
+
+export interface ReinsuranceEmailLinkAuditEvent {
+  tenantId: string;
+  linkId: string;
+  placementId: string;
+  threadId: string;
+  messageId?: string;
+  actorUserId: string;
+  actorEmail?: string;
+  actorRole?: string;
+  changes?: {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
 }
 
 // ── HR → Notification Events ───────────────────────────────────────────────

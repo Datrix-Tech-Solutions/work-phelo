@@ -1,0 +1,869 @@
+/* ── Reinsurance domain types ── */
+
+/* ── Unified Counterparty (API response shape) ── */
+export type CounterpartyType = 'CEDANT' | 'REINSURER' | 'BROKER';
+
+export interface CounterpartyContact {
+  id: string;
+  fullName: string;
+  jobTitle: string | null;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
+}
+
+export interface CounterpartyAddress {
+  id: string;
+  label: string | null;
+  line1: string;
+  line2: string | null;
+  city: string;
+  state: string | null;
+  postalCode: string | null;
+  country: string;
+  isPrimary: boolean;
+}
+
+export interface Counterparty {
+  id: string;
+  tenantId: string;
+  type: CounterpartyType;
+  name: string;
+  normalizedName: string;
+  registrationNumber: string | null;
+  email: string | null;
+  phone: string | null;
+  website: string | null;
+  notes: string | null;
+  brokerageFee: number | null;
+  contacts: CounterpartyContact[];
+  addresses: CounterpartyAddress[];
+  createdByUserId: string;
+  updatedByUserId: string;
+  archivedByUserId: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Backward-compat aliases used by existing table components */
+export type Cedant = Counterparty;
+export type Reinsurer = Counterparty;
+export type Broker = Counterparty;
+
+/* ── Paginated list response ── */
+export interface PaginatedCounterparties {
+  items: Counterparty[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+/* ── Shared address form values ── */
+export interface AddressFormValues {
+  country: string; // 'Ghana' | 'Africa' | 'Europe' | 'Asia' | 'Rest of the World'
+  state: string; // Ghana region — only relevant when country === 'Ghana'
+  city: string; // only relevant when country === 'Ghana'
+}
+
+export const ADDRESS_FORM_DEFAULTS: AddressFormValues = {
+  country: '',
+  state: '',
+  city: '',
+};
+
+/* ── Additional contact person (used in all three counterparty forms) ── */
+export interface ContactPersonFormValues {
+  fullName: string;
+  email: string;
+  phone: string;
+}
+
+export const CONTACT_PERSON_DEFAULTS: ContactPersonFormValues = {
+  fullName: '',
+  email: '',
+  phone: '',
+};
+
+/* ── Cedant form ── */
+export interface CedantFormValues {
+  name: string;
+  email: string;
+  phone: string;
+  contacts: ContactPersonFormValues[];
+  address: AddressFormValues;
+}
+
+export const CEDANT_FORM_DEFAULTS: CedantFormValues = {
+  name: '',
+  email: '',
+  phone: '',
+  contacts: [],
+  address: ADDRESS_FORM_DEFAULTS,
+};
+
+/* ── Reinsurer form ── */
+export interface ReinsurerFormValues {
+  name: string;
+  email: string;
+  phone: string;
+  brokerageFee: number | '';
+  contacts: ContactPersonFormValues[];
+  address: AddressFormValues;
+}
+
+export const REINSURER_FORM_DEFAULTS: ReinsurerFormValues = {
+  name: '',
+  email: '',
+  phone: '',
+  brokerageFee: '',
+  contacts: [],
+  address: ADDRESS_FORM_DEFAULTS,
+};
+
+/* ── Broker form ── */
+export interface BrokerFormValues {
+  name: string;
+  email: string;
+  phone: string;
+  contacts: ContactPersonFormValues[];
+  address: AddressFormValues;
+}
+
+export const BROKER_FORM_DEFAULTS: BrokerFormValues = {
+  name: '',
+  email: '',
+  phone: '',
+  contacts: [],
+  address: ADDRESS_FORM_DEFAULTS,
+};
+
+/* ── API payload types ── */
+
+export interface CounterpartyContactPayload {
+  fullName: string;
+  jobTitle?: string;
+  email?: string;
+  phone?: string;
+  isPrimary?: boolean;
+}
+
+export interface CounterpartyAddressPayload {
+  label?: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state?: string;
+  postalCode?: string;
+  country: string;
+  isPrimary?: boolean;
+}
+
+export interface CreateCounterpartyPayload {
+  type: CounterpartyType;
+  name: string;
+  registrationNumber?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  notes?: string;
+  brokerageFee?: number;
+  contacts?: CounterpartyContactPayload[];
+  addresses?: CounterpartyAddressPayload[];
+}
+
+export type UpdateCounterpartyPayload = Partial<Omit<CreateCounterpartyPayload, 'type'>>;
+
+export interface CreateRiskClassPayload {
+  name: string;
+  description?: string;
+  isActive?: boolean;
+  displayOrder?: number;
+}
+export type UpdateRiskClassPayload = Partial<CreateRiskClassPayload>;
+
+export type RiskTypeFieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'SELECT' | 'CHECKBOX' | 'TEXTAREA';
+export type RiskTypeFieldSection = 'BUSINESS_DETAILS' | 'OFFER_DETAILS';
+
+export interface RiskTypeCustomField {
+  label: string;
+  value: string;
+}
+
+export interface CreateRiskTypePayload {
+  name: string;
+  riskClassId: string;
+  description?: string;
+  isActive?: boolean;
+  displayOrder?: number;
+}
+export type UpdateRiskTypePayload = Partial<Omit<CreateRiskTypePayload, 'riskClassId'>>;
+
+export interface CreateRiskTypeFieldPayload {
+  section: RiskTypeFieldSection;
+  fieldKey: string;
+  label: string;
+  fieldType: RiskTypeFieldType;
+  required?: boolean;
+  options?: string[];
+  placeholder?: string;
+  displayOrder?: number;
+}
+
+export interface CreateCurrencyPayload {
+  name: string;
+  isoCode: string;
+  symbol?: string;
+  exchangeRateToBase?: number;
+  isBaseCurrency?: boolean;
+  isActive?: boolean;
+  displayOrder?: number;
+}
+export type UpdateCurrencyPayload = Partial<Omit<CreateCurrencyPayload, 'isoCode'>>;
+
+/* ── Currency ── */
+export interface Currency {
+  id: string;
+  tenantId: string;
+  isoCode: string;
+  name: string;
+  symbol: string | null;
+  exchangeRateToBase: string | null;
+  isBaseCurrency: boolean;
+  isActive: boolean;
+  displayOrder: number;
+  createdByUserId: string;
+  updatedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CurrencyFormValues {
+  name: string;
+  isoCode: string;
+  symbol: string;
+  exchangeRateToBase: number | '';
+  isBaseCurrency: boolean;
+}
+
+export const CURRENCY_FORM_DEFAULTS: CurrencyFormValues = {
+  name: '',
+  isoCode: '',
+  symbol: '',
+  exchangeRateToBase: '',
+  isBaseCurrency: false,
+};
+
+/* ── Risk Type ── */
+export interface RiskTypeField {
+  id: string;
+  tenantId: string;
+  riskTypeId: string;
+  section: string;
+  fieldKey: string;
+  label: string;
+  fieldType: string;
+  required: boolean;
+  options: string[] | null;
+  validationRules: Record<string, unknown> | null;
+  placeholder: string | null;
+  helpText: string | null;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RiskType {
+  id: string;
+  tenantId: string;
+  riskClassId: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  fields: RiskTypeField[];
+  createdByUserId: string;
+  updatedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RiskTypeFormValues {
+  name: string;
+  riskClassId: string;
+  customFields: RiskTypeCustomField[];
+}
+
+export const RISK_TYPE_FORM_DEFAULTS: RiskTypeFormValues = {
+  name: '',
+  riskClassId: '',
+  customFields: [],
+};
+
+/* ── Risk Class ── */
+export interface RiskClass {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  displayOrder: number;
+  riskTypes: RiskType[];
+  createdByUserId: string;
+  updatedByUserId: string;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RiskClassFormValues {
+  name: string;
+  description: string;
+}
+
+export const RISK_CLASS_FORM_DEFAULTS: RiskClassFormValues = {
+  name: '',
+  description: '',
+};
+
+/* ── Facultative ── */
+export const FACULTATIVE_STATUSES = [
+  'DRAFT',
+  'MARKETING',
+  'QUOTED',
+  'BOUND',
+  'DECLINED',
+  'CANCELLED',
+] as const;
+export type FacultativeStatus = (typeof FACULTATIVE_STATUSES)[number];
+
+export const PLACEMENT_DISPLAY_STATUSES = ['Open', 'Closed', 'Cancelled'] as const;
+export type PlacementDisplayStatus = (typeof PLACEMENT_DISPLAY_STATUSES)[number];
+
+export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStatus {
+  if (status === 'BOUND') return 'Closed';
+  if (status === 'CANCELLED') return 'Cancelled';
+  return 'Open';
+}
+
+export type PlacementParticipantRole = 'BROKER' | 'REINSURER' | 'LEAD_REINSURER' | 'CO_REINSURER';
+export type PlacementParticipantStatus =
+  | 'INVITED'
+  | 'OFFER_SENT'
+  | 'QUOTED'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'CLOSED';
+
+export interface PlacementParticipant {
+  id: string;
+  counterpartyId: string;
+  role: PlacementParticipantRole;
+  status: PlacementParticipantStatus;
+  sharePercent: string | null;
+  signedLinePercent: string | null;
+  brokerageFee: string | null;
+  notes: string | null;
+  counterparty: { id: string; name: string };
+}
+
+export interface PlacementParticipantPayload {
+  counterpartyId: string;
+  role: PlacementParticipantRole;
+  status?: PlacementParticipantStatus;
+  sharePercent?: number;
+  signedLinePercent?: number;
+  brokerageFee?: number;
+  notes?: string;
+}
+
+export interface UpdateParticipantPayload {
+  sharePercent?: number;
+  signedLinePercent?: number;
+  brokerageFee?: number;
+  notes?: string;
+}
+
+export interface UpdateParticipantStatusPayload {
+  status: PlacementParticipantStatus;
+  note?: string;
+}
+
+export interface Facultative {
+  insuranceCompany: string | null;
+  policyNumber: string | null;
+  id: string;
+  reference: string;
+  title: string;
+  classOfBusiness: string | null;
+  riskTypeId: string | null;
+  cedant: { id: string; name: string };
+  businessDetails: Record<string, unknown> | null;
+  offerDetails: Record<string, unknown> | null;
+  sumInsured: number | null;
+  rate: number | null;
+  commission: number | null;
+  facultativeOffer: number | null;
+  premium: number | null;
+  currency: string | null;
+  inceptionDate: string | null;
+  expiryDate: string | null;
+  createdAt: string;
+  status: FacultativeStatus;
+  participants: PlacementParticipant[];
+  totalOfferedPercent: number;
+  totalAcceptedPercent: number;
+  remainingPercent: number;
+}
+
+/* ── Facultative API payloads ── */
+export interface CreateFacultativePayload {
+  cedantId: string;
+  riskTypeId: string;
+  reference: string;
+  title: string;
+  sumInsured: number;
+  rate: number;
+  premium: number;
+  facultativeOffer: number;
+  commission: number;
+  currency: string;
+  inceptionDate?: string;
+  expiryDate?: string;
+  businessDetails?: Record<string, unknown>;
+  offerDetails?: Record<string, unknown>;
+  participants?: PlacementParticipantPayload[];
+}
+
+export type UpdateFacultativePayload = Partial<Omit<CreateFacultativePayload, 'cedantId'>>;
+
+/* ── Placement Endorsements ── */
+export type PlacementEndorsementStatus =
+  | 'DRAFT'
+  | 'MARKETING'
+  | 'PARTIALLY_ACCEPTED'
+  | 'ACCEPTED'
+  | 'CLOSING'
+  | 'CLOSED'
+  | 'DECLINED'
+  | 'VOID';
+
+export type PlacementEndorsementType =
+  | 'SUM_INSURED_INCREASE'
+  | 'SUM_INSURED_DECREASE'
+  | 'PREMIUM_ADJUSTMENT'
+  | 'COVERAGE_AMENDMENT'
+  | 'POLICY_AMENDMENT'
+  | 'PARTICIPANT_SHARE_CHANGE'
+  | 'PARTICIPANT_ADDITION'
+  | 'PARTICIPANT_REMOVAL'
+  | 'CANCELLATION'
+  | 'OTHER';
+
+export const ENDORSEMENT_TYPE_LABELS: Record<PlacementEndorsementType, string> = {
+  SUM_INSURED_INCREASE: 'Sum Insured Increase',
+  SUM_INSURED_DECREASE: 'Sum Insured Decrease',
+  PREMIUM_ADJUSTMENT: 'Premium Adjustment',
+  COVERAGE_AMENDMENT: 'Coverage Amendment',
+  POLICY_AMENDMENT: 'Policy Amendment',
+  PARTICIPANT_SHARE_CHANGE: 'Participant Share Change',
+  PARTICIPANT_ADDITION: 'Participant Addition',
+  PARTICIPANT_REMOVAL: 'Participant Removal',
+  CANCELLATION: 'Cancellation',
+  OTHER: 'Other',
+};
+
+export const ENDORSEMENT_STATUS_LABELS: Record<PlacementEndorsementStatus, string> = {
+  DRAFT: 'Draft',
+  MARKETING: 'In Market',
+  PARTIALLY_ACCEPTED: 'Partially Accepted',
+  ACCEPTED: 'Accepted',
+  CLOSING: 'Closing',
+  CLOSED: 'Closed',
+  DECLINED: 'Declined',
+  VOID: 'Void',
+};
+
+export const ENDORSEMENT_STATUS_VARIANT: Record<
+  PlacementEndorsementStatus,
+  'neutral' | 'warning' | 'success' | 'danger'
+> = {
+  DRAFT: 'neutral',
+  MARKETING: 'warning',
+  PARTIALLY_ACCEPTED: 'warning',
+  ACCEPTED: 'success',
+  CLOSING: 'warning',
+  CLOSED: 'success',
+  DECLINED: 'danger',
+  VOID: 'danger',
+};
+
+export const TERMINAL_ENDORSEMENT_STATUSES: PlacementEndorsementStatus[] = [
+  'CLOSED',
+  'DECLINED',
+  'VOID',
+];
+
+export interface PlacementEndorsement {
+  id: string;
+  placementId: string;
+  endorsementNumber: string;
+  type: PlacementEndorsementType;
+  status: PlacementEndorsementStatus;
+  effectiveDate: string;
+  reason: string;
+  description: string | null;
+  changeSummary: Record<string, unknown> | null;
+  originalSnapshot: Record<string, unknown>;
+  proposedSnapshot: Record<string, unknown> | null;
+  createdByUserId: string;
+  closedAt: string | null;
+  voidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PlacementEndorsementParticipantStatus =
+  | 'INVITED'
+  | 'OFFER_SENT'
+  | 'QUOTED'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'CLOSED';
+
+export interface PlacementEndorsementParticipant {
+  id: string;
+  placementId: string;
+  endorsementId: string;
+  originalParticipantId: string | null;
+  counterpartyId: string;
+  status: PlacementEndorsementParticipantStatus;
+  sharePercent: string | null;
+  signedLinePercent: string | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEndorsementParticipantPayload {
+  counterpartyId: string;
+  originalParticipantId?: string;
+  sharePercent?: number;
+  signedLinePercent?: number;
+  status?: PlacementEndorsementParticipantStatus;
+}
+
+export interface CreateEndorsementPayload {
+  type: PlacementEndorsementType;
+  effectiveDate: string;
+  reason: string;
+  description?: string;
+  proposedSnapshot?: Record<string, unknown>;
+}
+
+/* ── Facultative form ── */
+export interface FacultativeFormValues {
+  insuranceCompany: string;
+  riskClassId: string;
+  riskType: string;
+  reference: string;
+  title: string;
+  insured: string;
+  sumInsured: number | '';
+  rate: number | '';
+  premium: number | '';
+  facultativeOffer: number | '';
+  commission: number | '';
+  currency: string;
+  periodFrom: string;
+  periodTo: string;
+  comment: string;
+  riskDetails: Record<string, string>;
+}
+
+export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
+  insuranceCompany: '',
+  riskClassId: '',
+  riskType: '',
+  reference: '',
+  title: '',
+  insured: '',
+  sumInsured: '',
+  rate: '',
+  premium: '',
+  facultativeOffer: '',
+  commission: '',
+  currency: '',
+  periodFrom: '',
+  periodTo: '',
+  comment: '',
+  riskDetails: {},
+};
+
+export const TREATY_TYPES = [
+  'Quota Share',
+  'Surplus',
+  'Fac. Obligatory Treaty',
+  'Excess of Loss',
+] as const;
+
+export const TREATY_STATUSES = ['Active', 'Pending', 'Expired', 'Cancelled'] as const;
+
+export type TreatyType = (typeof TREATY_TYPES)[number];
+export type TreatyStatus = (typeof TREATY_STATUSES)[number];
+
+/* ── Table row shape ── */
+export interface Treaty {
+  id: string;
+  name: string;
+  type: TreatyType;
+  classofBusiness: string;
+  cedant: string;
+  share: number; // reinsurer's share 0-100
+  periodStart: string; // ISO date
+  periodEnd: string; // ISO date
+  year: number;
+  status: TreatyStatus;
+}
+
+/* ── Quota Share form ── */
+
+export interface ReinsurerPanelRow {
+  reinsurer: string;
+  reinsurerShare: number | '';
+}
+
+export const DEFAULT_REINSURER_ROW: ReinsurerPanelRow = {
+  reinsurer: '',
+  reinsurerShare: '',
+};
+
+export const TERRITORIAL_SCOPE_OPTIONS = [
+  { value: 'Ghana', label: 'Ghana' },
+  { value: 'Africa', label: 'Africa' },
+  { value: 'Europe', label: 'Europe' },
+  { value: 'Asia', label: 'Asia' },
+  { value: 'Rest of the World', label: 'Rest of the World' },
+];
+
+export const ACCOUNTING_ARRANGEMENT_OPTIONS = [
+  { value: 'Quarterly', label: 'Quarterly' },
+  { value: 'Semi-Annual', label: 'Semi-Annual' },
+  { value: 'Annual', label: 'Annual' },
+];
+
+export const CURRENCY_OPTIONS = [
+  { value: 'GHC', label: 'GHC – Ghana Cedi' },
+  { value: 'USD', label: 'USD – US Dollar' },
+  { value: 'EUR', label: 'EUR – Euro' },
+  { value: 'GBP', label: 'GBP – British Pound' },
+  { value: 'NGN', label: 'NGN – Nigerian Naira' },
+];
+
+export interface QuotaShareFormValues {
+  classOfBusiness: string;
+  year: string;
+  treatyName: string;
+  territorialScope: string;
+  accountingArrangement: string;
+  currency: string;
+  cedantCompany: string;
+  broker: string;
+  effectiveDate: string;
+  expiryDate: string;
+  cedantCommission: number | '';
+  brokerageFee: number | '';
+  limitOfLiability: number | '';
+  cedantShare: number | '';
+  reinsuranceShare: number | '';
+  yourShare: number | '';
+  reinsurerPanel: ReinsurerPanelRow[];
+  supportingDocument: File | null;
+}
+
+/* ── Surplus form ── */
+export interface SurplusFormValues {
+  classOfBusiness: string;
+  year: string;
+  treatyName: string;
+  territorialScope: string;
+  accountingArrangement: string;
+  currency: string;
+  cedantCompany: string;
+  broker: string;
+  effectiveDate: string;
+  expiryDate: string;
+  cedantCommission: number | '';
+  brokerageFee: number | '';
+  /** The cedant's own retention per risk */
+  cedantRetentionLine: number | '';
+  /** Number of lines the reinsurer accepts above the retention */
+  reinsuranceLine: number | '';
+  /** totalCapacity = cedantRetentionLine × reinsuranceLine — computed, never submitted */
+  yourShare: number | '';
+  supportingDocument: File | null;
+}
+
+export const SURPLUS_DEFAULTS: SurplusFormValues = {
+  classOfBusiness: '',
+  year: String(new Date().getFullYear()),
+  treatyName: '',
+  territorialScope: '',
+  accountingArrangement: '',
+  currency: '',
+  cedantCompany: '',
+  broker: '',
+  effectiveDate: '',
+  expiryDate: '',
+  cedantCommission: '',
+  brokerageFee: '',
+  cedantRetentionLine: '',
+  reinsuranceLine: '',
+  yourShare: '',
+  supportingDocument: null,
+};
+
+/* ── Excess of Loss form ── */
+export const EXCESS_OF_LOSS_TYPE_OPTIONS = [
+  { value: 'Aggregate', label: 'Aggregate' },
+  { value: 'Per Risk', label: 'Per Risk' },
+  { value: 'Catastrophe', label: 'Catastrophe' },
+];
+
+export const BASIS_OF_ATTACHMENT_OPTIONS = [
+  { value: 'Losses Occurring', label: 'Losses Occurring' },
+  { value: 'Risk Attaching', label: 'Risk Attaching' },
+];
+
+export const REINSTATEMENT_TYPE_OPTIONS = [
+  { value: 'Free', label: 'Free' },
+  { value: 'Paid', label: 'Paid' },
+  { value: 'Pro-Rate', label: 'Pro-Rate' },
+  { value: 'Full', label: 'Full' },
+];
+
+export interface TreatyLayer {
+  name: string;
+  retention: number | '';
+  limit: number | '';
+  reinstatements: number | '';
+  reinstatementsType: string;
+}
+
+export const DEFAULT_TREATY_LAYER: TreatyLayer = {
+  name: '',
+  retention: '',
+  limit: '',
+  reinstatements: '',
+  reinstatementsType: '',
+};
+
+export interface ExcessOfLossFormValues {
+  classOfBusiness: string;
+  excessOfLossType: string;
+  year: string;
+  treatyName: string;
+  territorialScope: string;
+  accountingArrangement: string;
+  currency: string;
+  cedantCompany: string;
+  broker: string;
+  effectiveDate: string;
+  expiryDate: string;
+  brokerageFee: number | '';
+  basisOfAttachment: string;
+  egnpi: number | '';
+  rate: number | '';
+  mAndD: number | '';
+  layers: TreatyLayer[];
+  reinsurerShare: number | '';
+  yourShare: number | '';
+  supportingDocument: File | null;
+}
+
+export const EXCESS_OF_LOSS_DEFAULTS: ExcessOfLossFormValues = {
+  classOfBusiness: '',
+  excessOfLossType: '',
+  year: String(new Date().getFullYear()),
+  treatyName: '',
+  territorialScope: '',
+  accountingArrangement: '',
+  currency: '',
+  cedantCompany: '',
+  broker: '',
+  effectiveDate: '',
+  expiryDate: '',
+  brokerageFee: '',
+  basisOfAttachment: '',
+  egnpi: '',
+  rate: '',
+  mAndD: '',
+  layers: [{ ...DEFAULT_TREATY_LAYER }],
+  reinsurerShare: '',
+  yourShare: '',
+  supportingDocument: null,
+};
+
+/* ── Fac. Obligatory Treaty form ── */
+export interface FacObligatoryFormValues {
+  classOfBusiness: string;
+  year: string;
+  treatyName: string;
+  territorialScope: string;
+  accountingArrangement: string;
+  currency: string;
+  cedantCompany: string;
+  broker: string;
+  effectiveDate: string;
+  expiryDate: string;
+  cedantCommission: number | '';
+  brokerageFee: number | '';
+  reinsurererShare: number | '';
+  yourShare: number | '';
+  supportingDocument: File | null;
+}
+
+export const FAC_OBLIGATORY_DEFAULTS: FacObligatoryFormValues = {
+  classOfBusiness: '',
+  year: String(new Date().getFullYear()),
+  treatyName: '',
+  territorialScope: '',
+  accountingArrangement: '',
+  currency: '',
+  cedantCompany: '',
+  broker: '',
+  effectiveDate: '',
+  expiryDate: '',
+  cedantCommission: '',
+  brokerageFee: '',
+  reinsurererShare: '',
+  yourShare: '',
+  supportingDocument: null,
+};
+
+export const QUOTA_SHARE_DEFAULTS: QuotaShareFormValues = {
+  classOfBusiness: '',
+  year: String(new Date().getFullYear()),
+  treatyName: '',
+  territorialScope: '',
+  accountingArrangement: '',
+  currency: '',
+  cedantCompany: '',
+  broker: '',
+  effectiveDate: '',
+  expiryDate: '',
+  cedantCommission: '',
+  brokerageFee: '',
+  limitOfLiability: '',
+  cedantShare: '',
+  reinsuranceShare: '',
+  yourShare: '',
+  reinsurerPanel: [{ ...DEFAULT_REINSURER_ROW }],
+  supportingDocument: null,
+};

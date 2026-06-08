@@ -3,8 +3,8 @@ FROM node:20-alpine AS base
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
-COPY apps/web/work-phelo-web/package.json ./
-RUN npm install
+COPY apps/web/work-phelo-web/package.json apps/web/work-phelo-web/package-lock.json ./
+RUN npm ci
 
 FROM base AS builder
 WORKDIR /app

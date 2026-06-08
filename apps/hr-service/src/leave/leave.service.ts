@@ -798,9 +798,16 @@ export class LeaveService {
     });
   }
 
-  async getPublicHolidays(tenantId: string) {
+  async getPublicHolidays(tenantId: string, year?: number) {
+    const targetYear = year ?? new Date().getFullYear();
+    const startOfYear = new Date(targetYear, 0, 1);
+    const endOfYear = new Date(targetYear, 11, 31, 23, 59, 59, 999);
+
     return this.prisma.publicHoliday.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        date: { gte: startOfYear, lte: endOfYear },
+      },
       select: {
         id: true,
         tenantId: true,

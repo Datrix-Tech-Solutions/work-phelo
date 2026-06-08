@@ -18,7 +18,7 @@ export function DashboardWelcomeBanner({
   return (
     <div
       className="rounded-card px-8 py-5 flex items-center justify-between shrink-0"
-      style={{ background: 'linear-gradient(to right, #0D1F44, #1E3A8A)' }}
+      style={{ background: 'linear-gradient(to right, var(--brand), var(--brand-gradient-end))' }}
     >
       <div>
         <p className="text-sm font-semibold text-orange-400">{tenantName}</p>

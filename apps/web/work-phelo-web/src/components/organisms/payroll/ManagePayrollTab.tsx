@@ -210,9 +210,16 @@ export function ManagePayrollTab() {
       { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
     );
 
+  // Metric cards show totals for what's currently visible (respects search filter).
   const totals = useMemo(() => sumRows(filteredData), [filteredData]);
+
+  // RunPayrollPanel preview must always reflect ALL eligible employees, not just
+  // the filtered subset, because the backend runs payroll for every employee.
   const allTotals = useMemo(() => sumRows(payrollRows), [payrollRows]);
 
+  // Build a complete override for every eligible employee so that profile-based
+  // allowances and deductions are always sent to the backend on run, not just
+  // values the user manually edited in this session.
   const overrides = useMemo(() => {
     const result: Record<string, EmployeeOverride> = {};
     const employees = (empData?.data ?? []).filter(
@@ -231,7 +238,8 @@ export function ManagePayrollTab() {
       const allowances = allowancesMap[e.id] ?? savedAllowances;
       const deductionItems = deductionItemsMap[e.id] ?? profileDeductionItems[e.id] ?? [];
       const basicSalary = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
-      const totalAllowances = allowances
+
+      const nonTransportAllowances = allowances
         .filter((item) => !isTransportAllowance(item))
         .reduce((sum, item) => sum + item.amount, 0);
       const transportAmount = allowances
@@ -240,7 +248,7 @@ export function ManagePayrollTab() {
 
       result[e.id] = {
         basicSalary,
-        totalAllowances,
+        totalAllowances: nonTransportAllowances,
         transportAmount,
         allowanceItems: allowances.map((item) => ({
           name: item.name,
@@ -336,11 +344,6 @@ export function ManagePayrollTab() {
       key: 'employeeSSNIT',
       label: payrollLabels.employeeLabel,
       render: (row) => money(row.employeeStatutoryContrib),
-    },
-    {
-      key: 'taxableIncome',
-      label: 'Taxable Income',
-      render: (row) => money(row.taxableIncome),
     },
     {
       key: 'paye',

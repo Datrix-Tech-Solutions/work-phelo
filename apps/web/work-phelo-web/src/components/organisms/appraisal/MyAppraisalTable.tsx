@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useMyAppraisals, useAppraisalCycles } from '@/hooks/useAppraisals';
+import { useMyAppraisals, useAppraisalCycles } from '@/hooks/hr/useAppraisals';
 import { Column, DataTable } from '../shared/DataTable';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';

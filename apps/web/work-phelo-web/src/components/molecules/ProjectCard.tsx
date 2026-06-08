@@ -24,7 +24,7 @@ export function ProjectCard({ project, onOpen, onDelete }: ProjectCardProps) {
     <div className="bg-white border border-gray-200 rounded-card flex flex-col h-full hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
       {/* Header */}
       <div className="flex items-start gap-3 p-4 pb-3">
-        <div className="w-10 h-10 rounded-lg bg-[#EEF1F8] flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-lg bg-brand-tint flex items-center justify-center shrink-0">
           <span className="text-brand font-bold text-sm">
             {project.name.substring(0, 2).toUpperCase()}
           </span>

@@ -9,7 +9,7 @@ import {
   PermissionMatrix,
   FeaturePermissions,
 } from '@/components/molecules/roles/PermissionMatrix';
-import { usePermissionResources } from '@/hooks/useRoles';
+import { usePermissionResources } from '@/hooks/hr/useRoles';
 import type { PermissionSetResourceDto, PermissionAction, PermissionSet } from '@/types/roles';
 import {
   reverseTransformFeaturePermissions,

@@ -6,10 +6,10 @@ import { use, useMemo, useState, useRef } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { useUpcomingBirthdays, useEmployeeDashboard, useMyTasks } from '@/hooks';
 import { useMyProfile } from '@/hooks';
-import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/useLeave';
-import { useMyPayslips } from '@/hooks/usePayroll';
-import { usePublicHolidays } from '@/hooks/usePublicHolidays';
-import { useClockIn, useClockOut } from '@/hooks/useTimeClock';
+import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/hr/useLeave';
+import { useMyPayslips } from '@/hooks/hr/usePayroll';
+import { usePublicHolidays } from '@/hooks/hr/usePublicHolidays';
+import { useClockIn, useClockOut } from '@/hooks/hr/useTimeClock';
 import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
 import { DashboardWelcomeBanner } from '@/components/molecules/dashboard/DashboardWelcomeBanner';
 import { QuickActionsCard } from '@/components/molecules/dashboard/QuickActionsCard';
@@ -25,10 +25,12 @@ import { MyProjectsPanel } from '@/components/organisms/dashboard/MyProjectsPane
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
 import { formatTime, resolveHolidayUpcomingDate } from '@/lib/formatters';
 
-/* ── Avatar colour picker ── */
+/* ── Avatar colour picker ──
+   Intentional variety palette for employee initials.
+   First two mirror --brand and --brand-gradient-end from globals.css. */
 const AVATAR_COLORS = [
-  '#0D2244',
-  '#1E3A8A',
+  '#0D2244' /* = --brand */,
+  '#1E3A8A' /* = --brand-gradient-end */,
   '#6D28D9',
   '#B45309',
   '#047857',
@@ -99,7 +101,14 @@ export default function EmployeeDashboardPage({
 
   /* ── Derived: announcements ── */
   const announcements = (dashboard?.announcements ?? []).map(
-    (a: { id: string; title: string; publishedAt: string; body?: string; preview?: string }) => ({
+    (a: {
+      id: string;
+      title: string;
+      publishedAt: string;
+      body?: string;
+      preview?: string;
+      isRead?: boolean;
+    }) => ({
       id: a.id,
       title: a.title,
       date: new Date(a.publishedAt).toLocaleDateString('en-GB', {
@@ -108,6 +117,7 @@ export default function EmployeeDashboardPage({
         year: 'numeric',
       }),
       body: a.body ?? a.preview ?? '',
+      isRead: a.isRead,
     }),
   );
 
@@ -232,8 +242,15 @@ export default function EmployeeDashboardPage({
 
   /* ── Render ── */
   return (
-    <div className="p-6 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
-      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-2 bg-gray-50">
+    <div className="pl-6 pr-6 pt-0 pb-6 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
+      <div
+        className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-3"
+        style={{
+          backgroundColor: 'rgba(249, 250, 251, 0.55)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+        }}
+      >
         <DashboardWelcomeBanner
           tenantName={tenantName}
           fullName={fullName}

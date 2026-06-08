@@ -19,7 +19,7 @@ function AssetRow({ asset }: { asset: EmployeeAsset }) {
 
   return (
     <div className="flex items-center gap-4 border border-gray-200 rounded-xl overflow-hidden bg-white">
-      <div className="w-20 h-16 shrink-0 bg-[#EEF1F8] flex items-center justify-center">
+      <div className="w-20 h-16 shrink-0 bg-brand-tint flex items-center justify-center">
         <AssetTypeIcon type={asset.type} size="sm" className="w-7 h-7" />
       </div>
       <div className="flex flex-col min-w-0">

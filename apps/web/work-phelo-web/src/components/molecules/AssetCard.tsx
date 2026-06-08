@@ -138,7 +138,7 @@ function AssetCard({
     >
       {/* Top row: icon + name/number + status */}
       <div className="flex items-start gap-3 p-4 pb-3">
-        <div className="w-10 h-10 rounded-lg bg-[#EEF1F8] flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-lg bg-brand-tint flex items-center justify-center shrink-0">
           <AssetTypeIcon type={asset.type} size="sm" />
         </div>
         <div className="flex-1 min-w-0">

@@ -8,15 +8,15 @@ import {
   useResendEmployeeInvite,
   useResignationRecord,
 } from '@/hooks/hr/useEmployees';
-import { useAvailableAssets } from '@/hooks/useAssets';
-import { usePermission } from '@/hooks/usePermission';
+import { useAvailableAssets } from '@/hooks/hr/useAssets';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
   useAssignPermissionSet,
   usePermissionSets,
   useRemovePermissionSet,
   useUserPermissions,
-} from '@/hooks/useRoles';
+} from '@/hooks/hr/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
 import { EmployeeDetailBanner } from '@/components/molecules/employees/EmployeeDetailBanner';

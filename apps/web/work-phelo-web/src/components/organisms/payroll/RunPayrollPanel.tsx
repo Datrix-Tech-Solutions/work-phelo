@@ -10,44 +10,17 @@ import { useTenantConfig } from '@/hooks/useTenantConfig';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatPayrollMoney } from '@/lib/payrollDisplay';
+import { MetricPreview } from '@/components/molecules/shared/MetricPreview';
+import { MONTH_OPTIONS } from '@/lib/payrollUtils';
+import type { EmployeeOverride } from '@/types/payroll';
 
-const MONTHS = [
-  { value: '1', label: 'January' },
-  { value: '2', label: 'February' },
-  { value: '3', label: 'March' },
-  { value: '4', label: 'April' },
-  { value: '5', label: 'May' },
-  { value: '6', label: 'June' },
-  { value: '7', label: 'July' },
-  { value: '8', label: 'August' },
-  { value: '9', label: 'September' },
-  { value: '10', label: 'October' },
-  { value: '11', label: 'November' },
-  { value: '12', label: 'December' },
-];
+export type { EmployeeOverride };
 
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: 3 }, (_, i) => {
   const y = currentYear - 1 + i;
   return { value: String(y), label: String(y) };
 });
-
-export interface EmployeeOverride {
-  basicSalary?: number;
-  totalAllowances?: number;
-  transportAmount?: number;
-  otherDeductions?: number;
-  allowanceItems?: Array<{
-    name: string;
-    type?: string | null;
-    amount: number;
-  }>;
-  deductionItems?: Array<{
-    employeeDeductionId?: string | null;
-    name: string;
-    amount: number;
-  }>;
-}
 
 interface Totals {
   gross: number;
@@ -84,12 +57,11 @@ export function RunPayrollPanel({
   const { mutateAsync: updateItem, isPending: isUpdating } = useUpdatePayrollItem();
   const isPending = isRunning || isUpdating || isSubmitting;
 
-  const selectedMonthLabel = MONTHS.find((m) => m.value === month)?.label ?? '';
+  const selectedMonthLabel = MONTH_OPTIONS.find((m) => m.value === month)?.label ?? '';
   const money = (value: number) => formatPayrollMoney(value, payrollCurrency, payrollCountry);
 
   const handleClose = () => {
     setShowConfirm(false);
-    setNotes('');
     onClose();
   };
 
@@ -139,7 +111,7 @@ export function RunPayrollPanel({
         }
       >
         <div className="flex flex-col gap-5">
-          <SearchSelect label="Month" options={MONTHS} value={month} onChange={setMonth} />
+          <SearchSelect label="Month" options={MONTH_OPTIONS} value={month} onChange={setMonth} />
           <SearchSelect label="Year" options={YEARS} value={year} onChange={setYear} />
 
           <div className="flex flex-col gap-1.5">
@@ -155,25 +127,14 @@ export function RunPayrollPanel({
             />
           </div>
 
-          <div className="rounded-2xl border border-gray-100 bg-gray-50 p-5 flex flex-col gap-4">
-            <p className="text-sm font-medium text-gray-600">Payroll Summary</p>
-            <div className="grid grid-cols-3 gap-0 divide-x divide-gray-200">
-              <div className="flex flex-col gap-1 pr-4">
-                <p className="text-xs text-gray-500">Total Gross</p>
-                <p className="text-sm font-semibold text-gray-900">{money(totals.gross)}</p>
-              </div>
-              <div className="flex flex-col gap-1 px-4">
-                <p className="text-xs text-gray-500">Total PAYE</p>
-                <p className="text-sm font-semibold text-gray-900">{money(totals.paye)}</p>
-              </div>
-              <div className="flex flex-col gap-1 pl-4">
-                <p className="text-xs text-gray-500">Employer Cost</p>
-                <p className="text-sm font-semibold text-orange-500">
-                  {money(totals.employerCost)}
-                </p>
-              </div>
-            </div>
-          </div>
+          <MetricPreview
+            title="Payroll Summary"
+            metrics={[
+              { label: 'Total Gross', value: money(totals.gross) },
+              { label: 'Total PAYE', value: money(totals.paye) },
+              { label: 'Employer Cost', value: money(totals.employerCost), highlight: true },
+            ]}
+          />
         </div>
       </SidePanel>
 

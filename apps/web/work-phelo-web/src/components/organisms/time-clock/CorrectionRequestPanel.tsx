@@ -5,7 +5,7 @@ import { extractError } from '@/lib/extractError';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { useSubmitCorrectionRequest } from '@/hooks/useTimeClock';
+import { useSubmitCorrectionRequest } from '@/hooks/hr/useTimeClock';
 import { useToast } from '@/hooks/useToast';
 
 interface CorrectionRequestPanelProps {

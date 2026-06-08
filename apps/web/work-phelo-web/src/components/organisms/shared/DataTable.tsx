@@ -35,6 +35,7 @@ interface DataTableProps<T extends { id: string | number }> {
   onExport?: () => void;
   extraFilters?: React.ReactNode;
   secondaryButton?: { label: React.ReactNode; onClick: () => void };
+  secondaryButtons?: { label: React.ReactNode; onClick: () => void }[];
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
   onRowClick?: (row: T) => void;
@@ -50,10 +51,11 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
   const [menuPos, setMenuPos] = useState({ top: 0, bottom: 0, right: 0 });
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const handleToggle = () => {
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!open && buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      setOpenUpward(window.innerHeight - rect.bottom < 120);
+      setOpenUpward(window.innerHeight - rect.bottom < 200);
       setMenuPos({
         top: rect.bottom + 4,
         bottom: window.innerHeight - rect.top + 4,
@@ -75,7 +77,13 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+            className="fixed inset-0 z-40"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
+          />
           <div
             style={{
               position: 'fixed',
@@ -88,7 +96,8 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
             {actions.map((action) => (
               <button
                 key={action.label}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   action.onClick();
                   setOpen(false);
                 }}
@@ -121,6 +130,7 @@ export function DataTable<T extends { id: string | number }>({
   onExport,
   extraFilters,
   secondaryButton,
+  secondaryButtons,
   actionButton,
   rowActions,
   onRowClick,
@@ -135,6 +145,7 @@ export function DataTable<T extends { id: string | number }>({
     (filterOptions && onFilter) ||
     onExport ||
     secondaryButton ||
+    (secondaryButtons && secondaryButtons.length > 0) ||
     actionButton
   );
 
@@ -151,7 +162,7 @@ export function DataTable<T extends { id: string | number }>({
                 placeholder={searchPlaceholder}
                 value={searchValue ?? undefined}
                 onChange={(e) => onSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
               />
             </div>
           )}
@@ -195,6 +206,15 @@ export function DataTable<T extends { id: string | number }>({
               {secondaryButton.label}
             </button>
           )}
+          {secondaryButtons?.map((btn, i) => (
+            <button
+              key={i}
+              onClick={btn.onClick}
+              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+            >
+              {btn.label}
+            </button>
+          ))}
 
           {actionButton && (
             <button
@@ -226,7 +246,7 @@ export function DataTable<T extends { id: string | number }>({
                 style={{
                   gridTemplateColumns: [
                     ...columns.map((c) => c.width ?? '1fr'),
-                    ...(rowActions ? ['auto'] : []),
+                    ...(rowActions ? ['44px'] : []),
                   ].join(' '),
                 }}
               >
@@ -282,7 +302,7 @@ export function DataTable<T extends { id: string | number }>({
                     style={{
                       gridTemplateColumns: [
                         ...columns.map((c) => c.width ?? '1fr'),
-                        ...(rowActions ? ['auto'] : []),
+                        ...(rowActions ? ['44px'] : []),
                       ].join(' '),
                     }}
                   >

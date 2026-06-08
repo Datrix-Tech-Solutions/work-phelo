@@ -126,7 +126,7 @@ export function AssignAssetPanel({
                     onClick={() => setSelectedAssetId(isSelected ? null : asset.id)}
                     className={`w-full text-left flex items-center gap-3 px-4 py-3 rounded-card border transition-all ${
                       isSelected
-                        ? 'border-brand bg-[#EEF1F8] ring-1 ring-brand/20'
+                        ? 'border-brand bg-brand-tint ring-1 ring-brand/20'
                         : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
@@ -152,7 +152,7 @@ export function AssignAssetPanel({
 
         {/* Selected summary */}
         {selectedAsset && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-[#EEF1F8] rounded-card border border-brand/20">
+          <div className="flex items-center gap-2 px-4 py-3 bg-brand-tint rounded-card border border-brand/20">
             <Icons.Check />
             <p className="text-sm text-brand font-semibold truncate">
               {selectedAsset.name} selected

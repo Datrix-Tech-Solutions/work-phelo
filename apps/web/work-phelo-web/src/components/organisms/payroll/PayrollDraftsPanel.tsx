@@ -13,14 +13,10 @@ import { PayrollRun, PayrollRunDetail } from '@/types/hr';
 import { AllowanceItem } from '@/lib/payrollCalculations';
 import { payrollMonthLabel } from '@/lib/payrollUtils';
 import { api } from '@/lib/api';
-import type { DeductionLineItem } from './DeductionsPanel';
+import type { DeductionLineItem, DraftLoadData } from '@/types/payroll';
 import { formatPayrollMoney } from '@/lib/payrollDisplay';
 
-export interface DraftLoadData {
-  basicMap: Record<string, number>;
-  allowancesMap: Record<string, AllowanceItem[]>;
-  deductionItemsMap: Record<string, DeductionLineItem[]>;
-}
+export type { DraftLoadData };
 
 async function loadRunData(
   run: PayrollRun,

@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { PayrollTabs } from '@/components/molecules/payroll/PayrollTabs';
 import { MyPayslipTab } from '@/components/organisms/payroll/MyPayslipTab';

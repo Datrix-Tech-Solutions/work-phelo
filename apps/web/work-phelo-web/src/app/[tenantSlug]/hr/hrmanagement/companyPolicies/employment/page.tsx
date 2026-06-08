@@ -8,7 +8,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { useCompanyPoliciesSettings, useUpdateCompanyPoliciesSettings } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import type { CompanyPolicyProbationPeriod, CompanyPolicyResignationWindow } from '@/types/hr';
 

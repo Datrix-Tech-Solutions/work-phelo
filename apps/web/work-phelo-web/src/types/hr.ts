@@ -36,7 +36,7 @@ export type EmploymentStatus =
   | 'SUSPENDED'
   | 'TERMINATED'
   | 'OFFBOARDED';
-export type AllowanceType = 'TRANSPORT' | 'HOUSING' | 'MEDICAL' | 'OTHER';
+export type AllowanceType = 'TRANSPORT' | 'HOUSING' | 'MEDICAL' | 'CLOTHING' | 'OTHER';
 export type DocumentType =
   | 'CONTRACT'
   | 'ID_CARD'
@@ -306,6 +306,7 @@ export interface Announcement {
   createdById?: string | null;
   createdAt: string;
   updatedAt: string;
+  isRead?: boolean;
 }
 
 export interface QueryAnnouncementsParams {
@@ -340,17 +341,7 @@ export interface CreateAnnouncementPayload {
   expiresAt?: string;
 }
 
-export interface UpdateAnnouncementPayload {
-  title?: string;
-  body?: string;
-  audienceType?: AnnouncementAudienceType;
-  departmentIds?: string[];
-  branchIds?: string[];
-  employeeIds?: string[];
-  deliveryChannels?: AnnouncementDeliveryChannel[];
-  sendEmail?: boolean;
-  expiresAt?: string | null;
-}
+export type UpdateAnnouncementPayload = Partial<CreateAnnouncementPayload>;
 
 export type UpdatePublicHolidayDto = Partial<CreatePublicHolidayDto>;
 
@@ -405,158 +396,28 @@ export interface LeaveBalance {
 }
 
 // ── Payroll ───────────────────────────────────────────────
-export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
-export type PayrollCountry = 'GH' | 'NG' | 'KE';
-
-export interface PayrollRun {
-  id: string;
-  month: number;
-  year: number;
-  status: PayrollRunStatus;
-  notes?: string;
-  totalGross: string;
-  totalNet: string;
-  totalSSNIT: string;
-  totalTier1: string;
-  totalTier2: string;
-  totalTier3: string;
-  totalPAYE: string;
-  totalEmployerCost: string;
-  runBy: string;
-  submittedBy?: string | null;
-  submittedAt?: string | null;
-  approvedBy?: string;
-  approvedAt?: string;
-  approvalNote?: string | null;
-  returnToDraftNote?: string | null;
-  paidAt?: string;
-  payrollCountry: PayrollCountry;
-  payrollCurrency: string;
-  tier3Enabled: boolean;
-  tier3Rate?: string | null;
-  tier3SchemeName?: string | null;
-  createdAt: string;
-  updatedAt?: string;
-}
-
-export interface PayrollRunEmployeeSummary {
-  firstName: string;
-  lastName: string;
-  employeeNumber: string;
-  jobTitle: string;
-  department?: string | null;
-  tinNumber?: string | null;
-  ssnit?: string | null;
-  branchName?: string | null;
-  bankName?: string | null;
-  bankBranch?: string | null;
-  bankAccountNumber?: string | null;
-}
-
-export interface PayrollItemAllowance {
-  id: string;
-  payrollItemId: string;
-  name: string;
-  type?: string | null;
-  amount: string;
-}
-
-export interface PayrollItemDeduction {
-  id: string;
-  payrollItemId: string;
-  employeeDeductionId?: string | null;
-  name: string;
-  amount: string;
-}
-
-export interface PayrollItem {
-  id: string;
-  tenantId: string;
-  payrollRunId: string;
-  employeeId: string;
-  basicSalary: string;
-  totalAllowances: string;
-  allowanceItems?: PayrollItemAllowance[];
-  transportAmount: string;
-  otherDeductions: string;
-  deductionItems?: PayrollItemDeduction[];
-  overtimePay: string;
-  bonus: string;
-  thirteenthMonth: string;
-  grossSalary: string;
-  employeeSSNIT: string;
-  employerSSNIT: string;
-  tier1Contribution: string;
-  tier2Contribution: string;
-  tier3Employee: string;
-  taxableIncome: string;
-  payeTax: string;
-  totalDeductions: string;
-  netSalary: string;
-  createdAt: string;
-  updatedAt?: string;
-  employee?: PayrollRunEmployeeSummary;
-  payrollRun?: {
-    month: number;
-    year: number;
-    status: PayrollRunStatus;
-    paidAt?: string | null;
-    payrollCountry?: PayrollCountry;
-    payrollCurrency?: string;
-    tier3Enabled: boolean;
-    tier3Rate?: string | null;
-    tier3SchemeName?: string | null;
-  };
-}
-
-export interface PayrollRunDetail extends PayrollRun {
-  items: PayrollItem[];
-}
-
-export interface PayrollDecisionDto {
-  note: string;
-}
-
-export interface RunPayrollDto {
-  month: number;
-  year: number;
-  notes?: string;
-}
-
-export interface UpdatePayrollItemDto {
-  basicSalary?: number;
-  totalAllowances?: number;
-  transportAmount?: number;
-  otherDeductions?: number;
-  allowanceItems?: Array<{
-    name: string;
-    type?: string | null;
-    amount: number;
-  }>;
-  deductionItems?: Array<{
-    employeeDeductionId?: string | null;
-    name: string;
-    amount: number;
-  }>;
-}
-
-export interface PayrollSettings {
-  payrollCountry: PayrollCountry;
-  payrollCurrency: string;
-  payrollTier2FundName: string | null;
-  payrollTier3Enabled: boolean;
-  payrollTier3Rate: number | null;
-  payrollTier3SchemeName: string | null;
-}
-
-export interface UpdatePayrollSettingsDto {
-  payrollCountry?: PayrollCountry;
-  payrollCurrency?: string;
-  payrollTier2FundName?: string;
-  payrollTier3Enabled?: boolean;
-  payrollTier3Rate?: number;
-  payrollTier3SchemeName?: string;
-}
+// All payroll types live in src/types/payroll.ts — re-exported here for backward compatibility.
+export type {
+  PayrollRunStatus,
+  PayrollCountry,
+  PayrollRun,
+  PayrollRunEmployeeSummary,
+  PayrollItemAllowance,
+  PayrollItemDeduction,
+  PayrollItem,
+  PayrollRunDetail,
+  PayrollDecisionDto,
+  RunPayrollDto,
+  UpdatePayrollItemDto,
+  PayrollSettings,
+  UpdatePayrollSettingsDto,
+  PayslipCompanyInfo,
+  PayslipEmployeeInfo,
+  PayslipYTD,
+  EmployeeOverride,
+  DeductionLineItem,
+  DraftLoadData,
+} from './payroll';
 
 // ── Project ───────────────────────────────────────────────
 export type ProjectStatus = 'PLANNING' | 'ACTIVE' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED';
@@ -1033,6 +894,14 @@ export interface AppraisalSettings {
   veryGoodThreshold: number;
   goodThreshold: number;
   satisfactoryThreshold: number;
+}
+
+export interface UpdateAppraisalSettingsDto {
+  appraisalEligibleStatuses?: AppraisalEligibleEmploymentStatus[];
+  outstandingThreshold?: number;
+  veryGoodThreshold?: number;
+  goodThreshold?: number;
+  satisfactoryThreshold?: number;
 }
 
 export type CompanyPolicyProbationPeriod = '3' | '4' | '5' | '6' | 'undefined';

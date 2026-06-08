@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import helmet from 'helmet';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
+import { isSwaggerEnabled } from '@work-phelo/config';
 import { AppModule } from './app.module';
 import { setupSwagger } from './swagger.config';
 import { Transport } from '@nestjs/microservices';
@@ -35,7 +36,7 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  if (process.env.NODE_ENV !== 'production') {
+  if (isSwaggerEnabled()) {
     setupSwagger(app);
   }
 

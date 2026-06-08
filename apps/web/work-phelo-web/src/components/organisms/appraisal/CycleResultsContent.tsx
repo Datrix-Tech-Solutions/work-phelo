@@ -156,7 +156,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 min-h-full">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-2 text-sm text-gray-400">
         <Link

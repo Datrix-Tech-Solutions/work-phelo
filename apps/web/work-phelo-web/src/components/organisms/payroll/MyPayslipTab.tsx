@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useMyPayslips } from '@/hooks/usePayroll';
+import { useMyPayslips } from '@/hooks/hr/usePayroll';
 import { PayrollItem } from '@/types/hr';
 import {
   payrollMonthLabel,
@@ -166,7 +166,10 @@ export function MyPayslipTab() {
             {/* Hero */}
             <div
               className="rounded-card px-8 py-4 shrink-0 flex items-center justify-between"
-              style={{ background: 'linear-gradient(135deg, #0D1F44 0%, #1E3A8A 100%)' }}
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--brand) 0%, var(--brand-gradient-end) 100%)',
+              }}
             >
               <div>
                 <p className="text-sm text-blue-300 mb-1">Net Salary</p>

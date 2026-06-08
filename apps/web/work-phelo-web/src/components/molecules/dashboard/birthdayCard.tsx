@@ -74,8 +74,8 @@ export function BirthdaysCard({
               >
                 {person.initials}
               </div>
-              <div className="text-center">
-                <p className="text-sm font-semibold text-gray-900 leading-tight truncate w-full">
+              <div className="text-center w-full">
+                <p className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2 break-words">
                   {person.name}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5">{person.date}</p>
