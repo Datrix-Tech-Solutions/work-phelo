@@ -340,6 +340,18 @@ export interface CreateAnnouncementPayload {
   expiresAt?: string;
 }
 
+export interface UpdateAnnouncementPayload {
+  title?: string;
+  body?: string;
+  audienceType?: AnnouncementAudienceType;
+  departmentIds?: string[];
+  branchIds?: string[];
+  employeeIds?: string[];
+  deliveryChannels?: AnnouncementDeliveryChannel[];
+  sendEmail?: boolean;
+  expiresAt?: string | null;
+}
+
 export type UpdatePublicHolidayDto = Partial<CreatePublicHolidayDto>;
 
 // ── Leave Request ─────────────────────────────────────────
