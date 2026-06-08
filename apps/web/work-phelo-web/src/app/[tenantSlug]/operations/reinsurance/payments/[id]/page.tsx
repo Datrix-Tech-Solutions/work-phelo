@@ -6,6 +6,7 @@ import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement } from '@/hooks';
 import { PaymentBreakdown } from '@/components/molecules/reinsurance/PaymentBreakdown';
+import { ReinsurersPaymentTable } from '@/components/molecules/reinsurance/ReinsurersPaymentTable';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
 
 export default function PaymentDetailPage({
@@ -38,8 +39,17 @@ export default function PaymentDetailPage({
       {/* Content */}
       <div className={`${pageContent} flex-1 overflow-y-auto`}>
         {placement ? (
-          <div className="max-w-lg">
-            <PaymentBreakdown placement={placement} paidAmount={paidAmount} />
+          <div className="flex gap-4 items-start">
+            <div className="flex-1 min-w-0">
+              <PaymentBreakdown placement={placement} paidAmount={paidAmount} />
+            </div>
+            <div className="flex-2 min-w-0">
+              <ReinsurersPaymentTable
+                participants={placement.participants}
+                grossPremium={placement.premium ?? 0}
+                currency={placement.currency}
+              />
+            </div>
           </div>
         ) : (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">

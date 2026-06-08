@@ -6,6 +6,7 @@ import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultatives } from '@/hooks';
 import { PaymentBreakdown } from '@/components/molecules/reinsurance/PaymentBreakdown';
+import { ReinsurersPaymentTable } from '@/components/molecules/reinsurance/ReinsurersPaymentTable';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
 
 export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
@@ -41,15 +42,28 @@ export default function AddPaymentPage({ params }: { params: Promise<{ tenantSlu
       </div>
 
       <div className={`${pageContent} flex-1 overflow-y-auto`}>
-        <div className="flex flex-col gap-4 max-w-lg">
-          {selectedPlacements.length > 0 ? (
-            selectedPlacements.map((placement) => (
-              <PaymentBreakdown key={placement!.id} placement={placement} paidAmount={paidAmount} />
-            ))
-          ) : (
+        {selectedPlacements.length > 0 ? (
+          <div className="flex flex-col gap-6">
+            {selectedPlacements.map((placement) => (
+              <div key={placement!.id} className="flex gap-4 items-start">
+                <div className="flex-1 min-w-0">
+                  <PaymentBreakdown placement={placement} paidAmount={paidAmount} />
+                </div>
+                <div className="flex-2 min-w-0">
+                  <ReinsurersPaymentTable
+                    participants={placement!.participants}
+                    grossPremium={placement!.premium ?? 0}
+                    currency={placement!.currency}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex-1 min-w-0 max-w-sm">
             <PaymentBreakdown />
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
