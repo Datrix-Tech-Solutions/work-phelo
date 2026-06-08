@@ -204,7 +204,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
               value={field.value}
               onChange={field.onChange}
               error={errors.startDate?.message}
-              disablePast
+              // disablePast
             />
           )}
         />
@@ -221,7 +221,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
               value={field.value}
               onChange={field.onChange}
               error={errors.endDate?.message}
-              disablePast
+              // disablePast
             />
           )}
         />
