@@ -8,11 +8,11 @@ import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { LeaveRequestDetailPanel } from '@/components/organisms/leave/LeaveRequestDetailPanel';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
-import { useLeaveTypes, useLeaveRequests } from '@/hooks/useLeave';
-import { useDepartments } from '@/hooks/useDepartments';
+import { useLeaveTypes, useLeaveRequests } from '@/hooks/hr/useLeave';
+import { useDepartments } from '@/hooks/hr/useDepartments';
 import { formatDate } from '@/lib/formatters';
 import { LeaveRequest, LeaveRequestStatus, LeaveType } from '@/types/hr';
-import { Users, Search } from 'lucide-react';
+import { Users } from 'lucide-react';
 
 const STATUS_VARIANT: Record<LeaveRequestStatus, 'success' | 'warning' | 'danger' | 'neutral'> = {
   APPROVED: 'success',
@@ -150,74 +150,50 @@ export function LeaveRequestsTab({ tenantSlug, canReview }: Props) {
           />
         </div>
 
-        {/* Search + Filters */}
-        <div className="flex items-center shrink-0 gap-6">
-          <div className="relative flex-1 min-w-52 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setReqPage(1);
-              }}
-              placeholder="Search by employee name..."
-              className="w-full h-9 pl-9 pr-4 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
-            />
-          </div>
-          <div className="flex items-center gap-3">
-            <SearchSelect
-              placeholder="All leave types"
-              options={[
-                { value: '', label: 'All leave types' },
-                ...leaveTypes.map((t) => ({ value: t.id, label: t.name })),
-              ]}
-              value={filterLeaveType}
-              onChange={(v) => {
-                setFilterLeaveType(v);
-                setReqPage(1);
-              }}
-            />
-            <SearchSelect
-              placeholder="All departments"
-              options={[
-                { value: '', label: 'All departments' },
-                ...departments.map((d) => ({ value: d.id, label: d.name })),
-              ]}
-              value={filterDepartment}
-              onChange={(v) => {
-                setFilterDepartment(v);
-                setReqPage(1);
-              }}
-            />
-            {/* <SearchSelect
-              placeholder="All Statuses"
-              options={[
-                { value: '', label: 'All statuses' },
-                ...status.map((d) => ({ value: d.id, label: d.name })),
-              ]}
-              value={filterStatus}
-              onChange={(v) => {
-                filterStatus(v);
-                setReqPage(1);
-              }}
-            /> */}
-
-            {/* <DatePicker
-              placeholder="Date Leave Submitted"
-              value={filterFrom}
-              onChange={(v) => {
-                setFilterFrom(v);
-                setReqPage(1);
-              }}
-            /> */}
-          </div>
-        </div>
-
         <DataTable
           columns={columns}
           data={pagedRequests}
           isLoading={reqLoading}
+          searchPlaceholder="Search by employee name…"
+          searchValue={search}
+          onSearch={(q) => {
+            setSearch(q);
+            setReqPage(1);
+          }}
+          extraFilters={
+            <>
+              <div className="w-44">
+                <SearchSelect
+                  placeholder="All leave types"
+                  size="sm"
+                  options={[
+                    { value: '', label: 'All leave types' },
+                    ...leaveTypes.map((t) => ({ value: t.id, label: t.name })),
+                  ]}
+                  value={filterLeaveType}
+                  onChange={(v) => {
+                    setFilterLeaveType(v);
+                    setReqPage(1);
+                  }}
+                />
+              </div>
+              <div className="w-44">
+                <SearchSelect
+                  placeholder="All departments"
+                  size="sm"
+                  options={[
+                    { value: '', label: 'All departments' },
+                    ...departments.map((d) => ({ value: d.id, label: d.name })),
+                  ]}
+                  value={filterDepartment}
+                  onChange={(v) => {
+                    setFilterDepartment(v);
+                    setReqPage(1);
+                  }}
+                />
+              </div>
+            </>
+          }
           emptyMessage="No leave requests found"
           currentPage={reqPage}
           totalPages={reqTotalPages}

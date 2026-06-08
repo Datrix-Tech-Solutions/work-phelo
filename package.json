@@ -21,6 +21,7 @@
     "dev:notify": "turbo run dev --filter=notification-service",
     "dev:billing": "turbo run dev --filter=subscription-service",
     "dev:marketing": "turbo run dev --filter=marketing-service",
+    "dev:reinsurance": "turbo run dev --filter=reinsurance-service",
     "dev:infra": "docker compose -f infrastructure/docker-compose.dev.yml up rabbitmq redis -d",
     "prepare": "husky",
     "check-types": "turbo run check-types",
@@ -55,6 +56,7 @@
     "apps/notification-service",
     "apps/subscription-service",
     "apps/marketing-service",
+    "apps/reinsurance-service",
     "packages/*"
   ],
   "dependencies": {

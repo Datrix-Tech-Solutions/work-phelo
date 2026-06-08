@@ -2,7 +2,7 @@
 
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { AssetsContent } from '@/components/organisms/assets/AssetsContent';
 

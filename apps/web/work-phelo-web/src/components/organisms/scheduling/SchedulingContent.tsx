@@ -2,10 +2,10 @@
 
 import { useState, useMemo } from 'react';
 import { useEmployees } from '@/hooks/hr/useEmployees';
-import { useDepartmentOptions } from '@/hooks/useDepartments';
-import { useShiftSchedules, useCreateShiftSchedule } from '@/hooks/useScheduling';
+import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
+import { useShiftSchedules, useCreateShiftSchedule } from '@/hooks/hr/useScheduling';
 import { useToast } from '@/hooks/useToast';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { ShiftSchedule, BackendShiftType } from '@/types/scheduling';
 import { Shift } from './ShiftPanel';

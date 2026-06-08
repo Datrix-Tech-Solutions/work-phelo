@@ -46,7 +46,9 @@ export function ClockBanner({
     <>
       <div
         className="px-6 py-4 flex items-center justify-between"
-        style={{ background: 'linear-gradient(135deg, #0D1F44 0%, #1E3A8A 100%)' }}
+        style={{
+          background: 'linear-gradient(135deg, var(--brand) 0%, var(--brand-gradient-end) 100%)',
+        }}
       >
         <div>
           <p className="text-blue-300 text-xs font-medium">{date}</p>
@@ -83,7 +85,7 @@ export function ClockBanner({
               onClick={() => setConfirmClockIn(true)}
               isLoading={isClockingIn}
               loadingText="Clocking in…"
-              className="bg-white text-[#0D1F44] hover:bg-blue-50 focus:ring-white border-0"
+              className="bg-white text-brand hover:bg-blue-50 focus:ring-white border-0"
             >
               Clock In
             </Button>
@@ -94,7 +96,7 @@ export function ClockBanner({
               onClick={() => setConfirmClockOut(true)}
               isLoading={isClockingOut}
               loadingText="Clocking out…"
-              className="bg-white text-[#0D1F44] hover:bg-blue-50 focus:ring-white border-0"
+              className="bg-white text-brand hover:bg-blue-50 focus:ring-white border-0"
             >
               Clock Out
             </Button>
@@ -118,7 +120,7 @@ export function ClockBanner({
                 setConfirmClockIn(false);
                 onClockIn();
               }}
-              className="bg-[#0D1F44] text-white hover:bg-[#1E3A8A]"
+              className="bg-brand text-white hover:bg-brand-gradient-end"
             >
               Confirm
             </Button>
@@ -142,7 +144,7 @@ export function ClockBanner({
                 setConfirmClockOut(false);
                 onClockOut();
               }}
-              className="bg-[#0D1F44] text-white hover:bg-[#1E3A8A]"
+              className="bg-brand text-white hover:bg-brand-gradient-end"
             >
               Confirm
             </Button>

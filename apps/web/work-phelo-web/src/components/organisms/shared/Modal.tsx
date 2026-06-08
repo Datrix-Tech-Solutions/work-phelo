@@ -13,7 +13,9 @@ interface ModalProps {
   footer?: React.ReactNode;
   visual?: React.ReactNode;
   width?: string;
+  height?: string;
   hideClose?: boolean;
+  fullScreenMobile?: boolean;
 }
 
 export function Modal({
@@ -25,7 +27,9 @@ export function Modal({
   footer,
   visual,
   width = 'max-w-md',
+  height = 'max-h-[80vh]',
   hideClose = false,
+  fullScreenMobile = false,
 }: ModalProps) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -45,20 +49,36 @@ export function Modal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className={cn(
+        'fixed inset-0 z-50',
+        fullScreenMobile
+          ? 'sm:flex sm:items-center sm:justify-center sm:p-4'
+          : 'flex items-center justify-center p-4',
+      )}
+    >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
       {/* Dialog */}
       <div
         className={cn(
-          'relative z-10 w-full bg-white rounded-card shadow-2xl p-6 flex flex-col max-h-[calc(100dvh-2rem)]',
-          width,
+          'z-10 bg-white shadow-2xl flex flex-col',
+          fullScreenMobile
+            ? cn(
+                // mobile: truly full screen
+                'fixed inset-0 w-full h-full rounded-none p-6',
+                // desktop: float centred with provided (sm:-prefixed) dimensions
+                'sm:inset-auto sm:relative sm:rounded-card',
+                width,
+                height,
+              )
+            : cn('relative w-full rounded-card p-6 max-h-[calc(100dvh-2rem)]', width, height),
         )}
       >
         {/* Header */}
         <div className="flex items-start justify-between gap-4 mb-3 shrink-0">
-          <h2 className="text-xl font-bold text-gray-800">{title}</h2>
+          <h2 className="text-lg font-bold text-gray-800">{title}</h2>
           {!hideClose && (
             <button
               onClick={onClose}

@@ -94,6 +94,9 @@ export enum Permission {
 
   READ_ANNOUNCEMENTS = 'read:announcements',
   MANAGE_ANNOUNCEMENTS = 'manage:announcements',
+
+  // ── Reinsurance Operations ────────────────────────────────────────────────
+  VIEW_REINSURANCE_DASHBOARD = 'view:reinsurance_dashboard',
 }
 
 // Maps each Permission to the resource:ACTION strings returned in effectivePermissions.
@@ -203,6 +206,9 @@ export const PERMISSION_MAP: Record<string, string[]> = {
     'announcements:EDIT',
     'announcements:DELETE',
   ],
+
+  // Reinsurance Operations
+  [Permission.VIEW_REINSURANCE_DASHBOARD]: ['operations.reinsurance.dashboard:VIEW'],
 };
 
 export const PERMISSION_ACTION_LABELS: Record<string, string> = {
@@ -252,6 +258,14 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   'expense-reports': ['VIEW', 'EXPORT'],
   'platform-settings': ['VIEW', 'EDIT'],
   subscriptions: ['VIEW', 'EDIT'],
+  'operations.reinsurance.dashboard': ['VIEW'],
+  'operations.reinsurance.placements': ['VIEW', 'CREATE', 'EDIT', 'DELETE', 'APPROVE', 'EXPORT'],
+  'operations.reinsurance.counterparties': ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
+  'operations.reinsurance.claims': ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'EXPORT'],
+  'operations.reinsurance.email': ['VIEW', 'CREATE', 'EDIT'],
+  'operations.reinsurance.email-settings': ['VIEW', 'EDIT'],
+  'operations.reinsurance.reports': ['VIEW', 'EXPORT'],
+  'operations.reinsurance.settings': ['VIEW', 'EDIT'],
 };
 
 // All seeded resource actions stay in RESOURCE_ACTIONS so hidden or future
@@ -287,6 +301,14 @@ export const PERMISSION_UI_VISIBLE_RESOURCES = new Set([
   'projects',
   'project-tasks',
   'hr-settings',
+  'operations.reinsurance.dashboard',
+  'operations.reinsurance.placements',
+  'operations.reinsurance.counterparties',
+  'operations.reinsurance.claims',
+  'operations.reinsurance.email',
+  'operations.reinsurance.email-settings',
+  'operations.reinsurance.reports',
+  'operations.reinsurance.settings',
 ]);
 
 export function isPermissionUiVisibleResource(resourceName: string): boolean {

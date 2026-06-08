@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useMemo } from 'react';
-import { useCycleAppraisals } from '@/hooks/useAppraisals';
+import { useCycleAppraisals } from '@/hooks/hr/useAppraisals';
 import { CycleInProgressContent } from '@/components/organisms/appraisal/CycleInProgressContent';
 import { CycleResultsContent } from '@/components/organisms/appraisal/CycleResultsContent';
 

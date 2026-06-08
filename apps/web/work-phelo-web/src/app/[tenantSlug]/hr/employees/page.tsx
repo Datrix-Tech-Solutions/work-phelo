@@ -10,12 +10,12 @@ import { EmployeeCard } from '@/components/molecules/employees/EmployeeCard';
 import { Button } from '@/components/atoms/Button';
 import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
 import { useEmployees, useEmployeeOptions } from '@/hooks/hr/useEmployees';
-import { useDepartmentOptions } from '@/hooks/useDepartments';
-import { useLeaveRequests } from '@/hooks/useLeave';
+import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
+import { useLeaveRequests } from '@/hooks/hr/useLeave';
 import { SuccessModal } from '@/components/organisms/shared/SuccessModal';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { InviteEmployeePanel } from '@/components/organisms/employee/inviteEmployeePanel';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '@/components/atoms/NoSearchLogo';
@@ -160,7 +160,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, email, job title..."
-            className="w-full h-9 pl-9 pr-4 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+            className="w-full h-9 pl-9 pr-4 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
           />
         </div>
 

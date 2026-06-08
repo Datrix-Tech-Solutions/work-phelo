@@ -25,6 +25,7 @@ import type {
   Frequency,
 } from '@/types/hr';
 import { Icons } from '@/components/atoms/icons';
+import { MultiSelect } from '@/components/atoms/MultiSelect';
 
 const FREQUENCY_OPTIONS = [
   { value: 'ANNUAL', label: 'Annual' },
@@ -72,134 +73,6 @@ type FormValues = {
   selectSpecificEmployees: boolean;
   employeeIds: string[];
 };
-
-/* ── Applies-To multi-select (departments) ── */
-function DepartmentSelect({
-  value,
-  onChange,
-}: {
-  value: string[];
-  onChange: (ids: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const { data: departments = [] } = useDepartments();
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  useEffect(() => {
-    if (open && dropdownRef.current) {
-      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [open]);
-
-  const allSelected = value.length === 0;
-
-  const toggle = (id: string) =>
-    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
-
-  const selectedDepts = departments.filter((d) => value.includes(d.id));
-
-  return (
-    <div className="flex flex-col gap-1.5 relative" ref={ref}>
-      <label className="text-sm font-medium text-gray-700">Departments</label>
-
-      {selectedDepts.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selectedDepts.map((dept) => (
-            <span
-              key={dept.id}
-              className="inline-flex items-center gap-1 bg-blue-100 text-blue-700 text-xs font-medium px-2 py-1 rounded-full"
-            >
-              {dept.name}
-              <button
-                type="button"
-                onClick={() => toggle(dept.id)}
-                className="hover:text-blue-900 transition-colors"
-              >
-                <Icons.X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          'flex items-center justify-between w-full px-4 py-3 border rounded-input bg-white text-sm transition-colors',
-          open ? 'border-brand ring-1 ring-brand/20' : 'border-gray-300',
-        )}
-      >
-        <span className="text-gray-900">
-          {allSelected ? 'All departments' : 'Add more departments…'}
-        </span>
-        <Icons.ChevronDown
-          className={cn('text-gray-400 transition-transform duration-150', open && 'rotate-180')}
-        />
-      </button>
-
-      {open && (
-        <div
-          ref={dropdownRef}
-          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
-        >
-          <div className="max-h-52 overflow-y-auto py-1">
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onChange([])}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
-            >
-              <span
-                className={cn(
-                  'w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                  allSelected ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
-                )}
-              >
-                {allSelected && <Icons.Check className="w-2.5 h-2.5 text-white" />}
-              </span>
-              All Departments
-            </button>
-            {departments.map((dept) => {
-              const checked = value.includes(dept.id);
-              return (
-                <button
-                  key={dept.id}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => toggle(dept.id)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
-                >
-                  <span
-                    className={cn(
-                      'w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                      checked ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
-                    )}
-                  >
-                    {checked && <Icons.Check className="w-2.5 h-2.5 text-white" />}
-                  </span>
-                  {dept.name}
-                </button>
-              );
-            })}
-            {departments.length === 0 && (
-              <p className="px-4 py-3 text-sm text-gray-400 text-center">No departments found</p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ── Employment type multi-select ── */
 function EmploymentTypeSelect({
@@ -401,139 +274,6 @@ function EmploymentStatusSelect({
   );
 }
 
-/* ── Permission sets multi-select ── */
-function PermissionSetSelect({
-  value,
-  onChange,
-}: {
-  value: string[];
-  onChange: (ids: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const { data: rawSets = [] } = usePermissionSets();
-  const sets = rawSets.filter((s: PermissionSet) => !s.isSystem);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  useEffect(() => {
-    if (open && dropdownRef.current) {
-      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  }, [open]);
-
-  const toggle = (id: string) =>
-    onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
-
-  const selectedSets = sets.filter((s: PermissionSet) => value.includes(s.id));
-  const allSelected = value.length === 0;
-
-  return (
-    <div className="flex flex-col gap-1.5 relative" ref={ref}>
-      <label className="text-sm font-medium text-gray-700">Roles</label>
-
-      {selectedSets.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {selectedSets.map((set: PermissionSet) => (
-            <span
-              key={set.id}
-              className="inline-flex items-center gap-1 bg-purple-100 text-purple-700 text-xs font-medium px-2 py-1 rounded-full"
-            >
-              {set.name}
-              <button
-                type="button"
-                onClick={() => toggle(set.id)}
-                className="hover:text-purple-900 transition-colors"
-              >
-                <Icons.X className="w-3 h-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={cn(
-          'flex items-center justify-between w-full px-4 py-3 border rounded-input bg-white text-sm transition-colors',
-          open ? 'border-brand ring-1 ring-brand/20' : 'border-gray-300',
-        )}
-      >
-        <span className="text-gray-900">{allSelected ? 'All roles' : 'Add more roles…'}</span>
-        <Icons.ChevronDown
-          className={cn('text-gray-400 transition-transform duration-150', open && 'rotate-180')}
-        />
-      </button>
-
-      {open && (
-        <div
-          ref={dropdownRef}
-          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
-        >
-          <div className="max-h-52 overflow-y-auto py-1">
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onChange([])}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
-            >
-              <span
-                className={cn(
-                  'w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                  allSelected ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
-                )}
-              >
-                {allSelected && <Icons.Check className="w-2.5 h-2.5 text-white" />}
-              </span>
-              All Roles
-            </button>
-            {sets.map((set: PermissionSet) => {
-              const checked = value.includes(set.id);
-              return (
-                <button
-                  key={set.id}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => toggle(set.id)}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-900 hover:bg-gray-50"
-                >
-                  <span
-                    className={cn(
-                      'w-4 h-4 rounded border flex items-center justify-center shrink-0',
-                      checked ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
-                    )}
-                  >
-                    {checked && <Icons.Check className="w-2.5 h-2.5 text-white" />}
-                  </span>
-                  <span className="flex flex-col text-left">
-                    <span>{set.name}</span>
-                    {set.description && (
-                      <span className="text-xs text-gray-400">{set.description}</span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-            {sets.length === 0 && (
-              <p className="px-4 py-3 text-sm text-gray-400 text-center">
-                No permission sets found
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ── Specific employees multi-select ── */
 function EmployeeSelect({
   value,
@@ -696,6 +436,14 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
   const { data: appraisalSettings } = useAppraisalSettings();
   const templateOptions = templates.map((t) => ({ value: t.id, label: t.name }));
 
+  const { data: departments = [] } = useDepartments();
+  const deptOptions = departments.map((d) => ({ value: d.id, label: d.name }));
+
+  const { data: rawSets = [] } = usePermissionSets();
+  const permSetOptions = rawSets
+    .filter((s: PermissionSet) => !s.isSystem)
+    .map((s: PermissionSet) => ({ value: s.id, label: s.name }));
+
   const {
     register,
     handleSubmit,
@@ -760,7 +508,7 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         employeeIds: [],
       });
     }
-  }, [editCycle, reset, isOpen]);
+  }, [editCycle, reset]);
 
   const startDate = useWatch({ control, name: 'startDate' });
   const useCompanyDefaultEligibility = useWatch({ control, name: 'useCompanyDefaultEligibility' });
@@ -800,6 +548,23 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
     const options = {
       onSuccess: () => {
         toast.success(isEditing ? 'Cycle updated' : 'Cycle created');
+        reset({
+          title: '',
+          description: '',
+          frequency: '',
+          startDate: '',
+          endDate: '',
+          selfAssessmentDeadline: '',
+          managerReviewDeadline: '',
+          templateId: '',
+          departmentIds: [],
+          employmentTypes: [],
+          useCompanyDefaultEligibility: true,
+          employmentStatuses: [],
+          permissionSetIds: [],
+          selectSpecificEmployees: false,
+          employeeIds: [],
+        });
         onClose();
       },
       onError: (err: unknown) => toast.error(extractError(err, 'Something went wrong')),
@@ -945,7 +710,15 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
       <Controller
         name="departmentIds"
         control={control}
-        render={({ field }) => <DepartmentSelect value={field.value} onChange={field.onChange} />}
+        render={({ field }) => (
+          <MultiSelect
+            label="Departments"
+            placeholder="All departments"
+            options={deptOptions}
+            value={field.value}
+            onChange={field.onChange}
+          />
+        )}
       />
 
       {/* Applies To — employment types */}
@@ -962,7 +735,13 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
         name="permissionSetIds"
         control={control}
         render={({ field }) => (
-          <PermissionSetSelect value={field.value} onChange={field.onChange} />
+          <MultiSelect
+            label="Roles"
+            placeholder="All roles"
+            options={permSetOptions}
+            value={field.value}
+            onChange={field.onChange}
+          />
         )}
       />
 

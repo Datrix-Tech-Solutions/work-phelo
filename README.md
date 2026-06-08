@@ -22,6 +22,7 @@ work-phelo/
 │   ├── notification-service/
 │   ├── subscription-service/
 │   ├── marketing-service/
+│   ├── reinsurance-service/
 │   └── web/
 │       └── work-phelo-web/
 ├── packages/
@@ -32,6 +33,11 @@ work-phelo/
 └── infrastructure/
     └── docker-compose.dev.yml
 ```
+
+The broker-only Reinsurance Operations module is being introduced as a
+domain-specific service inside this monorepo. Detailed Reinsurance planning
+documentation is maintained internally/local-only and is intentionally not
+tracked in Git.
 
 ## Tech Stack
 
@@ -158,6 +164,13 @@ npm run dev
 All requests go through the API Gateway at `/api/v1/`.
 
 See full API docs at the Swagger URLs above.
+
+In the development deployment, Reinsurance Operations OpenAPI documentation
+is exposed through `/api/v1/operations/reinsurance/docs` when enabled by its
+deployment flag. The
+`apps/reinsurance-service/README.md` contract includes frontend integration
+guidance for Counterparties, Risk Settings, Currency Settings, Placements,
+participant workflow, slip previews and the current UAT flow.
 
 ---
 

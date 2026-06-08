@@ -204,7 +204,7 @@ export function calculatePayrollForCountry(
     case PayrollCountry.NG: {
       employeeStatutory = basicSalary.times(NIGERIA.employeePensionRate);
       employerStatutory = basicSalary.times(NIGERIA.employerPensionRate);
-      // Loans/advances are post-tax deductions, so they do not reduce PAYE.
+      // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base
       taxableIncome = maxZero(grossSalary.minus(employeeStatutory));
       payeTax = calculateNigeriaMonthlyPaye(taxableIncome, grossSalary);
       break;
@@ -213,7 +213,7 @@ export function calculatePayrollForCountry(
     case PayrollCountry.KE: {
       employeeStatutory = calculateKenyaNssf(basicSalary);
       employerStatutory = employeeStatutory;
-      // Loans/advances are post-tax deductions, so they do not reduce PAYE.
+      // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base
       taxableIncome = maxZero(grossSalary.minus(employeeStatutory));
       payeTax = Decimal.max(
         new Decimal(0),
@@ -237,8 +237,9 @@ export function calculatePayrollForCountry(
           ? basicSalary.times(new Decimal(settings.tier3Rate).div(100))
           : new Decimal(0);
 
-      // Transport is PAYE-exempt but remains in gross/net. Loans/advances are
-      // post-tax deductions and should not reduce taxable income.
+      // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base.
+      // Transport allowance is PAYE-exempt so it is excluded from taxableIncome,
+      // but remains in gross and therefore in netSalary.
       taxableIncome = maxZero(
         grossSalary
           .minus(employeeStatutory)

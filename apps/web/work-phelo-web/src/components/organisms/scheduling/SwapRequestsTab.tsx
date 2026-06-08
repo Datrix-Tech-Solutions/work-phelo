@@ -4,7 +4,7 @@ import { type ChangeEvent, useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Input } from '@/components/atoms/Input';
 import { SwapRequestCard, SwapRequest } from '@/components/molecules/scheduling/SwapRequestCard';
-import { usePendingManagerShiftSwaps, useReviewShiftSwap } from '@/hooks/useScheduling';
+import { usePendingManagerShiftSwaps, useReviewShiftSwap } from '@/hooks/hr/useScheduling';
 import { useToast } from '@/hooks/useToast';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { ShiftSwapRequest } from '@/types/scheduling';
@@ -155,7 +155,7 @@ export function SwapRequestsTab() {
             onClick={() => setStatusFilter(key)}
             className={`px-4 py-2 rounded-full text-sm font-medium transition-colors ${
               statusFilter === key
-                ? 'bg-[#0d1b3e] text-white'
+                ? 'bg-shift-night text-white'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >

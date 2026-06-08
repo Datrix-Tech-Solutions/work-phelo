@@ -21,7 +21,7 @@ import {
   ASSET_TYPE_OPTIONS,
   ASSET_CONDITION_OPTIONS,
 } from '@/lib/assetOptions';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
   useAssets,
@@ -31,7 +31,7 @@ import {
   useRetireAsset,
   useUnassignAsset,
   useUpdateAsset,
-} from '@/hooks/useAssets';
+} from '@/hooks/hr/useAssets';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
 import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
@@ -195,7 +195,7 @@ export function AssetsContent() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, serial number, type..."
-            className="w-full h-9 pl-9 pr-4 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
+            className="w-full h-9 pl-9 pr-4 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
           />
         </div>
         <FilterSelect

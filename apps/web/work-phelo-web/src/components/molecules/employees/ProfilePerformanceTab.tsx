@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { useMyAppraisals } from '@/hooks/useAppraisals';
+import { useMyAppraisals } from '@/hooks/hr/useAppraisals';
 
 export function ProfilePerformanceTab() {
   const router = useRouter();

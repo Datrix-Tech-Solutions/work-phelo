@@ -8,15 +8,20 @@
   --radius-input: 0.5rem; /* rounded-input → inputs, buttons, selects */
 
   /* Brand palette */
-  --brand:        #0D2244;   /* primary navy */
-  --brand-hover:  #162d56;   /* primary hover */
-  --brand-accent: #85B7EB;   /* secondary light-blue */
+  --brand:              #0D2244;   /* primary navy — use bg-brand / text-brand */
+  --brand-hover:        #162d56;   /* primary hover — use bg-brand-hover */
+  --brand-accent:       #85B7EB;   /* secondary light-blue — use bg-brand-accent */
+  --brand-tint:         #EEF1F8;   /* active/selected bg, icon containers — use bg-brand-tint */
+  --brand-gradient-end: #1E3A8A;   /* gradient highlight — use to-brand-gradient-end or var() in inline styles */
+
+  /* Scheduling shift colors */
+  --shift-night: #0d1b3e;   /* night-shift blocks — use bg-shift-night / border-shift-night */
 
   /* Module identity colors — used for icon backgrounds */
   --module-hr:         #0D2244;  /* navy  — HR */
   --module-marketing:  #16A34A;  /* green — Marketing */
-  --module-accounting: #D97706;  /* amber — Accounting */
-  --module-operations: #6B7280;  /* slate — Operations */
+  --module-accounting: #ce2121;  /* red — Accounting */
+  --module-operations: #D97706;  /* amber — Operations */
 }
 
 @theme inline {
@@ -27,9 +32,14 @@
   --radius-input: var(--radius-input);
 
   /* Brand tokens — use as bg-brand, text-brand, border-brand, etc. */
-  --color-brand:        var(--brand);
-  --color-brand-hover:  var(--brand-hover);
-  --color-brand-accent: var(--brand-accent);
+  --color-brand:              var(--brand);
+  --color-brand-hover:        var(--brand-hover);
+  --color-brand-accent:       var(--brand-accent);
+  --color-brand-tint:         var(--brand-tint);
+  --color-brand-gradient-end: var(--brand-gradient-end);
+
+  /* Scheduling tokens */
+  --color-shift-night: var(--shift-night);
 
   /* Module color tokens */
   --color-module-hr:         var(--module-hr);
@@ -54,4 +64,25 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-app), sans-serif;
+}
+
+/* Must be top-level — @page inside @media is ignored by Chrome */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  body > *:not(#irisk-print-root) {
+    display: none !important;
+  }
+  #irisk-print-root {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    min-height: 100%;
+    background: white;
+  }
 }

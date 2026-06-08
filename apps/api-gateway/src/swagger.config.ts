@@ -62,7 +62,11 @@ All frontend requests go through this gateway at port **4000**.
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
-    swaggerOptions: { persistAuthorization: true, tagsSorter: 'alpha' },
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      url: 'docs-json',
+    },
   });
 
   console.log(' API Gateway docs: http://localhost:4000/docs');

@@ -15,7 +15,7 @@ import {
   useMyShiftSwaps,
   useRespondToShiftSwap,
   useCancelShiftSwap,
-} from '@/hooks/useScheduling';
+} from '@/hooks/hr/useScheduling';
 import { ShiftSwapRequest, ShiftSwapStatus } from '@/types/scheduling';
 import { Skeleton } from '@/components/atoms/Skeleton';
 import { Button } from '@/components/atoms/Button';
@@ -170,7 +170,7 @@ function SwapRequestItem({
           </Button>
           <Button
             size="sm"
-            className="bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
+            className="bg-shift-night hover:bg-shift-night/90 focus:ring-shift-night"
             onClick={() => onRespond(request.id, 'ACCEPT')}
             isLoading={respondingId?.id === request.id && respondingId.action === 'ACCEPT'}
             loadingText="Accepting..."

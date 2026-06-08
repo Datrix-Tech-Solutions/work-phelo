@@ -94,6 +94,9 @@ export enum Permission {
 
   READ_ANNOUNCEMENTS = 'read:announcements',
   MANAGE_ANNOUNCEMENTS = 'manage:announcements',
+
+  // ── Reinsurance Operations ────────────────────────────────────────────────
+  VIEW_REINSURANCE_DASHBOARD = 'view:reinsurance_dashboard',
 }
 
 // System role platform access — controls WHERE you go after login

@@ -1,0 +1,904 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  output          = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["reinsurance"]
+}
+
+enum CounterpartyType {
+  CEDANT
+  REINSURER
+  BROKER
+
+  @@schema("reinsurance")
+}
+
+enum CounterpartyOrigin {
+  LOCAL
+  FOREIGN
+
+  @@schema("reinsurance")
+}
+
+enum PlacementType {
+  FACULTATIVE
+
+  @@schema("reinsurance")
+}
+
+enum PlacementStatus {
+  DRAFT
+  MARKETING
+  PARTIALLY_PLACED
+  PLACED
+  CLOSING
+  CLOSED
+  DECLINED
+  CANCELLED
+
+  @@schema("reinsurance")
+}
+
+enum PlacementParticipantRole {
+  BROKER
+  REINSURER
+  LEAD_REINSURER
+  CO_REINSURER
+
+  @@schema("reinsurance")
+}
+
+enum PlacementParticipantStatus {
+  INVITED
+  OFFER_SENT
+  QUOTED
+  ACCEPTED
+  DECLINED
+  CLOSED
+
+  @@schema("reinsurance")
+}
+
+enum PlacementClosingStatus {
+  DRAFT
+  ISSUED
+  CONFIRMED
+  VOID
+
+  @@schema("reinsurance")
+}
+
+enum PlacementPaymentType {
+  PREMIUM_RECEIVED
+  REINSURER_DISBURSEMENT
+  CLAIM_SETTLEMENT
+
+  @@schema("reinsurance")
+}
+
+enum PlacementPaymentDirection {
+  INBOUND
+  OUTBOUND
+
+  @@schema("reinsurance")
+}
+
+enum PlacementPaymentStatus {
+  RECORDED
+  REVERSED
+
+  @@schema("reinsurance")
+}
+
+enum PlacementNoteType {
+  DEBIT_NOTE
+  CREDIT_NOTE
+
+  @@schema("reinsurance")
+}
+
+enum PlacementNoteDirection {
+  CEDANT_TO_BROKER
+  BROKER_TO_REINSURER
+  BROKER_TO_CEDANT
+  REINSURER_TO_BROKER
+
+  @@schema("reinsurance")
+}
+
+enum PlacementNoteStatus {
+  DRAFT
+  ISSUED
+  VOID
+
+  @@schema("reinsurance")
+}
+
+enum PlacementClaimStatus {
+  DRAFT
+  NOTIFIED
+  RESERVED
+  PARTIALLY_SETTLED
+  SETTLED
+  DECLINED
+  CLOSED
+  VOID
+
+  @@schema("reinsurance")
+}
+
+enum PlacementClaimAllocationStatus {
+  DRAFT
+  NOTIFIED
+  CASH_CALLED
+  PARTIALLY_PAID
+  PAID
+  VOID
+
+  @@schema("reinsurance")
+}
+
+enum PlacementEndorsementType {
+  SUM_INSURED_INCREASE
+  SUM_INSURED_DECREASE
+  PREMIUM_ADJUSTMENT
+  COVERAGE_AMENDMENT
+  POLICY_AMENDMENT
+  PARTICIPANT_SHARE_CHANGE
+  PARTICIPANT_ADDITION
+  PARTICIPANT_REMOVAL
+  CANCELLATION
+  OTHER
+
+  @@schema("reinsurance")
+}
+
+enum PlacementEndorsementStatus {
+  DRAFT
+  MARKETING
+  PARTIALLY_ACCEPTED
+  ACCEPTED
+  CLOSING
+  CLOSED
+  DECLINED
+  VOID
+
+  @@schema("reinsurance")
+}
+
+enum PlacementEndorsementParticipantStatus {
+  INVITED
+  OFFER_SENT
+  QUOTED
+  ACCEPTED
+  DECLINED
+  CLOSED
+
+  @@schema("reinsurance")
+}
+
+enum MailboxProvider {
+  MICROSOFT_GRAPH
+  GOOGLE_GMAIL
+
+  @@schema("reinsurance")
+}
+
+enum MailboxConnectionStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+
+  @@schema("reinsurance")
+}
+
+enum EmailMessageDirection {
+  INBOUND
+  OUTBOUND
+
+  @@schema("reinsurance")
+}
+
+// Renamed from BusinessClassFieldSection
+enum RiskTypeFieldSection {
+  BUSINESS_DETAILS
+  OFFER_DETAILS
+
+  @@schema("reinsurance")
+}
+
+// Renamed from BusinessClassFieldType
+enum RiskTypeFieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  CHECKBOX
+  TEXTAREA
+
+  @@schema("reinsurance")
+}
+
+model Counterparty {
+  id                      String                            @id @default(uuid())
+  tenantId                String
+  type                    CounterpartyType
+  origin                  CounterpartyOrigin                @default(LOCAL)
+  name                    String
+  normalizedName          String
+  registrationNumber      String?
+  country                 String?
+  taxId                   String?
+  licenseNumber           String?
+  email                   String?
+  phone                   String?
+  website                 String?
+  notes                   String?
+  brokerageFee            Decimal?                          @db.Decimal(5, 2)
+  createdByUserId         String
+  updatedByUserId         String
+  archivedByUserId        String?
+  archivedAt              DateTime?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  contacts                CounterpartyContact[]
+  addresses               CounterpartyAddress[]
+  cededPlacements         Placement[]                       @relation("PlacementCedant")
+  placementRoles          PlacementParticipant[]            @relation("PlacementParticipantCounterparty")
+  placementPayments       PlacementPayment[]                @relation("PlacementPaymentCounterparty")
+  placementNotes          PlacementNote[]                   @relation("PlacementNoteCounterparty")
+  claimAllocations        PlacementClaimAllocation[]        @relation("PlacementClaimAllocationCounterparty")
+  endorsementParticipants PlacementEndorsementParticipant[] @relation("PlacementEndorsementParticipantCounterparty")
+
+  @@unique([id, tenantId])
+  @@index([tenantId, type, archivedAt, name])
+  @@index([tenantId, origin, archivedAt])
+  @@index([tenantId, archivedAt, createdAt])
+  @@schema("reinsurance")
+}
+
+model CounterpartyContact {
+  id             String       @id @default(uuid())
+  tenantId       String
+  counterpartyId String
+  fullName       String
+  jobTitle       String?
+  email          String?
+  phone          String?
+  isPrimary      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  counterparty   Counterparty @relation(fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, counterpartyId])
+  @@schema("reinsurance")
+}
+
+model Placement {
+  id                      String                            @id @default(uuid())
+  tenantId                String
+  reference               String
+  normalizedReference     String
+  title                   String
+  placementType           PlacementType                     @default(FACULTATIVE)
+  status                  PlacementStatus                   @default(DRAFT)
+  cedantId                String
+  // riskTypeId is validated at service layer (tenant-scoped FK existence check)
+  riskTypeId              String?
+  classOfBusiness         String?
+  businessDetails         Json?
+  offerDetails            Json?
+  description             String?
+  inceptionDate           DateTime?
+  expiryDate              DateTime?
+  currency                String?
+  exchangeRateToBase      Decimal?                          @db.Decimal(18, 6)
+  sumInsured              Decimal?                          @db.Decimal(18, 2)
+  rate                    Decimal?                          @db.Decimal(7, 4)
+  premium                 Decimal?                          @db.Decimal(18, 2)
+  commission              Decimal?                          @db.Decimal(7, 4)
+  facultativeOffer        Decimal?                          @db.Decimal(7, 4)
+  preliminaryBrokerage    Decimal?                          @db.Decimal(7, 4)
+  createdByUserId         String
+  updatedByUserId         String
+  archivedByUserId        String?
+  archivedAt              DateTime?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  cedant                  Counterparty                      @relation("PlacementCedant", fields: [cedantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participants            PlacementParticipant[]
+  statusHistory           PlacementStatusHistory[]
+  emailLinks              PlacementEmailLink[]
+  closings                PlacementClosing[]
+  payments                PlacementPayment[]
+  notes                   PlacementNote[]
+  claims                  PlacementClaim[]
+  claimAllocations        PlacementClaimAllocation[]
+  endorsements            PlacementEndorsement[]
+  endorsementParticipants PlacementEndorsementParticipant[]
+  endorsementClosings     PlacementEndorsementClosing[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementType, archivedAt])
+  @@index([tenantId, status, archivedAt, createdAt])
+  @@index([tenantId, cedantId, archivedAt])
+  @@index([tenantId, riskTypeId, archivedAt])
+  @@index([tenantId, archivedAt, createdAt])
+  @@schema("reinsurance")
+}
+
+model Currency {
+  id                 String    @id @default(uuid())
+  tenantId           String
+  isoCode            String
+  name               String
+  symbol             String?
+  exchangeRateToBase Decimal?  @db.Decimal(18, 6)
+  isBaseCurrency     Boolean   @default(false)
+  isActive           Boolean   @default(true)
+  displayOrder       Int       @default(0)
+  createdByUserId    String
+  updatedByUserId    String
+  archivedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, isoCode])
+  @@index([tenantId, isActive, displayOrder])
+  @@index([tenantId, archivedAt, createdAt])
+  @@schema("reinsurance")
+}
+
+// Renamed from BusinessClass; code field dropped; uniqueness on name
+model RiskClass {
+  id              String     @id @default(uuid())
+  tenantId        String
+  name            String
+  description     String?
+  isActive        Boolean    @default(true)
+  displayOrder    Int        @default(0)
+  createdByUserId String
+  updatedByUserId String
+  archivedAt      DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  riskTypes       RiskType[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, name])
+  @@index([tenantId, isActive, displayOrder])
+  @@index([tenantId, archivedAt, createdAt])
+  @@map("risk_class")
+  @@schema("reinsurance")
+}
+
+// New intermediate model between RiskClass and RiskTypeField
+model RiskType {
+  id              String          @id @default(uuid())
+  tenantId        String
+  riskClassId     String
+  name            String
+  description     String?
+  isActive        Boolean         @default(true)
+  displayOrder    Int             @default(0)
+  createdByUserId String
+  updatedByUserId String
+  archivedAt      DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  riskClass       RiskClass       @relation(fields: [riskClassId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  fields          RiskTypeField[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, riskClassId, name])
+  @@index([tenantId, riskClassId, isActive, displayOrder])
+  @@index([tenantId, archivedAt, createdAt])
+  @@map("risk_type")
+  @@schema("reinsurance")
+}
+
+// Renamed from BusinessClassField; parent FK moved from RiskClass to RiskType
+model RiskTypeField {
+  id              String               @id @default(uuid())
+  tenantId        String
+  riskTypeId      String
+  section         RiskTypeFieldSection
+  fieldKey        String
+  label           String
+  fieldType       RiskTypeFieldType
+  required        Boolean              @default(false)
+  options         Json?
+  validationRules Json?
+  placeholder     String?
+  helpText        String?
+  displayOrder    Int                  @default(0)
+  isActive        Boolean              @default(true)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  riskType        RiskType             @relation(fields: [riskTypeId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, riskTypeId, section, fieldKey])
+  @@index([tenantId, riskTypeId, section, isActive])
+  @@map("risk_type_field")
+  @@schema("reinsurance")
+}
+
+model PlacementParticipant {
+  id                      String                            @id @default(uuid())
+  tenantId                String
+  placementId             String
+  counterpartyId          String
+  role                    PlacementParticipantRole
+  status                  PlacementParticipantStatus        @default(INVITED)
+  sharePercent            Decimal?                          @db.Decimal(7, 4)
+  signedLinePercent       Decimal?                          @db.Decimal(7, 4)
+  brokerageFee            Decimal?                          @db.Decimal(5, 2)
+  notes                   String?
+  createdAt               DateTime                          @default(now())
+  updatedAt               DateTime                          @updatedAt
+  placement               Placement                         @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  counterparty            Counterparty                      @relation("PlacementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closings                PlacementClosing[]
+  payments                PlacementPayment[]
+  placementNotes          PlacementNote[]
+  claimAllocations        PlacementClaimAllocation[]
+  endorsementParticipants PlacementEndorsementParticipant[] @relation("PlacementEndorsementOriginalParticipant")
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, counterpartyId, role])
+  @@index([tenantId, placementId])
+  @@index([tenantId, placementId, status])
+  @@index([tenantId, counterpartyId])
+  @@schema("reinsurance")
+}
+
+model PlacementClosing {
+  id                String                     @id @default(uuid())
+  tenantId          String
+  placementId       String
+  participantId     String
+  closingNumber     String
+  status            PlacementClosingStatus     @default(DRAFT)
+  signedLinePercent Decimal                    @db.Decimal(7, 4)
+  sharePercent      Decimal?                   @db.Decimal(7, 4)
+  grossPremium      Decimal?                   @db.Decimal(18, 2)
+  commissionPercent Decimal?                   @db.Decimal(7, 4)
+  commissionAmount  Decimal?                   @db.Decimal(18, 2)
+  brokeragePercent  Decimal?                   @db.Decimal(5, 2)
+  brokerageAmount   Decimal?                   @db.Decimal(18, 2)
+  netPremium        Decimal?                   @db.Decimal(18, 2)
+  currency          String?
+  issuedAt          DateTime?
+  confirmedAt       DateTime?
+  createdByUserId   String
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  placement         Placement                  @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  participant       PlacementParticipant       @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  payments          PlacementPayment[]
+  notes             PlacementNote[]
+  claimAllocations  PlacementClaimAllocation[]
+
+  @@unique([tenantId, placementId, closingNumber])
+  @@index([tenantId, placementId])
+  @@index([tenantId, participantId])
+  @@index([tenantId, placementId, status])
+  @@schema("reinsurance")
+}
+
+model PlacementClaim {
+  id                  String                     @id @default(uuid())
+  tenantId            String
+  placementId         String
+  claimNumber         String
+  status              PlacementClaimStatus       @default(DRAFT)
+  occurrenceDate      DateTime
+  reportedDate        DateTime
+  claimCause          String
+  occurrenceDetails   String?
+  currency            String
+  estimatedLossAmount Decimal                    @db.Decimal(18, 2)
+  finalLossAmount     Decimal?                   @db.Decimal(18, 2)
+  finalizedAt         DateTime?
+  finalizedByUserId   String?
+  createdByUserId     String
+  updatedByUserId     String?
+  closedAt            DateTime?
+  voidedAt            DateTime?
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  placement           Placement                  @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  allocations         PlacementClaimAllocation[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, claimNumber])
+  @@index([tenantId, placementId, status, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementClaimAllocation {
+  id                           String                           @id @default(uuid())
+  tenantId                     String
+  claimId                      String
+  placementId                  String
+  placementClosingId           String?
+  endorsementClosingId         String?
+  participantId                String?
+  endorsementParticipantId     String?
+  counterpartyId               String
+  signedLinePercent            Decimal                          @db.Decimal(7, 4)
+  basisAmount                  Decimal                          @db.Decimal(18, 2)
+  allocatedEstimatedLossAmount Decimal                          @db.Decimal(18, 2)
+  allocatedFinalLossAmount     Decimal?                         @db.Decimal(18, 2)
+  cashCallAmount               Decimal?                         @db.Decimal(18, 2)
+  paidAmount                   Decimal?                         @db.Decimal(18, 2)
+  status                       PlacementClaimAllocationStatus   @default(DRAFT)
+  createdAt                    DateTime                         @default(now())
+  updatedAt                    DateTime                         @updatedAt
+  claim                        PlacementClaim                   @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  placement                    Placement                        @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  placementClosing             PlacementClosing?                @relation(fields: [placementClosingId], references: [id], onDelete: Restrict)
+  endorsementClosing           PlacementEndorsementClosing?     @relation(fields: [endorsementClosingId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participant                  PlacementParticipant?            @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsementParticipant       PlacementEndorsementParticipant? @relation(fields: [endorsementParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty                 Counterparty                     @relation("PlacementClaimAllocationCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, claimId])
+  @@index([tenantId, claimId, status])
+  @@index([tenantId, placementClosingId])
+  @@index([tenantId, endorsementClosingId])
+  @@index([tenantId, counterpartyId, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementPayment {
+  id                  String                    @id @default(uuid())
+  tenantId            String
+  placementId         String
+  closingId           String?
+  participantId       String?
+  counterpartyId      String
+  type                PlacementPaymentType
+  direction           PlacementPaymentDirection
+  amount              Decimal                   @db.Decimal(18, 2)
+  currency            String
+  paymentDate         DateTime
+  reference           String?
+  notes               String?
+  status              PlacementPaymentStatus    @default(RECORDED)
+  reversalOfPaymentId String?
+  createdByUserId     String
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  placement           Placement                 @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closing             PlacementClosing?         @relation(fields: [closingId], references: [id], onDelete: Restrict)
+  participant         PlacementParticipant?     @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty        Counterparty              @relation("PlacementPaymentCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalOfPayment   PlacementPayment?         @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
+  reversalPayments    PlacementPayment[]        @relation("PlacementPaymentReversal")
+  settledNotes        PlacementNote[]           @relation("PlacementNoteSettlement")
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, status, createdAt])
+  @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, counterpartyId, createdAt])
+  @@index([tenantId, participantId, createdAt])
+  @@index([tenantId, closingId, createdAt])
+  @@index([tenantId, reversalOfPaymentId])
+  @@schema("reinsurance")
+}
+
+model PlacementNote {
+  id                    String                 @id @default(uuid())
+  tenantId              String
+  placementId           String
+  closingId             String?
+  participantId         String?
+  counterpartyId        String
+  settledByPaymentId    String?
+  type                  PlacementNoteType
+  direction             PlacementNoteDirection
+  noteNumber            String
+  status                PlacementNoteStatus    @default(DRAFT)
+  currency              String
+  grossAmount           Decimal                @db.Decimal(18, 2)
+  commissionPercent     Decimal?               @db.Decimal(7, 4)
+  commissionAmount      Decimal?               @db.Decimal(18, 2)
+  brokeragePercent      Decimal?               @db.Decimal(5, 2)
+  brokerageAmount       Decimal?               @db.Decimal(18, 2)
+  nicLevyPercent        Decimal                @default(0) @db.Decimal(7, 4)
+  nicLevyAmount         Decimal                @default(0) @db.Decimal(18, 2)
+  withholdingTaxPercent Decimal                @default(0) @db.Decimal(7, 4)
+  withholdingTaxAmount  Decimal                @default(0) @db.Decimal(18, 2)
+  netAmount             Decimal                @db.Decimal(18, 2)
+  noteDate              DateTime
+  issuedAt              DateTime?
+  voidedAt              DateTime?
+  voidReason            String?
+  createdByUserId       String
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  placement             Placement              @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closing               PlacementClosing?      @relation(fields: [closingId], references: [id], onDelete: Restrict)
+  participant           PlacementParticipant?  @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty          Counterparty           @relation("PlacementNoteCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  settledByPayment      PlacementPayment?      @relation("PlacementNoteSettlement", fields: [settledByPaymentId], references: [id], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, noteNumber])
+  @@index([tenantId, placementId, status, createdAt])
+  @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, closingId, status])
+  @@index([tenantId, participantId, createdAt])
+  @@index([tenantId, counterpartyId, createdAt])
+  @@index([tenantId, settledByPaymentId])
+  @@schema("reinsurance")
+}
+
+model PlacementEndorsement {
+  id                String                            @id @default(uuid())
+  tenantId          String
+  placementId       String
+  endorsementNumber String
+  type              PlacementEndorsementType
+  status            PlacementEndorsementStatus        @default(DRAFT)
+  effectiveDate     DateTime
+  reason            String
+  description       String?
+  changeSummary     Json?
+  originalSnapshot  Json
+  proposedSnapshot  Json?
+  targetPercent     Decimal?                          @db.Decimal(7, 4)
+  createdByUserId   String
+  updatedByUserId   String
+  closedAt          DateTime?
+  voidedAt          DateTime?
+  createdAt         DateTime                          @default(now())
+  updatedAt         DateTime                          @updatedAt
+  placement         Placement                         @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participants      PlacementEndorsementParticipant[]
+  closings          PlacementEndorsementClosing[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, endorsementNumber])
+  @@index([tenantId, placementId, status, createdAt])
+  @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementEndorsementParticipant {
+  id                    String                                @id @default(uuid())
+  tenantId              String
+  placementId           String
+  endorsementId         String
+  originalParticipantId String?
+  counterpartyId        String
+  status                PlacementEndorsementParticipantStatus @default(INVITED)
+  sharePercent          Decimal?                              @db.Decimal(7, 4)
+  signedLinePercent     Decimal?                              @db.Decimal(7, 4)
+  notes                 String?
+  createdByUserId       String
+  createdAt             DateTime                              @default(now())
+  updatedAt             DateTime                              @updatedAt
+  placement             Placement                             @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsement           PlacementEndorsement                  @relation(fields: [endorsementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  originalParticipant   PlacementParticipant?                 @relation("PlacementEndorsementOriginalParticipant", fields: [originalParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty          Counterparty                          @relation("PlacementEndorsementParticipantCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closings              PlacementEndorsementClosing[]
+  claimAllocations      PlacementClaimAllocation[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, endorsementId])
+  @@index([tenantId, endorsementId, status])
+  @@index([tenantId, endorsementId, counterpartyId])
+  @@index([tenantId, originalParticipantId])
+  @@index([tenantId, counterpartyId, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementEndorsementClosing {
+  id                       String                          @id @default(uuid())
+  tenantId                 String
+  placementId              String
+  endorsementId            String
+  endorsementParticipantId String
+  closingNumber            String
+  status                   PlacementClosingStatus          @default(DRAFT)
+  signedLinePercent        Decimal                         @db.Decimal(7, 4)
+  sharePercent             Decimal?                        @db.Decimal(7, 4)
+  sumInsuredSnapshot       Decimal?                        @db.Decimal(18, 2)
+  premiumSnapshot          Decimal                         @db.Decimal(18, 2)
+  commissionPercent        Decimal?                        @db.Decimal(7, 4)
+  commissionAmount         Decimal?                        @db.Decimal(18, 2)
+  brokeragePercent         Decimal?                        @db.Decimal(5, 2)
+  brokerageAmount          Decimal?                        @db.Decimal(18, 2)
+  netPremium               Decimal?                        @db.Decimal(18, 2)
+  currency                 String?
+  issuedAt                 DateTime?
+  confirmedAt              DateTime?
+  createdByUserId          String
+  createdAt                DateTime                        @default(now())
+  updatedAt                DateTime                        @updatedAt
+  placement                Placement                       @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsement              PlacementEndorsement            @relation(fields: [endorsementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsementParticipant   PlacementEndorsementParticipant @relation(fields: [endorsementParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claimAllocations         PlacementClaimAllocation[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, closingNumber])
+  @@index([tenantId, placementId])
+  @@index([tenantId, endorsementId])
+  @@index([tenantId, endorsementParticipantId])
+  @@index([tenantId, placementId, status])
+  @@schema("reinsurance")
+}
+
+model PlacementStatusHistory {
+  id              String           @id @default(uuid())
+  tenantId        String
+  placementId     String
+  fromStatus      PlacementStatus?
+  toStatus        PlacementStatus
+  changedByUserId String
+  note            String?
+  createdAt       DateTime         @default(now())
+  placement       Placement        @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, placementId, createdAt])
+  @@index([tenantId, toStatus, createdAt])
+  @@schema("reinsurance")
+}
+
+model MailboxConnection {
+  id                    String                  @id @default(uuid())
+  tenantId              String
+  provider              MailboxProvider
+  emailAddress          String
+  normalizedEmail       String
+  displayName           String?
+  status                MailboxConnectionStatus @default(ACTIVE)
+  externalMailboxId     String?
+  encryptedAccessToken  String?
+  encryptedRefreshToken String?
+  tokenExpiresAt        DateTime?
+  syncCursor            String?
+  lastSyncedAt          DateTime?
+  lastSyncError         String?
+  connectedByUserId     String
+  archivedByUserId      String?
+  archivedAt            DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  threads               EmailThread[]
+  messages              EmailMessage[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, provider, status, archivedAt])
+  @@index([tenantId, normalizedEmail, archivedAt])
+  @@schema("reinsurance")
+}
+
+model EmailThread {
+  id                  String               @id @default(uuid())
+  tenantId            String
+  mailboxConnectionId String
+  providerThreadId    String
+  subject             String?
+  participants        Json?
+  lastMessageAt       DateTime?
+  messageCount        Int                  @default(0)
+  hasAttachments      Boolean              @default(false)
+  archivedByUserId    String?
+  archivedAt          DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  mailboxConnection   MailboxConnection    @relation(fields: [mailboxConnectionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  messages            EmailMessage[]
+  placementLinks      PlacementEmailLink[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, mailboxConnectionId, providerThreadId])
+  @@index([tenantId, mailboxConnectionId, archivedAt, lastMessageAt])
+  @@index([tenantId, archivedAt, lastMessageAt])
+  @@schema("reinsurance")
+}
+
+model EmailMessage {
+  id                  String                    @id @default(uuid())
+  tenantId            String
+  mailboxConnectionId String
+  threadId            String
+  providerMessageId   String
+  internetMessageId   String?
+  direction           EmailMessageDirection
+  subject             String?
+  fromEmail           String?
+  fromName            String?
+  toRecipients        Json?
+  ccRecipients        Json?
+  receivedAt          DateTime?
+  sentAt              DateTime?
+  bodyPreview         String?
+  hasAttachments      Boolean                   @default(false)
+  isRead              Boolean                   @default(false)
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  mailboxConnection   MailboxConnection         @relation(fields: [mailboxConnectionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  thread              EmailThread               @relation(fields: [threadId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  attachments         EmailAttachmentMetadata[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, mailboxConnectionId, providerMessageId])
+  @@index([tenantId, threadId, receivedAt])
+  @@index([tenantId, mailboxConnectionId, receivedAt])
+  @@schema("reinsurance")
+}
+
+model EmailAttachmentMetadata {
+  id                   String       @id @default(uuid())
+  tenantId             String
+  messageId            String
+  providerAttachmentId String
+  fileName             String
+  contentType          String?
+  sizeBytes            Int?
+  isInline             Boolean      @default(false)
+  contentId            String?
+  createdAt            DateTime     @default(now())
+  message              EmailMessage @relation(fields: [messageId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([tenantId, messageId, providerAttachmentId])
+  @@index([tenantId, messageId])
+  @@schema("reinsurance")
+}
+
+model PlacementEmailLink {
+  id               String      @id @default(uuid())
+  tenantId         String
+  placementId      String
+  threadId         String
+  messageId        String?
+  linkedByUserId   String
+  note             String?
+  archivedByUserId String?
+  archivedAt       DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  placement        Placement   @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  thread           EmailThread @relation(fields: [threadId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, archivedAt])
+  @@index([tenantId, threadId, archivedAt])
+  @@index([tenantId, messageId, archivedAt])
+  @@schema("reinsurance")
+}
+
+model CounterpartyAddress {
+  id             String       @id @default(uuid())
+  tenantId       String
+  counterpartyId String
+  label          String?
+  line1          String
+  line2          String?
+  city           String
+  state          String?
+  postalCode     String?
+  country        String
+  isPrimary      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  counterparty   Counterparty @relation(fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, counterpartyId])
+  @@schema("reinsurance")
+}

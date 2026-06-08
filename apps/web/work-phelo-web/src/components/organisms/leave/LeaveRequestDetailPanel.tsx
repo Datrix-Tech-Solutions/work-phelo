@@ -8,7 +8,7 @@ import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
-import { useLeaveBalances, useReviewLeaveRequest } from '@/hooks/useLeave';
+import { useLeaveBalances, useReviewLeaveRequest } from '@/hooks/hr/useLeave';
 import { LeaveRequest, LeaveRequestStatus } from '@/types/hr';
 
 interface LeaveRequestDetailPanelProps {

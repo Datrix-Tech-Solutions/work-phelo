@@ -145,7 +145,7 @@ function ShiftForm({
             Save to Draft
           </Button>
           <Button
-            className="flex-1 bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
+            className="flex-1 bg-shift-night hover:bg-shift-night/90 focus:ring-shift-night"
             type="button"
             isLoading={isLoading}
             loadingText="Saving..."

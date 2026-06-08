@@ -74,11 +74,12 @@ HOME
 # Local UI specs / design references
 roles-ui-spec/
 
-# Local docs drafts
+# Local/internal docs
 docs/
+!docs/
+docs/*
 
 .compose.local.env
 .env.dev
 
 data_masking.md
-

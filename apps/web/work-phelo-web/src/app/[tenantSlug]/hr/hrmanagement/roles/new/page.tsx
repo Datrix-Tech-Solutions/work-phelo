@@ -11,7 +11,7 @@ import {
   PermissionTagSelector,
   buildPermissionResources,
 } from '@/components/molecules/roles/PermissionTagSelector';
-import { useCreatePermissionSet, usePermissionResources } from '@/hooks/useRoles';
+import { useCreatePermissionSet, usePermissionResources } from '@/hooks/hr/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 

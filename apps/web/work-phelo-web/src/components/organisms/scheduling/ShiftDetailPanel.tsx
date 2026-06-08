@@ -5,7 +5,7 @@ import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { ShiftSchedule, BackendShiftType, WorkMode } from '@/types/scheduling';
-import { useUpdateShiftSchedule, useDeleteShiftSchedule } from '@/hooks/useScheduling';
+import { useUpdateShiftSchedule, useDeleteShiftSchedule } from '@/hooks/hr/useScheduling';
 import { useToast } from '@/hooks/useToast';
 
 interface Props {
@@ -48,7 +48,7 @@ const TYPE_LABEL: Record<string, string> = {
 const TYPE_COLORS: Record<string, string> = {
   MORNING: 'bg-green-100 text-green-700',
   AFTERNOON: 'bg-purple-100 text-purple-700',
-  NIGHT: 'bg-[#0d1b3e] text-white',
+  NIGHT: 'bg-shift-night text-white',
 };
 
 const SHIFT_TYPE_OPTIONS = [
@@ -137,7 +137,7 @@ function ReadOnlyView({
                 key={day}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium ${
                   schedule.dayOfWeek.includes(i)
-                    ? 'bg-[#0d1b3e] text-white'
+                    ? 'bg-shift-night text-white'
                     : 'bg-gray-100 text-gray-400'
                 }`}
               >
@@ -240,7 +240,7 @@ function EditForm({
               Delete
             </Button>
             <Button
-              className="flex-1 bg-[#0d1b3e] hover:bg-[#0d1b3e]/90 focus:ring-[#0d1b3e]"
+              className="flex-1 bg-shift-night hover:bg-shift-night/90 focus:ring-shift-night"
               onClick={handleSave}
               isLoading={isSaving}
               loadingText="Saving…"
@@ -327,7 +327,7 @@ function EditForm({
                 key={day}
                 className={`px-2.5 py-1 rounded-full text-xs font-medium ${
                   schedule.dayOfWeek.includes(i)
-                    ? 'bg-[#0d1b3e] text-white'
+                    ? 'bg-shift-night text-white'
                     : 'bg-gray-100 text-gray-400'
                 }`}
               >

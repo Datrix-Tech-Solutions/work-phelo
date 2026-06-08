@@ -9,8 +9,8 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { useToast } from '@/hooks/useToast';
 import { inputClass } from '@/lib/utils';
-import { useLeaveTypes, useCreateLeaveRequest } from '@/hooks/useLeave';
-import { usePublicHolidays } from '@/hooks/usePublicHolidays';
+import { useLeaveTypes, useCreateLeaveRequest } from '@/hooks/hr/useLeave';
+import { usePublicHolidays } from '@/hooks/hr/usePublicHolidays';
 import { useMyProfile, useEmployeeOptions } from '@/hooks';
 import { CreateLeaveRequestDto, LeaveBalance, PublicHoliday } from '@/types/hr';
 import { FileUpload } from '@/components/atoms/FileUpload';
@@ -204,7 +204,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
               value={field.value}
               onChange={field.onChange}
               error={errors.startDate?.message}
-              disablePast
+              // disablePast
             />
           )}
         />
@@ -221,7 +221,7 @@ export function ApplyLeavePanel({ isOpen, onClose, tenantSlug, balances }: Apply
               value={field.value}
               onChange={field.onChange}
               error={errors.endDate?.message}
-              disablePast
+              // disablePast
             />
           )}
         />

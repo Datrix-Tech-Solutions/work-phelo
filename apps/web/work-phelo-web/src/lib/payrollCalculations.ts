@@ -189,7 +189,7 @@ function validateInput(input: PayrollInput): void {
   }
 }
 
-/** Round to 2 decimal places to match backend Decimal ROUND_HALF_UP output. */
+/** Round to 2 decimal places — matches backend Decimal.toDecimalPlaces(2, ROUND_HALF_UP). */
 function r2(x: number): number {
   return Math.round(x * 100) / 100;
 }
@@ -346,8 +346,8 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         voluntaryPensionName = ghanaPension.providentFundName;
       }
 
-      // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax); transport is exempt.
-      // Other deductions are post-tax and do not reduce the PAYE base.
+      // Taxable: gross minus SSNIT employee and Tier 3 employee (both pre-tax); transport is exempt
+      // otherDeductions (loans, advances) are post-tax and do not reduce the PAYE base
       taxExemptTransport = transportAllowance;
       taxableIncome = Math.max(
         0,
@@ -371,7 +371,8 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         voluntaryPensionName = nigeriaPension.pfaName;
       }
 
-      // Other deductions are post-tax and do not reduce the PAYE base.
+      // taxableIncome for net salary: transport stays in (taxable in Nigeria)
+      // otherDeductions (loans, advances) are post-tax and do not reduce the PAYE base
       taxableIncome = Math.max(0, grossSalary - employeeStatutoryContrib - volEmployee);
       // CRA (Consolidated Relief Allowance) reduces the PAYE tax base only, not take-home
       const annualGross = grossSalary * 12;
@@ -403,7 +404,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         voluntaryPensionName = kenyaPension.schemeName;
       }
 
-      // Other deductions are post-tax and do not reduce the PAYE base.
+      // otherDeductions (loans, advances) are post-tax and do not reduce the PAYE base
       taxableIncome = Math.max(0, grossSalary - employeeStatutoryContrib - occEmployeeDeductible);
       paye = calculatePAYE_KE(taxableIncome, PAYROLL_CONFIG.KE.personalRelief);
       break;

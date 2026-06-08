@@ -77,7 +77,7 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
         kpis: [],
       });
     }
-  }, [editTemplate, reset, isOpen]);
+  }, [editTemplate, reset]);
 
   const selfWeight = Number(useWatch({ control, name: 'selfAssessmentWeight' }) || 0);
   const managerWeight = Number(useWatch({ control, name: 'managerAssessmentWeight' }) || 0);
@@ -113,6 +113,7 @@ export function CreateTemplatePanel({ isOpen, onClose, editTemplate }: CreateTem
     const callbacks = {
       onSuccess: () => {
         toast.success(isEditing ? 'Template updated' : 'Template created');
+        reset({ name: '', selfAssessmentWeight: '', managerAssessmentWeight: '', kpis: [] });
         onClose();
       },
       onError: (err: unknown) => {

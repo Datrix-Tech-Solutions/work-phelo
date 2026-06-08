@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { useBranches, useDeleteBranch, useUpdateBranch, useEmployeeOptions } from '@/hooks';
 import type { Branch, EmployeeOption } from '@/types/hr';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 
 const PAGE_SIZE = 8;

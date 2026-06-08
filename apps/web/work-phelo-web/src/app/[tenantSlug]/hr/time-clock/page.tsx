@@ -3,12 +3,12 @@
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
-import { useDepartmentOptions } from '@/hooks/useDepartments';
+import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 
 import { CorrectionRequestPanel } from '@/components/organisms/time-clock/CorrectionRequestPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -22,7 +22,7 @@ import {
   useAttendanceRecords,
   useCorrectionRequests,
   useReviewCorrectionRequest,
-} from '@/hooks/useTimeClock';
+} from '@/hooks/hr/useTimeClock';
 import { TimeClockTabs } from '@/components/molecules/time-clock/TimeClockTabs';
 import { MyTimeSection } from '@/components/organisms/time-clock/MyTimeSection';
 import { LiveAttendanceTable } from '@/components/organisms/time-clock/LiveAttendanceTable';

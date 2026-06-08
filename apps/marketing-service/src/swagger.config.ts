@@ -35,8 +35,14 @@ export function setupSwagger(app: INestApplication) {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
-    swaggerOptions: { persistAuthorization: true, tagsSorter: 'alpha' },
+    useGlobalPrefix: true,
+    swaggerOptions: {
+      persistAuthorization: true,
+      tagsSorter: 'alpha',
+      url: 'docs-json',
+    },
+    customSiteTitle: 'WorkPhelo Marketing API Docs',
   });
 
-  console.log('📖 Marketing service docs: http://localhost:4006/docs');
+  console.log('📖 Marketing service docs: http://localhost:4006/api/docs');
 }

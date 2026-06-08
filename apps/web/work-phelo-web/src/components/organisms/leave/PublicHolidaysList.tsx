@@ -8,7 +8,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { CreatePublicHolidayPanel } from '@/components/organisms/leave/CreatePublicHolidayPanel';
 import { api } from '@/lib/api';
 import { useToast } from '@/hooks/useToast';
-import { useDeletePublicHoliday } from '@/hooks/usePublicHolidays';
+import { useDeletePublicHoliday } from '@/hooks/hr/usePublicHolidays';
 import { extractError } from '@/lib/extractError';
 import { formatHolidayDate } from '@/lib/formatters';
 import { PublicHoliday } from '@/types/hr';
@@ -26,21 +26,29 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
   const [editHoliday, setEditHoliday] = useState<PublicHoliday | undefined>();
   const [deleteTarget, setDeleteTarget] = useState<PublicHoliday | null>(null);
 
+  const limit = 10;
+
+  const currentYear = new Date().getFullYear();
+
   const { data, isLoading } = useQuery({
-    queryKey: ['public-holidays', { page }],
-    queryFn: () => api.get('/hr/leave/public-holidays', { params: { page } }).then((r) => r.data),
+    queryKey: ['public-holidays', { year: currentYear }],
+    queryFn: () =>
+      api.get('/hr/leave/public-holidays', { params: { year: currentYear } }).then((r) => r.data),
   });
 
-  const totalPages: number = data?.totalPages ?? 1;
+  const { filteredHolidays, totalPages } = useMemo(() => {
+    const raw: PublicHoliday[] = Array.isArray(data) ? data : (data?.data ?? data?.holidays ?? []);
 
-  const filteredHolidays = useMemo(() => {
-    const holidays: PublicHoliday[] = Array.isArray(data)
-      ? data
-      : (data?.data ?? data?.holidays ?? []);
-    if (!search) return holidays;
-    const q = search.toLowerCase();
-    return holidays.filter((h) => h.name.toLowerCase().includes(q));
-  }, [data, search]);
+    // Guard: keep only current-year holidays in case the backend returns all years
+    const all = raw.filter((h) => new Date(h.date).getFullYear() === currentYear);
+
+    const filtered = search
+      ? all.filter((h) => h.name.toLowerCase().includes(search.toLowerCase()))
+      : all;
+    const pages = Math.max(1, Math.ceil(filtered.length / limit));
+    const start = (page - 1) * limit;
+    return { filteredHolidays: filtered.slice(start, start + limit), totalPages: pages };
+  }, [data, search, page, limit, currentYear]);
 
   const { mutate: deleteHoliday, isPending: isDeleting } = useDeletePublicHoliday();
   const formatScope = (holiday: PublicHoliday) => {
@@ -121,7 +129,10 @@ export function PublicHolidaysList({ tenantSlug }: Props) {
         data={filteredHolidays}
         isLoading={isLoading}
         searchPlaceholder="Search holidays..."
-        onSearch={setSearch}
+        onSearch={(v) => {
+          setSearch(v);
+          setPage(1);
+        }}
         actionButton={{
           label: 'Add Holiday',
           onClick: () => {

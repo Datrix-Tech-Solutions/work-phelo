@@ -5,7 +5,7 @@
 import { use, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useTeamAppraisals } from '@/hooks';
 import { AppraisalTabs } from '@/components/molecules/appraisal/AppraisalTabs';

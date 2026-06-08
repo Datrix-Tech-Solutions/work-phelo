@@ -57,16 +57,14 @@ export function ApplicableTo({ selected, onChange }: ApplicableToProps) {
           className={cn(
             'flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors',
             allChecked || someChecked
-              ? 'border-[#8b929e] bg-white'
+              ? 'border-gray-400 bg-white'
               : 'border-gray-200 bg-white hover:border-gray-300',
           )}
         >
           <span
             className={cn(
               'w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-colors',
-              allChecked || someChecked
-                ? 'bg-[#0D2244] border-[#0D2244]'
-                : 'border-gray-300 bg-white',
+              allChecked || someChecked ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
             )}
           >
             {allChecked && <Icons.Check className="w-2.5 h-2.5 text-white stroke-3" />}
@@ -85,14 +83,14 @@ export function ApplicableTo({ selected, onChange }: ApplicableToProps) {
                 className={cn(
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors',
                   on
-                    ? 'border-[#8b929e] bg-white'
+                    ? 'border-gray-400 bg-white'
                     : 'border-gray-200 bg-white hover:border-gray-300',
                 )}
               >
                 <span
                   className={cn(
                     'w-4 h-4 rounded flex items-center justify-center shrink-0 border transition-colors',
-                    on ? 'bg-[#0D2244] border-[#0D2244]' : 'border-gray-300 bg-white',
+                    on ? 'bg-brand border-brand' : 'border-gray-300 bg-white',
                   )}
                 >
                   {on && <Icons.Check className="w-2.5 h-2.5 text-white stroke-3" />}

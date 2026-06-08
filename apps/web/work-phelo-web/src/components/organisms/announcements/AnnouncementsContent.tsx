@@ -8,7 +8,7 @@ import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateAnnouncementPanel } from '@/components/organisms/announcements/CreateAnnouncementPanel';
 import { useAnnouncementsPage, useDeleteAnnouncement } from '@/hooks';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';

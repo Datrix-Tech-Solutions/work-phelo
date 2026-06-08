@@ -8,7 +8,7 @@ import { Icons } from '@/components/atoms/icons';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { CycleProgressSection } from '@/components/molecules/appraisal/CycleProgressSection';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/useAppraisals';
+import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/hr/useAppraisals';
 import { cn } from '@/lib/utils';
 import type { AppraisalCycle } from '@/types/hr';
 
@@ -156,7 +156,7 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
       {/* Breadcrumb */}
       <nav className="flex items-center gap-1.5 text-sm text-gray-400">
         <Link

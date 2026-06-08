@@ -23,7 +23,7 @@ function extractNamedResources(source) {
 
 function extractRuleResources(source) {
   return new Set(
-    Array.from(source.matchAll(/'([a-z-]+):[A-Z]+'/g), ([, resource]) => resource),
+    Array.from(source.matchAll(/'([a-z.-]+):[A-Z]+'/g), ([, resource]) => resource),
   );
 }
 

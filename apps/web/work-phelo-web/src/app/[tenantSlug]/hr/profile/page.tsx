@@ -7,7 +7,7 @@ import {
   useResignationRecord,
   useEmployeeOptions,
 } from '@/hooks/hr/useEmployees';
-import { useUserPermissions } from '@/hooks/useRoles';
+import { useUserPermissions } from '@/hooks/hr/useRoles';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { pageBanner, pagePx, pageContent } from '@/lib/layout';

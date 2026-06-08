@@ -139,7 +139,8 @@ ensure_deploy_dirs() {
   if [[ "${DEPLOY_ENV}" == "dev" ]]; then
     mkdir -p \
       "$DEPLOY_PATH/apps/subscription-service" \
-      "$DEPLOY_PATH/apps/marketing-service"
+      "$DEPLOY_PATH/apps/marketing-service" \
+      "$DEPLOY_PATH/apps/reinsurance-service"
   fi
 }
 

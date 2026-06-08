@@ -3,7 +3,7 @@
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnnouncementsContent } from '@/components/organisms/announcements/AnnouncementsContent';
-import { usePermission } from '@/hooks/usePermission';
+import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 
 export default function AnnouncementsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {

@@ -5,7 +5,7 @@ import { Shift } from '@/components/organisms/scheduling/ShiftPanel';
 const SHIFT_COLORS: Record<string, string> = {
   morning: 'bg-green-100 text-green-600',
   afternoon: 'bg-purple-400 text-white',
-  night: 'bg-[#0d1b3e] text-white',
+  night: 'bg-shift-night text-white',
   'on-leave': 'bg-blue-200 text-blue-600',
 };
 
