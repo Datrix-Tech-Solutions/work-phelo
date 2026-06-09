@@ -79,9 +79,19 @@ const COLUMNS: Column<Facultative>[] = [
   },
   {
     key: 'premium',
-    label: 'Net Premium',
+    label: 'Premium',
     width: '1fr',
-    render: (row) => <span className="text-gray-700">{fmtAmount(row.premium)}</span>,
+    render: (row) => {
+      const facPremium =
+        row.premium != null && row.facultativeOffer != null
+          ? (row.facultativeOffer / 100) * row.premium
+          : null;
+      const netPremium =
+        facPremium != null && row.commission != null
+          ? facPremium * (1 - row.commission / 100)
+          : facPremium;
+      return <span className="text-gray-700">{fmtAmount(netPremium)}</span>;
+    },
   },
   {
     key: 'collectedToDate' as keyof Facultative,

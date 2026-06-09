@@ -102,15 +102,12 @@ export function CedantsTable() {
           setSearch(q);
           setPage(1);
         }}
-        onRowClick={(row) =>
-          router.push(`/${tenantSlug}/operations/reinsurance/settings/cedants/${row.id}`)
-        }
+        onRowClick={(row) => router.push(`/${tenantSlug}/operations/reinsurance/cedants/${row.id}`)}
         actionButton={{ label: 'Add Cedant', onClick: () => setPanelOpen(true) }}
         rowActions={(row) => [
           {
             label: 'View',
-            onClick: () =>
-              router.push(`/${tenantSlug}/operations/reinsurance/settings/cedants/${row.id}`),
+            onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/cedants/${row.id}`),
           },
           {
             label: 'Edit',

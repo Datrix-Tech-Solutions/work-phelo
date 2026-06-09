@@ -142,6 +142,9 @@ export function FacultativeTable() {
         isLoading={isLoading}
         searchPlaceholder="Search facultative…"
         searchValue={search}
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.id}`)
+        }
         onSearch={(q) => {
           setSearch(q);
           setPage(1);

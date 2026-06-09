@@ -109,7 +109,7 @@ export function ReinsurersTable() {
         searchPlaceholder="Search reinsurers…"
         searchValue={search}
         onRowClick={(row) =>
-          router.push(`/${tenantSlug}/operations/reinsurance/settings/reinsurers/${row.id}`)
+          router.push(`/${tenantSlug}/operations/reinsurance/reinsurers/${row.id}`)
         }
         onSearch={(q) => {
           setSearch(q);
@@ -120,7 +120,7 @@ export function ReinsurersTable() {
           {
             label: 'View',
             onClick: () =>
-              router.push(`/${tenantSlug}/operations/reinsurance/settings/reinsurers/${row.id}`),
+              router.push(`/${tenantSlug}/operations/reinsurance/reinsurers/${row.id}`),
           },
           {
             label: 'Edit',
