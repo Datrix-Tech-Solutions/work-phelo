@@ -64,7 +64,6 @@ function participantToEntry(
 export function DistributionListTab({ placement }: DistributionListTabProps) {
   const facOffer = placement.facultativeOffer ?? 0;
   const premium = placement.premium ?? 0;
-  const facPremium = premium * (facOffer / 100);
 
   const { data: reinsurers = [] } = useReinsurers();
   const { mutateAsync: addParticipant, isPending: isAdding } = useAddParticipant(placement.id);
@@ -180,8 +179,6 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const handleAccept = (row: DistributionEntry) => {
     const isReconfirm = row.status === 'Accepted';
     patch(row.id, { status: 'Accepted' });
-    // Always set both sharePercent and signedLinePercent together to avoid
-    // race conditions with the inline share editor and to keep them in sync.
     if (isReconfirm) {
       updateParticipant({
         participantId: row.id,
@@ -316,7 +313,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       <div className="mt-4">
         <DistributionTable
           entries={entries}
-          facPremium={facPremium}
+          premium={premium}
           placement={placement}
           hasActiveEndorsement={hasActiveEndorsement}
           confirmedCounterpartyIds={confirmedCounterpartyIds}

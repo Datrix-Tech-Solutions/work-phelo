@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { Controller, UseFormReturn } from 'react-hook-form';
+import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { useFacultatives, useCurrencyOptions } from '@/hooks';
+import { cn, inputClass } from '@/lib/utils';
 
 export interface AddPaymentFormValues {
   cedantId: string;
@@ -21,6 +22,8 @@ export interface AddPaymentFormValues {
   bankName: string;
   currency: string;
   rate: string;
+  allocations: Record<string, string>;
+  allocationRates: Record<string, string>;
 }
 
 export const ADD_PAYMENT_DEFAULTS: AddPaymentFormValues = {
@@ -33,6 +36,8 @@ export const ADD_PAYMENT_DEFAULTS: AddPaymentFormValues = {
   bankName: '',
   currency: '',
   rate: '',
+  allocations: {},
+  allocationRates: {},
 };
 
 const PAYMENT_TYPE_OPTIONS = [
@@ -103,11 +108,13 @@ export function AddPaymentFormFields({
       facultatives
         .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
         .map((f) => {
+          const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
+          const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
           const parts = [
             f.classOfBusiness,
             f.title,
             f.premium != null
-              ? `${f.currency ? f.currency + ' ' : ''}${f.premium.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              ? `${f.currency ? f.currency + ' ' : ''}${netPremium.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
               : null,
           ].filter(Boolean);
           return {
@@ -119,7 +126,149 @@ export function AddPaymentFormFields({
     [facultatives, cedantId],
   );
 
+  const totalExpected = useMemo(() => {
+    const selected = facultatives.filter((f) => businessIds.includes(f.id));
+    return selected.reduce((sum, f) => {
+      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
+      return sum + facPremium * (1 - (f.commission ?? 0) / 100);
+    }, 0);
+  }, [facultatives, businessIds]);
+
+  const expectedCurrency = useMemo(
+    () => facultatives.find((f) => businessIds.includes(f.id))?.currency ?? null,
+    [facultatives, businessIds],
+  );
+
   const paymentType = watch('paymentType');
+  const paymentCurrency = watch('currency');
+  const amountValue = watch('amount');
+  const allocations = useWatch({ control, name: 'allocations' });
+
+  const parsedAmount = parseFloat(amountValue) || 0;
+
+  const selectedFacultatives = useMemo(
+    () => facultatives.filter((f) => businessIds.includes(f.id)),
+    [facultatives, businessIds],
+  );
+
+  const allSameCurrency = useMemo(() => {
+    if (selectedFacultatives.length <= 1) return true;
+    const first = selectedFacultatives[0].currency;
+    return selectedFacultatives.every((f) => f.currency === first);
+  }, [selectedFacultatives]);
+
+  const businessCurrency = preFilledPlacement?.currency ?? expectedCurrency;
+  const showRate =
+    !!paymentCurrency &&
+    !!businessCurrency &&
+    paymentCurrency !== businessCurrency &&
+    allSameCurrency;
+
+  const showAllocation =
+    businessIds.length > 1 && parsedAmount > 0 && Math.abs(parsedAmount - totalExpected) > 0.01;
+
+  useEffect(() => {
+    if (!showRate) setValue('rate', '');
+  }, [showRate, setValue]);
+
+  useEffect(() => {
+    if (!showAllocation) return;
+    const newAllocations: Record<string, string> = {};
+    selectedFacultatives.forEach((f) => {
+      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
+      const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+      const proportion =
+        totalExpected > 0 ? netPremium / totalExpected : 1 / selectedFacultatives.length;
+      newAllocations[f.id] = (proportion * parsedAmount).toFixed(2);
+    });
+    setValue('allocations', newAllocations);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showAllocation, parsedAmount, totalExpected]);
+
+  const allocatedTotal = Object.values(allocations ?? {}).reduce(
+    (sum, v) => sum + (parseFloat(v) || 0),
+    0,
+  );
+  const remaining = parsedAmount - allocatedTotal;
+
+  const fmtNum = (val: number) =>
+    val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const totalExpectedHint =
+    businessIds.length > 1 ? (
+      <p className="text-xs text-gray-500 mt-1">
+        Expected total:{' '}
+        <span className="font-medium text-gray-700">
+          {expectedCurrency ? `${expectedCurrency} ` : ''}
+          {totalExpected.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        </span>
+      </p>
+    ) : null;
+
+  const allocationSection = showAllocation && (
+    <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
+      <p className="text-xs font-semibold text-gray-700">Allocate Payment</p>
+      {selectedFacultatives.map((f) => {
+        const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
+        const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+        const rowNeedsRate =
+          !allSameCurrency && !!paymentCurrency && !!f.currency && paymentCurrency !== f.currency;
+        return (
+          <div key={f.id} className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {f.policyNumber ?? f.reference}
+              </p>
+              <p className="text-xs text-gray-400">
+                {f.currency ? `${f.currency} ` : ''}
+                {fmtNum(netPremium)} due
+              </p>
+            </div>
+            {rowNeedsRate && (
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs text-gray-400">Rate</span>
+                <input
+                  type="number"
+                  step="any"
+                  placeholder="0.00"
+                  className={cn(inputClass(), 'w-20 px-2 py-2 text-xs text-right')}
+                  {...register(`allocationRates.${f.id}` as `allocationRates.${string}`)}
+                />
+              </div>
+            )}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs text-gray-400">Amount</span>
+              <input
+                type="number"
+                step="any"
+                placeholder="0.00"
+                className={cn(inputClass(), 'w-32 px-2 py-2 text-xs text-right')}
+                {...register(`allocations.${f.id}` as `allocations.${string}`)}
+              />
+            </div>
+          </div>
+        );
+      })}
+      <div className="flex items-center justify-between pt-1 border-t border-gray-200 text-xs">
+        <span className="text-gray-500">Allocated: {fmtNum(allocatedTotal)}</span>
+        <span
+          className={cn(
+            'font-medium',
+            remaining < 0 ? 'text-red-500' : remaining > 0 ? 'text-orange-500' : 'text-green-600',
+          )}
+        >
+          {remaining > 0
+            ? `${fmtNum(remaining)} remaining`
+            : remaining < 0
+              ? `${fmtNum(Math.abs(remaining))} over`
+              : 'Fully allocated'}
+        </span>
+      </div>
+    </div>
+  );
 
   const chequeFields = paymentType === 'cheque' && (
     <>
@@ -156,15 +305,7 @@ export function AddPaymentFormFields({
         error={errors.bankName}
       />
 
-      <FormField
-        label="Amount"
-        registration={register('amount', { required: 'Amount is required' })}
-        placeholder="0.00"
-        type="number"
-        error={errors.amount}
-      />
-
-      <div className="grid grid-cols-2 gap-4">
+      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
         <Controller
           name="currency"
           control={control}
@@ -180,14 +321,28 @@ export function AddPaymentFormFields({
             />
           )}
         />
+        {showRate && (
+          <FormField
+            label="Rate"
+            registration={register('rate', { required: 'Rate is required' })}
+            placeholder="0.00"
+            type="number"
+            step="any"
+            error={errors.rate}
+          />
+        )}
+      </div>
+      <div>
         <FormField
-          label="Rate"
-          registration={register('rate', { required: 'Rate is required' })}
+          label="Amount"
+          registration={register('amount', { required: 'Amount is required' })}
           placeholder="0.00"
           type="number"
-          error={errors.rate}
+          error={errors.amount}
         />
+        {totalExpectedHint}
       </div>
+      {allocationSection}
     </>
   );
 
@@ -200,15 +355,7 @@ export function AddPaymentFormFields({
         error={errors.bankName}
       />
 
-      <FormField
-        label="Amount"
-        registration={register('amount', { required: 'Amount is required' })}
-        placeholder="0.00"
-        type="number"
-        error={errors.amount}
-      />
-
-      <div className="grid grid-cols-2 gap-4">
+      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
         <Controller
           name="currency"
           control={control}
@@ -224,14 +371,28 @@ export function AddPaymentFormFields({
             />
           )}
         />
+        {showRate && (
+          <FormField
+            label="Rate"
+            registration={register('rate', { required: 'Rate is required' })}
+            placeholder="0.00"
+            type="number"
+            step="any"
+            error={errors.rate}
+          />
+        )}
+      </div>
+      <div>
         <FormField
-          label="Rate"
-          registration={register('rate', { required: 'Rate is required' })}
+          label="Amount"
+          registration={register('amount', { required: 'Amount is required' })}
           placeholder="0.00"
           type="number"
-          error={errors.rate}
+          error={errors.amount}
         />
+        {totalExpectedHint}
       </div>
+      {allocationSection}
     </>
   );
 

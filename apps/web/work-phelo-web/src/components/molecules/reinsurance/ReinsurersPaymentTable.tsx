@@ -1,13 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PlacementParticipant } from '@/types/reinsurance';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 
 interface ReinsurersPaymentTableProps {
   participants: PlacementParticipant[];
   grossPremium: number;
+  commission: number;
   currency: string | null;
+  onTotalChange?: (total: number) => void;
 }
 
 function fmt(val: number, currency: string | null) {
@@ -15,12 +18,24 @@ function fmt(val: number, currency: string | null) {
   return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function participantNetPremium(p: PlacementParticipant, grossPremium: number, commission: number) {
+  const share = parseFloat(p.sharePercent ?? '0') / 100;
+  const brokerage = parseFloat(p.brokerageFee ?? '0');
+  const yourPremium = share * grossPremium;
+  return yourPremium * (1 - (commission + brokerage) / 100);
+}
+
 export function ReinsurersPaymentTable({
   participants,
   grossPremium,
+  commission,
   currency,
+  onTotalChange,
 }: ReinsurersPaymentTableProps) {
-  const reinsurers = useMemo(() => participants.filter((p) => p.role !== 'BROKER'), [participants]);
+  const reinsurers = useMemo(
+    () => participants.filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED'),
+    [participants],
+  );
 
   const [selectedIds, setSelectedIds] = useState<string[]>(() => reinsurers.map((p) => p.id));
 
@@ -36,9 +51,49 @@ export function ReinsurersPaymentTable({
 
   const selected = reinsurers.filter((p) => selectedIds.includes(p.id));
 
+  const total = useMemo(
+    () => selected.reduce((sum, p) => sum + participantNetPremium(p, grossPremium, commission), 0),
+    [selected, grossPremium, commission],
+  );
+
+  useEffect(() => {
+    onTotalChange?.(total);
+  }, [total, onTotalChange]);
+
+  const columns: Column<PlacementParticipant>[] = useMemo(
+    () => [
+      {
+        key: 'counterparty',
+        label: 'Reinsurer',
+        render: (row) => <span className="font-medium text-gray-900">{row.counterparty.name}</span>,
+      },
+      {
+        key: 'sharePercent',
+        label: 'Share %',
+        width: '80px',
+        className: 'text-center',
+        render: (row) => (
+          <span className="text-gray-600 block text-center">{row.sharePercent ?? '—'}</span>
+        ),
+      },
+      {
+        key: 'premiumShare',
+        label: 'Premium Share',
+        width: '200px',
+        className: 'text-right',
+        render: (row) => (
+          <span className="text-gray-900 block text-right">
+            {fmt(participantNetPremium(row, grossPremium, commission), currency)}
+          </span>
+        ),
+      },
+    ],
+    [grossPremium, commission, currency],
+  );
+
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col">
-      <div className="p-4 border-b border-gray-100">
+    <div className="flex flex-col gap-0">
+      <div className="p-4 bg-white rounded-t-xl border border-b-0 border-gray-200">
         <MultiSelect
           label="Reinsurers"
           placeholder="Select reinsurers…"
@@ -48,53 +103,15 @@ export function ReinsurersPaymentTable({
         />
       </div>
 
-      {selected.length > 0 && (
-        <>
-          {/* Table header */}
-          <div className="grid grid-cols-[1fr_80px_120px] px-4 py-2.5 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide border-b border-gray-100">
-            <span>Reinsurer</span>
-            <span className="text-center">Share %</span>
-            <span className="text-right">Premium Share</span>
-          </div>
-
-          {/* Rows */}
-          {selected.map((p) => {
-            const share = parseFloat(p.sharePercent ?? '0');
-            const amount = grossPremium * (share / 100);
-            return (
-              <div
-                key={p.id}
-                className="grid grid-cols-[1fr_80px_120px] px-4 py-3 border-b border-gray-100 text-sm items-center"
-              >
-                <span className="text-gray-900 font-medium">{p.counterparty.name}</span>
-                <span className="text-center text-gray-600">{p.sharePercent ?? '—'}</span>
-                <span className="text-right text-gray-900">{fmt(amount, currency)}</span>
-              </div>
-            );
-          })}
-
-          {/* Total row */}
-          {(() => {
-            const total = selected.reduce(
-              (sum, p) => sum + grossPremium * (parseFloat(p.sharePercent ?? '0') / 100),
-              0,
-            );
-            return (
-              <div className="grid grid-cols-[1fr_80px_120px] px-4 py-3 bg-gray-50 border-t border-gray-200 text-sm items-center">
-                <span className="font-semibold text-gray-900">Total</span>
-                <span />
-                <span className="text-right font-semibold text-gray-900">
-                  {fmt(total, currency)}
-                </span>
-              </div>
-            );
-          })()}
-        </>
-      )}
-
-      {selected.length === 0 && (
-        <p className="px-4 py-6 text-sm text-gray-400 text-center">No reinsurers selected.</p>
-      )}
+      <DataTable
+        columns={columns}
+        data={selected}
+        emptyMessage="No reinsurers selected"
+        currentPage={1}
+        totalPages={0}
+        onPageChange={() => {}}
+        noInternalScroll
+      />
     </div>
   );
 }

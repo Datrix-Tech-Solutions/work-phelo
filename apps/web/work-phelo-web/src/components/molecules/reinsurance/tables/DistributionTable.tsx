@@ -32,7 +32,7 @@ function fmtAmount(val: number) {
 
 interface DistributionTableProps {
   entries: DistributionEntry[];
-  facPremium: number;
+  premium: number;
   placement: Facultative;
   hasActiveEndorsement?: boolean;
   confirmedCounterpartyIds?: Set<string>;
@@ -46,7 +46,7 @@ interface DistributionTableProps {
 
 export function DistributionTable({
   entries,
-  facPremium,
+  premium,
   placement,
   hasActiveEndorsement = false,
   confirmedCounterpartyIds,
@@ -187,7 +187,7 @@ export function DistributionTable({
       label: 'Premium Share',
       width: '1.2fr',
       render: (row) => (
-        <span className="text-gray-700">{fmtAmount((row.shareLine / 100) * facPremium)}</span>
+        <span className="text-gray-700">{fmtAmount((row.shareLine / 100) * premium)}</span>
       ),
     },
     {
@@ -195,7 +195,7 @@ export function DistributionTable({
       label: 'Brokerage Amount',
       width: '1.2fr',
       render: (row) => {
-        const premiumShare = (row.shareLine / 100) * facPremium;
+        const premiumShare = (row.shareLine / 100) * premium;
         return (
           <span className="text-gray-700">
             {fmtAmount((row.brokerageFee / 100) * premiumShare)}

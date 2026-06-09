@@ -46,9 +46,6 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
   const base = `/${params.tenantSlug}/operations/reinsurance/settings`;
 
   const tabs: TabItem[] = [
-    { label: 'Cedants', href: `${base}/cedants` },
-    { label: 'Reinsurers', href: `${base}/reinsurers` },
-    // { label: 'Brokers', href: `${base}/brokers` },
     { label: 'Risk Class', href: `${base}/risk-classes` },
     { label: 'Risk Types', href: `${base}/risk-types` },
     { label: 'Currency', href: `${base}/currency` },

@@ -147,7 +147,7 @@ export function CedantPlacementsTab({
       </div>
 
       <div className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-gray-900">Facultative Placements</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Placements</h3>
         <DataTable
           columns={PLACEMENT_COLUMNS}
           data={paged}
@@ -161,11 +161,9 @@ export function CedantPlacementsTab({
             },
             { label: 'Edit', onClick: () => onEditPlacement(row) },
             {
-              label: 'Make Payment',
+              label: 'Premiums',
               onClick: () =>
-                router.push(
-                  `/${tenantSlug}/operations/reinsurance/payments/new?placementId=${row.id}`,
-                ),
+                router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
             },
             ...(row.status !== 'CANCELLED'
               ? [{ label: 'Endorsement', onClick: () => onEndorsement(row) }]
