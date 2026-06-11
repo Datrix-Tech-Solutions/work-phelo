@@ -1247,11 +1247,15 @@ Implemented now:
 - Manual sync proof-of-concept for recent message metadata.
 - Email threads, messages and attachment metadata persistence.
 - Manual placement-to-thread/message links.
+- Placement-scoped outbound send and reply persistence.
 
 Deferred:
 
-- Sending, replying and forwarding.
+- Forwarding.
 - Attachment file downloads.
+- Attachment sending.
+- Slip, note, cash-call or document emailing.
+- Email templates and retry/outbox queues.
 - AI parsing or OCR.
 - Automatic placement/counterparty updates.
 - Webhook subscriptions and background schedulers.
@@ -1268,20 +1272,22 @@ characters or base64. Never expose encrypted tokens through API responses.
 
 The gateway forwards these routes:
 
-| Method   | Gateway route                                                                         | Permission                                   |
-| -------- | ------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `GET`    | `/api/v1/operations/reinsurance/email/mailboxes`                                      | `operations.reinsurance.email-settings:VIEW` |
-| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/connect`                              | `operations.reinsurance.email-settings:EDIT` |
-| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/:id/verify`                           | `operations.reinsurance.email-settings:EDIT` |
-| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/:id/sync`                             | `operations.reinsurance.email-settings:EDIT` |
-| `DELETE` | `/api/v1/operations/reinsurance/email/mailboxes/:id`                                  | `operations.reinsurance.email-settings:EDIT` |
-| `GET`    | `/api/v1/operations/reinsurance/email/threads`                                        | `operations.reinsurance.email:VIEW`          |
-| `GET`    | `/api/v1/operations/reinsurance/email/threads/:id`                                    | `operations.reinsurance.email:VIEW`          |
-| `GET`    | `/api/v1/operations/reinsurance/email/messages`                                       | `operations.reinsurance.email:VIEW`          |
-| `GET`    | `/api/v1/operations/reinsurance/placements/:placementId/email/threads`                | `operations.reinsurance.email:VIEW`          |
-| `GET`    | `/api/v1/operations/reinsurance/placements/:placementId/email/threads/:threadId`      | `operations.reinsurance.email:VIEW`          |
-| `POST`   | `/api/v1/operations/reinsurance/email/threads/:threadId/placements/:placementId/link` | `operations.reinsurance.email:EDIT`          |
-| `DELETE` | `/api/v1/operations/reinsurance/email/links/:id`                                      | `operations.reinsurance.email:EDIT`          |
+| Method   | Gateway route                                                                            | Permission                                   |
+| -------- | ---------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `GET`    | `/api/v1/operations/reinsurance/email/mailboxes`                                         | `operations.reinsurance.email-settings:VIEW` |
+| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/connect`                                 | `operations.reinsurance.email-settings:EDIT` |
+| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/:id/verify`                              | `operations.reinsurance.email-settings:EDIT` |
+| `POST`   | `/api/v1/operations/reinsurance/email/mailboxes/:id/sync`                                | `operations.reinsurance.email-settings:EDIT` |
+| `DELETE` | `/api/v1/operations/reinsurance/email/mailboxes/:id`                                     | `operations.reinsurance.email-settings:EDIT` |
+| `GET`    | `/api/v1/operations/reinsurance/email/threads`                                           | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/email/threads/:id`                                       | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/email/messages`                                          | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/placements/:placementId/email/threads`                   | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/placements/:placementId/email/threads/:threadId`         | `operations.reinsurance.email:VIEW`          |
+| `POST`   | `/api/v1/operations/reinsurance/placements/:placementId/email/threads`                   | `operations.reinsurance.email:EDIT`          |
+| `POST`   | `/api/v1/operations/reinsurance/placements/:placementId/email/threads/:threadId/replies` | `operations.reinsurance.email:EDIT`          |
+| `POST`   | `/api/v1/operations/reinsurance/email/threads/:threadId/placements/:placementId/link`    | `operations.reinsurance.email:EDIT`          |
+| `DELETE` | `/api/v1/operations/reinsurance/email/links/:id`                                         | `operations.reinsurance.email:EDIT`          |
 
 Connect payload:
 
@@ -1307,10 +1313,53 @@ thread summaries, latest message previews, link metadata and mailbox metadata.
 The detail endpoint returns the linked thread summary plus messages in
 chronological order for conversation-style UI rendering.
 
-The foundation is read/link/unlink only:
+Outbound placement email is placement-scoped and persists the message lifecycle:
 
-- It does not send, reply to or forward email.
+- `POST /placements/:placementId/email/threads` creates a new email thread,
+  creates an outbound `SENDING` message, links the thread to the placement, sends
+  through the selected mailbox provider, then updates the message to `SENT` or
+  `FAILED`.
+- `POST /placements/:placementId/email/threads/:threadId/replies` requires an
+  active placement-thread link, persists an outbound reply in the same thread,
+  then sends through the provider.
+- Provider failures keep the persisted message with `status=FAILED` and
+  `errorMessage`. The backend does not create fake `SENT` records on provider
+  failure.
+- Manual link operations are service-idempotent for an active
+  placement/thread pair. A database partial unique index for active links is
+  deferred because archived-link uniqueness is not currently modeled portably in
+  Prisma.
+
+Send payload:
+
+```json
+{
+  "mailboxConnectionId": "9d5be5c8-5c8a-47b9-9f6c-18d6d77d24e4",
+  "to": [{ "email": "underwriter@example.com", "name": "Avenue Re" }],
+  "cc": [{ "email": "broker@example.com" }],
+  "bcc": [{ "email": "audit@example.com" }],
+  "subject": "Offer slip for FAC/2026/001",
+  "bodyText": "Please review the offer details.",
+  "bodyHtml": "<p>Please review the offer details.</p>"
+}
+```
+
+Reply payload:
+
+```json
+{
+  "mailboxConnectionId": "9d5be5c8-5c8a-47b9-9f6c-18d6d77d24e4",
+  "to": [{ "email": "underwriter@example.com" }],
+  "bodyText": "Following up on this placement."
+}
+```
+
+The current foundation still has intentional limits:
+
+- It does not forward email.
+- It does not send or download attachments.
 - It does not generate or attach PDFs, slips, notes or documents.
+- It does not provide templates or retry/outbox queues.
 - It does not infer placement links from subjects or email body content.
 - Unlinking archives only the placement link; it does not delete the email
   thread or message metadata.

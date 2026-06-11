@@ -1,8 +1,10 @@
 import {
+  Body,
   Controller,
   Get,
   Param,
   ParseUUIDPipe,
+  Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -28,9 +30,14 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import {
   ApiErrorResponseDto,
+  PlacementEmailSendResponseDto,
   PlacementEmailThreadConversationDto,
   PlacementEmailThreadSummaryDto,
 } from './dto/email-response.dto';
+import {
+  ReplyPlacementEmailDto,
+  SendPlacementEmailDto,
+} from './dto/send-placement-email.dto';
 import { EmailPermission } from './email.permissions';
 import { EmailThreadsService } from './email-threads.service';
 
@@ -92,6 +99,53 @@ export class PlacementEmailThreadsController {
       request.user.tenantId,
       placementId,
       threadId,
+    );
+  }
+
+  @Post('threads')
+  @RequirePermissions(EmailPermission.EDIT)
+  @ApiOperation({
+    summary: 'Send a new placement email',
+    description:
+      'Creates a placement-linked email thread, persists an outbound SENDING message, sends through the mailbox provider, and updates the message to SENT or FAILED.',
+  })
+  @ApiParam({ name: 'placementId', format: 'uuid' })
+  @ApiOkResponse({ type: PlacementEmailSendResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  sendPlacementEmail(
+    @Param('placementId', ParseUUIDPipe) placementId: string,
+    @Body() dto: SendPlacementEmailDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.emailThreadsService.sendPlacementEmail(
+      request.user,
+      placementId,
+      dto,
+    );
+  }
+
+  @Post('threads/:threadId/replies')
+  @RequirePermissions(EmailPermission.EDIT)
+  @ApiOperation({
+    summary: 'Reply to a placement email thread',
+    description:
+      'Requires the thread to already be linked to the placement. Persists the outbound reply in the same thread and sends through the mailbox provider.',
+  })
+  @ApiParam({ name: 'placementId', format: 'uuid' })
+  @ApiParam({ name: 'threadId', format: 'uuid' })
+  @ApiOkResponse({ type: PlacementEmailSendResponseDto })
+  @ApiNotFoundResponse({ type: ApiErrorResponseDto })
+  replyToPlacementEmail(
+    @Param('placementId', ParseUUIDPipe) placementId: string,
+    @Param('threadId', ParseUUIDPipe) threadId: string,
+    @Body() dto: ReplyPlacementEmailDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.emailThreadsService.replyToPlacementEmail(
+      request.user,
+      placementId,
+      threadId,
+      dto,
     );
   }
 }
