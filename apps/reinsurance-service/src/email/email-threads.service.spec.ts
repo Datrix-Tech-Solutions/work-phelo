@@ -1,8 +1,16 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
+import {
+  EmailMessageDirection,
+  EmailMessageStatus,
+  MailboxConnectionStatus,
+  MailboxProvider,
+} from '../../prisma/generated/client';
 import { EmailEventPublisher } from '../messaging/email-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailTokenEncryptionService } from './email-token-encryption.service';
 import { EmailThreadsService } from './email-threads.service';
+import { EmailProviderRegistry } from './providers/email-provider.registry';
 
 describe('EmailThreadsService', () => {
   const user: RequestUser = {
@@ -26,24 +34,42 @@ describe('EmailThreadsService', () => {
   };
 
   let prisma: {
+    $transaction: jest.Mock;
     emailThread: Record<string, jest.Mock>;
     emailMessage: Record<string, jest.Mock>;
+    mailboxConnection: Record<string, jest.Mock>;
     placement: Record<string, jest.Mock>;
     placementEmailLink: Record<string, jest.Mock>;
   };
   let publisher: { emailLinked: jest.Mock };
+  let provider: {
+    sendMessage: jest.Mock;
+    replyToMessage: jest.Mock;
+  };
+  let registry: { get: jest.Mock };
+  let encryption: { decrypt: jest.Mock };
   let service: EmailThreadsService;
 
   beforeEach(() => {
     prisma = {
+      $transaction: jest.fn((callback: (tx: typeof prisma) => unknown) =>
+        callback(prisma),
+      ),
       emailThread: {
+        create: jest.fn(),
         findMany: jest.fn(),
         count: jest.fn(),
         findFirst: jest.fn(),
+        update: jest.fn(),
       },
       emailMessage: {
+        create: jest.fn(),
         findMany: jest.fn(),
         count: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+      },
+      mailboxConnection: {
         findFirst: jest.fn(),
       },
       placement: {
@@ -58,11 +84,62 @@ describe('EmailThreadsService', () => {
       },
     };
     publisher = { emailLinked: jest.fn().mockResolvedValue(undefined) };
+    provider = {
+      sendMessage: jest.fn(),
+      replyToMessage: jest.fn(),
+    };
+    registry = { get: jest.fn().mockReturnValue(provider) };
+    encryption = { decrypt: jest.fn().mockReturnValue('access-token') };
     service = new EmailThreadsService(
       prisma as unknown as PrismaService,
       publisher as unknown as EmailEventPublisher,
+      registry as unknown as EmailProviderRegistry,
+      encryption as unknown as EmailTokenEncryptionService,
     );
   });
+
+  const activeMailbox = {
+    id: 'mailbox-1',
+    tenantId: 'tenant-1',
+    provider: MailboxProvider.MICROSOFT_GRAPH,
+    emailAddress: 'placements@example.com',
+    displayName: 'Placements',
+    encryptedAccessToken: 'encrypted-access-token',
+    status: MailboxConnectionStatus.ACTIVE,
+    archivedAt: null,
+  };
+
+  const placementThreadLink = {
+    id: 'link-1',
+    placementId: 'placement-1',
+    threadId: 'thread-1',
+    linkedByUserId: 'user-1',
+    note: null,
+    createdAt: new Date('2026-06-11T09:00:00.000Z'),
+    thread: {
+      id: 'thread-1',
+      subject: 'FAC placement thread',
+      participants: null,
+      lastMessageAt: new Date('2026-06-11T10:00:00.000Z'),
+      messageCount: 1,
+      hasAttachments: false,
+      mailboxConnection: {
+        id: 'mailbox-1',
+        provider: MailboxProvider.MICROSOFT_GRAPH,
+        emailAddress: 'placements@example.com',
+        displayName: 'Placements',
+      },
+      messages: [
+        {
+          id: 'message-1',
+          bodyPreview: 'Hello cedant',
+          receivedAt: null,
+          sentAt: new Date('2026-06-11T10:00:00.000Z'),
+          attachments: [],
+        },
+      ],
+    },
+  };
 
   it('lists only active threads in the current tenant', async () => {
     prisma.emailThread.findMany.mockResolvedValue([thread]);
@@ -243,8 +320,21 @@ describe('EmailThreadsService', () => {
           displayName: null,
         },
         messages: [
-          { id: 'message-1', bodyPreview: 'First' },
-          { id: 'message-2', bodyPreview: 'Second' },
+          {
+            id: 'message-1',
+            bodyPreview: 'First',
+            direction: EmailMessageDirection.INBOUND,
+            receivedAt: new Date('2026-06-11T09:00:00.000Z'),
+            createdAt: new Date('2026-06-11T09:05:00.000Z'),
+          },
+          {
+            id: 'message-2',
+            bodyPreview: 'Second',
+            direction: EmailMessageDirection.OUTBOUND,
+            status: EmailMessageStatus.SENT,
+            sentAt: new Date('2026-06-11T10:00:00.000Z'),
+            createdAt: new Date('2026-06-11T08:00:00.000Z'),
+          },
         ],
       },
     });
@@ -255,21 +345,314 @@ describe('EmailThreadsService', () => {
       'thread-1',
     );
 
-    expect(prisma.placementEmailLink.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          tenantId: 'tenant-1',
-          placementId: 'placement-1',
-          threadId: 'thread-1',
-          archivedAt: null,
-          thread: { archivedAt: null },
+    const findFirstCalls = prisma.placementEmailLink.findFirst.mock
+      .calls as unknown as Array<
+      [
+        {
+          where: Record<string, unknown>;
+          include: {
+            thread: {
+              include: { messages: { orderBy: unknown } };
+            };
+          };
         },
-      }),
-    );
+      ]
+    >;
+    expect(findFirstCalls[0]?.[0].where).toEqual({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      threadId: 'thread-1',
+      archivedAt: null,
+      thread: { archivedAt: null },
+    });
+    expect(
+      findFirstCalls[0]?.[0].include.thread.include.messages.orderBy,
+    ).toEqual([{ createdAt: 'asc' }, { receivedAt: 'asc' }, { sentAt: 'asc' }]);
     expect(result.messages.map((message) => message.id)).toEqual([
       'message-1',
       'message-2',
     ]);
+  });
+
+  it('sends a new placement email and persists the outbound message as sent', async () => {
+    const sentAt = new Date('2026-06-11T10:00:00.000Z');
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.mailboxConnection.findFirst.mockResolvedValue(activeMailbox);
+    prisma.emailThread.create.mockResolvedValue({
+      id: 'thread-1',
+      subject: 'Offer slip',
+    });
+    prisma.emailMessage.create.mockResolvedValue({
+      id: 'message-1',
+      status: EmailMessageStatus.SENDING,
+      direction: EmailMessageDirection.OUTBOUND,
+      attachments: [],
+    });
+    prisma.placementEmailLink.create.mockResolvedValue({
+      id: 'link-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      threadId: 'thread-1',
+      messageId: 'message-1',
+      linkedByUserId: 'user-1',
+      note: null,
+    });
+    provider.sendMessage.mockResolvedValue({
+      providerThreadId: 'provider-thread-1',
+      providerMessageId: 'provider-message-1',
+      internetMessageId: 'internet-1',
+      sentAt,
+    });
+    prisma.emailThread.update.mockResolvedValue({ id: 'thread-1' });
+    prisma.emailMessage.update.mockResolvedValue({
+      id: 'message-1',
+      status: EmailMessageStatus.SENT,
+      direction: EmailMessageDirection.OUTBOUND,
+      providerMessageId: 'provider-message-1',
+      sentAt,
+      attachments: [],
+    });
+    prisma.placementEmailLink.findFirst.mockResolvedValue(placementThreadLink);
+
+    const result = await service.sendPlacementEmail(user, 'placement-1', {
+      mailboxConnectionId: 'mailbox-1',
+      subject: 'Offer slip',
+      to: [{ email: 'cedant@example.com', name: 'Cedant' }],
+      cc: [{ email: 'broker@example.com' }],
+      bcc: [{ email: 'audit@example.com' }],
+      bodyText: 'Please review the attached terms.',
+    });
+
+    const threadCreateCalls = prisma.emailThread.create.mock
+      .calls as unknown as Array<[{ data: Record<string, unknown> }]>;
+    expect(threadCreateCalls[0]?.[0].data).toMatchObject({
+      tenantId: 'tenant-1',
+      mailboxConnectionId: 'mailbox-1',
+      subject: 'Offer slip',
+    });
+    expect(threadCreateCalls[0]?.[0].data.providerThreadId).toEqual(
+      expect.stringMatching(/^pending:thread:/),
+    );
+
+    const messageCreateCalls = prisma.emailMessage.create.mock
+      .calls as unknown as Array<[{ data: Record<string, unknown> }]>;
+    expect(messageCreateCalls[0]?.[0].data).toMatchObject({
+      direction: EmailMessageDirection.OUTBOUND,
+      status: EmailMessageStatus.SENDING,
+      toRecipients: [{ email: 'cedant@example.com', name: 'Cedant' }],
+      ccRecipients: [{ email: 'broker@example.com' }],
+      bccRecipients: [{ email: 'audit@example.com' }],
+      bodyText: 'Please review the attached terms.',
+    });
+    expect(messageCreateCalls[0]?.[0].data).not.toHaveProperty('sentAt');
+    expect(messageCreateCalls[0]?.[0].data.providerMessageId).toEqual(
+      expect.stringMatching(/^pending:message:/),
+    );
+    expect(provider.sendMessage).toHaveBeenCalledWith({
+      accessToken: 'access-token',
+      subject: 'Offer slip',
+      to: [{ email: 'cedant@example.com', name: 'Cedant' }],
+      cc: [{ email: 'broker@example.com' }],
+      bcc: [{ email: 'audit@example.com' }],
+      bodyText: 'Please review the attached terms.',
+      bodyHtml: undefined,
+    });
+    const messageUpdateCalls = prisma.emailMessage.update.mock
+      .calls as unknown as Array<[{ data: Record<string, unknown> }]>;
+    expect(messageUpdateCalls[0]?.[0].data).toMatchObject({
+      providerMessageId: 'provider-message-1',
+      status: EmailMessageStatus.SENT,
+      errorMessage: null,
+    });
+    expect(result.message.status).toBe(EmailMessageStatus.SENT);
+  });
+
+  it('stores a failed outbound message when provider sending fails', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.mailboxConnection.findFirst.mockResolvedValue(activeMailbox);
+    prisma.emailThread.create.mockResolvedValue({
+      id: 'thread-1',
+      subject: 'Offer slip',
+    });
+    prisma.emailMessage.create.mockResolvedValue({
+      id: 'message-1',
+      status: EmailMessageStatus.SENDING,
+      attachments: [],
+    });
+    prisma.placementEmailLink.create.mockResolvedValue({ id: 'link-1' });
+    provider.sendMessage.mockRejectedValue(new Error('provider down'));
+    prisma.emailMessage.update.mockResolvedValue({
+      id: 'message-1',
+      status: EmailMessageStatus.FAILED,
+    });
+
+    await expect(
+      service.sendPlacementEmail(user, 'placement-1', {
+        mailboxConnectionId: 'mailbox-1',
+        subject: 'Offer slip',
+        to: [{ email: 'cedant@example.com' }],
+        bodyText: 'Please review.',
+      }),
+    ).rejects.toThrow('provider down');
+
+    expect(prisma.emailMessage.update).toHaveBeenCalledWith({
+      where: { id_tenantId: { id: 'message-1', tenantId: 'tenant-1' } },
+      data: {
+        status: EmailMessageStatus.FAILED,
+        errorMessage: 'provider down',
+        sentAt: null,
+      },
+    });
+    expect(prisma.emailThread.update).not.toHaveBeenCalled();
+  });
+
+  it('requires a placement-thread link before replying', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.mailboxConnection.findFirst.mockResolvedValue(activeMailbox);
+    prisma.placementEmailLink.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.replyToPlacementEmail(user, 'placement-1', 'thread-1', {
+        mailboxConnectionId: 'mailbox-1',
+        bodyText: 'Thanks.',
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(provider.replyToMessage).not.toHaveBeenCalled();
+  });
+
+  it('persists an outbound reply in the same linked thread', async () => {
+    const sentAt = new Date('2026-06-11T11:00:00.000Z');
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.mailboxConnection.findFirst.mockResolvedValue(activeMailbox);
+    prisma.placementEmailLink.findFirst
+      .mockResolvedValueOnce({
+        id: 'link-1',
+        placementId: 'placement-1',
+        threadId: 'thread-1',
+      })
+      .mockResolvedValueOnce(placementThreadLink);
+    prisma.emailThread.findFirst.mockResolvedValue({
+      id: 'thread-1',
+      subject: 'Offer slip',
+      providerThreadId: 'provider-thread-1',
+      mailboxConnectionId: 'mailbox-1',
+    });
+    prisma.emailMessage.findFirst
+      .mockResolvedValueOnce({
+        id: 'parent-message-1',
+        providerMessageId: 'provider-message-parent',
+      })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        receivedAt: null,
+        sentAt,
+        createdAt: sentAt,
+      });
+    prisma.emailMessage.create.mockResolvedValue({
+      id: 'reply-message-1',
+      status: EmailMessageStatus.SENDING,
+      attachments: [],
+    });
+    prisma.emailMessage.count.mockResolvedValue(2);
+    prisma.emailThread.update.mockResolvedValue({ id: 'thread-1' });
+    provider.replyToMessage.mockResolvedValue({
+      providerThreadId: 'provider-thread-1',
+      providerMessageId: 'provider-message-reply',
+      internetMessageId: 'internet-reply',
+      sentAt,
+    });
+    prisma.emailMessage.update.mockResolvedValue({
+      id: 'reply-message-1',
+      status: EmailMessageStatus.SENT,
+      providerMessageId: 'provider-message-reply',
+      attachments: [],
+    });
+
+    const result = await service.replyToPlacementEmail(
+      user,
+      'placement-1',
+      'thread-1',
+      {
+        mailboxConnectionId: 'mailbox-1',
+        to: [{ email: 'cedant@example.com' }],
+        bodyHtml: '<p>Thanks.</p>',
+      },
+    );
+
+    expect(prisma.placementEmailLink.create).not.toHaveBeenCalled();
+    const replyCreateCalls = prisma.emailMessage.create.mock
+      .calls as unknown as Array<[{ data: Record<string, unknown> }]>;
+    expect(replyCreateCalls[0]?.[0].data).toMatchObject({
+      threadId: 'thread-1',
+      direction: EmailMessageDirection.OUTBOUND,
+      status: EmailMessageStatus.SENDING,
+      parentMessageId: 'parent-message-1',
+      inReplyToMessageId: 'parent-message-1',
+      bodyHtml: '<p>Thanks.</p>',
+    });
+    expect(provider.replyToMessage).toHaveBeenCalledWith({
+      accessToken: 'access-token',
+      providerMessageId: 'provider-message-parent',
+      to: [{ email: 'cedant@example.com' }],
+      cc: undefined,
+      bcc: undefined,
+      bodyText: undefined,
+      bodyHtml: '<p>Thanks.</p>',
+    });
+    expect(result.message.status).toBe(EmailMessageStatus.SENT);
+  });
+
+  it('rejects replies sent through a mailbox that does not own the thread', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEmailLink.findFirst.mockResolvedValue({
+      id: 'link-1',
+      placementId: 'placement-1',
+      threadId: 'thread-1',
+    });
+    prisma.emailThread.findFirst.mockResolvedValue({
+      id: 'thread-1',
+      subject: 'Offer slip',
+      providerThreadId: 'provider-thread-1',
+      mailboxConnectionId: 'mailbox-1',
+    });
+
+    await expect(
+      service.replyToPlacementEmail(user, 'placement-1', 'thread-1', {
+        mailboxConnectionId: 'mailbox-2',
+        bodyText: 'Thanks.',
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.mailboxConnection.findFirst).not.toHaveBeenCalled();
+    expect(provider.replyToMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects outbound send when the mailbox is outside the tenant', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.mailboxConnection.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.sendPlacementEmail(user, 'placement-1', {
+        mailboxConnectionId: 'mailbox-from-other-tenant',
+        subject: 'Offer slip',
+        to: [{ email: 'cedant@example.com' }],
+        bodyText: 'Please review.',
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(provider.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects outbound send without a message body', async () => {
+    await expect(
+      service.sendPlacementEmail(user, 'placement-1', {
+        mailboxConnectionId: 'mailbox-1',
+        subject: 'Offer slip',
+        to: [{ email: 'cedant@example.com' }],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(prisma.placement.findFirst).not.toHaveBeenCalled();
   });
 
   it('returns an existing active placement-thread link instead of duplicating it', async () => {

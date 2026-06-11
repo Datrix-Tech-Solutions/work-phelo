@@ -1,11 +1,32 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
-import { Prisma } from '../../prisma/generated/client';
+import {
+  EmailMessageDirection,
+  EmailMessageStatus,
+  MailboxConnectionStatus,
+  Prisma,
+} from '../../prisma/generated/client';
 import { EmailEventPublisher } from '../messaging/email-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
 import { LinkPlacementEmailDto } from './dto/link-placement-email.dto';
 import { QueryEmailMessagesDto } from './dto/query-email-messages.dto';
 import { QueryEmailThreadsDto } from './dto/query-email-threads.dto';
+import {
+  ReplyPlacementEmailDto,
+  SendPlacementEmailDto,
+} from './dto/send-placement-email.dto';
+import { EmailTokenEncryptionService } from './email-token-encryption.service';
+import { EmailProviderRegistry } from './providers/email-provider.registry';
+import {
+  EmailProviderRecipient,
+  EmailProviderSentMessage,
+} from './providers/email-provider.interface';
 
 const threadInclude = {
   messages: {
@@ -26,16 +47,28 @@ const mailboxSummarySelect = {
   displayName: true,
 } satisfies Prisma.MailboxConnectionSelect;
 
+const mailboxOutboundSelect = {
+  id: true,
+  tenantId: true,
+  provider: true,
+  emailAddress: true,
+  displayName: true,
+  encryptedAccessToken: true,
+  status: true,
+  archivedAt: true,
+} satisfies Prisma.MailboxConnectionSelect;
+
 const placementThreadListInclude = {
   thread: {
     include: {
       mailboxConnection: { select: mailboxSummarySelect },
       messages: {
         orderBy: [
-          { receivedAt: 'desc' as const },
           { createdAt: 'desc' as const },
+          { receivedAt: 'desc' as const },
+          { sentAt: 'desc' as const },
         ],
-        take: 1,
+        take: 10,
         include: { attachments: true },
       },
     },
@@ -48,8 +81,9 @@ const placementThreadDetailInclude = {
       mailboxConnection: { select: mailboxSummarySelect },
       messages: {
         orderBy: [
-          { receivedAt: 'asc' as const },
           { createdAt: 'asc' as const },
+          { receivedAt: 'asc' as const },
+          { sentAt: 'asc' as const },
         ],
         include: { attachments: true },
       },
@@ -68,6 +102,9 @@ type PlacementThreadListRecord = Prisma.PlacementEmailLinkGetPayload<{
 type PlacementThreadDetailRecord = Prisma.PlacementEmailLinkGetPayload<{
   include: typeof placementThreadDetailInclude;
 }>;
+type OutboundMailboxRecord = Prisma.MailboxConnectionGetPayload<{
+  select: typeof mailboxOutboundSelect;
+}>;
 
 @Injectable()
 export class EmailThreadsService {
@@ -76,6 +113,8 @@ export class EmailThreadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly publisher: EmailEventPublisher,
+    private readonly providers: EmailProviderRegistry,
+    private readonly encryption: EmailTokenEncryptionService,
   ) {}
 
   async findThreads(tenantId: string, query: QueryEmailThreadsDto) {
@@ -207,7 +246,273 @@ export class EmailThreadsService {
 
     return {
       thread: this.mapPlacementThreadSummary(link),
-      messages: link.thread.messages,
+      messages: this.sortMessagesByActivity(link.thread.messages, 'asc'),
+    };
+  }
+
+  async sendPlacementEmail(
+    user: RequestUser,
+    placementId: string,
+    dto: SendPlacementEmailDto,
+  ) {
+    this.assertBody(dto.bodyText, dto.bodyHtml);
+    if (!dto.to?.length) {
+      throw new BadRequestException('At least one recipient is required');
+    }
+
+    await this.assertPlacement(user.tenantId, placementId);
+    const mailbox = await this.findOutboundMailbox(
+      user.tenantId,
+      dto.mailboxConnectionId,
+    );
+
+    const provider = this.providers.get(mailbox.provider);
+    const messageId = randomUUID();
+    const threadId = randomUUID();
+    const now = new Date();
+
+    const { thread, message, link } = await this.prisma.$transaction(
+      async (tx) => {
+        const createdThread = await tx.emailThread.create({
+          data: {
+            id: threadId,
+            tenantId: user.tenantId,
+            mailboxConnectionId: mailbox.id,
+            providerThreadId: this.pendingProviderId('thread', threadId),
+            subject: dto.subject,
+            participants: this.jsonOrUndefined({
+              from: { email: mailbox.emailAddress, name: mailbox.displayName },
+              to: dto.to,
+              cc: dto.cc,
+              bcc: dto.bcc,
+            }),
+            lastMessageAt: now,
+            messageCount: 1,
+          },
+        });
+
+        const createdMessage = await tx.emailMessage.create({
+          data: {
+            id: messageId,
+            tenantId: user.tenantId,
+            mailboxConnectionId: mailbox.id,
+            threadId: createdThread.id,
+            providerMessageId: this.pendingProviderId('message', messageId),
+            direction: EmailMessageDirection.OUTBOUND,
+            status: EmailMessageStatus.SENDING,
+            subject: dto.subject,
+            fromEmail: mailbox.emailAddress,
+            fromName: mailbox.displayName,
+            toRecipients: this.jsonOrUndefined(dto.to),
+            ccRecipients: this.jsonOrUndefined(dto.cc),
+            bccRecipients: this.jsonOrUndefined(dto.bcc),
+            bodyPreview: this.preview(dto.bodyText, dto.bodyHtml),
+            bodyText: this.cleanOptional(dto.bodyText),
+            bodyHtml: this.cleanOptional(dto.bodyHtml),
+          },
+          include: messageInclude,
+        });
+
+        const createdLink = await tx.placementEmailLink.create({
+          data: {
+            tenantId: user.tenantId,
+            placementId,
+            threadId: createdThread.id,
+            messageId: createdMessage.id,
+            linkedByUserId: user.id,
+          },
+        });
+
+        return {
+          thread: createdThread,
+          message: createdMessage,
+          link: createdLink,
+        };
+      },
+    );
+
+    const sent = await this.sendWithFailureStatus(
+      user.tenantId,
+      message.id,
+      () =>
+        provider.sendMessage({
+          accessToken: this.encryption.decrypt(mailbox.encryptedAccessToken),
+          subject: dto.subject,
+          to: this.toProviderRecipients(dto.to) ?? [],
+          cc: this.toProviderRecipients(dto.cc),
+          bcc: this.toProviderRecipients(dto.bcc),
+          bodyText: this.providerBody(dto.bodyText),
+          bodyHtml: this.providerBody(dto.bodyHtml),
+        }),
+    );
+
+    await this.prisma.emailThread.update({
+      where: { id_tenantId: { id: thread.id, tenantId: user.tenantId } },
+      data: {
+        providerThreadId: sent.providerThreadId,
+        lastMessageAt: sent.sentAt,
+      },
+    });
+
+    const sentMessage = await this.prisma.emailMessage.update({
+      where: { id_tenantId: { id: message.id, tenantId: user.tenantId } },
+      data: {
+        providerMessageId: sent.providerMessageId,
+        internetMessageId: sent.internetMessageId,
+        status: EmailMessageStatus.SENT,
+        errorMessage: null,
+        sentAt: sent.sentAt,
+      },
+      include: messageInclude,
+    });
+
+    const conversation = await this.findPlacementThread(
+      user.tenantId,
+      placementId,
+      thread.id,
+    );
+
+    return {
+      thread: conversation.thread,
+      message: sentMessage,
+      link,
+    };
+  }
+
+  async replyToPlacementEmail(
+    user: RequestUser,
+    placementId: string,
+    threadId: string,
+    dto: ReplyPlacementEmailDto,
+  ) {
+    this.assertBody(dto.bodyText, dto.bodyHtml);
+    await this.assertPlacement(user.tenantId, placementId);
+
+    const link = await this.prisma.placementEmailLink.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        placementId,
+        threadId,
+        archivedAt: null,
+        thread: { archivedAt: null },
+      },
+    });
+    if (!link) throw new NotFoundException('Placement email thread not found');
+
+    const thread = await this.prisma.emailThread.findFirst({
+      where: { id: threadId, tenantId: user.tenantId, archivedAt: null },
+      select: {
+        id: true,
+        subject: true,
+        providerThreadId: true,
+        mailboxConnectionId: true,
+      },
+    });
+    if (!thread) throw new NotFoundException('Email thread not found');
+    if (dto.mailboxConnectionId !== thread.mailboxConnectionId) {
+      throw new BadRequestException(
+        'Reply mailbox must match the mailbox that owns the thread',
+      );
+    }
+
+    const mailbox = await this.findOutboundMailbox(
+      user.tenantId,
+      thread.mailboxConnectionId,
+    );
+
+    const parentMessage = await this.prisma.emailMessage.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        threadId,
+        NOT: { providerMessageId: { startsWith: 'pending:' } },
+      },
+      orderBy: [
+        { receivedAt: 'desc' },
+        { sentAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      select: { id: true, providerMessageId: true },
+    });
+    if (!parentMessage) {
+      throw new BadRequestException(
+        'Thread has no provider message to reply to',
+      );
+    }
+
+    const provider = this.providers.get(mailbox.provider);
+    const messageId = randomUUID();
+
+    const message = await this.prisma.emailMessage.create({
+      data: {
+        id: messageId,
+        tenantId: user.tenantId,
+        mailboxConnectionId: mailbox.id,
+        threadId,
+        providerMessageId: this.pendingProviderId('message', messageId),
+        direction: EmailMessageDirection.OUTBOUND,
+        status: EmailMessageStatus.SENDING,
+        subject: thread.subject,
+        fromEmail: mailbox.emailAddress,
+        fromName: mailbox.displayName,
+        toRecipients: this.jsonOrUndefined(dto.to),
+        ccRecipients: this.jsonOrUndefined(dto.cc),
+        bccRecipients: this.jsonOrUndefined(dto.bcc),
+        bodyPreview: this.preview(dto.bodyText, dto.bodyHtml),
+        bodyText: this.cleanOptional(dto.bodyText),
+        bodyHtml: this.cleanOptional(dto.bodyHtml),
+        parentMessageId: parentMessage.id,
+        inReplyToMessageId: parentMessage.id,
+      },
+      include: messageInclude,
+    });
+
+    await this.recountThread(user.tenantId, threadId);
+
+    const sent = await this.sendWithFailureStatus(
+      user.tenantId,
+      message.id,
+      () =>
+        provider.replyToMessage({
+          accessToken: this.encryption.decrypt(mailbox.encryptedAccessToken),
+          providerMessageId: parentMessage.providerMessageId,
+          to: this.toProviderRecipients(dto.to),
+          cc: this.toProviderRecipients(dto.cc),
+          bcc: this.toProviderRecipients(dto.bcc),
+          bodyText: this.providerBody(dto.bodyText),
+          bodyHtml: this.providerBody(dto.bodyHtml),
+        }),
+    );
+
+    await this.prisma.emailThread.update({
+      where: { id_tenantId: { id: threadId, tenantId: user.tenantId } },
+      data: {
+        providerThreadId: sent.providerThreadId,
+        lastMessageAt: sent.sentAt,
+      },
+    });
+
+    const sentMessage = await this.prisma.emailMessage.update({
+      where: { id_tenantId: { id: message.id, tenantId: user.tenantId } },
+      data: {
+        providerMessageId: sent.providerMessageId,
+        internetMessageId: sent.internetMessageId,
+        status: EmailMessageStatus.SENT,
+        errorMessage: null,
+        sentAt: sent.sentAt,
+      },
+      include: messageInclude,
+    });
+
+    const conversation = await this.findPlacementThread(
+      user.tenantId,
+      placementId,
+      threadId,
+    );
+
+    return {
+      thread: conversation.thread,
+      message: sentMessage,
+      link,
     };
   }
 
@@ -295,6 +600,23 @@ export class EmailThreadsService {
     if (!placement) throw new NotFoundException('Placement not found');
   }
 
+  private async findOutboundMailbox(
+    tenantId: string,
+    mailboxConnectionId: string,
+  ): Promise<OutboundMailboxRecord> {
+    const mailbox = await this.prisma.mailboxConnection.findFirst({
+      where: {
+        id: mailboxConnectionId,
+        tenantId,
+        archivedAt: null,
+        status: MailboxConnectionStatus.ACTIVE,
+      },
+      select: mailboxOutboundSelect,
+    });
+    if (!mailbox) throw new NotFoundException('Mailbox connection not found');
+    return mailbox;
+  }
+
   private async assertThread(
     tenantId: string,
     threadId: string,
@@ -324,10 +646,109 @@ export class EmailThreadsService {
     return trimmed.length > 0 ? trimmed : null;
   }
 
+  private providerBody(value?: string): string | undefined {
+    const cleaned = this.cleanOptional(value);
+    return cleaned ?? undefined;
+  }
+
+  private assertBody(bodyText?: string, bodyHtml?: string): void {
+    if (!bodyText?.trim() && !bodyHtml?.trim()) {
+      throw new BadRequestException('Email body is required');
+    }
+  }
+
+  private pendingProviderId(type: 'thread' | 'message', id: string): string {
+    return `pending:${type}:${id}`;
+  }
+
+  private preview(bodyText?: string, bodyHtml?: string): string | null {
+    const source =
+      bodyText?.trim() || bodyHtml?.replace(/<[^>]*>/g, ' ').trim();
+    if (!source) return null;
+    return source.replace(/\s+/g, ' ').slice(0, 500);
+  }
+
+  private toProviderRecipients(
+    recipients?: { email: string; name?: string }[],
+  ): EmailProviderRecipient[] | undefined {
+    if (!recipients) return undefined;
+    return recipients.map((recipient) => ({
+      email: recipient.email,
+      ...(recipient.name ? { name: recipient.name } : {}),
+    }));
+  }
+
+  private jsonOrUndefined(value: unknown): Prisma.InputJsonValue | undefined {
+    return value === undefined ? undefined : (value as Prisma.InputJsonValue);
+  }
+
+  private async sendWithFailureStatus(
+    tenantId: string,
+    messageId: string,
+    send: () => Promise<EmailProviderSentMessage>,
+  ): Promise<EmailProviderSentMessage> {
+    try {
+      return await send();
+    } catch (error) {
+      await this.markOutboundFailed(tenantId, messageId, error);
+      throw error;
+    }
+  }
+
+  private async markOutboundFailed(
+    tenantId: string,
+    messageId: string,
+    error: unknown,
+  ): Promise<void> {
+    await this.prisma.emailMessage.update({
+      where: { id_tenantId: { id: messageId, tenantId } },
+      data: {
+        status: EmailMessageStatus.FAILED,
+        errorMessage: this.errorMessage(error),
+        sentAt: null,
+      },
+    });
+  }
+
+  private async recountThread(
+    tenantId: string,
+    threadId: string,
+  ): Promise<void> {
+    const [messageCount, hasAttachments, latestMessage] = await Promise.all([
+      this.prisma.emailMessage.count({ where: { tenantId, threadId } }),
+      this.prisma.emailMessage.findFirst({
+        where: { tenantId, threadId, hasAttachments: true },
+        select: { id: true },
+      }),
+      this.prisma.emailMessage.findFirst({
+        where: { tenantId, threadId },
+        orderBy: [
+          { receivedAt: 'desc' },
+          { sentAt: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        select: { receivedAt: true, sentAt: true, createdAt: true },
+      }),
+    ]);
+
+    await this.prisma.emailThread.update({
+      where: { id_tenantId: { id: threadId, tenantId } },
+      data: {
+        messageCount,
+        hasAttachments: Boolean(hasAttachments),
+        lastMessageAt:
+          latestMessage?.receivedAt ??
+          latestMessage?.sentAt ??
+          latestMessage?.createdAt,
+      },
+    });
+  }
+
   private mapPlacementThreadSummary(
     link: PlacementThreadListRecord | PlacementThreadDetailRecord,
   ) {
-    const latestMessage = link.thread.messages[0];
+    const messages = this.sortMessagesByActivity(link.thread.messages, 'desc');
+    const latestMessage = messages[0];
 
     return {
       linkId: link.id,
@@ -383,5 +804,29 @@ export class EmailThreadsService {
 
   private errorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+  }
+
+  private sortMessagesByActivity<T extends { createdAt?: Date | null }>(
+    messages: T[],
+    direction: 'asc' | 'desc',
+  ): T[] {
+    return [...messages].sort((left, right) => {
+      const diff =
+        this.messageActivityAt(left).getTime() -
+        this.messageActivityAt(right).getTime();
+      return direction === 'asc' ? diff : -diff;
+    });
+  }
+
+  private messageActivityAt(message: {
+    direction?: EmailMessageDirection | null;
+    receivedAt?: Date | null;
+    sentAt?: Date | null;
+    createdAt?: Date | null;
+  }): Date {
+    if (message.direction === EmailMessageDirection.OUTBOUND) {
+      return message.sentAt ?? message.createdAt ?? new Date(0);
+    }
+    return message.receivedAt ?? message.createdAt ?? new Date(0);
   }
 }

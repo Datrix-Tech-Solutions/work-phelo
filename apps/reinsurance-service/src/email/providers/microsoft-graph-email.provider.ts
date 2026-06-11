@@ -4,6 +4,10 @@ import {
   EmailProvider,
   EmailProviderMailboxMetadata,
   EmailProviderMessage,
+  EmailProviderRecipient,
+  EmailProviderReplyInput,
+  EmailProviderSendInput,
+  EmailProviderSentMessage,
   EmailProviderSyncInput,
   EmailProviderSyncResult,
   EmailProviderVerifyInput,
@@ -19,6 +23,13 @@ type GraphUser = {
 type GraphEmailAddress = {
   emailAddress?: {
     address?: string;
+    name?: string;
+  };
+};
+
+type GraphRecipient = {
+  emailAddress: {
+    address: string;
     name?: string;
   };
 };
@@ -43,6 +54,10 @@ type GraphMessagesResponse = {
   '@odata.nextLink'?: string;
 };
 
+type FetchResponse = Awaited<ReturnType<typeof fetch>>;
+
+const GRAPH_IMMUTABLE_ID_HEADER = 'IdType="ImmutableId"';
+
 @Injectable()
 export class MicrosoftGraphEmailProvider implements EmailProvider {
   async verifyConnection(
@@ -52,7 +67,10 @@ export class MicrosoftGraphEmailProvider implements EmailProvider {
     const response = await fetch(
       'https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName',
       {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Prefer: GRAPH_IMMUTABLE_ID_HEADER,
+        },
       },
     );
 
@@ -100,6 +118,44 @@ export class MicrosoftGraphEmailProvider implements EmailProvider {
     };
   }
 
+  async sendMessage(
+    input: EmailProviderSendInput,
+  ): Promise<EmailProviderSentMessage> {
+    const accessToken = this.requireToken(input.accessToken);
+    const draft = await this.createDraft(accessToken, {
+      subject: input.subject,
+      body: this.body(input),
+      toRecipients: this.toGraphRecipients(input.to),
+      ccRecipients: this.toGraphRecipients(input.cc),
+      bccRecipients: this.toGraphRecipients(input.bcc),
+    });
+
+    await this.sendDraft(accessToken, draft.id);
+    return this.toSentMessage(draft);
+  }
+
+  async replyToMessage(
+    input: EmailProviderReplyInput,
+  ): Promise<EmailProviderSentMessage> {
+    const accessToken = this.requireToken(input.accessToken);
+    const draft = await this.createReplyDraft(
+      accessToken,
+      input.providerMessageId,
+    );
+
+    await this.patchDraft(accessToken, draft.id, {
+      body: this.body(input),
+      ...(input.to ? { toRecipients: this.toGraphRecipients(input.to) } : {}),
+      ...(input.cc ? { ccRecipients: this.toGraphRecipients(input.cc) } : {}),
+      ...(input.bcc
+        ? { bccRecipients: this.toGraphRecipients(input.bcc) }
+        : {}),
+    });
+
+    await this.sendDraft(accessToken, draft.id);
+    return this.toSentMessage(draft);
+  }
+
   private requireToken(accessToken?: string): string {
     if (!accessToken) {
       throw new BadRequestException(
@@ -107,6 +163,158 @@ export class MicrosoftGraphEmailProvider implements EmailProvider {
       );
     }
     return accessToken;
+  }
+
+  private async createDraft(
+    accessToken: string,
+    payload: Record<string, unknown>,
+  ): Promise<
+    Required<Pick<GraphMessage, 'id' | 'conversationId'>> & GraphMessage
+  > {
+    const response = await fetch(
+      'https://graph.microsoft.com/v1.0/me/messages',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          Prefer: GRAPH_IMMUTABLE_ID_HEADER,
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    return this.parseDraftResponse(response, 'Microsoft Graph draft creation');
+  }
+
+  private async createReplyDraft(
+    accessToken: string,
+    providerMessageId: string,
+  ): Promise<
+    Required<Pick<GraphMessage, 'id' | 'conversationId'>> & GraphMessage
+  > {
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(providerMessageId)}/createReply`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          Prefer: GRAPH_IMMUTABLE_ID_HEADER,
+        },
+      },
+    );
+
+    return this.parseDraftResponse(
+      response,
+      'Microsoft Graph reply draft creation',
+    );
+  }
+
+  private async patchDraft(
+    accessToken: string,
+    providerMessageId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(providerMessageId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+          Prefer: GRAPH_IMMUTABLE_ID_HEADER,
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    if (!response.ok) {
+      throw new BadRequestException(
+        `Microsoft Graph draft update failed with status ${response.status}`,
+      );
+    }
+  }
+
+  private async sendDraft(
+    accessToken: string,
+    providerMessageId: string,
+  ): Promise<void> {
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(providerMessageId)}/send`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Prefer: GRAPH_IMMUTABLE_ID_HEADER,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      throw new BadRequestException(
+        `Microsoft Graph send failed with status ${response.status}`,
+      );
+    }
+  }
+
+  private async parseDraftResponse(
+    response: FetchResponse,
+    operation: string,
+  ): Promise<
+    Required<Pick<GraphMessage, 'id' | 'conversationId'>> & GraphMessage
+  > {
+    if (!response.ok) {
+      throw new BadRequestException(
+        `${operation} failed with status ${response.status}`,
+      );
+    }
+
+    const draft = (await response.json()) as GraphMessage;
+    if (!draft.id || !draft.conversationId) {
+      throw new BadRequestException(
+        `${operation} did not return message and conversation identifiers`,
+      );
+    }
+
+    return draft as Required<Pick<GraphMessage, 'id' | 'conversationId'>> &
+      GraphMessage;
+  }
+
+  private body(input: { bodyHtml?: string; bodyText?: string }): {
+    contentType: 'HTML' | 'Text';
+    content: string;
+  } {
+    if (input.bodyHtml?.trim()) {
+      return { contentType: 'HTML', content: input.bodyHtml };
+    }
+
+    return { contentType: 'Text', content: input.bodyText ?? '' };
+  }
+
+  private toGraphRecipients(
+    recipients?: EmailProviderRecipient[],
+  ): GraphRecipient[] {
+    return (recipients ?? []).map((recipient) => ({
+      emailAddress: {
+        address: recipient.email,
+        ...(recipient.name ? { name: recipient.name } : {}),
+      },
+    }));
+  }
+
+  private toSentMessage(
+    message: Required<Pick<GraphMessage, 'id' | 'conversationId'>> &
+      GraphMessage,
+  ): EmailProviderSentMessage {
+    // All send/reply calls request Microsoft Graph immutable IDs, so this draft
+    // ID remains the durable message ID after Graph moves the message to Sent.
+    return {
+      providerMessageId: message.id,
+      providerThreadId: message.conversationId,
+      internetMessageId: message.internetMessageId,
+      sentAt: this.toDate(message.sentDateTime) ?? new Date(),
+    };
   }
 
   private toProviderMessage(message: GraphMessage): EmailProviderMessage[] {
