@@ -77,8 +77,9 @@ Endorsements may be created once at least one placement closing exists. Before
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:
 connection metadata, provider verification, sync proof-of-concept, thread/message
-metadata and manual placement links. They do not send/reply/forward email, download
-attachments, parse content with AI or automatically update placements.
+metadata, manual placement links and placement-scoped conversation reads. They do
+not send/reply/forward email, download attachments, parse content with AI or
+automatically update placements.
 
 Documentation is exposed only when \`ENABLE_SWAGGER=true\`; the deployment
 pipeline enables it for development only.
@@ -176,6 +177,10 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Email Threads',
       'Thread/message metadata and manual placement email links',
+    )
+    .addTag(
+      'Reinsurance - Placement Emails',
+      'Placement-scoped linked email thread and conversation views',
     )
     .addCookieAuth('access_token')
     .addBearerAuth(

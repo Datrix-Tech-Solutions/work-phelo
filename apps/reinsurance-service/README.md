@@ -1278,6 +1278,8 @@ The gateway forwards these routes:
 | `GET`    | `/api/v1/operations/reinsurance/email/threads`                                        | `operations.reinsurance.email:VIEW`          |
 | `GET`    | `/api/v1/operations/reinsurance/email/threads/:id`                                    | `operations.reinsurance.email:VIEW`          |
 | `GET`    | `/api/v1/operations/reinsurance/email/messages`                                       | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/placements/:placementId/email/threads`                | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/placements/:placementId/email/threads/:threadId`      | `operations.reinsurance.email:VIEW`          |
 | `POST`   | `/api/v1/operations/reinsurance/email/threads/:threadId/placements/:placementId/link` | `operations.reinsurance.email:EDIT`          |
 | `DELETE` | `/api/v1/operations/reinsurance/email/links/:id`                                      | `operations.reinsurance.email:EDIT`          |
 
@@ -1297,6 +1299,21 @@ Connect payload:
 The access and refresh tokens are write-only inputs. Responses return mailbox
 metadata only. `sync` stores provider message metadata and attachment metadata
 only; it does not download attachment content.
+
+Placement email conversations are built from explicit `PlacementEmailLink`
+records. A synced mailbox thread can be manually linked to a placement, then read
+through the placement-scoped conversation endpoints. The list endpoint returns
+thread summaries, latest message previews, link metadata and mailbox metadata.
+The detail endpoint returns the linked thread summary plus messages in
+chronological order for conversation-style UI rendering.
+
+The foundation is read/link/unlink only:
+
+- It does not send, reply to or forward email.
+- It does not generate or attach PDFs, slips, notes or documents.
+- It does not infer placement links from subjects or email body content.
+- Unlinking archives only the placement link; it does not delete the email
+  thread or message metadata.
 
 Email frontend integration should follow the same route/key style as
 Counterparties and Placements:
@@ -1318,6 +1335,10 @@ const emailKeys = {
     [...emailKeys.all, 'mailboxes', params] as const,
   threads: (params: EmailThreadQuery) =>
     [...emailKeys.all, 'threads', params] as const,
+  placementThreads: (placementId: string) =>
+    [...emailKeys.all, 'placements', placementId, 'threads'] as const,
+  placementThread: (placementId: string, threadId: string) =>
+    [...emailKeys.placementThreads(placementId), threadId] as const,
   messages: (params: EmailMessageQuery) =>
     [...emailKeys.all, 'messages', params] as const,
 };
