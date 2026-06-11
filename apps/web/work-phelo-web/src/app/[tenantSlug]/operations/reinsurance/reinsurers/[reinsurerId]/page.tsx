@@ -53,6 +53,8 @@ export default function ReinsurerDetailPage({
           role: participant.role,
           sharePercent: participant.sharePercent,
           participantStatus: participant.status,
+          placementStatus: p.status,
+          offerType: 'Facultative',
           inceptionDate: p.inceptionDate,
           expiryDate: p.expiryDate,
         },

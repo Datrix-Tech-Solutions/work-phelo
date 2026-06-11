@@ -25,7 +25,6 @@ export function MailPreviewModal({
   recipients,
   onSend,
   onClose,
-  onClosePlacement,
 }: MailPreviewModalProps) {
   const [localRecipients, setLocalRecipients] = useState<string[]>(recipients);
   const [addingRecipient, setAddingRecipient] = useState(false);
@@ -84,17 +83,6 @@ export function MailPreviewModal({
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            {onClosePlacement && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  onClosePlacement();
-                  handleClose();
-                }}
-              >
-                Close Placement
-              </Button>
-            )}
             <Button onClick={handleSend}>Send</Button>
           </div>
         </div>

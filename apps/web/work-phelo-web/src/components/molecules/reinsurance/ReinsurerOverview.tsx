@@ -13,6 +13,11 @@ function formatTerritory(addresses: Counterparty['addresses']): string {
   return primary.state ? `${primary.state}, ${country}` : country;
 }
 
+function formatCity(addresses: Counterparty['addresses']): string {
+  const primary = addresses.find((a) => a.isPrimary) ?? addresses[0];
+  return primary?.city ?? '—';
+}
+
 interface ReinsurerOverviewProps {
   reinsurer: Counterparty;
 }
@@ -46,6 +51,7 @@ export function ReinsurerOverview({ reinsurer }: ReinsurerOverviewProps) {
             label="Brokerage Fee"
             value={reinsurer.brokerageFee != null ? `${reinsurer.brokerageFee}%` : '—'}
           />
+          <DetailField label="Address" value={formatCity(reinsurer.addresses)} />
           <DetailField label="Territory" value={formatTerritory(reinsurer.addresses)} />
           {reinsurer.notes && <DetailField label="Notes" value={reinsurer.notes} />}
         </div>

@@ -48,7 +48,7 @@ export function ReinsurerPlacementsTab({
       </div>
 
       <div className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-gray-900">Facultative Placements</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Offers</h3>
         <ReinsurerPoliciesTable
           data={participations}
           isLoading={isLoading}

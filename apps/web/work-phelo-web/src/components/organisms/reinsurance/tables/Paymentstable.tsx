@@ -2,15 +2,15 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
+import { useQueries } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   Facultative,
   FacultativeStatus,
-  PlacementDisplayStatus,
-  PLACEMENT_DISPLAY_STATUSES,
-  toDisplayStatus,
+  PlacementPayment,
   toStatusLabel,
 } from '@/types/reinsurance';
 import { useFacultatives, usePlacementPayments } from '@/hooks';
@@ -37,7 +37,7 @@ const RAW_STATUS_VARIANT_MAP: Record<
 > = {
   DRAFT: 'neutral',
   MARKETING: 'warning',
-  PARTIALLY_PLACED: 'warning',
+  PARTIALLY_PLACED: 'success',
   PLACED: 'success',
   CLOSING: 'warning',
   CLOSED: 'success',
@@ -53,7 +53,13 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Paid: 'text-xs text-green-600 font-medium',
 };
 
-const STATUS_FILTER_OPTIONS = PLACEMENT_DISPLAY_STATUSES.map((s) => ({ value: s, label: s }));
+const STATUS_FILTER_OPTIONS = [
+  { value: 'Placed', label: 'Placed' },
+  { value: 'Closed', label: 'Closed' },
+  { value: 'Outstanding', label: 'Outstanding' },
+  { value: 'Partially Paid', label: 'Partially Paid' },
+  { value: 'Paid', label: 'Paid' },
+];
 
 function netPremiumFor(row: Facultative): number {
   const facPremium =
@@ -77,7 +83,7 @@ function PaymentSummaryCell({ placement }: { placement: Facultative }) {
   const cur = placement.currency ?? '';
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-medium text-gray-900">
+      <span className="font-bold text-gray-900">
         {cur} {fmtAmount(paid)}
       </span>
       <span className="text-xs text-gray-400">
@@ -134,7 +140,7 @@ const COLUMNS: Column<Facultative>[] = [
     label: 'Sum Insured',
     width: '1.1fr',
     render: (row) => (
-      <span className="font-medium text-gray-900 whitespace-nowrap">
+      <span className="font-small text-gray-900 whitespace-nowrap">
         {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
       </span>
     ),
@@ -149,7 +155,7 @@ const COLUMNS: Column<Facultative>[] = [
           ? row.sumInsured * (row.facultativeOffer / 100)
           : null;
       return (
-        <span className="font-medium text-gray-900 whitespace-nowrap">
+        <span className="font-small text-gray-900 whitespace-nowrap">
           {facSumInsured != null ? `${row.currency ?? ''} ${fmtAmount(facSumInsured)}` : '—'}
         </span>
       );
@@ -172,6 +178,23 @@ const COLUMNS: Column<Facultative>[] = [
         <span className="font-medium text-gray-900 whitespace-nowrap">
           {netPremium != null ? `${row.currency ?? ''} ${fmtAmount(netPremium)}` : '—'}
         </span>
+      );
+    },
+  },
+  {
+    key: 'participants' as keyof Facultative,
+    label: 'Participants',
+    width: '110px',
+    render: (row) => {
+      const total = row.participants?.length ?? 0;
+      const accepted = row.participants?.filter((p) => p.status === 'ACCEPTED').length ?? 0;
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-semibold text-gray-900">
+            {accepted} / {total}
+          </span>
+          <span className="text-xs text-gray-400">accepted</span>
+        </div>
       );
     },
   },
@@ -204,6 +227,15 @@ const COLUMNS: Column<Facultative>[] = [
   },
 ];
 
+const CLOSING_STATUSES: FacultativeStatus[] = [
+  'PARTIALLY_PLACED',
+  'PLACED',
+  'CLOSING',
+  'CLOSED',
+  'DECLINED',
+  'CANCELLED',
+];
+
 export function PaymentsTable() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -214,6 +246,35 @@ export function PaymentsTable() {
 
   const { data: allRows = [], isLoading } = useFacultatives();
 
+  const closingRows = useMemo(
+    () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
+    [allRows],
+  );
+
+  const paymentQueries = useQueries({
+    queries: closingRows.map((row) => ({
+      queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
+      queryFn: async () => {
+        const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
+  const paymentStatusMap = useMemo(() => {
+    const map = new Map<string, PaymentStatus>();
+    closingRows.forEach((row, i) => {
+      const payments = paymentQueries[i]?.data ?? [];
+      const netPremium = netPremiumFor(row);
+      const paid = totalPaidFor(payments);
+      let status: PaymentStatus = 'Outstanding';
+      if (netPremium > 0 && paid >= netPremium) status = 'Paid';
+      else if (paid > 0) status = 'Partially Paid';
+      map.set(row.id, status);
+    });
+    return map;
+  }, [closingRows, paymentQueries]);
+
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
     for (const r of allRows) seen.set(r.cedant.id, r.cedant.name);
@@ -223,7 +284,7 @@ export function PaymentsTable() {
   }, [allRows]);
 
   const filtered = useMemo(() => {
-    let rows = allRows;
+    let rows = closingRows;
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -234,15 +295,23 @@ export function PaymentsTable() {
       );
     }
     if (statusFilter) {
-      rows = rows.filter(
-        (r) => toDisplayStatus(r.status) === (statusFilter as PlacementDisplayStatus),
-      );
+      if (statusFilter === 'Placed') {
+        rows = rows.filter((r) =>
+          (['PLACED', 'PARTIALLY_PLACED', 'CLOSING'] as FacultativeStatus[]).includes(r.status),
+        );
+      } else if (statusFilter === 'Closed') {
+        rows = rows.filter((r) =>
+          (['CLOSED', 'DECLINED', 'CANCELLED'] as FacultativeStatus[]).includes(r.status),
+        );
+      } else {
+        rows = rows.filter((r) => paymentStatusMap.get(r.id) === (statusFilter as PaymentStatus));
+      }
     }
     if (cedantFilter) {
       rows = rows.filter((r) => r.cedant.id === cedantFilter);
     }
     return rows;
-  }, [allRows, search, statusFilter, cedantFilter]);
+  }, [closingRows, search, statusFilter, cedantFilter, paymentStatusMap]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);

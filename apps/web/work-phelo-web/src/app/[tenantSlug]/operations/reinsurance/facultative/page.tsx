@@ -7,8 +7,8 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 type FacultativePageTab = 'placements' | 'closing';
 
 const TABS = [
-  { key: 'placements', label: 'Placements' },
-  { key: 'closing', label: 'Closing' },
+  { key: 'placements', label: 'Offers' },
+  { key: 'closing', label: 'Closings' },
 ];
 
 export default function FacultativePage() {
@@ -27,7 +27,7 @@ export default function FacultativePage() {
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as FacultativePageTab)}
       />
-      <FacultativeTable tab={activeTab} />
+      <FacultativeTable key={activeTab} tab={activeTab} />
     </div>
   );
 }

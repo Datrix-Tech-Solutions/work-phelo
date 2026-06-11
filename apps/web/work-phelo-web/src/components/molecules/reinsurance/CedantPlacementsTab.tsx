@@ -5,15 +5,41 @@ import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/atoms/Badge';
 import { StatCard } from '@/components/atoms/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { Facultative, toDisplayStatus } from '@/types/reinsurance';
+import {
+  Facultative,
+  FacultativeStatus,
+  toDisplayStatus,
+  toStatusLabel,
+} from '@/types/reinsurance';
+import { usePlacementPayments } from '@/hooks';
 
 const PAGE_SIZE = 10;
 
-const STATUS_VARIANT_MAP: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
-  Open: 'warning',
-  Closed: 'success',
-  Cancelled: 'danger',
+const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'danger' | 'neutral'> =
+  {
+    DRAFT: 'neutral',
+    MARKETING: 'warning',
+    PARTIALLY_PLACED: 'warning',
+    PLACED: 'success',
+    CLOSING: 'success',
+    CLOSED: 'success',
+    DECLINED: 'danger',
+    CANCELLED: 'danger',
+  };
+
+type PaymentStatus = 'Outstanding' | 'Partially Paid' | 'Paid';
+
+const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
+  Outstanding: 'text-xs text-gray-400',
+  'Partially Paid': 'text-xs text-yellow-600 font-medium',
+  Paid: 'text-xs text-green-600 font-medium',
 };
+
+function fmtAmount(val: number | null, currency: string | null): string {
+  if (val == null) return '—';
+  const prefix = currency ? `${currency} ` : '';
+  return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return '—';
@@ -24,46 +50,75 @@ function fmtDate(iso: string | null): string {
   });
 }
 
-function fmtAmount(val: number | null, currency: string | null): string {
-  if (val == null) return '—';
-  const prefix = currency ? `${currency} ` : '';
-  return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function netPremiumFor(p: Facultative): number {
+  const facPremium =
+    p.premium != null && p.facultativeOffer != null ? (p.facultativeOffer / 100) * p.premium : 0;
+  return p.commission != null ? facPremium * (1 - p.commission / 100) : facPremium;
+}
+
+function PaymentStatusCell({ placement }: { placement: Facultative }) {
+  const { data: payments = [] } = usePlacementPayments(placement.id);
+  const netPremium = netPremiumFor(placement);
+  const paid = payments
+    .filter((p) => p.status === 'RECORDED')
+    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+
+  let paymentStatus: PaymentStatus = 'Outstanding';
+  if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
+  else if (paid > 0) paymentStatus = 'Partially Paid';
+
+  return (
+    <div className="flex flex-col gap-1 items-start">
+      <Badge
+        label={toStatusLabel(placement.status)}
+        variant={STATUS_VARIANT_MAP[placement.status]}
+      />
+      <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
+    </div>
+  );
 }
 
 const PLACEMENT_COLUMNS: Column<Facultative>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
-    width: '1fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.reference}</span>,
+    width: '190px',
+    render: (row) => (
+      <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-300 text-xs font-medium text-blue-700 bg-blue-50 whitespace-nowrap">
+        {row.reference}
+      </span>
+    ),
   },
   {
     key: 'title',
-    label: 'Insured',
-    width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{row.title}</span>,
-  },
-  {
-    key: 'classOfBusiness',
-    label: 'Risk Type',
-    width: '1.2fr',
-    render: (row) => <span className="text-gray-600">{row.classOfBusiness ?? '—'}</span>,
+    label: 'Insured / Risk Type',
+    width: '1.6fr',
+    render: (row) => (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
+        <span className="text-xs text-gray-400">{row.classOfBusiness ?? '—'}</span>
+      </div>
+    ),
   },
   {
     key: 'facultativeOffer',
-    label: 'Fac. Offer (%)',
-    width: '110px',
+    label: 'Fac. Offer',
+    width: '100px',
     render: (row) => (
-      <span className="text-gray-700">
+      <span className="font-semibold text-gray-900">
         {row.facultativeOffer != null ? `${row.facultativeOffer}%` : '—'}
       </span>
     ),
   },
   {
     key: 'premium',
-    label: 'Gross Premium',
+    label: 'Fac. Premium',
     width: '1.2fr',
-    render: (row) => <span className="text-gray-700">{fmtAmount(row.premium, row.currency)}</span>,
+    render: (row) => (
+      <span className="font-semibold text-gray-900 whitespace-nowrap">
+        {fmtAmount(row.premium, row.currency)}
+      </span>
+    ),
   },
   {
     key: 'commission',
@@ -71,30 +126,65 @@ const PLACEMENT_COLUMNS: Column<Facultative>[] = [
     width: '1.2fr',
     render: (row) => {
       const net =
-        row.premium != null && row.commission != null
-          ? row.premium * (1 - row.commission / 100)
+        row.premium != null && row.facultativeOffer != null && row.commission != null
+          ? (row.facultativeOffer / 100) * row.premium * (1 - row.commission / 100)
           : null;
-      return <span className="text-gray-700">{fmtAmount(net, row.currency)}</span>;
+      return (
+        <span className="font-medium text-gray-700 whitespace-nowrap">
+          {fmtAmount(net, row.currency)}
+        </span>
+      );
+    },
+  },
+  {
+    key: 'totalAcceptedPercent',
+    label: 'Signing Progress',
+    width: '160px',
+    className: 'pr-6',
+    render: (row) => {
+      const facOffer = row.facultativeOffer ?? 0;
+      const accepted = row.totalAcceptedPercent ?? 0;
+      const barWidth = facOffer > 0 ? Math.min(100, (accepted / facOffer) * 100) : 0;
+      return (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-medium text-gray-700">{accepted.toFixed(1)}%</span>
+            <span className="text-gray-400">{barWidth.toFixed(0)}% Placed</span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${barWidth >= 100 ? 'bg-green-500' : 'bg-blue-500'}`}
+              style={{ width: `${barWidth}%` }}
+            />
+          </div>
+        </div>
+      );
     },
   },
   {
     key: 'participants',
     label: 'Participants',
-    width: '100px',
-    render: (row) => (
-      <span className="text-gray-700">
-        {row.participants.filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED').length}
-      </span>
-    ),
+    width: '110px',
+    render: (row) => {
+      const total = row.participants?.length ?? 0;
+      const accepted =
+        row.participants?.filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED').length ??
+        0;
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-semibold text-gray-900">
+            {accepted} / {total}
+          </span>
+          <span className="text-xs text-gray-400">accepted</span>
+        </div>
+      );
+    },
   },
   {
     key: 'status',
     label: 'Status',
-    width: '110px',
-    render: (row) => {
-      const display = toDisplayStatus(row.status);
-      return <Badge label={display} variant={STATUS_VARIANT_MAP[display] ?? 'neutral'} />;
-    },
+    width: '120px',
+    render: (row) => <PaymentStatusCell placement={row} />,
   },
   {
     key: 'inceptionDate',
@@ -147,7 +237,7 @@ export function CedantPlacementsTab({
       </div>
 
       <div className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-gray-900">Placements</h3>
+        <h3 className="text-sm font-semibold text-gray-900">Offers</h3>
         <DataTable
           columns={PLACEMENT_COLUMNS}
           data={paged}

@@ -193,7 +193,7 @@ export default function FacultativeFormFields({
                 maxLength: { value: 200, message: 'Max 200 characters' },
               })}
               error={errors.title}
-              placeholder="e.g. Property All Risk – Accra Breweries"
+              placeholder="e.g. Accra Breweries"
             />
           </div>
 

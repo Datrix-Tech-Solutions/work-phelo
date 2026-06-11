@@ -40,7 +40,7 @@ export function CounterpartyAddressFields<T extends FieldValues>({
   const addrErrors = (errors as any)?.address ?? {};
 
   return (
-    <FormSection title="Location">
+    <FormSection title="Address">
       <div className="flex flex-col gap-4">
         {/* Country / Territory */}
         <Controller
@@ -81,14 +81,12 @@ export function CounterpartyAddressFields<T extends FieldValues>({
         )}
 
         {/* City — Ghana only */}
-        {isGhana && (
-          <FormField
-            label="City"
-            registration={register('address.city' as Path<T>)}
-            error={addrErrors.city}
-            placeholder="e.g. Accra"
-          />
-        )}
+        <FormField
+          label="City"
+          registration={register('address.city' as Path<T>)}
+          error={addrErrors.city}
+          placeholder="e.g. Accra"
+        />
       </div>
     </FormSection>
   );
