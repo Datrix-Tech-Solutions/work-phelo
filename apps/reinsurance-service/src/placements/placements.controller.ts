@@ -65,12 +65,19 @@ import { PlacementEndorsementClosingsService } from './placement-endorsement-clo
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import {
+  PlacementClaimCashCallListResponseDto,
+  PlacementClaimCashCallResponseDto,
+} from './dto/placement-claim-cash-call-response.dto';
+import {
   PlacementClaimAllocationListResponseDto,
   PlacementClaimListResponseDto,
   PlacementClaimResponseDto,
 } from './dto/placement-claim-response.dto';
+import { UpdatePlacementClaimCashCallStatusDto } from './dto/update-placement-claim-cash-call-status.dto';
 import { UpdatePlacementClaimStatusDto } from './dto/update-placement-claim-status.dto';
 import { UpdatePlacementClaimDto } from './dto/update-placement-claim.dto';
+import { VoidPlacementClaimCashCallDto } from './dto/void-placement-claim-cash-call.dto';
+import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import {
   PlacementClosingListResponseDto,
@@ -130,6 +137,7 @@ export class PlacementsController {
     private readonly notesService: PlacementNotesService,
     private readonly paymentsService: PlacementPaymentsService,
     private readonly claimsService: PlacementClaimsService,
+    private readonly claimCashCallsService: PlacementClaimCashCallsService,
   ) {}
 
   @Get()
@@ -937,6 +945,173 @@ export class PlacementsController {
       claimId,
     );
     return { items };
+  }
+
+  @Get(':id/claims/:claimId/cash-calls')
+  @ApiTags('Reinsurance - Claim Cash Calls')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List claim cash calls',
+    description:
+      'Returns one-allocation-per-cash-call records generated from claim allocation snapshots. Cash calls do not lock placements or settle claims in PR1.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiOkResponse({ type: PlacementClaimCashCallListResponseDto })
+  async findClaimCashCalls(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.claimCashCallsService.findAll(
+      request.user.tenantId,
+      id,
+      claimId,
+    );
+    return { items };
+  }
+
+  @Get(':id/claims/:claimId/cash-calls/:cashCallId')
+  @ApiTags('Reinsurance - Claim Cash Calls')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get claim cash call',
+    description:
+      'Returns a single claim cash call that belongs to the placement, claim and authenticated tenant.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'cashCallId',
+    format: 'uuid',
+    description: 'Claim cash call ID.',
+  })
+  @ApiOkResponse({ type: PlacementClaimCashCallResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement, claim or cash call is missing, archived or belongs to another tenant.',
+  })
+  findClaimCashCall(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('cashCallId', ParseUUIDPipe) cashCallId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimCashCallsService.findOne(
+      request.user.tenantId,
+      id,
+      claimId,
+      cashCallId,
+    );
+  }
+
+  @Post(':id/claims/:claimId/allocations/:allocationId/cash-calls')
+  @ApiTags('Reinsurance - Claim Cash Calls')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create claim cash call from allocation',
+    description:
+      'Creates a DRAFT CCL-* cash call from one claim allocation snapshot. The amount uses allocatedFinalLossAmount when present, otherwise allocatedEstimatedLossAmount. Existing allocation rows are not mutated.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'allocationId',
+    format: 'uuid',
+    description: 'Claim allocation ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementClaimCashCallResponseDto })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'An active cash call already exists for this claim allocation.',
+  })
+  createClaimCashCall(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('allocationId', ParseUUIDPipe) allocationId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimCashCallsService.create(
+      request.user,
+      id,
+      claimId,
+      allocationId,
+    );
+  }
+
+  @Patch(':id/claims/:claimId/cash-calls/:cashCallId/status')
+  @ApiTags('Reinsurance - Claim Cash Calls')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Change claim cash call status',
+    description:
+      'PR1 supports DRAFT -> ISSUED, DRAFT -> VOID and ISSUED -> VOID only. PAID is reserved for future claim settlement payment linkage.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'cashCallId',
+    format: 'uuid',
+    description: 'Claim cash call ID.',
+  })
+  @ApiOkResponse({ type: PlacementClaimCashCallResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Unsupported claim cash call status transition.',
+  })
+  changeClaimCashCallStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('cashCallId', ParseUUIDPipe) cashCallId: string,
+    @Body() dto: UpdatePlacementClaimCashCallStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimCashCallsService.changeStatus(
+      request.user,
+      id,
+      claimId,
+      cashCallId,
+      dto,
+    );
+  }
+
+  @Post(':id/claims/:claimId/cash-calls/:cashCallId/void')
+  @ApiTags('Reinsurance - Claim Cash Calls')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Void claim cash call',
+    description:
+      'Voids a DRAFT or ISSUED claim cash call with a reason. VOID cash calls are terminal and allow the allocation to be reissued with the next CCL number.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'cashCallId',
+    format: 'uuid',
+    description: 'Claim cash call ID.',
+  })
+  @ApiOkResponse({ type: PlacementClaimCashCallResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The cash call is already terminal or the void reason is empty.',
+  })
+  voidClaimCashCall(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('cashCallId', ParseUUIDPipe) cashCallId: string,
+    @Body() dto: VoidPlacementClaimCashCallDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.claimCashCallsService.void(
+      request.user,
+      id,
+      claimId,
+      cashCallId,
+      dto,
+    );
   }
 
   @Get(':id/notes')

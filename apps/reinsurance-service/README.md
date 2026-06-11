@@ -606,10 +606,11 @@ closing snapshots.
 
 ## Placement Claims API
 
-Claims represent loss events first, not settlements. PR1 captures occurrence
-details, estimated loss, optional final loss and reinsurer liability allocations.
-It does not create cash calls, claim debit/credit notes, payments, recoveries,
-accounting records, documents, PDFs or email workflows.
+Claims represent loss events first, not settlements. The current foundation
+captures occurrence details, estimated loss, optional final loss, reinsurer
+liability allocations and one-allocation-per-cash-call records. It does not
+create claim debit/credit notes, settlement payments, recoveries, accounting
+records, documents, PDFs or email workflows.
 
 ```text
 GET   /api/v1/operations/reinsurance/placements/:id/claims
@@ -620,6 +621,12 @@ PATCH /api/v1/operations/reinsurance/placements/:id/claims/:claimId/status
 
 GET   /api/v1/operations/reinsurance/placements/:id/claims/:claimId/allocations
 POST  /api/v1/operations/reinsurance/placements/:id/claims/:claimId/allocations/generate
+
+GET   /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls
+GET   /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls/:cashCallId
+POST  /api/v1/operations/reinsurance/placements/:id/claims/:claimId/allocations/:allocationId/cash-calls
+PATCH /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls/:cashCallId/status
+POST  /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls/:cashCallId/void
 ```
 
 Claim fields:
@@ -664,13 +671,42 @@ Claim allocations:
 - `allocatedEstimatedLossAmount = estimatedLossAmount * signedLinePercent / 100`.
 - `allocatedFinalLossAmount = finalLossAmount * signedLinePercent / 100` when a
   final loss amount exists.
-- `cashCallAmount` and `paidAmount` are reserved for future workflows and remain
-  `null` in PR1.
+- `cashCallAmount` and `paidAmount` are reserved on the allocation row for
+  future settlement tracking. Cash-call generation does not mutate them.
 
-Claim creation and allocation generation do not financially lock placements.
-Payment remains the only hard financial lock trigger. `CLAIM_SETTLEMENT`
-payments remain deferred and guarded until explicit claim settlement APIs are
-implemented.
+Claim cash calls:
+
+- Are generated explicitly with
+  `POST /placements/:id/claims/:claimId/allocations/:allocationId/cash-calls`.
+- Use the claim allocation as the source of truth. They do not recalculate from
+  live participants, placement closings or endorsement closings.
+- Use `allocatedFinalLossAmount` when present; otherwise they use
+  `allocatedEstimatedLossAmount`.
+- Snapshot `basisAmount`, `signedLinePercent`, `currency` and `counterpartyId`
+  from the allocation.
+- Use `CCL-001`, `CCL-002`, etc. scoped to the placement. Numbers are never
+  reused; voided cash calls retain their numbers.
+- Allow one active cash call per allocation. Active means status is not `VOID`.
+  After a cash call is voided, the same allocation can be reissued with the next
+  `CCL-*` number.
+- Do not mutate claim allocations, closings, notes, payments, placements or
+  endorsements.
+- Do not financially lock or unlock placements. Payment remains the only hard
+  financial lock trigger.
+
+Claim cash call lifecycle:
+
+| Status   | Meaning                                             | Allowed next statuses |
+| -------- | --------------------------------------------------- | --------------------- |
+| `DRAFT`  | Cash call created but not issued.                   | `ISSUED`, `VOID`      |
+| `ISSUED` | Cash call has been issued externally.               | `VOID`                |
+| `PAID`   | Reserved for future claim settlement payment links. | terminal              |
+| `VOID`   | Cash call was voided and may be reissued.           | terminal              |
+
+Claim creation, allocation generation and cash-call issuance do not financially
+lock placements. Payment remains the only hard financial lock trigger.
+`CLAIM_SETTLEMENT` payments remain deferred and guarded until explicit claim
+settlement APIs are implemented.
 
 ## Placement Payment API
 

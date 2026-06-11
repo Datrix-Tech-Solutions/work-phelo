@@ -51,8 +51,9 @@ financially lock a placement; payments remain the only hard-lock trigger.
 Claim endpoints record loss events first. They capture occurrence details,
 estimated loss and optional final loss amounts. Claim allocations are generated
 explicitly from immutable CONFIRMED placement and endorsement closing snapshots
-to calculate reinsurer liability. PR1 does not create cash calls, claim notes,
-settlement payments, documents, email workflows or accounting records.
+to calculate reinsurer liability. Claim cash calls are generated one per
+allocation from those allocation snapshots. Claim notes, settlement payments,
+documents, email workflows and accounting records remain deferred.
 
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
@@ -137,6 +138,10 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Claim Allocations',
       'Reinsurer liability calculations generated from immutable closing snapshots',
+    )
+    .addTag(
+      'Reinsurance - Claim Cash Calls',
+      'Cash calls generated one-per-claim-allocation from allocation snapshots',
     )
     .addTag(
       'Reinsurance - Financial Locking',
