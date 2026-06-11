@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement } from '@/hooks';
+import { useFacultativePlacement, usePlacementLockStatus } from '@/hooks';
 import { FacultativeOverview } from '@/components/molecules/reinsurance/FacultativeOverview';
 import { DistributionListTab } from '@/components/molecules/reinsurance/DistributionListTab';
 import { PlacementClosingsTab } from '@/components/molecules/reinsurance/PlacementClosingsTab';
@@ -29,9 +29,13 @@ export default function FacultativeDetailPage({
 }) {
   const { tenantSlug, id } = use(params);
   const { data: placement, isLoading } = useFacultativePlacement(id);
+  const { data: fetchedLockStatus } = usePlacementLockStatus(id);
   const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
   const [editOpen, setEditOpen] = useState(false);
   const [endorsementOpen, setEndorsementOpen] = useState(false);
+
+  const lockStatus = fetchedLockStatus ?? placement?.lockStatus;
+  const isFinanciallyLocked = lockStatus?.locked ?? false;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -56,7 +60,16 @@ export default function FacultativeDetailPage({
                 Endorse Policy
               </Button>
             )}
-            <Button size="sm" onClick={() => setEditOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => setEditOpen(true)}
+              disabled={isFinanciallyLocked}
+              title={
+                isFinanciallyLocked
+                  ? 'Placement is financially locked. Changes require endorsement.'
+                  : undefined
+              }
+            >
               Edit
             </Button>
           </div>
@@ -75,6 +88,16 @@ export default function FacultativeDetailPage({
           </div>
         ) : (
           <div className="flex flex-col gap-6">
+            {isFinanciallyLocked && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="font-semibold">Financially locked</p>
+                <p>
+                  {lockStatus?.reason ??
+                    'This placement has payment activity. Direct changes require endorsement.'}
+                </p>
+              </div>
+            )}
+
             {/* Overview */}
             <FacultativeOverview placement={placement} />
 
@@ -87,7 +110,9 @@ export default function FacultativeDetailPage({
               />
 
               <div className="pt-5">
-                {activeTab === 'distribution' && <DistributionListTab placement={placement} />}
+                {activeTab === 'distribution' && (
+                  <DistributionListTab placement={placement} lockStatus={lockStatus} />
+                )}
                 {activeTab === 'closings' && <PlacementClosingsTab placement={placement} />}
                 {activeTab === 'endorsement' && <EndorsementTab placement={placement} />}
               </div>

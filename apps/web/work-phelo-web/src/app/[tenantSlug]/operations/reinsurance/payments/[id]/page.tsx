@@ -4,7 +4,7 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement } from '@/hooks';
+import { useFacultativePlacement, usePlacementLockStatus, usePlacementPayments } from '@/hooks';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
 import { PaymentHistoryTab } from '@/components/molecules/reinsurance/PaymentHistoryTab';
@@ -24,8 +24,15 @@ export default function PaymentDetailPage({
 }) {
   const { tenantSlug, id } = use(params);
   const { data: placement } = useFacultativePlacement(id);
+  const { data: payments = [] } = usePlacementPayments(id);
+  const { data: lockStatus } = usePlacementLockStatus(id);
   const [paidAmount, setPaidAmount] = useState<number | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<PaymentTab>('overview');
+
+  const recordedPremiumReceived = payments
+    .filter((payment) => payment.type === 'PREMIUM_RECEIVED' && payment.status === 'RECORDED')
+    .reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0);
+  const displayedPaidAmount = paidAmount ?? recordedPremiumReceived;
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -47,6 +54,13 @@ export default function PaymentDetailPage({
       <div className={`${pageContent} flex-1 overflow-y-auto`}>
         {placement ? (
           <div className="flex flex-col gap-6">
+            {lockStatus?.locked && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <p className="font-semibold">Financially locked</p>
+                <p>{lockStatus.reason}</p>
+              </div>
+            )}
+
             <div className="flex flex-col">
               <TabBar
                 tabs={TABS}
@@ -56,7 +70,7 @@ export default function PaymentDetailPage({
 
               <div className="pt-5">
                 {activeTab === 'overview' && (
-                  <BusinessPaymentSection placement={placement} paidAmount={paidAmount} />
+                  <BusinessPaymentSection placement={placement} paidAmount={displayedPaidAmount} />
                 )}
                 {activeTab === 'history' && <PaymentHistoryTab placementId={id} />}
               </div>

@@ -36,6 +36,7 @@ interface DistributionTableProps {
   placement: Facultative;
   hasActiveEndorsement?: boolean;
   confirmedCounterpartyIds?: Set<string>;
+  mutationDisabled?: boolean;
   onShareCommit: (row: DistributionEntry, share: number) => void;
   onBrokerageCommit: (row: DistributionEntry, brokerage: number) => void;
   onMailSent: (row: DistributionEntry) => void;
@@ -50,6 +51,7 @@ export function DistributionTable({
   placement,
   hasActiveEndorsement = false,
   confirmedCounterpartyIds,
+  mutationDisabled = false,
   onShareCommit,
   onBrokerageCommit,
   onMailSent,
@@ -67,11 +69,18 @@ export function DistributionTable({
   const [draftBrokerage, setDraftBrokerage] = useState('');
 
   const startEdit = (row: DistributionEntry) => {
+    if (mutationDisabled) return;
     setEditingId(row.id);
     setDraftShare(String(row.shareLine));
   };
 
   const commitEdit = (row: DistributionEntry) => {
+    if (mutationDisabled) {
+      setEditingId(null);
+      setDraftShare('');
+      return;
+    }
+
     const parsed = parseFloat(draftShare);
     if (!isNaN(parsed)) {
       onShareCommit(row, Math.min(100, Math.max(0, parsed)));
@@ -81,11 +90,18 @@ export function DistributionTable({
   };
 
   const startEditBrokerage = (row: DistributionEntry) => {
+    if (mutationDisabled) return;
     setEditingBrokerageId(row.id);
     setDraftBrokerage(String(row.brokerageFee));
   };
 
   const commitBrokerage = (row: DistributionEntry) => {
+    if (mutationDisabled) {
+      setEditingBrokerageId(null);
+      setDraftBrokerage('');
+      return;
+    }
+
     const parsed = parseFloat(draftBrokerage);
     if (!isNaN(parsed)) onBrokerageCommit(row, Math.min(100, Math.max(0, parsed)));
     setEditingBrokerageId(null);
@@ -93,7 +109,7 @@ export function DistributionTable({
   };
 
   const handleSend = () => {
-    if (!mailPreviewId) return;
+    if (!mailPreviewId || mutationDisabled) return;
     const row = entries.find((e) => e.id === mailPreviewId);
     if (row) onMailSent(row);
     setMailedIds((prev) => new Set([...prev, mailPreviewId]));
@@ -101,6 +117,7 @@ export function DistributionTable({
   };
 
   const handleAccept = (row: DistributionEntry) => {
+    if (mutationDisabled) return;
     onAccept(row);
     setReconfirmedIds((prev) => new Set([...prev, row.id]));
     setMailedIds((prev) => {
@@ -111,6 +128,7 @@ export function DistributionTable({
   };
 
   const handleDecline = (row: DistributionEntry) => {
+    if (mutationDisabled) return;
     onDecline(row);
     setMailedIds((prev) => {
       const n = new Set(prev);
@@ -147,7 +165,9 @@ export function DistributionTable({
           <button
             type="button"
             onClick={() => startEdit(row)}
-            className="w-20 flex items-center justify-between px-2 py-1 text-sm border border-gray-300 rounded-input bg-white text-gray-700 hover:border-brand transition-colors"
+            disabled={mutationDisabled}
+            title={mutationDisabled ? 'Placement is financially locked.' : undefined}
+            className="w-20 flex items-center justify-between px-2 py-1 text-sm border border-gray-300 rounded-input bg-white text-gray-700 hover:border-brand transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-gray-300"
           >
             <span>{row.shareLine}%</span>
             <Icons.Pencil className="w-3 h-3 text-gray-400 shrink-0" />
@@ -175,7 +195,9 @@ export function DistributionTable({
           <button
             type="button"
             onClick={() => startEditBrokerage(row)}
-            className="w-20 flex items-center justify-between px-2 py-1 text-sm border border-gray-300 rounded-input bg-white text-gray-700 hover:border-brand transition-colors"
+            disabled={mutationDisabled}
+            title={mutationDisabled ? 'Placement is financially locked.' : undefined}
+            className="w-20 flex items-center justify-between px-2 py-1 text-sm border border-gray-300 rounded-input bg-white text-gray-700 hover:border-brand transition-colors disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-gray-300"
           >
             <span>{row.brokerageFee}%</span>
             <Icons.Pencil className="w-3 h-3 text-gray-400 shrink-0" />
@@ -235,18 +257,20 @@ export function DistributionTable({
             </button>
             <button
               type="button"
-              title="Send mail"
+              title={mutationDisabled ? 'Placement is financially locked.' : 'Send mail'}
               onClick={() => setMailPreviewId(row.id)}
-              className="text-green-500 hover:text-green-700 transition-colors"
+              disabled={mutationDisabled}
+              className="text-green-500 hover:text-green-700 transition-colors disabled:text-gray-300 disabled:cursor-not-allowed"
             >
               <Icons.Mail className="w-4 h-4" />
             </button>
             {showAccept && (
               <button
                 type="button"
-                title="Accept"
+                title={mutationDisabled ? 'Placement is financially locked.' : 'Accept'}
                 onClick={() => handleAccept(row)}
-                className="text-green-500 hover:text-green-600 transition-colors"
+                disabled={mutationDisabled}
+                className="text-green-500 hover:text-green-600 transition-colors disabled:text-gray-300 disabled:cursor-not-allowed"
               >
                 <Icons.Check className="w-4 h-4" />
               </button>
@@ -254,9 +278,10 @@ export function DistributionTable({
             {showDecline && (
               <button
                 type="button"
-                title="Decline"
+                title={mutationDisabled ? 'Placement is financially locked.' : 'Decline'}
                 onClick={() => handleDecline(row)}
-                className="text-red-400 hover:text-red-600 transition-colors"
+                disabled={mutationDisabled}
+                className="text-red-400 hover:text-red-600 transition-colors disabled:text-gray-300 disabled:cursor-not-allowed"
               >
                 <Icons.X className="w-4 h-4" />
               </button>
@@ -264,9 +289,10 @@ export function DistributionTable({
             {!responded && (
               <button
                 type="button"
-                title="Delete"
+                title={mutationDisabled ? 'Placement is financially locked.' : 'Delete'}
                 onClick={() => onDelete?.(row)}
-                className="text-red-400 hover:text-red-600 transition-colors"
+                disabled={mutationDisabled}
+                className="text-red-400 hover:text-red-600 transition-colors disabled:text-gray-300 disabled:cursor-not-allowed"
               >
                 <Icons.Trash2 className="w-4 h-4" />
               </button>

@@ -373,6 +373,83 @@ export interface PlacementParticipant {
   counterparty: { id: string; name: string };
 }
 
+export type PlacementLockSource =
+  | 'NONE'
+  | 'PREMIUM_PAYMENT'
+  | 'REINSURER_PAYMENT'
+  | 'CLAIM_SETTLEMENT'
+  | 'STATUS_TERMINAL';
+
+export interface PlacementLockStatus {
+  editable: boolean;
+  locked: boolean;
+  endorsementRequired: boolean;
+  reason: string;
+  lockSource?: PlacementLockSource;
+  lockedAt?: string;
+}
+
+export type PlacementPaymentType =
+  | 'PREMIUM_RECEIVED'
+  | 'REINSURER_DISBURSEMENT'
+  | 'CLAIM_SETTLEMENT';
+export type PlacementPaymentDirection = 'INBOUND' | 'OUTBOUND';
+export type PlacementPaymentStatus = 'RECORDED' | 'REVERSED';
+
+export interface PlacementPaymentCounterparty {
+  id: string;
+  type: CounterpartyType;
+  name: string;
+  registrationNumber: string | null;
+}
+
+export interface PlacementPaymentParticipant {
+  id: string;
+  counterpartyId: string;
+}
+
+export interface PlacementPaymentClosing {
+  id: string;
+  closingNumber: string;
+}
+
+export interface PlacementPayment {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  closingId: string | null;
+  participantId: string | null;
+  counterpartyId: string;
+  type: PlacementPaymentType;
+  direction: PlacementPaymentDirection;
+  amount: string;
+  currency: string;
+  paymentDate: string;
+  reference: string | null;
+  notes: string | null;
+  status: PlacementPaymentStatus;
+  reversalOfPaymentId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: PlacementPaymentCounterparty;
+  participant: PlacementPaymentParticipant | null;
+  closing: PlacementPaymentClosing | null;
+}
+
+export interface CreatePlacementPaymentPayload {
+  type: PlacementPaymentType;
+  direction: PlacementPaymentDirection;
+  counterpartyId: string;
+  closingId?: string;
+  participantId?: string;
+  amount: number;
+  currency: string;
+  paymentDate: string;
+  reference?: string;
+  notes?: string;
+}
+
 export interface PlacementParticipantPayload {
   counterpartyId: string;
   role: PlacementParticipantRole;
@@ -420,6 +497,7 @@ export interface Facultative {
   totalOfferedPercent: number;
   totalAcceptedPercent: number;
   remainingPercent: number;
+  lockStatus?: PlacementLockStatus;
 }
 
 /* ── Facultative API payloads ── */

@@ -11,7 +11,7 @@ import {
   PLACEMENT_DISPLAY_STATUSES,
   toDisplayStatus,
 } from '@/types/reinsurance';
-import { useFacultatives } from '@/hooks';
+import { useFacultatives, usePlacementLockStatus, usePlacementPayments } from '@/hooks';
 
 const PAGE_SIZE = 10;
 
@@ -27,6 +27,56 @@ function fmtDate(iso: string) {
 function fmtAmount(val: number | null | undefined) {
   if (val == null) return '—';
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function netPremium(row: Facultative): number {
+  const facPremium =
+    row.premium != null && row.facultativeOffer != null
+      ? (row.facultativeOffer / 100) * row.premium
+      : 0;
+  return facPremium * (1 - (row.commission ?? 0) / 100);
+}
+
+function usePlacementPaymentSummary(row: Facultative) {
+  const { data: payments = [] } = usePlacementPayments(row.id);
+  const { data: lockStatus } = usePlacementLockStatus(row.id);
+  const paid = payments
+    .filter((payment) => payment.type === 'PREMIUM_RECEIVED' && payment.status === 'RECORDED')
+    .reduce((sum, payment) => sum + (parseFloat(payment.amount) || 0), 0);
+  const expected = netPremium(row);
+
+  return {
+    paid,
+    outstanding: Math.max(0, expected - paid),
+    locked: lockStatus?.locked ?? row.lockStatus?.locked ?? paid > 0,
+  };
+}
+
+function PaidAmountCell({ row }: { row: Facultative }) {
+  const { paid } = usePlacementPaymentSummary(row);
+  return (
+    <span className={paid > 0 ? 'font-medium text-gray-900' : 'text-gray-400'}>
+      {row.currency ? `${row.currency} ` : ''}
+      {fmtAmount(paid)}
+    </span>
+  );
+}
+
+function OutstandingAmountCell({ row }: { row: Facultative }) {
+  const { outstanding } = usePlacementPaymentSummary(row);
+  return (
+    <span className={outstanding > 0 ? 'text-gray-700' : 'font-medium text-green-700'}>
+      {row.currency ? `${row.currency} ` : ''}
+      {fmtAmount(outstanding)}
+    </span>
+  );
+}
+
+function PaymentStatusCell({ row }: { row: Facultative }) {
+  const { paid, outstanding, locked } = usePlacementPaymentSummary(row);
+  if (paid <= 0) return <Badge label="Pending" variant="neutral" />;
+  if (outstanding <= 0.01) return <Badge label="Paid" variant="success" />;
+  return <Badge label={locked ? 'Part Paid / Locked' : 'Part Paid'} variant="warning" />;
 }
 
 const OFFER_STATUS_VARIANT_MAP: Record<
@@ -95,15 +145,15 @@ const COLUMNS: Column<Facultative>[] = [
   },
   {
     key: 'collectedToDate' as keyof Facultative,
-    label: 'Amount payed',
+    label: 'Amount paid',
     width: '1fr',
-    render: () => <span className="text-gray-400">—</span>,
+    render: (row) => <PaidAmountCell row={row} />,
   },
   {
     key: 'outstanding' as keyof Facultative,
     label: 'Outstanding',
     width: '1fr',
-    render: () => <span className="text-gray-400">—</span>,
+    render: (row) => <OutstandingAmountCell row={row} />,
   },
   {
     key: 'commission',
@@ -124,7 +174,7 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'paymentStatus' as keyof Facultative,
     label: 'Payment Status',
     width: '120px',
-    render: () => <Badge label="Pending" variant="neutral" />,
+    render: (row) => <PaymentStatusCell row={row} />,
   },
   {
     key: 'createdAt',

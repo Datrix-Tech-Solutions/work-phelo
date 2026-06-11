@@ -172,6 +172,12 @@ export function AddPaymentFormFields({
   }, [showRate, setValue]);
 
   useEffect(() => {
+    if (businessCurrency && allSameCurrency && !paymentCurrency) {
+      setValue('currency', businessCurrency);
+    }
+  }, [allSameCurrency, businessCurrency, paymentCurrency, setValue]);
+
+  useEffect(() => {
     if (!showAllocation) return;
     const newAllocations: Record<string, string> = {};
     selectedFacultatives.forEach((f) => {
