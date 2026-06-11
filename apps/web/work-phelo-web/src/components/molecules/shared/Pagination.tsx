@@ -28,7 +28,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint)) disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Previous
         </button>
@@ -45,8 +45,8 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
               className={cn(
                 'w-8 h-8 text-sm rounded-lg transition-colors',
                 p === currentPage
-                  ? 'bg-brand text-white font-medium'
-                  : 'border border-gray-200 text-gray-600 hover:bg-gray-50',
+                  ? 'bg-(--module-btn-bg,var(--color-brand)) text-white font-medium'
+                  : 'border border-gray-200 text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint))',
               )}
             >
               {p}
@@ -57,7 +57,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="px-3 py-1.5 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint)) disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Next
         </button>

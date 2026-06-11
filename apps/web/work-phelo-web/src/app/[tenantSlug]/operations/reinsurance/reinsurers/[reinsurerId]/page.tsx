@@ -38,7 +38,7 @@ export default function ReinsurerDetailPage({
   const [editOpen, setEditOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ReinsurerTab>('contacts');
 
-  const settingsBase = `/${tenantSlug}/operations/reinsurance/settings/reinsurers`;
+  const settingsBase = `/${tenantSlug}/operations/reinsurance/reinsurers`;
 
   const participations = useMemo<ReinsurerParticipation[]>(() => {
     return placements.flatMap((p) => {

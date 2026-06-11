@@ -44,7 +44,11 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
     <span
       className={cn(
         'shrink-0 flex items-center justify-center',
-        isDeactivated ? 'text-gray-300' : isCurrent ? 'text-brand' : 'text-gray-400',
+        isDeactivated
+          ? 'text-gray-300'
+          : isCurrent
+            ? 'text-(--module-btn-bg,var(--color-brand))'
+            : 'text-gray-400',
       )}
     >
       {item.icon}
@@ -54,13 +58,22 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
   const inner = (
     <>
       {iconEl}
-      {!collapsed && <span className="text-sm truncate">{item.label}</span>}
+      <span
+        className={cn(
+          'text-sm whitespace-nowrap overflow-hidden transition-[max-width,opacity,transform] duration-500',
+          collapsed
+            ? 'max-w-0 opacity-0 -translate-x-3'
+            : 'max-w-44 opacity-100 translate-x-0 delay-100',
+        )}
+      >
+        {item.label}
+      </span>
     </>
   );
 
   const baseRow = cn(
-    'relative flex items-center gap-3 rounded-input transition-colors w-full',
-    collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5',
+    'relative flex items-center rounded-input transition-colors w-full',
+    collapsed ? 'justify-center px-0 py-2.5 gap-0' : 'px-3 py-2.5 gap-3',
   );
 
   return (
@@ -68,7 +81,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
     <div className="relative group/tip px-2">
       {/* Active left-bar accent */}
       {isCurrent && !isDeactivated && (
-        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-brand rounded-r-full" />
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-(--module-btn-bg,var(--color-brand)) rounded-r-full" />
       )}
 
       {isDeactivated ? (
@@ -86,7 +99,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
           className={cn(
             baseRow,
             isCurrent
-              ? 'bg-brand-tint text-brand font-semibold'
+              ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
           )}
         >
@@ -134,7 +147,7 @@ function SidebarChildItem({ item }: { item: NavItem }) {
       className={cn(
         baseRow,
         isCurrent
-          ? 'bg-brand-tint text-brand font-semibold'
+          ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
       )}
     >
@@ -161,15 +174,15 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
   const isDeactivated = item.active === false;
 
   const baseRow = cn(
-    'relative flex items-center gap-3 rounded-input transition-colors w-full',
-    collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5',
+    'relative flex items-center rounded-input transition-colors w-full',
+    collapsed ? 'justify-center px-0 py-2.5 gap-0' : 'px-3 py-2.5 gap-3',
   );
 
   return (
     <div className="relative group/tip px-2">
       {/* Highlight bar when a child is active */}
       {isAnyChildActive && !isDeactivated && !collapsed && (
-        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-brand rounded-r-full" />
+        <span className="absolute left-0 top-1.5 bottom-1.5 w-0.75 bg-(--module-btn-bg,var(--color-brand)) rounded-r-full" />
       )}
 
       <button
@@ -183,30 +196,46 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
           isDeactivated
             ? 'cursor-not-allowed text-gray-300'
             : isAnyChildActive
-              ? 'bg-brand-tint text-brand font-semibold'
+              ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
               : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
         )}
       >
         <span
           className={cn(
             'shrink-0 flex items-center justify-center',
-            isDeactivated ? 'text-gray-300' : isAnyChildActive ? 'text-brand' : 'text-gray-400',
+            isDeactivated
+              ? 'text-gray-300'
+              : isAnyChildActive
+                ? 'text-(--module-btn-bg,var(--color-brand))'
+                : 'text-gray-400',
           )}
         >
           {item.icon}
         </span>
 
-        {!collapsed && (
-          <>
-            <span className="text-sm truncate flex-1 text-left">{item.label}</span>
-            <ChevronDown
-              className={cn(
-                'w-4 h-4 shrink-0 transition-transform duration-200',
-                isOpen && 'rotate-180',
-              )}
-            />
-          </>
-        )}
+        <span
+          className={cn(
+            'text-sm whitespace-nowrap overflow-hidden flex-1 text-left transition-[max-width,opacity,transform] duration-500',
+            collapsed
+              ? 'max-w-0 opacity-0 -translate-x-3'
+              : 'max-w-44 opacity-100 translate-x-0 delay-100',
+          )}
+        >
+          {item.label}
+        </span>
+        <span
+          className={cn(
+            'overflow-hidden transition-[max-width,opacity] duration-500',
+            collapsed ? 'max-w-0 opacity-0' : 'max-w-6 opacity-100 delay-100',
+          )}
+        >
+          <ChevronDown
+            className={cn(
+              'w-4 h-4 shrink-0 transition-transform duration-200',
+              isOpen && 'rotate-180',
+            )}
+          />
+        </span>
       </button>
 
       {/* Flyout menu when collapsed */}
@@ -234,13 +263,22 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
       )}
 
       {/* Children list — only in expanded sidebar */}
-      {isOpen && !collapsed && (
-        <div className="mt-0.5 ml-3 flex flex-col gap-0.5 border-l border-gray-100 pl-2">
-          {item.children
-            ?.filter((child) => child.enabled !== false)
-            .map((child) => (
-              <SidebarChildItem key={child.key} item={child} />
-            ))}
+      {!collapsed && (
+        <div
+          className={cn(
+            'grid transition-[grid-template-rows,opacity] duration-500 ease-in-out',
+            isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0',
+          )}
+        >
+          <div className="min-h-0 overflow-hidden">
+            <div className="mt-0.5 ml-3 flex flex-col gap-0.5 border-l border-gray-100 pl-2">
+              {item.children
+                ?.filter((child) => child.enabled !== false)
+                .map((child) => (
+                  <SidebarChildItem key={child.key} item={child} />
+                ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -261,8 +299,8 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
         'bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-hidden',
         // Mobile: absolute drawer that slides over content (below the top nav)
         'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
-        // Desktop: static in flex flow with width animation
-        'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-200',
+        // Desktop: static in flex flow with width animation (spring curve)
+        'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-350 md:ease-[cubic-bezier(0.34,1.8,0.64,1)]',
         effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-56',
       )}
     >

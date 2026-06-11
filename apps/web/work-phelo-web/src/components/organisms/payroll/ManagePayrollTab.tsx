@@ -406,16 +406,8 @@ export function ManagePayrollTab() {
         searchPlaceholder="Search employee name..."
         onSearch={setSearchQuery}
         secondaryButton={{
-          label: (
-            <span className="relative inline-flex items-center gap-2">
-              Drafts
-              {rejectedDraftsCount > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
-                  {rejectedDraftsCount}
-                </span>
-              )}
-            </span>
-          ),
+          label: 'Drafts',
+          badgeCount: rejectedDraftsCount,
           onClick: () => setDraftsPanelOpen(true),
         }}
         actionButton={{ label: 'Run Payroll', onClick: () => setRunPanelOpen(true) }}

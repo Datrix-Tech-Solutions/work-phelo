@@ -15,8 +15,10 @@ import {
   useAddParticipant,
   useUpdateParticipant,
   useUpdateParticipantStatus,
+  useUpdateFacultativeStatus,
   useDeleteParticipant,
   useCreateClosing,
+  useUpdateClosingStatus,
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
@@ -69,8 +71,10 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const { mutateAsync: addParticipant, isPending: isAdding } = useAddParticipant(placement.id);
   const { mutateAsync: updateParticipant } = useUpdateParticipant(placement.id);
   const { mutateAsync: updateParticipantStatus } = useUpdateParticipantStatus(placement.id);
+  const { mutateAsync: updatePlacementStatus } = useUpdateFacultativeStatus(placement.id);
   const { mutateAsync: deleteParticipant } = useDeleteParticipant(placement.id);
   const { mutateAsync: createClosing } = useCreateClosing(placement.id);
+  const { mutateAsync: updateClosingStatus } = useUpdateClosingStatus(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
 
   const activeEndorsement = endorsements.find(
@@ -144,13 +148,29 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const handleAdd = async (newEntries: ReinsurerEntry[]) => {
     const existingIds = new Set(placement.participants.map((p) => p.counterpartyId));
     const reinsurersById = Object.fromEntries(reinsurers.map((r) => [r.id, r]));
-    for (const e of newEntries.filter((e) => !existingIds.has(e.id))) {
-      addParticipant({
-        counterpartyId: e.id,
-        role: 'REINSURER',
-        sharePercent: facOffer,
-        brokerageFee: parseFloat(String(reinsurersById[e.id]?.brokerageFee ?? 0)) || 0,
-      }).catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
+    const newOnes = newEntries.filter((e) => !existingIds.has(e.id));
+
+    const results = await Promise.allSettled(
+      newOnes.map((e) =>
+        addParticipant({
+          counterpartyId: e.id,
+          role: 'REINSURER',
+          sharePercent: facOffer,
+          brokerageFee: parseFloat(String(reinsurersById[e.id]?.brokerageFee ?? 0)) || 0,
+        }),
+      ),
+    );
+
+    results.forEach((r) => {
+      if (r.status === 'rejected')
+        toast().addToast({ message: extractError(r.reason), type: 'error' });
+    });
+
+    const anyAdded = results.some((r) => r.status === 'fulfilled');
+    if (anyAdded && placement.status === 'DRAFT') {
+      updatePlacementStatus({ status: 'MARKETING' }).catch((error) =>
+        toast().addToast({ message: extractError(error), type: 'error' }),
+      );
     }
   };
 
@@ -203,11 +223,19 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       })
         .then(() => updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' }))
         .then(() => createClosing(row.id))
+        .then((closing) => updateClosingStatus({ closingId: closing.id, status: 'ISSUED' }))
+        .then((closing) => updateClosingStatus({ closingId: closing.id, status: 'CONFIRMED' }))
         .catch((error) => {
           patch(row.id, { status: 'Pending' });
           toast().addToast({ message: extractError(error), type: 'error' });
         });
     }
+  };
+
+  const handleClosePlacement = () => {
+    updatePlacementStatus({ status: 'CLOSING' })
+      .then(() => updatePlacementStatus({ status: 'CLOSED' }))
+      .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
   };
 
   const handleDecline = (row: DistributionEntry) => {
@@ -323,6 +351,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           onAccept={handleAccept}
           onDecline={handleDecline}
           onDelete={handleDelete}
+          onClosePlacement={placement.status === 'PLACED' ? handleClosePlacement : undefined}
         />
       </div>
 

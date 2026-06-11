@@ -42,7 +42,7 @@ export default function CedantDetailPage({
   const [endorsementPlacement, setEndorsementPlacement] = useState<Facultative | null>(null);
   const [activeTab, setActiveTab] = useState<CedantTab>('contacts');
 
-  const settingsBase = `/${tenantSlug}/operations/reinsurance/settings/cedants`;
+  const settingsBase = `/${tenantSlug}/operations/reinsurance/cedants`;
 
   const cedantPlacements = useMemo(
     () => placements.filter((p) => p.cedant.id === cedantId),

@@ -1,10 +1,10 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement } from '@/hooks';
+import { useFacultativePlacement, usePlacementPayments } from '@/hooks';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
 import { PaymentHistoryTab } from '@/components/molecules/reinsurance/PaymentHistoryTab';
@@ -24,8 +24,16 @@ export default function PaymentDetailPage({
 }) {
   const { tenantSlug, id } = use(params);
   const { data: placement } = useFacultativePlacement(id);
-  const [paidAmount, setPaidAmount] = useState<number | undefined>(undefined);
+  const { data: payments = [] } = usePlacementPayments(id);
   const [activeTab, setActiveTab] = useState<PaymentTab>('overview');
+
+  const paidAmount = useMemo(
+    () =>
+      payments
+        .filter((p) => p.status === 'RECORDED')
+        .reduce((sum, p) => sum + parseFloat(p.amount), 0),
+    [payments],
+  );
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -41,7 +49,7 @@ export default function PaymentDetailPage({
           <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
         </nav>
 
-        {placement && <AddPaymentForm placementId={id} onPaymentRecorded={setPaidAmount} />}
+        {placement && <AddPaymentForm placementId={id} />}
       </div>
 
       <div className={`${pageContent} flex-1 overflow-y-auto`}>

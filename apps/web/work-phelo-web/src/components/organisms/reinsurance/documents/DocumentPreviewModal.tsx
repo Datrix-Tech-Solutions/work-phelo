@@ -72,7 +72,9 @@ export function DocumentPreviewModal({
             </div>
           </div>
 
-          {children}
+          <div className="flex justify-center pt-6">
+            <div className="w-full max-w-lg">{children}</div>
+          </div>
         </div>
       </Modal>
 

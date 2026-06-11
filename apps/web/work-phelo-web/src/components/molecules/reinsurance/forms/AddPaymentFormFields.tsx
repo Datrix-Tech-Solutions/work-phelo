@@ -17,8 +17,9 @@ export interface AddPaymentFormValues {
   chequeNumber: string;
   valueDate: string;
   // bank transfer fields
-  amount: string;
+  paymentDate: string;
   // shared
+  amount: string;
   bankName: string;
   currency: string;
   rate: string;
@@ -32,6 +33,7 @@ export const ADD_PAYMENT_DEFAULTS: AddPaymentFormValues = {
   paymentType: '',
   chequeNumber: '',
   valueDate: '',
+  paymentDate: '',
   amount: '',
   bankName: '',
   currency: '',
@@ -338,6 +340,7 @@ export function AddPaymentFormFields({
           registration={register('amount', { required: 'Amount is required' })}
           placeholder="0.00"
           type="number"
+          step="any"
           error={errors.amount}
         />
         {totalExpectedHint}
@@ -348,6 +351,20 @@ export function AddPaymentFormFields({
 
   const bankFields = paymentType === 'bank_transfer' && (
     <>
+      <Controller
+        name="paymentDate"
+        control={control}
+        rules={{ required: 'Payment date is required' }}
+        render={({ field }) => (
+          <DatePicker
+            label="Payment Date"
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.paymentDate?.message}
+          />
+        )}
+      />
+
       <FormField
         label="Bank Name"
         registration={register('bankName', { required: 'Bank name is required' })}
@@ -388,6 +405,7 @@ export function AddPaymentFormFields({
           registration={register('amount', { required: 'Amount is required' })}
           placeholder="0.00"
           type="number"
+          step="any"
           error={errors.amount}
         />
         {totalExpectedHint}

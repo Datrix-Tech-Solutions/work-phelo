@@ -5,16 +5,6 @@ import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { useReinsurers, useCedants } from '@/hooks';
 
-function toLabel(key: string) {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function fmtFieldValue(val: unknown): string {
-  if (val == null) return '—';
-  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-  return String(val);
-}
-
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -74,14 +64,7 @@ export function GuaranteeNoteModal({
     expiryDate,
     cedant,
     participants,
-    businessDetails,
-    offerDetails,
   } = placement;
-
-  const riskEntries = [
-    ...Object.entries(businessDetails ?? {}),
-    ...Object.entries(offerDetails ?? {}),
-  ];
 
   const facOffer = facultativeOffer ?? 0;
   const facSumInsured = sumInsured != null ? (facOffer / 100) * sumInsured : null;
@@ -101,6 +84,7 @@ export function GuaranteeNoteModal({
       isOpen={isOpen}
       title={`Guarantee Note — ${reference}`}
       documentTitle="Guarantee Note"
+      afterContent={null}
       onPrint={onPrint}
       onClose={onClose}
     >
@@ -129,9 +113,6 @@ export function GuaranteeNoteModal({
         </p>
 
         <DetailField inline label="Cover Type" value={classOfBusiness ?? '—'} />
-        {riskEntries.map(([key, val]) => (
-          <DetailField key={key} inline label={toLabel(key)} value={fmtFieldValue(val)} />
-        ))}
         <DetailField inline label="Reinsured" value={cedant.name} />
         <DetailField inline label="Policy Number" value={reference} />
         <DetailField inline label="Original Insured" value={title} />

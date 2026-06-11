@@ -1,8 +1,19 @@
 'use client';
 
+import { useState } from 'react';
 import { FacultativeTable } from '@/components/organisms/reinsurance/tables/FacultativeTable';
+import { TabBar } from '@/components/molecules/shared/TabBar';
+
+type FacultativePageTab = 'placements' | 'closing';
+
+const TABS = [
+  { key: 'placements', label: 'Placements' },
+  { key: 'closing', label: 'Closing' },
+];
 
 export default function FacultativePage() {
+  const [activeTab, setActiveTab] = useState<FacultativePageTab>('placements');
+
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto flex-1">
       <div className="shrink-0">
@@ -11,7 +22,12 @@ export default function FacultativePage() {
           Manage individual risk placements and facultative certificates
         </p>
       </div>
-      <FacultativeTable />
+      <TabBar
+        tabs={TABS}
+        activeTab={activeTab}
+        onTabChange={(t) => setActiveTab(t as FacultativePageTab)}
+      />
+      <FacultativeTable tab={activeTab} />
     </div>
   );
 }

@@ -9,6 +9,9 @@ import {
   AddPaymentFormValues,
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
+import { useFacultatives, useCreatePlacementPayment } from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 interface AddPaymentFormProps {
   placementId?: string;
@@ -26,6 +29,9 @@ export default function AddPaymentForm({
   defaultOpen = false,
 }: AddPaymentFormProps) {
   const [panelOpen, setPanelOpen] = useState(defaultOpen);
+  const { data: facultatives = [] } = useFacultatives();
+  const createPayment = useCreatePlacementPayment();
+  const addToast = useToastStore((s) => s.addToast);
 
   const form = useForm<AddPaymentFormValues>({ defaultValues: ADD_PAYMENT_DEFAULTS });
   const {
@@ -34,19 +40,96 @@ export default function AddPaymentForm({
   } = form;
 
   const onSubmit = async (values: AddPaymentFormValues) => {
-    // TODO: call mutation once payments API is ready
-    onPaymentRecorded?.(parseFloat(values.amount) || 0);
+    const selectedFacs = facultatives.filter((f) => values.businessIds.includes(f.id));
+    if (selectedFacs.length === 0) return;
 
-    const allocEntries = Object.entries(values.allocations ?? {});
-    if (allocEntries.length > 0) {
-      const parsed: Record<string, number> = {};
-      allocEntries.forEach(([id, val]) => {
-        parsed[id] = parseFloat(val) || 0;
+    const parsedAmount = parseFloat(values.amount) || 0;
+    const hasAllocations = Object.keys(values.allocations).length > 0;
+
+    const totalNetPremium = selectedFacs.reduce((sum, f) => {
+      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
+      return sum + facPremium * (1 - (f.commission ?? 0) / 100);
+    }, 0);
+
+    const allSameCurrency =
+      selectedFacs.length <= 1 ||
+      selectedFacs.every((f) => f.currency === selectedFacs[0].currency);
+
+    const resolvedDate =
+      values.paymentType === 'cheque'
+        ? values.valueDate
+        : values.paymentDate || new Date().toISOString();
+
+    const refParts: string[] = [];
+    if (values.chequeNumber) refParts.push(values.chequeNumber);
+    if (values.bankName) refParts.push(values.bankName);
+    const reference = refParts.join(' — ') || undefined;
+
+    const notesStr = values.paymentType === 'cheque' ? 'Cheque payment' : 'Bank transfer';
+
+    try {
+      const calls = selectedFacs.map(async (f) => {
+        // Amount for this placement
+        let rawAmount: number;
+        if (selectedFacs.length === 1) {
+          rawAmount = parsedAmount;
+        } else if (hasAllocations && values.allocations[f.id]) {
+          rawAmount = parseFloat(values.allocations[f.id]) || 0;
+        } else {
+          const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
+          const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+          const proportion =
+            totalNetPremium > 0 ? netPremium / totalNetPremium : 1 / selectedFacs.length;
+          rawAmount = proportion * parsedAmount;
+        }
+
+        // Currency conversion — submit always in placement currency
+        const paymentCurrency = values.currency;
+        const placementCurrency = f.currency ?? values.currency;
+        let submittedAmount = rawAmount;
+
+        if (paymentCurrency !== placementCurrency) {
+          const rateStr = allSameCurrency
+            ? values.rate
+            : (values.allocationRates[f.id] ?? values.rate);
+          const rate = parseFloat(rateStr) || 1;
+          submittedAmount = rawAmount * rate;
+        }
+
+        submittedAmount = Math.round(submittedAmount * 100) / 100;
+
+        return createPayment.mutateAsync({
+          placementId: f.id,
+          type: 'PREMIUM_RECEIVED',
+          direction: 'INBOUND',
+          counterpartyId: values.cedantId,
+          amount: submittedAmount,
+          currency: placementCurrency,
+          paymentDate: new Date(resolvedDate).toISOString(),
+          reference,
+          notes: notesStr,
+        });
       });
-      onAllocationsRecorded?.(parsed);
-    }
 
-    setPanelOpen(false);
+      await Promise.all(calls);
+
+      onPaymentRecorded?.(parsedAmount);
+
+      const allocEntries = Object.entries(values.allocations ?? {});
+      if (allocEntries.length > 0) {
+        const parsed: Record<string, number> = {};
+        allocEntries.forEach(([id, val]) => {
+          parsed[id] = parseFloat(val) || 0;
+        });
+        onAllocationsRecorded?.(parsed);
+      }
+
+      addToast({ message: 'Payment recorded successfully', type: 'success' });
+      setPanelOpen(false);
+      form.reset(ADD_PAYMENT_DEFAULTS);
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    }
   };
 
   return (

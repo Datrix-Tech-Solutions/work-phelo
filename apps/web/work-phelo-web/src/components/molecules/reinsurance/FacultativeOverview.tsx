@@ -34,7 +34,6 @@ const DISPLAY_STATUS_VARIANT_MAP: Record<
 > = {
   Open: 'warning',
   Closed: 'success',
-  Cancelled: 'danger',
 };
 
 interface FacultativeOverviewProps {

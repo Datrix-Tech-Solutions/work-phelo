@@ -52,7 +52,7 @@ export default function FacultativeDetailPage({
             {placement.participants.some(
               (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
             ) && (
-              <Button size="sm" variant="outline" onClick={() => setEndorsementOpen(true)}>
+              <Button size="sm" variant="secondary" onClick={() => setEndorsementOpen(true)}>
                 Endorse Policy
               </Button>
             )}
