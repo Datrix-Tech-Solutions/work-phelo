@@ -36,6 +36,7 @@ import {
   PaginatedEmailMessagesResponseDto,
   PaginatedEmailThreadsResponseDto,
   PlacementEmailLinkResponseDto,
+  PlacementEmailLinkWithThreadResponseDto,
 } from './dto/email-response.dto';
 import { LinkPlacementEmailDto } from './dto/link-placement-email.dto';
 import { QueryEmailMessagesDto } from './dto/query-email-messages.dto';
@@ -105,7 +106,7 @@ export class EmailThreadsController {
   })
   @ApiParam({ name: 'threadId', format: 'uuid' })
   @ApiParam({ name: 'placementId', format: 'uuid' })
-  @ApiOkResponse({ type: PlacementEmailLinkResponseDto })
+  @ApiOkResponse({ type: PlacementEmailLinkWithThreadResponseDto })
   @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   linkPlacement(
     @Param('threadId', ParseUUIDPipe) threadId: string,
@@ -113,7 +114,7 @@ export class EmailThreadsController {
     @Body() dto: LinkPlacementEmailDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.emailThreadsService.linkPlacement(
+    return this.emailThreadsService.linkPlacementWithThread(
       request.user,
       threadId,
       placementId,

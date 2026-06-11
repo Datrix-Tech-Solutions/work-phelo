@@ -6,12 +6,17 @@ import { EmailMailboxService } from './email-mailbox.service';
 import { EmailThreadsController } from './email-threads.controller';
 import { EmailThreadsService } from './email-threads.service';
 import { EmailTokenEncryptionService } from './email-token-encryption.service';
+import { PlacementEmailThreadsController } from './placement-email-threads.controller';
 import { EmailProviderRegistry } from './providers/email-provider.registry';
 import { MicrosoftGraphEmailProvider } from './providers/microsoft-graph-email.provider';
 
 @Module({
   imports: [PrismaModule, RabbitMQModule],
-  controllers: [EmailMailboxesController, EmailThreadsController],
+  controllers: [
+    EmailMailboxesController,
+    EmailThreadsController,
+    PlacementEmailThreadsController,
+  ],
   providers: [
     EmailMailboxService,
     EmailProviderRegistry,

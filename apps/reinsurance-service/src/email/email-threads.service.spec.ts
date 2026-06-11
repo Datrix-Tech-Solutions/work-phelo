@@ -51,6 +51,8 @@ describe('EmailThreadsService', () => {
       },
       placementEmailLink: {
         create: jest.fn(),
+        delete: jest.fn(),
+        findMany: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
       },
@@ -114,6 +116,7 @@ describe('EmailThreadsService', () => {
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.emailThread.findFirst.mockResolvedValue({ id: 'thread-1' });
     prisma.emailMessage.findFirst.mockResolvedValue({ id: 'message-1' });
+    prisma.placementEmailLink.findFirst.mockResolvedValue(null);
     prisma.placementEmailLink.create.mockResolvedValue({
       id: 'link-1',
       tenantId: 'tenant-1',
@@ -155,6 +158,145 @@ describe('EmailThreadsService', () => {
     );
   });
 
+  it('lists placement-linked email threads with latest message metadata', async () => {
+    const linkedAt = new Date('2026-06-11T09:00:00.000Z');
+    const latestAt = new Date('2026-06-11T10:00:00.000Z');
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEmailLink.findMany.mockResolvedValue([
+      {
+        id: 'link-1',
+        placementId: 'placement-1',
+        threadId: 'thread-1',
+        linkedByUserId: 'user-1',
+        note: 'Important placement thread',
+        createdAt: linkedAt,
+        thread: {
+          id: 'thread-1',
+          subject: 'FAC placement thread',
+          participants: [{ email: 'cedant@example.com' }],
+          lastMessageAt: latestAt,
+          messageCount: 2,
+          hasAttachments: false,
+          mailboxConnection: {
+            id: 'mailbox-1',
+            provider: 'MICROSOFT_GRAPH',
+            emailAddress: 'placements@example.com',
+            displayName: 'Placements',
+          },
+          messages: [
+            {
+              bodyPreview: 'Latest reply',
+              receivedAt: latestAt,
+              sentAt: null,
+            },
+          ],
+        },
+      },
+    ]);
+
+    const result = await service.findPlacementThreads(
+      'tenant-1',
+      'placement-1',
+    );
+
+    expect(prisma.placementEmailLink.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          archivedAt: null,
+          thread: { archivedAt: null },
+        },
+      }),
+    );
+    expect(result).toEqual([
+      expect.objectContaining({
+        linkId: 'link-1',
+        threadId: 'thread-1',
+        latestMessagePreview: 'Latest reply',
+        latestMessageAt: latestAt,
+        linkedAt,
+      }),
+    ]);
+  });
+
+  it('gets a placement email thread with messages in chronological order', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEmailLink.findFirst.mockResolvedValue({
+      id: 'link-1',
+      placementId: 'placement-1',
+      threadId: 'thread-1',
+      linkedByUserId: 'user-1',
+      note: null,
+      createdAt: new Date('2026-06-11T09:00:00.000Z'),
+      thread: {
+        id: 'thread-1',
+        subject: 'FAC placement thread',
+        participants: null,
+        lastMessageAt: null,
+        messageCount: 2,
+        hasAttachments: false,
+        mailboxConnection: {
+          id: 'mailbox-1',
+          provider: 'MICROSOFT_GRAPH',
+          emailAddress: 'placements@example.com',
+          displayName: null,
+        },
+        messages: [
+          { id: 'message-1', bodyPreview: 'First' },
+          { id: 'message-2', bodyPreview: 'Second' },
+        ],
+      },
+    });
+
+    const result = await service.findPlacementThread(
+      'tenant-1',
+      'placement-1',
+      'thread-1',
+    );
+
+    expect(prisma.placementEmailLink.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          threadId: 'thread-1',
+          archivedAt: null,
+          thread: { archivedAt: null },
+        },
+      }),
+    );
+    expect(result.messages.map((message) => message.id)).toEqual([
+      'message-1',
+      'message-2',
+    ]);
+  });
+
+  it('returns an existing active placement-thread link instead of duplicating it', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.emailThread.findFirst.mockResolvedValue({ id: 'thread-1' });
+    prisma.placementEmailLink.findFirst.mockResolvedValue({
+      id: 'link-1',
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      threadId: 'thread-1',
+      messageId: null,
+      note: null,
+      linkedByUserId: 'user-1',
+    });
+
+    const result = await service.linkPlacement(
+      user,
+      'thread-1',
+      'placement-1',
+      {},
+    );
+
+    expect(result.id).toBe('link-1');
+    expect(prisma.placementEmailLink.create).not.toHaveBeenCalled();
+    expect(publisher.emailLinked).not.toHaveBeenCalled();
+  });
+
   it('rejects linking when the message is not in the selected thread and tenant', async () => {
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.emailThread.findFirst.mockResolvedValue({ id: 'thread-1' });
@@ -184,5 +326,6 @@ describe('EmailThreadsService', () => {
         where: { id_tenantId: { id: 'link-1', tenantId: 'tenant-1' } },
       }),
     );
+    expect(prisma.placementEmailLink.delete).not.toHaveBeenCalled();
   });
 });
