@@ -567,6 +567,68 @@ export interface CreateEndorsementPayload {
   proposedSnapshot?: Record<string, unknown>;
 }
 
+/* ── Placement Email Threads ── */
+export type EmailMessageDirection = 'INBOUND' | 'OUTBOUND';
+export type MailboxProvider = 'MICROSOFT_GRAPH' | 'GMAIL';
+
+export interface PlacementEmailMailboxSummary {
+  id: string;
+  provider: MailboxProvider;
+  emailAddress: string;
+  displayName: string | null;
+}
+
+export interface EmailAttachmentMetadata {
+  id: string;
+  messageId: string;
+  providerAttachmentId: string;
+  fileName: string;
+  contentType: string | null;
+  sizeBytes: number | null;
+  isInline: boolean;
+}
+
+export interface EmailMessage {
+  id: string;
+  tenantId: string;
+  mailboxConnectionId: string;
+  threadId: string;
+  providerMessageId: string;
+  internetMessageId: string | null;
+  direction: EmailMessageDirection;
+  subject: string | null;
+  fromEmail: string | null;
+  fromName: string | null;
+  toRecipients: unknown;
+  ccRecipients: unknown;
+  receivedAt: string | null;
+  sentAt: string | null;
+  bodyPreview: string | null;
+  hasAttachments: boolean;
+  isRead: boolean;
+  attachments: EmailAttachmentMetadata[];
+}
+
+export interface PlacementEmailThreadSummary {
+  linkId: string;
+  threadId: string;
+  subject: string | null;
+  participants: unknown;
+  latestMessagePreview: string | null;
+  latestMessageAt: string | null;
+  messageCount: number;
+  hasAttachments: boolean;
+  linkedByUserId: string;
+  note: string | null;
+  linkedAt: string;
+  mailbox: PlacementEmailMailboxSummary;
+}
+
+export interface PlacementEmailThreadConversation {
+  thread: PlacementEmailThreadSummary;
+  messages: EmailMessage[];
+}
+
 /* ── Facultative form ── */
 export interface FacultativeFormValues {
   insuranceCompany: string;

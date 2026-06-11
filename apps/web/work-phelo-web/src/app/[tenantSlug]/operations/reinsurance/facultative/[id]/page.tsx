@@ -13,12 +13,14 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
 import { EndorsementTab } from '@/components/molecules/reinsurance/EndorsmentTab';
+import { PlacementEmailThreadsTab } from '@/components/molecules/reinsurance/PlacementEmailThreadsTab';
 
-type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
+type FacultativeTab = 'distribution' | 'closings' | 'emails' | 'endorsement';
 
 const TABS = [
   { key: 'distribution', label: 'Distribution List' },
   { key: 'closings', label: 'Placement Closings' },
+  { key: 'emails', label: 'Emails' },
   { key: 'endorsement', label: 'Endorsement' },
 ];
 
@@ -89,6 +91,7 @@ export default function FacultativeDetailPage({
               <div className="pt-5">
                 {activeTab === 'distribution' && <DistributionListTab placement={placement} />}
                 {activeTab === 'closings' && <PlacementClosingsTab placement={placement} />}
+                {activeTab === 'emails' && <PlacementEmailThreadsTab placement={placement} />}
                 {activeTab === 'endorsement' && <EndorsementTab placement={placement} />}
               </div>
             </div>
