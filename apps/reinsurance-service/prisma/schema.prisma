@@ -213,6 +213,15 @@ enum EmailMessageDirection {
   @@schema("reinsurance")
 }
 
+enum EmailMessageStatus {
+  DRAFT
+  SENDING
+  SENT
+  FAILED
+
+  @@schema("reinsurance")
+}
+
 // Renamed from BusinessClassFieldSection
 enum RiskTypeFieldSection {
   BUSINESS_DETAILS
@@ -867,14 +876,22 @@ model EmailMessage {
   providerMessageId   String
   internetMessageId   String?
   direction           EmailMessageDirection
+  status              EmailMessageStatus       @default(SENT)
   subject             String?
   fromEmail           String?
   fromName            String?
   toRecipients        Json?
   ccRecipients        Json?
+  bccRecipients       Json?
+  replyToRecipients   Json?
   receivedAt          DateTime?
   sentAt              DateTime?
   bodyPreview         String?
+  bodyText            String?
+  bodyHtml            String?
+  errorMessage        String?
+  inReplyToMessageId  String?
+  parentMessageId     String?
   hasAttachments      Boolean                   @default(false)
   isRead              Boolean                   @default(false)
   createdAt           DateTime                  @default(now())
