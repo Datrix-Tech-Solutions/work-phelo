@@ -19,11 +19,55 @@ const messageInclude = {
   attachments: true,
 } satisfies Prisma.EmailMessageInclude;
 
+const mailboxSummarySelect = {
+  id: true,
+  provider: true,
+  emailAddress: true,
+  displayName: true,
+} satisfies Prisma.MailboxConnectionSelect;
+
+const placementThreadListInclude = {
+  thread: {
+    include: {
+      mailboxConnection: { select: mailboxSummarySelect },
+      messages: {
+        orderBy: [
+          { receivedAt: 'desc' as const },
+          { createdAt: 'desc' as const },
+        ],
+        take: 1,
+        include: { attachments: true },
+      },
+    },
+  },
+} satisfies Prisma.PlacementEmailLinkInclude;
+
+const placementThreadDetailInclude = {
+  thread: {
+    include: {
+      mailboxConnection: { select: mailboxSummarySelect },
+      messages: {
+        orderBy: [
+          { receivedAt: 'asc' as const },
+          { createdAt: 'asc' as const },
+        ],
+        include: { attachments: true },
+      },
+    },
+  },
+} satisfies Prisma.PlacementEmailLinkInclude;
+
 type ThreadRecord = Prisma.EmailThreadGetPayload<{
   include: typeof threadInclude;
 }>;
 
 type LinkRecord = Prisma.PlacementEmailLinkGetPayload<object>;
+type PlacementThreadListRecord = Prisma.PlacementEmailLinkGetPayload<{
+  include: typeof placementThreadListInclude;
+}>;
+type PlacementThreadDetailRecord = Prisma.PlacementEmailLinkGetPayload<{
+  include: typeof placementThreadDetailInclude;
+}>;
 
 @Injectable()
 export class EmailThreadsService {
@@ -124,6 +168,49 @@ export class EmailThreadsService {
     };
   }
 
+  async findPlacementThreads(tenantId: string, placementId: string) {
+    await this.assertPlacement(tenantId, placementId);
+
+    const links = await this.prisma.placementEmailLink.findMany({
+      where: {
+        tenantId,
+        placementId,
+        archivedAt: null,
+        thread: { archivedAt: null },
+      },
+      include: placementThreadListInclude,
+      orderBy: [{ createdAt: 'desc' }],
+    });
+
+    return links.map((link) => this.mapPlacementThreadSummary(link));
+  }
+
+  async findPlacementThread(
+    tenantId: string,
+    placementId: string,
+    threadId: string,
+  ) {
+    await this.assertPlacement(tenantId, placementId);
+
+    const link = await this.prisma.placementEmailLink.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        threadId,
+        archivedAt: null,
+        thread: { archivedAt: null },
+      },
+      include: placementThreadDetailInclude,
+    });
+
+    if (!link) throw new NotFoundException('Placement email thread not found');
+
+    return {
+      thread: this.mapPlacementThreadSummary(link),
+      messages: link.thread.messages,
+    };
+  }
+
   async linkPlacement(
     user: RequestUser,
     threadId: string,
@@ -138,6 +225,16 @@ export class EmailThreadsService {
         : Promise.resolve(),
     ]);
 
+    const existing = await this.prisma.placementEmailLink.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        placementId,
+        threadId,
+        archivedAt: null,
+      },
+    });
+    if (existing) return existing;
+
     const link = await this.prisma.placementEmailLink.create({
       data: {
         tenantId: user.tenantId,
@@ -151,6 +248,25 @@ export class EmailThreadsService {
 
     this.publishLinked(link, user);
     return link;
+  }
+
+  async linkPlacementWithThread(
+    user: RequestUser,
+    threadId: string,
+    placementId: string,
+    dto: LinkPlacementEmailDto,
+  ) {
+    const link = await this.linkPlacement(user, threadId, placementId, dto);
+    const conversation = await this.findPlacementThread(
+      user.tenantId,
+      placementId,
+      threadId,
+    );
+
+    return {
+      link,
+      thread: conversation.thread,
+    };
   }
 
   async archiveLink(user: RequestUser, id: string): Promise<LinkRecord> {
@@ -206,6 +322,31 @@ export class EmailThreadsService {
     if (value === undefined) return undefined;
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private mapPlacementThreadSummary(
+    link: PlacementThreadListRecord | PlacementThreadDetailRecord,
+  ) {
+    const latestMessage = link.thread.messages[0];
+
+    return {
+      linkId: link.id,
+      threadId: link.threadId,
+      subject: link.thread.subject,
+      participants: link.thread.participants,
+      latestMessagePreview: latestMessage?.bodyPreview ?? null,
+      latestMessageAt:
+        link.thread.lastMessageAt ??
+        latestMessage?.receivedAt ??
+        latestMessage?.sentAt ??
+        null,
+      messageCount: link.thread.messageCount,
+      hasAttachments: link.thread.hasAttachments,
+      linkedByUserId: link.linkedByUserId,
+      note: link.note,
+      linkedAt: link.createdAt,
+      mailbox: link.thread.mailboxConnection,
+    };
   }
 
   private publishLinked(link: LinkRecord, user: RequestUser): void {

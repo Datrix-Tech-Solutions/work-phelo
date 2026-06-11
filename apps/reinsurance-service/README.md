@@ -606,10 +606,11 @@ closing snapshots.
 
 ## Placement Claims API
 
-Claims represent loss events first, not settlements. PR1 captures occurrence
-details, estimated loss, optional final loss and reinsurer liability allocations.
-It does not create cash calls, claim debit/credit notes, payments, recoveries,
-accounting records, documents, PDFs or email workflows.
+Claims represent loss events first, not settlements. The current foundation
+captures occurrence details, estimated loss, optional final loss, reinsurer
+liability allocations and one-allocation-per-cash-call records. It does not
+create claim debit/credit notes, settlement payments, recoveries, accounting
+records, documents, PDFs or email workflows.
 
 ```text
 GET   /api/v1/operations/reinsurance/placements/:id/claims
@@ -620,6 +621,12 @@ PATCH /api/v1/operations/reinsurance/placements/:id/claims/:claimId/status
 
 GET   /api/v1/operations/reinsurance/placements/:id/claims/:claimId/allocations
 POST  /api/v1/operations/reinsurance/placements/:id/claims/:claimId/allocations/generate
+
+GET   /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls
+GET   /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls/:cashCallId
+POST  /api/v1/operations/reinsurance/placements/:id/claims/:claimId/allocations/:allocationId/cash-calls
+PATCH /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls/:cashCallId/status
+POST  /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls/:cashCallId/void
 ```
 
 Claim fields:
@@ -664,13 +671,42 @@ Claim allocations:
 - `allocatedEstimatedLossAmount = estimatedLossAmount * signedLinePercent / 100`.
 - `allocatedFinalLossAmount = finalLossAmount * signedLinePercent / 100` when a
   final loss amount exists.
-- `cashCallAmount` and `paidAmount` are reserved for future workflows and remain
-  `null` in PR1.
+- `cashCallAmount` and `paidAmount` are reserved on the allocation row for
+  future settlement tracking. Cash-call generation does not mutate them.
 
-Claim creation and allocation generation do not financially lock placements.
-Payment remains the only hard financial lock trigger. `CLAIM_SETTLEMENT`
-payments remain deferred and guarded until explicit claim settlement APIs are
-implemented.
+Claim cash calls:
+
+- Are generated explicitly with
+  `POST /placements/:id/claims/:claimId/allocations/:allocationId/cash-calls`.
+- Use the claim allocation as the source of truth. They do not recalculate from
+  live participants, placement closings or endorsement closings.
+- Use `allocatedFinalLossAmount` when present; otherwise they use
+  `allocatedEstimatedLossAmount`.
+- Snapshot `basisAmount`, `signedLinePercent`, `currency` and `counterpartyId`
+  from the allocation.
+- Use `CCL-001`, `CCL-002`, etc. scoped to the placement. Numbers are never
+  reused; voided cash calls retain their numbers.
+- Allow one active cash call per allocation. Active means status is not `VOID`.
+  After a cash call is voided, the same allocation can be reissued with the next
+  `CCL-*` number.
+- Do not mutate claim allocations, closings, notes, payments, placements or
+  endorsements.
+- Do not financially lock or unlock placements. Payment remains the only hard
+  financial lock trigger.
+
+Claim cash call lifecycle:
+
+| Status   | Meaning                                             | Allowed next statuses |
+| -------- | --------------------------------------------------- | --------------------- |
+| `DRAFT`  | Cash call created but not issued.                   | `ISSUED`, `VOID`      |
+| `ISSUED` | Cash call has been issued externally.               | `VOID`                |
+| `PAID`   | Reserved for future claim settlement payment links. | terminal              |
+| `VOID`   | Cash call was voided and may be reissued.           | terminal              |
+
+Claim creation, allocation generation and cash-call issuance do not financially
+lock placements. Payment remains the only hard financial lock trigger.
+`CLAIM_SETTLEMENT` payments remain deferred and guarded until explicit claim
+settlement APIs are implemented.
 
 ## Placement Payment API
 
@@ -1242,6 +1278,8 @@ The gateway forwards these routes:
 | `GET`    | `/api/v1/operations/reinsurance/email/threads`                                        | `operations.reinsurance.email:VIEW`          |
 | `GET`    | `/api/v1/operations/reinsurance/email/threads/:id`                                    | `operations.reinsurance.email:VIEW`          |
 | `GET`    | `/api/v1/operations/reinsurance/email/messages`                                       | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/placements/:placementId/email/threads`                | `operations.reinsurance.email:VIEW`          |
+| `GET`    | `/api/v1/operations/reinsurance/placements/:placementId/email/threads/:threadId`      | `operations.reinsurance.email:VIEW`          |
 | `POST`   | `/api/v1/operations/reinsurance/email/threads/:threadId/placements/:placementId/link` | `operations.reinsurance.email:EDIT`          |
 | `DELETE` | `/api/v1/operations/reinsurance/email/links/:id`                                      | `operations.reinsurance.email:EDIT`          |
 
@@ -1261,6 +1299,21 @@ Connect payload:
 The access and refresh tokens are write-only inputs. Responses return mailbox
 metadata only. `sync` stores provider message metadata and attachment metadata
 only; it does not download attachment content.
+
+Placement email conversations are built from explicit `PlacementEmailLink`
+records. A synced mailbox thread can be manually linked to a placement, then read
+through the placement-scoped conversation endpoints. The list endpoint returns
+thread summaries, latest message previews, link metadata and mailbox metadata.
+The detail endpoint returns the linked thread summary plus messages in
+chronological order for conversation-style UI rendering.
+
+The foundation is read/link/unlink only:
+
+- It does not send, reply to or forward email.
+- It does not generate or attach PDFs, slips, notes or documents.
+- It does not infer placement links from subjects or email body content.
+- Unlinking archives only the placement link; it does not delete the email
+  thread or message metadata.
 
 Email frontend integration should follow the same route/key style as
 Counterparties and Placements:
@@ -1282,6 +1335,10 @@ const emailKeys = {
     [...emailKeys.all, 'mailboxes', params] as const,
   threads: (params: EmailThreadQuery) =>
     [...emailKeys.all, 'threads', params] as const,
+  placementThreads: (placementId: string) =>
+    [...emailKeys.all, 'placements', placementId, 'threads'] as const,
+  placementThread: (placementId: string, threadId: string) =>
+    [...emailKeys.placementThreads(placementId), threadId] as const,
   messages: (params: EmailMessageQuery) =>
     [...emailKeys.all, 'messages', params] as const,
 };

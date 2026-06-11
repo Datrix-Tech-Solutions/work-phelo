@@ -51,8 +51,9 @@ financially lock a placement; payments remain the only hard-lock trigger.
 Claim endpoints record loss events first. They capture occurrence details,
 estimated loss and optional final loss amounts. Claim allocations are generated
 explicitly from immutable CONFIRMED placement and endorsement closing snapshots
-to calculate reinsurer liability. PR1 does not create cash calls, claim notes,
-settlement payments, documents, email workflows or accounting records.
+to calculate reinsurer liability. Claim cash calls are generated one per
+allocation from those allocation snapshots. Claim notes, settlement payments,
+documents, email workflows and accounting records remain deferred.
 
 Financial lock status is available on placement detail responses and
 \`GET /placements/:id/lock-status\`. Lifecycle edit rules and financial locks
@@ -76,8 +77,9 @@ Endorsements may be created once at least one placement closing exists. Before
 ### Email foundation
 The email endpoints are a technical foundation for embedded mailbox workflows:
 connection metadata, provider verification, sync proof-of-concept, thread/message
-metadata and manual placement links. They do not send/reply/forward email, download
-attachments, parse content with AI or automatically update placements.
+metadata, manual placement links and placement-scoped conversation reads. They do
+not send/reply/forward email, download attachments, parse content with AI or
+automatically update placements.
 
 Documentation is exposed only when \`ENABLE_SWAGGER=true\`; the deployment
 pipeline enables it for development only.
@@ -139,6 +141,10 @@ pipeline enables it for development only.
       'Reinsurer liability calculations generated from immutable closing snapshots',
     )
     .addTag(
+      'Reinsurance - Claim Cash Calls',
+      'Cash calls generated one-per-claim-allocation from allocation snapshots',
+    )
+    .addTag(
       'Reinsurance - Financial Locking',
       'Direct-edit lock status used to gate future endorsement-required changes',
     )
@@ -171,6 +177,10 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Email Threads',
       'Thread/message metadata and manual placement email links',
+    )
+    .addTag(
+      'Reinsurance - Placement Emails',
+      'Placement-scoped linked email thread and conversation views',
     )
     .addCookieAuth('access_token')
     .addBearerAuth(

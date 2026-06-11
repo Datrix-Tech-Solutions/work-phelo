@@ -5,6 +5,7 @@ import { ClaimAllocationCalculator } from './claim-allocation.calculator';
 import { ClosingSnapshotReader } from './closing-snapshot.reader';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
@@ -22,6 +23,7 @@ import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
   providers: [
     PlacementsService,
     PlacementClaimsService,
+    PlacementClaimCashCallsService,
     PlacementClosingsService,
     PlacementEndorsementsService,
     PlacementEndorsementParticipantsService,
