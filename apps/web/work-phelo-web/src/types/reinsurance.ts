@@ -336,20 +336,26 @@ export const RISK_CLASS_FORM_DEFAULTS: RiskClassFormValues = {
 export const FACULTATIVE_STATUSES = [
   'DRAFT',
   'MARKETING',
-  'QUOTED',
-  'BOUND',
+  'PARTIALLY_PLACED',
+  'PLACED',
+  'CLOSING',
+  'CLOSED',
   'DECLINED',
   'CANCELLED',
 ] as const;
 export type FacultativeStatus = (typeof FACULTATIVE_STATUSES)[number];
 
-export const PLACEMENT_DISPLAY_STATUSES = ['Open', 'Closed', 'Cancelled'] as const;
+export const PLACEMENT_DISPLAY_STATUSES = ['Open', 'Closed'] as const;
 export type PlacementDisplayStatus = (typeof PLACEMENT_DISPLAY_STATUSES)[number];
 
 export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStatus {
-  if (status === 'BOUND') return 'Closed';
-  if (status === 'CANCELLED') return 'Cancelled';
+  if (status === 'CLOSED' || status === 'DECLINED' || status === 'CANCELLED') return 'Closed';
   return 'Open';
+}
+
+export function toStatusLabel(status: FacultativeStatus): string {
+  if (status === 'PARTIALLY_PLACED' || status === 'PLACED') return 'Placed';
+  return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 
 export type PlacementParticipantRole = 'BROKER' | 'REINSURER' | 'LEAD_REINSURER' | 'CO_REINSURER';
@@ -565,6 +571,52 @@ export interface CreateEndorsementPayload {
   reason: string;
   description?: string;
   proposedSnapshot?: Record<string, unknown>;
+}
+
+/* ── Placement Payments ── */
+export type PlacementPaymentType =
+  | 'PREMIUM_RECEIVED'
+  | 'REINSURER_DISBURSEMENT'
+  | 'CLAIM_SETTLEMENT';
+
+export type PlacementPaymentDirection = 'INBOUND' | 'OUTBOUND';
+export type PlacementPaymentStatus = 'RECORDED' | 'REVERSED';
+
+export interface PlacementPayment {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  closingId: string | null;
+  participantId: string | null;
+  counterpartyId: string;
+  type: PlacementPaymentType;
+  direction: PlacementPaymentDirection;
+  amount: string;
+  currency: string;
+  paymentDate: string;
+  reference: string | null;
+  notes: string | null;
+  status: PlacementPaymentStatus;
+  reversalOfPaymentId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: { id: string; type: string; name: string; registrationNumber: string | null };
+  participant: { id: string; counterpartyId: string } | null;
+  closing: { id: string; closingNumber: string } | null;
+}
+
+export interface CreatePlacementPaymentPayload {
+  type: PlacementPaymentType;
+  direction: PlacementPaymentDirection;
+  counterpartyId: string;
+  closingId?: string;
+  participantId?: string;
+  amount: number;
+  currency: string;
+  paymentDate: string;
+  reference?: string;
+  notes?: string;
 }
 
 /* ── Facultative form ── */
@@ -846,6 +898,51 @@ export const FAC_OBLIGATORY_DEFAULTS: FacObligatoryFormValues = {
   yourShare: '',
   supportingDocument: null,
 };
+
+/* ── Bank ── */
+export interface Bank {
+  id: string;
+  tenantId: string;
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  branchName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BankFormValues {
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  branchName: string;
+}
+
+/* ── Levy & Tax ── */
+export interface LevyTaxFormValues {
+  nicLevy: number | '';
+  withholdingTax: number | '';
+}
+
+export const LEVY_TAX_FORM_DEFAULTS: LevyTaxFormValues = {
+  nicLevy: '',
+  withholdingTax: '',
+};
+
+export const BANK_FORM_DEFAULTS: BankFormValues = {
+  accountName: '',
+  accountNumber: '',
+  bankName: '',
+  branchName: '',
+};
+
+export interface CreateBankPayload {
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  branchName: string;
+}
+export type UpdateBankPayload = Partial<CreateBankPayload>;
 
 export const QUOTA_SHARE_DEFAULTS: QuotaShareFormValues = {
   classOfBusiness: '',

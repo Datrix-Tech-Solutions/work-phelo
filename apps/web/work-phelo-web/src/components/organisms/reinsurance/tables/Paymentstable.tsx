@@ -7,11 +7,13 @@ import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   Facultative,
+  FacultativeStatus,
   PlacementDisplayStatus,
   PLACEMENT_DISPLAY_STATUSES,
   toDisplayStatus,
+  toStatusLabel,
 } from '@/types/reinsurance';
-import { useFacultatives } from '@/hooks';
+import { useFacultatives, usePlacementPayments } from '@/hooks';
 
 const PAGE_SIZE = 10;
 
@@ -29,58 +31,134 @@ function fmtAmount(val: number | null | undefined) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const OFFER_STATUS_VARIANT_MAP: Record<
-  PlacementDisplayStatus,
+const RAW_STATUS_VARIANT_MAP: Record<
+  FacultativeStatus,
   'success' | 'warning' | 'neutral' | 'danger'
 > = {
-  Open: 'warning',
-  Closed: 'success',
-  Cancelled: 'danger',
+  DRAFT: 'neutral',
+  MARKETING: 'warning',
+  PARTIALLY_PLACED: 'warning',
+  PLACED: 'success',
+  CLOSING: 'warning',
+  CLOSED: 'success',
+  DECLINED: 'danger',
+  CANCELLED: 'danger',
+};
+
+type PaymentStatus = 'Outstanding' | 'Partially Paid' | 'Paid';
+
+const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
+  Outstanding: 'text-xs text-gray-400',
+  'Partially Paid': 'text-xs text-yellow-600 font-medium',
+  Paid: 'text-xs text-green-600 font-medium',
 };
 
 const STATUS_FILTER_OPTIONS = PLACEMENT_DISPLAY_STATUSES.map((s) => ({ value: s, label: s }));
+
+function netPremiumFor(row: Facultative): number {
+  const facPremium =
+    row.premium != null && row.facultativeOffer != null
+      ? (row.facultativeOffer / 100) * row.premium
+      : 0;
+  return row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
+}
+
+function totalPaidFor(payments: { amount: string; status: string }[]): number {
+  return payments
+    .filter((p) => p.status === 'RECORDED')
+    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+}
+
+function PaymentSummaryCell({ placement }: { placement: Facultative }) {
+  const { data: payments = [] } = usePlacementPayments(placement.id);
+  const netPremium = netPremiumFor(placement);
+  const paid = totalPaidFor(payments);
+  const outstanding = Math.max(0, netPremium - paid);
+  const cur = placement.currency ?? '';
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-medium text-gray-900">
+        {cur} {fmtAmount(paid)}
+      </span>
+      <span className="text-xs text-gray-400">
+        {cur} {fmtAmount(outstanding)} outstanding
+      </span>
+    </div>
+  );
+}
+
+function PaymentStatusCell({ placement }: { placement: Facultative }) {
+  const { data: payments = [] } = usePlacementPayments(placement.id);
+  const netPremium = netPremiumFor(placement);
+  const paid = totalPaidFor(payments);
+
+  let paymentStatus: PaymentStatus = 'Outstanding';
+  if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
+  else if (paid > 0) paymentStatus = 'Partially Paid';
+
+  return (
+    <div className="flex flex-col gap-1 items-start">
+      <Badge
+        label={toStatusLabel(placement.status)}
+        variant={RAW_STATUS_VARIANT_MAP[placement.status]}
+      />
+      <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
+    </div>
+  );
+}
 
 const COLUMNS: Column<Facultative>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
-    width: '1.1fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.reference}</span>,
-  },
-  {
-    key: 'classOfBusiness',
-    label: 'Risk Type',
-    width: '1fr',
-    render: (row) => <span className="text-gray-600">{row.classOfBusiness ?? '—'}</span>,
+    width: '190px',
+    render: (row) => (
+      <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-300 text-xs font-medium text-blue-700 bg-blue-50 whitespace-nowrap">
+        {row.reference}
+      </span>
+    ),
   },
   {
     key: 'title',
-    label: 'Insured',
-    width: '1.3fr',
-    render: (row) => <span className="text-gray-700">{row.title}</span>,
+    label: 'Insured / Risk Type',
+    width: '1.5fr',
+    render: (row) => (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
+        <span className="text-xs text-gray-400">{row.classOfBusiness ?? '—'}</span>
+      </div>
+    ),
   },
   {
     key: 'sumInsured',
     label: 'Sum Insured',
-    width: '1fr',
-    render: (row) => <span className="text-gray-700">{fmtAmount(row.sumInsured)}</span>,
+    width: '1.1fr',
+    render: (row) => (
+      <span className="font-medium text-gray-900 whitespace-nowrap">
+        {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
+      </span>
+    ),
   },
   {
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
-    width: '1fr',
+    width: '1.1fr',
     render: (row) => {
       const facSumInsured =
         row.sumInsured != null && row.facultativeOffer != null
           ? row.sumInsured * (row.facultativeOffer / 100)
           : null;
-      return <span className="text-gray-700">{fmtAmount(facSumInsured)}</span>;
+      return (
+        <span className="font-medium text-gray-900 whitespace-nowrap">
+          {facSumInsured != null ? `${row.currency ?? ''} ${fmtAmount(facSumInsured)}` : '—'}
+        </span>
+      );
     },
   },
   {
     key: 'premium',
-    label: 'Premium',
-    width: '1fr',
+    label: 'Net Premium',
+    width: '1.1fr',
     render: (row) => {
       const facPremium =
         row.premium != null && row.facultativeOffer != null
@@ -90,47 +168,39 @@ const COLUMNS: Column<Facultative>[] = [
         facPremium != null && row.commission != null
           ? facPremium * (1 - row.commission / 100)
           : facPremium;
-      return <span className="text-gray-700">{fmtAmount(netPremium)}</span>;
+      return (
+        <span className="font-medium text-gray-900 whitespace-nowrap">
+          {netPremium != null ? `${row.currency ?? ''} ${fmtAmount(netPremium)}` : '—'}
+        </span>
+      );
     },
   },
   {
     key: 'collectedToDate' as keyof Facultative,
-    label: 'Amount payed',
-    width: '1fr',
-    render: () => <span className="text-gray-400">—</span>,
-  },
-  {
-    key: 'outstanding' as keyof Facultative,
-    label: 'Outstanding',
-    width: '1fr',
-    render: () => <span className="text-gray-400">—</span>,
+    label: 'Paid / Outstanding',
+    width: '1.2fr',
+    render: (row) => <PaymentSummaryCell placement={row} />,
   },
   {
     key: 'commission',
     label: 'Commission',
-    width: '1fr',
-    render: (row) => <span className="text-gray-700">{fmtAmount(row.commission)}</span>,
-  },
-  {
-    key: 'status',
-    label: 'Offer Status',
-    width: '110px',
-    render: (row) => {
-      const display = toDisplayStatus(row.status);
-      return <Badge label={display} variant={OFFER_STATUS_VARIANT_MAP[display]} />;
-    },
-  },
-  {
-    key: 'paymentStatus' as keyof Facultative,
-    label: 'Payment Status',
-    width: '120px',
-    render: () => <Badge label="Pending" variant="neutral" />,
+    width: '100px',
+    render: (row) => (
+      <span className="text-gray-700">{row.commission != null ? `${row.commission}%` : '—'}</span>
+    ),
   },
   {
     key: 'createdAt',
     label: 'Offer Date',
     width: '1fr',
     render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
+  },
+  {
+    key: 'status',
+    label: 'Status',
+    width: '130px',
+    className: 'pr-6',
+    render: (row) => <PaymentStatusCell placement={row} />,
   },
 ];
 

@@ -42,6 +42,7 @@ interface DistributionTableProps {
   onAccept: (row: DistributionEntry) => void;
   onDecline: (row: DistributionEntry) => void;
   onDelete?: (row: DistributionEntry) => void;
+  onClosePlacement?: () => void;
 }
 
 export function DistributionTable({
@@ -56,6 +57,7 @@ export function DistributionTable({
   onAccept,
   onDecline,
   onDelete,
+  onClosePlacement,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [reconfirmedIds, setReconfirmedIds] = useState<Set<string>>(new Set());
@@ -300,6 +302,7 @@ export function DistributionTable({
         recipients={mailPreviewEntry?.emails ?? []}
         onSend={handleSend}
         onClose={() => setMailPreviewId(null)}
+        onClosePlacement={onClosePlacement}
       />
 
       <SlipPreviewModal

@@ -214,7 +214,6 @@ export default function FacultativeFormFields({
               label="Rate (%)"
               type="number"
               registration={register('rate', {
-                required: 'Rate is required',
                 min: { value: 0, message: 'Cannot be negative' },
                 max: { value: 100, message: 'Cannot exceed 100%' },
                 valueAsNumber: true,
@@ -253,7 +252,7 @@ export default function FacultativeFormFields({
 
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label="Commission (%)"
+              label="Cedant Commission (%)"
               type="number"
               registration={register('commission', {
                 required: 'Commission is required',

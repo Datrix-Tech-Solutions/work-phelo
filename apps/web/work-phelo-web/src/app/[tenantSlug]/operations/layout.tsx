@@ -41,7 +41,7 @@ export default function OperationsLayout({
   }));
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+    <div className="h-screen overflow-hidden bg-app-bg-operations flex flex-col layout-operations">
       <TopNav
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}

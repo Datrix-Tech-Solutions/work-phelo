@@ -14,6 +14,11 @@ function fmtFieldValue(val: unknown): string {
   return String(val);
 }
 
+function Field({ label, value }: { label: string; value: string | null | undefined }) {
+  if (!value || value === '—') return null;
+  return <DetailField inline label={label} value={value} />;
+}
+
 function fmtDate(iso: string) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -89,56 +94,83 @@ export function SlipPreviewModal({
       onClose={onClose}
     >
       <div className="flex flex-col gap-3">
-        <DetailField inline label="Date" value={today()} />
-        <DetailField inline label="Cover Type" value={classOfBusiness ?? '—'} />
-        <DetailField inline label="Original Insured" value={title} />
-        <DetailField inline label="Policy Number" value={reference} />
-        <DetailField inline label="Currency" value={currency ?? '—'} />
-        <DetailField
-          inline
-          label="Insurance Period"
-          value={`${fmtDate(inceptionDate ?? '')} – ${fmtDate(expiryDate ?? '')}`}
-        />
+        <div className="mb-4">
+          <Field label="Date" value={today()} />
+        </div>
+        <Field label="Cover Type" value={classOfBusiness} />
+        <Field label="Original Insured" value={title} />
+        <Field label="Policy Number" value={reference} />
+        <Field label="Currency" value={currency} />
+        {(inceptionDate || expiryDate) && (
+          <Field
+            label="Insurance Period"
+            value={`${fmtDate(inceptionDate ?? '')} – ${fmtDate(expiryDate ?? '')}`}
+          />
+        )}
 
         {(businessEntries.length > 0 || offerEntries.length > 0) && (
           <>
             <hr className="border-gray-100 my-1" />
-            {businessEntries.map(([key, val]) => (
-              <DetailField key={key} inline label={toLabel(key)} value={fmtFieldValue(val)} />
-            ))}
-            {offerEntries.map(([key, val]) => (
-              <DetailField key={key} inline label={toLabel(key)} value={fmtFieldValue(val)} />
-            ))}
+            {businessEntries.map(([key, val]) => {
+              const formatted = fmtFieldValue(val);
+              return formatted === '—' ? null : (
+                <DetailField key={key} inline label={toLabel(key)} value={formatted} />
+              );
+            })}
+            {offerEntries.map(([key, val]) => {
+              const formatted = fmtFieldValue(val);
+              return formatted === '—' ? null : (
+                <DetailField key={key} inline label={toLabel(key)} value={formatted} />
+              );
+            })}
           </>
         )}
 
-        <hr className="border-gray-100 my-1" />
+        {(sumInsured != null ||
+          rate != null ||
+          premium != null ||
+          facSumInsured != null ||
+          reinsurancePremium != null) && (
+          <>
+            <hr className="border-gray-100 my-1" />
+            <Field
+              label="100% Sum Insured"
+              value={sumInsured != null ? fmtAmount(sumInsured, currency) : null}
+            />
+            <Field label="Premium Rate" value={rate != null ? `${rate}%` : null} />
+            <Field
+              label="100% Gross Premium"
+              value={premium != null ? fmtAmount(premium, currency) : null}
+            />
+            <Field
+              label="Offer"
+              value={
+                facSumInsured != null
+                  ? `${fmtAmount(facSumInsured, currency)} (${facOffer}%)`
+                  : null
+              }
+            />
+            <Field
+              label="Reinsurance Premium"
+              value={reinsurancePremium != null ? fmtAmount(reinsurancePremium, currency) : null}
+            />
+            <Field
+              label="Cedant Commission"
+              value={
+                commissions != null
+                  ? `${fmtAmount(commissions, currency)} (${(commission ?? 0) + brokerageFee}%)`
+                  : null
+              }
+            />
+          </>
+        )}
 
-        <DetailField inline label="100% Sum Insured" value={fmtAmount(sumInsured, currency)} />
-        <DetailField inline label="Premium Rate" value={rate != null ? `${rate}%` : '—'} />
-        <DetailField inline label="100% Gross Premium" value={fmtAmount(premium, currency)} />
-        <DetailField
-          inline
-          label="Offer"
-          value={
-            facSumInsured != null ? `${fmtAmount(facSumInsured, currency)} (${facOffer}%)` : '—'
-          }
-        />
-
-        <DetailField
-          inline
-          label="Reinsurance Premium"
-          value={fmtAmount(reinsurancePremium, currency)}
-        />
-        <DetailField
-          inline
-          label="Commission"
-          value={`${fmtAmount(commissions, currency)} (${commission ?? 0}% + ${brokerageFee}%)`}
-        />
-
-        <hr className="border-gray-100 my-1" />
-
-        <DetailField inline label="Net Premium" value={fmtAmount(netPremium, currency)} />
+        {netPremium != null && (
+          <>
+            <hr className="border-gray-100 my-1" />
+            <Field label="Net Premium" value={fmtAmount(netPremium, currency)} />
+          </>
+        )}
       </div>
     </DocumentPreviewModal>
   );

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
   Facultative,
+  FacultativeStatus,
   CreateFacultativePayload,
   UpdateFacultativePayload,
   PlacementParticipantPayload,
@@ -92,6 +93,20 @@ export function useUpdateFacultative() {
   });
 }
 
+export function useUpdateFacultativeStatus(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ status, note }: { status: FacultativeStatus; note?: string }) => {
+      const res = await api.patch(`${BASE}/${placementId}/status`, { status, note });
+      return transformPlacement(res.data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    },
+  });
+}
+
 export function useDeleteFacultative() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -170,7 +185,28 @@ export function useCreateClosing(placementId: string) {
   return useMutation({
     mutationFn: async (participantId: string) => {
       const res = await api.post(`${BASE}/${placementId}/participants/${participantId}/closings`);
-      return res.data;
+      return res.data as { id: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    },
+  });
+}
+
+export function useUpdateClosingStatus(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      closingId,
+      status,
+    }: {
+      closingId: string;
+      status: 'ISSUED' | 'CONFIRMED' | 'VOID';
+    }) => {
+      const res = await api.patch(`${BASE}/${placementId}/closings/${closingId}/status`, {
+        status,
+      });
+      return res.data as { id: string };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });

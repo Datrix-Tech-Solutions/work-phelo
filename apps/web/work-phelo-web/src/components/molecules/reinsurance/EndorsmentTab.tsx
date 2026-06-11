@@ -174,7 +174,7 @@ function EndorsementCard({
                 Send to Market
               </Button>
             )}
-            <Button size="sm" variant="outline" onClick={() => setCedantDocOpen(true)}>
+            <Button size="sm" variant="secondary" onClick={() => setCedantDocOpen(true)}>
               Cedant Document
             </Button>
             <SearchSelect
