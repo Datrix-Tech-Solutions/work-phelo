@@ -1,8 +1,19 @@
-import { useState } from 'react';
+'use client';
+
+import { useState, useMemo } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
-import { Facultative, PlacementDisplayStatus, toDisplayStatus } from '@/types/reinsurance';
+import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
+import { usePlacementPayments } from '@/hooks';
+
+type PaymentStatus = 'Outstanding' | 'Partially Paid' | 'Paid';
+
+const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
+  Outstanding: 'text-xs text-gray-400',
+  'Partially Paid': 'text-xs text-yellow-600 font-medium',
+  Paid: 'text-xs text-green-600 font-medium',
+};
 
 function toLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -28,13 +39,17 @@ function fmtAmount(val: number | null, currency: string | null) {
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-const DISPLAY_STATUS_VARIANT_MAP: Record<
-  PlacementDisplayStatus,
-  'success' | 'warning' | 'neutral' | 'danger'
-> = {
-  Open: 'warning',
-  Closed: 'success',
-};
+const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neutral' | 'danger'> =
+  {
+    DRAFT: 'neutral',
+    MARKETING: 'warning',
+    PARTIALLY_PLACED: 'warning',
+    PLACED: 'success',
+    CLOSING: 'success',
+    CLOSED: 'success',
+    DECLINED: 'danger',
+    CANCELLED: 'danger',
+  };
 
 interface FacultativeOverviewProps {
   placement: Facultative;
@@ -42,6 +57,22 @@ interface FacultativeOverviewProps {
 
 export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const { data: payments = [] } = usePlacementPayments(placement.id);
+
+  const paymentStatus = useMemo<PaymentStatus>(() => {
+    const facPrem =
+      placement.premium != null && placement.facultativeOffer != null
+        ? (placement.facultativeOffer / 100) * placement.premium
+        : 0;
+    const netPremium =
+      placement.commission != null ? facPrem * (1 - placement.commission / 100) : facPrem;
+    const paid = payments
+      .filter((p) => p.status === 'RECORDED')
+      .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    if (netPremium > 0 && paid >= netPremium) return 'Paid';
+    if (paid > 0) return 'Partially Paid';
+    return 'Outstanding';
+  }, [payments, placement.premium, placement.facultativeOffer, placement.commission]);
 
   const facOffer = placement.facultativeOffer ?? 0;
   const facSumInsured =
@@ -53,14 +84,17 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
     ...Object.entries(placement.offerDetails ?? {}),
   ];
 
-  const display = toDisplayStatus(placement.status);
-
   return (
     <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">Overview</h2>
-          <Badge label={display} variant={DISPLAY_STATUS_VARIANT_MAP[display]} />
+          <Badge
+            label={toStatusLabel(placement.status)}
+            variant={STATUS_VARIANT_MAP[placement.status]}
+          />
+          <span className="text-sm text-gray-500">|</span>
+          <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
         </div>
         <button
           type="button"

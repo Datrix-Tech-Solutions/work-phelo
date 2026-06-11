@@ -33,6 +33,7 @@ import {
   // Business / HR
   Building2,
   TrendingUp,
+  TrendingDown,
   CircleDollarSign,
 
   // Devices / Assets
@@ -69,6 +70,7 @@ import {
   Pencil,
   Check,
   SendHorizonal,
+  RotateCcw,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -99,6 +101,7 @@ export const Icons = {
   GripVertical,
   Pencil,
   Check,
+  RotateCcw,
 
   // Time & Status
   Clock,
@@ -109,6 +112,7 @@ export const Icons = {
   User,
   Users,
   TrendingUp,
+  TrendingDown,
   CircleDollarSign,
 
   // Devices / Assets

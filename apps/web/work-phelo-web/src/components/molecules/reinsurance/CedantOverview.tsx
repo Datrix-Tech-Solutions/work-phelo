@@ -13,6 +13,11 @@ function formatTerritory(addresses: Counterparty['addresses']): string {
   return primary.state ? `${primary.state}, ${country}` : country;
 }
 
+function formatCity(addresses: Counterparty['addresses']): string {
+  const primary = addresses.find((a) => a.isPrimary) ?? addresses[0];
+  return primary?.city ?? '—';
+}
+
 interface CedantOverviewProps {
   cedant: Counterparty;
 }
@@ -41,6 +46,7 @@ export function CedantOverview({ cedant }: CedantOverviewProps) {
           <DetailField label="Name" value={cedant.name} />
           <DetailField label="Email" value={cedant.email ?? '—'} />
           <DetailField label="Phone" value={cedant.phone ?? '—'} />
+          <DetailField label="Address" value={formatCity(cedant.addresses)} />
           <DetailField label="Territory" value={formatTerritory(cedant.addresses)} />
           {cedant.notes && <DetailField label="Notes" value={cedant.notes} />}
         </div>

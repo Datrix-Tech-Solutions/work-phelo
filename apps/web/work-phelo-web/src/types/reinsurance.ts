@@ -355,6 +355,7 @@ export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStat
 
 export function toStatusLabel(status: FacultativeStatus): string {
   if (status === 'PARTIALLY_PLACED' || status === 'PLACED') return 'Placed';
+  if (status === 'MARKETING') return 'Open';
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 
@@ -376,6 +377,7 @@ export interface PlacementParticipant {
   signedLinePercent: string | null;
   brokerageFee: string | null;
   notes: string | null;
+  createdAt?: string;
   counterparty: { id: string; name: string };
 }
 
@@ -574,6 +576,18 @@ export interface CreateEndorsementPayload {
 }
 
 /* ── Placement Payments ── */
+export type PlacementParticipantClosingStatus = 'DRAFT' | 'ISSUED' | 'CONFIRMED' | 'VOID';
+
+export interface PlacementParticipantClosing {
+  id: string;
+  placementId: string;
+  participantId: string;
+  status: PlacementParticipantClosingStatus;
+  closingNumber: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PlacementPaymentType =
   | 'PREMIUM_RECEIVED'
   | 'REINSURER_DISBURSEMENT'

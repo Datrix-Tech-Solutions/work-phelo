@@ -19,6 +19,8 @@ import {
   useDeleteParticipant,
   useCreateClosing,
   useUpdateClosingStatus,
+  usePlacementClosings,
+  usePlacementPayments,
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
@@ -75,6 +77,8 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const { mutateAsync: deleteParticipant } = useDeleteParticipant(placement.id);
   const { mutateAsync: createClosing } = useCreateClosing(placement.id);
   const { mutateAsync: updateClosingStatus } = useUpdateClosingStatus(placement.id);
+  const { data: closings = [] } = usePlacementClosings(placement.id);
+  const { data: payments = [] } = usePlacementPayments(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
 
   const activeEndorsement = endorsements.find(
@@ -141,6 +145,19 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   );
 
   const toast = useToastStore.getState;
+
+  const isPlacementLocked = useMemo(
+    () => payments.some((p) => p.status === 'RECORDED'),
+    [payments],
+  );
+
+  const closingByParticipantId = useMemo(
+    () =>
+      Object.fromEntries(
+        closings.filter((c) => c.status !== 'VOID').map((c) => [c.participantId, c.id]),
+      ),
+    [closings],
+  );
 
   const patch = (id: string, update: Partial<DistributionEntry>) =>
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
@@ -236,6 +253,20 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     updatePlacementStatus({ status: 'CLOSING' })
       .then(() => updatePlacementStatus({ status: 'CLOSED' }))
       .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
+  };
+
+  const handleRevert = (row: DistributionEntry) => {
+    patch(row.id, { status: 'Pending' });
+    const closingId = closingByParticipantId[row.id];
+    const voidClosing = closingId
+      ? updateClosingStatus({ closingId, status: 'VOID' })
+      : Promise.resolve();
+    voidClosing
+      .then(() => updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }))
+      .catch((error) => {
+        patch(row.id, { status: 'Accepted' });
+        toast().addToast({ message: extractError(error), type: 'error' });
+      });
   };
 
   const handleDecline = (row: DistributionEntry) => {
@@ -345,12 +376,14 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           placement={placement}
           hasActiveEndorsement={hasActiveEndorsement}
           confirmedCounterpartyIds={confirmedCounterpartyIds}
+          isPlacementLocked={isPlacementLocked}
           onShareCommit={handleShareCommit}
           onBrokerageCommit={handleBrokerageCommit}
           onMailSent={handleMailSent}
           onAccept={handleAccept}
           onDecline={handleDecline}
           onDelete={handleDelete}
+          onRevert={handleRevert}
           onClosePlacement={placement.status === 'PLACED' ? handleClosePlacement : undefined}
         />
       </div>

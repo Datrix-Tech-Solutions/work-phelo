@@ -13,6 +13,7 @@ import {
   PlacementEndorsementParticipant,
   CreateEndorsementPayload,
   CreateEndorsementParticipantPayload,
+  PlacementParticipantClosing,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
@@ -177,6 +178,18 @@ export function useDeleteParticipant(placementId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
     },
+  });
+}
+
+export function usePlacementClosings(placementId: string) {
+  return useQuery({
+    queryKey: [...FACULTATIVES_KEY, placementId, 'closings'],
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/closings`);
+      const raw = res.data?.items ?? res.data ?? [];
+      return raw as PlacementParticipantClosing[];
+    },
+    enabled: !!placementId,
   });
 }
 

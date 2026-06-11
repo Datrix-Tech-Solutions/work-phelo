@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
 import { useRouter, useParams } from 'next/navigation';
+import { useQueries } from '@tanstack/react-query';
+import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panels/CreateFacultativePanel';
@@ -10,14 +11,10 @@ import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/
 import {
   Facultative,
   FacultativeStatus,
-  PlacementDisplayStatus,
   PlacementPayment,
-  PLACEMENT_DISPLAY_STATUSES,
-  toDisplayStatus,
   toStatusLabel,
 } from '@/types/reinsurance';
 import { useFacultatives, usePlacementPayments } from '@/hooks';
-import { api } from '@/lib/api';
 
 const PAGE_SIZE = 10;
 
@@ -30,8 +27,8 @@ const RAW_STATUS_VARIANT_MAP: Record<
   'success' | 'warning' | 'neutral' | 'danger'
 > = {
   DRAFT: 'neutral',
-  MARKETING: 'warning',
-  PARTIALLY_PLACED: 'warning',
+  MARKETING: 'neutral',
+  PARTIALLY_PLACED: 'success',
   PLACED: 'success',
   CLOSING: 'success',
   CLOSED: 'success',
@@ -39,7 +36,18 @@ const RAW_STATUS_VARIANT_MAP: Record<
   CANCELLED: 'danger',
 };
 
-const STATUS_FILTER_OPTIONS = PLACEMENT_DISPLAY_STATUSES.map((s) => ({ value: s, label: s }));
+const PLACEMENTS_FILTER_OPTIONS = [
+  { value: 'Open', label: 'Open' },
+  { value: 'Draft', label: 'Draft' },
+];
+
+const CLOSING_FILTER_OPTIONS = [
+  { value: 'Placed', label: 'Placed' },
+  { value: 'Closed', label: 'Closed' },
+  { value: 'Outstanding', label: 'Outstanding' },
+  { value: 'Partially Paid', label: 'Partially Paid' },
+  { value: 'Paid', label: 'Paid' },
+];
 
 type PaymentStatus = 'Outstanding' | 'Partially Paid' | 'Paid';
 
@@ -156,6 +164,23 @@ const COLUMNS: Column<Facultative>[] = [
   },
 
   {
+    key: 'participants' as keyof Facultative,
+    label: 'Participants',
+    width: '110px',
+    render: (row) => {
+      const total = row.participants?.length ?? 0;
+      const accepted = row.participants?.filter((p) => p.status === 'ACCEPTED').length ?? 0;
+      return (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-semibold text-gray-900">
+            {accepted} / {total}
+          </span>
+          <span className="text-xs text-gray-400">accepted</span>
+        </div>
+      );
+    },
+  },
+  {
     key: 'status',
     label: 'Status',
     width: '120px',
@@ -164,7 +189,14 @@ const COLUMNS: Column<Facultative>[] = [
 ];
 
 const PLACEMENT_STATUSES: FacultativeStatus[] = ['DRAFT', 'MARKETING'];
-const CLOSING_STATUSES: FacultativeStatus[] = ['CLOSING', 'CLOSED', 'DECLINED', 'CANCELLED'];
+const CLOSING_STATUSES: FacultativeStatus[] = [
+  'PARTIALLY_PLACED',
+  'PLACED',
+  'CLOSING',
+  'CLOSED',
+  'DECLINED',
+  'CANCELLED',
+];
 
 export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 'closing' }) {
   const router = useRouter();
@@ -177,44 +209,44 @@ export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 
 
   const { data: allRows = [], isLoading } = useFacultatives();
 
-  const placedRows = useMemo(
-    () => allRows.filter((r) => r.status === 'PLACED' || r.status === 'PARTIALLY_PLACED'),
+  const closingRows = useMemo(
+    () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
     [allRows],
   );
 
-  const placedPaymentQueries = useQueries({
-    queries: placedRows.map((p) => ({
-      queryKey: ['reinsurance', 'placements', p.id, 'payments'],
-      queryFn: async () => {
-        const res = await api.get(`/operations/reinsurance/placements/${p.id}/payments`);
-        return (res.data?.items ?? []) as PlacementPayment[];
-      },
-    })),
+  const paymentQueries = useQueries({
+    queries:
+      tab === 'closing'
+        ? closingRows.map((row) => ({
+            queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
+            queryFn: async () => {
+              const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
+              return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+            },
+          }))
+        : [],
   });
 
-  const paidPlacementIds = useMemo(() => {
-    const ids = new Set<string>();
-    placedRows.forEach((p, i) => {
-      const payments = placedPaymentQueries[i]?.data ?? [];
-      const netPremium = netPremiumFor(p);
+  const paymentStatusMap = useMemo(() => {
+    const map = new Map<string, PaymentStatus>();
+    closingRows.forEach((row, i) => {
+      const payments = paymentQueries[i]?.data ?? [];
+      const netPremium = netPremiumFor(row);
       const paid = payments
-        .filter((pmt) => pmt.status === 'RECORDED')
-        .reduce((sum, pmt) => sum + parseFloat(pmt.amount), 0);
-      if (netPremium > 0 && paid >= netPremium) ids.add(p.id);
+        .filter((p) => p.status === 'RECORDED')
+        .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+      let status: PaymentStatus = 'Outstanding';
+      if (netPremium > 0 && paid >= netPremium) status = 'Paid';
+      else if (paid > 0) status = 'Partially Paid';
+      map.set(row.id, status);
     });
-    return ids;
-  }, [placedRows, placedPaymentQueries]);
+    return map;
+  }, [closingRows, paymentQueries]);
 
   const filtered = useMemo(() => {
     let rows = allRows;
-    rows = rows.filter((r) => {
-      if (r.status === 'PLACED' || r.status === 'PARTIALLY_PLACED') {
-        const isPaid = paidPlacementIds.has(r.id);
-        return tab === 'placements' ? !isPaid : isPaid;
-      }
-      const allowed = tab === 'placements' ? PLACEMENT_STATUSES : CLOSING_STATUSES;
-      return allowed.includes(r.status);
-    });
+    const allowed = tab === 'placements' ? PLACEMENT_STATUSES : CLOSING_STATUSES;
+    rows = rows.filter((r) => allowed.includes(r.status));
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -226,12 +258,25 @@ export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 
       );
     }
     if (statusFilter) {
-      rows = rows.filter(
-        (r) => toDisplayStatus(r.status) === (statusFilter as PlacementDisplayStatus),
-      );
+      if (tab === 'placements') {
+        if (statusFilter === 'Open') rows = rows.filter((r) => r.status === 'MARKETING');
+        else if (statusFilter === 'Draft') rows = rows.filter((r) => r.status === 'DRAFT');
+      } else {
+        if (statusFilter === 'Placed') {
+          rows = rows.filter((r) =>
+            (['PLACED', 'PARTIALLY_PLACED', 'CLOSING'] as FacultativeStatus[]).includes(r.status),
+          );
+        } else if (statusFilter === 'Closed') {
+          rows = rows.filter((r) =>
+            (['CLOSED', 'DECLINED', 'CANCELLED'] as FacultativeStatus[]).includes(r.status),
+          );
+        } else {
+          rows = rows.filter((r) => paymentStatusMap.get(r.id) === (statusFilter as PaymentStatus));
+        }
+      }
     }
     return rows;
-  }, [allRows, search, statusFilter, tab, paidPlacementIds]);
+  }, [allRows, search, statusFilter, tab, paymentStatusMap]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -251,7 +296,7 @@ export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 
           setSearch(q);
           setPage(1);
         }}
-        filterOptions={STATUS_FILTER_OPTIONS}
+        filterOptions={tab === 'placements' ? PLACEMENTS_FILTER_OPTIONS : CLOSING_FILTER_OPTIONS}
         onFilter={(v) => {
           setStatusFilter(v);
           setPage(1);

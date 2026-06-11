@@ -36,12 +36,14 @@ interface DistributionTableProps {
   placement: Facultative;
   hasActiveEndorsement?: boolean;
   confirmedCounterpartyIds?: Set<string>;
+  isPlacementLocked?: boolean;
   onShareCommit: (row: DistributionEntry, share: number) => void;
   onBrokerageCommit: (row: DistributionEntry, brokerage: number) => void;
   onMailSent: (row: DistributionEntry) => void;
   onAccept: (row: DistributionEntry) => void;
   onDecline: (row: DistributionEntry) => void;
   onDelete?: (row: DistributionEntry) => void;
+  onRevert?: (row: DistributionEntry) => void;
   onClosePlacement?: () => void;
 }
 
@@ -51,12 +53,14 @@ export function DistributionTable({
   placement,
   hasActiveEndorsement = false,
   confirmedCounterpartyIds,
+  isPlacementLocked = false,
   onShareCommit,
   onBrokerageCommit,
   onMailSent,
   onAccept,
   onDecline,
   onDelete,
+  onRevert,
   onClosePlacement,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
@@ -132,8 +136,10 @@ export function DistributionTable({
       key: 'shareLine',
       label: 'Participant Share (%)',
       width: '1fr',
-      render: (row) =>
-        editingId === row.id ? (
+      render: (row) => {
+        const isPaid = isPlacementLocked;
+        if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
+        return editingId === row.id ? (
           <input
             type="number"
             min={0}
@@ -154,14 +160,17 @@ export function DistributionTable({
             <span>{row.shareLine}%</span>
             <Icons.Pencil className="w-3 h-3 text-gray-400 shrink-0" />
           </button>
-        ),
+        );
+      },
     },
     {
       key: 'brokerageFee',
       label: 'Brokerage Fee (%)',
       width: '1fr',
-      render: (row) =>
-        editingBrokerageId === row.id ? (
+      render: (row) => {
+        const isPaid = isPlacementLocked;
+        if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
+        return editingBrokerageId === row.id ? (
           <input
             type="number"
             min={0}
@@ -182,7 +191,8 @@ export function DistributionTable({
             <span>{row.brokerageFee}%</span>
             <Icons.Pencil className="w-3 h-3 text-gray-400 shrink-0" />
           </button>
-        ),
+        );
+      },
     },
     {
       key: 'premiumShare',
@@ -217,14 +227,13 @@ export function DistributionTable({
       width: '150px',
       render: (row) => {
         const mailed = mailedIds.has(row.id);
-        // Server state (persists across navigation) takes priority; session state gives instant feedback
         const hasReconfirmed =
           confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
         const responded = row.status === 'Declined' || row.status === 'Accepted';
-        // In endorsement mode, accepted participants re-confirm (no decline allowed)
         const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
-        const showAccept = isReconfirming || (mailed && !responded);
-        const showDecline = !isReconfirming && mailed && !responded;
+        const showAccept = !isPlacementLocked && (isReconfirming || (mailed && !responded));
+        const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
+        const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
         return (
           <div className="flex items-center gap-2">
             <button
@@ -261,6 +270,16 @@ export function DistributionTable({
                 className="text-red-400 hover:text-red-600 transition-colors"
               >
                 <Icons.X className="w-4 h-4" />
+              </button>
+            )}
+            {showRevert && (
+              <button
+                type="button"
+                title="Revert to pending"
+                onClick={() => onRevert?.(row)}
+                className="text-amber-500 hover:text-amber-600 transition-colors"
+              >
+                <Icons.RotateCcw className="w-4 h-4" />
               </button>
             )}
             {!responded && (
