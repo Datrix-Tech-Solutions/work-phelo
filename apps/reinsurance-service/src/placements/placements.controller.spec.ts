@@ -1,5 +1,6 @@
 import { RequestUser } from '@work-phelo/types';
 import {
+  PlacementClaimCashCallStatus,
   PlacementClaimStatus,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
@@ -13,6 +14,7 @@ import {
 } from '../../prisma/generated/client';
 import { PERMISSIONS_KEY } from '../auth/decorators/permissions.decorator';
 import { PlacementPermission } from './placement.permissions';
+import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
@@ -89,6 +91,13 @@ describe('PlacementsController', () => {
     findAllocations: jest.fn(),
     generateAllocations: jest.fn(),
   };
+  const claimCashCallsService = {
+    findAll: jest.fn(),
+    findOne: jest.fn(),
+    create: jest.fn(),
+    changeStatus: jest.fn(),
+    void: jest.fn(),
+  };
   const user = {
     tenantId: 'tenant-1',
   } as RequestUser;
@@ -107,6 +116,7 @@ describe('PlacementsController', () => {
       notesService as unknown as PlacementNotesService,
       paymentsService as unknown as PlacementPaymentsService,
       claimsService as unknown as PlacementClaimsService,
+      claimCashCallsService as unknown as PlacementClaimCashCallsService,
     );
 
   it('delegates list queries using only the authenticated tenant context', async () => {
@@ -139,6 +149,8 @@ describe('PlacementsController', () => {
     ['findClaims', PlacementPermission.VIEW],
     ['findClaim', PlacementPermission.VIEW],
     ['findClaimAllocations', PlacementPermission.VIEW],
+    ['findClaimCashCalls', PlacementPermission.VIEW],
+    ['findClaimCashCall', PlacementPermission.VIEW],
     ['create', PlacementPermission.CREATE],
     ['createEndorsement', PlacementPermission.CREATE],
     ['createPayment', PlacementPermission.CREATE],
@@ -164,6 +176,9 @@ describe('PlacementsController', () => {
     ['updateClaim', PlacementPermission.EDIT],
     ['changeClaimStatus', PlacementPermission.EDIT],
     ['generateClaimAllocations', PlacementPermission.EDIT],
+    ['createClaimCashCall', PlacementPermission.EDIT],
+    ['changeClaimCashCallStatus', PlacementPermission.EDIT],
+    ['voidClaimCashCall', PlacementPermission.EDIT],
     ['issueNote', PlacementPermission.EDIT],
     ['voidNote', PlacementPermission.EDIT],
     ['reversePayment', PlacementPermission.EDIT],
@@ -685,6 +700,74 @@ describe('PlacementsController', () => {
       user,
       'placement-1',
       'claim-1',
+    );
+  });
+
+  it('delegates claim cash call reads and mutations with authenticated context', async () => {
+    const controller = createController();
+    claimCashCallsService.findAll.mockResolvedValue([]);
+
+    const list = await controller.findClaimCashCalls('placement-1', 'claim-1', {
+      user,
+    } as never);
+    await controller.findClaimCashCall(
+      'placement-1',
+      'claim-1',
+      'cash-call-1',
+      { user } as never,
+    );
+    await controller.createClaimCashCall(
+      'placement-1',
+      'claim-1',
+      'allocation-1',
+      { user } as never,
+    );
+    await controller.changeClaimCashCallStatus(
+      'placement-1',
+      'claim-1',
+      'cash-call-1',
+      { status: PlacementClaimCashCallStatus.ISSUED },
+      { user } as never,
+    );
+    await controller.voidClaimCashCall(
+      'placement-1',
+      'claim-1',
+      'cash-call-1',
+      { voidReason: 'Replacement required' },
+      { user } as never,
+    );
+
+    expect(claimCashCallsService.findAll).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+    );
+    expect(list).toEqual({ items: [] });
+    expect(claimCashCallsService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'claim-1',
+      'cash-call-1',
+    );
+    expect(claimCashCallsService.create).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'claim-1',
+      'allocation-1',
+    );
+    expect(claimCashCallsService.changeStatus).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'claim-1',
+      'cash-call-1',
+      expect.objectContaining({ status: PlacementClaimCashCallStatus.ISSUED }),
+    );
+    expect(claimCashCallsService.void).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'claim-1',
+      'cash-call-1',
+      expect.objectContaining({ voidReason: 'Replacement required' }),
     );
   });
 

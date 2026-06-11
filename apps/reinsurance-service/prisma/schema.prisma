@@ -143,6 +143,15 @@ enum PlacementClaimAllocationStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementClaimCashCallStatus {
+  DRAFT
+  ISSUED
+  PAID
+  VOID
+
+  @@schema("reinsurance")
+}
+
 enum PlacementEndorsementType {
   SUM_INSURED_INCREASE
   SUM_INSURED_DECREASE
@@ -253,6 +262,7 @@ model Counterparty {
   placementPayments       PlacementPayment[]                @relation("PlacementPaymentCounterparty")
   placementNotes          PlacementNote[]                   @relation("PlacementNoteCounterparty")
   claimAllocations        PlacementClaimAllocation[]        @relation("PlacementClaimAllocationCounterparty")
+  claimCashCalls          PlacementClaimCashCall[]          @relation("PlacementClaimCashCallCounterparty")
   endorsementParticipants PlacementEndorsementParticipant[] @relation("PlacementEndorsementParticipantCounterparty")
 
   @@unique([id, tenantId])
@@ -319,6 +329,7 @@ model Placement {
   notes                   PlacementNote[]
   claims                  PlacementClaim[]
   claimAllocations        PlacementClaimAllocation[]
+  claimCashCalls          PlacementClaimCashCall[]
   endorsements            PlacementEndorsement[]
   endorsementParticipants PlacementEndorsementParticipant[]
   endorsementClosings     PlacementEndorsementClosing[]
@@ -515,6 +526,7 @@ model PlacementClaim {
   updatedAt           DateTime                   @updatedAt
   placement           Placement                  @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
   allocations         PlacementClaimAllocation[]
+  cashCalls           PlacementClaimCashCall[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, claimNumber])
@@ -549,12 +561,47 @@ model PlacementClaimAllocation {
   participant                  PlacementParticipant?            @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
   endorsementParticipant       PlacementEndorsementParticipant? @relation(fields: [endorsementParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
   counterparty                 Counterparty                     @relation("PlacementClaimAllocationCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  cashCalls                    PlacementClaimCashCall[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, claimId])
   @@index([tenantId, claimId, status])
   @@index([tenantId, placementClosingId])
   @@index([tenantId, endorsementClosingId])
+  @@index([tenantId, counterpartyId, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementClaimCashCall {
+  id                String                       @id @default(uuid())
+  tenantId          String
+  placementId       String
+  claimId           String
+  allocationId      String
+  counterpartyId    String
+  cashCallNumber    String
+  status            PlacementClaimCashCallStatus @default(DRAFT)
+  currency          String
+  amount            Decimal                      @db.Decimal(18, 2)
+  basisAmount       Decimal                      @db.Decimal(18, 2)
+  signedLinePercent Decimal                      @db.Decimal(7, 4)
+  issuedAt          DateTime?
+  paidAt            DateTime?
+  voidedAt          DateTime?
+  voidReason        String?
+  createdByUserId   String
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+  placement         Placement                    @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claim             PlacementClaim               @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  allocation        PlacementClaimAllocation     @relation(fields: [allocationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  counterparty      Counterparty                 @relation("PlacementClaimCashCallCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, placementId, cashCallNumber])
+  @@index([tenantId, placementId, claimId, status, createdAt])
+  @@index([tenantId, claimId, status])
+  @@index([tenantId, allocationId, status])
   @@index([tenantId, counterpartyId, createdAt])
   @@schema("reinsurance")
 }
