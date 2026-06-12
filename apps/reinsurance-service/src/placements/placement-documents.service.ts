@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { RequestUser } from '@work-phelo/types';
 import {
   PlacementDocumentStatus,
@@ -13,6 +15,10 @@ import {
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
+import {
+  S3DocumentStorageService,
+  SignedDocumentUrlResult,
+} from './storage/s3-document-storage.service';
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
 import { PlacementsService } from './placements.service';
 
@@ -47,6 +53,7 @@ export class PlacementDocumentsService {
     private readonly prisma: PrismaService,
     private readonly placementsService: PlacementsService,
     private readonly pdfRenderer: PlacementPdfRendererService,
+    private readonly documentStorage: S3DocumentStorageService,
   ) {}
 
   async findAll(
@@ -388,6 +395,84 @@ export class PlacementDocumentsService {
     }
   }
 
+  async renderAndStorePdf(
+    tenantId: string,
+    placementId: string,
+    documentId: string,
+  ): Promise<PlacementDocumentRecord> {
+    const document = await this.findOne(tenantId, placementId, documentId);
+    this.assertPdfRenderable(document);
+
+    if (document.objectKey) {
+      throw new ConflictException('Document PDF has already been stored');
+    }
+
+    let pdf: Buffer;
+    try {
+      pdf = await this.renderDocumentBuffer(document);
+    } catch (error: unknown) {
+      if (error instanceof BadRequestException) throw error;
+      throw new InternalServerErrorException(
+        'Failed to render placement document PDF',
+      );
+    }
+
+    try {
+      const checksum = this.checksum(pdf);
+      const stored = await this.documentStorage.storePdf({
+        tenantId,
+        placementId,
+        documentId,
+        version: document.version,
+        documentNumber: document.documentNumber,
+        body: pdf,
+        checksum,
+        contentType: 'application/pdf',
+      });
+
+      return await this.prisma.placementDocument.update({
+        where: { id: documentId },
+        data: {
+          storageProvider: stored.storageProvider,
+          objectKey: stored.objectKey,
+          fileName: stored.fileName,
+          mimeType: stored.mimeType,
+          sizeBytes: stored.sizeBytes,
+          checksum,
+          generatedAt: new Date(),
+          failureReason: null,
+        },
+        include: documentInclude,
+      });
+    } catch (error: unknown) {
+      await this.prisma.placementDocument.update({
+        where: { id: documentId },
+        data: { failureReason: this.safeFailureReason(error) },
+        include: documentInclude,
+      });
+      throw new InternalServerErrorException(
+        'Failed to store placement document PDF',
+      );
+    }
+  }
+
+  async createDownloadUrl(
+    tenantId: string,
+    placementId: string,
+    documentId: string,
+  ): Promise<SignedDocumentUrlResult> {
+    const document = await this.findOne(tenantId, placementId, documentId);
+    if (!document.objectKey) {
+      throw new BadRequestException('Document PDF has not been stored');
+    }
+
+    return this.documentStorage.signedDownloadUrl({
+      objectKey: document.objectKey,
+      mimeType: document.mimeType ?? 'application/pdf',
+      fileName: document.fileName ?? `${document.documentNumber}.pdf`,
+    });
+  }
+
   private assertPdfRenderable(document: PlacementDocumentRecord): void {
     if (document.type !== PlacementDocumentType.CLOSING_SLIP) {
       throw new BadRequestException(
@@ -577,5 +662,16 @@ export class PlacementDocumentsService {
     const cleaned = value.trim();
     if (!cleaned) throw new BadRequestException('Required text is missing');
     return cleaned;
+  }
+
+  private checksum(pdf: Buffer): string {
+    return `sha256:${createHash('sha256').update(pdf).digest('hex')}`;
+  }
+
+  private safeFailureReason(error: unknown): string {
+    if (error instanceof Error && error.message.trim()) {
+      return error.message.slice(0, 500);
+    }
+    return 'S3 upload failed';
   }
 }

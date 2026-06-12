@@ -19,6 +19,7 @@ import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.servic
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
+import { S3DocumentStorageService } from './storage/s3-document-storage.service';
 
 @Module({
   imports: [PrismaModule, RabbitMQModule],
@@ -36,6 +37,7 @@ import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
     PlacementPaymentsService,
     PlacementDocumentTemplateRegistry,
     PlacementPdfRendererService,
+    S3DocumentStorageService,
     PlacementFinancialActivityReader,
     PlacementFinancialLockPolicy,
     ReinsuranceMoneyHelper,

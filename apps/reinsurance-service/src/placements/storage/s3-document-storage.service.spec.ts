@@ -1,0 +1,137 @@
+import { InternalServerErrorException } from '@nestjs/common';
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { S3DocumentStorageService } from './s3-document-storage.service';
+
+jest.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: jest.fn(),
+}));
+
+describe('S3DocumentStorageService', () => {
+  const originalEnv = process.env;
+  let sendMock: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-12T10:00:00.000Z'));
+    process.env = {
+      ...originalEnv,
+      REINSURANCE_DOCUMENT_STORAGE_PROVIDER: 's3',
+      REINSURANCE_DOCUMENT_S3_BUCKET: 'workphelo-documents',
+      REINSURANCE_DOCUMENT_S3_REGION: 'eu-west-1',
+      REINSURANCE_DOCUMENT_S3_PREFIX: 'reinsurance',
+      REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS: '300',
+    };
+    sendMock = jest
+      .spyOn(S3Client.prototype, 'send')
+      .mockResolvedValue({} as never);
+    (getSignedUrl as jest.Mock).mockResolvedValue(
+      'https://signed.example/document.pdf',
+    );
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+    process.env = originalEnv;
+  });
+
+  it('uploads PDFs to private S3 with a tenant/placement/document/version object key', async () => {
+    const service = new S3DocumentStorageService();
+
+    const result = await service.storePdf({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      documentId: 'document-1',
+      version: 2,
+      documentNumber: 'DOC-CS-001',
+      body: Buffer.from('%PDF'),
+      checksum: 'sha256:abc123',
+      contentType: 'application/pdf',
+    });
+
+    expect(result).toEqual({
+      storageProvider: 'S3',
+      objectKey:
+        'reinsurance/tenants/tenant-1/placements/placement-1/documents/document-1/v2/DOC-CS-001.pdf',
+      fileName: 'DOC-CS-001.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 4,
+    });
+    expect(sendMock).toHaveBeenCalledWith(expect.any(PutObjectCommand));
+    const sendCalls = sendMock.mock.calls as Array<
+      [PutObjectCommand | GetObjectCommand]
+    >;
+    const sentCommand = sendCalls[0][0];
+    expect(sentCommand).toBeInstanceOf(PutObjectCommand);
+    expect(sentCommand.input).toMatchObject({
+      Bucket: 'workphelo-documents',
+      Key: result.objectKey,
+      Body: Buffer.from('%PDF'),
+      ContentType: 'application/pdf',
+      Metadata: {
+        checksum: 'sha256:abc123',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        documentId: 'document-1',
+      },
+    });
+  });
+
+  it('creates short-lived signed download URLs without storing public URLs', async () => {
+    const service = new S3DocumentStorageService();
+
+    const result = await service.signedDownloadUrl({
+      objectKey: 'reinsurance/document.pdf',
+      mimeType: 'application/pdf',
+      fileName: 'DOC-CS-001.pdf',
+    });
+
+    expect(getSignedUrl).toHaveBeenCalledWith(
+      expect.any(S3Client),
+      expect.any(GetObjectCommand),
+      { expiresIn: 300 },
+    );
+    const signedUrlCalls = (getSignedUrl as jest.Mock).mock.calls as Array<
+      [S3Client, GetObjectCommand, { expiresIn: number }]
+    >;
+    const signedCommand = signedUrlCalls[0][1];
+    const signedOptions = signedUrlCalls[0][2];
+    expect(signedCommand).toBeInstanceOf(GetObjectCommand);
+    expect(signedOptions).toEqual({ expiresIn: 300 });
+    expect(signedCommand.input).toMatchObject({
+      Bucket: 'workphelo-documents',
+      Key: 'reinsurance/document.pdf',
+      ResponseContentType: 'application/pdf',
+      ResponseContentDisposition: 'inline; filename="DOC-CS-001.pdf"',
+    });
+    expect(result).toEqual({
+      url: 'https://signed.example/document.pdf',
+      expiresAt: new Date('2026-06-12T10:05:00.000Z'),
+      mimeType: 'application/pdf',
+      fileName: 'DOC-CS-001.pdf',
+    });
+  });
+
+  it('fails fast when required S3 configuration is missing', async () => {
+    delete process.env.REINSURANCE_DOCUMENT_S3_BUCKET;
+    const service = new S3DocumentStorageService();
+
+    await expect(
+      service.storePdf({
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        documentId: 'document-1',
+        version: 1,
+        documentNumber: 'DOC-CS-001',
+        body: Buffer.from('%PDF'),
+        checksum: 'sha256:abc123',
+        contentType: 'application/pdf',
+      }),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(sendMock).not.toHaveBeenCalled();
+  });
+});

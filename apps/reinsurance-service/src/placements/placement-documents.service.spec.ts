@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import { PlacementDocumentsService } from './placement-documents.service';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementsService } from './placements.service';
+import { S3DocumentStorageService } from './storage/s3-document-storage.service';
 
 describe('PlacementDocumentsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
@@ -119,6 +121,10 @@ describe('PlacementDocumentsService', () => {
   };
   let placementsService: { getOfferSlipPreview: jest.Mock };
   let pdfRenderer: { render: jest.Mock };
+  let documentStorage: {
+    storePdf: jest.Mock;
+    signedDownloadUrl: jest.Mock;
+  };
   let service: PlacementDocumentsService;
   let lockPolicy: PlacementFinancialLockPolicy;
 
@@ -169,10 +175,27 @@ describe('PlacementDocumentsService', () => {
     pdfRenderer = {
       render: jest.fn().mockResolvedValue(Buffer.from('%PDF test')),
     };
+    documentStorage = {
+      storePdf: jest.fn().mockResolvedValue({
+        storageProvider: 'S3',
+        objectKey:
+          'reinsurance/tenants/tenant-1/placements/placement-1/documents/document-1/v1/DOC-CS-001.pdf',
+        fileName: 'DOC-CS-001.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: Buffer.from('%PDF test').byteLength,
+      }),
+      signedDownloadUrl: jest.fn().mockResolvedValue({
+        url: 'https://signed.example/DOC-CS-001.pdf',
+        expiresAt: new Date('2026-06-11T12:05:00.000Z'),
+        mimeType: 'application/pdf',
+        fileName: 'DOC-CS-001.pdf',
+      }),
+    };
     service = new PlacementDocumentsService(
       prisma as unknown as PrismaService,
       placementsService as unknown as PlacementsService,
       pdfRenderer as unknown as PlacementPdfRendererService,
+      documentStorage as unknown as S3DocumentStorageService,
     );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
@@ -527,6 +550,164 @@ describe('PlacementDocumentsService', () => {
       pdfRenderer.render as PrismaMethod,
     );
     expect(renderArg.sourceSnapshot).toBeUndefined();
+    expect(documentStorage.storePdf).not.toHaveBeenCalled();
+  });
+
+  it('renders and stores a CLOSING_SLIP PDF with checksum and storage metadata', async () => {
+    const closingDocument = {
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      documentNumber: 'DOC-CS-001',
+      title: 'Closing Slip CLO-001',
+      renderPayload: {
+        documentType: PlacementDocumentType.CLOSING_SLIP,
+        closing: { closingNumber: 'CLO-001' },
+      },
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(closingDocument);
+    prisma.placementDocument.update.mockResolvedValue({
+      ...closingDocument,
+      storageProvider: 'S3',
+      objectKey:
+        'reinsurance/tenants/tenant-1/placements/placement-1/documents/document-1/v1/DOC-CS-001.pdf',
+      fileName: 'DOC-CS-001.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 9,
+      checksum:
+        'sha256:bb094c25184067415837d8dc66cfa65366384a80625877252719369a2dc80575',
+      generatedAt: new Date('2026-06-11T12:01:00.000Z'),
+    });
+
+    const result = await service.renderAndStorePdf(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(documentStorage.storePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        documentId: 'document-1',
+        version: 1,
+        documentNumber: 'DOC-CS-001',
+        body: Buffer.from('%PDF test'),
+        checksum:
+          'sha256:bb094c25184067415837d8dc66cfa65366384a80625877252719369a2dc80575',
+        contentType: 'application/pdf',
+      }),
+    );
+    expect(prisma.placementDocument.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'document-1' },
+      }),
+    );
+    const updateArgs = firstCallArg<Prisma.PlacementDocumentUpdateArgs>(
+      prisma.placementDocument.update,
+    );
+    expect(updateArgs.data).toMatchObject({
+      storageProvider: 'S3',
+      objectKey:
+        'reinsurance/tenants/tenant-1/placements/placement-1/documents/document-1/v1/DOC-CS-001.pdf',
+      fileName: 'DOC-CS-001.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 9,
+      checksum:
+        'sha256:bb094c25184067415837d8dc66cfa65366384a80625877252719369a2dc80575',
+      failureReason: null,
+    });
+    expect(updateArgs.data.generatedAt).toBeInstanceOf(Date);
+    expect(result.storageProvider).toBe('S3');
+  });
+
+  it('rejects already stored documents during render-and-store', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      objectKey: 'reinsurance/existing.pdf',
+    });
+
+    await expect(
+      service.renderAndStorePdf('tenant-1', 'placement-1', 'document-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(pdfRenderer.render).not.toHaveBeenCalled();
+    expect(documentStorage.storePdf).not.toHaveBeenCalled();
+  });
+
+  it('records a safe failure reason when S3 upload fails without clearing metadata or snapshots', async () => {
+    const closingDocument = {
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      documentNumber: 'DOC-CS-001',
+      renderPayload: {
+        documentType: PlacementDocumentType.CLOSING_SLIP,
+        closing: { closingNumber: 'CLO-001' },
+      },
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(closingDocument);
+    documentStorage.storePdf.mockRejectedValue(new Error('S3 outage'));
+    prisma.placementDocument.update.mockResolvedValue({
+      ...closingDocument,
+      failureReason: 'S3 outage',
+    });
+
+    await expect(
+      service.renderAndStorePdf('tenant-1', 'placement-1', 'document-1'),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+
+    expect(prisma.placementDocument.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'document-1' },
+        data: { failureReason: 'S3 outage' },
+      }),
+    );
+    const updateArgs = firstCallArg<Prisma.PlacementDocumentUpdateArgs>(
+      prisma.placementDocument.update,
+    );
+    expect(updateArgs.data.sourceSnapshot).toBeUndefined();
+    expect(updateArgs.data.renderPayload).toBeUndefined();
+    expect(updateArgs.data.objectKey).toBeUndefined();
+    expect(updateArgs.data.storageProvider).toBeUndefined();
+  });
+
+  it('creates signed download URLs only for stored tenant-scoped documents', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      storageProvider: 'S3',
+      objectKey: 'reinsurance/document.pdf',
+      fileName: 'DOC-CS-001.pdf',
+      mimeType: 'application/pdf',
+    });
+
+    const result = await service.createDownloadUrl(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(documentStorage.signedDownloadUrl).toHaveBeenCalledWith({
+      objectKey: 'reinsurance/document.pdf',
+      mimeType: 'application/pdf',
+      fileName: 'DOC-CS-001.pdf',
+    });
+    expect(result).toMatchObject({
+      url: 'https://signed.example/DOC-CS-001.pdf',
+      mimeType: 'application/pdf',
+    });
+  });
+
+  it('rejects signed download URLs for documents without stored object metadata', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      objectKey: null,
+    });
+
+    await expect(
+      service.createDownloadUrl('tenant-1', 'placement-1', 'document-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(documentStorage.signedDownloadUrl).not.toHaveBeenCalled();
   });
 
   it('rejects unsupported document types for PDF rendering', async () => {

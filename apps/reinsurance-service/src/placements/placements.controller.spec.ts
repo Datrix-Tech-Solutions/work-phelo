@@ -60,6 +60,8 @@ describe('PlacementsController', () => {
     generateClaimNotice: jest.fn(),
     generateClaimCashCall: jest.fn(),
     renderPdf: jest.fn(),
+    renderAndStorePdf: jest.fn(),
+    createDownloadUrl: jest.fn(),
     void: jest.fn(),
   };
   const endorsementsService = {
@@ -155,6 +157,7 @@ describe('PlacementsController', () => {
     ['findDocuments', PlacementPermission.VIEW],
     ['findDocument', PlacementPermission.VIEW],
     ['renderDocumentPdf', PlacementPermission.VIEW],
+    ['getDocumentDownloadUrl', PlacementPermission.VIEW],
     ['findEndorsements', PlacementPermission.VIEW],
     ['findEndorsement', PlacementPermission.VIEW],
     ['findEndorsementParticipants', PlacementPermission.VIEW],
@@ -197,6 +200,7 @@ describe('PlacementsController', () => {
     ['generateEndorsementClosingSlipDocument', PlacementPermission.EDIT],
     ['generateClaimNoticeDocument', PlacementPermission.EDIT],
     ['generateClaimCashCallDocument', PlacementPermission.EDIT],
+    ['renderAndStoreDocumentPdf', PlacementPermission.EDIT],
     ['voidDocument', PlacementPermission.EDIT],
     ['createDebitNote', PlacementPermission.EDIT],
     ['createCreditNote', PlacementPermission.EDIT],
@@ -606,6 +610,20 @@ describe('PlacementsController', () => {
       'document-1',
       { user } as never,
     );
+    await controller.renderAndStoreDocumentPdf('placement-1', 'document-1', {
+      user,
+    } as never);
+    documentsService.createDownloadUrl.mockResolvedValue({
+      url: 'https://signed.example/document.pdf',
+      expiresAt: new Date('2026-06-11T12:05:00.000Z'),
+      mimeType: 'application/pdf',
+      fileName: 'DOC-CS-001.pdf',
+    });
+    const downloadUrl = await controller.getDocumentDownloadUrl(
+      'placement-1',
+      'document-1',
+      { user } as never,
+    );
     await controller.generateOfferSlipDocument('placement-1', {
       user,
     } as never);
@@ -658,6 +676,20 @@ describe('PlacementsController', () => {
       'document-1',
     );
     expect(pdf).toBeInstanceOf(StreamableFile);
+    expect(documentsService.renderAndStorePdf).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+    expect(documentsService.createDownloadUrl).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+    expect(downloadUrl).toMatchObject({
+      url: 'https://signed.example/document.pdf',
+      mimeType: 'application/pdf',
+    });
     expect(documentsService.generateOfferSlip).toHaveBeenCalledWith(
       user,
       'placement-1',

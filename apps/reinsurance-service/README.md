@@ -715,13 +715,16 @@ current foundation captures immutable `sourceSnapshot` data and renderer-ready
 `renderPayload` JSON. Backend PDF rendering is currently enabled only for
 existing `CLOSING_SLIP` document rows and uses `renderPayload` as the sole
 source of truth. The direct PDF preview endpoint streams `application/pdf`
-without storing a file. It does not upload files, create download URLs, attach
-documents to emails or send emails.
+without storing a file. The storage endpoint renders the same immutable payload,
+uploads the PDF to private S3 and stores only private object metadata on the
+document row. It does not attach documents to emails or send emails.
 
 ```text
 GET  /api/v1/operations/reinsurance/placements/:id/documents
 GET  /api/v1/operations/reinsurance/placements/:id/documents/:documentId
 POST /api/v1/operations/reinsurance/placements/:id/documents/:documentId/render-pdf
+POST /api/v1/operations/reinsurance/placements/:id/documents/:documentId/render-and-store
+GET  /api/v1/operations/reinsurance/placements/:id/documents/:documentId/download-url
 POST /api/v1/operations/reinsurance/placements/:id/documents/:documentId/void
 
 POST /api/v1/operations/reinsurance/placements/:id/documents/offer-slip
@@ -766,9 +769,10 @@ Document rules:
 - `VOID` documents cannot be rendered as PDFs.
 - Document generation does not financially lock or unlock a placement.
 - PDF rendering does not financially lock or unlock a placement.
+- PDF storage does not financially lock or unlock a placement.
 - Locked placements may still generate documents from immutable snapshots.
 - Existing placement, closing, note, endorsement, claim and cash-call records
-  are not mutated by document generation or PDF rendering.
+  are not mutated by document generation, PDF rendering or PDF storage.
 
 PDF rendering:
 
@@ -779,8 +783,47 @@ PDF rendering:
   installs Alpine `chromium` and sets
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser`.
 - `POST .../render-pdf` streams the PDF directly and does not store it.
-- S3 upload/download, signed URLs, email attachments and frontend rendering
-  remain deferred.
+- `POST .../render-and-store` uploads the rendered PDF to private S3 and
+  populates `storageProvider`, `objectKey`, `fileName`, `mimeType`,
+  `sizeBytes`, `checksum` and `generatedAt`.
+- `GET .../download-url` returns a short-lived signed URL for stored PDFs.
+- Stored PDFs are never public. No public URL is persisted on
+  `PlacementDocument`.
+- Existing stored object metadata is not overwritten in the MVP; regenerate a
+  new document version if the source document needs a new stored PDF.
+- Email attachments and frontend rendering remain deferred.
+
+S3 storage configuration:
+
+```env
+REINSURANCE_DOCUMENT_STORAGE_PROVIDER=s3
+REINSURANCE_DOCUMENT_S3_BUCKET=workphelo-private-documents
+REINSURANCE_DOCUMENT_S3_REGION=eu-west-1
+REINSURANCE_DOCUMENT_S3_PREFIX=reinsurance
+REINSURANCE_DOCUMENT_S3_ENDPOINT=
+REINSURANCE_DOCUMENT_S3_FORCE_PATH_STYLE=false
+REINSURANCE_DOCUMENT_SIGNED_URL_TTL_SECONDS=300
+```
+
+The service uses the AWS SDK v3 default credential chain. Prefer an IAM role or
+workload identity for deployed environments. Static AWS credentials may be
+provided through the standard AWS environment variables only when operationally
+necessary; they are not read from custom application config and must never be
+committed.
+
+S3 object keys intentionally avoid names and sensitive business data:
+
+```text
+{prefix}/tenants/{tenantId}/placements/{placementId}/documents/{documentId}/v{version}/{documentNumber}.pdf
+```
+
+Upload failure behavior:
+
+- Render failures do not upload and do not mutate `sourceSnapshot` or
+  `renderPayload`.
+- Upload failures store a safe `failureReason` and do not clear existing
+  successful storage metadata.
+- Reversing or voiding documents does not delete S3 objects in this foundation.
 
 Source rules:
 
