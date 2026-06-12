@@ -34,6 +34,12 @@ payloads only and do not create PDFs, persist document records or send email.
 Preview calculations intentionally use \`facultativeOffer ?? 0\` when the
 facultative offer is not yet known.
 
+### Documents
+Document endpoints create registry rows with immutable source snapshots and
+renderer-ready payloads for future generated Reinsurance documents. PR1 does
+not render PDFs, upload to S3, create download URLs or send emails. Future file
+storage will use private S3 object storage with signed download URLs.
+
 ### Placement closings
 Placement closing endpoints persist participant-specific closing snapshots for
 accepted participants. Closings use the lifecycle \`DRAFT → ISSUED → CONFIRMED\`,
@@ -144,6 +150,10 @@ pipeline enables it for development only.
     .addTag(
       'Reinsurance - Claim Cash Calls',
       'Cash calls generated one-per-claim-allocation from allocation snapshots',
+    )
+    .addTag(
+      'Reinsurance - Documents',
+      'Generated document registry entries, immutable snapshots and future S3 metadata',
     )
     .addTag(
       'Reinsurance - Financial Locking',

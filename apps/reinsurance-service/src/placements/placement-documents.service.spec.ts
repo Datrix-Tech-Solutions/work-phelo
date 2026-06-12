@@ -1,0 +1,524 @@
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  PlacementDocumentStatus,
+  PlacementDocumentType,
+  PlacementNoteDirection,
+  PlacementNoteStatus,
+  PlacementNoteType,
+  PlacementPaymentType,
+  PlacementStatus,
+  Prisma,
+} from '../../prisma/generated/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { PlacementDocumentsService } from './placement-documents.service';
+import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
+import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
+import { PlacementsService } from './placements.service';
+
+describe('PlacementDocumentsService', () => {
+  type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
+
+  const firstCallArg = <TArgs>(mock: PrismaMethod): TArgs => {
+    const call = mock.mock.calls[0];
+    if (!call) throw new Error('Expected Prisma mock to be called');
+    return call[0] as TArgs;
+  };
+
+  const callArg = <TArgs>(mock: PrismaMethod, index: number): TArgs => {
+    const call = mock.mock.calls[index];
+    if (!call) throw new Error('Expected Prisma mock to be called');
+    return call[0] as TArgs;
+  };
+
+  const jsonRecord = (value: unknown): Record<string, unknown> =>
+    value as Record<string, unknown>;
+
+  const user = {
+    id: 'user-1',
+    email: 'broker@example.com',
+    role: 'EMPLOYEE' as const,
+    tenantId: 'tenant-1',
+    tenantSlug: 'broker',
+    tenantName: 'Broker',
+    firstName: 'Ama',
+    moduleConfig: { operations: true },
+    featureConfig: { operations: { reinsurance: true } },
+    permissions: [] as string[],
+  };
+
+  const placement = { id: 'placement-1' };
+  const document = {
+    id: 'document-1',
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    participantId: null,
+    closingId: null,
+    noteId: null,
+    endorsementId: null,
+    endorsementClosingId: null,
+    claimId: null,
+    claimCashCallId: null,
+    type: PlacementDocumentType.OFFER_SLIP,
+    status: PlacementDocumentStatus.GENERATED,
+    documentNumber: 'DOC-OS-001',
+    version: 1,
+    title: 'Offer Slip FAC-001',
+    currency: 'GHS',
+    sourceSnapshot: { placement: { reference: 'FAC-001' } },
+    renderPayload: { placement: { reference: 'FAC-001' } },
+    storageProvider: null,
+    objectKey: null,
+    fileName: null,
+    mimeType: null,
+    sizeBytes: null,
+    checksum: null,
+    generatedAt: new Date('2026-06-11T12:00:00.000Z'),
+    voidedAt: null,
+    voidReason: null,
+    failureReason: null,
+    createdByUserId: 'user-1',
+    createdAt: new Date('2026-06-11T12:00:00.000Z'),
+    updatedAt: new Date('2026-06-11T12:00:00.000Z'),
+  };
+
+  const offerPreview = {
+    placement: {
+      id: 'placement-1',
+      reference: 'FAC-001',
+      currency: 'GHS',
+    },
+    cedant: { id: 'cedant-1', name: 'Acme Insurance' },
+    participantPreviews: [],
+  };
+
+  let prisma: {
+    placement: { findFirst: PrismaMethod };
+    placementDocument: {
+      findMany: PrismaMethod;
+      findFirst: PrismaMethod;
+      count: PrismaMethod;
+      create: PrismaMethod;
+      update: PrismaMethod;
+    };
+    placementClosing: { findFirst: PrismaMethod; update: PrismaMethod };
+    placementNote: { findFirst: PrismaMethod; update: PrismaMethod };
+    placementEndorsement: { findFirst: PrismaMethod; update: PrismaMethod };
+    placementEndorsementClosing: {
+      findFirst: PrismaMethod;
+      update: PrismaMethod;
+    };
+    placementClaim: { findFirst: PrismaMethod; update: PrismaMethod };
+    placementClaimCashCall: { findFirst: PrismaMethod; update: PrismaMethod };
+    placementPayment: { findFirst: PrismaMethod };
+    $transaction: jest.Mock;
+  };
+  let placementsService: { getOfferSlipPreview: jest.Mock };
+  let service: PlacementDocumentsService;
+  let lockPolicy: PlacementFinancialLockPolicy;
+
+  beforeEach(() => {
+    prisma = {
+      placement: { findFirst: jest.fn<Promise<unknown>, [unknown]>() },
+      placementDocument: {
+        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        count: jest.fn<Promise<unknown>, [unknown]>(),
+        create: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementClosing: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementNote: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementEndorsement: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementEndorsementClosing: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementClaim: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementClaimCashCall: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementPayment: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      ),
+    };
+    placementsService = {
+      getOfferSlipPreview: jest.fn().mockResolvedValue(offerPreview),
+    };
+    service = new PlacementDocumentsService(
+      prisma as unknown as PrismaService,
+      placementsService as unknown as PlacementsService,
+    );
+    lockPolicy = new PlacementFinancialLockPolicy(
+      new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
+    );
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementDocument.count.mockResolvedValue(0);
+    prisma.placementDocument.create.mockResolvedValue(document);
+  });
+
+  it('lists and details document registry entries for an active tenant placement', async () => {
+    prisma.placementDocument.findMany.mockResolvedValue([document]);
+    prisma.placementDocument.findFirst.mockResolvedValue(document);
+
+    const list = await service.findAll('tenant-1', 'placement-1');
+    const detail = await service.findOne(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(prisma.placementDocument.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { tenantId: 'tenant-1', placementId: 'placement-1' },
+      }),
+    );
+    expect(list).toEqual([document]);
+    expect(detail).toBe(document);
+  });
+
+  it('does not expose another tenant placement documents', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(null);
+
+    await expect(service.findAll('tenant-1', 'placement-1')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('generates an offer slip document from the current offer preview payload', async () => {
+    await service.generateOfferSlip(user, 'placement-1');
+
+    expect(placementsService.getOfferSlipPreview).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      type: PlacementDocumentType.OFFER_SLIP,
+      documentNumber: 'DOC-OS-001',
+      version: 1,
+      title: 'Offer Slip FAC-001',
+      currency: 'GHS',
+      status: PlacementDocumentStatus.GENERATED,
+    });
+    expect(
+      jsonRecord(jsonRecord(createArgs.data.sourceSnapshot).placement),
+    ).toMatchObject({ reference: 'FAC-001' });
+    expect(
+      jsonRecord(jsonRecord(createArgs.data.renderPayload).placement),
+    ).toMatchObject({ reference: 'FAC-001' });
+  });
+
+  it('generates a closing slip from a PlacementClosing snapshot', async () => {
+    const closing = {
+      id: 'closing-1',
+      participantId: 'participant-1',
+      closingNumber: 'CLO-001',
+      currency: 'GHS',
+      grossPremium: new Prisma.Decimal('2500.00'),
+      participant: {
+        id: 'participant-1',
+        counterparty: { id: 'reinsurer-1', name: 'Avenue Re' },
+      },
+    };
+    prisma.placementClosing.findFirst.mockResolvedValue(closing);
+    prisma.placementDocument.create.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      documentNumber: 'DOC-CS-001',
+    });
+
+    await service.generateClosingSlip(user, 'placement-1', 'closing-1');
+
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      closingId: 'closing-1',
+      participantId: 'participant-1',
+      type: PlacementDocumentType.CLOSING_SLIP,
+      documentNumber: 'DOC-CS-001',
+    });
+    expect(jsonRecord(createArgs.data.sourceSnapshot)).toMatchObject({
+      grossPremium: '2500',
+    });
+  });
+
+  it('generates note documents from PlacementNote values', async () => {
+    prisma.placementNote.findFirst.mockResolvedValue({
+      id: 'note-1',
+      closingId: 'closing-1',
+      participantId: 'participant-1',
+      noteNumber: 'DN-001',
+      type: PlacementNoteType.DEBIT_NOTE,
+      direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+      status: PlacementNoteStatus.ISSUED,
+      currency: 'GHS',
+      grossAmount: new Prisma.Decimal('5000.00'),
+      counterparty: { id: 'cedant-1', name: 'Acme Insurance' },
+      closing: { id: 'closing-1', closingNumber: 'CLO-001' },
+      participant: { id: 'participant-1', counterpartyId: 'reinsurer-1' },
+    });
+    prisma.placementDocument.create.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.DEBIT_NOTE,
+      documentNumber: 'DOC-DN-001',
+    });
+
+    await service.generateNoteDocument(user, 'placement-1', 'note-1');
+
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      noteId: 'note-1',
+      closingId: 'closing-1',
+      participantId: 'participant-1',
+      type: PlacementDocumentType.DEBIT_NOTE,
+      documentNumber: 'DOC-DN-001',
+    });
+    expect(jsonRecord(createArgs.data.sourceSnapshot)).toMatchObject({
+      grossAmount: '5000',
+    });
+  });
+
+  it('generates endorsement slip and endorsement closing slip documents', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      endorsementNumber: 'END-001',
+      currency: null,
+      participants: [],
+      closings: [],
+    });
+    prisma.placementDocument.create
+      .mockResolvedValueOnce({
+        ...document,
+        type: PlacementDocumentType.ENDORSEMENT_SLIP,
+        documentNumber: 'DOC-ES-001',
+      })
+      .mockResolvedValueOnce({
+        ...document,
+        type: PlacementDocumentType.CLOSING_SLIP,
+        documentNumber: 'DOC-CS-001',
+      });
+
+    await service.generateEndorsementSlip(user, 'placement-1', 'endorsement-1');
+    expect(
+      firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+        prisma.placementDocument.create,
+      ).data,
+    ).toMatchObject({
+      endorsementId: 'endorsement-1',
+      type: PlacementDocumentType.ENDORSEMENT_SLIP,
+      documentNumber: 'DOC-ES-001',
+    });
+
+    prisma.placementEndorsementClosing.findFirst.mockResolvedValue({
+      id: 'endorsement-closing-1',
+      endorsementId: 'endorsement-1',
+      closingNumber: 'ENC-001',
+      currency: 'GHS',
+      endorsement: { id: 'endorsement-1', endorsementNumber: 'END-001' },
+      endorsementParticipant: {
+        id: 'endorsement-participant-1',
+        counterparty: { id: 'reinsurer-1', name: 'Avenue Re' },
+      },
+    });
+
+    await service.generateEndorsementClosingSlip(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+    const secondCreate = callArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+      1,
+    );
+    expect(secondCreate.data).toMatchObject({
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      type: PlacementDocumentType.CLOSING_SLIP,
+      documentNumber: 'DOC-CS-001',
+    });
+  });
+
+  it('generates claim notice and claim cash call documents', async () => {
+    prisma.placementClaim.findFirst.mockResolvedValue({
+      id: 'claim-1',
+      claimNumber: 'CLM-001',
+      currency: 'GHS',
+      estimatedLossAmount: new Prisma.Decimal('40000.00'),
+      allocations: [],
+      cashCalls: [],
+    });
+    prisma.placementDocument.create
+      .mockResolvedValueOnce({
+        ...document,
+        type: PlacementDocumentType.CLAIM_NOTICE,
+        documentNumber: 'DOC-CLM-001',
+      })
+      .mockResolvedValueOnce({
+        ...document,
+        type: PlacementDocumentType.CLAIM_CASH_CALL,
+        documentNumber: 'DOC-CCL-001',
+      });
+
+    await service.generateClaimNotice(user, 'placement-1', 'claim-1');
+    expect(
+      firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+        prisma.placementDocument.create,
+      ).data,
+    ).toMatchObject({
+      claimId: 'claim-1',
+      type: PlacementDocumentType.CLAIM_NOTICE,
+      documentNumber: 'DOC-CLM-001',
+    });
+    expect(
+      jsonRecord(
+        firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+          prisma.placementDocument.create,
+        ).data.sourceSnapshot,
+      ),
+    ).toMatchObject({
+      estimatedLossAmount: '40000',
+    });
+
+    prisma.placementClaimCashCall.findFirst.mockResolvedValue({
+      id: 'cash-call-1',
+      claimId: 'claim-1',
+      cashCallNumber: 'CCL-001',
+      currency: 'GHS',
+      amount: new Prisma.Decimal('16000.00'),
+      allocation: { id: 'allocation-1' },
+      counterparty: { id: 'reinsurer-1', name: 'Avenue Re' },
+    });
+
+    await service.generateClaimCashCall(
+      user,
+      'placement-1',
+      'claim-1',
+      'cash-call-1',
+    );
+    const secondCreate = callArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+      1,
+    );
+    expect(secondCreate.data).toMatchObject({
+      claimId: 'claim-1',
+      claimCashCallId: 'cash-call-1',
+      type: PlacementDocumentType.CLAIM_CASH_CALL,
+      documentNumber: 'DOC-CCL-001',
+    });
+    expect(jsonRecord(secondCreate.data.sourceSnapshot)).toMatchObject({
+      amount: '16000',
+    });
+  });
+
+  it('increments version on regeneration and never reuses placement-scoped numbers', async () => {
+    prisma.placementDocument.count
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(1);
+
+    await service.generateOfferSlip(user, 'placement-1');
+
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      documentNumber: 'DOC-OS-002',
+      version: 2,
+    });
+  });
+
+  it('voids a document while keeping the row readable', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue(document);
+    prisma.placementDocument.update.mockResolvedValue({
+      ...document,
+      status: PlacementDocumentStatus.VOID,
+      voidReason: 'Replacement generated',
+    });
+
+    const result = await service.void(user, 'placement-1', 'document-1', {
+      voidReason: 'Replacement generated',
+    });
+
+    expect(prisma.placementDocument.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'document-1' },
+        data: {
+          status: PlacementDocumentStatus.VOID,
+          voidedAt: expect.any(Date) as Date,
+          voidReason: 'Replacement generated',
+        },
+      }),
+    );
+    expect(result.status).toBe(PlacementDocumentStatus.VOID);
+  });
+
+  it('rejects voiding a VOID document', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      status: PlacementDocumentStatus.VOID,
+    });
+
+    await expect(
+      service.void(user, 'placement-1', 'document-1', {
+        voidReason: 'Replacement generated',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('allows locked placements to generate documents without mutating source records or unlocking', async () => {
+    const lockedPlacement = {
+      id: 'placement-1',
+      tenantId: 'tenant-1',
+      status: PlacementStatus.MARKETING,
+    };
+    const paymentDate = new Date('2026-06-11T13:00:00.000Z');
+    prisma.placementPayment.findFirst.mockResolvedValue({
+      type: PlacementPaymentType.PREMIUM_RECEIVED,
+      paymentDate,
+      createdAt: paymentDate,
+    });
+
+    await expect(lockPolicy.evaluate(lockedPlacement)).resolves.toMatchObject({
+      locked: true,
+      endorsementRequired: true,
+      lockSource: 'PREMIUM_PAYMENT',
+    });
+
+    await expect(
+      service.generateOfferSlip(user, 'placement-1'),
+    ).resolves.toMatchObject({
+      documentNumber: 'DOC-OS-001',
+    });
+
+    expect(prisma.placementClosing.update).not.toHaveBeenCalled();
+    expect(prisma.placementNote.update).not.toHaveBeenCalled();
+    expect(prisma.placementEndorsement.update).not.toHaveBeenCalled();
+    expect(prisma.placementEndorsementClosing.update).not.toHaveBeenCalled();
+    expect(prisma.placementClaim.update).not.toHaveBeenCalled();
+    expect(prisma.placementClaimCashCall.update).not.toHaveBeenCalled();
+    await expect(lockPolicy.evaluate(lockedPlacement)).resolves.toMatchObject({
+      locked: true,
+    });
+  });
+});
