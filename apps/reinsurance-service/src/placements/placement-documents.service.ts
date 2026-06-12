@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
@@ -11,6 +12,7 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
 import { PlacementsService } from './placements.service';
 
@@ -44,6 +46,7 @@ export class PlacementDocumentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly placementsService: PlacementsService,
+    private readonly pdfRenderer: PlacementPdfRendererService,
   ) {}
 
   async findAll(
@@ -364,6 +367,48 @@ export class PlacementDocumentsService {
         voidReason: this.cleanRequired(dto.voidReason),
       },
       include: documentInclude,
+    });
+  }
+
+  async renderPdf(
+    tenantId: string,
+    placementId: string,
+    documentId: string,
+  ): Promise<Buffer> {
+    const document = await this.findOne(tenantId, placementId, documentId);
+    this.assertPdfRenderable(document);
+
+    try {
+      return await this.renderDocumentBuffer(document);
+    } catch (error: unknown) {
+      if (error instanceof BadRequestException) throw error;
+      throw new InternalServerErrorException(
+        'Failed to render placement document PDF',
+      );
+    }
+  }
+
+  private assertPdfRenderable(document: PlacementDocumentRecord): void {
+    if (document.type !== PlacementDocumentType.CLOSING_SLIP) {
+      throw new BadRequestException(
+        'PDF rendering is currently supported only for CLOSING_SLIP documents',
+      );
+    }
+    if (document.status === PlacementDocumentStatus.VOID) {
+      throw new BadRequestException('VOID documents cannot be rendered');
+    }
+  }
+
+  private renderDocumentBuffer(
+    document: PlacementDocumentRecord,
+  ): Promise<Buffer> {
+    return this.pdfRenderer.render({
+      documentNumber: document.documentNumber,
+      title: document.title,
+      type: document.type,
+      status: document.status,
+      renderPayload: document.renderPayload,
+      generatedAt: document.generatedAt,
     });
   }
 

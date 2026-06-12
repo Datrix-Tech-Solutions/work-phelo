@@ -1,4 +1,5 @@
 import { RequestUser } from '@work-phelo/types';
+import { StreamableFile } from '@nestjs/common';
 import {
   PlacementClaimCashCallStatus,
   PlacementClaimStatus,
@@ -58,6 +59,7 @@ describe('PlacementsController', () => {
     generateEndorsementClosingSlip: jest.fn(),
     generateClaimNotice: jest.fn(),
     generateClaimCashCall: jest.fn(),
+    renderPdf: jest.fn(),
     void: jest.fn(),
   };
   const endorsementsService = {
@@ -152,6 +154,7 @@ describe('PlacementsController', () => {
     ['findClosing', PlacementPermission.VIEW],
     ['findDocuments', PlacementPermission.VIEW],
     ['findDocument', PlacementPermission.VIEW],
+    ['renderDocumentPdf', PlacementPermission.VIEW],
     ['findEndorsements', PlacementPermission.VIEW],
     ['findEndorsement', PlacementPermission.VIEW],
     ['findEndorsementParticipants', PlacementPermission.VIEW],
@@ -597,6 +600,12 @@ describe('PlacementsController', () => {
     await controller.findDocument('placement-1', 'document-1', {
       user,
     } as never);
+    documentsService.renderPdf.mockResolvedValue(Buffer.from('%PDF'));
+    const pdf = await controller.renderDocumentPdf(
+      'placement-1',
+      'document-1',
+      { user } as never,
+    );
     await controller.generateOfferSlipDocument('placement-1', {
       user,
     } as never);
@@ -643,6 +652,12 @@ describe('PlacementsController', () => {
       'placement-1',
       'document-1',
     );
+    expect(documentsService.renderPdf).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+    expect(pdf).toBeInstanceOf(StreamableFile);
     expect(documentsService.generateOfferSlip).toHaveBeenCalledWith(
       user,
       'placement-1',

@@ -712,17 +712,16 @@ settlement APIs are implemented.
 
 Placement documents are registry rows for generated Reinsurance documents. The
 current foundation captures immutable `sourceSnapshot` data and renderer-ready
-`renderPayload` JSON. It does not render PDFs, upload files, create download
-URLs, attach documents to emails or send emails.
-
-Future file storage will use private S3 object storage with short-lived signed
-download URLs. The nullable storage fields are present now so the PDF/storage
-PR can populate `storageProvider`, `objectKey`, `fileName`, `mimeType`,
-`sizeBytes` and `checksum` without changing the document identity model.
+`renderPayload` JSON. Backend PDF rendering is currently enabled only for
+existing `CLOSING_SLIP` document rows and uses `renderPayload` as the sole
+source of truth. The direct PDF preview endpoint streams `application/pdf`
+without storing a file. It does not upload files, create download URLs, attach
+documents to emails or send emails.
 
 ```text
 GET  /api/v1/operations/reinsurance/placements/:id/documents
 GET  /api/v1/operations/reinsurance/placements/:id/documents/:documentId
+POST /api/v1/operations/reinsurance/placements/:id/documents/:documentId/render-pdf
 POST /api/v1/operations/reinsurance/placements/:id/documents/:documentId/void
 
 POST /api/v1/operations/reinsurance/placements/:id/documents/offer-slip
@@ -764,10 +763,24 @@ Document rules:
 - Regeneration creates a new `PlacementDocument` row with `version + 1`.
 - Document numbers are placement-scoped and never reused.
 - `VOID` documents remain readable.
+- `VOID` documents cannot be rendered as PDFs.
 - Document generation does not financially lock or unlock a placement.
+- PDF rendering does not financially lock or unlock a placement.
 - Locked placements may still generate documents from immutable snapshots.
 - Existing placement, closing, note, endorsement, claim and cash-call records
-  are not mutated by document generation.
+  are not mutated by document generation or PDF rendering.
+
+PDF rendering:
+
+- `CLOSING_SLIP` is the only supported PDF document type in this first
+  rendering foundation.
+- Rendering uses HTML + Playwright Chromium via `playwright-core`.
+- Runtime containers must provide a Chromium binary. The service Dockerfile
+  installs Alpine `chromium` and sets
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser`.
+- `POST .../render-pdf` streams the PDF directly and does not store it.
+- S3 upload/download, signed URLs, email attachments and frontend rendering
+  remain deferred.
 
 Source rules:
 
