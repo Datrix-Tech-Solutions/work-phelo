@@ -708,6 +708,78 @@ lock placements. Payment remains the only hard financial lock trigger.
 `CLAIM_SETTLEMENT` payments remain deferred and guarded until explicit claim
 settlement APIs are implemented.
 
+## Placement Document Registry API
+
+Placement documents are registry rows for generated Reinsurance documents. The
+current foundation captures immutable `sourceSnapshot` data and renderer-ready
+`renderPayload` JSON. It does not render PDFs, upload files, create download
+URLs, attach documents to emails or send emails.
+
+Future file storage will use private S3 object storage with short-lived signed
+download URLs. The nullable storage fields are present now so the PDF/storage
+PR can populate `storageProvider`, `objectKey`, `fileName`, `mimeType`,
+`sizeBytes` and `checksum` without changing the document identity model.
+
+```text
+GET  /api/v1/operations/reinsurance/placements/:id/documents
+GET  /api/v1/operations/reinsurance/placements/:id/documents/:documentId
+POST /api/v1/operations/reinsurance/placements/:id/documents/:documentId/void
+
+POST /api/v1/operations/reinsurance/placements/:id/documents/offer-slip
+POST /api/v1/operations/reinsurance/placements/:id/closings/:closingId/documents/closing-slip
+POST /api/v1/operations/reinsurance/placements/:id/notes/:noteId/documents
+POST /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/documents/endorsement-slip
+POST /api/v1/operations/reinsurance/placements/:id/endorsements/:endorsementId/closings/:closingId/documents/closing-slip
+POST /api/v1/operations/reinsurance/placements/:id/claims/:claimId/documents/claim-notice
+POST /api/v1/operations/reinsurance/placements/:id/claims/:claimId/cash-calls/:cashCallId/documents
+```
+
+Document types:
+
+- `OFFER_SLIP`
+- `CLOSING_SLIP`
+- `DEBIT_NOTE`
+- `CREDIT_NOTE`
+- `ENDORSEMENT_SLIP`
+- `ENDORSEMENT_DEBIT_NOTE`
+- `ENDORSEMENT_CREDIT_NOTE`
+- `CLAIM_CASH_CALL`
+- `CLAIM_NOTICE`
+
+Numbering:
+
+- `OFFER_SLIP`: `DOC-OS-001`
+- `CLOSING_SLIP`: `DOC-CS-001`
+- `DEBIT_NOTE`: `DOC-DN-001`
+- `CREDIT_NOTE`: `DOC-CN-001`
+- `ENDORSEMENT_SLIP`: `DOC-ES-001`
+- `ENDORSEMENT_DEBIT_NOTE`: `DOC-EDN-001`
+- `ENDORSEMENT_CREDIT_NOTE`: `DOC-ECN-001`
+- `CLAIM_CASH_CALL`: `DOC-CCL-001`
+- `CLAIM_NOTICE`: `DOC-CLM-001`
+
+Document rules:
+
+- Generated documents are immutable snapshots.
+- Regeneration creates a new `PlacementDocument` row with `version + 1`.
+- Document numbers are placement-scoped and never reused.
+- `VOID` documents remain readable.
+- Document generation does not financially lock or unlock a placement.
+- Locked placements may still generate documents from immutable snapshots.
+- Existing placement, closing, note, endorsement, claim and cash-call records
+  are not mutated by document generation.
+
+Source rules:
+
+- Offer slip documents use the existing offer-preview payload.
+- Placement closing slips use `PlacementClosing` snapshots.
+- Note documents use `PlacementNote` values and infer debit/credit document
+  type from the note.
+- Endorsement slips use `PlacementEndorsement` version snapshots.
+- Endorsement closing slips use `PlacementEndorsementClosing` snapshots.
+- Claim notices use `PlacementClaim` snapshots.
+- Claim cash-call documents use `PlacementClaimCashCall` snapshots.
+
 ## Placement Payment API
 
 Placement payments record the first MVP financial activity for a placement.

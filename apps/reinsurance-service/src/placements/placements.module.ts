@@ -8,6 +8,7 @@ import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy'
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
 import { PlacementClaimsService } from './placement-claims.service';
 import { PlacementClosingsService } from './placement-closings.service';
+import { PlacementDocumentsService } from './placement-documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
@@ -25,6 +26,7 @@ import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
     PlacementClaimsService,
     PlacementClaimCashCallsService,
     PlacementClosingsService,
+    PlacementDocumentsService,
     PlacementEndorsementsService,
     PlacementEndorsementParticipantsService,
     PlacementEndorsementClosingsService,

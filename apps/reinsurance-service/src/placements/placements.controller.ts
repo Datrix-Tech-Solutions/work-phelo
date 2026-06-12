@@ -86,6 +86,12 @@ import {
 import { UpdatePlacementClosingStatusDto } from './dto/update-placement-closing-status.dto';
 import { PlacementClosingsService } from './placement-closings.service';
 import {
+  PlacementDocumentListResponseDto,
+  PlacementDocumentResponseDto,
+} from './dto/placement-document-response.dto';
+import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
+import { PlacementDocumentsService } from './placement-documents.service';
+import {
   PlacementNoteListResponseDto,
   PlacementNoteResponseDto,
 } from './dto/placement-note-response.dto';
@@ -131,6 +137,7 @@ export class PlacementsController {
   constructor(
     private readonly placementsService: PlacementsService,
     private readonly closingsService: PlacementClosingsService,
+    private readonly documentsService: PlacementDocumentsService,
     private readonly endorsementsService: PlacementEndorsementsService,
     private readonly endorsementParticipantsService: PlacementEndorsementParticipantsService,
     private readonly endorsementClosingsService: PlacementEndorsementClosingsService,
@@ -243,6 +250,262 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.placementsService.getLockStatus(request.user.tenantId, id);
+  }
+
+  @Get(':id/documents')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List placement document registry entries',
+    description:
+      'Returns generated document registry rows for the placement. PR1 stores immutable source snapshots and renderer payloads only; PDFs, S3 uploads, downloads and emails are deferred.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementDocumentListResponseDto })
+  async findDocuments(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.documentsService.findAll(
+      request.user.tenantId,
+      id,
+    );
+    return { items };
+  }
+
+  @Get(':id/documents/:documentId')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get placement document registry entry',
+    description:
+      'Returns one generated document registry row including sourceSnapshot and renderPayload. VOID documents remain readable.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'documentId',
+    format: 'uuid',
+    description: 'Placement document ID.',
+  })
+  @ApiOkResponse({ type: PlacementDocumentResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or document is missing, archived or belongs to another tenant.',
+  })
+  findDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.findOne(request.user.tenantId, id, documentId);
+  }
+
+  @Post(':id/documents/:documentId/void')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Void placement document registry entry',
+    description:
+      'Marks a generated document registry entry VOID with a reason. The row remains readable and document numbers are never reused.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'documentId',
+    format: 'uuid',
+    description: 'Placement document ID.',
+  })
+  @ApiOkResponse({ type: PlacementDocumentResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'The document is already VOID or the void reason is empty.',
+  })
+  voidDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Body() dto: VoidPlacementDocumentDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.void(request.user, id, documentId, dto);
+  }
+
+  @Post(':id/documents/offer-slip')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate offer slip document registry entry',
+    description:
+      'Creates a GENERATED OFFER_SLIP document row from the current offer slip preview payload. This does not render a PDF, upload to S3 or email the slip.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  generateOfferSlipDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateOfferSlip(request.user, id);
+  }
+
+  @Post(':id/closings/:closingId/documents/closing-slip')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate placement closing slip document registry entry',
+    description:
+      'Creates a GENERATED CLOSING_SLIP document row from the immutable PlacementClosing snapshot.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Placement closing ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  generateClosingSlipDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateClosingSlip(
+      request.user,
+      id,
+      closingId,
+    );
+  }
+
+  @Post(':id/notes/:noteId/documents')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate note document registry entry',
+    description:
+      'Creates a generated debit/credit note document row from PlacementNote values. The endpoint infers debit, credit and future endorsement-note document types from the note record.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Placement note ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  generateNoteDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateNoteDocument(request.user, id, noteId);
+  }
+
+  @Post(':id/endorsements/:endorsementId/documents/endorsement-slip')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate endorsement slip document registry entry',
+    description:
+      'Creates a GENERATED ENDORSEMENT_SLIP document row from the endorsement version snapshot. Original placement records are not mutated.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  generateEndorsementSlipDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateEndorsementSlip(
+      request.user,
+      id,
+      endorsementId,
+    );
+  }
+
+  @Post(
+    ':id/endorsements/:endorsementId/closings/:closingId/documents/closing-slip',
+  )
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate endorsement closing slip document registry entry',
+    description:
+      'Creates a GENERATED CLOSING_SLIP document row from the immutable PlacementEndorsementClosing snapshot.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Endorsement closing ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  generateEndorsementClosingSlipDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateEndorsementClosingSlip(
+      request.user,
+      id,
+      endorsementId,
+      closingId,
+    );
+  }
+
+  @Post(':id/claims/:claimId/documents/claim-notice')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate claim notice document registry entry',
+    description:
+      'Creates a GENERATED CLAIM_NOTICE document row from the PlacementClaim snapshot.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  generateClaimNoticeDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateClaimNotice(request.user, id, claimId);
+  }
+
+  @Post(':id/claims/:claimId/cash-calls/:cashCallId/documents')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate claim cash call document registry entry',
+    description:
+      'Creates a GENERATED CLAIM_CASH_CALL document row from the PlacementClaimCashCall snapshot.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({ name: 'claimId', format: 'uuid', description: 'Claim ID.' })
+  @ApiParam({
+    name: 'cashCallId',
+    format: 'uuid',
+    description: 'Claim cash call ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  generateClaimCashCallDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('claimId', ParseUUIDPipe) claimId: string,
+    @Param('cashCallId', ParseUUIDPipe) cashCallId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateClaimCashCall(
+      request.user,
+      id,
+      claimId,
+      cashCallId,
+    );
   }
 
   @Get(':id/endorsements')
