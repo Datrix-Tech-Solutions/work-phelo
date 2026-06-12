@@ -8,7 +8,12 @@ import {
   DistributionEntry,
   DistributionStatus,
 } from '@/components/molecules/reinsurance/tables/DistributionTable';
-import { Facultative, PlacementParticipant, PlacementParticipantStatus } from '@/types/reinsurance';
+import {
+  Facultative,
+  PlacementLockStatus,
+  PlacementParticipant,
+  PlacementParticipantStatus,
+} from '@/types/reinsurance';
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 import {
   useReinsurers,
@@ -42,6 +47,7 @@ const SEGMENT_COLORS = [
 
 interface DistributionListTabProps {
   placement: Facultative;
+  lockStatus?: PlacementLockStatus;
 }
 
 function participantStatus(s: PlacementParticipantStatus): DistributionStatus {
@@ -65,7 +71,7 @@ function participantToEntry(
   };
 }
 
-export function DistributionListTab({ placement }: DistributionListTabProps) {
+export function DistributionListTab({ placement, lockStatus }: DistributionListTabProps) {
   const facOffer = placement.facultativeOffer ?? 0;
   const premium = placement.premium ?? 0;
 
@@ -147,9 +153,18 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const toast = useToastStore.getState;
 
   const isPlacementLocked = useMemo(
-    () => payments.some((p) => p.status === 'RECORDED'),
-    [payments],
+    () => lockStatus?.locked ?? payments.some((p) => p.status === 'RECORDED'),
+    [lockStatus?.locked, payments],
   );
+
+  const showLockedToast = useCallback(() => {
+    toast().addToast({
+      message:
+        lockStatus?.reason ??
+        'Placement is financially locked. Direct changes require endorsement.',
+      type: 'error',
+    });
+  }, [lockStatus?.reason, toast]);
 
   const closingByParticipantId = useMemo(
     () =>
@@ -163,6 +178,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
 
   const handleAdd = async (newEntries: ReinsurerEntry[]) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     const existingIds = new Set(placement.participants.map((p) => p.counterpartyId));
     const reinsurersById = Object.fromEntries(reinsurers.map((r) => [r.id, r]));
     const newOnes = newEntries.filter((e) => !existingIds.has(e.id));
@@ -192,6 +212,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleShareCommit = (row: DistributionEntry, share: number) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     patch(row.id, { shareLine: share });
     updateParticipant({ participantId: row.id, sharePercent: share }).catch((error) =>
       toast().addToast({ message: extractError(error), type: 'error' }),
@@ -199,6 +224,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleBrokerageCommit = (row: DistributionEntry, brokerage: number) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     patch(row.id, { brokerageFee: brokerage });
     updateParticipant({ participantId: row.id, brokerageFee: brokerage }).catch((error) =>
       toast().addToast({ message: extractError(error), type: 'error' }),
@@ -206,6 +236,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleMailSent = (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     // Skip status update when already accepted — ACCEPTED → OFFER_SENT is not a valid transition
     if (row.status === 'Accepted') return;
     updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) =>
@@ -214,6 +249,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleAccept = (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     const isReconfirm = row.status === 'Accepted';
     patch(row.id, { status: 'Accepted' });
     if (isReconfirm) {
@@ -254,12 +294,22 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleClosePlacement = () => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     updatePlacementStatus({ status: 'CLOSING' })
       .then(() => updatePlacementStatus({ status: 'CLOSED' }))
       .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
   };
 
   const handleRevert = (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     patch(row.id, { status: 'Pending' });
     const closingId = closingByParticipantId[row.id];
     const voidClosing = closingId
@@ -274,6 +324,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleDecline = (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     patch(row.id, { status: 'Declined', shareLine: 0 });
     updateParticipant({ participantId: row.id, sharePercent: 0 })
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'DECLINED' }))
@@ -284,6 +339,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleDelete = (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     setDeletedIds((prev) => new Set([...prev, row.id]));
     deleteParticipant(row.id).catch((error) => {
       setDeletedIds((prev) => {
@@ -314,7 +374,17 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
               <span className="font-semibold text-gray-600">{facOffer}%</span>
             </p>
           </div>
-          <Button size="sm" onClick={() => setPanelOpen(true)} isLoading={isAdding}>
+          <Button
+            size="sm"
+            onClick={() => setPanelOpen(true)}
+            isLoading={isAdding}
+            disabled={isPlacementLocked}
+            title={
+              isPlacementLocked
+                ? 'Placement is financially locked. Changes require endorsement.'
+                : undefined
+            }
+          >
             Add Reinsurers
           </Button>
         </div>

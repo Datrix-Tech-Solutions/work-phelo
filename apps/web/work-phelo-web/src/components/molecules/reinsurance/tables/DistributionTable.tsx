@@ -73,6 +73,7 @@ export function DistributionTable({
   const [draftBrokerage, setDraftBrokerage] = useState('');
 
   const startEdit = (row: DistributionEntry) => {
+    if (isPlacementLocked) return;
     setEditingId(row.id);
     setDraftShare(String(row.shareLine));
   };
@@ -87,6 +88,7 @@ export function DistributionTable({
   };
 
   const startEditBrokerage = (row: DistributionEntry) => {
+    if (isPlacementLocked) return;
     setEditingBrokerageId(row.id);
     setDraftBrokerage(String(row.brokerageFee));
   };
@@ -101,6 +103,10 @@ export function DistributionTable({
   const handleSend = () => {
     if (!mailPreviewId) return;
     const row = entries.find((e) => e.id === mailPreviewId);
+    if (isPlacementLocked) {
+      setMailPreviewId(null);
+      return;
+    }
     if (row) onMailSent(row);
     setMailedIds((prev) => new Set([...prev, mailPreviewId]));
     setMailPreviewId(null);
@@ -234,6 +240,7 @@ export function DistributionTable({
         const showAccept = !isPlacementLocked && (isReconfirming || (mailed && !responded));
         const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
         const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
+        const showMail = !isPlacementLocked;
         return (
           <div className="flex items-center gap-2">
             <button
@@ -244,14 +251,16 @@ export function DistributionTable({
             >
               <Icons.Eye className="w-4 h-4" />
             </button>
-            <button
-              type="button"
-              title="Send mail"
-              onClick={() => setMailPreviewId(row.id)}
-              className="text-green-500 hover:text-green-700 transition-colors"
-            >
-              <Icons.Mail className="w-4 h-4" />
-            </button>
+            {showMail && (
+              <button
+                type="button"
+                title="Send mail"
+                onClick={() => setMailPreviewId(row.id)}
+                className="text-green-500 hover:text-green-700 transition-colors"
+              >
+                <Icons.Mail className="w-4 h-4" />
+              </button>
+            )}
             {showAccept && (
               <button
                 type="button"
@@ -282,7 +291,7 @@ export function DistributionTable({
                 <Icons.RotateCcw className="w-4 h-4" />
               </button>
             )}
-            {!responded && (
+            {!isPlacementLocked && !responded && (
               <button
                 type="button"
                 title="Delete"

@@ -428,6 +428,7 @@ export interface Facultative {
   totalOfferedPercent: number;
   totalAcceptedPercent: number;
   remainingPercent: number;
+  lockStatus?: PlacementLockStatus;
 }
 
 /* ── Facultative API payloads ── */
@@ -595,6 +596,22 @@ export type PlacementPaymentType =
 
 export type PlacementPaymentDirection = 'INBOUND' | 'OUTBOUND';
 export type PlacementPaymentStatus = 'RECORDED' | 'REVERSED';
+
+export type PlacementLockSource =
+  | 'NONE'
+  | 'PREMIUM_PAYMENT'
+  | 'REINSURER_PAYMENT'
+  | 'CLAIM_SETTLEMENT'
+  | 'STATUS_TERMINAL';
+
+export interface PlacementLockStatus {
+  editable: boolean;
+  locked: boolean;
+  endorsementRequired: boolean;
+  reason: string;
+  lockSource?: PlacementLockSource;
+  lockedAt?: string | null;
+}
 
 export interface PlacementPayment {
   id: string;

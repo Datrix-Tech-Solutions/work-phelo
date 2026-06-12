@@ -4,15 +4,20 @@ import { api } from '@/lib/api';
 import {
   Facultative,
   FacultativeStatus,
+  PlacementLockStatus,
   PlacementPayment,
   CreatePlacementPaymentPayload,
 } from '@/types/reinsurance';
 import { useFacultatives } from './useFacultatives';
 
 const BASE = '/operations/reinsurance/placements';
+const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
 
 const paymentsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'payments'] as const;
+
+const lockStatusKey = (placementId: string) =>
+  ['reinsurance', 'placements', placementId, 'lock-status'] as const;
 
 export function usePlacementPayments(placementId: string) {
   return useQuery({
@@ -21,6 +26,17 @@ export function usePlacementPayments(placementId: string) {
       const res = await api.get(`${BASE}/${placementId}/payments`);
       const items: PlacementPayment[] = res.data?.items ?? res.data ?? [];
       return items;
+    },
+    enabled: !!placementId,
+  });
+}
+
+export function usePlacementLockStatus(placementId: string) {
+  return useQuery({
+    queryKey: lockStatusKey(placementId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/lock-status`);
+      return res.data as PlacementLockStatus;
     },
     enabled: !!placementId,
   });
@@ -38,6 +54,9 @@ export function useCreatePlacementPayment() {
     },
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: lockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
     },
   });
 }
@@ -51,6 +70,9 @@ export function useReversePayment() {
     },
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: lockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
     },
   });
 }
