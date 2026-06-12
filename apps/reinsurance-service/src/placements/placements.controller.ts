@@ -91,6 +91,7 @@ import {
   PlacementDocumentListResponseDto,
   PlacementDocumentResponseDto,
 } from './dto/placement-document-response.dto';
+import { PlacementDocumentDownloadUrlDto } from './dto/placement-document-download-url.dto';
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
 import { PlacementDocumentsService } from './placement-documents.service';
 import {
@@ -346,6 +347,83 @@ export class PlacementsController {
       type: 'application/pdf',
       disposition: `inline; filename="placement-document-${documentId}.pdf"`,
     });
+  }
+
+  @Post(':id/documents/:documentId/render-and-store')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Render and store a placement document PDF in private S3',
+    description:
+      'Renders an existing generated CLOSING_SLIP document from PlacementDocument.renderPayload, uploads the PDF to private S3, stores object metadata and checksum on the document row, and returns the updated registry entry. Existing stored PDFs are not overwritten in the MVP.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'documentId',
+    format: 'uuid',
+    description: 'Placement document ID.',
+  })
+  @ApiOkResponse({ type: PlacementDocumentResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The document is VOID, unsupported for PDF rendering or has invalid renderPayload.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'The document already has stored PDF metadata.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or document is missing, archived or belongs to another tenant.',
+  })
+  renderAndStoreDocumentPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.renderAndStorePdf(
+      request.user.tenantId,
+      id,
+      documentId,
+    );
+  }
+
+  @Get(':id/documents/:documentId/download-url')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Create a short-lived signed document download URL',
+    description:
+      'Returns a private, short-lived signed URL for a stored document PDF. No public URL is stored on PlacementDocument, and VOID documents remain downloadable if they already have stored object metadata.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'documentId',
+    format: 'uuid',
+    description: 'Placement document ID.',
+  })
+  @ApiOkResponse({ type: PlacementDocumentDownloadUrlDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'The document PDF has not been stored yet.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or document is missing, archived or belongs to another tenant.',
+  })
+  getDocumentDownloadUrl(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.createDownloadUrl(
+      request.user.tenantId,
+      id,
+      documentId,
+    );
   }
 
   @Post(':id/documents/:documentId/void')
