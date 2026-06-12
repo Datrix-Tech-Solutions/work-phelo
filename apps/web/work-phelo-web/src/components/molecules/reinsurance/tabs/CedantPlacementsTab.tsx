@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/atoms/Badge';
 import { StatCard } from '@/components/atoms/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -201,19 +200,20 @@ const PLACEMENT_COLUMNS: Column<Facultative>[] = [
 interface CedantPlacementsTabProps {
   placements: Facultative[];
   isLoading: boolean;
-  tenantSlug: string;
   onEditPlacement: (placement: Facultative) => void;
   onEndorsement: (placement: Facultative) => void;
+  onView: (placement: Facultative) => void;
+  onPremiums: (placement: Facultative) => void;
 }
 
 export function CedantPlacementsTab({
   placements,
   isLoading,
-  tenantSlug,
   onEditPlacement,
   onEndorsement,
+  onView,
+  onPremiums,
 }: CedantPlacementsTabProps) {
-  const router = useRouter();
   const [page, setPage] = useState(1);
 
   const openPlacements = placements.filter((p) => toDisplayStatus(p.status) === 'Open');
@@ -244,17 +244,9 @@ export function CedantPlacementsTab({
           isLoading={isLoading}
           emptyMessage="No placements found for this cedant"
           rowActions={(row) => [
-            {
-              label: 'View',
-              onClick: () =>
-                router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.id}`),
-            },
+            { label: 'View', onClick: () => onView(row) },
             { label: 'Edit', onClick: () => onEditPlacement(row) },
-            {
-              label: 'Premiums',
-              onClick: () =>
-                router.push(`/${tenantSlug}/operations/reinsurance/payments/${row.id}`),
-            },
+            { label: 'Premiums', onClick: () => onPremiums(row) },
             ...(row.status !== 'CANCELLED'
               ? [{ label: 'Endorsement', onClick: () => onEndorsement(row) }]
               : []),

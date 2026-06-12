@@ -26,7 +26,7 @@ export function TrendBadge({ change }: TrendBadgeProps) {
         ) : (
           <Icons.TrendingDown className="w-3 h-3" />
         ))}
-      {isNeutral ? '—' : `${isPositive ? '+' : ''}${change.toFixed(1)}%`}
+      {isNeutral ? '—' : `${Math.abs(change).toFixed(1)}%`}
     </span>
   );
 }

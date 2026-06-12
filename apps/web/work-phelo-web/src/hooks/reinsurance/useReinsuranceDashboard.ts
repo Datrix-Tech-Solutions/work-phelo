@@ -102,11 +102,14 @@ function computeFinancials(items: Facultative[], currencies: Currency[], targetR
     totalRisk += convertToTarget(f.sumInsured, f.currency, currencies, targetRate);
     totalPremium += convertToTarget(f.premium, f.currency, currencies, targetRate);
 
-    const premium = f.premium ?? 0;
-    const premiumInTarget = convertToTarget(premium, f.currency, currencies, targetRate);
-    for (const p of f.participants) {
-      if (p.role === 'BROKER' && p.brokerageFee) {
-        totalBrokerage += (parseFloat(p.brokerageFee) / 100) * premiumInTarget;
+    if (f.premium != null) {
+      const premiumInTarget = convertToTarget(f.premium, f.currency, currencies, targetRate);
+      for (const p of f.participants) {
+        if (p.status !== 'ACCEPTED' && p.status !== 'CLOSED') continue;
+        const share = p.sharePercent != null ? parseFloat(p.sharePercent) : null;
+        const fee = p.brokerageFee != null ? parseFloat(p.brokerageFee) : null;
+        if (share == null || fee == null) continue;
+        totalBrokerage += premiumInTarget * (share / 100) * (fee / 100);
       }
     }
   }

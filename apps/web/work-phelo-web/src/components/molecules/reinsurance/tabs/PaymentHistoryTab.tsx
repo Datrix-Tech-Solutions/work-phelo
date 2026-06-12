@@ -1,11 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { usePlacementPayments, useReversePayment } from '@/hooks';
-import { PlacementPayment } from '@/types/reinsurance';
-import { extractError } from '@/lib/extractError';
-import { useToastStore } from '@/store/toast.store';
+import { usePlacementPayments } from '@/hooks';
+import { Facultative, PlacementPayment } from '@/types/reinsurance';
+import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -38,21 +38,12 @@ const STATUS_VARIANT: Record<string, 'success' | 'danger' | 'neutral'> = {
 
 interface PaymentHistoryTabProps {
   placementId: string;
+  placement: Facultative;
 }
 
-export function PaymentHistoryTab({ placementId }: PaymentHistoryTabProps) {
+export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabProps) {
   const { data: payments = [], isLoading } = usePlacementPayments(placementId);
-  const reversePayment = useReversePayment();
-  const addToast = useToastStore((s) => s.addToast);
-
-  const handleReverse = async (payment: PlacementPayment) => {
-    try {
-      await reversePayment.mutateAsync({ placementId, paymentId: payment.id });
-      addToast({ message: 'Payment reversed', type: 'success' });
-    } catch (error) {
-      addToast({ message: extractError(error), type: 'error' });
-    }
-  };
+  const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
 
   const COLUMNS: Column<PlacementPayment>[] = [
     {
@@ -69,7 +60,7 @@ export function PaymentHistoryTab({ placementId }: PaymentHistoryTabProps) {
     },
     {
       key: 'counterparty',
-      label: 'Counterparty',
+      label: 'Cedant',
       width: '1.5fr',
       render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
     },
@@ -78,6 +69,12 @@ export function PaymentHistoryTab({ placementId }: PaymentHistoryTabProps) {
       label: 'Reference',
       width: '1fr',
       render: (row) => <span className="text-gray-500">{row.reference || '—'}</span>,
+    },
+    {
+      key: 'notes',
+      label: 'Payment Type',
+      width: '1fr',
+      render: (row) => <span className="text-gray-600">{row.notes || '—'}</span>,
     },
     {
       key: 'amount',
@@ -101,20 +98,30 @@ export function PaymentHistoryTab({ placementId }: PaymentHistoryTabProps) {
   ];
 
   return (
-    <DataTable
-      columns={COLUMNS}
-      data={payments}
-      isLoading={isLoading}
-      emptyMessage="No payments recorded yet"
-      currentPage={1}
-      totalPages={1}
-      onPageChange={() => {}}
-      noInternalScroll
-      rowActions={(row) =>
-        row.status === 'RECORDED' && !row.reversalOfPaymentId
-          ? [{ label: 'Reverse', onClick: () => handleReverse(row) }]
-          : []
-      }
-    />
+    <>
+      <DataTable
+        columns={COLUMNS}
+        data={payments}
+        isLoading={isLoading}
+        emptyMessage="No payments recorded yet"
+        currentPage={1}
+        totalPages={1}
+        onPageChange={() => {}}
+        noInternalScroll
+        rowActions={(row: PlacementPayment) => [
+          { label: 'Receipt', onClick: () => setReceiptTarget(row) },
+        ]}
+      />
+
+      {receiptTarget && (
+        <PaymentReceiptModal
+          isOpen
+          placement={placement}
+          payment={receiptTarget}
+          onPrint={() => {}}
+          onClose={() => setReceiptTarget(null)}
+        />
+      )}
+    </>
   );
 }

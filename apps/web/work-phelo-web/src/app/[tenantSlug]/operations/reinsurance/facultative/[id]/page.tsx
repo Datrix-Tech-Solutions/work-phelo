@@ -6,13 +6,13 @@ import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement } from '@/hooks';
-import { FacultativeOverview } from '@/components/molecules/reinsurance/FacultativeOverview';
-import { DistributionListTab } from '@/components/molecules/reinsurance/DistributionListTab';
-import { PlacementClosingsTab } from '@/components/molecules/reinsurance/PlacementClosingsTab';
+import { FacultativeOverview } from '@/components/molecules/reinsurance/stats/FacultativeOverview';
+import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
+import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/PlacementClosingsTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
-import { EndorsementTab } from '@/components/molecules/reinsurance/EndorsmentTab';
+import { EndorsementTab } from '@/components/molecules/reinsurance/tabs/EndorsmentTab';
 
 type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
 

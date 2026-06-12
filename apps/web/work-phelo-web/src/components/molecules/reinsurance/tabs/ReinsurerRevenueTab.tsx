@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { DataList, Column } from '@/components/organisms/shared/DataList';
 import { Facultative, Currency } from '@/types/reinsurance';
 
 type BrokerageRow = Currency & { amount: number | null };
@@ -75,14 +75,10 @@ export function ReinsurerRevenueTab({
   return (
     <div className="flex flex-col gap-3">
       <h3 className="text-sm font-semibold text-gray-900">Brokerage Summary</h3>
-      <DataTable
+      <DataList
         columns={BROKERAGE_COLUMNS}
         data={currencies.map((c) => ({ ...c, amount: brokerageByCode.get(c.isoCode) ?? null }))}
         emptyMessage="No currencies configured"
-        currentPage={1}
-        totalPages={1}
-        onPageChange={() => {}}
-        noInternalScroll
       />
     </div>
   );

@@ -25,6 +25,7 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
     reference,
     policyNumber,
     title,
+    cedant,
     classOfBusiness,
   } = placement ?? {
     premium: 0,
@@ -34,6 +35,7 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
     reference: null,
     policyNumber: null,
     title: null,
+    cedant: null,
     classOfBusiness: null,
   };
 
@@ -61,10 +63,12 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
               <span className="text-sm font-semibold text-gray-900">{reference}</span>
               {policyNumber && <span className="text-xs text-gray-400">{policyNumber}</span>}
             </div>
-            {(title || classOfBusiness) && (
+            {(title || cedant || classOfBusiness) && (
               <div className="flex items-center gap-3">
                 {title && <span className="text-xs text-gray-600">{title}</span>}
-                {title && classOfBusiness && <span className="text-gray-300 text-xs">·</span>}
+                {title && classOfBusiness && <span className="text-gray-400 text-xs">·</span>}
+                {cedant?.name && <span className="text-xs text-gray-400">{cedant.name}</span>}
+                {cedant?.name && title && <span className="text-gray-400 text-xs">·</span>}
                 {classOfBusiness && (
                   <span className="text-xs text-gray-400">{classOfBusiness}</span>
                 )}

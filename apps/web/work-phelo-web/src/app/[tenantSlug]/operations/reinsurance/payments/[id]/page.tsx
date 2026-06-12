@@ -7,7 +7,7 @@ import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement, usePlacementPayments } from '@/hooks';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { BusinessPaymentSection } from '@/components/molecules/reinsurance/BusinessPaymentSection';
-import { PaymentHistoryTab } from '@/components/molecules/reinsurance/PaymentHistoryTab';
+import { PaymentHistoryTab } from '@/components/molecules/reinsurance/tabs/PaymentHistoryTab';
 import AddPaymentForm from '@/components/organisms/reinsurance/AddPaymentForm';
 
 type PaymentTab = 'overview' | 'history';
@@ -66,7 +66,9 @@ export default function PaymentDetailPage({
                 {activeTab === 'overview' && (
                   <BusinessPaymentSection placement={placement} paidAmount={paidAmount} />
                 )}
-                {activeTab === 'history' && <PaymentHistoryTab placementId={id} />}
+                {activeTab === 'history' && (
+                  <PaymentHistoryTab placementId={id} placement={placement} />
+                )}
               </div>
             </div>
           </div>

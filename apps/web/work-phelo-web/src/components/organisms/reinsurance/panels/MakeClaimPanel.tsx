@@ -8,6 +8,9 @@ import {
   MakeClaimFormValues,
   MAKE_CLAIM_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
+import { usePlacementClosings, useCreatePlacementPayment } from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 import { Facultative } from '@/types/reinsurance';
 
 interface MakeClaimPanelProps {
@@ -25,22 +28,75 @@ export function MakeClaimPanel({ isOpen, onClose, placement, onSuccess }: MakeCl
     formState: { isSubmitting },
   } = form;
 
+  const { data: closings = [] } = usePlacementClosings(placement?.id ?? '');
+  const createPayment = useCreatePlacementPayment();
+  const addToast = useToastStore((s) => s.addToast);
+
   const handleClose = () => {
     reset(MAKE_CLAIM_DEFAULTS);
     onClose();
   };
 
-  const onSubmit = async () => {
-    // TODO: wire to claim API when available
-    onSuccess?.();
-    handleClose();
+  const onSubmit = async (values: MakeClaimFormValues) => {
+    if (!placement) return;
+
+    const acceptedReinsurers = (placement.participants ?? []).filter(
+      (p) => p.role !== 'BROKER' && p.status === 'ACCEPTED',
+    );
+
+    if (acceptedReinsurers.length === 0) {
+      addToast({ message: 'No accepted reinsurers found for this placement', type: 'error' });
+      return;
+    }
+
+    const closingByParticipantId = Object.fromEntries(closings.map((c) => [c.participantId, c.id]));
+
+    const claimAmount = parseFloat(values.claimAmount) || 0;
+    const rate = values.rate ? parseFloat(values.rate) : 1;
+    const paymentCurrency = values.currency || placement.currency;
+    const placementCurrency = placement.currency ?? values.currency;
+    const needsConversion = !!values.rate && paymentCurrency !== placementCurrency;
+
+    try {
+      await Promise.all(
+        acceptedReinsurers.map((participant) => {
+          const share =
+            participant.sharePercent != null ? parseFloat(participant.sharePercent) / 100 : 0;
+          const rawAmount = share * claimAmount;
+          const submittedAmount = needsConversion
+            ? Math.round(rawAmount * rate * 100) / 100
+            : Math.round(rawAmount * 100) / 100;
+
+          const closingId = closingByParticipantId[participant.id];
+
+          return createPayment.mutateAsync({
+            placementId: placement.id,
+            type: 'CLAIM_SETTLEMENT',
+            direction: 'INBOUND',
+            counterpartyId: participant.counterpartyId,
+            ...(closingId ? { closingId } : {}),
+            participantId: participant.id,
+            amount: submittedAmount,
+            currency: placementCurrency ?? paymentCurrency,
+            paymentDate: new Date(values.claimDate).toISOString(),
+            ...(values.claimCause ? { notes: values.claimCause } : {}),
+          });
+        }),
+      );
+
+      addToast({ message: 'Claim submitted successfully', type: 'success' });
+      onSuccess?.();
+      handleClose();
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    }
   };
 
   return (
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title={placement ? 'Make Claim' : 'Make Claim'}
+      title="Make Claim"
       description={placement ? `Claim for ${placement.reference}` : 'Submit a claim'}
       footer={
         placement ? (

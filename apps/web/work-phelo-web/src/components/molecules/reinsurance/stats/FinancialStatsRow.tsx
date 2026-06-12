@@ -1,7 +1,7 @@
 'use client';
 
 import { Period } from '@/components/atoms/PeriodToggle';
-import { DashboardStatCard } from '@/components/molecules/reinsurance/DashboardStatCard';
+import { DashboardStatCard } from '@/components/molecules/reinsurance/stats/DashboardStatCard';
 import { useReinsuranceFinancials } from '@/hooks';
 
 const PERIOD_LABELS: Record<Period, string> = {
