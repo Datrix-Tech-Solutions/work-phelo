@@ -14,6 +14,8 @@ import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
+import { PlacementDocumentTemplateRegistry } from './pdf/placement-document-template.registry';
+import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
@@ -32,6 +34,8 @@ import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
     PlacementEndorsementClosingsService,
     PlacementNotesService,
     PlacementPaymentsService,
+    PlacementDocumentTemplateRegistry,
+    PlacementPdfRendererService,
     PlacementFinancialActivityReader,
     PlacementFinancialLockPolicy,
     ReinsuranceMoneyHelper,

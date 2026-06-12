@@ -9,6 +9,7 @@ import {
   Post,
   Query,
   Req,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,6 +23,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiProduces,
   ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -299,6 +301,51 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.documentsService.findOne(request.user.tenantId, id, documentId);
+  }
+
+  @Post(':id/documents/:documentId/render-pdf')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Render a placement document as PDF',
+    description:
+      'Renders an existing generated CLOSING_SLIP document registry row to a PDF using PlacementDocument.renderPayload only. The sourceSnapshot and renderPayload are not mutated. S3 upload, signed URLs and email sending are deferred.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'documentId',
+    format: 'uuid',
+    description: 'Placement document ID.',
+  })
+  @ApiProduces('application/pdf')
+  @ApiOkResponse({
+    description: 'Rendered closing slip PDF.',
+    schema: { type: 'string', format: 'binary' },
+  })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The document is VOID, unsupported for PDF rendering or has an invalid renderPayload.',
+  })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or document is missing, archived or belongs to another tenant.',
+  })
+  async renderDocumentPdf(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const pdf = await this.documentsService.renderPdf(
+      request.user.tenantId,
+      id,
+      documentId,
+    );
+    return new StreamableFile(pdf, {
+      type: 'application/pdf',
+      disposition: `inline; filename="placement-document-${documentId}.pdf"`,
+    });
   }
 
   @Post(':id/documents/:documentId/void')

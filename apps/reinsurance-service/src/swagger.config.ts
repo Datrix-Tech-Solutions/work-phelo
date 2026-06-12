@@ -153,7 +153,7 @@ pipeline enables it for development only.
     )
     .addTag(
       'Reinsurance - Documents',
-      'Generated document registry entries, immutable snapshots and future S3 metadata',
+      'Generated document registry entries, immutable snapshots and PDF rendering',
     )
     .addTag(
       'Reinsurance - Financial Locking',

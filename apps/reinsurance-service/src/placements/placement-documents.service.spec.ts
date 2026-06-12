@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   PlacementDocumentStatus,
   PlacementDocumentType,
@@ -10,6 +14,7 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
 import { PlacementDocumentsService } from './placement-documents.service';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
@@ -113,6 +118,7 @@ describe('PlacementDocumentsService', () => {
     $transaction: jest.Mock;
   };
   let placementsService: { getOfferSlipPreview: jest.Mock };
+  let pdfRenderer: { render: jest.Mock };
   let service: PlacementDocumentsService;
   let lockPolicy: PlacementFinancialLockPolicy;
 
@@ -160,9 +166,13 @@ describe('PlacementDocumentsService', () => {
     placementsService = {
       getOfferSlipPreview: jest.fn().mockResolvedValue(offerPreview),
     };
+    pdfRenderer = {
+      render: jest.fn().mockResolvedValue(Buffer.from('%PDF test')),
+    };
     service = new PlacementDocumentsService(
       prisma as unknown as PrismaService,
       placementsService as unknown as PlacementsService,
+      pdfRenderer as unknown as PlacementPdfRendererService,
     );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
@@ -484,6 +494,89 @@ describe('PlacementDocumentsService', () => {
         voidReason: 'Replacement generated',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('renders a CLOSING_SLIP document as PDF using renderPayload', async () => {
+    const closingDocument = {
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      documentNumber: 'DOC-CS-001',
+      title: 'Closing Slip CLO-001',
+      sourceSnapshot: { closing: { closingNumber: 'CLO-001' } },
+      renderPayload: {
+        documentType: PlacementDocumentType.CLOSING_SLIP,
+        closing: { closingNumber: 'CLO-001' },
+      },
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(closingDocument);
+
+    const pdf = await service.renderPdf(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(pdf.toString()).toBe('%PDF test');
+    expect(pdfRenderer.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PlacementDocumentType.CLOSING_SLIP,
+        renderPayload: closingDocument.renderPayload,
+      }),
+    );
+    const renderArg = firstCallArg<Record<string, unknown>>(
+      pdfRenderer.render as PrismaMethod,
+    );
+    expect(renderArg.sourceSnapshot).toBeUndefined();
+  });
+
+  it('rejects unsupported document types for PDF rendering', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.OFFER_SLIP,
+    });
+
+    await expect(
+      service.renderPdf('tenant-1', 'placement-1', 'document-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(pdfRenderer.render).not.toHaveBeenCalled();
+  });
+
+  it('rejects VOID documents for PDF rendering', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      status: PlacementDocumentStatus.VOID,
+    });
+
+    await expect(
+      service.renderPdf('tenant-1', 'placement-1', 'document-1'),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(pdfRenderer.render).not.toHaveBeenCalled();
+  });
+
+  it('does not expose wrong-tenant documents during PDF rendering', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.renderPdf('tenant-1', 'placement-1', 'document-1'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('returns a safe error when PDF rendering fails without mutating snapshots', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      renderPayload: {
+        documentType: PlacementDocumentType.CLOSING_SLIP,
+        closing: { closingNumber: 'CLO-001' },
+      },
+    });
+    pdfRenderer.render.mockRejectedValue(new Error('Chromium failed'));
+
+    await expect(
+      service.renderPdf('tenant-1', 'placement-1', 'document-1'),
+    ).rejects.toBeInstanceOf(InternalServerErrorException);
+    expect(prisma.placementDocument.update).not.toHaveBeenCalled();
   });
 
   it('allows locked placements to generate documents without mutating source records or unlocking', async () => {
