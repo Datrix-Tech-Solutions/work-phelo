@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
-import { SurplusFormFields } from '@/components/molecules/reinsurance/SurplusFormFields';
+import { SurplusFormFields } from '@/components/molecules/reinsurance/forms/SurplusFormFields';
 import { SurplusFormValues, SURPLUS_DEFAULTS } from '@/types/reinsurance';
 
 interface CreateSurplusPanelProps {

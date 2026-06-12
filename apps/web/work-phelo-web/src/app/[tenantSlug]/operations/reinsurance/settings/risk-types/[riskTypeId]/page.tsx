@@ -6,7 +6,7 @@ import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useRiskTypes, useRiskClassOptions, useFacultatives } from '@/hooks';
 import { EditRiskTypePanel } from '@/components/organisms/reinsurance/panels/EditRiskTypePanel';
-import { RiskTypeOverview } from '@/components/molecules/reinsurance/RiskTypeOverview';
+import { RiskTypeOverview } from '@/components/molecules/reinsurance/stats/RiskTypeOverview';
 import { RiskTypePoliciesSection } from '@/components/molecules/reinsurance/RiskTypePoliciesSection';
 
 export default function RiskTypeDetailPage({

@@ -100,10 +100,14 @@ function ClaimReinsurersTable({
   participants,
   claimAmount,
   currency,
+  grossPremium,
+  commission,
 }: {
   participants: PlacementParticipant[];
   claimAmount?: number | null;
   currency?: string | null;
+  grossPremium: number;
+  commission: number;
 }) {
   const reinsurers = useMemo(
     () => participants.filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED'),
@@ -116,6 +120,20 @@ function ClaimReinsurersTable({
         key: 'counterparty',
         label: 'Reinsurer',
         render: (row) => <span className="font-medium text-gray-900">{row.counterparty.name}</span>,
+      },
+      {
+        key: 'brokerageFee',
+        label: 'Premium Share',
+        width: '160px',
+        className: 'text-right',
+        render: (row) => {
+          const share = row.sharePercent != null ? parseFloat(row.sharePercent) / 100 : 0;
+          const brokerage = row.brokerageFee != null ? parseFloat(row.brokerageFee) : 0;
+          const premiumShare = share * grossPremium * (1 - (commission + brokerage) / 100);
+          return (
+            <span className="text-gray-700 block text-right">{fmt(premiumShare, currency)}</span>
+          );
+        },
       },
       {
         key: 'sharePercent',
@@ -174,7 +192,7 @@ function ClaimReinsurersTable({
         ),
       },
     ],
-    [claimAmount, currency],
+    [claimAmount, currency, grossPremium, commission],
   );
 
   return (
@@ -222,6 +240,8 @@ export function ClaimOverviewSection({
             participants={placement.participants ?? []}
             claimAmount={claimAmount}
             currency={placement.currency}
+            grossPremium={placement.premium ?? 0}
+            commission={placement.commission ?? 0}
           />
         </div>
       </div>

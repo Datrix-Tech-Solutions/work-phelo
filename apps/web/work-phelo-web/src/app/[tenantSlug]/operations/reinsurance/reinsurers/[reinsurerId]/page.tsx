@@ -5,22 +5,72 @@ import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useReinsurers, useFacultatives, useCurrencies } from '@/hooks';
+import { useReinsurers, useFacultatives, useCurrencies, useFacultativePlacement } from '@/hooks';
 import { EditReinsurancePanel } from '@/components/organisms/reinsurance/panels/EditReinsurancePanel';
-import { ReinsurerOverview } from '@/components/molecules/reinsurance/ReinsurerOverview';
-import { CedantContactsTab } from '@/components/molecules/reinsurance/CedantContactsTab';
+import { ReinsurerOverview } from '@/components/molecules/reinsurance/stats/ReinsurerOverview';
+import { CedantContactsTab } from '@/components/molecules/reinsurance/tabs/CedantContactsTab';
 import { ReinsurerPlacementsTab } from '@/components/molecules/reinsurance/ReinsurerPlacementsTab';
-import { ReinsurerRevenueTab } from '@/components/molecules/reinsurance/ReinsurerRevenueTab';
+import { ReinsurerRevenueTab } from '@/components/molecules/reinsurance/tabs/ReinsurerRevenueTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { FacultativeOverview } from '@/components/molecules/reinsurance/stats/FacultativeOverview';
+import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
+import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/PlacementClosingsTab';
+import { EndorsementTab } from '@/components/molecules/reinsurance/tabs/EndorsmentTab';
 import { type ReinsurerParticipation } from '@/components/molecules/reinsurance/tables/ReinsurerPoliciesTable';
 
-type ReinsurerTab = 'contacts' | 'placements' | 'revenue';
+type ReinsurerTab = 'placements' | 'revenue' | 'contacts';
+type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
+
+type ActiveView = { placementId: string; reference: string } | null;
 
 const TABS = [
-  { key: 'contacts', label: 'Contacts' },
   { key: 'placements', label: 'Placements' },
   { key: 'revenue', label: 'Revenue' },
+  { key: 'contacts', label: 'Contacts' },
 ];
+
+const FACULTATIVE_TABS = [
+  { key: 'distribution', label: 'Distribution List' },
+  { key: 'closings', label: 'Placement Closings' },
+  { key: 'endorsement', label: 'Endorsement' },
+];
+
+function PlacementView({ placementId }: { placementId: string }) {
+  const { data: placement, isLoading } = useFacultativePlacement(placementId);
+  const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading…</div>
+    );
+  }
+
+  if (!placement) {
+    return (
+      <div className="flex items-center justify-center h-40 text-sm text-gray-400">
+        Placement not found.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <FacultativeOverview placement={placement} />
+      <div className="flex flex-col">
+        <TabBar
+          tabs={FACULTATIVE_TABS}
+          activeTab={activeTab}
+          onTabChange={(t) => setActiveTab(t as FacultativeTab)}
+        />
+        <div className="pt-5">
+          {activeTab === 'distribution' && <DistributionListTab placement={placement} />}
+          {activeTab === 'closings' && <PlacementClosingsTab placement={placement} />}
+          {activeTab === 'endorsement' && <EndorsementTab placement={placement} />}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ReinsurerDetailPage({
   params,
@@ -36,7 +86,8 @@ export default function ReinsurerDetailPage({
   const reinsurer = reinsurers.find((r) => r.id === reinsurerId) ?? null;
 
   const [editOpen, setEditOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<ReinsurerTab>('contacts');
+  const [activeTab, setActiveTab] = useState<ReinsurerTab>('placements');
+  const [activeView, setActiveView] = useState<ActiveView>(null);
 
   const settingsBase = `/${tenantSlug}/operations/reinsurance/reinsurers`;
 
@@ -70,9 +121,22 @@ export default function ReinsurerDetailPage({
             Reinsurers
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
-          <span className="text-gray-700 font-medium">{reinsurer?.name ?? '—'}</span>
+          {activeView ? (
+            <>
+              <button
+                onClick={() => setActiveView(null)}
+                className="hover:text-gray-700 transition-colors"
+              >
+                {reinsurer?.name ?? '—'}
+              </button>
+              <Icons.ChevronRight className="w-5 h-5" />
+              <span className="text-gray-700 font-medium">{activeView.reference}</span>
+            </>
+          ) : (
+            <span className="text-gray-700 font-medium">{reinsurer?.name ?? '—'}</span>
+          )}
         </nav>
-        {reinsurer && (
+        {!activeView && reinsurer && (
           <Button size="sm" onClick={() => setEditOpen(true)}>
             Edit
           </Button>
@@ -88,6 +152,8 @@ export default function ReinsurerDetailPage({
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Reinsurer not found.
           </div>
+        ) : activeView ? (
+          <PlacementView placementId={activeView.placementId} />
         ) : (
           <div className="flex flex-col gap-6">
             <ReinsurerOverview reinsurer={reinsurer} />
@@ -106,7 +172,7 @@ export default function ReinsurerDetailPage({
                   <ReinsurerPlacementsTab
                     participations={participations}
                     isLoading={placementsLoading}
-                    tenantSlug={tenantSlug}
+                    onView={(id, reference) => setActiveView({ placementId: id, reference })}
                   />
                 )}
 

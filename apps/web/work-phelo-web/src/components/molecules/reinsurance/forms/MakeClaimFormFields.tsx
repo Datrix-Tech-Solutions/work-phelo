@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
+import { cn, inputClass } from '@/lib/utils';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -13,6 +14,7 @@ export interface MakeClaimFormValues {
   claimDate: string;
   currency: string;
   rate: string;
+  claimCause: string;
 }
 
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
@@ -20,6 +22,7 @@ export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
   claimDate: '',
   currency: '',
   rate: '',
+  claimCause: '',
 };
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
@@ -131,6 +134,17 @@ export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProp
             error={errors.rate}
           />
         )}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-bold text-gray-900">Claim Cause</label>
+        <textarea
+          {...register('claimCause')}
+          placeholder="Describe the cause of the claim…"
+          rows={4}
+          className={cn(inputClass(), 'resize-none')}
+        />
+        {errors.claimCause && <p className="text-xs text-red-500">{errors.claimCause.message}</p>}
       </div>
     </div>
   );

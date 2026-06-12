@@ -4,14 +4,17 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
+import { Modal } from '@/components/organisms/shared/Modal';
 import {
   AddPaymentFormFields,
   AddPaymentFormValues,
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
-import { useFacultatives, useCreatePlacementPayment } from '@/hooks';
+import { useFacultatives, useCreatePlacementPayment, useFacultativePlacement } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
+import { Facultative, PlacementPayment } from '@/types/reinsurance';
+import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
 
 interface AddPaymentFormProps {
   placementId?: string;
@@ -29,7 +32,14 @@ export default function AddPaymentForm({
   defaultOpen = false,
 }: AddPaymentFormProps) {
   const [panelOpen, setPanelOpen] = useState(defaultOpen);
+  const [receiptPrompt, setReceiptPrompt] = useState<{
+    payment: PlacementPayment;
+    placement: Facultative;
+  } | null>(null);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+
   const { data: facultatives = [] } = useFacultatives();
+  const { data: singlePlacement } = useFacultativePlacement(placementId ?? '');
   const createPayment = useCreatePlacementPayment();
   const addToast = useToastStore((s) => s.addToast);
 
@@ -69,7 +79,6 @@ export default function AddPaymentForm({
 
     try {
       const calls = selectedFacs.map(async (f) => {
-        // Amount for this placement
         let rawAmount: number;
         if (selectedFacs.length === 1) {
           rawAmount = parsedAmount;
@@ -83,7 +92,6 @@ export default function AddPaymentForm({
           rawAmount = proportion * parsedAmount;
         }
 
-        // Currency conversion — submit always in placement currency
         const paymentCurrency = values.currency;
         const placementCurrency = f.currency ?? values.currency;
         let submittedAmount = rawAmount;
@@ -111,7 +119,7 @@ export default function AddPaymentForm({
         });
       });
 
-      await Promise.all(calls);
+      const results = await Promise.all(calls);
 
       onPaymentRecorded?.(parsedAmount);
 
@@ -124,12 +132,30 @@ export default function AddPaymentForm({
         onAllocationsRecorded?.(parsed);
       }
 
-      addToast({ message: 'Payment recorded successfully', type: 'success' });
       setPanelOpen(false);
       form.reset(ADD_PAYMENT_DEFAULTS);
+
+      // Offer receipt generation when placement context is available
+      const firstPayment = results[0];
+      const receiptPlacement = singlePlacement ?? selectedFacs[0];
+      if (firstPayment && receiptPlacement) {
+        setReceiptPrompt({ payment: firstPayment, placement: receiptPlacement });
+      } else {
+        addToast({ message: 'Payment recorded successfully', type: 'success' });
+      }
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
     }
+  };
+
+  const handleGenerateReceipt = () => {
+    setReceiptPrompt(null);
+    setReceiptOpen(true);
+  };
+
+  const handleLater = () => {
+    addToast({ message: 'Payment recorded successfully', type: 'success' });
+    setReceiptPrompt(null);
   };
 
   return (
@@ -160,6 +186,36 @@ export default function AddPaymentForm({
           />
         </form>
       </SidePanel>
+
+      {/* Receipt prompt popup */}
+      <Modal
+        isOpen={!!receiptPrompt}
+        onClose={handleLater}
+        title="Generate Receipt"
+        description="Payment recorded successfully. Would you like to generate a receipt?"
+        footer={
+          <>
+            <Button variant="outline" onClick={handleLater}>
+              Later
+            </Button>
+            <Button onClick={handleGenerateReceipt}>Generate</Button>
+          </>
+        }
+      />
+
+      {/* Receipt modal */}
+      {receiptPrompt && receiptOpen && (
+        <PaymentReceiptModal
+          isOpen
+          placement={receiptPrompt.placement}
+          payment={receiptPrompt.payment}
+          onPrint={() => {}}
+          onClose={() => {
+            setReceiptOpen(false);
+            setReceiptPrompt(null);
+          }}
+        />
+      )}
     </>
   );
 }

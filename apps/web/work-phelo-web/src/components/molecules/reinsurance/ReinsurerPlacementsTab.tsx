@@ -1,6 +1,5 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
 import { StatCard } from '@/components/atoms/StatCard';
 import {
   ReinsurerPoliciesTable,
@@ -10,16 +9,14 @@ import {
 interface ReinsurerPlacementsTabProps {
   participations: ReinsurerParticipation[];
   isLoading: boolean;
-  tenantSlug: string;
+  onView: (id: string, reference: string) => void;
 }
 
 export function ReinsurerPlacementsTab({
   participations,
   isLoading,
-  tenantSlug,
+  onView,
 }: ReinsurerPlacementsTabProps) {
-  const router = useRouter();
-
   const accepted = participations.filter((p) => p.participantStatus === 'ACCEPTED').length;
   const closed = participations.filter((p) => p.participantStatus === 'CLOSED').length;
   const pending = participations.filter((p) =>
@@ -52,9 +49,10 @@ export function ReinsurerPlacementsTab({
         <ReinsurerPoliciesTable
           data={participations}
           isLoading={isLoading}
-          onRowClick={(id) =>
-            router.push(`/${tenantSlug}/operations/reinsurance/facultative/${id}`)
-          }
+          onRowClick={(id) => {
+            const participation = participations.find((p) => p.id === id);
+            if (participation) onView(participation.id, participation.reference);
+          }}
         />
       </div>
     </div>

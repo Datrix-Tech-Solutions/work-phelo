@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Facultative } from '@/types/reinsurance';
 import { PaymentBreakdown } from '@/components/molecules/reinsurance/PaymentBreakdown';
-import { ReinsurersPaymentTable } from '@/components/molecules/reinsurance/ReinsurersPaymentTable';
+import { ReinsurersPaymentTable } from '@/components/molecules/reinsurance/tables/ReinsurersPaymentTable';
 
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';
