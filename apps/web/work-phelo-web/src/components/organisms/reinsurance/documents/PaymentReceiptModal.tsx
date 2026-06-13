@@ -109,21 +109,6 @@ export function PaymentReceiptModal({
         <span className="text-xs text-gray-500">Signature / Stamp</span>
         <div className="w-64 border-b border-gray-400 mt-20" />
       </div>
-
-      <div
-        className="flex flex-col gap-1 p-4 border border-gray-200 rounded-lg bg-gray-50 text-xs text-gray-700"
-        style={{ breakInside: 'avoid' }}
-      >
-        <p className="font-semibold text-gray-900 mb-1">Bank Account</p>
-        <p>iRisk Reinsurance Brokers Limited</p>
-        <p>Access Bank PLC, Accra Newtown Branch</p>
-        <p>GHS - 1036000007232 / USD - 1036000007233 / EUR - 1036000007235 / GBP - 1036000007236</p>
-      </div>
-
-      <p className="text-xs font-semibold text-gray-800 leading-relaxed">
-        NOTE: COVER IS SUBJECT TO &quot;NO PREMIUM NO COVER&quot;, PLEASE. WE WOULD THEREFORE
-        APPRECIATE PAYMENT AS SOON AS POSSIBLE.
-      </p>
     </div>
   );
 

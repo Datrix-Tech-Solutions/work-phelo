@@ -33,6 +33,7 @@ interface ContactCardProps {
   location: string;
   email: string;
   phone: string;
+  badge?: { count: number; label: string };
   onClick?: () => void;
   onAddPerson?: () => void;
   onDelete?: () => void;
@@ -44,6 +45,7 @@ export function ContactCard({
   location,
   email,
   phone,
+  badge,
   onClick,
   onAddPerson,
   onDelete,
@@ -63,6 +65,21 @@ export function ContactCard({
       )}
       onClick={onClick}
     >
+      {/* Notification badge — straddles the top border */}
+      {badge && (
+        <div
+          className="absolute top-0 right-6 -translate-y-1/3 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="group/badge flex items-center border border-orange-300 bg-white text-orange-600 text-[11px] font-semibold rounded-full px-1.5 py-0.5 ring-1 ring-white cursor-default whitespace-nowrap">
+            <span>{badge.count}</span>
+            <span className="grid grid-cols-[0fr] group-hover/badge:grid-cols-[1fr] transition-[grid-template-columns] duration-200 overflow-hidden">
+              <span className="overflow-hidden pl-1">{badge.label}</span>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Action buttons — visible on hover */}
       <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
         <button

@@ -5,6 +5,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FileUpload } from '@/components/atoms/FileUpload';
 import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect';
+import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
 import { Icons } from '@/components/atoms/icons';
 import { inputClass } from '@/lib/utils';
 import { Facultative } from '@/types/reinsurance';
@@ -68,8 +69,8 @@ export function MailPreviewModal({
       isOpen={isOpen}
       onClose={handleClose}
       title={`Mail — ${placement.cedant.name}`}
-      width="sm:w-[30vw] sm:max-w-[40vw]"
-      height="sm:h-[70vh] sm:max-h-[90vh]"
+      width="sm:w-[50vw] sm:max-w-[60vw]"
+      height="sm:h-[80vh] sm:max-h-[90vh]"
       fullScreenMobile
       footer={
         <div className="flex items-end justify-between gap-4 w-full">
@@ -168,16 +169,13 @@ export function MailPreviewModal({
         </div>
 
         {/* Body */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-bold text-gray-900">Body</label>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Write your message here…"
-            rows={8}
-            className={inputClass(undefined, 'resize-none')}
-          />
-        </div>
+        <RichTextEditor
+          label="Body"
+          value={body}
+          onChange={setBody}
+          placeholder="Write your message here…"
+          minHeight={200}
+        />
       </div>
     </Modal>
   );

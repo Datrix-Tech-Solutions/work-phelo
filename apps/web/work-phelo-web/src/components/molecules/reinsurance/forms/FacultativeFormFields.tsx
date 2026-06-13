@@ -1,13 +1,14 @@
 'use client';
 
-import { Controller, UseFormReturn } from 'react-hook-form';
+import { Controller, UseFormReturn, useFieldArray } from 'react-hook-form';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
+import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
 import { FacultativeFormValues } from '@/types/reinsurance';
 import { useCedantOptions, useRiskTypeOptions, useCurrencyOptions, useRiskTypes } from '@/hooks';
-import { inputClass } from '@/lib/utils';
+import { cn, inputClass } from '@/lib/utils';
 
 interface FacultativeFormFieldsProps {
   form: UseFormReturn<FacultativeFormValues>;
@@ -24,6 +25,15 @@ export default function FacultativeFormFields({
     watch,
     formState: { errors },
   } = form;
+
+  const {
+    fields: extraFields,
+    append: appendExtra,
+    remove: removeExtra,
+  } = useFieldArray({
+    control,
+    name: 'extraRiskFields',
+  });
 
   const periodFrom = watch('periodFrom');
   const periodTo = watch('periodTo');
@@ -84,88 +94,136 @@ export default function FacultativeFormFields({
       </FormSection>
 
       {/* ── Risk Details ── */}
-      {riskFields.length > 0 && (
+      {selectedRiskTypeId && (
         <FormSection title="Risk Details">
-          <div className="grid grid-cols-2 gap-3">
-            {riskFields.map((field) => {
-              const name = `riskDetails.${field.fieldKey}` as const;
-              if (field.fieldType === 'TEXTAREA') {
-                return (
-                  <div key={field.id} className="col-span-2">
+          <div className="flex flex-col gap-3">
+            {riskFields.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                {riskFields.map((field) => {
+                  const name = `riskDetails.${field.fieldKey}` as const;
+                  if (field.fieldType === 'TEXTAREA') {
+                    return (
+                      <div key={field.id} className="col-span-2">
+                        <FormField
+                          label={field.label}
+                          type="textarea"
+                          rows={3}
+                          registration={register(name as 'riskDetails', {
+                            required: field.required ? `${field.label} is required` : false,
+                          })}
+                          placeholder={field.placeholder ?? ''}
+                        />
+                      </div>
+                    );
+                  }
+                  if (field.fieldType === 'SELECT' && field.options?.length) {
+                    return (
+                      <Controller
+                        key={field.id}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        name={name as any}
+                        control={control}
+                        rules={{ required: field.required ? `${field.label} is required` : false }}
+                        render={({ field: f }) => (
+                          <SearchSelect
+                            label={field.label}
+                            placeholder={field.placeholder ?? `Select ${field.label}…`}
+                            options={field.options!.map((o) => ({ value: o, label: o }))}
+                            value={String(f.value ?? '')}
+                            onChange={f.onChange}
+                          />
+                        )}
+                      />
+                    );
+                  }
+                  if (field.fieldType === 'DATE') {
+                    return (
+                      <Controller
+                        key={field.id}
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        name={name as any}
+                        control={control}
+                        rules={{ required: field.required ? `${field.label} is required` : false }}
+                        render={({ field: f }) => (
+                          <DatePicker
+                            label={field.label}
+                            value={String(f.value ?? '')}
+                            onChange={f.onChange}
+                          />
+                        )}
+                      />
+                    );
+                  }
+                  if (field.fieldType === 'CHECKBOX') {
+                    return (
+                      <div key={field.id} className="flex flex-col gap-1.5">
+                        <label className="text-sm font-bold text-gray-900">{field.label}</label>
+                        <input
+                          type="checkbox"
+                          {...register(name as 'riskDetails')}
+                          className="w-4 h-4 accent-orange-500"
+                        />
+                      </div>
+                    );
+                  }
+                  return (
                     <FormField
+                      key={field.id}
                       label={field.label}
-                      type="textarea"
-                      rows={3}
+                      type={field.fieldType === 'NUMBER' ? 'number' : 'text'}
                       registration={register(name as 'riskDetails', {
                         required: field.required ? `${field.label} is required` : false,
                       })}
                       placeholder={field.placeholder ?? ''}
                     />
-                  </div>
-                );
-              }
-              if (field.fieldType === 'SELECT' && field.options?.length) {
-                return (
-                  <Controller
-                    key={field.id}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    name={name as any}
-                    control={control}
-                    rules={{ required: field.required ? `${field.label} is required` : false }}
-                    render={({ field: f }) => (
-                      <SearchSelect
-                        label={field.label}
-                        placeholder={field.placeholder ?? `Select ${field.label}…`}
-                        options={field.options!.map((o) => ({ value: o, label: o }))}
-                        value={String(f.value ?? '')}
-                        onChange={f.onChange}
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Extra / custom fields */}
+            {extraFields.length > 0 && (
+              <div className="flex flex-col gap-2">
+                {extraFields.map((ef, index) => (
+                  <div key={ef.id} className="grid grid-cols-2 gap-2 items-end">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-bold text-gray-900">Field Name</label>
+                      <input
+                        {...register(`extraRiskFields.${index}.label`)}
+                        className={cn(inputClass())}
+                        placeholder="e.g. Extra Title"
                       />
-                    )}
-                  />
-                );
-              }
-              if (field.fieldType === 'DATE') {
-                return (
-                  <Controller
-                    key={field.id}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    name={name as any}
-                    control={control}
-                    rules={{ required: field.required ? `${field.label} is required` : false }}
-                    render={({ field: f }) => (
-                      <DatePicker
-                        label={field.label}
-                        value={String(f.value ?? '')}
-                        onChange={f.onChange}
-                      />
-                    )}
-                  />
-                );
-              }
-              if (field.fieldType === 'CHECKBOX') {
-                return (
-                  <div key={field.id} className="flex flex-col gap-1.5">
-                    <label className="text-sm font-bold text-gray-900">{field.label}</label>
-                    <input
-                      type="checkbox"
-                      {...register(name as 'riskDetails')}
-                      className="w-4 h-4 accent-orange-500"
-                    />
+                    </div>
+                    <div className="flex items-end gap-2">
+                      <div className="flex flex-col gap-1.5 flex-1">
+                        <label className="text-sm font-bold text-gray-900">Value</label>
+                        <input
+                          {...register(`extraRiskFields.${index}.value`)}
+                          className={cn(inputClass())}
+                          placeholder="e.g. Extra details"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeExtra(index)}
+                        className="mb-0.5 text-gray-400 hover:text-red-500 transition-colors text-lg leading-none"
+                        title="Remove field"
+                      >
+                        ×
+                      </button>
+                    </div>
                   </div>
-                );
-              }
-              return (
-                <FormField
-                  key={field.id}
-                  label={field.label}
-                  type={field.fieldType === 'NUMBER' ? 'number' : 'text'}
-                  registration={register(name as 'riskDetails', {
-                    required: field.required ? `${field.label} is required` : false,
-                  })}
-                  placeholder={field.placeholder ?? ''}
-                />
-              );
-            })}
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => appendExtra({ label: '', value: '' })}
+              className="self-start text-sm font-medium flex items-center gap-1 transition-colors text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover))"
+            >
+              <span className="text-base leading-none">+</span> Add Extra Field
+            </button>
           </div>
         </FormSection>
       )}
@@ -177,7 +235,6 @@ export default function FacultativeFormFields({
             <FormField
               label="Policy Number"
               registration={register('reference', {
-                required: 'Policy Number is required',
                 minLength: { value: 2, message: 'Min 2 characters' },
                 maxLength: { value: 80, message: 'Max 80 characters' },
               })}
@@ -336,13 +393,17 @@ export default function FacultativeFormFields({
 
       {/* ── Comment ── */}
       <FormSection title={commentLabel}>
-        <FormField
-          label={commentLabel}
-          type="textarea"
-          rows={4}
-          registration={register('comment')}
-          error={errors.comment}
-          placeholder="Add any relevant notes or comments…"
+        <Controller
+          name="comment"
+          control={control}
+          render={({ field }) => (
+            <RichTextEditor
+              value={field.value}
+              onChange={field.onChange}
+              error={errors.comment?.message}
+              placeholder="Add any relevant notes or comments…"
+            />
+          )}
         />
       </FormSection>
     </div>

@@ -2,6 +2,7 @@
 
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement, usePlacementPayments } from '@/hooks';
@@ -23,6 +24,8 @@ export default function PaymentDetailPage({
   params: Promise<{ tenantSlug: string; id: string }>;
 }) {
   const { tenantSlug, id } = use(params);
+  const searchParams = useSearchParams();
+  const fromClosing = searchParams.get('from') === 'closing';
   const { data: placement } = useFacultativePlacement(id);
   const { data: payments = [] } = usePlacementPayments(id);
   const [activeTab, setActiveTab] = useState<PaymentTab>('overview');
@@ -39,12 +42,30 @@ export default function PaymentDetailPage({
     <div className="flex flex-col h-full overflow-hidden">
       <div className={`${pageBreadcrumb} shrink-0 flex items-center justify-between`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
-          <Link
-            href={`/${tenantSlug}/operations/reinsurance/payments`}
-            className="hover:text-gray-700 transition-colors"
-          >
-            Payments
-          </Link>
+          {fromClosing ? (
+            <>
+              <Link
+                href={`/${tenantSlug}/operations/reinsurance/facultative`}
+                className="hover:text-gray-700 transition-colors"
+              >
+                Facultative
+              </Link>
+              <Icons.ChevronRight className="w-5 h-5" />
+              <Link
+                href={`/${tenantSlug}/operations/reinsurance/facultative?tab=closing`}
+                className="hover:text-gray-700 transition-colors"
+              >
+                Closings
+              </Link>
+            </>
+          ) : (
+            <Link
+              href={`/${tenantSlug}/operations/reinsurance/payments`}
+              className="hover:text-gray-700 transition-colors"
+            >
+              Payments
+            </Link>
+          )}
           <Icons.ChevronRight className="w-5 h-5" />
           <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
         </nav>

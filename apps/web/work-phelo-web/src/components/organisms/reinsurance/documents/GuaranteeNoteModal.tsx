@@ -84,7 +84,24 @@ export function GuaranteeNoteModal({
       isOpen={isOpen}
       title={`Guarantee Note — ${reference}`}
       documentTitle="Guarantee Note"
-      afterContent={null}
+      afterContent={
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            fontSize: '14px',
+            color: '#374151',
+          }}
+        >
+          <p style={{ margin: 0 }}>Thank You.</p>
+          <p style={{ margin: 0 }}>Yours faithfully,</p>
+          <div style={{ marginTop: '64px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director (AG)</p>
+          </div>
+        </div>
+      }
       onPrint={onPrint}
       onClose={onClose}
     >
