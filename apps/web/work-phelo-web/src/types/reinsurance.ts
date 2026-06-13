@@ -651,6 +651,7 @@ export interface FacultativeFormValues {
   periodTo: string;
   comment: string;
   riskDetails: Record<string, string>;
+  extraRiskFields: { label: string; value: string }[];
 }
 
 export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
@@ -670,6 +671,7 @@ export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
   periodTo: '',
   comment: '',
   riskDetails: {},
+  extraRiskFields: [],
 };
 
 export const TREATY_TYPES = [

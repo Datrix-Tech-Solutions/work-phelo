@@ -11,6 +11,13 @@ const PERIOD_LABELS: Record<Period, string> = {
   yearly: 'year',
 };
 
+const PERIOD_PREV_LABELS: Record<Period, string> = {
+  daily: 'Yesterday',
+  weekly: 'Last week',
+  monthly: 'Last month',
+  yearly: 'Last year',
+};
+
 function fmtAmount(value: number, symbol: string): string {
   const abs = Math.abs(value);
   let formatted: string;
@@ -34,6 +41,7 @@ interface FinancialStatsRowProps {
 export function FinancialStatsRow({ period, currency }: FinancialStatsRowProps) {
   const { data, isLoading } = useReinsuranceFinancials({ period, currency });
   const periodLabel = PERIOD_LABELS[period];
+  const prevLabel = PERIOD_PREV_LABELS[period];
   const sym = data.currencySymbol;
 
   return (
@@ -42,6 +50,7 @@ export function FinancialStatsRow({ period, currency }: FinancialStatsRowProps) 
         label="Total Risk"
         value={fmtAmount(data.totalRisk, sym)}
         trend={data.trends.totalRisk}
+        trendTooltip={`${prevLabel}: ${fmtAmount(data.previous.totalRisk, sym)}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
       />
@@ -49,6 +58,7 @@ export function FinancialStatsRow({ period, currency }: FinancialStatsRowProps) 
         label="Total Premium"
         value={fmtAmount(data.totalPremium, sym)}
         trend={data.trends.totalPremium}
+        trendTooltip={`${prevLabel}: ${fmtAmount(data.previous.totalPremium, sym)}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
       />
@@ -56,6 +66,7 @@ export function FinancialStatsRow({ period, currency }: FinancialStatsRowProps) 
         label="Total Brokerage"
         value={fmtAmount(data.totalBrokerage, sym)}
         trend={data.trends.totalBrokerage}
+        trendTooltip={`${prevLabel}: ${fmtAmount(data.previous.totalBrokerage, sym)}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
       />

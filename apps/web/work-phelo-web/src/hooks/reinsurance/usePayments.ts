@@ -1,6 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useMutation, useQuery, useQueryClient, useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { PlacementPayment, CreatePlacementPaymentPayload } from '@/types/reinsurance';
+import {
+  Facultative,
+  FacultativeStatus,
+  PlacementPayment,
+  CreatePlacementPaymentPayload,
+} from '@/types/reinsurance';
+import { useFacultatives } from './useFacultatives';
 
 const BASE = '/operations/reinsurance/placements';
 
@@ -46,4 +53,61 @@ export function useReversePayment() {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
     },
   });
+}
+
+const CLOSING_STATUSES: FacultativeStatus[] = [
+  'PARTIALLY_PLACED',
+  'PLACED',
+  'CLOSING',
+  'CLOSED',
+  'DECLINED',
+  'CANCELLED',
+];
+
+function netPremiumFor(p: Facultative): number {
+  const fac =
+    p.premium != null && p.facultativeOffer != null ? (p.facultativeOffer / 100) * p.premium : 0;
+  return p.commission != null ? fac * (1 - p.commission / 100) : fac;
+}
+
+function totalPaidFor(payments: PlacementPayment[]): number {
+  return payments
+    .filter((p) => p.status === 'RECORDED')
+    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+}
+
+/**
+ * Returns a map of cedantId → count of placements with outstanding or partial payments.
+ * Uses the same query keys as usePlacementPayments so results share the React Query cache.
+ */
+export function useCedantOutstandingCounts(): Map<string, number> {
+  const { data: placements = [] } = useFacultatives();
+
+  const closingPlacements = useMemo(
+    () => placements.filter((p) => CLOSING_STATUSES.includes(p.status)),
+    [placements],
+  );
+
+  const paymentQueries = useQueries({
+    queries: closingPlacements.map((p) => ({
+      queryKey: paymentsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
+  return useMemo(() => {
+    const counts = new Map<string, number>();
+    closingPlacements.forEach((placement, i) => {
+      const payments = paymentQueries[i]?.data ?? [];
+      const net = netPremiumFor(placement);
+      const paid = totalPaidFor(payments);
+      if (net > 0 && paid < net) {
+        counts.set(placement.cedant.id, (counts.get(placement.cedant.id) ?? 0) + 1);
+      }
+    });
+    return counts;
+  }, [closingPlacements, paymentQueries]);
 }

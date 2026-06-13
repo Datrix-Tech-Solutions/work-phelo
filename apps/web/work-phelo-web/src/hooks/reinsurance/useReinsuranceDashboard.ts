@@ -15,6 +15,12 @@ export interface DashboardStats {
     closedOffers: number;
     acceptanceRate: number;
   };
+  previous: {
+    totalOffers: number;
+    pendingOffers: number;
+    closedOffers: number;
+    acceptanceRate: number;
+  };
 }
 
 function periodBounds(period: Period, now: Date): { start: Date; prevStart: Date } {
@@ -70,6 +76,11 @@ export interface FinancialStats {
   totalBrokerage: number;
   currencySymbol: string;
   trends: {
+    totalRisk: number;
+    totalPremium: number;
+    totalBrokerage: number;
+  };
+  previous: {
     totalRisk: number;
     totalPremium: number;
     totalBrokerage: number;
@@ -158,6 +169,11 @@ export function useReinsuranceFinancials({
         totalPremium: pctChange(cur.totalPremium, prev.totalPremium),
         totalBrokerage: pctChange(cur.totalBrokerage, prev.totalBrokerage),
       },
+      previous: {
+        totalRisk: prev.totalRisk,
+        totalPremium: prev.totalPremium,
+        totalBrokerage: prev.totalBrokerage,
+      },
     };
   }, [all, currencies, period, currency]);
 
@@ -194,6 +210,12 @@ export function useReinsuranceDashboard({ period }: { period: Period }) {
         pendingOffers: pctChange(cur.pending, prev.pending),
         closedOffers: pctChange(cur.closed, prev.closed),
         acceptanceRate: pctChange(cur.acceptanceRate, prev.acceptanceRate),
+      },
+      previous: {
+        totalOffers: prev.total,
+        pendingOffers: prev.pending,
+        closedOffers: prev.closed,
+        acceptanceRate: prev.acceptanceRate,
       },
     };
   }, [all, period]);

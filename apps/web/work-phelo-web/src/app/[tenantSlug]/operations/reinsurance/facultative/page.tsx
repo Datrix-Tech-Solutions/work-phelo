@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { FacultativeTable } from '@/components/organisms/reinsurance/tables/FacultativeTable';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 
@@ -12,7 +13,9 @@ const TABS = [
 ];
 
 export default function FacultativePage() {
-  const [activeTab, setActiveTab] = useState<FacultativePageTab>('placements');
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'closing' ? 'closing' : 'placements';
+  const [activeTab, setActiveTab] = useState<FacultativePageTab>(initialTab);
 
   return (
     <div className="flex flex-col gap-6 p-6 overflow-y-auto flex-1">

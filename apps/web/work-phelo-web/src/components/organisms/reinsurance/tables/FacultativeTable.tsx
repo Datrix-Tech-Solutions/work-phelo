@@ -290,7 +290,9 @@ export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 
         searchPlaceholder="Search facultative…"
         searchValue={search}
         onRowClick={(row) =>
-          router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.id}`)
+          router.push(
+            `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${tab === 'closing' ? '?from=closing' : ''}`,
+          )
         }
         onSearch={(q) => {
           setSearch(q);
@@ -309,8 +311,21 @@ export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 
           {
             label: 'View',
             onClick: () =>
-              router.push(`/${tenantSlug}/operations/reinsurance/facultative/${row.id}`),
+              router.push(
+                `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${tab === 'closing' ? '?from=closing' : ''}`,
+              ),
           },
+          ...(tab === 'closing'
+            ? [
+                {
+                  label: 'Premium',
+                  onClick: () =>
+                    router.push(
+                      `/${tenantSlug}/operations/reinsurance/payments/${row.id}?from=closing`,
+                    ),
+                },
+              ]
+            : []),
           {
             label: 'Edit Slip',
             onClick: () => setEditTarget(row),

@@ -7,6 +7,7 @@ interface DashboardStatCardProps {
   label: string;
   value: string | number;
   trend?: number;
+  trendTooltip?: string;
   isLoading?: boolean;
   periodLabel: string;
 }
@@ -15,6 +16,7 @@ export function DashboardStatCard({
   label,
   value,
   trend,
+  trendTooltip,
   isLoading,
   periodLabel,
 }: DashboardStatCardProps) {
@@ -31,7 +33,7 @@ export function DashboardStatCard({
         <>
           <span className="text-2xl font-bold text-gray-900">{value}</span>
           <div className="flex items-center gap-1.5">
-            {trend !== undefined && <TrendBadge change={trend} />}
+            {trend !== undefined && <TrendBadge change={trend} tooltip={trendTooltip} />}
             <span className="text-xs text-gray-400">vs previous {periodLabel}</span>
           </div>
         </>

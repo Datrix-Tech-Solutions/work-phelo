@@ -1,0 +1,173 @@
+'use client';
+
+import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
+import { Facultative, PlacementParticipant } from '@/types/reinsurance';
+import { useReinsurers } from '@/hooks';
+
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function fmtAmount(val: number | null | undefined, currency: string | null | undefined) {
+  if (val == null) return '—';
+  return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
+}
+
+function fmtNum(val: number) {
+  return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+interface ClaimDebitNoteModalProps {
+  isOpen: boolean;
+  placement: Facultative;
+  participant: PlacementParticipant;
+  claimAmount?: number | null;
+  onPrint: () => void;
+  onClose: () => void;
+}
+
+export function ClaimDebitNoteModal({
+  isOpen,
+  placement,
+  participant,
+  claimAmount,
+  onPrint,
+  onClose,
+}: ClaimDebitNoteModalProps) {
+  const { data: reinsurers = [] } = useReinsurers();
+  const reinsurer = reinsurers.find((r) => r.id === participant.counterpartyId);
+  const addr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
+  const reinsurerCity = addr?.city ?? null;
+  const reinsurerRegionCountry = [addr?.state, addr?.country].filter(Boolean).join(' - ') || null;
+
+  const {
+    currency,
+    facultativeOffer,
+    classOfBusiness,
+    title,
+    reference,
+    policyNumber,
+    inceptionDate,
+    expiryDate,
+    cedant,
+  } = placement;
+
+  const sharePercent = parseFloat(participant.sharePercent ?? '0');
+  const facOffer = facultativeOffer ?? 0;
+  const amountDue = claimAmount != null ? (sharePercent / 100) * claimAmount : null;
+
+  const afterContent = (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        fontSize: '14px',
+        color: '#374151',
+      }}
+    >
+      <p style={{ margin: 0 }}>Thank You.</p>
+      <p style={{ margin: 0 }}>Yours faithfully,</p>
+      <div style={{ marginTop: '64px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>
+        <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director (AG)</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <DocumentPreviewModal
+      isOpen={isOpen}
+      title={`Claim Debit Note — ${reference}`}
+      documentTitle="Claim Debit Note"
+      onPrint={onPrint}
+      onClose={onClose}
+      afterContent={afterContent}
+    >
+      <div className="flex flex-col gap-4 text-sm">
+        {/* Address block */}
+        <div className="flex flex-col gap-0.5 mb-2">
+          <p className="text-gray-500">
+            {new Date().toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: 'long',
+              year: 'numeric',
+            })}
+          </p>
+          <p className="font-medium text-gray-900 mt-2">The Managing Director</p>
+          <p className="text-gray-800">{participant.counterparty.name}</p>
+          {reinsurerCity && <p className="text-gray-600">{reinsurerCity}</p>}
+          {reinsurerRegionCountry && <p className="text-gray-600">{reinsurerRegionCountry}</p>}
+          <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
+          <p className="text-gray-700 mt-3 leading-relaxed">
+            We refer to the risk below and wish to advise you of a claim under the above policy.
+            Kindly remit the amount due in accordance with the information below.
+          </p>
+        </div>
+
+        {/* Table */}
+        <table className="w-full border-collapse border border-gray-200 overflow-hidden text-sm">
+          <tbody>
+            {/* Description heading */}
+            <tr className="bg-blue-900">
+              <td
+                colSpan={2}
+                className="py-2 px-4 text-center text-xs font-semibold text-gray-100 uppercase tracking-wide border-b border-blue-900"
+              >
+                Description
+              </td>
+            </tr>
+
+            {[
+              { label: 'Reinsured', value: cedant.name },
+              { label: 'Policy Type', value: classOfBusiness ?? '—' },
+              { label: 'Insured', value: title ?? '—' },
+              { label: 'Policy Number', value: policyNumber ?? reference },
+              {
+                label: 'Policy Period',
+                value: `${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`,
+              },
+              { label: 'Currency', value: currency ?? '—' },
+            ].map((row) => (
+              <tr key={row.label} className="border-b border-gray-100 last:border-b-0">
+                <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
+                <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
+              </tr>
+            ))}
+
+            {/* Claim amount — blue header row (replaces Particulars heading) */}
+            <tr className="bg-blue-900">
+              <td className="py-2.5 px-4 font-semibold text-white w-1/2">Claim amount :</td>
+              <td className="py-2.5 px-4 text-right font-bold text-white">
+                {fmtAmount(claimAmount, currency)}
+              </td>
+            </tr>
+
+            {/* Your reinsurance participation */}
+            <tr className="border-b border-gray-200">
+              <td className="py-2.5 px-4 text-gray-600 w-1/2">Your reinsurance participation :</td>
+              <td className="py-2.5 px-4 text-right text-gray-700">
+                {sharePercent}% of {facOffer}%
+              </td>
+            </tr>
+
+            {/* Amount Due */}
+            <tr>
+              <td className="py-2.5 px-4 font-semibold text-gray-900 w-1/2">
+                Amount Due from you:
+              </td>
+              <td className="py-2.5 px-4 text-right font-bold text-gray-900">
+                {amountDue != null ? fmtNum(amountDue) : '—'}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </DocumentPreviewModal>
+  );
+}

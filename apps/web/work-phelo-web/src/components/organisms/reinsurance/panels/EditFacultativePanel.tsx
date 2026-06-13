@@ -9,6 +9,7 @@ import {
   Facultative,
   FacultativeFormValues,
   FACULTATIVE_FORM_DEFAULTS,
+  RiskType,
   RiskTypeField,
 } from '@/types/reinsurance';
 import { useUpdateFacultative, useRiskTypes } from '@/hooks';
@@ -34,6 +35,7 @@ function mergeRiskDetails(
 function splitRiskDetails(
   riskDetails: Record<string, string>,
   fields: RiskTypeField[],
+  extraRiskFields: { label: string; value: string }[],
 ): {
   businessDetails: Record<string, unknown> | undefined;
   offerDetails: Record<string, unknown> | undefined;
@@ -51,13 +53,35 @@ function splitRiskDetails(
     }
   }
 
+  for (const { label, value } of extraRiskFields) {
+    if (label.trim() && value.trim()) {
+      businessDetails[label.trim()] = value.trim();
+    }
+  }
+
   return {
     businessDetails: Object.keys(businessDetails).length ? businessDetails : undefined,
     offerDetails: Object.keys(offerDetails).length ? offerDetails : undefined,
   };
 }
 
-function placementToFormValues(placement: Facultative): FacultativeFormValues {
+function placementToFormValues(
+  placement: Facultative,
+  allRiskTypes: RiskType[],
+): FacultativeFormValues {
+  const selectedRiskType = allRiskTypes.find((rt) => rt.id === placement.riskTypeId);
+  const schemaKeys = new Set(
+    (selectedRiskType?.fields ?? []).filter((f) => f.isActive).map((f) => f.fieldKey),
+  );
+
+  const allDetails: Record<string, unknown> = {
+    ...(placement.businessDetails ?? {}),
+    ...(placement.offerDetails ?? {}),
+  };
+  const extraRiskFields = Object.entries(allDetails)
+    .filter(([k]) => !schemaKeys.has(k))
+    .map(([k, v]) => ({ label: k, value: String(v ?? '') }));
+
   return {
     ...FACULTATIVE_FORM_DEFAULTS,
     insuranceCompany: placement.cedant.id,
@@ -73,12 +97,16 @@ function placementToFormValues(placement: Facultative): FacultativeFormValues {
     periodFrom: placement.inceptionDate ?? '',
     periodTo: placement.expiryDate ?? '',
     riskDetails: mergeRiskDetails(placement.businessDetails, placement.offerDetails),
+    extraRiskFields,
   };
 }
 
 export function EditFacultativePanel({ isOpen, placement, onClose }: EditFacultativePanelProps) {
+  const { mutateAsync: updateFacultative } = useUpdateFacultative();
+  const { data: allRiskTypes = [] } = useRiskTypes();
+
   const form = useForm<FacultativeFormValues>({
-    defaultValues: placementToFormValues(placement),
+    defaultValues: placementToFormValues(placement, allRiskTypes),
   });
 
   const {
@@ -89,12 +117,10 @@ export function EditFacultativePanel({ isOpen, placement, onClose }: EditFaculta
 
   useEffect(() => {
     if (isOpen) {
-      reset(placementToFormValues(placement));
+      reset(placementToFormValues(placement, allRiskTypes));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, placement, reset]);
-
-  const { mutateAsync: updateFacultative } = useUpdateFacultative();
-  const { data: allRiskTypes = [] } = useRiskTypes();
 
   const handleClose = () => {
     reset();
@@ -107,6 +133,7 @@ export function EditFacultativePanel({ isOpen, placement, onClose }: EditFaculta
       const { businessDetails, offerDetails } = splitRiskDetails(
         values.riskDetails,
         selectedRiskType?.fields ?? [],
+        values.extraRiskFields ?? [],
       );
 
       await updateFacultative({

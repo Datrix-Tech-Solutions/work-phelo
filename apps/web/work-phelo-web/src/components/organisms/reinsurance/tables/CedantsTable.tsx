@@ -8,7 +8,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { AddCedantPanel } from '@/components/organisms/reinsurance/panels/AddCedantPanel';
 import { AddContactPanel } from '@/components/organisms/reinsurance/panels/AddContactPanel';
-import { useCedants, useDeleteCedant } from '@/hooks';
+import { useCedants, useDeleteCedant, useCedantOutstandingCounts } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { Counterparty } from '@/types/reinsurance';
@@ -35,6 +35,7 @@ export function CedantsTable() {
 
   const { data = [], isLoading } = useCedants();
   const { mutate: deleteCedant, isPending: isDeleting } = useDeleteCedant();
+  const outstandingCounts = useCedantOutstandingCounts();
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -77,19 +78,23 @@ export function CedantsTable() {
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
-        renderCard={(cedant) => (
-          <ContactCard
-            name={cedant.name}
-            location={formatTerritory(cedant.addresses)}
-            email={cedant.email ?? '—'}
-            phone={cedant.phone ?? '—'}
-            onClick={() =>
-              router.push(`/${tenantSlug}/operations/reinsurance/cedants/${cedant.id}`)
-            }
-            onAddPerson={() => setContactTarget(cedant)}
-            onDelete={() => setDeleteTarget(cedant)}
-          />
-        )}
+        renderCard={(cedant) => {
+          const outstanding = outstandingCounts.get(cedant.id) ?? 0;
+          return (
+            <ContactCard
+              name={cedant.name}
+              location={formatTerritory(cedant.addresses)}
+              email={cedant.email ?? '—'}
+              phone={cedant.phone ?? '—'}
+              badge={outstanding > 0 ? { count: outstanding, label: 'Unpaid Policy' } : undefined}
+              onClick={() =>
+                router.push(`/${tenantSlug}/operations/reinsurance/cedants/${cedant.id}`)
+              }
+              onAddPerson={() => setContactTarget(cedant)}
+              onDelete={() => setDeleteTarget(cedant)}
+            />
+          );
+        }}
       />
 
       <AddCedantPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />

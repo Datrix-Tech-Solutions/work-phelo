@@ -1,10 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Facultative, PlacementParticipant } from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
+import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
+import { useReinsurers } from '@/hooks';
 
 function fmt(val: number | null | undefined, currency?: string | null) {
   if (val == null) return '—';
@@ -102,12 +105,16 @@ function ClaimReinsurersTable({
   currency,
   grossPremium,
   commission,
+  onMail,
+  onPreview,
 }: {
   participants: PlacementParticipant[];
   claimAmount?: number | null;
   currency?: string | null;
   grossPremium: number;
   commission: number;
+  onMail: (participant: PlacementParticipant) => void;
+  onPreview: (participant: PlacementParticipant) => void;
 }) {
   const reinsurers = useMemo(
     () => participants.filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED'),
@@ -170,13 +177,16 @@ function ClaimReinsurersTable({
         label: 'Actions',
         width: '100px',
         className: 'pr-6',
-        render: () => (
+        render: (row) => (
           <div className="flex items-center gap-2">
             <button
               type="button"
               title="Preview Debit Note"
               className="text-blue-500 hover:text-blue-600 transition-colors"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreview(row);
+              }}
             >
               <Icons.Eye className="w-4 h-4" />
             </button>
@@ -184,7 +194,10 @@ function ClaimReinsurersTable({
               type="button"
               title="Send Mail"
               className="text-green-500 hover:text-green-700 transition-colors"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMail(row);
+              }}
             >
               <Icons.Mail className="w-4 h-4" />
             </button>
@@ -192,7 +205,7 @@ function ClaimReinsurersTable({
         ),
       },
     ],
-    [claimAmount, currency, grossPremium, commission],
+    [claimAmount, currency, grossPremium, commission, onMail, onPreview],
   );
 
   return (
@@ -215,6 +228,27 @@ export function ClaimOverviewSection({
   claimAmount,
   claimDate,
 }: ClaimOverviewSectionProps) {
+  const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
+  const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
+  const { data: reinsurers = [] } = useReinsurers();
+
+  const reinsurerEmails = useMemo<Record<string, string[]>>(
+    () =>
+      Object.fromEntries(
+        reinsurers.map((r) => {
+          const emails: string[] = [];
+          if (r.email) emails.push(r.email);
+          r.contacts.forEach((c) => {
+            if (c.email) emails.push(c.email);
+          });
+          return [r.id, emails];
+        }),
+      ),
+    [reinsurers],
+  );
+
+  const mailRecipients = mailTarget ? (reinsurerEmails[mailTarget.counterpartyId] ?? []) : [];
+
   const totalActualClaim = useMemo(() => {
     if (claimAmount == null) return null;
     return (placement.participants ?? [])
@@ -242,6 +276,8 @@ export function ClaimOverviewSection({
             currency={placement.currency}
             grossPremium={placement.premium ?? 0}
             commission={placement.commission ?? 0}
+            onMail={setMailTarget}
+            onPreview={setDebitNoteTarget}
           />
         </div>
       </div>
@@ -252,6 +288,28 @@ export function ClaimOverviewSection({
           {fmt(totalActualClaim, placement.currency)}
         </span>
       </div>
+
+      {mailTarget && (
+        <MailPreviewModal
+          isOpen
+          placement={placement}
+          brokerageFee={parseFloat(mailTarget.brokerageFee ?? '0')}
+          recipients={mailRecipients}
+          onSend={() => setMailTarget(null)}
+          onClose={() => setMailTarget(null)}
+        />
+      )}
+
+      {debitNoteTarget && (
+        <ClaimDebitNoteModal
+          isOpen
+          placement={placement}
+          participant={debitNoteTarget}
+          claimAmount={claimAmount}
+          onPrint={() => {}}
+          onClose={() => setDebitNoteTarget(null)}
+        />
+      )}
     </div>
   );
 }
