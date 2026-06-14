@@ -240,8 +240,12 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       })
         .then(() => updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' }))
         .then(() => createClosing(row.id))
-        .then((closing) => updateClosingStatus({ closingId: closing.id, status: 'ISSUED' }))
-        .then((closing) => updateClosingStatus({ closingId: closing.id, status: 'CONFIRMED' }))
+        .then((closing) => {
+          const closingId = closing.id;
+          return updateClosingStatus({ closingId, status: 'ISSUED' }).then(() =>
+            updateClosingStatus({ closingId, status: 'CONFIRMED' }),
+          );
+        })
         .catch((error) => {
           patch(row.id, { status: 'Pending' });
           toast().addToast({ message: extractError(error), type: 'error' });

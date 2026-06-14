@@ -146,7 +146,7 @@ export function PaymentReceiptModal({
     },
     {
       label: 'Net Premium Received by iRisk Re',
-      value: fmtAmount(netPremium, currency),
+      value: fmtAmount(payment.amount, payment.currency),
       bold: true,
     },
   ];

@@ -6,6 +6,7 @@ import { DashboardFiltersBar } from '@/components/molecules/reinsurance/Dashboar
 import { DashboardStatsRow } from '@/components/molecules/reinsurance/stats/DashboardStatsRow';
 import { FinancialStatsRow } from '@/components/molecules/reinsurance/stats/FinancialStatsRow';
 import { CurrencyBreakdownCards } from '@/components/molecules/reinsurance/CurrencyBreakdownCards';
+import { TopCedantsList } from '@/components/molecules/reinsurance/TopCedantsList';
 
 export default function ReinsuranceFoundation() {
   const [currency, setCurrency] = useState('');
@@ -22,6 +23,7 @@ export default function ReinsuranceFoundation() {
       <DashboardStatsRow period={period} />
       <FinancialStatsRow period={period} currency={currency} />
       <CurrencyBreakdownCards period={period} />
+      <TopCedantsList period={period} currency={currency} />
     </div>
   );
 }

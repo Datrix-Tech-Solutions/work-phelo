@@ -18,13 +18,18 @@ export function ReinsurerPlacementsTab({
   onView,
 }: ReinsurerPlacementsTabProps) {
   const accepted = participations.filter((p) => p.participantStatus === 'ACCEPTED').length;
-  const closed = participations.filter((p) => p.participantStatus === 'CLOSED').length;
-  const pending = participations.filter((p) =>
-    ['INVITED', 'OFFER_SENT', 'QUOTED'].includes(p.participantStatus),
+  const closed = participations.filter(
+    (p) =>
+      p.placementStatus === 'PARTIALLY_PLACED' ||
+      p.placementStatus === 'PLACED' ||
+      p.placementStatus === 'CLOSED',
+  ).length;
+  const pending = participations.filter(
+    (p) => p.placementStatus === 'DRAFT' || p.placementStatus === 'MARKETING',
   ).length;
   const rejected = participations.filter((p) => p.participantStatus === 'DECLINED').length;
-  const decided = accepted + closed + rejected;
-  const acceptanceRate = decided > 0 ? Math.round(((accepted + closed) / decided) * 100) : null;
+  const decided = accepted + rejected;
+  const acceptanceRate = decided > 0 ? Math.round((accepted / decided) * 100) : null;
 
   return (
     <div className="flex flex-col gap-6">
