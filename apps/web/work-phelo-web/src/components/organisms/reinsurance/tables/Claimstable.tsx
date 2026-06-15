@@ -9,11 +9,12 @@ import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   Facultative,
-  FacultativeStatus,
   PlacementPayment,
-  toStatusLabel,
+  PlacementClaim,
+  PlacementClaimStatus,
 } from '@/types/reinsurance';
 import { useFacultatives } from '@/hooks';
+import { claimsKey } from '@/hooks/reinsurance/useClaims';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
 
 const PAGE_SIZE = 10;
@@ -32,19 +33,23 @@ function fmtAmount(val: number | null | undefined) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-const RAW_STATUS_VARIANT_MAP: Record<
-  FacultativeStatus,
-  'success' | 'warning' | 'neutral' | 'danger'
+const CLAIM_STATUS_VARIANT: Record<
+  PlacementClaimStatus,
+  'success' | 'warning' | 'neutral' | 'danger' | 'info'
 > = {
   DRAFT: 'neutral',
-  MARKETING: 'warning',
-  PARTIALLY_PLACED: 'success',
-  PLACED: 'success',
-  CLOSING: 'warning',
-  CLOSED: 'success',
+  NOTIFIED: 'info',
+  RESERVED: 'warning',
+  PARTIALLY_SETTLED: 'warning',
+  SETTLED: 'success',
   DECLINED: 'danger',
-  CANCELLED: 'danger',
+  CLOSED: 'success',
+  VOID: 'danger',
 };
+
+function statusLabel(status: PlacementClaimStatus) {
+  return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
+}
 
 function netPremiumFor(row: Facultative): number {
   const facPremium =
@@ -60,16 +65,17 @@ function totalPaidFor(payments: { amount: string; status: string }[]): number {
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
 
-function StatusCell({ placement }: { placement: Facultative }) {
-  return (
-    <Badge
-      label={toStatusLabel(placement.status)}
-      variant={RAW_STATUS_VARIANT_MAP[placement.status]}
-    />
-  );
+type ClaimPlacementRow = Facultative & {
+  latestClaim: PlacementClaim | null;
+  claimCount: number;
+};
+
+function StatusCell({ claim }: { claim: PlacementClaim | null }) {
+  if (!claim) return <Badge label="Not recorded" variant="neutral" />;
+  return <Badge label={statusLabel(claim.status)} variant={CLAIM_STATUS_VARIANT[claim.status]} />;
 }
 
-const COLUMNS: Column<Facultative>[] = [
+const COLUMNS: Column<ClaimPlacementRow>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
@@ -77,6 +83,19 @@ const COLUMNS: Column<Facultative>[] = [
     render: (row) => (
       <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-300 text-xs font-medium text-blue-700 bg-blue-50 whitespace-nowrap">
         {row.reference}
+      </span>
+    ),
+  },
+  {
+    key: 'latestClaim',
+    label: 'Claim Number',
+    width: '130px',
+    render: (row) => (
+      <span className="font-medium text-gray-700">
+        {row.latestClaim?.claimNumber ?? '—'}
+        {row.claimCount > 1 && (
+          <span className="ml-1 text-xs text-gray-400">+{row.claimCount - 1}</span>
+        )}
       </span>
     ),
   },
@@ -166,11 +185,11 @@ const COLUMNS: Column<Facultative>[] = [
     label: 'Claim Status',
     width: '130px',
     className: 'pr-6',
-    render: (row) => <StatusCell placement={row} />,
+    render: (row) => <StatusCell claim={row.latestClaim} />,
   },
 ];
 
-const CLOSING_STATUSES: FacultativeStatus[] = [
+const CLOSING_STATUSES: Facultative['status'][] = [
   'PARTIALLY_PLACED',
   'PLACED',
   'CLOSING',
@@ -213,30 +232,55 @@ export function ClaimsTable() {
     });
   }, [closingRows, paymentQueries]);
 
+  const claimQueries = useQueries({
+    queries: paidRows.map((row) => ({
+      queryKey: claimsKey(row.id),
+      queryFn: async () => {
+        const res = await api.get(`/operations/reinsurance/placements/${row.id}/claims`);
+        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
+      },
+    })),
+  });
+
+  const claimRows = useMemo<ClaimPlacementRow[]>(
+    () =>
+      paidRows.map((row, index) => {
+        const claims = claimQueries[index]?.data ?? [];
+        return {
+          ...row,
+          latestClaim: claims[0] ?? null,
+          claimCount: claims.length,
+        };
+      }),
+    [paidRows, claimQueries],
+  );
+
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of paidRows) seen.set(r.cedant.id, r.cedant.name);
+    for (const r of claimRows) seen.set(r.cedant.id, r.cedant.name);
     return Array.from(seen.entries())
       .map(([id, name]) => ({ value: id, label: name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [paidRows]);
+  }, [claimRows]);
 
   const filtered = useMemo(() => {
-    let rows = paidRows;
+    let rows = claimRows;
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
         (r) =>
           r.reference.toLowerCase().includes(q) ||
           r.title.toLowerCase().includes(q) ||
-          (r.classOfBusiness?.toLowerCase().includes(q) ?? false),
+          (r.classOfBusiness?.toLowerCase().includes(q) ?? false) ||
+          (r.latestClaim?.claimNumber.toLowerCase().includes(q) ?? false) ||
+          (r.latestClaim?.claimCause.toLowerCase().includes(q) ?? false),
       );
     }
     if (cedantFilter) {
       rows = rows.filter((r) => r.cedant.id === cedantFilter);
     }
     return rows;
-  }, [paidRows, search, cedantFilter]);
+  }, [claimRows, search, cedantFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -258,36 +302,53 @@ export function ClaimsTable() {
 
   return (
     <>
+      {claimQueries.some((query) => query.isError) && (
+        <div className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          Some claim records could not be loaded. Refresh before recording another claim.
+        </div>
+      )}
       <DataTable
         columns={COLUMNS}
         data={paged}
-        isLoading={isLoading}
+        isLoading={
+          isLoading ||
+          paymentQueries.some((query) => query.isLoading) ||
+          claimQueries.some((query) => query.isLoading)
+        }
         searchPlaceholder="Search claims…"
         searchValue={search}
-        onRowClick={(row) => router.push(`/${tenantSlug}/operations/reinsurance/claims/${row.id}`)}
+        onRowClick={(row) => {
+          if (row.latestClaim) {
+            router.push(
+              `/${tenantSlug}/operations/reinsurance/claims/${row.id}?claimId=${row.latestClaim.id}`,
+            );
+          } else {
+            setClaimTarget(row);
+          }
+        }}
         onSearch={(q) => {
           setSearch(q);
           setPage(1);
         }}
         extraFilters={cedantDropdown}
-        // actionButton={{ label: 'Make Claim', onClick: () => setClaimTarget({} as Facultative) }}
         rowActions={(row) => [
+          ...(row.latestClaim
+            ? [
+                {
+                  label: 'View Claim',
+                  onClick: () =>
+                    router.push(
+                      `/${tenantSlug}/operations/reinsurance/claims/${row.id}?claimId=${row.latestClaim?.id}`,
+                    ),
+                },
+              ]
+            : []),
           {
-            label: 'View Claim',
-            onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/claims/${row.id}`),
-          },
-          {
-            label: 'Make Claim',
+            label: 'Record Claim',
             onClick: () => setClaimTarget(row),
           },
-          {
-            label: 'Claim Request',
-            onClick: () => {
-              /* TODO */
-            },
-          },
         ]}
-        emptyMessage="No paid placements found"
+        emptyMessage="No claim-eligible placements found"
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}

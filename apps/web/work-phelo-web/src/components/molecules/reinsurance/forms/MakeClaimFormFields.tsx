@@ -1,28 +1,29 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
 import { cn, inputClass } from '@/lib/utils';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { useCurrencyOptions } from '@/hooks';
 import { Facultative } from '@/types/reinsurance';
 
 export interface MakeClaimFormValues {
-  claimAmount: string;
-  claimDate: string;
-  currency: string;
-  rate: string;
+  estimatedLossAmount: string;
+  finalLossAmount: string;
+  occurrenceDate: string;
+  reportedDate: string;
   claimCause: string;
+  occurrenceDetails: string;
 }
 
+const today = new Date().toISOString().split('T')[0];
+
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
-  claimAmount: '',
-  claimDate: '',
-  currency: '',
-  rate: '',
+  estimatedLossAmount: '',
+  finalLossAmount: '',
+  occurrenceDate: '',
+  reportedDate: today,
   claimCause: '',
+  occurrenceDetails: '',
 };
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
@@ -36,11 +37,6 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function fmtAmount(val: number, currency?: string | null) {
-  const prefix = currency ? `${currency} ` : '';
-  return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 interface MakeClaimFormFieldsProps {
   form: UseFormReturn<MakeClaimFormValues>;
   placement: Facultative;
@@ -50,25 +46,8 @@ export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProp
   const {
     register,
     control,
-    watch,
     formState: { errors },
   } = form;
-
-  const { data: currencyOptions = [] } = useCurrencyOptions();
-
-  const claimablAmount = useMemo(() => {
-    const facPremium =
-      placement.premium != null && placement.facultativeOffer != null
-        ? (placement.facultativeOffer / 100) * placement.premium
-        : 0;
-    return placement.commission != null
-      ? facPremium * (1 - placement.commission / 100)
-      : facPremium;
-  }, [placement]);
-
-  const selectedCurrency = watch('currency');
-  const showRate =
-    !!selectedCurrency && !!placement.currency && selectedCurrency !== placement.currency;
 
   return (
     <div className="flex flex-col gap-5">
@@ -78,73 +57,93 @@ export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProp
         <ReadOnlyField label="Class of Business" value={placement.classOfBusiness} />
       )}
 
-      <ReadOnlyField
-        label="Claimable Amount"
-        value={fmtAmount(claimablAmount, placement.currency)}
-      />
+      <ReadOnlyField label="Currency" value={placement.currency ?? '—'} />
 
       <hr className="border-gray-100" />
 
       <FormField
-        label="Claim Amount"
-        registration={register('claimAmount', { required: 'Claim amount is required' })}
+        label="Estimated Loss Amount"
+        registration={register('estimatedLossAmount', {
+          required: 'Estimated loss amount is required',
+          min: { value: 0.01, message: 'Estimated loss amount must be greater than zero' },
+        })}
         placeholder="0.00"
         type="number"
-        step="any"
-        error={errors.claimAmount}
+        step="0.01"
+        error={errors.estimatedLossAmount}
+      />
+
+      <FormField
+        label="Final Loss Amount (optional)"
+        registration={register('finalLossAmount', {
+          min: { value: 0.01, message: 'Final loss amount must be greater than zero' },
+        })}
+        placeholder="0.00"
+        type="number"
+        step="0.01"
+        error={errors.finalLossAmount}
       />
 
       <Controller
-        name="claimDate"
+        name="occurrenceDate"
         control={control}
-        rules={{ required: 'Claim date is required' }}
+        rules={{ required: 'Occurrence date is required' }}
         render={({ field }) => (
           <DatePicker
-            label="Claim Date"
+            label="Occurrence Date"
             value={field.value}
             onChange={field.onChange}
-            error={errors.claimDate?.message}
+            error={errors.occurrenceDate?.message}
+            disableFuture
           />
         )}
       />
 
-      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
-        <Controller
-          name="currency"
-          control={control}
-          rules={{ required: 'Currency is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Currency"
-              placeholder="Select currency…"
-              options={currencyOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.currency?.message}
-            />
-          )}
-        />
-        {showRate && (
-          <FormField
-            label="Rate"
-            registration={register('rate', { required: 'Rate is required' })}
-            placeholder="0.00"
-            type="number"
-            step="any"
-            error={errors.rate}
+      <Controller
+        name="reportedDate"
+        control={control}
+        rules={{ required: 'Reported date is required' }}
+        render={({ field }) => (
+          <DatePicker
+            label="Reported Date"
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.reportedDate?.message}
+            disableFuture
           />
         )}
-      </div>
+      />
 
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-bold text-gray-900">Claim Cause</label>
         <textarea
-          {...register('claimCause')}
-          placeholder="Describe the cause of the claim…"
-          rows={4}
+          {...register('claimCause', {
+            required: 'Claim cause is required',
+            maxLength: { value: 250, message: 'Claim cause must be 250 characters or fewer' },
+          })}
+          placeholder="e.g. Warehouse fire"
+          rows={3}
           className={cn(inputClass(), 'resize-none')}
         />
         {errors.claimCause && <p className="text-xs text-red-500">{errors.claimCause.message}</p>}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-bold text-gray-900">Occurrence Details (optional)</label>
+        <textarea
+          {...register('occurrenceDetails', {
+            maxLength: {
+              value: 2000,
+              message: 'Occurrence details must be 2,000 characters or fewer',
+            },
+          })}
+          placeholder="Add any useful loss-event details…"
+          rows={4}
+          className={cn(inputClass(), 'resize-none')}
+        />
+        {errors.occurrenceDetails && (
+          <p className="text-xs text-red-500">{errors.occurrenceDetails.message}</p>
+        )}
       </div>
     </div>
   );

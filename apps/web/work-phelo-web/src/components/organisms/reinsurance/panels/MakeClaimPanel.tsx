@@ -8,16 +8,16 @@ import {
   MakeClaimFormValues,
   MAKE_CLAIM_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
-import { usePlacementClosings, useCreatePlacementPayment } from '@/hooks';
+import { useCreatePlacementClaim } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { Facultative } from '@/types/reinsurance';
+import { Facultative, PlacementClaim } from '@/types/reinsurance';
 
 interface MakeClaimPanelProps {
   isOpen: boolean;
   onClose: () => void;
   placement?: Facultative;
-  onSuccess?: () => void;
+  onSuccess?: (claim: PlacementClaim) => void;
 }
 
 export function MakeClaimPanel({ isOpen, onClose, placement, onSuccess }: MakeClaimPanelProps) {
@@ -28,8 +28,7 @@ export function MakeClaimPanel({ isOpen, onClose, placement, onSuccess }: MakeCl
     formState: { isSubmitting },
   } = form;
 
-  const { data: closings = [] } = usePlacementClosings(placement?.id ?? '');
-  const createPayment = useCreatePlacementPayment();
+  const createClaim = useCreatePlacementClaim();
   const addToast = useToastStore((s) => s.addToast);
 
   const handleClose = () => {
@@ -40,52 +39,30 @@ export function MakeClaimPanel({ isOpen, onClose, placement, onSuccess }: MakeCl
   const onSubmit = async (values: MakeClaimFormValues) => {
     if (!placement) return;
 
-    const acceptedReinsurers = (placement.participants ?? []).filter(
-      (p) => p.role !== 'BROKER' && p.status === 'ACCEPTED',
-    );
-
-    if (acceptedReinsurers.length === 0) {
-      addToast({ message: 'No accepted reinsurers found for this placement', type: 'error' });
+    if (!placement.currency) {
+      addToast({
+        message: 'The placement must have a currency before recording a claim',
+        type: 'error',
+      });
       return;
     }
 
-    const closingByParticipantId = Object.fromEntries(closings.map((c) => [c.participantId, c.id]));
-
-    const claimAmount = parseFloat(values.claimAmount) || 0;
-    const rate = values.rate ? parseFloat(values.rate) : 1;
-    const paymentCurrency = values.currency || placement.currency;
-    const placementCurrency = placement.currency ?? values.currency;
-    const needsConversion = !!values.rate && paymentCurrency !== placementCurrency;
-
     try {
-      await Promise.all(
-        acceptedReinsurers.map((participant) => {
-          const share =
-            participant.sharePercent != null ? parseFloat(participant.sharePercent) / 100 : 0;
-          const rawAmount = share * claimAmount;
-          const submittedAmount = needsConversion
-            ? Math.round(rawAmount * rate * 100) / 100
-            : Math.round(rawAmount * 100) / 100;
+      const claim = await createClaim.mutateAsync({
+        placementId: placement.id,
+        occurrenceDate: new Date(`${values.occurrenceDate}T00:00:00.000Z`).toISOString(),
+        reportedDate: new Date(`${values.reportedDate}T00:00:00.000Z`).toISOString(),
+        claimCause: values.claimCause.trim(),
+        ...(values.occurrenceDetails.trim()
+          ? { occurrenceDetails: values.occurrenceDetails.trim() }
+          : {}),
+        currency: placement.currency,
+        estimatedLossAmount: Number(values.estimatedLossAmount),
+        ...(values.finalLossAmount ? { finalLossAmount: Number(values.finalLossAmount) } : {}),
+      });
 
-          const closingId = closingByParticipantId[participant.id];
-
-          return createPayment.mutateAsync({
-            placementId: placement.id,
-            type: 'CLAIM_SETTLEMENT',
-            direction: 'INBOUND',
-            counterpartyId: participant.counterpartyId,
-            ...(closingId ? { closingId } : {}),
-            participantId: participant.id,
-            amount: submittedAmount,
-            currency: placementCurrency ?? paymentCurrency,
-            paymentDate: new Date(values.claimDate).toISOString(),
-            ...(values.claimCause ? { notes: values.claimCause } : {}),
-          });
-        }),
-      );
-
-      addToast({ message: 'Claim submitted successfully', type: 'success' });
-      onSuccess?.();
+      addToast({ message: 'Claim recorded successfully', type: 'success' });
+      onSuccess?.(claim);
       handleClose();
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
@@ -96,8 +73,8 @@ export function MakeClaimPanel({ isOpen, onClose, placement, onSuccess }: MakeCl
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Make Claim"
-      description={placement ? `Claim for ${placement.reference}` : 'Submit a claim'}
+      title="Record Claim"
+      description={placement ? `Loss event for ${placement.reference}` : 'Record a loss event'}
       footer={
         placement ? (
           <div className="flex justify-end gap-3">
@@ -106,10 +83,10 @@ export function MakeClaimPanel({ isOpen, onClose, placement, onSuccess }: MakeCl
             </Button>
             <Button
               isLoading={isSubmitting}
-              loadingText="Submitting…"
+              loadingText="Recording…"
               onClick={handleSubmit(onSubmit)}
             >
-              Submit Claim
+              Record Claim
             </Button>
           </div>
         ) : undefined
@@ -119,7 +96,7 @@ export function MakeClaimPanel({ isOpen, onClose, placement, onSuccess }: MakeCl
         <MakeClaimFormFields form={form} placement={placement} />
       ) : (
         <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-          Select a placement to make a claim
+          Select a placement to record a claim
         </div>
       )}
     </SidePanel>

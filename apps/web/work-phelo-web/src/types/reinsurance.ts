@@ -661,7 +661,7 @@ export interface PlacementPayment {
 }
 
 export interface CreatePlacementPaymentPayload {
-  type: PlacementPaymentType;
+  type: Exclude<PlacementPaymentType, 'CLAIM_SETTLEMENT'>;
   direction: PlacementPaymentDirection;
   counterpartyId: string;
   closingId?: string;
@@ -671,6 +671,123 @@ export interface CreatePlacementPaymentPayload {
   paymentDate: string;
   reference?: string;
   notes?: string;
+}
+
+/* ── Placement Claims ── */
+export type PlacementClaimStatus =
+  | 'DRAFT'
+  | 'NOTIFIED'
+  | 'RESERVED'
+  | 'PARTIALLY_SETTLED'
+  | 'SETTLED'
+  | 'DECLINED'
+  | 'CLOSED'
+  | 'VOID';
+
+export type PlacementClaimAllocationStatus =
+  | 'DRAFT'
+  | 'NOTIFIED'
+  | 'CASH_CALLED'
+  | 'PARTIALLY_PAID'
+  | 'PAID'
+  | 'VOID';
+
+export type PlacementClaimCashCallStatus = 'DRAFT' | 'ISSUED' | 'PAID' | 'VOID';
+
+export interface PlacementClaim {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimNumber: string;
+  status: PlacementClaimStatus;
+  occurrenceDate: string;
+  reportedDate: string;
+  claimCause: string;
+  occurrenceDetails: string | null;
+  currency: string;
+  estimatedLossAmount: string;
+  finalLossAmount: string | null;
+  finalizedAt: string | null;
+  finalizedByUserId: string | null;
+  createdByUserId: string;
+  updatedByUserId: string | null;
+  closedAt: string | null;
+  voidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePlacementClaimPayload {
+  occurrenceDate: string;
+  reportedDate: string;
+  claimCause: string;
+  occurrenceDetails?: string;
+  currency: string;
+  estimatedLossAmount: number;
+  finalLossAmount?: number;
+}
+
+export type UpdatePlacementClaimPayload = Partial<CreatePlacementClaimPayload>;
+
+export interface PlacementClaimAllocation {
+  id: string;
+  tenantId: string;
+  claimId: string;
+  placementId: string;
+  placementClosingId: string | null;
+  endorsementClosingId: string | null;
+  participantId: string | null;
+  endorsementParticipantId: string | null;
+  counterpartyId: string;
+  signedLinePercent: string;
+  basisAmount: string;
+  allocatedEstimatedLossAmount: string;
+  allocatedFinalLossAmount: string | null;
+  cashCallAmount: string | null;
+  paidAmount: string | null;
+  status: PlacementClaimAllocationStatus;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: {
+    id: string;
+    type: CounterpartyType;
+    name: string;
+    registrationNumber: string | null;
+  };
+  placementClosing: { id: string; closingNumber: string } | null;
+  endorsementClosing: { id: string; closingNumber: string } | null;
+}
+
+export interface PlacementClaimCashCall {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  claimId: string;
+  allocationId: string;
+  counterpartyId: string;
+  cashCallNumber: string;
+  status: PlacementClaimCashCallStatus;
+  currency: string;
+  amount: string;
+  basisAmount: string;
+  signedLinePercent: string;
+  issuedAt: string | null;
+  paidAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: {
+    id: string;
+    type: CounterpartyType;
+    name: string;
+    registrationNumber: string | null;
+  };
+  allocation: {
+    id: string;
+    status: PlacementClaimAllocationStatus;
+  };
 }
 
 /* ── Facultative form ── */

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Facultative, PlacementParticipant } from '@/types/reinsurance';
+import { Facultative, PlacementClaimAllocation, PlacementParticipant } from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
@@ -28,6 +28,7 @@ interface ClaimOverviewSectionProps {
   placement: Facultative;
   claimAmount?: number | null;
   claimDate?: string | null;
+  allocations?: PlacementClaimAllocation[];
 }
 
 function ClaimDetailsPanel({
@@ -101,18 +102,18 @@ function ClaimDetailsPanel({
 
 function ClaimReinsurersTable({
   participants,
-  claimAmount,
   currency,
   grossPremium,
   commission,
+  allocations,
   onMail,
   onPreview,
 }: {
   participants: PlacementParticipant[];
-  claimAmount?: number | null;
   currency?: string | null;
   grossPremium: number;
   commission: number;
+  allocations: PlacementClaimAllocation[];
   onMail: (participant: PlacementParticipant) => void;
   onPreview: (participant: PlacementParticipant) => void;
 }) {
@@ -159,8 +160,12 @@ function ClaimReinsurersTable({
         width: '180px',
         className: 'text-right pr-8',
         render: (row) => {
-          const share = row.sharePercent != null ? parseFloat(row.sharePercent) / 100 : null;
-          const actual = share != null && claimAmount != null ? share * claimAmount : null;
+          const allocation = allocations.find(
+            (item) => item.participantId === row.id || item.counterpartyId === row.counterpartyId,
+          );
+          const actual = allocation
+            ? Number(allocation.allocatedFinalLossAmount ?? allocation.allocatedEstimatedLossAmount)
+            : null;
           return (
             <span className="text-gray-900 block text-right pr-8">{fmt(actual, currency)}</span>
           );
@@ -205,7 +210,7 @@ function ClaimReinsurersTable({
         ),
       },
     ],
-    [claimAmount, currency, grossPremium, commission, onMail, onPreview],
+    [allocations, currency, grossPremium, commission, onMail, onPreview],
   );
 
   return (
@@ -230,6 +235,7 @@ export function ClaimOverviewSection({
   placement,
   claimAmount,
   claimDate,
+  allocations = [],
 }: ClaimOverviewSectionProps) {
   const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
@@ -253,14 +259,14 @@ export function ClaimOverviewSection({
   const mailRecipients = mailTarget ? (reinsurerEmails[mailTarget.counterpartyId] ?? []) : [];
 
   const totalActualClaim = useMemo(() => {
-    if (claimAmount == null) return null;
-    return (placement.participants ?? [])
-      .filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED')
-      .reduce((sum, p) => {
-        const share = p.sharePercent != null ? parseFloat(p.sharePercent) / 100 : 0;
-        return sum + share * claimAmount;
-      }, 0);
-  }, [placement.participants, claimAmount]);
+    if (allocations.length === 0) return null;
+    return allocations.reduce(
+      (sum, allocation) =>
+        sum +
+        Number(allocation.allocatedFinalLossAmount ?? allocation.allocatedEstimatedLossAmount),
+      0,
+    );
+  }, [allocations]);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-4">
@@ -275,10 +281,10 @@ export function ClaimOverviewSection({
         <div className="w-full md:flex-2 min-w-0">
           <ClaimReinsurersTable
             participants={placement.participants ?? []}
-            claimAmount={claimAmount}
             currency={placement.currency}
             grossPremium={placement.premium ?? 0}
             commission={placement.commission ?? 0}
+            allocations={allocations}
             onMail={setMailTarget}
             onPreview={setDebitNoteTarget}
           />
