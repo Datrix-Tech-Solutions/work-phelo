@@ -23,6 +23,9 @@ const TABS = [
   { key: 'endorsement', label: 'Endorsement' },
 ];
 
+const FINANCIAL_LOCK_MESSAGE =
+  'Placement is financially locked because payments have been recorded.';
+
 export default function FacultativeDetailPage({
   params,
 }: {
@@ -62,18 +65,11 @@ export default function FacultativeDetailPage({
                 Endorse Policy
               </Button>
             )}
-            <Button
-              size="sm"
-              onClick={() => setEditOpen(true)}
-              disabled={isFinanciallyLocked}
-              title={
-                isFinanciallyLocked
-                  ? 'Placement is financially locked. Changes require endorsement.'
-                  : undefined
-              }
-            >
-              Edit
-            </Button>
+            <span title={isFinanciallyLocked ? FINANCIAL_LOCK_MESSAGE : undefined}>
+              <Button size="sm" onClick={() => setEditOpen(true)} disabled={isFinanciallyLocked}>
+                Edit
+              </Button>
+            </span>
           </div>
         )}
       </div>
@@ -94,8 +90,8 @@ export default function FacultativeDetailPage({
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
                 <p className="font-semibold">Financially locked</p>
                 <p>
-                  {lockStatus?.reason ??
-                    'This placement has payment activity. Direct changes require endorsement.'}
+                  {FINANCIAL_LOCK_MESSAGE} Structural edits are disabled; use an endorsement for
+                  changes.
                 </p>
               </div>
             )}

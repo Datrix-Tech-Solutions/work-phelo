@@ -45,6 +45,9 @@ const SEGMENT_COLORS = [
   '#10b981',
 ];
 
+const FINANCIAL_LOCK_MESSAGE =
+  'Placement is financially locked because payments have been recorded.';
+
 interface DistributionListTabProps {
   placement: Facultative;
   lockStatus?: PlacementLockStatus;
@@ -159,12 +162,10 @@ export function DistributionListTab({ placement, lockStatus }: DistributionListT
 
   const showLockedToast = useCallback(() => {
     toast().addToast({
-      message:
-        lockStatus?.reason ??
-        'Placement is financially locked. Direct changes require endorsement.',
+      message: FINANCIAL_LOCK_MESSAGE,
       type: 'error',
     });
-  }, [lockStatus?.reason, toast]);
+  }, [toast]);
 
   const closingByParticipantId = useMemo(
     () =>
@@ -374,19 +375,16 @@ export function DistributionListTab({ placement, lockStatus }: DistributionListT
               <span className="font-semibold text-gray-600">{facOffer}%</span>
             </p>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setPanelOpen(true)}
-            isLoading={isAdding}
-            disabled={isPlacementLocked}
-            title={
-              isPlacementLocked
-                ? 'Placement is financially locked. Changes require endorsement.'
-                : undefined
-            }
-          >
-            Add Reinsurers
-          </Button>
+          <span title={isPlacementLocked ? FINANCIAL_LOCK_MESSAGE : undefined}>
+            <Button
+              size="sm"
+              onClick={() => setPanelOpen(true)}
+              isLoading={isAdding}
+              disabled={isPlacementLocked}
+            >
+              Add Reinsurers
+            </Button>
+          </span>
         </div>
 
         <div className="flex flex-col gap-2">

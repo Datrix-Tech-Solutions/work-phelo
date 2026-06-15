@@ -26,6 +26,9 @@ const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'danger
   Declined: 'danger',
 };
 
+const FINANCIAL_LOCK_MESSAGE =
+  'Placement is financially locked because payments have been recorded.';
+
 function fmtAmount(val: number) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -144,7 +147,12 @@ export function DistributionTable({
       width: '1fr',
       render: (row) => {
         const isPaid = isPlacementLocked;
-        if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
+        if (isPaid)
+          return (
+            <span className="text-gray-700 text-sm" title={FINANCIAL_LOCK_MESSAGE}>
+              {row.shareLine}%
+            </span>
+          );
         return editingId === row.id ? (
           <input
             type="number"
@@ -175,7 +183,12 @@ export function DistributionTable({
       width: '1fr',
       render: (row) => {
         const isPaid = isPlacementLocked;
-        if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
+        if (isPaid)
+          return (
+            <span className="text-gray-700 text-sm" title={FINANCIAL_LOCK_MESSAGE}>
+              {row.brokerageFee}%
+            </span>
+          );
         return editingBrokerageId === row.id ? (
           <input
             type="number"
@@ -237,10 +250,10 @@ export function DistributionTable({
           confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
         const responded = row.status === 'Declined' || row.status === 'Accepted';
         const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
-        const showAccept = !isPlacementLocked && (isReconfirming || (mailed && !responded));
-        const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
-        const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
-        const showMail = !isPlacementLocked;
+        const showAccept = isReconfirming || (mailed && !responded);
+        const showDecline = !isReconfirming && mailed && !responded;
+        const showRevert = row.status === 'Accepted' && !isReconfirming;
+        const lockedActionClass = isPlacementLocked ? 'cursor-not-allowed opacity-40' : '';
         return (
           <div className="flex items-center gap-2">
             <button
@@ -251,22 +264,22 @@ export function DistributionTable({
             >
               <Icons.Eye className="w-4 h-4" />
             </button>
-            {showMail && (
-              <button
-                type="button"
-                title="Send mail"
-                onClick={() => setMailPreviewId(row.id)}
-                className="text-green-500 hover:text-green-700 transition-colors"
-              >
-                <Icons.Mail className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              type="button"
+              title={isPlacementLocked ? FINANCIAL_LOCK_MESSAGE : 'Send mail'}
+              onClick={() => setMailPreviewId(row.id)}
+              disabled={isPlacementLocked}
+              className={`text-green-500 hover:text-green-700 transition-colors ${lockedActionClass}`}
+            >
+              <Icons.Mail className="w-4 h-4" />
+            </button>
             {showAccept && (
               <button
                 type="button"
-                title="Accept"
+                title={isPlacementLocked ? FINANCIAL_LOCK_MESSAGE : 'Accept'}
                 onClick={() => handleAccept(row)}
-                className="text-green-500 hover:text-green-600 transition-colors"
+                disabled={isPlacementLocked}
+                className={`text-green-500 hover:text-green-600 transition-colors ${lockedActionClass}`}
               >
                 <Icons.Check className="w-4 h-4" />
               </button>
@@ -274,9 +287,10 @@ export function DistributionTable({
             {showDecline && (
               <button
                 type="button"
-                title="Decline"
+                title={isPlacementLocked ? FINANCIAL_LOCK_MESSAGE : 'Decline'}
                 onClick={() => handleDecline(row)}
-                className="text-red-400 hover:text-red-600 transition-colors"
+                disabled={isPlacementLocked}
+                className={`text-red-400 hover:text-red-600 transition-colors ${lockedActionClass}`}
               >
                 <Icons.X className="w-4 h-4" />
               </button>
@@ -284,19 +298,21 @@ export function DistributionTable({
             {showRevert && (
               <button
                 type="button"
-                title="Revert to pending"
+                title={isPlacementLocked ? FINANCIAL_LOCK_MESSAGE : 'Revert to pending'}
                 onClick={() => onRevert?.(row)}
-                className="text-amber-500 hover:text-amber-600 transition-colors"
+                disabled={isPlacementLocked}
+                className={`text-amber-500 hover:text-amber-600 transition-colors ${lockedActionClass}`}
               >
                 <Icons.RotateCcw className="w-4 h-4" />
               </button>
             )}
-            {!isPlacementLocked && !responded && (
+            {!responded && (
               <button
                 type="button"
-                title="Delete"
+                title={isPlacementLocked ? FINANCIAL_LOCK_MESSAGE : 'Delete'}
                 onClick={() => onDelete?.(row)}
-                className="text-red-400 hover:text-red-600 transition-colors"
+                disabled={isPlacementLocked}
+                className={`text-red-400 hover:text-red-600 transition-colors ${lockedActionClass}`}
               >
                 <Icons.Trash2 className="w-4 h-4" />
               </button>
