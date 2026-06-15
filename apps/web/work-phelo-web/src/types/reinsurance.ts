@@ -585,8 +585,31 @@ export interface PlacementParticipantClosing {
   participantId: string;
   status: PlacementParticipantClosingStatus;
   closingNumber: string;
+  signedLinePercent: string;
+  sharePercent: string | null;
+  grossPremium: string | null;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  netPremium: string | null;
+  currency: string | null;
+  issuedAt: string | null;
+  confirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  participant: {
+    id: string;
+    counterpartyId: string;
+    role: PlacementParticipantRole;
+    status: PlacementParticipantStatus;
+    counterparty: {
+      id: string;
+      type: CounterpartyType;
+      name: string;
+      registrationNumber: string | null;
+    };
+  };
 }
 
 export type PlacementPaymentType =

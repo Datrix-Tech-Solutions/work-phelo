@@ -24,7 +24,6 @@ import {
   useDeleteParticipant,
   useCreateClosing,
   useUpdateClosingStatus,
-  usePlacementClosings,
   usePlacementPayments,
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
@@ -86,7 +85,6 @@ export function DistributionListTab({ placement, lockStatus }: DistributionListT
   const { mutateAsync: deleteParticipant } = useDeleteParticipant(placement.id);
   const { mutateAsync: createClosing } = useCreateClosing(placement.id);
   const { mutateAsync: updateClosingStatus } = useUpdateClosingStatus(placement.id);
-  const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
 
@@ -167,14 +165,6 @@ export function DistributionListTab({ placement, lockStatus }: DistributionListT
     });
   }, [toast]);
 
-  const closingByParticipantId = useMemo(
-    () =>
-      Object.fromEntries(
-        closings.filter((c) => c.status !== 'VOID').map((c) => [c.participantId, c.id]),
-      ),
-    [closings],
-  );
-
   const patch = (id: string, update: Partial<DistributionEntry>) =>
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
 
@@ -249,7 +239,7 @@ export function DistributionListTab({ placement, lockStatus }: DistributionListT
     );
   };
 
-  const handleAccept = (row: DistributionEntry) => {
+  const handleAccept = async (row: DistributionEntry) => {
     if (isPlacementLocked) {
       showLockedToast();
       return;
@@ -258,39 +248,48 @@ export function DistributionListTab({ placement, lockStatus }: DistributionListT
     const isReconfirm = row.status === 'Accepted';
     patch(row.id, { status: 'Accepted' });
     if (isReconfirm) {
-      updateParticipant({
-        participantId: row.id,
-        sharePercent: row.shareLine,
-        signedLinePercent: row.shareLine,
-      })
-        .then(() =>
-          createEndorsementParticipant({
-            counterpartyId: row.counterpartyId,
-            originalParticipantId: row.id,
-            sharePercent: row.shareLine,
-            signedLinePercent: row.shareLine,
-            status: 'ACCEPTED',
-          }),
-        )
-        .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
-    } else {
-      updateParticipant({
-        participantId: row.id,
-        sharePercent: row.shareLine,
-        signedLinePercent: row.shareLine,
-      })
-        .then(() => updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' }))
-        .then(() => createClosing(row.id))
-        .then((closing) => {
-          const closingId = closing.id;
-          return updateClosingStatus({ closingId, status: 'ISSUED' }).then(() =>
-            updateClosingStatus({ closingId, status: 'CONFIRMED' }),
-          );
-        })
-        .catch((error) => {
-          patch(row.id, { status: 'Pending' });
-          toast().addToast({ message: extractError(error), type: 'error' });
+      try {
+        await updateParticipant({
+          participantId: row.id,
+          sharePercent: row.shareLine,
+          signedLinePercent: row.shareLine,
         });
+        await createEndorsementParticipant({
+          counterpartyId: row.counterpartyId,
+          originalParticipantId: row.id,
+          sharePercent: row.shareLine,
+          signedLinePercent: row.shareLine,
+          status: 'ACCEPTED',
+        });
+      } catch (error) {
+        toast().addToast({ message: extractError(error), type: 'error' });
+      }
+    } else {
+      try {
+        await updateParticipant({
+          participantId: row.id,
+          sharePercent: row.shareLine,
+          signedLinePercent: row.shareLine,
+        });
+        await updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' });
+      } catch (error) {
+        patch(row.id, { status: 'Pending' });
+        toast().addToast({ message: extractError(error), type: 'error' });
+        return;
+      }
+
+      try {
+        const closing = await createClosing(row.id);
+        await updateClosingStatus({ closingId: closing.id, status: 'ISSUED' });
+        await updateClosingStatus({ closingId: closing.id, status: 'CONFIRMED' });
+      } catch (error) {
+        toast().addToast({
+          message:
+            'Participant accepted, but closing was not created. Please create a closing before payment.',
+          type: 'error',
+        });
+        toast().addToast({ message: extractError(error), type: 'error' });
+      }
     }
   };
 
@@ -303,25 +302,6 @@ export function DistributionListTab({ placement, lockStatus }: DistributionListT
     updatePlacementStatus({ status: 'CLOSING' })
       .then(() => updatePlacementStatus({ status: 'CLOSED' }))
       .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
-  };
-
-  const handleRevert = (row: DistributionEntry) => {
-    if (isPlacementLocked) {
-      showLockedToast();
-      return;
-    }
-
-    patch(row.id, { status: 'Pending' });
-    const closingId = closingByParticipantId[row.id];
-    const voidClosing = closingId
-      ? updateClosingStatus({ closingId, status: 'VOID' })
-      : Promise.resolve();
-    voidClosing
-      .then(() => updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }))
-      .catch((error) => {
-        patch(row.id, { status: 'Accepted' });
-        toast().addToast({ message: extractError(error), type: 'error' });
-      });
   };
 
   const handleDecline = (row: DistributionEntry) => {
@@ -455,7 +435,6 @@ export function DistributionListTab({ placement, lockStatus }: DistributionListT
           onAccept={handleAccept}
           onDecline={handleDecline}
           onDelete={handleDelete}
-          onRevert={handleRevert}
           onClosePlacement={placement.status === 'PLACED' ? handleClosePlacement : undefined}
         />
       </div>

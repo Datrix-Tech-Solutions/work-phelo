@@ -46,7 +46,6 @@ interface DistributionTableProps {
   onAccept: (row: DistributionEntry) => void;
   onDecline: (row: DistributionEntry) => void;
   onDelete?: (row: DistributionEntry) => void;
-  onRevert?: (row: DistributionEntry) => void;
   onClosePlacement?: () => void;
 }
 
@@ -63,7 +62,6 @@ export function DistributionTable({
   onAccept,
   onDecline,
   onDelete,
-  onRevert,
   onClosePlacement,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
@@ -252,7 +250,6 @@ export function DistributionTable({
         const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
         const showAccept = isReconfirming || (mailed && !responded);
         const showDecline = !isReconfirming && mailed && !responded;
-        const showRevert = row.status === 'Accepted' && !isReconfirming;
         const lockedActionClass = isPlacementLocked ? 'cursor-not-allowed opacity-40' : '';
         return (
           <div className="flex items-center gap-2">
@@ -293,17 +290,6 @@ export function DistributionTable({
                 className={`text-red-400 hover:text-red-600 transition-colors ${lockedActionClass}`}
               >
                 <Icons.X className="w-4 h-4" />
-              </button>
-            )}
-            {showRevert && (
-              <button
-                type="button"
-                title={isPlacementLocked ? FINANCIAL_LOCK_MESSAGE : 'Revert to pending'}
-                onClick={() => onRevert?.(row)}
-                disabled={isPlacementLocked}
-                className={`text-amber-500 hover:text-amber-600 transition-colors ${lockedActionClass}`}
-              >
-                <Icons.RotateCcw className="w-4 h-4" />
               </button>
             )}
             {!responded && (

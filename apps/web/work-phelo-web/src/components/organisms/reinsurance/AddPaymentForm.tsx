@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { Button } from '@/components/atoms/Button';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
@@ -10,7 +10,12 @@ import {
   AddPaymentFormValues,
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
-import { useFacultatives, useCreatePlacementPayment, useFacultativePlacement } from '@/hooks';
+import {
+  useFacultatives,
+  useCreatePlacementPayment,
+  useFacultativePlacement,
+  usePlacementClosingEligibility,
+} from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
@@ -48,12 +53,41 @@ export default function AddPaymentForm({
   const addToast = useToastStore((s) => s.addToast);
 
   const form = useForm<AddPaymentFormValues>({ defaultValues: ADD_PAYMENT_DEFAULTS });
+  const selectedPlacementIds = useWatch({ control: form.control, name: 'businessIds' });
+  const selectedCedantId = useWatch({ control: form.control, name: 'cedantId' });
+  const eligiblePlacementIds = placementId
+    ? [placementId]
+    : facultatives
+        .filter(
+          (placement) =>
+            placement.status !== 'CANCELLED' && placement.cedant.id === selectedCedantId,
+        )
+        .map((placement) => placement.id);
+  const { confirmedPlacementIds, isLoading: isClosingEligibilityLoading } =
+    usePlacementClosingEligibility(eligiblePlacementIds);
+  const hasConfirmedClosings =
+    selectedPlacementIds.length > 0 &&
+    selectedPlacementIds.every((id) => confirmedPlacementIds.has(id));
+  const isClosingBlocked =
+    selectedPlacementIds.length > 0 && !isClosingEligibilityLoading && !hasConfirmedClosings;
+
   const {
     handleSubmit,
     formState: { isSubmitting },
   } = form;
 
   const onSubmit = async (values: AddPaymentFormValues) => {
+    if (
+      values.businessIds.length === 0 ||
+      values.businessIds.some((id) => !confirmedPlacementIds.has(id))
+    ) {
+      addToast({
+        message: 'At least one confirmed closing is required before recording payment.',
+        type: 'error',
+      });
+      return;
+    }
+
     const selectedFacs = facultatives.filter((f) => values.businessIds.includes(f.id));
     if (selectedFacs.length === 0) return;
 
@@ -177,17 +211,32 @@ export default function AddPaymentForm({
             <Button type="button" variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
-            <Button type="submit" form="add-payment-form" disabled={isSubmitting}>
+            <Button
+              type="submit"
+              form="add-payment-form"
+              disabled={isSubmitting || isClosingEligibilityLoading || isClosingBlocked}
+              title={
+                isClosingBlocked
+                  ? 'At least one confirmed closing is required before recording payment.'
+                  : undefined
+              }
+            >
               {isSubmitting ? 'Saving…' : 'Record Payment'}
             </Button>
           </div>
         }
       >
         <form id="add-payment-form" onSubmit={handleSubmit(onSubmit)}>
+          {isClosingBlocked && (
+            <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              At least one confirmed closing is required before recording payment.
+            </div>
+          )}
           <AddPaymentFormFields
             form={form}
             placementId={placementId}
             onPlacementsChange={onPlacementsChange}
+            confirmedClosingPlacementIds={confirmedPlacementIds}
           />
         </form>
       </SidePanel>

@@ -62,12 +62,14 @@ interface AddPaymentFormFieldsProps {
   form: UseFormReturn<AddPaymentFormValues>;
   placementId?: string;
   onPlacementsChange?: (placementIds: string[]) => void;
+  confirmedClosingPlacementIds: Set<string>;
 }
 
 export function AddPaymentFormFields({
   form,
   placementId,
   onPlacementsChange,
+  confirmedClosingPlacementIds,
 }: AddPaymentFormFieldsProps) {
   const {
     register,
@@ -108,7 +110,12 @@ export function AddPaymentFormFields({
   const businessOptions = useMemo(
     () =>
       facultatives
-        .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
+        .filter(
+          (f) =>
+            f.cedant.id === cedantId &&
+            f.status !== 'CANCELLED' &&
+            confirmedClosingPlacementIds.has(f.id),
+        )
         .map((f) => {
           const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
           const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
@@ -125,7 +132,7 @@ export function AddPaymentFormFields({
             sublabel: parts.join(' · '),
           };
         }),
-    [facultatives, cedantId],
+    [facultatives, cedantId, confirmedClosingPlacementIds],
   );
 
   const totalExpected = useMemo(() => {

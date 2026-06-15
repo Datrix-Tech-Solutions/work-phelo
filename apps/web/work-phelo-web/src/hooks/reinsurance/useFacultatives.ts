@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
   Facultative,
@@ -18,6 +18,8 @@ import {
 
 const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
+const closingsKey = (placementId: string) =>
+  [...FACULTATIVES_KEY, placementId, 'closings'] as const;
 
 function parseDecimal(val: unknown): number | null {
   if (val == null) return null;
@@ -183,7 +185,7 @@ export function useDeleteParticipant(placementId: string) {
 
 export function usePlacementClosings(placementId: string) {
   return useQuery({
-    queryKey: [...FACULTATIVES_KEY, placementId, 'closings'],
+    queryKey: closingsKey(placementId),
     queryFn: async () => {
       const res = await api.get(`${BASE}/${placementId}/closings`);
       const raw = res.data?.items ?? res.data ?? [];
@@ -191,6 +193,31 @@ export function usePlacementClosings(placementId: string) {
     },
     enabled: !!placementId,
   });
+}
+
+export function usePlacementClosingEligibility(placementIds: string[]) {
+  const queries = useQueries({
+    queries: placementIds.map((placementId) => ({
+      queryKey: closingsKey(placementId),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${placementId}/closings`);
+        return (res.data?.items ?? res.data ?? []) as PlacementParticipantClosing[];
+      },
+      enabled: !!placementId,
+    })),
+  });
+
+  const confirmedPlacementIds = new Set(
+    placementIds.filter((_, index) =>
+      queries[index]?.data?.some((closing) => closing.status === 'CONFIRMED'),
+    ),
+  );
+
+  return {
+    confirmedPlacementIds,
+    isLoading: queries.some((query) => query.isLoading),
+    isError: queries.some((query) => query.isError),
+  };
 }
 
 export function useCreateClosing(placementId: string) {
@@ -202,6 +229,7 @@ export function useCreateClosing(placementId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+      queryClient.invalidateQueries({ queryKey: closingsKey(placementId) });
     },
   });
 }
@@ -223,6 +251,7 @@ export function useUpdateClosingStatus(placementId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+      queryClient.invalidateQueries({ queryKey: closingsKey(placementId) });
     },
   });
 }
