@@ -7,12 +7,7 @@ import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import {
-  Facultative,
-  PlacementPayment,
-  PlacementClaim,
-  PlacementClaimStatus,
-} from '@/types/reinsurance';
+import { Facultative, PlacementClaim, PlacementClaimStatus } from '@/types/reinsurance';
 import { useFacultatives } from '@/hooks';
 import { claimsKey } from '@/hooks/reinsurance/useClaims';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
@@ -49,20 +44,6 @@ const CLAIM_STATUS_VARIANT: Record<
 
 function statusLabel(status: PlacementClaimStatus) {
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
-}
-
-function netPremiumFor(row: Facultative): number {
-  const facPremium =
-    row.premium != null && row.facultativeOffer != null
-      ? (row.facultativeOffer / 100) * row.premium
-      : 0;
-  return row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
-}
-
-function totalPaidFor(payments: { amount: string; status: string }[]): number {
-  return payments
-    .filter((p) => p.status === 'RECORDED')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
 
 type ClaimPlacementRow = Facultative & {
@@ -213,27 +194,8 @@ export function ClaimsTable() {
     [allRows],
   );
 
-  const paymentQueries = useQueries({
-    queries: closingRows.map((row) => ({
-      queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
-      queryFn: async () => {
-        const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
-        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-      },
-    })),
-  });
-
-  const paidRows = useMemo(() => {
-    return closingRows.filter((row, i) => {
-      const payments = paymentQueries[i]?.data ?? [];
-      const netPremium = netPremiumFor(row);
-      const paid = totalPaidFor(payments);
-      return netPremium > 0 && paid >= netPremium;
-    });
-  }, [closingRows, paymentQueries]);
-
   const claimQueries = useQueries({
-    queries: paidRows.map((row) => ({
+    queries: closingRows.map((row) => ({
       queryKey: claimsKey(row.id),
       queryFn: async () => {
         const res = await api.get(`/operations/reinsurance/placements/${row.id}/claims`);
@@ -244,7 +206,7 @@ export function ClaimsTable() {
 
   const claimRows = useMemo<ClaimPlacementRow[]>(
     () =>
-      paidRows.map((row, index) => {
+      closingRows.map((row, index) => {
         const claims = claimQueries[index]?.data ?? [];
         return {
           ...row,
@@ -252,7 +214,7 @@ export function ClaimsTable() {
           claimCount: claims.length,
         };
       }),
-    [paidRows, claimQueries],
+    [closingRows, claimQueries],
   );
 
   const cedantOptions = useMemo(() => {
@@ -310,11 +272,7 @@ export function ClaimsTable() {
       <DataTable
         columns={COLUMNS}
         data={paged}
-        isLoading={
-          isLoading ||
-          paymentQueries.some((query) => query.isLoading) ||
-          claimQueries.some((query) => query.isLoading)
-        }
+        isLoading={isLoading || claimQueries.some((query) => query.isLoading)}
         searchPlaceholder="Search claims…"
         searchValue={search}
         onRowClick={(row) => {
@@ -348,7 +306,7 @@ export function ClaimsTable() {
             onClick: () => setClaimTarget(row),
           },
         ]}
-        emptyMessage="No claim-eligible placements found"
+        emptyMessage="No placements available for claims"
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
