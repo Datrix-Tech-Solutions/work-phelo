@@ -20,7 +20,7 @@ export default function ReinsuranceFoundation() {
         period={period}
         onPeriodChange={setPeriod}
       />
-      <DashboardStatsRow period={period} />
+      <DashboardStatsRow period={period} currency={currency} />
       <FinancialStatsRow period={period} currency={currency} />
       <CurrencyBreakdownCards period={period} />
       <TopCedantsList period={period} currency={currency} />

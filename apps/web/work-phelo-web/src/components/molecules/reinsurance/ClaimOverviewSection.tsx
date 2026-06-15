@@ -1,18 +1,52 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Facultative, PlacementParticipant } from '@/types/reinsurance';
+import {
+  Facultative,
+  PlacementClaim,
+  PlacementClaimAllocation,
+  PlacementClaimStatus,
+  PlacementParticipant,
+} from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
+import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
-import { useReinsurers } from '@/hooks';
+import { useReinsurers, useClaimAllocations } from '@/hooks';
 
-function fmt(val: number | null | undefined, currency?: string | null) {
-  if (val == null) return '—';
+const CLAIM_STATUS_VARIANT: Record<
+  PlacementClaimStatus,
+  'neutral' | 'warning' | 'success' | 'danger'
+> = {
+  DRAFT: 'neutral',
+  NOTIFIED: 'warning',
+  RESERVED: 'warning',
+  PARTIALLY_SETTLED: 'warning',
+  SETTLED: 'success',
+  DECLINED: 'danger',
+  CLOSED: 'success',
+  VOID: 'danger',
+};
+
+const CLAIM_STATUS_LABEL: Record<PlacementClaimStatus, string> = {
+  DRAFT: 'Draft',
+  NOTIFIED: 'Notified',
+  RESERVED: 'Reserved',
+  PARTIALLY_SETTLED: 'Partly Settled',
+  SETTLED: 'Settled',
+  DECLINED: 'Declined',
+  CLOSED: 'Closed',
+  VOID: 'Void',
+};
+
+function fmt(val: number | string | null | undefined, currency?: string | null) {
+  if (val == null || val === '') return '—';
+  const num = typeof val === 'string' ? parseFloat(val) : val;
+  if (isNaN(num)) return '—';
   const prefix = currency ? `${currency} ` : '';
-  return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${prefix}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function fmtDate(iso: string | null | undefined) {
@@ -26,15 +60,13 @@ function fmtDate(iso: string | null | undefined) {
 
 interface ClaimOverviewSectionProps {
   placement: Facultative;
-  claimAmount?: number | null;
-  claimDate?: string | null;
+  claim?: PlacementClaim;
 }
 
 function ClaimDetailsPanel({
   placement,
-  claimAmount,
-  claimDate,
-}: Pick<ClaimOverviewSectionProps, 'placement' | 'claimAmount' | 'claimDate'>) {
+  claim,
+}: Pick<ClaimOverviewSectionProps, 'placement' | 'claim'>) {
   const { facultativeOffer, sumInsured, premium, commission, currency, createdAt } = placement;
 
   const facSumInsured =
@@ -85,22 +117,55 @@ function ClaimDetailsPanel({
         label="Fac. Premium"
         value={<span className="font-semibold text-gray-900">{fmt(netPremium, currency)}</span>}
       />
-
-      <hr className="border-gray-100" />
-
-      <DetailField
-        horizontal
-        label="Claim Amount"
-        value={<span className="font-semibold text-gray-900">{fmt(claimAmount, currency)}</span>}
-      />
-      <DetailField horizontal label="Claim Date" value={fmtDate(claimDate)} />
       <DetailField horizontal label="Created At" value={fmtDate(createdAt)} />
+
+      {claim && (
+        <>
+          <hr className="border-gray-100" />
+
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold text-gray-900">{claim.claimNumber}</span>
+            <Badge
+              label={CLAIM_STATUS_LABEL[claim.status]}
+              variant={CLAIM_STATUS_VARIANT[claim.status]}
+            />
+          </div>
+
+          <DetailField horizontal label="Occurrence Date" value={fmtDate(claim.occurrenceDate)} />
+          <DetailField horizontal label="Reported Date" value={fmtDate(claim.reportedDate)} />
+          <DetailField horizontal label="Claim Cause" value={claim.claimCause} />
+          {claim.occurrenceDetails && (
+            <DetailField horizontal label="Details" value={claim.occurrenceDetails} />
+          )}
+          <DetailField
+            horizontal
+            label="Estimated Loss"
+            value={
+              <span className="font-semibold text-gray-900">
+                {fmt(claim.estimatedLossAmount, claim.currency)}
+              </span>
+            }
+          />
+          {claim.finalLossAmount && (
+            <DetailField
+              horizontal
+              label="Final Loss"
+              value={
+                <span className="font-semibold text-gray-900">
+                  {fmt(claim.finalLossAmount, claim.currency)}
+                </span>
+              }
+            />
+          )}
+        </>
+      )}
     </div>
   );
 }
 
 function ClaimReinsurersTable({
   participants,
+  allocations,
   claimAmount,
   currency,
   grossPremium,
@@ -109,6 +174,7 @@ function ClaimReinsurersTable({
   onPreview,
 }: {
   participants: PlacementParticipant[];
+  allocations: PlacementClaimAllocation[];
   claimAmount?: number | null;
   currency?: string | null;
   grossPremium: number;
@@ -159,11 +225,13 @@ function ClaimReinsurersTable({
         width: '180px',
         className: 'text-right pr-8',
         render: (row) => {
-          const share = row.sharePercent != null ? parseFloat(row.sharePercent) / 100 : null;
-          const actual = share != null && claimAmount != null ? share * claimAmount : null;
-          return (
-            <span className="text-gray-900 block text-right pr-8">{fmt(actual, currency)}</span>
-          );
+          const allocation = allocations.find((a) => a.participantId === row.id);
+          const actual = allocation
+            ? parseFloat(allocation.allocatedEstimatedLossAmount)
+            : row.sharePercent != null && claimAmount != null
+              ? (parseFloat(row.sharePercent) / 100) * claimAmount
+              : null;
+          return <span className="text-gray-900 block text-right">{fmt(actual, currency)}</span>;
         },
       },
       {
@@ -205,7 +273,7 @@ function ClaimReinsurersTable({
         ),
       },
     ],
-    [claimAmount, currency, grossPremium, commission, onMail, onPreview],
+    [allocations, claimAmount, currency, grossPremium, commission, onMail, onPreview],
   );
 
   return (
@@ -226,14 +294,16 @@ function ClaimReinsurersTable({
   );
 }
 
-export function ClaimOverviewSection({
-  placement,
-  claimAmount,
-  claimDate,
-}: ClaimOverviewSectionProps) {
+export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionProps) {
   const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: allocations = [] } = useClaimAllocations(placement.id, claim?.id ?? '');
+
+  const claimAmount = claim ? parseFloat(claim.estimatedLossAmount) : null;
+  const mailAllocation = mailTarget
+    ? allocations.find((a) => a.participantId === mailTarget.id)
+    : undefined;
 
   const reinsurerEmails = useMemo<Record<string, string[]>>(
     () =>
@@ -266,17 +336,14 @@ export function ClaimOverviewSection({
     <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-4">
       <div className="flex flex-col md:flex-row gap-4 items-start">
         <div className="w-full md:flex-1 min-w-0">
-          <ClaimDetailsPanel
-            placement={placement}
-            claimAmount={claimAmount}
-            claimDate={claimDate}
-          />
+          <ClaimDetailsPanel placement={placement} claim={claim} />
         </div>
         <div className="w-full md:flex-2 min-w-0">
           <ClaimReinsurersTable
             participants={placement.participants ?? []}
+            allocations={allocations}
             claimAmount={claimAmount}
-            currency={placement.currency}
+            currency={claim?.currency ?? placement.currency}
             grossPremium={placement.premium ?? 0}
             commission={placement.commission ?? 0}
             onMail={setMailTarget}
@@ -288,7 +355,7 @@ export function ClaimOverviewSection({
       <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm">
         <span className="font-semibold text-gray-900">Total Claim</span>
         <span className="font-semibold text-gray-900">
-          {fmt(totalActualClaim, placement.currency)}
+          {fmt(totalActualClaim, claim?.currency ?? placement.currency)}
         </span>
       </div>
 
@@ -298,6 +365,8 @@ export function ClaimOverviewSection({
           placement={placement}
           brokerageFee={parseFloat(mailTarget.brokerageFee ?? '0')}
           recipients={mailRecipients}
+          claim={claim}
+          allocation={mailAllocation}
           onSend={() => setMailTarget(null)}
           onClose={() => setMailTarget(null)}
         />

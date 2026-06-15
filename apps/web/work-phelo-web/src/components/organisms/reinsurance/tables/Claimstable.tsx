@@ -10,41 +10,34 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   Facultative,
   FacultativeStatus,
+  PlacementClaim,
   PlacementPayment,
-  toStatusLabel,
 } from '@/types/reinsurance';
 import { useFacultatives } from '@/hooks';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
 
 const PAGE_SIZE = 10;
 
-function fmtDate(iso: string) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
+const CLOSING_STATUSES: FacultativeStatus[] = [
+  'PARTIALLY_PLACED',
+  'PLACED',
+  'CLOSING',
+  'CLOSED',
+  'DECLINED',
+  'CANCELLED',
+];
+
+interface PlacementWithClaim extends Facultative {
+  latestClaim?: PlacementClaim;
 }
 
-function fmtAmount(val: number | null | undefined) {
-  if (val == null) return '—';
-  return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function fmtAmount(val: number | string | null | undefined, currency?: string | null) {
+  if (val == null || val === '') return '—';
+  const num = typeof val === 'string' ? parseFloat(val) : val;
+  if (isNaN(num)) return '—';
+  const prefix = currency ? `${currency} ` : '';
+  return `${prefix}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-
-const RAW_STATUS_VARIANT_MAP: Record<
-  FacultativeStatus,
-  'success' | 'warning' | 'neutral' | 'danger'
-> = {
-  DRAFT: 'neutral',
-  MARKETING: 'warning',
-  PARTIALLY_PLACED: 'success',
-  PLACED: 'success',
-  CLOSING: 'warning',
-  CLOSED: 'success',
-  DECLINED: 'danger',
-  CANCELLED: 'danger',
-};
 
 function netPremiumFor(row: Facultative): number {
   const facPremium =
@@ -54,22 +47,13 @@ function netPremiumFor(row: Facultative): number {
   return row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
 }
 
-function totalPaidFor(payments: { amount: string; status: string }[]): number {
+function totalPaidFor(payments: PlacementPayment[]): number {
   return payments
     .filter((p) => p.status === 'RECORDED')
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
 
-function StatusCell({ placement }: { placement: Facultative }) {
-  return (
-    <Badge
-      label={toStatusLabel(placement.status)}
-      variant={RAW_STATUS_VARIANT_MAP[placement.status]}
-    />
-  );
-}
-
-const COLUMNS: Column<Facultative>[] = [
+const COLUMNS: Column<PlacementWithClaim>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
@@ -92,15 +76,21 @@ const COLUMNS: Column<Facultative>[] = [
     ),
   },
   {
-    key: 'sumInsured',
-    label: 'Sum Insured',
-    width: '1.1fr',
-    render: (row) => (
-      <span className="text-gray-900 whitespace-nowrap">
-        {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
-      </span>
-    ),
+    key: 'cedant',
+    label: 'Cedant',
+    width: '1fr',
+    render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
   },
+  // {
+  //   key: 'sumInsured',
+  //   label: 'Sum Insured',
+  //   width: '1.1fr',
+  //   render: (row) => (
+  //     <span className="text-gray-900 whitespace-nowrap">
+  //       {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
+  //     </span>
+  //   ),
+  // },
   {
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
@@ -121,24 +111,14 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'premium',
     label: 'Net Premium',
     width: '1.1fr',
-    render: (row) => {
-      const facPremium =
-        row.premium != null && row.facultativeOffer != null
-          ? (row.facultativeOffer / 100) * row.premium
-          : null;
-      const netPremium =
-        facPremium != null && row.commission != null
-          ? facPremium * (1 - row.commission / 100)
-          : facPremium;
-      return (
-        <span className="font-medium text-gray-900 whitespace-nowrap">
-          {netPremium != null ? `${row.currency ?? ''} ${fmtAmount(netPremium)}` : '—'}
-        </span>
-      );
-    },
+    render: (row) => (
+      <span className="font-medium text-gray-900 whitespace-nowrap">
+        {fmtAmount(netPremiumFor(row), row.currency)}
+      </span>
+    ),
   },
   {
-    key: 'participants' as keyof Facultative,
+    key: 'participants',
     label: 'Participants',
     width: '110px',
     render: (row) => {
@@ -154,29 +134,32 @@ const COLUMNS: Column<Facultative>[] = [
       );
     },
   },
-
   {
     key: 'createdAt',
     label: 'Offer Date',
     width: '1fr',
-    render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
+    render: (row) => (
+      <span className="text-gray-600">
+        {new Date(row.createdAt).toLocaleDateString('en-GB', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+        })}
+      </span>
+    ),
   },
   {
-    key: 'status',
+    key: 'claimStatus',
     label: 'Claim Status',
-    width: '130px',
+    width: '140px',
     className: 'pr-6',
-    render: (row) => <StatusCell placement={row} />,
+    render: (row) =>
+      row.latestClaim ? (
+        <Badge label="Claimed" variant="success" />
+      ) : (
+        <Badge label="Unclaimed" variant="neutral" />
+      ),
   },
-];
-
-const CLOSING_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
-  'PLACED',
-  'CLOSING',
-  'CLOSED',
-  'DECLINED',
-  'CANCELLED',
 ];
 
 export function ClaimsTable() {
@@ -185,7 +168,7 @@ export function ClaimsTable() {
   const [search, setSearch] = useState('');
   const [cedantFilter, setCedantFilter] = useState('');
   const [page, setPage] = useState(1);
-  const [claimTarget, setClaimTarget] = useState<Facultative | null>(null);
+  const [panelTarget, setPanelTarget] = useState<PlacementWithClaim | null>(null);
 
   const { data: allRows = [], isLoading } = useFacultatives();
 
@@ -204,57 +187,64 @@ export function ClaimsTable() {
     })),
   });
 
-  const paidRows = useMemo(() => {
-    return closingRows.filter((row, i) => {
-      const payments = paymentQueries[i]?.data ?? [];
-      const netPremium = netPremiumFor(row);
-      const paid = totalPaidFor(payments);
-      return netPremium > 0 && paid >= netPremium;
-    });
-  }, [closingRows, paymentQueries]);
+  const paidRows = useMemo(
+    () =>
+      closingRows.filter((row, i) => {
+        const payments = paymentQueries[i]?.data ?? [];
+        const netPremium = netPremiumFor(row);
+        const paid = totalPaidFor(payments);
+        return netPremium > 0 && paid >= netPremium;
+      }),
+    [closingRows, paymentQueries],
+  );
+
+  const claimQueries = useQueries({
+    queries: paidRows.map((row) => ({
+      queryKey: ['reinsurance', 'placements', row.id, 'claims'] as const,
+      queryFn: async () => {
+        const res = await api.get(`/operations/reinsurance/placements/${row.id}/claims`);
+        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
+      },
+    })),
+  });
+
+  const tableRows = useMemo<PlacementWithClaim[]>(
+    () =>
+      paidRows.map((placement, i) => ({
+        ...placement,
+        latestClaim: claimQueries[i]?.data?.[0],
+      })),
+    [paidRows, claimQueries],
+  );
 
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of paidRows) seen.set(r.cedant.id, r.cedant.name);
+    for (const r of tableRows) seen.set(r.cedant.id, r.cedant.name);
     return Array.from(seen.entries())
       .map(([id, name]) => ({ value: id, label: name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [paidRows]);
+  }, [tableRows]);
 
   const filtered = useMemo(() => {
-    let rows = paidRows;
+    let rows = tableRows;
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
         (r) =>
           r.reference.toLowerCase().includes(q) ||
           r.title.toLowerCase().includes(q) ||
-          (r.classOfBusiness?.toLowerCase().includes(q) ?? false),
+          (r.classOfBusiness?.toLowerCase().includes(q) ?? false) ||
+          (r.latestClaim?.claimNumber.toLowerCase().includes(q) ?? false),
       );
     }
     if (cedantFilter) {
       rows = rows.filter((r) => r.cedant.id === cedantFilter);
     }
     return rows;
-  }, [paidRows, search, cedantFilter]);
+  }, [tableRows, search, cedantFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const cedantDropdown = (
-    <div>
-      <SearchSelect
-        size="sm"
-        placeholder="Cedants"
-        options={cedantOptions}
-        value={cedantFilter}
-        onChange={(v) => {
-          setCedantFilter(v);
-          setPage(1);
-        }}
-      />
-    </div>
-  );
 
   return (
     <>
@@ -269,22 +259,28 @@ export function ClaimsTable() {
           setSearch(q);
           setPage(1);
         }}
-        extraFilters={cedantDropdown}
-        // actionButton={{ label: 'Make Claim', onClick: () => setClaimTarget({} as Facultative) }}
+        extraFilters={
+          <div>
+            <SearchSelect
+              size="sm"
+              placeholder="Cedants"
+              options={cedantOptions}
+              value={cedantFilter}
+              onChange={(v) => {
+                setCedantFilter(v);
+                setPage(1);
+              }}
+            />
+          </div>
+        }
         rowActions={(row) => [
           {
-            label: 'View Claim',
+            label: 'View',
             onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/claims/${row.id}`),
           },
           {
-            label: 'Make Claim',
-            onClick: () => setClaimTarget(row),
-          },
-          {
-            label: 'Claim Request',
-            onClick: () => {
-              /* TODO */
-            },
+            label: row.latestClaim ? 'Edit Claim' : 'Make Claim',
+            onClick: () => setPanelTarget(row),
           },
         ]}
         emptyMessage="No paid placements found"
@@ -295,9 +291,10 @@ export function ClaimsTable() {
       />
 
       <MakeClaimPanel
-        isOpen={!!claimTarget}
-        placement={Object.keys(claimTarget ?? {}).length > 0 ? claimTarget! : undefined}
-        onClose={() => setClaimTarget(null)}
+        isOpen={!!panelTarget}
+        placement={panelTarget ?? undefined}
+        claim={panelTarget?.latestClaim}
+        onClose={() => setPanelTarget(null)}
       />
     </>
   );

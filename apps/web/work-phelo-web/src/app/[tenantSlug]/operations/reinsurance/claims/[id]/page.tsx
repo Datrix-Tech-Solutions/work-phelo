@@ -4,7 +4,7 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement } from '@/hooks';
+import { useFacultativePlacement, usePlacementClaims } from '@/hooks';
 import { ClaimOverviewSection } from '@/components/molecules/reinsurance/ClaimOverviewSection';
 import { Button } from '@/components/atoms/Button';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
@@ -16,8 +16,9 @@ export default function ClaimDetailPage({
 }) {
   const { tenantSlug, id } = use(params);
   const { data: placement } = useFacultativePlacement(id);
+  const { data: claims = [] } = usePlacementClaims(id);
+  const activeClaim = claims[0];
   const [panelOpen, setPanelOpen] = useState(false);
-  const [hasClaim, setHasClaim] = useState(false);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -35,7 +36,7 @@ export default function ClaimDetailPage({
 
         {placement && (
           <Button size="sm" onClick={() => setPanelOpen(true)}>
-            {hasClaim ? 'Edit Claim' : 'Make Claim'}
+            {activeClaim ? 'Edit Claim' : 'Make Claim'}
           </Button>
         )}
       </div>
@@ -43,13 +44,13 @@ export default function ClaimDetailPage({
       <MakeClaimPanel
         isOpen={panelOpen}
         placement={placement}
+        claim={activeClaim}
         onClose={() => setPanelOpen(false)}
-        onSuccess={() => setHasClaim(true)}
       />
 
       <div className={`${pageContent} flex-1 overflow-y-auto`}>
         {placement ? (
-          <ClaimOverviewSection placement={placement} />
+          <ClaimOverviewSection placement={placement} claim={activeClaim} />
         ) : (
           <div className="flex items-center justify-center h-40 text-sm text-gray-400">
             Loading…
