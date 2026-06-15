@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { PlacementParticipant } from '@/types/reinsurance';
-import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 
 interface ReinsurersPaymentTableProps {
@@ -10,6 +9,7 @@ interface ReinsurersPaymentTableProps {
   grossPremium: number;
   commission: number;
   currency: string | null;
+  paidAmount?: number;
   onTotalChange?: (total: number) => void;
 }
 
@@ -30,35 +30,26 @@ export function ReinsurersPaymentTable({
   grossPremium,
   commission,
   currency,
+  // paidAmount = 0,
+
   onTotalChange,
 }: ReinsurersPaymentTableProps) {
-  const reinsurers = useMemo(
+  const participants_ = useMemo(
     () => participants.filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED'),
     [participants],
   );
 
-  const [selectedIds, setSelectedIds] = useState<string[]>(() => reinsurers.map((p) => p.id));
-
-  const options = useMemo(
-    () =>
-      reinsurers.map((p) => ({
-        value: p.id,
-        label: p.counterparty.name,
-        sublabel: p.sharePercent ? `${p.sharePercent}% share` : undefined,
-      })),
-    [reinsurers],
-  );
-
-  const selected = reinsurers.filter((p) => selectedIds.includes(p.id));
-
   const total = useMemo(
-    () => selected.reduce((sum, p) => sum + participantNetPremium(p, grossPremium, commission), 0),
-    [selected, grossPremium, commission],
+    () =>
+      participants_.reduce((sum, p) => sum + participantNetPremium(p, grossPremium, commission), 0),
+    [participants_, grossPremium, commission],
   );
 
   useEffect(() => {
     onTotalChange?.(total);
   }, [total, onTotalChange]);
+
+  // const proRataFactor = total > 0 ? Math.min(paidAmount / total, 1) : 0;
 
   const columns: Column<PlacementParticipant>[] = useMemo(
     () => [
@@ -79,7 +70,7 @@ export function ReinsurersPaymentTable({
       {
         key: 'premiumShare',
         label: 'Premium Share',
-        width: '200px',
+        width: '160px',
         className: 'text-right',
         render: (row) => (
           <span className="text-gray-900 block text-right">
@@ -87,26 +78,34 @@ export function ReinsurersPaymentTable({
           </span>
         ),
       },
+      // {
+      //   key: 'allocated',
+      //   label: 'Allocated',
+      //   width: '160px',
+      //   className: 'text-right',
+      //   render: (row) => {
+      //     const allocated = participantNetPremium(row, grossPremium, commission) * proRataFactor;
+      //     return (
+      //       <span className="text-orange-600 font-medium block text-right">
+      //         {fmt(allocated, currency)}
+      //       </span>
+      //     );
+      //   },
+      // },
     ],
-    [grossPremium, commission, currency],
+    [grossPremium, commission, currency], //proRataFactor],
   );
 
   return (
     <div className="flex flex-col gap-0">
-      <div className="p-4 bg-white rounded-t-xl border border-b-0 border-gray-200">
-        <MultiSelect
-          label="Reinsurers"
-          placeholder="Select reinsurers…"
-          options={options}
-          value={selectedIds}
-          onChange={setSelectedIds}
-        />
+      <div className="px-4 pt-4 pb-2 bg-white rounded-t-xl border border-b-0 border-gray-200">
+        <span className="text-sm font-bold text-gray-900">Participants</span>
       </div>
 
       <DataTable
         columns={columns}
-        data={selected}
-        emptyMessage="No reinsurers selected"
+        data={participants_}
+        emptyMessage="No participants"
         currentPage={1}
         totalPages={0}
         onPageChange={() => {}}

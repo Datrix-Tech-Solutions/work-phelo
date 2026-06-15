@@ -65,16 +65,15 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
       render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
     },
     {
-      key: 'reference',
-      label: 'Reference',
-      width: '1fr',
-      render: (row) => <span className="text-gray-500">{row.reference || '—'}</span>,
-    },
-    {
       key: 'notes',
-      label: 'Payment Type',
-      width: '1fr',
-      render: (row) => <span className="text-gray-600">{row.notes || '—'}</span>,
+      label: 'Payment Details',
+      width: '1.4fr',
+      render: (row) => (
+        <div className="flex flex-col">
+          <span className="text-gray-700">{row.notes || '—'}</span>
+          {row.reference && <span className="text-xs text-gray-400">{row.reference}</span>}
+        </div>
+      ),
     },
     {
       key: 'amount',

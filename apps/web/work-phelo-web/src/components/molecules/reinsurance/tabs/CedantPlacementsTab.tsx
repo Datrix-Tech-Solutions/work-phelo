@@ -4,12 +4,7 @@ import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
 import { StatCard } from '@/components/atoms/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import {
-  Facultative,
-  FacultativeStatus,
-  toDisplayStatus,
-  toStatusLabel,
-} from '@/types/reinsurance';
+import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
 import { usePlacementPayments } from '@/hooks';
 
 const PAGE_SIZE = 10;
@@ -216,12 +211,13 @@ export function CedantPlacementsTab({
 }: CedantPlacementsTabProps) {
   const [page, setPage] = useState(1);
 
-  const openPlacements = placements.filter((p) => toDisplayStatus(p.status) === 'Open');
-  const closedCount = placements.filter((p) => toDisplayStatus(p.status) === 'Closed').length;
-  const pendingCount = openPlacements.filter(
-    (p) => !p.participants.some((pt) => pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
+  const pendingCount = placements.filter(
+    (p) => p.status === 'DRAFT' || p.status === 'MARKETING',
   ).length;
-  const unpaidCount = openPlacements.filter((p) =>
+  const closedCount = placements.filter(
+    (p) => p.status === 'PARTIALLY_PLACED' || p.status === 'PLACED' || p.status === 'CLOSED',
+  ).length;
+  const unpaidCount = placements.filter((p) =>
     p.participants.some((pt) => pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
   ).length;
 

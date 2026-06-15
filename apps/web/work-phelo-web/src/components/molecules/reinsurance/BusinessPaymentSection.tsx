@@ -30,6 +30,7 @@ export function BusinessPaymentSection({ placement, paidAmount }: BusinessPaymen
             grossPremium={placement.premium ?? 0}
             commission={placement.commission ?? 0}
             currency={placement.currency}
+            paidAmount={paidAmount}
             onTotalChange={setTotal}
           />
         </div>

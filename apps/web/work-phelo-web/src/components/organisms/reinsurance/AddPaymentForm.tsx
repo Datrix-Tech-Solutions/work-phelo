@@ -36,6 +36,10 @@ export default function AddPaymentForm({
     payment: PlacementPayment;
     placement: Facultative;
   } | null>(null);
+  const [receiptData, setReceiptData] = useState<{
+    payment: PlacementPayment;
+    placement: Facultative;
+  } | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
 
   const { data: facultatives = [] } = useFacultatives();
@@ -149,6 +153,7 @@ export default function AddPaymentForm({
   };
 
   const handleGenerateReceipt = () => {
+    if (receiptPrompt) setReceiptData(receiptPrompt);
     setReceiptPrompt(null);
     setReceiptOpen(true);
   };
@@ -204,15 +209,15 @@ export default function AddPaymentForm({
       />
 
       {/* Receipt modal */}
-      {receiptPrompt && receiptOpen && (
+      {receiptData && (
         <PaymentReceiptModal
-          isOpen
-          placement={receiptPrompt.placement}
-          payment={receiptPrompt.payment}
+          isOpen={receiptOpen}
+          placement={receiptData.placement}
+          payment={receiptData.payment}
           onPrint={() => {}}
           onClose={() => {
             setReceiptOpen(false);
-            setReceiptPrompt(null);
+            setReceiptData(null);
           }}
         />
       )}

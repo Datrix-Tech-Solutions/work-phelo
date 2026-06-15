@@ -3,8 +3,8 @@
 import { Facultative } from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
 
-const NIC_RATE = 0.01;
-const WHT_RATE = 0.1;
+const NIC_RATE = 0;
+const WHT_RATE = 0;
 
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';

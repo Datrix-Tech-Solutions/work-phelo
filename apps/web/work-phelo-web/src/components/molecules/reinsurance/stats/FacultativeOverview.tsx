@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
-import { Icons } from '@/components/atoms/icons';
+import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
 import { usePlacementPayments } from '@/hooks';
 
@@ -56,7 +56,6 @@ interface FacultativeOverviewProps {
 }
 
 export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
-  const [collapsed, setCollapsed] = useState(false);
   const { data: payments = [] } = usePlacementPayments(placement.id);
 
   const paymentStatus = useMemo<PaymentStatus>(() => {
@@ -85,63 +84,47 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
   ];
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-gray-900">Overview</h2>
+    <CollapsibleOverview
+      headerExtra={
+        <>
           <Badge
             label={toStatusLabel(placement.status)}
             variant={STATUS_VARIANT_MAP[placement.status]}
           />
           <span className="text-sm text-gray-500">|</span>
           <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setCollapsed((c) => !c)}
-          className="text-gray-400 hover:text-gray-600 transition-colors"
-          aria-label={collapsed ? 'Expand overview' : 'Collapse overview'}
-        >
-          <Icons.ChevronDown
-            className={`w-4 h-4 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`}
-          />
-        </button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
+        <DetailField label="Class of Risk" value={placement.classOfBusiness ?? '—'} />
+        <DetailField label="Policy No." value={placement.reference} />
+        <DetailField label="Reinsured" value={placement.cedant.name} />
+        <DetailField label="Insured" value={placement.title} />
+        <DetailField
+          label="Period of Insurance"
+          value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
+        />
+        {riskEntries.map(([key, val]) => (
+          <DetailField key={key} label={toLabel(key)} value={fmtFieldValue(val)} />
+        ))}
+        <DetailField label="Rate (%)" value={placement.rate != null ? `${placement.rate}%` : '—'} />
+        <DetailField
+          label="Commission (%)"
+          value={placement.commission != null ? `${placement.commission}%` : '—'}
+        />
+        <DetailField label="Fac. Offer (%)" value={`${facOffer}%`} />
+        <DetailField label="Premium" value={fmtAmount(placement.premium, placement.currency)} />
+        <DetailField
+          label="Sum Insured"
+          value={fmtAmount(placement.sumInsured, placement.currency)}
+        />
+        <DetailField
+          label="Fac. Sum Insured"
+          value={fmtAmount(facSumInsured, placement.currency)}
+        />
+        <DetailField label="Fac. Premium" value={fmtAmount(facPremium, placement.currency)} />
       </div>
-
-      {!collapsed && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
-          <DetailField label="Class of Risk" value={placement.classOfBusiness ?? '—'} />
-          <DetailField label="Policy No." value={placement.reference} />
-          <DetailField label="Reinsured" value={placement.cedant.name} />
-          <DetailField label="Insured" value={placement.title} />
-          <DetailField
-            label="Period of Insurance"
-            value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
-          />
-          {riskEntries.map(([key, val]) => (
-            <DetailField key={key} label={toLabel(key)} value={fmtFieldValue(val)} />
-          ))}
-          <DetailField
-            label="Rate (%)"
-            value={placement.rate != null ? `${placement.rate}%` : '—'}
-          />
-          <DetailField
-            label="Commission (%)"
-            value={placement.commission != null ? `${placement.commission}%` : '—'}
-          />
-          <DetailField label="Fac. Offer (%)" value={`${facOffer}%`} />
-          <DetailField label="Premium" value={fmtAmount(placement.premium, placement.currency)} />
-          <DetailField
-            label="Sum Insured"
-            value={fmtAmount(placement.sumInsured, placement.currency)}
-          />
-          <DetailField
-            label="Fac. Sum Insured"
-            value={fmtAmount(facSumInsured, placement.currency)}
-          />
-          <DetailField label="Fac. Premium" value={fmtAmount(facPremium, placement.currency)} />
-        </div>
-      )}
-    </div>
+    </CollapsibleOverview>
   );
 }

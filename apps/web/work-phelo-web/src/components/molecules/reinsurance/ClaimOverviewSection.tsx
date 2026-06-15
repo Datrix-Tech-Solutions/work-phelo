@@ -210,6 +210,9 @@ function ClaimReinsurersTable({
 
   return (
     <div className="flex flex-col gap-0">
+      <div className="px-4 pt-4 pb-2 bg-white rounded-t-xl border border-b-0 border-gray-200">
+        <span className="text-sm font-bold text-gray-900">Participants</span>
+      </div>
       <DataTable
         columns={columns}
         data={reinsurers}
