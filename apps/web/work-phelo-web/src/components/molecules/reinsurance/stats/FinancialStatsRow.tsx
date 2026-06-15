@@ -2,7 +2,11 @@
 
 import { Period } from '@/components/atoms/PeriodToggle';
 import { DashboardStatCard } from '@/components/molecules/reinsurance/stats/DashboardStatCard';
-import { useReinsuranceFinancials } from '@/hooks';
+import {
+  useReinsuranceFinancials,
+  useReinsurancePremiumPaidPct,
+  useReinsuranceClaimStats,
+} from '@/hooks';
 
 const PERIOD_LABELS: Record<Period, string> = {
   daily: 'day',
@@ -40,12 +44,23 @@ interface FinancialStatsRowProps {
 
 export function FinancialStatsRow({ period, currency }: FinancialStatsRowProps) {
   const { data, isLoading } = useReinsuranceFinancials({ period, currency });
+  const { pct: paidPct, isLoading: loadingPct } = useReinsurancePremiumPaidPct({
+    period,
+    currency,
+  });
+  const {
+    totalAmount: claimAmount,
+    prevTotalAmount: prevClaimAmount,
+    trend: claimTrend,
+    paidPct: claimPaidPct,
+    isLoading: loadingClaims,
+  } = useReinsuranceClaimStats({ period, currency });
   const periodLabel = PERIOD_LABELS[period];
   const prevLabel = PERIOD_PREV_LABELS[period];
   const sym = data.currencySymbol;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <DashboardStatCard
         label="Total Risk"
         value={fmtAmount(data.totalRisk, sym)}
@@ -59,8 +74,9 @@ export function FinancialStatsRow({ period, currency }: FinancialStatsRowProps) 
         value={fmtAmount(data.totalPremium, sym)}
         trend={data.trends.totalPremium}
         trendTooltip={`${prevLabel}: ${fmtAmount(data.previous.totalPremium, sym)}`}
-        isLoading={isLoading}
+        isLoading={isLoading || loadingPct}
         periodLabel={periodLabel}
+        subtext={`${paidPct.toFixed(1)}% paid`}
       />
       <DashboardStatCard
         label="Total Brokerage"
@@ -69,6 +85,15 @@ export function FinancialStatsRow({ period, currency }: FinancialStatsRowProps) 
         trendTooltip={`${prevLabel}: ${fmtAmount(data.previous.totalBrokerage, sym)}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
+      />
+      <DashboardStatCard
+        label="Total Claims"
+        value={fmtAmount(claimAmount, sym)}
+        trend={claimTrend}
+        trendTooltip={`${prevLabel}: ${fmtAmount(prevClaimAmount, sym)}`}
+        isLoading={loadingClaims}
+        periodLabel={periodLabel}
+        subtext={`${claimPaidPct.toFixed(1)}% settled`}
       />
     </div>
   );

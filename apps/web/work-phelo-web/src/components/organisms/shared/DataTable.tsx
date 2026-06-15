@@ -253,9 +253,9 @@ export function DataTable<T extends { id: string | number }>({
                 }}
               >
                 {columns.map((col) => (
-                  <span key={col.key} className={col.className}>
+                  <div key={col.key} className={col.className}>
                     {col.label}
-                  </span>
+                  </div>
                 ))}
                 {rowActions && <span />}
               </div>

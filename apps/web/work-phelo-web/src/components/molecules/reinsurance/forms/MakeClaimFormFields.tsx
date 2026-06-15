@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { Controller, UseFormReturn } from 'react-hook-form';
 import { cn, inputClass } from '@/lib/utils';
 import { DatePicker } from '@/components/atoms/DatePicker';
@@ -10,19 +9,21 @@ import { useCurrencyOptions } from '@/hooks';
 import { Facultative } from '@/types/reinsurance';
 
 export interface MakeClaimFormValues {
-  claimAmount: string;
-  claimDate: string;
-  currency: string;
-  rate: string;
+  estimatedLossAmount: string;
+  occurrenceDate: string;
+  reportedDate: string;
   claimCause: string;
+  occurrenceDetails: string;
+  currency: string;
 }
 
 export const MAKE_CLAIM_DEFAULTS: MakeClaimFormValues = {
-  claimAmount: '',
-  claimDate: '',
-  currency: '',
-  rate: '',
+  estimatedLossAmount: '',
+  occurrenceDate: '',
+  reportedDate: '',
   claimCause: '',
+  occurrenceDetails: '',
+  currency: '',
 };
 
 function ReadOnlyField({ label, value }: { label: string; value: string }) {
@@ -36,11 +37,6 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
   );
 }
 
-function fmtAmount(val: number, currency?: string | null) {
-  const prefix = currency ? `${currency} ` : '';
-  return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
 interface MakeClaimFormFieldsProps {
   form: UseFormReturn<MakeClaimFormValues>;
   placement: Facultative;
@@ -50,25 +46,10 @@ export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProp
   const {
     register,
     control,
-    watch,
     formState: { errors },
   } = form;
 
   const { data: currencyOptions = [] } = useCurrencyOptions();
-
-  const claimablAmount = useMemo(() => {
-    const facPremium =
-      placement.premium != null && placement.facultativeOffer != null
-        ? (placement.facultativeOffer / 100) * placement.premium
-        : 0;
-    return placement.commission != null
-      ? facPremium * (1 - placement.commission / 100)
-      : facPremium;
-  }, [placement]);
-
-  const selectedCurrency = watch('currency');
-  const showRate =
-    !!selectedCurrency && !!placement.currency && selectedCurrency !== placement.currency;
 
   return (
     <div className="flex flex-col gap-5">
@@ -78,70 +59,54 @@ export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProp
         <ReadOnlyField label="Class of Business" value={placement.classOfBusiness} />
       )}
 
-      <ReadOnlyField
-        label="Claimable Amount"
-        value={fmtAmount(claimablAmount, placement.currency)}
-      />
-
       <hr className="border-gray-100" />
 
       <FormField
-        label="Claim Amount"
-        registration={register('claimAmount', { required: 'Claim amount is required' })}
+        label="Estimated Loss Amount"
+        registration={register('estimatedLossAmount', {
+          required: 'Estimated loss amount is required',
+        })}
         placeholder="0.00"
         type="number"
         step="any"
-        error={errors.claimAmount}
+        error={errors.estimatedLossAmount}
       />
 
       <Controller
-        name="claimDate"
+        name="currency"
         control={control}
-        rules={{ required: 'Claim date is required' }}
+        rules={{ required: 'Currency is required' }}
         render={({ field }) => (
-          <DatePicker
-            label="Claim Date"
+          <SearchSelect
+            label="Currency"
+            placeholder="Select currency…"
+            options={currencyOptions}
             value={field.value}
             onChange={field.onChange}
-            error={errors.claimDate?.message}
+            error={errors.currency?.message}
           />
         )}
       />
 
-      <div className={showRate ? 'grid grid-cols-2 gap-4' : ''}>
-        <Controller
-          name="currency"
-          control={control}
-          rules={{ required: 'Currency is required' }}
-          render={({ field }) => (
-            <SearchSelect
-              label="Currency"
-              placeholder="Select currency…"
-              options={currencyOptions}
-              value={field.value}
-              onChange={field.onChange}
-              error={errors.currency?.message}
-            />
-          )}
-        />
-        {showRate && (
-          <FormField
-            label="Rate"
-            registration={register('rate', { required: 'Rate is required' })}
-            placeholder="0.00"
-            type="number"
-            step="any"
-            error={errors.rate}
+      <Controller
+        name="occurrenceDate"
+        control={control}
+        rules={{ required: 'Occurrence date is required' }}
+        render={({ field }) => (
+          <DatePicker
+            label="Occurrence Date"
+            value={field.value}
+            onChange={field.onChange}
+            error={errors.occurrenceDate?.message}
           />
         )}
-      </div>
-
+      />
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-bold text-gray-900">Claim Cause</label>
+        <label className="text-sm font-bold text-gray-900">Claim Details</label>
         <textarea
-          {...register('claimCause')}
+          {...register('claimCause', { required: 'Claim cause is required' })}
           placeholder="Describe the cause of the claim…"
-          rows={4}
+          rows={3}
           className={cn(inputClass(), 'resize-none')}
         />
         {errors.claimCause && <p className="text-xs text-red-500">{errors.claimCause.message}</p>}
