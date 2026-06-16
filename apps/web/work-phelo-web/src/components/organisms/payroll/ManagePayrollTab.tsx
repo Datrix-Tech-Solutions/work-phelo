@@ -210,7 +210,7 @@ export function ManagePayrollTab() {
     allowancesMap,
     deductionItemsMap,
     payrollCountry,
-    payrollSettings?.payrollTier3SchemeName,
+    payrollSettings,
     profileDeductionItems,
     tier3Rate,
   ]);
