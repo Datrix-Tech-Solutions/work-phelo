@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { TrendingUp, TrendingDown, Pencil } from 'lucide-react';
+import { useToast } from '@/hooks/useToast';
 import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { Column, DataTable } from '../shared/DataTable';
 import { usePayrollSettings, usePayrollRuns } from '@/hooks';
@@ -69,6 +70,7 @@ interface PayrollRow {
   netSalary: number;
   totalEmployerCost: number;
   department?: string;
+  validationError?: string;
 }
 
 // Keep in sync with hr-service/src/payroll/payroll.service.ts employee eligibility filter
@@ -80,6 +82,7 @@ function isTransportAllowance(item: AllowanceItem) {
 }
 
 export function ManagePayrollTab() {
+  const toast = useToast();
   const { data: empData, isLoading } = useAllEmployees();
   const { data: payrollSettings } = usePayrollSettings();
   const { data: runs = [] } = usePayrollRuns();
@@ -148,38 +151,58 @@ export function ManagePayrollTab() {
       const totalAllowances = allowances.reduce((sum, a) => sum + a.amount, 0);
       const deductionItems = deductionItemsMap[e.id] ?? profileDeductionItems[e.id] ?? [];
       const otherDeductions = deductionItems.reduce((sum, d) => sum + d.amount, 0);
-      const calc = calculatePayroll({
-        basicSalary: basic,
-        allowances,
-        otherDeductions,
-        country: payrollCountry,
-        ...(payrollCountry === 'GH' && tier3Rate > 0
-          ? {
-              ghanaPension: {
-                providentFundEmployeeRate: tier3Rate,
-                providentFundName: payrollSettings?.payrollTier3SchemeName ?? undefined,
-              },
-            }
-          : {}),
-      });
-      return {
+      const baseRow = {
         id: e.id,
         employeeName: `${e.firstName} ${e.lastName}`,
         avatarUrl: e.avatarUrl,
         basicSalary: basic,
         allowances: totalAllowances,
         deductions: otherDeductions,
-        grossSalary: calc.grossSalary,
-        employeeStatutoryContrib: calc.employeeStatutoryContrib,
-        employerStatutoryContrib: calc.employerStatutoryContrib,
-        tier1Contribution: calc.tier1Contribution ?? 0,
-        tier2Contribution: calc.tier2Contribution ?? 0,
-        taxableIncome: calc.taxableIncome,
-        paye: calc.paye,
-        netSalary: calc.netSalary,
-        totalEmployerCost: calc.totalEmployerCost,
         department: e.department?.name,
       };
+
+      try {
+        const calc = calculatePayroll({
+          basicSalary: basic,
+          allowances,
+          otherDeductions,
+          country: payrollCountry,
+          ...(payrollCountry === 'GH' && tier3Rate > 0
+            ? {
+                ghanaPension: {
+                  providentFundEmployeeRate: tier3Rate,
+                  providentFundName: payrollSettings?.payrollTier3SchemeName ?? undefined,
+                },
+              }
+            : {}),
+        });
+        return {
+          ...baseRow,
+          grossSalary: calc.grossSalary,
+          employeeStatutoryContrib: calc.employeeStatutoryContrib,
+          employerStatutoryContrib: calc.employerStatutoryContrib,
+          tier1Contribution: calc.tier1Contribution ?? 0,
+          tier2Contribution: calc.tier2Contribution ?? 0,
+          taxableIncome: calc.taxableIncome,
+          paye: calc.paye,
+          netSalary: calc.netSalary,
+          totalEmployerCost: calc.totalEmployerCost,
+        };
+      } catch (err) {
+        return {
+          ...baseRow,
+          grossSalary: 0,
+          employeeStatutoryContrib: 0,
+          employerStatutoryContrib: 0,
+          tier1Contribution: 0,
+          tier2Contribution: 0,
+          taxableIncome: 0,
+          paye: 0,
+          netSalary: 0,
+          totalEmployerCost: 0,
+          validationError: err instanceof Error ? err.message : 'Calculation error',
+        };
+      }
     });
   }, [
     empData,
@@ -187,7 +210,7 @@ export function ManagePayrollTab() {
     allowancesMap,
     deductionItemsMap,
     payrollCountry,
-    payrollSettings?.payrollTier3SchemeName,
+    payrollSettings,
     profileDeductionItems,
     tier3Rate,
   ]);
@@ -199,16 +222,18 @@ export function ManagePayrollTab() {
   }, [payrollRows, searchQuery]);
 
   const sumRows = (rows: PayrollRow[]) =>
-    rows.reduce(
-      (acc, r) => ({
-        gross: acc.gross + r.grossSalary,
-        net: acc.net + r.netSalary,
-        paye: acc.paye + r.paye,
-        statutory: acc.statutory + r.employeeStatutoryContrib + r.employerStatutoryContrib,
-        employerCost: acc.employerCost + r.totalEmployerCost,
-      }),
-      { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
-    );
+    rows
+      .filter((r) => !r.validationError)
+      .reduce(
+        (acc, r) => ({
+          gross: acc.gross + r.grossSalary,
+          net: acc.net + r.netSalary,
+          paye: acc.paye + r.paye,
+          statutory: acc.statutory + r.employeeStatutoryContrib + r.employerStatutoryContrib,
+          employerCost: acc.employerCost + r.totalEmployerCost,
+        }),
+        { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
+      );
 
   // Metric cards show totals for what's currently visible (respects search filter).
   const totals = useMemo(() => sumRows(filteredData), [filteredData]);
@@ -267,6 +292,16 @@ export function ManagePayrollTab() {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
   };
 
+  const handleRunPayroll = () => {
+    const invalidRows = payrollRows.filter((r) => r.validationError);
+    if (invalidRows.length > 0) {
+      const names = invalidRows.map((r) => r.employeeName).join(', ');
+      toast.error(`Fix salary issues before running payroll: ${names}`);
+      return;
+    }
+    setRunPanelOpen(true);
+  };
+
   const columns: Column<PayrollRow>[] = [
     {
       key: 'employee',
@@ -278,8 +313,22 @@ export function ManagePayrollTab() {
             {row.employeeName.substring(0, 2).toUpperCase()}
           </div>
           <div>
-            <p className="font-medium text-gray-900">{row.employeeName}</p>
-            {row.department && <p className="text-xs text-gray-500">{row.department}</p>}
+            <div className="flex items-center gap-1.5">
+              <p
+                className={`font-medium ${row.validationError ? 'text-red-500' : 'text-gray-900'}`}
+              >
+                {row.employeeName}
+              </p>
+              {row.validationError && (
+                <div
+                  title={row.validationError}
+                  className="w-2 h-2 rounded-full bg-red-500 shrink-0 cursor-help"
+                />
+              )}
+            </div>
+            {!row.validationError && row.department && (
+              <p className="text-xs text-gray-500">{row.department}</p>
+            )}
           </div>
         </div>
       ),
@@ -338,24 +387,27 @@ export function ManagePayrollTab() {
     {
       key: 'grossSalary',
       label: 'Gross',
-      render: (row) => money(row.grossSalary),
+      render: (row) => (row.validationError ? '—' : money(row.grossSalary)),
     },
     {
       key: 'employeeSSNIT',
       label: payrollLabels.employeeLabel,
-      render: (row) => money(row.employeeStatutoryContrib),
+      render: (row) => (row.validationError ? '—' : money(row.employeeStatutoryContrib)),
     },
     {
       key: 'paye',
       label: 'PAYE',
-      render: (row) => money(row.paye),
+      render: (row) => (row.validationError ? '—' : money(row.paye)),
     },
     {
       key: 'netSalary',
       label: 'Net Salary',
-      render: (row) => (
-        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
-      ),
+      render: (row) =>
+        row.validationError ? (
+          '—'
+        ) : (
+          <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
+        ),
     },
   ];
 
@@ -410,7 +462,7 @@ export function ManagePayrollTab() {
           badgeCount: rejectedDraftsCount,
           onClick: () => setDraftsPanelOpen(true),
         }}
-        actionButton={{ label: 'Run Payroll', onClick: () => setRunPanelOpen(true) }}
+        actionButton={{ label: 'Run Payroll', onClick: handleRunPayroll }}
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}
