@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: 'dev-app.workphelo.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'dev-api.workphelo.com',
+      },
+      {
+        protocol: 'https',
         hostname: 'workphelo.datrixtechsolutions.com',
       },
       {
@@ -28,8 +36,7 @@ const nextConfig: NextConfig = {
     unoptimized: process.env.NODE_ENV === 'production',
   },
   async rewrites() {
-    const apiBase =
-      process.env.NEXT_PUBLIC_API_URL ?? 'https://dev.workphelo.datrixtechsolutions.com/api/v1';
+    const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'https://dev-api.workphelo.com/api/v1';
     return [
       {
         source: '/api/v1/:path*',
