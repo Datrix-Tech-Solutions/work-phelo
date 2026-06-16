@@ -21,7 +21,8 @@ env:
   IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
   COMPOSE_FILE: infrastructure/docker-compose.dev.yml
   DEPLOY_PATH: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo
-  WEB_PUBLIC_API_URL: https://dev.workphelo.datrixtechsolutions.com/api/v1
+  WEB_PUBLIC_API_URL: https://dev-api.workphelo.com/api/v1
+  WEB_PUBLIC_APP_BASE_URL: https://dev-app.workphelo.com
   BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
   BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
   CHECKOUT_REF: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
@@ -217,6 +218,7 @@ jobs:
             BUILD_SHA=${{ env.BUILD_SHA }}
             BUILD_REF=${{ env.BUILD_REF }}
             NEXT_PUBLIC_API_URL=${{ env.WEB_PUBLIC_API_URL }}
+            NEXT_PUBLIC_APP_BASE_URL=${{ env.WEB_PUBLIC_APP_BASE_URL }}
             NEXT_PUBLIC_ENABLE_ANNOUNCEMENT_SMS=true
 
   deploy:
@@ -240,7 +242,7 @@ jobs:
 
     environment:
       name: dev
-      url: https://dev.workphelo.datrixtechsolutions.com
+      url: https://dev-app.workphelo.com
 
     env:
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
@@ -273,6 +275,8 @@ jobs:
       BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
       IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
       CHANGED_SERVICES: ${{ needs.detect-changes.outputs.changed }}
+      WEB_PUBLIC_API_URL: ${{ env.WEB_PUBLIC_API_URL }}
+      WEB_PUBLIC_APP_BASE_URL: ${{ env.WEB_PUBLIC_APP_BASE_URL }}
 
     steps:
       - name: Checkout code
@@ -308,4 +312,4 @@ jobs:
           port: 22
           command_timeout: 60m
           script_path: .github/scripts/deploy-dev.sh
-          envs: GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_SMS_PROVIDER,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,NOTIFY_PILOSMS_API_KEY,NOTIFY_PILOSMS_SENDER_ID,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,HR_FIELD_ENCRYPTION_KEY,HR_FIELD_HMAC_KEY,BUILD_SHA,BUILD_REF,IMAGE_PREFIX,CHANGED_SERVICES
+          envs: GHCR_TOKEN,GHCR_USERNAME,DATABASE_URL,RABBITMQ_URL,JWT_SECRET,ALLOWED_ORIGINS,AUTH_FRONTEND_BASE_URL,AUTH_COOKIE_SECURE,AUTH_COOKIE_SAME_SITE,AUTH_GOOGLE_CLIENT_ID,AUTH_GOOGLE_CLIENT_SECRET,AUTH_GOOGLE_CALLBACK_URL,AUTH_MICROSOFT_CLIENT_ID,AUTH_MICROSOFT_CLIENT_SECRET,AUTH_MICROSOFT_CALLBACK_URL,NOTIFY_RESEND_API_KEY,NOTIFY_RESEND_FROM_EMAIL,NOTIFY_SMS_PROVIDER,NOTIFY_TERMII_API_KEY,NOTIFY_TERMII_SENDER_ID,NOTIFY_PILOSMS_API_KEY,NOTIFY_PILOSMS_SENDER_ID,SUPER_ADMIN_PASSWORD,SUPER_ADMIN_EMAIL,HR_FIELD_ENCRYPTION_KEY,HR_FIELD_HMAC_KEY,BUILD_SHA,BUILD_REF,IMAGE_PREFIX,CHANGED_SERVICES,WEB_PUBLIC_API_URL,WEB_PUBLIC_APP_BASE_URL
