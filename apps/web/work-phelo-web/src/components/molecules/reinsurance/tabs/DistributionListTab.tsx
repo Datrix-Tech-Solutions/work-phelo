@@ -158,7 +158,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const closingByParticipantId = useMemo(
     () =>
       Object.fromEntries(
-        closings.filter((c) => c.status !== 'VOID').map((c) => [c.participantId, c.id]),
+        closings.filter((c) => c.status !== 'VOID').map((c) => [c.participantId, c]),
       ),
     [closings],
   );
@@ -300,9 +300,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleRevert = (row: DistributionEntry) => {
     patch(row.id, { status: 'Pending' });
-    const closingId = closingByParticipantId[row.id];
-    const voidClosing = closingId
-      ? updateClosingStatus({ closingId, status: 'VOID' })
+    const closing = closingByParticipantId[row.id];
+    // Confirmed closings are immutable backend snapshots; do not void from frontend revert flow.
+    const canVoidClosing = closing?.status === 'DRAFT' || closing?.status === 'ISSUED';
+    const voidClosing = canVoidClosing
+      ? updateClosingStatus({ closingId: closing.id, status: 'VOID' })
       : Promise.resolve();
     voidClosing
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'QUOTED' }))
