@@ -71,9 +71,9 @@ export default function SelfAssessmentPage({
   const isPending = appraisal.selfStatus === 'PENDING';
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-gray-400">
+      <nav className="sticky top-0 z-10 bg-app-bg-hr flex items-center gap-2 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50">
         <Link href={backHref} className="hover:text-gray-600 transition-colors">
           Appraisal
         </Link>
@@ -81,64 +81,70 @@ export default function SelfAssessmentPage({
         <span className="text-gray-600">{cycleTitle}</span>
       </nav>
 
-      {/* Header card */}
-      <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex items-start justify-between gap-6">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-xl font-bold text-gray-900">{cycleTitle} – Self Assessment</h1>
-            <span
-              className={cn(
-                'inline-flex items-center gap-1.5 text-sm font-medium',
-                isPending ? 'text-amber-500' : 'text-green-600',
-              )}
-            >
+      {/* Page body */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-8 flex flex-col gap-6">
+        {/* Header card */}
+        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex items-start justify-between gap-6">
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-xl font-bold text-gray-900">{cycleTitle} – Self Assessment</h1>
               <span
-                className={cn('w-2 h-2 rounded-full', isPending ? 'bg-amber-400' : 'bg-green-500')}
-              />
-              {isPending ? 'Pending' : 'Submitted'}
+                className={cn(
+                  'inline-flex items-center gap-1.5 text-sm font-medium',
+                  isPending ? 'text-amber-500' : 'text-green-600',
+                )}
+              >
+                <span
+                  className={cn(
+                    'w-2 h-2 rounded-full',
+                    isPending ? 'bg-amber-400' : 'bg-green-500',
+                  )}
+                />
+                {isPending ? 'Pending' : 'Submitted'}
+              </span>
+            </div>
+            {deadline && (
+              <p className="text-sm text-gray-500">Deadline: {formatDeadline(deadline)}</p>
+            )}
+          </div>
+
+          <div className="flex flex-col items-end shrink-0">
+            <span className="text-xs text-gray-400">self-assessment score</span>
+            <span className="text-2xl font-bold text-gray-900">
+              {selfScore != null ? `${selfScore}/5` : '—'}
             </span>
           </div>
-          {deadline && (
-            <p className="text-sm text-gray-500">Deadline: {formatDeadline(deadline)}</p>
-          )}
         </div>
 
-        <div className="flex flex-col items-end shrink-0">
-          <span className="text-xs text-gray-400">self-assessment score</span>
-          <span className="text-2xl font-bold text-gray-900">
-            {selfScore != null ? `${selfScore}/5` : '—'}
-          </span>
-        </div>
-      </div>
+        {/* Instruction */}
+        <p className="text-sm text-gray-600">
+          Complete the KPIs below to evaluate your performance for this review cycle.
+        </p>
 
-      {/* Instruction */}
-      <p className="text-sm text-gray-600">
-        Complete the KPIs below to evaluate your performance for this review cycle.
-      </p>
-
-      {/* KPI form */}
-      {kpis.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center">
-          <p className="text-sm text-gray-400">
-            No KPIs have been configured for this cycle yet. Contact your HR administrator.
-          </p>
-        </div>
-      ) : (
-        <SelfAssessmentForm appraisalId={employeeAppraisalId} kpis={kpis} backHref={backHref} />
-      )}
-
-      {/* No-manager block modal — non-dismissible */}
-      <Modal
-        isOpen={hasNoManager}
-        onClose={() => {}}
-        title="No Reporting Manager Assigned"
-        description="You cannot start your self-assessment because no reporting manager has been assigned to your profile. Please contact your HR administrator to have a manager assigned before proceeding."
-        footer={
-          <div className="flex justify-end">
-            <Button onClick={() => router.push(backHref)}>Back to Appraisals</Button>
+        {/* KPI form */}
+        {kpis.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-gray-200 p-8 text-center">
+            <p className="text-sm text-gray-400">
+              No KPIs have been configured for this cycle yet. Contact your HR administrator.
+            </p>
           </div>
-        }
-      />
+        ) : (
+          <SelfAssessmentForm appraisalId={employeeAppraisalId} kpis={kpis} backHref={backHref} />
+        )}
+
+        {/* No-manager block modal — non-dismissible */}
+        <Modal
+          isOpen={hasNoManager}
+          onClose={() => {}}
+          title="No Reporting Manager Assigned"
+          description="You cannot start your self-assessment because no reporting manager has been assigned to your profile. Please contact your HR administrator to have a manager assigned before proceeding."
+          footer={
+            <div className="flex justify-end">
+              <Button onClick={() => router.push(backHref)}>Back to Appraisals</Button>
+            </div>
+          }
+        />
+      </div>
     </div>
   );
 }

@@ -60,7 +60,7 @@ export function DashboardStatsRow({ period, currency }: DashboardStatsRowProps) 
         trendTooltip={`${prevLabel}: ${data.previous.closedOffers}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
-        subtext={`${data.acceptanceRate.toFixed(1)}% acceptance`}
+        subtext={`${data.acceptanceRate.toFixed(1)}% Closing Rate`}
       />
       <DashboardStatCard
         label="Claim Ratio"
