@@ -47,7 +47,6 @@ export function ClaimDebitNoteModal({
 
   const {
     currency,
-    facultativeOffer,
     classOfBusiness,
     title,
     reference,
@@ -58,7 +57,6 @@ export function ClaimDebitNoteModal({
   } = placement;
 
   const sharePercent = parseFloat(participant.sharePercent ?? '0');
-  const facOffer = facultativeOffer ?? 0;
   const amountDue = claimAmount != null ? (sharePercent / 100) * claimAmount : null;
 
   const afterContent = (
@@ -151,9 +149,7 @@ export function ClaimDebitNoteModal({
             {/* Your reinsurance participation */}
             <tr className="border-b border-gray-200">
               <td className="py-2.5 px-4 text-gray-600 w-1/2">Your reinsurance participation :</td>
-              <td className="py-2.5 px-4 text-right text-gray-700">
-                {sharePercent}% of {facOffer}%
-              </td>
+              <td className="py-2.5 px-4 text-right text-gray-700">{sharePercent}% of 100%</td>
             </tr>
 
             {/* Amount Due */}

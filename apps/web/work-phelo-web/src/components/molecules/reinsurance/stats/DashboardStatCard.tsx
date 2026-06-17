@@ -33,13 +33,13 @@ export function DashboardStatCard({
         </>
       ) : (
         <>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-gray-900">{value}</span>
-            {subtext && <span className="text-xs text-gray-400">{subtext}</span>}
-          </div>
-          <div className="flex items-center gap-1.5">
-            {trend !== undefined && <TrendBadge change={trend} tooltip={trendTooltip} />}
-            <span className="text-xs text-gray-400">vs previous {periodLabel}</span>
+          <span className="text-2xl font-bold text-gray-900">{value}</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              {trend !== undefined && <TrendBadge change={trend} tooltip={trendTooltip} />}
+              <span className="text-xs text-gray-400">vs previous {periodLabel}</span>
+            </div>
+            {subtext && <span className="text-s font-medium text-gray-400">{subtext}</span>}
           </div>
         </>
       )}

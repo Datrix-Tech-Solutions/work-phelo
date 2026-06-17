@@ -242,7 +242,7 @@ export function CedantPlacementsTab({
           rowActions={(row) => [
             { label: 'View', onClick: () => onView(row) },
             { label: 'Edit', onClick: () => onEditPlacement(row) },
-            { label: 'Premiums', onClick: () => onPremiums(row) },
+            { label: 'Premium Payment', onClick: () => onPremiums(row) },
             ...(row.status !== 'CANCELLED'
               ? [{ label: 'Endorsement', onClick: () => onEndorsement(row) }]
               : []),

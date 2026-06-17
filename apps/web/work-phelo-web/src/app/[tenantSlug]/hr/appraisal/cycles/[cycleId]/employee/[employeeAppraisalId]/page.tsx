@@ -131,9 +131,9 @@ export default function EmployeeAppraisalDetailPage({
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6">
+    <div className="flex flex-col gap-6">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-gray-400">
+      <nav className="sticky top-0 z-10 bg-app-bg-hr flex items-center gap-2 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50">
         <Link href={appraisalHref} className="hover:text-gray-600 transition-colors">
           Appraisal
         </Link>
@@ -145,272 +145,275 @@ export default function EmployeeAppraisalDetailPage({
         <span className="text-gray-600">{employeeName}</span>
       </nav>
 
-      {/* Page title */}
-      <h1 className="text-2xl font-bold text-gray-900">Appraisals</h1>
+      {/* Page body */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-8 flex flex-col gap-6">
+        {/* Page title */}
+        <h1 className="text-2xl font-bold text-gray-900">Appraisals</h1>
 
-      {/* Header card */}
-      <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex items-start justify-between gap-6">
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-xl font-bold text-gray-900">{employeeName}</h2>
-            <StatusBadge status={appraisal.overallStatus} />
+        {/* Header card */}
+        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex items-start justify-between gap-6">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-xl font-bold text-gray-900">{employeeName}</h2>
+              <StatusBadge status={appraisal.overallStatus} />
+            </div>
+            <div className="flex items-center gap-4 text-sm text-gray-500">
+              <span>{cycleTitle}</span>
+              {resultItem?.department && (
+                <>
+                  <span className="text-gray-300">·</span>
+                  <span>{resultItem.department}</span>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-sm text-gray-500">
-            <span>{cycleTitle}</span>
-            {resultItem?.department && (
-              <>
-                <span className="text-gray-300">·</span>
-                <span>{resultItem.department}</span>
-              </>
+          {isFinalized ? (
+            <div className="flex items-center gap-8 shrink-0">
+              <ScoreCard
+                large
+                label="Final Combined Score"
+                value={combinedScore != null ? `${Math.round(combinedScore)}%` : '—'}
+              />
+              <ScoreCard
+                large
+                label="Performance Band"
+                value={
+                  resultItem?.finalRating ? (
+                    <RatingBadge rating={resultItem.finalRating as FinalRating} />
+                  ) : derivedRating ? (
+                    <RatingBadge rating={derivedRating} />
+                  ) : (
+                    '—'
+                  )
+                }
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 shrink-0">
+              <Button variant="outline" onClick={() => setRejectOpen(true)} disabled={isApproving}>
+                Reject
+              </Button>
+              <Button
+                variant="primary"
+                disabled={isRejecting || isApproving}
+                onClick={() => setApproveOpen(true)}
+              >
+                Approve
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Main content */}
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {/* Section header */}
+          <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+            <h3 className="text-sm font-semibold text-gray-700">Assessment Results</h3>
+          </div>
+          {/* KPI table */}
+          <div className="px-6 pb-6">
+            {selfKpis.length > 0 ? (
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">KPI</th>
+                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">Employee</th>
+                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">Manager</th>
+                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">Weight</th>
+                    <th className="text-left py-3 pr-4 font-semibold text-gray-700">
+                      Employee Comment
+                    </th>
+                    <th className="text-left py-3 font-semibold text-gray-700">Manager Comment</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selfKpis.map((self: KpiScoreRow) => {
+                    const mgr = managerMap.get(self.kpiId);
+                    return (
+                      <tr key={self.kpiId} className="border-b border-gray-100 last:border-0">
+                        <td className="py-4 pr-4 text-gray-900">{self.title}</td>
+                        <td className="py-4 pr-4 text-gray-700">
+                          {self.score}/{self.maxScore}
+                        </td>
+                        <td className="py-4 pr-4 text-gray-700">
+                          {mgr ? `${mgr.score}/${mgr.maxScore}` : '—'}
+                        </td>
+                        <td className="py-4 pr-4 text-gray-700">{self.weight}%</td>
+                        <td className="py-4 pr-4 text-gray-500">{self.comment ?? '—'}</td>
+                        <td className="py-4 text-gray-500">{mgr?.comment ?? '—'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <p className="py-8 text-sm text-gray-400 text-center">No KPI data available yet.</p>
             )}
           </div>
         </div>
-        {isFinalized ? (
-          <div className="flex items-center gap-8 shrink-0">
-            <ScoreCard
-              large
-              label="Final Combined Score"
-              value={combinedScore != null ? `${Math.round(combinedScore)}%` : '—'}
-            />
-            <ScoreCard
-              large
-              label="Performance Band"
-              value={
-                resultItem?.finalRating ? (
-                  <RatingBadge rating={resultItem.finalRating as FinalRating} />
-                ) : derivedRating ? (
-                  <RatingBadge rating={derivedRating} />
-                ) : (
-                  '—'
-                )
-              }
-            />
+
+        {/* Overall score + comment cards */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">Overall Self-Assessment Score</span>
+              <span className="text-base font-bold text-gray-900">
+                {appraisal.selfResponse?.score != null
+                  ? `${Math.round(appraisal.selfResponse.score)}%`
+                  : '—'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-semibold text-gray-900">Overall Comment</p>
+              <p className="text-sm text-gray-500">{appraisal.selfResponse?.comment ?? '—'}</p>
+            </div>
           </div>
-        ) : (
-          <div className="flex items-center gap-3 shrink-0">
-            <Button variant="outline" onClick={() => setRejectOpen(true)} disabled={isApproving}>
-              Reject
-            </Button>
-            <Button
-              variant="primary"
-              disabled={isRejecting || isApproving}
-              onClick={() => setApproveOpen(true)}
-            >
-              Approve
-            </Button>
+
+          <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-gray-500">Overall Manager Assessment Score</span>
+              <span className="text-base font-bold text-gray-900">
+                {appraisal.managerResponse?.score != null
+                  ? `${Math.round(appraisal.managerResponse.score)}%`
+                  : '—'}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-semibold text-gray-900">Overall Manager Comment</p>
+              <p className="text-sm text-gray-500">{appraisal.managerResponse?.comment ?? '—'}</p>
+            </div>
+          </div>
+        </div>
+
+        {isFinalized && (
+          <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-1">
+            <p className="text-sm font-semibold text-gray-900">Overall HR Note</p>
+            <p className="text-sm text-gray-500">
+              {(appraisal.finalizedAppraisal as { finalComment?: string } | null)?.finalComment ??
+                '—'}
+            </p>
           </div>
         )}
-      </div>
 
-      {/* Main content */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {/* Section header */}
-        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-          <h3 className="text-sm font-semibold text-gray-700">Assessment Results</h3>
-        </div>
-        {/* KPI table */}
-        <div className="px-6 pb-6">
-          {selfKpis.length > 0 ? (
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">KPI</th>
-                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">Employee</th>
-                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">Manager</th>
-                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">Weight</th>
-                  <th className="text-left py-3 pr-4 font-semibold text-gray-700">
-                    Employee Comment
-                  </th>
-                  <th className="text-left py-3 font-semibold text-gray-700">Manager Comment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selfKpis.map((self: KpiScoreRow) => {
-                  const mgr = managerMap.get(self.kpiId);
-                  return (
-                    <tr key={self.kpiId} className="border-b border-gray-100 last:border-0">
-                      <td className="py-4 pr-4 text-gray-900">{self.title}</td>
-                      <td className="py-4 pr-4 text-gray-700">
-                        {self.score}/{self.maxScore}
-                      </td>
-                      <td className="py-4 pr-4 text-gray-700">
-                        {mgr ? `${mgr.score}/${mgr.maxScore}` : '—'}
-                      </td>
-                      <td className="py-4 pr-4 text-gray-700">{self.weight}%</td>
-                      <td className="py-4 pr-4 text-gray-500">{self.comment ?? '—'}</td>
-                      <td className="py-4 text-gray-500">{mgr?.comment ?? '—'}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : (
-            <p className="py-8 text-sm text-gray-400 text-center">No KPI data available yet.</p>
-          )}
-        </div>
-      </div>
-
-      {/* Overall score + comment cards */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">Overall Self-Assessment Score</span>
-            <span className="text-base font-bold text-gray-900">
-              {appraisal.selfResponse?.score != null
-                ? `${Math.round(appraisal.selfResponse.score)}%`
-                : '—'}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-semibold text-gray-900">Overall Comment</p>
-            <p className="text-sm text-gray-500">{appraisal.selfResponse?.comment ?? '—'}</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-500">Overall Manager Assessment Score</span>
-            <span className="text-base font-bold text-gray-900">
-              {appraisal.managerResponse?.score != null
-                ? `${Math.round(appraisal.managerResponse.score)}%`
-                : '—'}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <p className="text-sm font-semibold text-gray-900">Overall Manager Comment</p>
-            <p className="text-sm text-gray-500">{appraisal.managerResponse?.comment ?? '—'}</p>
-          </div>
-        </div>
-      </div>
-
-      {isFinalized && (
-        <div className="bg-white rounded-xl border border-gray-200 px-6 py-5 flex flex-col gap-1">
-          <p className="text-sm font-semibold text-gray-900">Overall HR Note</p>
-          <p className="text-sm text-gray-500">
-            {(appraisal.finalizedAppraisal as { finalComment?: string } | null)?.finalComment ??
-              '—'}
-          </p>
-        </div>
-      )}
-
-      <Modal
-        isOpen={rejectOpen}
-        onClose={() => {
-          setRejectOpen(false);
-          setRejectReason('');
-        }}
-        title="Reject Manager Review"
-        description="This will send the manager's review back for revision."
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setRejectOpen(false);
-                setRejectReason('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              disabled={!rejectReason.trim()}
-              isLoading={isRejecting}
-              loadingText="Rejecting..."
-              onClick={() =>
-                reopen(
-                  { id: employeeAppraisalId, reason: rejectReason.trim(), target: 'MANAGER' },
-                  {
-                    onSuccess: () => {
-                      setRejectOpen(false);
-                      setRejectReason('');
-                      useToastStore
-                        .getState()
-                        .addToast({ message: 'Appraisal sent back for redo', type: 'success' });
+        <Modal
+          isOpen={rejectOpen}
+          onClose={() => {
+            setRejectOpen(false);
+            setRejectReason('');
+          }}
+          title="Reject Manager Review"
+          description="This will send the manager's review back for revision."
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRejectOpen(false);
+                  setRejectReason('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={!rejectReason.trim()}
+                isLoading={isRejecting}
+                loadingText="Rejecting..."
+                onClick={() =>
+                  reopen(
+                    { id: employeeAppraisalId, reason: rejectReason.trim(), target: 'MANAGER' },
+                    {
+                      onSuccess: () => {
+                        setRejectOpen(false);
+                        setRejectReason('');
+                        useToastStore
+                          .getState()
+                          .addToast({ message: 'Appraisal sent back for redo', type: 'success' });
+                      },
+                      onError: (err) =>
+                        useToastStore
+                          .getState()
+                          .addToast({ message: extractError(err), type: 'error' }),
                     },
-                    onError: (err) =>
-                      useToastStore
-                        .getState()
-                        .addToast({ message: extractError(err), type: 'error' }),
-                  },
-                )
-              }
-            >
-              Confirm Rejection
-            </Button>
+                  )
+                }
+              >
+                Confirm Rejection
+              </Button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-gray-700">Rejection Note</label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Enter reason…"
+              rows={4}
+              className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
+            />
           </div>
-        }
-      >
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700">Rejection Note</label>
-          <textarea
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.target.value)}
-            placeholder="Enter reason…"
-            rows={4}
-            className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
-          />
-        </div>
-      </Modal>
+        </Modal>
 
-      <Modal
-        isOpen={approveOpen}
-        onClose={() => {
-          setApproveOpen(false);
-          setApproveNote('');
-        }}
-        title="Approve Appraisal"
-        description="Add an overall message for the employee before finalising."
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setApproveOpen(false);
-                setApproveNote('');
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              isLoading={isApproving}
-              loadingText="Approving..."
-              onClick={() =>
-                finalize(
-                  { id: employeeAppraisalId, note: approveNote.trim() || undefined },
-                  {
-                    onSuccess: () => {
-                      setApproveOpen(false);
-                      setApproveNote('');
-                      useToastStore
-                        .getState()
-                        .addToast({ message: 'Appraisal approved', type: 'success' });
+        <Modal
+          isOpen={approveOpen}
+          onClose={() => {
+            setApproveOpen(false);
+            setApproveNote('');
+          }}
+          title="Approve Appraisal"
+          description="Add an overall message for the employee before finalising."
+          footer={
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setApproveOpen(false);
+                  setApproveNote('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                isLoading={isApproving}
+                loadingText="Approving..."
+                onClick={() =>
+                  finalize(
+                    { id: employeeAppraisalId, note: approveNote.trim() || undefined },
+                    {
+                      onSuccess: () => {
+                        setApproveOpen(false);
+                        setApproveNote('');
+                        useToastStore
+                          .getState()
+                          .addToast({ message: 'Appraisal approved', type: 'success' });
+                      },
+                      onError: (err) =>
+                        useToastStore
+                          .getState()
+                          .addToast({ message: extractError(err), type: 'error' }),
                     },
-                    onError: (err) =>
-                      useToastStore
-                        .getState()
-                        .addToast({ message: extractError(err), type: 'error' }),
-                  },
-                )
-              }
-            >
-              Confirm Approval
-            </Button>
+                  )
+                }
+              >
+                Confirm Approval
+              </Button>
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-gray-700">Overall Message</label>
+            <textarea
+              value={approveNote}
+              onChange={(e) => setApproveNote(e.target.value)}
+              placeholder="Add a message for the employee…"
+              rows={4}
+              className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
+            />
           </div>
-        }
-      >
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-gray-700">Overall Message</label>
-          <textarea
-            value={approveNote}
-            onChange={(e) => setApproveNote(e.target.value)}
-            placeholder="Add a message for the employee…"
-            rows={4}
-            className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
-          />
-        </div>
-      </Modal>
+        </Modal>
+      </div>
     </div>
   );
 }

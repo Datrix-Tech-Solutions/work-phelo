@@ -68,16 +68,19 @@ function computeStats(items: Facultative[]) {
   const total = items.length;
   const pending = items.filter((f) => ['DRAFT', 'MARKETING'].includes(f.status)).length;
   const closed = items.filter((f) =>
-    ['PARTIALLY_PLACED', 'CLOSING', 'CLOSED'].includes(f.status),
+    ['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED'].includes(f.status),
   ).length;
-  const accepted = items.filter((f) => ['PLACED', 'CLOSING', 'CLOSED'].includes(f.status)).length;
+  const accepted = items.filter((f) =>
+    ['PARTIALLY_PLACED', 'PLACED', 'CLOSING', 'CLOSED'].includes(f.status),
+  ).length;
   const acceptanceRate = total > 0 ? (accepted / total) * 100 : 0;
   return { total, pending, closed, acceptanceRate };
 }
 
 function pctChange(current: number, previous: number): number {
   if (previous === 0) return current > 0 ? 100 : 0;
-  return ((current - previous) / previous) * 100;
+  const change = ((current - previous) / previous) * 100;
+  return Math.min(Math.max(change, -100), 100);
 }
 
 export interface FinancialStats {
@@ -440,46 +443,47 @@ export function useReinsuranceClaimRatio({
     const targetIso = currency || baseCurrency?.isoCode || '';
     const targetRate = getRate(currencies, targetIso);
 
-    const curPlacements = all.filter((f) => {
-      const t = new Date(f.createdAt);
-      return t >= start && t <= now;
-    });
-    const prevPlacements = all.filter((f) => {
-      const t = new Date(f.createdAt);
-      return t >= prevStart && t < start;
-    });
-
-    const { totalPremium: curPremium } = computeFinancials(curPlacements, currencies, targetRate);
-    const { totalPremium: prevPremium } = computeFinancials(prevPlacements, currencies, targetRate);
-
+    let curPremium = 0;
+    let prevPremium = 0;
     let curClaimAmount = 0;
     let prevClaimAmount = 0;
 
-    claimQueries.forEach((query) => {
-      const claims = (query.data ?? []) as PlacementClaim[];
-      for (const claim of claims) {
-        if (!ACTIVE_CLAIM_STATUSES.includes(claim.status as (typeof ACTIVE_CLAIM_STATUSES)[number]))
-          continue;
-        const t = new Date(claim.createdAt);
-        const amount = convertToTarget(
-          parseFloat(claim.estimatedLossAmount),
-          claim.currency,
-          currencies,
-          targetRate,
+    eligiblePlacements.forEach((placement, i) => {
+      const t = new Date(placement.createdAt);
+      const premium = convertToTarget(
+        placement.premium,
+        placement.currency,
+        currencies,
+        targetRate,
+      );
+
+      const claims = (claimQueries[i]?.data ?? []) as PlacementClaim[];
+      const claimTotal = claims
+        .filter((c) =>
+          ACTIVE_CLAIM_STATUSES.includes(c.status as (typeof ACTIVE_CLAIM_STATUSES)[number]),
+        )
+        .reduce(
+          (sum, c) =>
+            sum +
+            convertToTarget(parseFloat(c.estimatedLossAmount), c.currency, currencies, targetRate),
+          0,
         );
-        if (t >= start && t <= now) {
-          curClaimAmount += amount;
-        } else if (t >= prevStart && t < start) {
-          prevClaimAmount += amount;
-        }
+
+      if (t >= start && t <= now) {
+        curPremium += premium;
+        curClaimAmount += claimTotal;
+      } else if (t >= prevStart && t < start) {
+        prevPremium += premium;
+        prevClaimAmount += claimTotal;
       }
     });
 
-    const curRatio = curPremium > 0 ? (curClaimAmount / curPremium) * 100 : 0;
-    const prevRatio = prevPremium > 0 ? (prevClaimAmount / prevPremium) * 100 : 0;
+    const curRatio = curPremium > 0 ? Math.min((curClaimAmount / curPremium) * 100, 100) : 0;
+    const prevRatio = prevPremium > 0 ? Math.min((prevClaimAmount / prevPremium) * 100, 100) : 0;
+    const trend = Math.min(Math.max(pctChange(curRatio, prevRatio), -100), 100);
 
-    return { ratio: curRatio, trend: pctChange(curRatio, prevRatio), prevRatio };
-  }, [all, claimQueries, currencies, currency, period]);
+    return { ratio: curRatio, trend, prevRatio };
+  }, [eligiblePlacements, claimQueries, currencies, currency, period]);
 
   const isLoading = loadingFac || loadingCur || claimQueries.some((q) => q.isLoading);
 

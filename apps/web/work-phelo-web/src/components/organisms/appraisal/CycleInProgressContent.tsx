@@ -156,9 +156,9 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
   ];
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
+    <div className="flex flex-col gap-6">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-gray-400">
+      <nav className="sticky top-0 z-10 bg-app-bg-hr flex items-center gap-1.5 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50">
         <Link
           href={`/${tenantSlug}/hr/appraisal`}
           className="hover:text-gray-600 transition-colors"
@@ -169,75 +169,78 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
         <span className="text-gray-700 font-medium">{cycle?.title ?? 'Cycle'}</span>
       </nav>
 
-      <h1 className="text-2xl font-bold text-gray-900">Appraisals</h1>
+      {/* Page body */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-8 flex flex-col gap-6">
+        <h1 className="text-2xl font-bold text-gray-900">Appraisals</h1>
 
-      {/* Cycle header card */}
-      <div className="bg-white border border-gray-100 rounded-card px-6 py-5 shadow-sm">
-        <div className="flex items-center gap-3">
-          <p className="text-xl font-bold text-gray-900">{cycle?.title ?? '—'}</p>
-          <StatusPill status={cycleStatus} />
-        </div>
-        <p className="text-sm text-gray-400 mt-1">Results</p>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-200 shrink-0">
-        {(['overview', 'results'] as Tab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={cn(
-              'px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
-              activeTab === tab
-                ? 'border-brand text-brand'
-                : 'border-transparent text-gray-500 hover:text-gray-700',
-            )}
-          >
-            {tab === 'overview' ? 'Overview' : 'Individual Results'}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'overview' ? (
-        <>
-          {/* Metric cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <MetricCard label="Employees Included" value={total} icon={Users} />
-            <MetricCard label="Self Assessment" value={selfCompleted} icon={User} />
-            <MetricCard label="Manager Review" value={managerCompleted} icon={CalendarCheck} />
-            <MetricCard label="Overall Completion" value={`${overallPct}%`} icon={BarChart2} />
+        {/* Cycle header card */}
+        <div className="bg-white border border-gray-100 rounded-card px-6 py-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <p className="text-xl font-bold text-gray-900">{cycle?.title ?? '—'}</p>
+            <StatusPill status={cycleStatus} />
           </div>
+          <p className="text-sm text-gray-400 mt-1">Results</p>
+        </div>
 
-          {/* Progress sections */}
-          <CycleProgressSection
-            title="Self Assessments"
-            completed={selfCompleted}
-            total={total}
-            entityLabel="employees"
+        {/* Tabs */}
+        <div className="flex items-center gap-1 border-b border-gray-200 shrink-0">
+          {(['overview', 'results'] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                'px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
+                activeTab === tab
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-gray-500 hover:text-gray-700',
+              )}
+            >
+              {tab === 'overview' ? 'Overview' : 'Individual Results'}
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'overview' ? (
+          <>
+            {/* Metric cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <MetricCard label="Employees Included" value={total} icon={Users} />
+              <MetricCard label="Self Assessment" value={selfCompleted} icon={User} />
+              <MetricCard label="Manager Review" value={managerCompleted} icon={CalendarCheck} />
+              <MetricCard label="Overall Completion" value={`${overallPct}%`} icon={BarChart2} />
+            </div>
+
+            {/* Progress sections */}
+            <CycleProgressSection
+              title="Self Assessments"
+              completed={selfCompleted}
+              total={total}
+              entityLabel="employees"
+            />
+            <CycleProgressSection
+              title="Manager Reviews"
+              completed={managerCompleted}
+              total={total}
+              entityLabel="Managers"
+            />
+          </>
+        ) : (
+          /* Individual Results tab */
+          <DataTable
+            columns={columns}
+            data={pendingRows}
+            isLoading={isLoading}
+            emptyMessage="All appraisals are complete"
+            currentPage={1}
+            totalPages={1}
+            onPageChange={() => {}}
+            onRowClick={(row) =>
+              router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/employee/${row.id}`)
+            }
+            noInternalScroll
           />
-          <CycleProgressSection
-            title="Manager Reviews"
-            completed={managerCompleted}
-            total={total}
-            entityLabel="Managers"
-          />
-        </>
-      ) : (
-        /* Individual Results tab */
-        <DataTable
-          columns={columns}
-          data={pendingRows}
-          isLoading={isLoading}
-          emptyMessage="All appraisals are complete"
-          currentPage={1}
-          totalPages={1}
-          onPageChange={() => {}}
-          onRowClick={(row) =>
-            router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/employee/${row.id}`)
-          }
-          noInternalScroll
-        />
-      )}
+        )}
+      </div>
     </div>
   );
 }
