@@ -99,6 +99,7 @@ All endpoints require a valid JWT token via:
     )
     .addTag('Departments', 'Department management')
     .addTag('Employees', 'Employee profiles and documents')
+    .addTag('Imports', 'CSV import dry-runs and validation results')
     .addTag('Leave', 'Leave types, balances, requests and approvals')
     .addTag('Time', 'Clock-in/out, timesheets, corrections, schedules')
     .addTag('Payroll', 'Payroll processing with Ghana GRA calculations')
