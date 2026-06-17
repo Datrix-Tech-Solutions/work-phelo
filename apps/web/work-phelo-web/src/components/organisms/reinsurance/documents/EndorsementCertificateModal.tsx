@@ -1,7 +1,7 @@
 'use client';
 
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
-import { Facultative, PlacementEndorsement, ENDORSEMENT_TYPE_LABELS } from '@/types/reinsurance';
+import { Facultative, PlacementEndorsement } from '@/types/reinsurance';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -104,7 +104,7 @@ export function EndorsementCertificateModal({
             { label: 'Cedant', value: placement.cedant.name },
             { label: 'Policy Number', value: placement.reference },
             { label: 'Endorsement Reference', value: endorsement.endorsementNumber },
-            { label: 'Endorsement Type', value: ENDORSEMENT_TYPE_LABELS[endorsement.type] },
+            { label: 'Risk Type', value: placement.classOfBusiness ?? '—' },
             { label: 'Effective Date', value: fmtDate(endorsement.effectiveDate) },
             { label: 'Reason', value: endorsement.reason },
           ].map((row) => (
@@ -129,7 +129,7 @@ export function EndorsementCertificateModal({
                   Parameter
                 </th>
                 <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
-                  Previous
+                  Original
                 </th>
                 <th className="py-2 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
                   Revised

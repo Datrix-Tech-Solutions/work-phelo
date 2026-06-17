@@ -6,6 +6,7 @@ import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   Facultative,
@@ -45,11 +46,11 @@ const RAW_STATUS_VARIANT_MAP: Record<
   CANCELLED: 'danger',
 };
 
-type PaymentStatus = 'Outstanding' | 'Partially Paid' | 'Paid';
+type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-xs text-gray-400',
-  'Partially Paid': 'text-xs text-yellow-600 font-medium',
+  'Part Payment': 'text-xs text-yellow-600 font-medium',
   Paid: 'text-xs text-green-600 font-medium',
 };
 
@@ -57,7 +58,7 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'Placed', label: 'Placed' },
   { value: 'Closed', label: 'Closed' },
   { value: 'Outstanding', label: 'Outstanding' },
-  { value: 'Partially Paid', label: 'Partially Paid' },
+  { value: 'Part Payment', label: 'Part Payment' },
   { value: 'Paid', label: 'Paid' },
 ];
 
@@ -100,7 +101,7 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
 
   let paymentStatus: PaymentStatus = 'Outstanding';
   if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
-  else if (paid > 0) paymentStatus = 'Partially Paid';
+  else if (paid > 0) paymentStatus = 'Part Payment';
 
   return (
     <div className="flex flex-col gap-1 items-start">
@@ -118,11 +119,7 @@ const COLUMNS: Column<Facultative>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: '190px',
-    render: (row) => (
-      <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-300 text-xs font-medium text-blue-700 bg-blue-50 whitespace-nowrap">
-        {row.reference}
-      </span>
-    ),
+    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
   },
   {
     key: 'title',
@@ -269,7 +266,7 @@ export function PaymentsTable() {
       const paid = totalPaidFor(payments);
       let status: PaymentStatus = 'Outstanding';
       if (netPremium > 0 && paid >= netPremium) status = 'Paid';
-      else if (paid > 0) status = 'Partially Paid';
+      else if (paid > 0) status = 'Part Payment';
       map.set(row.id, status);
     });
     return map;

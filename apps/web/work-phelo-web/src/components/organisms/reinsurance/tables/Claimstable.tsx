@@ -6,13 +6,9 @@ import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import {
-  Facultative,
-  FacultativeStatus,
-  PlacementClaim,
-  PlacementPayment,
-} from '@/types/reinsurance';
+import { Facultative, FacultativeStatus, PlacementClaim } from '@/types/reinsurance';
 import { useFacultatives } from '@/hooks';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
 
@@ -47,22 +43,12 @@ function netPremiumFor(row: Facultative): number {
   return row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
 }
 
-function totalPaidFor(payments: PlacementPayment[]): number {
-  return payments
-    .filter((p) => p.status === 'RECORDED')
-    .reduce((sum, p) => sum + parseFloat(p.amount), 0);
-}
-
 const COLUMNS: Column<PlacementWithClaim>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
     width: '190px',
-    render: (row) => (
-      <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-300 text-xs font-medium text-blue-700 bg-blue-50 whitespace-nowrap">
-        {row.reference}
-      </span>
-    ),
+    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
   },
   {
     key: 'title',
@@ -81,16 +67,6 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
     width: '1fr',
     render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
   },
-  // {
-  //   key: 'sumInsured',
-  //   label: 'Sum Insured',
-  //   width: '1.1fr',
-  //   render: (row) => (
-  //     <span className="text-gray-900 whitespace-nowrap">
-  //       {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
-  //     </span>
-  //   ),
-  // },
   {
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
@@ -177,29 +153,8 @@ export function ClaimsTable() {
     [allRows],
   );
 
-  const paymentQueries = useQueries({
-    queries: closingRows.map((row) => ({
-      queryKey: ['reinsurance', 'placements', row.id, 'payments'] as const,
-      queryFn: async () => {
-        const res = await api.get(`/operations/reinsurance/placements/${row.id}/payments`);
-        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
-      },
-    })),
-  });
-
-  const paidRows = useMemo(
-    () =>
-      closingRows.filter((row, i) => {
-        const payments = paymentQueries[i]?.data ?? [];
-        const netPremium = netPremiumFor(row);
-        const paid = totalPaidFor(payments);
-        return netPremium > 0 && paid >= netPremium;
-      }),
-    [closingRows, paymentQueries],
-  );
-
   const claimQueries = useQueries({
-    queries: paidRows.map((row) => ({
+    queries: closingRows.map((row) => ({
       queryKey: ['reinsurance', 'placements', row.id, 'claims'] as const,
       queryFn: async () => {
         const res = await api.get(`/operations/reinsurance/placements/${row.id}/claims`);
@@ -210,11 +165,11 @@ export function ClaimsTable() {
 
   const tableRows = useMemo<PlacementWithClaim[]>(
     () =>
-      paidRows.map((placement, i) => ({
+      closingRows.map((placement, i) => ({
         ...placement,
         latestClaim: claimQueries[i]?.data?.[0],
       })),
-    [paidRows, claimQueries],
+    [closingRows, claimQueries],
   );
 
   const cedantOptions = useMemo(() => {
@@ -283,7 +238,7 @@ export function ClaimsTable() {
             onClick: () => setPanelTarget(row),
           },
         ]}
-        emptyMessage="No paid placements found"
+        emptyMessage="No placed offers found"
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}

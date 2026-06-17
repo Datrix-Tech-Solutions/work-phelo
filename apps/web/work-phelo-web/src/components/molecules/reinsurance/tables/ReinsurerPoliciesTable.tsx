@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
+import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { FacultativeStatus, TreatyType, toStatusLabel } from '@/types/reinsurance';
 
@@ -51,7 +52,7 @@ const PLACEMENT_VARIANT_MAP: Record<
 > = {
   DRAFT: 'neutral',
   MARKETING: 'warning',
-  PARTIALLY_PLACED: 'warning',
+  PARTIALLY_PLACED: 'success',
   PLACED: 'success',
   CLOSING: 'success',
   CLOSED: 'success',
@@ -79,11 +80,7 @@ const COLUMNS: Column<ReinsurerParticipation>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: '190px',
-    render: (row) => (
-      <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-300 text-xs font-medium text-blue-700 bg-blue-50 whitespace-nowrap">
-        {row.reference}
-      </span>
-    ),
+    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
   },
   {
     key: 'title',

@@ -354,7 +354,7 @@ export function toDisplayStatus(status: FacultativeStatus): PlacementDisplayStat
 }
 
 export function toStatusLabel(status: FacultativeStatus): string {
-  if (status === 'PARTIALLY_PLACED' || status === 'PLACED') return 'Placed';
+  if (status === 'PARTIALLY_PLACED' || status === 'PLACED') return 'Closed';
   if (status === 'MARKETING') return 'Open';
   return status.charAt(0) + status.slice(1).toLowerCase().replace(/_/g, ' ');
 }

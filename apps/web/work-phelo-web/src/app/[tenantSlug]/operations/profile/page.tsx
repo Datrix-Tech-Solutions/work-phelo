@@ -1,5 +1,5 @@
 import { ProfileContent } from '@/components/organisms/profile/ProfileContent';
 
-export default function MyProfilePage() {
+export default function OperationsProfilePage() {
   return <ProfileContent />;
 }

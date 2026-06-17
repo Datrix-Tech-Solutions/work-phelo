@@ -155,7 +155,7 @@ export function SlipPreviewModal({
               value={reinsurancePremium != null ? fmtAmount(reinsurancePremium, currency) : null}
             />
             <Field
-              label="Cedant Commission"
+              label="Reinsurance Commission"
               value={
                 commissions != null
                   ? `${fmtAmount(commissions, currency)} (${(commission ?? 0) + brokerageFee}%)`
