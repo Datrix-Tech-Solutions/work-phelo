@@ -394,10 +394,20 @@ export class EmployeesController {
   @HttpCode(HttpStatus.OK)
   @RequirePermissions(Permission.CREATE_EMPLOYEE)
   @ApiOperation({
-    summary: 'Resend invite email to employee — invalidates previous link',
+    summary:
+      'Queue employee invite resend — invalidates previous link when auth resend succeeds',
   })
   @ApiParam({ name: 'id', description: 'Employee UUID' })
-  @ApiResponse({ status: 200, description: 'Invite resent successfully' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Invite resend queued for the employee identity linked to this profile',
+    schema: { example: { message: 'Invitation resent successfully' } },
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Employee has no email address on record',
+  })
   @ApiResponse({ status: 404, description: 'Employee not found' })
   resendInvite(
     @Param('id') id: string,

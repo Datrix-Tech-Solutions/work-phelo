@@ -234,6 +234,7 @@ export interface InviteUserEvent {
   acceptInviteUrl: string;
   tenantName: string;
   inviteKind?: InviteUserKind;
+  isResend?: boolean;
 }
 
 export interface PasswordResetLinkEvent {
