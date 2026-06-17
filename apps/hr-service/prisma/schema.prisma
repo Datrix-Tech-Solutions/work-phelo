@@ -48,6 +48,26 @@ enum MaritalStatus {
   @@schema("hr")
 }
 
+enum HrImportEntityType {
+  EMPLOYEE
+
+  @@schema("hr")
+}
+
+enum HrImportJobStatus {
+  DRY_RUN_COMPLETED
+  DRY_RUN_FAILED
+
+  @@schema("hr")
+}
+
+enum HrImportRowStatus {
+  VALID
+  INVALID
+
+  @@schema("hr")
+}
+
 enum LeaveRequestStatus {
   PENDING
   APPROVED
@@ -419,32 +439,32 @@ model Employee {
   createdAt            DateTime         @default(now())
   updatedAt            DateTime         @updatedAt
 
-  department            Department?               @relation(fields: [departmentId], references: [id])
-  branch                Branch?                   @relation(fields: [branchId], references: [id])
+  department            Department?                 @relation(fields: [departmentId], references: [id])
+  branch                Branch?                     @relation(fields: [branchId], references: [id])
   leaveBalances         LeaveBalance[]
   leaveRequests         LeaveRequest[]
-  coveringLeaveRequests LeaveRequest[]            @relation("LeaveCoverageEmployee")
+  coveringLeaveRequests LeaveRequest[]              @relation("LeaveCoverageEmployee")
   clockRecords          ClockRecord[]
   timesheets            Timesheet[]
   timeCorrections       TimeCorrection[]
   schedules             ShiftSchedule[]
-  requestedShiftSwaps   ShiftSwapRequest[]        @relation("ShiftSwapRequester")
-  targetShiftSwaps      ShiftSwapRequest[]        @relation("ShiftSwapTarget")
-  managedShiftSwaps     ShiftSwapRequest[]        @relation("ShiftSwapManager")
+  requestedShiftSwaps   ShiftSwapRequest[]          @relation("ShiftSwapRequester")
+  targetShiftSwaps      ShiftSwapRequest[]          @relation("ShiftSwapTarget")
+  managedShiftSwaps     ShiftSwapRequest[]          @relation("ShiftSwapManager")
   shiftSwapActionLogs   ShiftSwapActionLog[]
   shiftOverrides        ShiftAssignmentOverride[]
   payrollItems          PayrollItem[]
-  appraisals            Appraisal[]               @relation("AppraisalEmployee")
-  managedAppraisals     Appraisal[]               @relation("AppraisalManager")
+  appraisals            Appraisal[]                 @relation("AppraisalEmployee")
+  managedAppraisals     Appraisal[]                 @relation("AppraisalManager")
   documents             EmployeeDocument[]
   agreementSignatures   CompanyAgreementSignature[]
   allowances            EmployeeAllowance[]
   deductions            EmployeeDeduction[]
-  assignedAssets        Asset[]                   @relation("AssignedAssets")
-  assetAssignments      AssetAssignment[]         @relation("EmployeeAssetAssignments")
-  managedProjects       Project[]                 @relation("ManagedProjects")
+  assignedAssets        Asset[]                     @relation("AssignedAssets")
+  assetAssignments      AssetAssignment[]           @relation("EmployeeAssetAssignments")
+  managedProjects       Project[]                   @relation("ManagedProjects")
   projectMemberships    ProjectMember[]
-  assignedProjectTasks  ProjectTask[]             @relation("AssignedProjectTasks")
+  assignedProjectTasks  ProjectTask[]               @relation("AssignedProjectTasks")
   offboarding           OffboardingRecord?
   resignation           ResignationRecord?
 
@@ -1265,21 +1285,21 @@ model AppraisalReminderLog {
 }
 
 model Announcement {
-  id                  String                   @id @default(uuid())
+  id                  String                        @id @default(uuid())
   tenantId            String
   title               String
   body                String
-  audienceType        AnnouncementAudienceType @default(ALL)
-  targetDepartmentIds String[]                 @default([])
-  targetBranchIds     String[]                 @default([])
-  targetEmployeeIds   String[]                 @default([])
-  sendEmail           Boolean                  @default(false)
+  audienceType        AnnouncementAudienceType      @default(ALL)
+  targetDepartmentIds String[]                      @default([])
+  targetBranchIds     String[]                      @default([])
+  targetEmployeeIds   String[]                      @default([])
+  sendEmail           Boolean                       @default(false)
   deliveryChannels    AnnouncementDeliveryChannel[] @default([IN_APP])
-  publishedAt         DateTime                 @default(now())
+  publishedAt         DateTime                      @default(now())
   expiresAt           DateTime?
   createdById         String?
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
 
   readReceipts AnnouncementReadReceipt[]
 
@@ -1318,6 +1338,50 @@ model EmployeeInviteRollbackTask {
 
   @@unique([tenantId, email])
   @@index([tenantId, createdAt])
+  @@schema("hr")
+}
+
+model HrImportJob {
+  id              String             @id @default(uuid())
+  tenantId        String
+  entityType      HrImportEntityType
+  status          HrImportJobStatus
+  fileName        String
+  fileHash        String
+  idempotencyKey  String?
+  totalRows       Int                @default(0)
+  validRows       Int                @default(0)
+  invalidRows     Int                @default(0)
+  createdByUserId String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  rows HrImportRow[]
+
+  @@unique([tenantId, entityType, idempotencyKey])
+  @@index([tenantId, entityType, createdAt])
+  @@index([tenantId, fileHash])
+  @@schema("hr")
+}
+
+model HrImportRow {
+  id             String            @id @default(uuid())
+  tenantId       String
+  jobId          String
+  rowNumber      Int
+  status         HrImportRowStatus
+  rawData        Json
+  normalizedData Json?
+  errors         Json
+  warnings       Json
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  job HrImportJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, rowNumber])
+  @@index([tenantId, jobId])
+  @@index([tenantId, status])
   @@schema("hr")
 }
 
