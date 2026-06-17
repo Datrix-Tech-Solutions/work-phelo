@@ -10,7 +10,14 @@ function makePrisma() {
   return {
     user: {
       findFirst: jest.fn() as MockFn,
+      findUnique: jest.fn() as MockFn,
       update: jest.fn().mockResolvedValue({}) as MockFn,
+    },
+    tenant: {
+      update: jest.fn().mockResolvedValue({}) as MockFn,
+    },
+    refreshToken: {
+      create: jest.fn().mockResolvedValue({}) as MockFn,
     },
   };
 }
@@ -18,6 +25,10 @@ function makePrisma() {
 function makeRabbit() {
   return {
     notificationInviteUser: jest.fn().mockResolvedValue(undefined) as MockFn,
+    hrProvisionTenantWorkspace: jest
+      .fn()
+      .mockResolvedValue(undefined) as MockFn,
+    hrLinkEmployeeIdentity: jest.fn().mockResolvedValue(undefined) as MockFn,
   };
 }
 
@@ -31,11 +42,17 @@ function makeService(
   prisma = makePrisma(),
   rabbit = makeRabbit(),
   audit = makeAudit(),
+  jwtService = {
+    sign: jest
+      .fn()
+      .mockReturnValueOnce('access-token')
+      .mockReturnValueOnce('refresh-token'),
+  },
 ) {
   return new UsersService(
     prisma as unknown as PrismaService,
     rabbit as unknown as RabbitMQPublisher,
-    {} as never,
+    jwtService as never,
     audit as unknown as AuditService,
   );
 }
@@ -137,5 +154,89 @@ describe('UsersService.resendInvite', () => {
     await expect(service.resendInvite('tenant-2', 'user-1')).rejects.toThrow(
       NotFoundException,
     );
+  });
+});
+
+describe('UsersService.acceptInvite after resend token rotation', () => {
+  const tenant = {
+    id: 'tenant-1',
+    slug: 'acme-ghana',
+    name: 'Acme Ghana',
+    email: 'admin@acmeghana.com',
+    country: 'GH',
+    currency: 'GHS',
+  };
+
+  const pendingAdmin = {
+    id: 'admin-1',
+    tenantId: tenant.id,
+    email: 'admin@acmeghana.com',
+    firstName: 'Ama',
+    lastName: 'Admin',
+    role: 'TENANT_ADMIN',
+    status: 'PENDING_VERIFICATION',
+    inviteToken: 'new-token',
+    inviteExpiresAt: new Date('2026-06-20T00:00:00.000Z'),
+    tenant,
+  };
+
+  it('rejects the old expired token after resend and activates with the new token', async () => {
+    const prisma = makePrisma();
+    prisma.user.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(pendingAdmin);
+    prisma.user.update.mockResolvedValue({
+      ...pendingAdmin,
+      status: 'ACTIVE',
+      inviteToken: null,
+      inviteExpiresAt: null,
+    });
+
+    const rabbit = makeRabbit();
+    const service = makeService(prisma, rabbit);
+
+    await expect(
+      service.acceptInvite({
+        inviteToken: 'old-expired-token',
+        password: 'Password123!',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+
+    const result = await service.acceptInvite({
+      inviteToken: 'new-token',
+      password: 'Password123!',
+    });
+
+    expect(prisma.user.findUnique).toHaveBeenNthCalledWith(1, {
+      where: { inviteToken: 'old-expired-token' },
+      include: { tenant: true },
+    });
+    expect(prisma.user.findUnique).toHaveBeenNthCalledWith(2, {
+      where: { inviteToken: 'new-token' },
+      include: { tenant: true },
+    });
+    expect(rabbit.hrProvisionTenantWorkspace).toHaveBeenCalledWith({
+      tenantId: tenant.id,
+      adminEmail: tenant.email,
+      adminUserId: pendingAdmin.id,
+      country: tenant.country,
+      currency: tenant.currency,
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: pendingAdmin.id },
+        data: expect.objectContaining({
+          status: 'ACTIVE',
+          inviteToken: null,
+          inviteExpiresAt: null,
+        }),
+      }),
+    );
+    expect(prisma.tenant.update).toHaveBeenCalledWith({
+      where: { id: tenant.id },
+      data: { status: 'ACTIVE' },
+    });
+    expect(result.accessToken).toBe('access-token');
+    expect(result.refreshToken).toBe('refresh-token');
   });
 });

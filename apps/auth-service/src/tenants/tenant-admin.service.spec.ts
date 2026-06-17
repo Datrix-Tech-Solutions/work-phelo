@@ -457,6 +457,61 @@ describe('TenantAdminService.resendAdminInvite', () => {
     expect(result).not.toHaveProperty('inviteToken');
   });
 
+  it('allows multiple expired invite resends and rotates the token each time', async () => {
+    const prisma = makePrisma();
+    const pendingAdmin = {
+      ...PENDING_ADMIN,
+      tenant: TENANT,
+      inviteExpiresAt: new Date('2026-06-01T00:00:00.000Z'),
+    };
+    prisma.user.findFirst.mockResolvedValueOnce(pendingAdmin);
+    prisma.user.update.mockResolvedValueOnce({
+      ...pendingAdmin,
+      inviteToken: 'first-new-token',
+    });
+
+    const rabbit = makeRabbit();
+    const svc = makeService(prisma, rabbit);
+
+    await svc.resendAdminInvite('tenant-1');
+
+    const firstUpdate = prisma.user.update.mock.calls[0][0] as {
+      data: { inviteToken: string; inviteExpiresAt: Date };
+    };
+
+    prisma.user.findFirst.mockResolvedValueOnce({
+      ...pendingAdmin,
+      inviteToken: firstUpdate.data.inviteToken,
+      inviteExpiresAt: new Date('2026-06-02T00:00:00.000Z'),
+    });
+    prisma.user.update.mockResolvedValueOnce({
+      ...pendingAdmin,
+      inviteToken: 'second-new-token',
+    });
+
+    await svc.resendAdminInvite('tenant-1');
+
+    const secondUpdate = prisma.user.update.mock.calls[1][0] as {
+      data: { inviteToken: string; inviteExpiresAt: Date };
+    };
+
+    expect(firstUpdate.data.inviteToken).not.toBe(PENDING_ADMIN.inviteToken);
+    expect(secondUpdate.data.inviteToken).not.toBe(PENDING_ADMIN.inviteToken);
+    expect(secondUpdate.data.inviteToken).not.toBe(
+      firstUpdate.data.inviteToken,
+    );
+    expect(firstUpdate.data.inviteExpiresAt).toBeInstanceOf(Date);
+    expect(secondUpdate.data.inviteExpiresAt).toBeInstanceOf(Date);
+    expect(rabbit.notificationInviteUser).toHaveBeenCalledTimes(2);
+    expect(rabbit.notificationInviteUser).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        inviteToken: secondUpdate.data.inviteToken,
+        isResend: true,
+      }),
+    );
+  });
+
   it('rejects accepted admins because only pending admins can be resent', async () => {
     const prisma = makePrisma();
     prisma.user.findFirst.mockResolvedValue(null);
