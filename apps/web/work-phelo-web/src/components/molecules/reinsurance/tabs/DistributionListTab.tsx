@@ -256,21 +256,36 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           status: 'ACCEPTED',
           suppressInvalidation: true,
         });
-        const closing = await createClosing({
-          participantId: row.id,
-          suppressInvalidation: true,
-        });
-        const closingId = closing.id;
-        await updateClosingStatus({
-          closingId,
-          status: 'ISSUED',
-          suppressInvalidation: true,
-        });
-        await updateClosingStatus({
-          closingId,
-          status: 'CONFIRMED',
-          suppressInvalidation: true,
-        });
+        let closingId = closingByParticipantId[row.id]?.id;
+        let closingStatus = closingByParticipantId[row.id]?.status;
+
+        if (!closingId) {
+          const createdClosing = await createClosing({
+            participantId: row.id,
+            suppressInvalidation: true,
+          });
+          closingId = createdClosing.id;
+          closingStatus = 'DRAFT';
+        }
+
+        if (closingStatus === 'DRAFT') {
+          await updateClosingStatus({
+            closingId,
+            status: 'ISSUED',
+            suppressInvalidation: true,
+          });
+          await updateClosingStatus({
+            closingId,
+            status: 'CONFIRMED',
+            suppressInvalidation: true,
+          });
+        } else if (closingStatus === 'ISSUED') {
+          await updateClosingStatus({
+            closingId,
+            status: 'CONFIRMED',
+            suppressInvalidation: true,
+          });
+        }
       }
     } catch (error) {
       if (isReconfirm) {
