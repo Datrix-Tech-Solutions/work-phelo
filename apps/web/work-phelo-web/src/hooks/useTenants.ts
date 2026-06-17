@@ -99,8 +99,8 @@ export function useAssignAdmin() {
 
 export function useResendInvite() {
   return useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await api.post(`/auth/users/${userId}/resend-invite`);
+    mutationFn: async (tenantId: string) => {
+      const res = await api.post(`/auth/tenants/${tenantId}/admin/resend-invite`);
       return res.data;
     },
   });

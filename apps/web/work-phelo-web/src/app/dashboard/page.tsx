@@ -27,7 +27,17 @@ const CalendarIcon = () => <CalendarPlus />;
 const PAGE_SIZE = 7;
 
 const COLUMNS: Column<Company>[] = [
-  { key: 'name', label: 'Company name', width: '2.5fr' },
+  {
+    key: 'name',
+    label: 'Company name',
+    width: '2.5fr',
+    render: (row) => (
+      <div className="flex flex-col">
+        <span className="text-sm font-medium text-gray-900">{row.name}</span>
+        {row.email && <span className="text-xs text-gray-400">{row.email}</span>}
+      </div>
+    ),
+  },
   { key: 'dateCreated', label: 'Date Created', width: '1.2fr' },
   { key: 'contact', label: 'Contact Number', width: '1.2fr' },
   { key: 'industry', label: 'Industry', width: '1fr' },
@@ -74,6 +84,7 @@ export default function AdminDashboardPage() {
         _id?: string;
         name?: string;
         companyName?: string;
+        email?: string;
         dateCreated?: string;
         createdAt?: string;
         phone?: string;
@@ -86,6 +97,7 @@ export default function AdminDashboardPage() {
       }) => ({
         id: c.id ?? c._id ?? '',
         name: c.name ?? c.companyName ?? '',
+        email: c.email ?? '',
         dateCreated:
           (c.dateCreated ?? c.createdAt)
             ? new Date(String(c.dateCreated ?? c.createdAt)).toLocaleDateString('en-US', {
@@ -177,6 +189,7 @@ export default function AdminDashboardPage() {
               setSearch(q);
               setPage(1);
             }}
+            onRowClick={(row) => router.push(`/dashboard/${row.id}`)}
             filterOptions={[
               { value: 'ACTIVE', label: 'Active' },
               { value: 'INACTIVE', label: 'Inactive' },

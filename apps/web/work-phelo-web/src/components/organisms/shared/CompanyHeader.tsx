@@ -12,9 +12,18 @@ interface CompanyHeaderProps {
   name: string;
   slug: string;
   status: string;
+  onResendInvite?: () => void;
+  isResendingInvite?: boolean;
 }
 
-export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
+export function CompanyHeader({
+  id,
+  name,
+  slug,
+  status,
+  onResendInvite,
+  isResendingInvite,
+}: CompanyHeaderProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
 
@@ -40,6 +49,17 @@ export function CompanyHeader({ id, name, slug, status }: CompanyHeaderProps) {
 
       {/* Right — actions */}
       <div className="flex items-center gap-3">
+        {onResendInvite && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onResendInvite}
+            isLoading={isResendingInvite}
+            loadingText="Sending..."
+          >
+            Resend Invite
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
