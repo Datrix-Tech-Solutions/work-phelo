@@ -305,7 +305,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       ? updateClosingStatus({ closingId, status: 'VOID' })
       : Promise.resolve();
     voidClosing
-      .then(() => updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }))
+      .then(() => updateParticipantStatus({ participantId: row.id, status: 'QUOTED' }))
       .catch((error) => {
         patch(row.id, { status: 'Accepted' });
         toast().addToast({ message: extractError(error), type: 'error' });
