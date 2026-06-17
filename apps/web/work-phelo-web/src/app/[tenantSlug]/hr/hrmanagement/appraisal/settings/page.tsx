@@ -381,10 +381,9 @@ export default function AppraisalSettingsPage({
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-8">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
           {/* Performance Bands */}
-          <div className="flex flex-col gap-3">
+          <FormSection title="Performance Bands">
             <div>
-              <h3 className="text-sm font-bold text-gray-900">Performance Bands</h3>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="text-xs text-gray-500text-xs text-gray-500 mt-0.5">
                 Score thresholds that determine each employee&apos;s final rating
               </p>
             </div>
@@ -409,14 +408,11 @@ export default function AppraisalSettingsPage({
                   : undefined
               }
             />
-          </div>
+          </FormSection>
 
           {/* Cycle Recipients */}
           <FormSection title="Default Appraisal Cycle Recipients">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-bold text-gray-900">
-                Default Appraisal Cycle Recipients
-              </label>
+            <div className="flex flex-col gap-4">
               <p className="text-xs text-gray-500">
                 Select which employee groups are included in appraisal cycles by default
               </p>

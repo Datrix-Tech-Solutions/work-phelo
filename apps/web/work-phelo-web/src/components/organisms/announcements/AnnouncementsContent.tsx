@@ -152,7 +152,7 @@ export function AnnouncementsContent() {
         }}
         actionButton={
           canManageAnnouncements
-            ? { label: '+ New Announcement', onClick: () => setPanelOpen(true) }
+            ? { label: 'New Announcement', onClick: () => setPanelOpen(true) }
             : undefined
         }
         rowActions={

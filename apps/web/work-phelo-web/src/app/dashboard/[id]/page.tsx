@@ -105,7 +105,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         onResendInvite={
           admin && ['PENDING', 'PENDING_VERIFICATION'].includes(admin.status)
             ? () =>
-                resendInvite(admin.id, {
+                resendInvite(id, {
                   onSuccess: () => toast.success('Invite resent successfully'),
                   onError: () => toast.error('Failed to resend invite'),
                 })
@@ -156,7 +156,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             onResendInvite={
               admin && ['PENDING', 'PENDING_VERIFICATION'].includes(admin.status)
                 ? () =>
-                    resendInvite(admin.id, {
+                    resendInvite(id, {
                       onSuccess: () => toast.success('Invite resent successfully'),
                       onError: () => toast.error('Failed to resend invite'),
                     })
