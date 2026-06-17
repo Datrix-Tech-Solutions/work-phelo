@@ -27,10 +27,16 @@ import {
 import { TenantLifecycleService } from './tenant-lifecycle.service';
 import { TenantConfigService } from './tenant-config.service';
 import { TenantAdminService } from './tenant-admin.service';
+import { TenantBrandingService } from './tenant-branding.service';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { QueryTenantsDto } from './dto/query-tenants.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { UpdateTenantAdminDto } from './dto/update-tenant-admin.dto';
+import {
+  PublicTenantBrandingResponseDto,
+  TenantBrandingResponseDto,
+  UpdateTenantBrandingDto,
+} from './dto/tenant-branding.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -46,6 +52,7 @@ export class TenantsController {
     private readonly lifecycle: TenantLifecycleService,
     private readonly config: TenantConfigService,
     private readonly admin: TenantAdminService,
+    private readonly branding: TenantBrandingService,
   ) {}
 
   @Post('register')
@@ -139,6 +146,104 @@ export class TenantsController {
     @Query('limit', new DefaultValuePipe(20), ParseIntPipe) limit: number,
   ) {
     return this.lifecycle.getTenantAuditLogs(id, { page, limit });
+  }
+
+  @Get('slug/:slug/branding')
+  @ApiOperation({
+    summary: 'Get safe public tenant branding by workspace slug',
+    description:
+      'Public read-only bootstrap endpoint for login/workspace theming. Returns safe display colors and display URLs only; object storage keys and audit metadata are never exposed.',
+  })
+  @ApiParam({
+    name: 'slug',
+    description: 'Tenant workspace slug, for example acme-ghana.',
+  })
+  @ApiResponse({
+    status: 200,
+    type: PublicTenantBrandingResponseDto,
+    description: 'Safe tenant branding returned.',
+  })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  getPublicBrandingBySlug(@Param('slug') slug: string) {
+    return this.branding.findPublicBySlug(slug);
+  }
+
+  @Get(':id/branding')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Get tenant branding — SuperAdmin or owning Tenant Admin',
+    description:
+      'Returns the canonical tenant branding record with S3-ready object keys for authenticated administrators. WorkPhelo defaults are returned when no branding row exists.',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiResponse({
+    status: 200,
+    type: TenantBrandingResponseDto,
+    description: 'Tenant branding returned.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Tenant Admin tried to access another tenant branding record.',
+  })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  getBranding(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    this.assertBrandingAccess(id, req.user);
+    return this.branding.findByTenantId(id);
+  }
+
+  @Patch(':id/branding')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SUPER_ADMIN', 'TENANT_ADMIN')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
+    summary: 'Update tenant branding — SuperAdmin or owning Tenant Admin',
+    description:
+      'Upserts S3-ready tenant branding metadata. Hex colors are validated. Public URLs are not treated as source of truth when object keys exist.',
+  })
+  @ApiParam({ name: 'id', description: 'Tenant UUID' })
+  @ApiBody({
+    type: UpdateTenantBrandingDto,
+    examples: {
+      colors: {
+        summary: 'Brand colors only',
+        value: {
+          primaryColor: '#0D2244',
+          secondaryColor: '#85B7EB',
+          accentColor: '#1E3A8A',
+          sidebarColor: '#0D2244',
+          emailHeaderColor: '#0D2244',
+          documentHeaderColor: '#0D2244',
+        },
+      },
+      s3ReadyAssets: {
+        summary: 'Future S3 object keys',
+        value: {
+          logoObjectKey: 'tenant-branding/tenant-123/logo/v1/logo.png',
+          faviconObjectKey: 'tenant-branding/tenant-123/favicon/v1/favicon.ico',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    type: TenantBrandingResponseDto,
+    description: 'Tenant branding updated.',
+  })
+  @ApiResponse({ status: 400, description: 'Invalid hex color value.' })
+  @ApiResponse({
+    status: 403,
+    description: 'Tenant Admin tried to update another tenant branding record.',
+  })
+  @ApiResponse({ status: 404, description: 'Tenant not found' })
+  updateBranding(
+    @Param('id') id: string,
+    @Body() dto: UpdateTenantBrandingDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    this.assertBrandingAccess(id, req.user);
+    return this.branding.update(id, dto, req.user.id);
   }
 
   @Get(':id')
@@ -324,5 +429,13 @@ export class TenantsController {
   })
   async resendAdminInvite(@Param('id') tenantId: string) {
     return this.admin.resendAdminInvite(tenantId);
+  }
+
+  private assertBrandingAccess(tenantId: string, user: RequestUser): void {
+    if (user.role === 'TENANT_ADMIN' && tenantId !== user.tenantId) {
+      throw new ForbiddenException(
+        'You can only manage branding for your own company.',
+      );
+    }
   }
 }
