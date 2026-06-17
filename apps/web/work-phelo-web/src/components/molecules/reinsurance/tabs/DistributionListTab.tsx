@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/atoms/Button';
 import { CreateDistributionPanel } from '@/components/organisms/reinsurance/panels/CreateDistributionPanel';
 import {
@@ -24,6 +25,7 @@ import {
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
+  facultativePlacementKey,
 } from '@/hooks';
 import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
 import { extractError } from '@/lib/extractError';
@@ -66,6 +68,7 @@ function participantToEntry(
 }
 
 export function DistributionListTab({ placement }: DistributionListTabProps) {
+  const queryClient = useQueryClient();
   const facOffer = placement.facultativeOffer ?? 0;
   const premium = placement.premium ?? 0;
 
@@ -135,6 +138,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const [patches, setPatches] = useState<Record<string, Partial<DistributionEntry>>>({});
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
+  const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
 
   const entries = useMemo(
     () =>
@@ -154,13 +158,18 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const closingByParticipantId = useMemo(
     () =>
       Object.fromEntries(
-        closings.filter((c) => c.status !== 'VOID').map((c) => [c.participantId, c.id]),
+        closings.filter((c) => c.status !== 'VOID').map((c) => [c.participantId, c]),
       ),
     [closings],
   );
 
   const patch = (id: string, update: Partial<DistributionEntry>) =>
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
+
+  const refreshPlacementAfterAccept = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
+    [placement.id, queryClient],
+  );
 
   const handleAdd = async (newEntries: ReinsurerEntry[]) => {
     const existingIds = new Set(placement.participants.map((p) => p.counterpartyId));
@@ -213,43 +222,88 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     );
   };
 
-  const handleAccept = (row: DistributionEntry) => {
+  const handleAccept = async (row: DistributionEntry) => {
+    if (acceptingIds.has(row.id)) return;
+
     const isReconfirm = row.status === 'Accepted';
+    setAcceptingIds((prev) => new Set([...prev, row.id]));
     patch(row.id, { status: 'Accepted' });
-    if (isReconfirm) {
-      updateParticipant({
-        participantId: row.id,
-        sharePercent: row.shareLine,
-        signedLinePercent: row.shareLine,
-      })
-        .then(() =>
-          createEndorsementParticipant({
-            counterpartyId: row.counterpartyId,
-            originalParticipantId: row.id,
-            sharePercent: row.shareLine,
-            signedLinePercent: row.shareLine,
-            status: 'ACCEPTED',
-          }),
-        )
-        .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
-    } else {
-      updateParticipant({
-        participantId: row.id,
-        sharePercent: row.shareLine,
-        signedLinePercent: row.shareLine,
-      })
-        .then(() => updateParticipantStatus({ participantId: row.id, status: 'ACCEPTED' }))
-        .then(() => createClosing(row.id))
-        .then((closing) => {
-          const closingId = closing.id;
-          return updateClosingStatus({ closingId, status: 'ISSUED' }).then(() =>
-            updateClosingStatus({ closingId, status: 'CONFIRMED' }),
-          );
-        })
-        .catch((error) => {
-          patch(row.id, { status: 'Pending' });
-          toast().addToast({ message: extractError(error), type: 'error' });
+
+    try {
+      if (isReconfirm) {
+        await updateParticipant({
+          participantId: row.id,
+          sharePercent: row.shareLine,
+          signedLinePercent: row.shareLine,
+          suppressInvalidation: true,
         });
+        await createEndorsementParticipant({
+          counterpartyId: row.counterpartyId,
+          originalParticipantId: row.id,
+          sharePercent: row.shareLine,
+          signedLinePercent: row.shareLine,
+          status: 'ACCEPTED',
+        });
+      } else {
+        await updateParticipant({
+          participantId: row.id,
+          sharePercent: row.shareLine,
+          signedLinePercent: row.shareLine,
+          suppressInvalidation: true,
+        });
+        await updateParticipantStatus({
+          participantId: row.id,
+          status: 'ACCEPTED',
+          suppressInvalidation: true,
+        });
+        let closingId = closingByParticipantId[row.id]?.id;
+        let closingStatus = closingByParticipantId[row.id]?.status;
+
+        if (!closingId) {
+          const createdClosing = await createClosing({
+            participantId: row.id,
+            suppressInvalidation: true,
+          });
+          closingId = createdClosing.id;
+          closingStatus = 'DRAFT';
+        }
+
+        if (closingStatus === 'DRAFT') {
+          await updateClosingStatus({
+            closingId,
+            status: 'ISSUED',
+            suppressInvalidation: true,
+          });
+          await updateClosingStatus({
+            closingId,
+            status: 'CONFIRMED',
+            suppressInvalidation: true,
+          });
+        } else if (closingStatus === 'ISSUED') {
+          await updateClosingStatus({
+            closingId,
+            status: 'CONFIRMED',
+            suppressInvalidation: true,
+          });
+        }
+      }
+    } catch (error) {
+      if (isReconfirm) {
+        toast().addToast({ message: extractError(error), type: 'error' });
+      } else {
+        patch(row.id, { status: 'Pending' });
+        toast().addToast({
+          message: `Participant acceptance did not fully complete. Refreshing placement state. ${extractError(error)}`,
+          type: 'error',
+        });
+      }
+    } finally {
+      await refreshPlacementAfterAccept();
+      setAcceptingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
     }
   };
 
@@ -261,12 +315,14 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleRevert = (row: DistributionEntry) => {
     patch(row.id, { status: 'Pending' });
-    const closingId = closingByParticipantId[row.id];
-    const voidClosing = closingId
-      ? updateClosingStatus({ closingId, status: 'VOID' })
+    const closing = closingByParticipantId[row.id];
+    // Confirmed closings are immutable backend snapshots; do not void from frontend revert flow.
+    const canVoidClosing = closing?.status === 'DRAFT' || closing?.status === 'ISSUED';
+    const voidClosing = canVoidClosing
+      ? updateClosingStatus({ closingId: closing.id, status: 'VOID' })
       : Promise.resolve();
     voidClosing
-      .then(() => updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }))
+      .then(() => updateParticipantStatus({ participantId: row.id, status: 'QUOTED' }))
       .catch((error) => {
         patch(row.id, { status: 'Accepted' });
         toast().addToast({ message: extractError(error), type: 'error' });
@@ -381,6 +437,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           hasActiveEndorsement={hasActiveEndorsement}
           confirmedCounterpartyIds={confirmedCounterpartyIds}
           isPlacementLocked={isPlacementLocked}
+          busyIds={acceptingIds}
           onShareCommit={handleShareCommit}
           onBrokerageCommit={handleBrokerageCommit}
           onMailSent={handleMailSent}

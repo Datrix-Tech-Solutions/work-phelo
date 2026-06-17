@@ -37,6 +37,7 @@ interface DistributionTableProps {
   hasActiveEndorsement?: boolean;
   confirmedCounterpartyIds?: Set<string>;
   isPlacementLocked?: boolean;
+  busyIds?: Set<string>;
   onShareCommit: (row: DistributionEntry, share: number) => void;
   onBrokerageCommit: (row: DistributionEntry, brokerage: number) => void;
   onMailSent: (row: DistributionEntry) => void;
@@ -54,6 +55,7 @@ export function DistributionTable({
   hasActiveEndorsement = false,
   confirmedCounterpartyIds,
   isPlacementLocked = false,
+  busyIds,
   onShareCommit,
   onBrokerageCommit,
   onMailSent,
@@ -231,6 +233,8 @@ export function DistributionTable({
           confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
         const responded = row.status === 'Declined' || row.status === 'Accepted';
         const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
+        const isBusy = busyIds?.has(row.id) ?? false;
+        const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
         const showAccept = !isPlacementLocked && (isReconfirming || (mailed && !responded));
         const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
         const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
@@ -255,9 +259,12 @@ export function DistributionTable({
             {showAccept && (
               <button
                 type="button"
-                title="Accept"
-                onClick={() => handleAccept(row)}
-                className="text-green-500 hover:text-green-600 transition-colors"
+                title={isBusy ? 'Accepting line...' : 'Accept'}
+                onClick={() => {
+                  if (!isBusy) handleAccept(row);
+                }}
+                disabled={isBusy}
+                className={`text-green-500 hover:text-green-600 transition-colors ${disabledActionClass}`}
               >
                 <Icons.Check className="w-4 h-4" />
               </button>
@@ -266,8 +273,11 @@ export function DistributionTable({
               <button
                 type="button"
                 title="Decline"
-                onClick={() => handleDecline(row)}
-                className="text-red-400 hover:text-red-600 transition-colors"
+                onClick={() => {
+                  if (!isBusy) handleDecline(row);
+                }}
+                disabled={isBusy}
+                className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
                 <Icons.X className="w-4 h-4" />
               </button>
@@ -276,8 +286,11 @@ export function DistributionTable({
               <button
                 type="button"
                 title="Revert to pending"
-                onClick={() => onRevert?.(row)}
-                className="text-amber-500 hover:text-amber-600 transition-colors"
+                onClick={() => {
+                  if (!isBusy) onRevert?.(row);
+                }}
+                disabled={isBusy}
+                className={`text-amber-500 hover:text-amber-600 transition-colors ${disabledActionClass}`}
               >
                 <Icons.RotateCcw className="w-4 h-4" />
               </button>
@@ -286,8 +299,11 @@ export function DistributionTable({
               <button
                 type="button"
                 title="Delete"
-                onClick={() => onDelete?.(row)}
-                className="text-red-400 hover:text-red-600 transition-colors"
+                onClick={() => {
+                  if (!isBusy) onDelete?.(row);
+                }}
+                disabled={isBusy}
+                className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
                 <Icons.Trash2 className="w-4 h-4" />
               </button>

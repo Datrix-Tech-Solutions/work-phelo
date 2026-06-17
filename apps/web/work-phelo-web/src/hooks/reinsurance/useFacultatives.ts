@@ -18,6 +18,15 @@ import {
 
 const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
+const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
+
+export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
+export const placementClosingsKey = (placementId: string) =>
+  [...placementQueryKey(placementId), 'closings'] as const;
+
+type SuppressInvalidationOption = {
+  suppressInvalidation?: boolean;
+};
 
 function parseDecimal(val: unknown): number | null {
   if (val == null) return null;
@@ -138,13 +147,17 @@ export function useUpdateParticipant(placementId: string) {
   return useMutation({
     mutationFn: async ({
       participantId,
-      ...payload
-    }: UpdateParticipantPayload & { participantId: string }) => {
+      ...payloadWithOptions
+    }: UpdateParticipantPayload & { participantId: string } & SuppressInvalidationOption) => {
+      const payload = { ...payloadWithOptions };
+      delete payload.suppressInvalidation;
       const res = await api.patch(`${BASE}/${placementId}/participants/${participantId}`, payload);
       return transformPlacement(res.data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    onSuccess: (_data, variables) => {
+      if (!variables.suppressInvalidation) {
+        queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      }
     },
   });
 }
@@ -154,16 +167,20 @@ export function useUpdateParticipantStatus(placementId: string) {
   return useMutation({
     mutationFn: async ({
       participantId,
-      ...payload
-    }: UpdateParticipantStatusPayload & { participantId: string }) => {
+      ...payloadWithOptions
+    }: UpdateParticipantStatusPayload & { participantId: string } & SuppressInvalidationOption) => {
+      const payload = { ...payloadWithOptions };
+      delete payload.suppressInvalidation;
       const res = await api.patch(
         `${BASE}/${placementId}/participants/${participantId}/status`,
         payload,
       );
       return transformPlacement(res.data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    onSuccess: (_data, variables) => {
+      if (!variables.suppressInvalidation) {
+        queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      }
     },
   });
 }
@@ -183,7 +200,7 @@ export function useDeleteParticipant(placementId: string) {
 
 export function usePlacementClosings(placementId: string) {
   return useQuery({
-    queryKey: [...FACULTATIVES_KEY, placementId, 'closings'],
+    queryKey: placementClosingsKey(placementId),
     queryFn: async () => {
       const res = await api.get(`${BASE}/${placementId}/closings`);
       const raw = res.data?.items ?? res.data ?? [];
@@ -196,12 +213,19 @@ export function usePlacementClosings(placementId: string) {
 export function useCreateClosing(placementId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (participantId: string) => {
+    mutationFn: async (
+      input: string | ({ participantId: string } & SuppressInvalidationOption),
+    ) => {
+      const participantId = typeof input === 'string' ? input : input.participantId;
       const res = await api.post(`${BASE}/${placementId}/participants/${participantId}/closings`);
       return res.data as { id: string };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    onSuccess: (_data, variables) => {
+      const suppressInvalidation =
+        typeof variables !== 'string' && variables.suppressInvalidation === true;
+      if (!suppressInvalidation) {
+        queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      }
     },
   });
 }
@@ -215,14 +239,17 @@ export function useUpdateClosingStatus(placementId: string) {
     }: {
       closingId: string;
       status: 'ISSUED' | 'CONFIRMED' | 'VOID';
+      suppressInvalidation?: boolean;
     }) => {
       const res = await api.patch(`${BASE}/${placementId}/closings/${closingId}/status`, {
         status,
       });
       return res.data as { id: string };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, placementId] });
+    onSuccess: (_data, variables) => {
+      if (!variables.suppressInvalidation) {
+        queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      }
     },
   });
 }
