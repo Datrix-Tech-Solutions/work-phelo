@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { usePlacementPayments } from '@/hooks';
+import { usePlacementPayments, useReversePayment } from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
 import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
 
@@ -43,7 +45,18 @@ interface PaymentHistoryTabProps {
 
 export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabProps) {
   const { data: payments = [], isLoading } = usePlacementPayments(placementId);
+  const reversePayment = useReversePayment();
+  const addToast = useToastStore((s) => s.addToast);
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
+
+  const handleReverse = async (paymentId: string) => {
+    try {
+      await reversePayment.mutateAsync({ placementId, paymentId });
+      addToast({ message: 'Payment reversed successfully', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    }
+  };
 
   const COLUMNS: Column<PlacementPayment>[] = [
     {
@@ -109,6 +122,15 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
         noInternalScroll
         rowActions={(row: PlacementPayment) => [
           { label: 'Receipt', onClick: () => setReceiptTarget(row) },
+          ...(row.status === 'RECORDED' && !row.reversalOfPaymentId
+            ? [
+                {
+                  label: 'Reverse Payment',
+                  danger: true,
+                  onClick: () => void handleReverse(row.id),
+                },
+              ]
+            : []),
         ]}
       />
 
