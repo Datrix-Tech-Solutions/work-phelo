@@ -164,8 +164,17 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend invite email for a user in current tenant' })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiResponse({ status: 200, description: 'Invitation resent successfully' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Invitation resent successfully. Only PENDING_VERIFICATION users can be resent; previous invite links are invalidated.',
+    schema: { example: { message: 'Invitation resent successfully' } },
+  })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
+  @ApiResponse({
+    status: 404,
+    description: 'User not found in the current tenant',
+  })
   async resendInvite(
     @Req() req: Request & { user: RequestUser },
     @Param('id') userId: string,

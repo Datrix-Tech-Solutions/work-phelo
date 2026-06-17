@@ -387,3 +387,86 @@ describe('TenantAdminService.updateTenantAdmin', () => {
     });
   });
 });
+
+describe('TenantAdminService.resendAdminInvite', () => {
+  it('regenerates the pending admin token, extends expiry, emits resend invite, and audits', async () => {
+    const prisma = makePrisma();
+    const pendingAdmin = {
+      ...PENDING_ADMIN,
+      tenant: TENANT,
+      inviteExpiresAt: new Date('2026-06-01T00:00:00.000Z'),
+    };
+    prisma.user.findFirst.mockResolvedValue(pendingAdmin);
+    prisma.user.update.mockResolvedValue({
+      ...pendingAdmin,
+      inviteToken: 'new-token',
+    });
+
+    const rabbit = makeRabbit();
+    const audit = makeAudit();
+    const svc = makeService(prisma, rabbit, audit);
+
+    const result = await svc.resendAdminInvite('tenant-1');
+
+    expect(prisma.user.findFirst).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        role: 'TENANT_ADMIN',
+        status: 'PENDING_VERIFICATION',
+      },
+      include: { tenant: true },
+    });
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: pendingAdmin.id },
+      data: {
+        inviteToken: expect.any(String),
+        inviteExpiresAt: expect.any(Date),
+      },
+    });
+    const updateArgs = prisma.user.update.mock.calls[0][0] as {
+      data: { inviteToken: string; inviteExpiresAt: Date };
+    };
+    expect(updateArgs.data.inviteToken).not.toBe(pendingAdmin.inviteToken);
+    expect(rabbit.notificationInviteUser).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: pendingAdmin.id,
+        tenantId: 'tenant-1',
+        email: pendingAdmin.email,
+        inviteToken: updateArgs.data.inviteToken,
+        acceptInviteUrl: expect.stringContaining(
+          '/acme-ghana/accept-invite?token=',
+        ),
+        inviteKind: 'TENANT_ADMIN',
+        isResend: true,
+      }),
+    );
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-1',
+        userId: pendingAdmin.id,
+        action: 'UPDATE',
+        resource: 'tenant_admin',
+        resourceId: pendingAdmin.id,
+        changes: expect.objectContaining({
+          after: expect.objectContaining({ resendInvite: true }),
+        }),
+        status: 'SUCCESS',
+      }),
+    );
+    expect(result).toEqual({ message: 'Invitation resent successfully' });
+    expect(result).not.toHaveProperty('inviteToken');
+  });
+
+  it('rejects accepted admins because only pending admins can be resent', async () => {
+    const prisma = makePrisma();
+    prisma.user.findFirst.mockResolvedValue(null);
+
+    const rabbit = makeRabbit();
+    const svc = makeService(prisma, rabbit);
+
+    await expect(svc.resendAdminInvite('tenant-1')).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(rabbit.notificationInviteUser).not.toHaveBeenCalled();
+  });
+});

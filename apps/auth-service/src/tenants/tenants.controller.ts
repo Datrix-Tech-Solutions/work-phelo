@@ -308,9 +308,16 @@ export class TenantsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resend invite to Company Admin — SuperAdmin only' })
+  @ApiOperation({
+    summary: 'Resend invite to pending Company Admin — SuperAdmin only',
+  })
   @ApiParam({ name: 'id', description: 'Tenant ID' })
-  @ApiResponse({ status: 200, description: 'Invite resent successfully' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Invite resent successfully. Previous invite link is invalidated.',
+    schema: { example: { message: 'Invitation resent successfully' } },
+  })
   @ApiResponse({
     status: 404,
     description: 'No pending admin found for this company',

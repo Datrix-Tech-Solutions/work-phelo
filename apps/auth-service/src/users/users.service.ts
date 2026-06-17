@@ -381,7 +381,7 @@ export class UsersService {
       include: { tenant: true },
     });
     if (!user) throw new NotFoundException('User not found');
-    if (user.status === 'ACTIVE' && !user.inviteToken) {
+    if (user.status !== 'PENDING_VERIFICATION') {
       throw new ForbiddenException('User has already accepted the invitation.');
     }
 
@@ -400,15 +400,41 @@ export class UsersService {
 
     void this.rabbitmq
       .notificationInviteUser({
+        userId: user.id,
+        tenantId,
         email: user.email,
         firstName: user.firstName,
+        inviteToken,
         tenantName: user.tenant.name,
         acceptInviteUrl,
         inviteKind: user.role === 'TENANT_ADMIN' ? 'TENANT_ADMIN' : 'EMPLOYEE',
+        isResend: true,
       })
       .catch((err) =>
         this.logger.error(`Failed to resend invite for ${user.email}`, err),
       );
+
+    await this.audit.log({
+      tenantId,
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+      action: 'UPDATE',
+      resource: 'users',
+      resourceId: user.id,
+      changes: {
+        before: {
+          inviteExpiresAt: user.inviteExpiresAt?.toISOString(),
+          status: user.status,
+        },
+        after: {
+          resendInvite: true,
+          inviteExpiresAt: inviteExpiresAt.toISOString(),
+          status: user.status,
+        },
+      },
+      status: 'SUCCESS',
+    });
 
     return { message: 'Invitation resent successfully' };
   }
