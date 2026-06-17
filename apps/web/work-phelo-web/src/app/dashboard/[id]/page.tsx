@@ -3,7 +3,9 @@
 'use client';
 
 import { use, useMemo, useState } from 'react';
-import { useTenant, useTenantUsers, useTenantAudit } from '@/hooks/useTenants';
+import { useTenant, useTenantUsers, useTenantAudit, useResendInvite } from '@/hooks/useTenants';
+import { useToast } from '@/hooks/useToast';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUpdateModules, useUpdateFeatures } from '@/hooks/useModuleConfig';
 import Link from 'next/link';
 import { CompanyHeader } from '@/components/organisms/shared/CompanyHeader';
@@ -26,12 +28,25 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
   const { data: users = [] } = useTenantUsers(id);
   const { data: auditData } = useTenantAudit(id);
 
+  const queryClient = useQueryClient();
   const updateModules = useUpdateModules(id);
   const updateFeatures = useUpdateFeatures(id);
+  const { mutate: resendInvite, isPending: isResendingInvite } = useResendInvite();
+  const toast = useToast();
 
   const admin = (
-    users as { role: string; firstName: string; lastName: string; status: string; email: string }[]
-  ).find((u) => u.role === 'TENANT_ADMIN');
+    users as {
+      id?: string;
+      _id?: string;
+      role: string;
+      firstName: string;
+      lastName: string;
+      status: string;
+      email: string;
+    }[]
+  )
+    .map((u) => ({ ...u, id: u.id ?? u._id ?? '' }))
+    .find((u) => u.role === 'TENANT_ADMIN');
 
   const moduleConfig = (tenant?.moduleConfig as Record<string, boolean>) ?? {};
   const featureConfig = (tenant?.featureConfig as Record<string, Record<string, boolean>>) ?? {};
@@ -82,7 +97,22 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         <span className="text-gray-700 font-medium">{tenant.name}</span>
       </nav>
 
-      <CompanyHeader id={tenant.id} name={tenant.name} slug={tenant.slug} status={tenant.status} />
+      <CompanyHeader
+        id={tenant.id}
+        name={tenant.name}
+        slug={tenant.slug}
+        status={tenant.status}
+        onResendInvite={
+          admin && ['PENDING', 'PENDING_VERIFICATION'].includes(admin.status)
+            ? () =>
+                resendInvite(admin.id, {
+                  onSuccess: () => toast.success('Invite resent successfully'),
+                  onError: () => toast.error('Failed to resend invite'),
+                })
+            : undefined
+        }
+        isResendingInvite={isResendingInvite}
+      />
 
       {/* Tabs */}
       <div className="flex gap-1 shrink-0 border-b border-gray-200">
@@ -123,6 +153,16 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             }
             onEditCompany={() => setEditCompanyOpen(true)}
             onEditAdmin={() => setEditAdminOpen(true)}
+            onResendInvite={
+              admin && ['PENDING', 'PENDING_VERIFICATION'].includes(admin.status)
+                ? () =>
+                    resendInvite(admin.id, {
+                      onSuccess: () => toast.success('Invite resent successfully'),
+                      onError: () => toast.error('Failed to resend invite'),
+                    })
+                : undefined
+            }
+            isResendingInvite={isResendingInvite}
           />
           <ModuleConfiguration
             modules={modules}
@@ -173,6 +213,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
         admin={
           admin ? { name: `${admin.firstName} ${admin.lastName}`, email: admin.email } : undefined
         }
+        onSuccess={() => queryClient.invalidateQueries({ queryKey: ['tenant-users', id] })}
       />
     </main>
   );
