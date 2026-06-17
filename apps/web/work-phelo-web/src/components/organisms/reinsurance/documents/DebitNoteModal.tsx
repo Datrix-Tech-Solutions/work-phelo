@@ -82,8 +82,8 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
       </div>
 
       <p className="text-xs font-semibold text-gray-800 leading-relaxed">
-        NOTE: COVER IS SUBJECT TO &quot;NO PREMIUM NO COVER&quot;, PLEASE. WE WOULD THEREFORE
-        APPRECIATE PAYMENT AS SOON AS POSSIBLE.
+        NOTE: COVER IS SUBJECT TO PREMIUM PAYMENT WARRANTY, PLEASE. WE WOULD THEREFORE APPRECIATE
+        PAYMENT AS SOON AS POSSIBLE.
       </p>
     </div>
   );

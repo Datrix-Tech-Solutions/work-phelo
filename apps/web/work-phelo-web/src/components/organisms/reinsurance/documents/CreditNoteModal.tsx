@@ -138,8 +138,8 @@ export function CreditNoteModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Credit Note — ${reference}`}
-      documentTitle="Credit Note"
+      title={`Closings Note — ${reference}`}
+      documentTitle="Closings Note"
       afterContent={
         <div
           style={{

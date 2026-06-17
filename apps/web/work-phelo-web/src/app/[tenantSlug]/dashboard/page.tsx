@@ -2,17 +2,13 @@
 
 'use client';
 
-import { use, useMemo } from 'react';
-import { useCurrentTenantUsers } from '@/hooks/useTenants';
+import { use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
-import { StatPill } from '@/components/molecules/departments/StatPill';
 import { getGreeting } from '@/lib/formatters';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
-import { usePermission } from '@/hooks/hr/usePermission';
-import { Permission } from '@/lib/permissionMap';
 import { AgreementGate } from '@/components/organisms/companyPolicies/AgreementGate';
 
 /* ── Module definitions ── */
@@ -47,6 +43,13 @@ const MODULE_DEFS: ModuleDef[] = [
     route: 'accounting',
   },
   {
+    key: 'recruitment',
+    name: 'Recruitment',
+    description: 'Manage job postings, applications, and onboarding',
+    icon: <ModuleIcons.recruitment className="w-7 h-7" />,
+    route: 'recruitment',
+  },
+  {
     key: 'operations',
     name: 'Operations',
     description: 'Manage operations, workflows, and tasks',
@@ -71,22 +74,7 @@ export default function TenantDashboardPage({
   const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
 
   /* ── Fetch users for employee count ── */
-  const { data: users = [] } = useCurrentTenantUsers();
 
-  /* ── Derive stats ── */
-  const stats = useMemo(() => {
-    const total = users.length;
-
-    const active = users.filter((u: { status: string }) => u.status === 'ACTIVE').length;
-
-    const pending = users.filter(
-      (u: { status: string }) => u.status === 'PENDING_VERIFICATION' || u.status === 'PENDING',
-    ).length;
-
-    return { total, active, pending };
-  }, [users]);
-
-  const canViewEmployeeStats = usePermission(Permission.READ_EMPLOYEES);
   const isEmployee = user?.role === 'EMPLOYEE';
 
   /* ── Enabled modules from tenant config ── */
@@ -96,7 +84,6 @@ export default function TenantDashboardPage({
       .filter(([, enabled]) => enabled)
       .map(([key]) => key),
   );
-  const activeModuleCount = MODULE_DEFS.filter((m) => enabledKeys.has(m.key)).length;
 
   return (
     <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
@@ -119,26 +106,16 @@ export default function TenantDashboardPage({
               {getGreeting()}, {isTenantAdmin ? tenantName : firstName}
             </h1>
           </div>
-          <div className="flex items-center gap-0">
-            {canViewEmployeeStats && (
-              <>
-                <StatPill label="Active modules" value={activeModuleCount} />
-                <StatPill label="Total Employees" value={stats.total} />
-                <StatPill label="Active" value={stats.active} />
-                <StatPill label="Pending" value={stats.pending} />
-              </>
-            )}
-          </div>
         </div>
 
         {/* Modules section */}
-        <div className="max-w-4xl mx-auto px-6 py-12 flex flex-col items-center gap-8">
+        <div className="max-w-6xl mx-auto px-6 py-12 flex flex-col items-center gap-8">
           <div className="text-center">
             <h2 className="text-xl font-semibold text-gray-900">Your Modules</h2>
             <p className="text-sm text-gray-400 mt-1">Click on a module to get started</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4 w-full">
             {MODULE_DEFS.map((mod) => {
               const enabled = enabledKeys.has(mod.key);
               return (

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
+import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { StatCard } from '@/components/atoms/StatCard';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
@@ -13,7 +14,7 @@ const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'dan
   {
     DRAFT: 'neutral',
     MARKETING: 'warning',
-    PARTIALLY_PLACED: 'warning',
+    PARTIALLY_PLACED: 'success',
     PLACED: 'success',
     CLOSING: 'success',
     CLOSED: 'success',
@@ -21,11 +22,11 @@ const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'dan
     CANCELLED: 'danger',
   };
 
-type PaymentStatus = 'Outstanding' | 'Partially Paid' | 'Paid';
+type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-xs text-gray-400',
-  'Partially Paid': 'text-xs text-yellow-600 font-medium',
+  'Part Payment': 'text-xs text-yellow-600 font-medium',
   Paid: 'text-xs text-green-600 font-medium',
 };
 
@@ -59,7 +60,7 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
 
   let paymentStatus: PaymentStatus = 'Outstanding';
   if (netPremium > 0 && paid >= netPremium) paymentStatus = 'Paid';
-  else if (paid > 0) paymentStatus = 'Partially Paid';
+  else if (paid > 0) paymentStatus = 'Part Payment';
 
   return (
     <div className="flex flex-col gap-1 items-start">
@@ -77,11 +78,7 @@ const PLACEMENT_COLUMNS: Column<Facultative>[] = [
     key: 'reference',
     label: 'Policy Number',
     width: '190px',
-    render: (row) => (
-      <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-300 text-xs font-medium text-blue-700 bg-blue-50 whitespace-nowrap">
-        {row.reference}
-      </span>
-    ),
+    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
   },
   {
     key: 'title',

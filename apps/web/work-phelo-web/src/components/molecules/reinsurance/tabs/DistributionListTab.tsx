@@ -202,9 +202,13 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleShareCommit = (row: DistributionEntry, share: number) => {
     patch(row.id, { shareLine: share });
-    updateParticipant({ participantId: row.id, sharePercent: share }).catch((error) =>
-      toast().addToast({ message: extractError(error), type: 'error' }),
-    );
+    // Also reset signedLinePercent so a previously-accepted (then reverted) participant
+    // doesn't leave a stale signed line that exceeds the new sharePercent.
+    updateParticipant({
+      participantId: row.id,
+      sharePercent: share,
+      signedLinePercent: share,
+    }).catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
   };
 
   const handleBrokerageCommit = (row: DistributionEntry, brokerage: number) => {

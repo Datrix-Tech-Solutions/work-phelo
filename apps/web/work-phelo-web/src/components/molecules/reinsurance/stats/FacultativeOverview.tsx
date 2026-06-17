@@ -5,13 +5,13 @@ import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
-import { usePlacementPayments } from '@/hooks';
+import { usePlacementEndorsements, usePlacementPayments } from '@/hooks';
 
-type PaymentStatus = 'Outstanding' | 'Partially Paid' | 'Paid';
+type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-xs text-gray-400',
-  'Partially Paid': 'text-xs text-yellow-600 font-medium',
+  'Part Payment': 'text-xs text-yellow-600 font-medium',
   Paid: 'text-xs text-green-600 font-medium',
 };
 
@@ -43,7 +43,7 @@ const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neu
   {
     DRAFT: 'neutral',
     MARKETING: 'warning',
-    PARTIALLY_PLACED: 'warning',
+    PARTIALLY_PLACED: 'success',
     PLACED: 'success',
     CLOSING: 'success',
     CLOSED: 'success',
@@ -57,6 +57,8 @@ interface FacultativeOverviewProps {
 
 export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
   const { data: payments = [] } = usePlacementPayments(placement.id);
+  const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
+  const endorsementCount = endorsements.filter((e) => e.status !== 'VOID').length;
 
   const paymentStatus = useMemo<PaymentStatus>(() => {
     const facPrem =
@@ -69,7 +71,7 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
       .filter((p) => p.status === 'RECORDED')
       .reduce((sum, p) => sum + parseFloat(p.amount), 0);
     if (netPremium > 0 && paid >= netPremium) return 'Paid';
-    if (paid > 0) return 'Partially Paid';
+    if (paid > 0) return 'Part Payment';
     return 'Outstanding';
   }, [payments, placement.premium, placement.facultativeOffer, placement.commission]);
 
@@ -93,6 +95,14 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
           />
           <span className="text-sm text-gray-500">|</span>
           <span className={PAYMENT_STATUS_CLASS[paymentStatus]}>{paymentStatus}</span>
+          {endorsementCount > 0 && (
+            <>
+              <span className="text-sm text-gray-500">|</span>
+              <span className="text-xs text-gray-600 font-medium">
+                {endorsementCount} endorsement{endorsementCount > 1 ? 's' : ''}
+              </span>
+            </>
+          )}
         </>
       }
     >

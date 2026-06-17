@@ -71,6 +71,7 @@ import {
   Check,
   SendHorizonal,
   RotateCcw,
+  UserPlus,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -155,6 +156,7 @@ export const ModuleIcons = {
   marketing: Activity,
   accounting: DollarSign,
   operations: Handshake,
+  recruitment: UserPlus,
 
   // ── HR features (mirror hr-nav.tsx exactly) ───────────────────────────
   dashboard: LayoutDashboard,

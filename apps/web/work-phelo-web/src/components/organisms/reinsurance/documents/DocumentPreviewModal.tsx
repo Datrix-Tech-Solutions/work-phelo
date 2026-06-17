@@ -5,7 +5,7 @@ import Image from 'next/image';
 import QRCode from 'react-qr-code';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-import { DocumentPrintLayout } from '@/components/organisms/reinsurance/DocumentPrintLayout';
+import { DocumentPrintLayout } from '@/components/organisms/reinsurance/documents/DocumentPrintLayout';
 
 const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
 
