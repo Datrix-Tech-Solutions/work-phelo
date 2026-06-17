@@ -275,8 +275,8 @@ jobs:
       BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
       IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
       CHANGED_SERVICES: ${{ needs.detect-changes.outputs.changed }}
-      WEB_PUBLIC_API_URL: ${{ env.WEB_PUBLIC_API_URL }}
-      WEB_PUBLIC_APP_BASE_URL: ${{ env.WEB_PUBLIC_APP_BASE_URL }}
+      WEB_PUBLIC_API_URL: https://dev-api.workphelo.com/api/v1
+      WEB_PUBLIC_APP_BASE_URL: https://dev-app.workphelo.com
 
     steps:
       - name: Checkout code
