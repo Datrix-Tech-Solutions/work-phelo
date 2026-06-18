@@ -113,6 +113,13 @@ export default function ReinsurerDetailPage({
     });
   }, [placements, reinsurerId]);
 
+  const acceptanceRate = useMemo(() => {
+    const accepted = participations.filter((p) => p.participantStatus === 'ACCEPTED').length;
+    const declined = participations.filter((p) => p.participantStatus === 'DECLINED').length;
+    const decided = accepted + declined;
+    return decided > 0 ? Math.round((accepted / decided) * 100) : null;
+  }, [participations]);
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className={`${pageBreadcrumb} shrink-0 flex items-center justify-between`}>
@@ -156,7 +163,20 @@ export default function ReinsurerDetailPage({
           <PlacementView placementId={activeView.placementId} />
         ) : (
           <div className="flex flex-col gap-6">
-            <ReinsurerOverview reinsurer={reinsurer} />
+            <ReinsurerOverview
+              reinsurer={reinsurer}
+              headerExtra={
+                acceptanceRate !== null ? (
+                  <>
+                    <span className="text-sm text-gray-300">|</span>
+                    <span className="text-sm text-gray-400">
+                      Acceptance Rate{' '}
+                      <span className="font-bold text-gray-900">{acceptanceRate}%</span>
+                    </span>
+                  </>
+                ) : undefined
+              }
+            />
 
             <div className="flex flex-col">
               <TabBar

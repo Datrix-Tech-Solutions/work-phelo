@@ -19,11 +19,12 @@ function formatCity(addresses: Counterparty['addresses']): string {
 
 interface ReinsurerOverviewProps {
   reinsurer: Counterparty;
+  headerExtra?: React.ReactNode;
 }
 
-export function ReinsurerOverview({ reinsurer }: ReinsurerOverviewProps) {
+export function ReinsurerOverview({ reinsurer, headerExtra }: ReinsurerOverviewProps) {
   return (
-    <CollapsibleOverview>
+    <CollapsibleOverview headerExtra={headerExtra}>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">
         <DetailField label="Name" value={reinsurer.name} />
         <DetailField label="Email" value={reinsurer.email ?? '—'} />

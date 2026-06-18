@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Badge } from '@/components/atoms/Badge';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
-import { StatCard } from '@/components/atoms/StatCard';
+import { FilterChip } from '@/components/atoms/FilterChip';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
-import { usePlacementPayments } from '@/hooks';
+import { usePlacementPayments, useCedantPlacementPaymentStatuses } from '@/hooks';
 
 const PAGE_SIZE = 10;
 
@@ -189,6 +189,8 @@ const PLACEMENT_COLUMNS: Column<Facultative>[] = [
   },
 ];
 
+type PlacementFilter = 'all' | 'pending' | 'closed' | 'unpaid' | 'paid';
+
 interface CedantPlacementsTabProps {
   placements: Facultative[];
   isLoading: boolean;
@@ -206,50 +208,116 @@ export function CedantPlacementsTab({
   onView,
   onPremiums,
 }: CedantPlacementsTabProps) {
+  const [filter, _setFilter] = useState<PlacementFilter>('all');
   const [page, setPage] = useState(1);
 
-  const pendingCount = placements.filter(
-    (p) => p.status === 'DRAFT' || p.status === 'MARKETING',
-  ).length;
-  const closedCount = placements.filter(
-    (p) => p.status === 'PARTIALLY_PLACED' || p.status === 'PLACED' || p.status === 'CLOSED',
-  ).length;
-  const unpaidCount = placements.filter((p) =>
-    p.participants.some((pt) => pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
-  ).length;
+  const paymentStatuses = useCedantPlacementPaymentStatuses(placements);
 
-  const totalPages = Math.max(1, Math.ceil(placements.length / PAGE_SIZE));
-  const paged = placements.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const counts = useMemo(
+    () => ({
+      all: placements.length,
+      pending: placements.filter((p) => p.status === 'DRAFT' || p.status === 'MARKETING').length,
+      closed: placements.filter(
+        (p) =>
+          p.status === 'PARTIALLY_PLACED' ||
+          p.status === 'PLACED' ||
+          p.status === 'CLOSING' ||
+          p.status === 'CLOSED',
+      ).length,
+      unpaid: placements.filter((p) => {
+        const s = paymentStatuses.get(p.id);
+        return s === 'outstanding' || s === 'partial';
+      }).length,
+      paid: placements.filter((p) => paymentStatuses.get(p.id) === 'paid').length,
+    }),
+    [placements, paymentStatuses],
+  );
+
+  const filtered = useMemo(() => {
+    switch (filter) {
+      case 'pending':
+        return placements.filter((p) => p.status === 'DRAFT' || p.status === 'MARKETING');
+      case 'closed':
+        return placements.filter(
+          (p) =>
+            p.status === 'PARTIALLY_PLACED' ||
+            p.status === 'PLACED' ||
+            p.status === 'CLOSING' ||
+            p.status === 'CLOSED',
+        );
+      case 'unpaid':
+        return placements.filter((p) => {
+          const s = paymentStatuses.get(p.id);
+          return s === 'outstanding' || s === 'partial';
+        });
+      case 'paid':
+        return placements.filter((p) => paymentStatuses.get(p.id) === 'paid');
+      default:
+        return placements;
+    }
+  }, [placements, filter, paymentStatuses]);
+
+  function setFilter(f: PlacementFilter) {
+    _setFilter(f);
+    setPage(1);
+  }
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <StatCard label="Pending Offers" value={pendingCount} sub="Offers not accepted" />
-        <StatCard label="Closed Offers" value={closedCount} sub="Offers closed by reinsurers" />
-        <StatCard label="Unpaid Offers" value={unpaidCount} sub="Accepted offers by reinsurers" />
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-gray-900">Offers</h3>
-        <DataTable
-          columns={PLACEMENT_COLUMNS}
-          data={paged}
-          isLoading={isLoading}
-          emptyMessage="No placements found for this cedant"
-          rowActions={(row) => [
-            { label: 'View', onClick: () => onView(row) },
-            { label: 'Edit', onClick: () => onEditPlacement(row) },
-            { label: 'Premium Payment', onClick: () => onPremiums(row) },
-            ...(row.status !== 'CANCELLED'
-              ? [{ label: 'Endorsement', onClick: () => onEndorsement(row) }]
-              : []),
-          ]}
-          currentPage={page}
-          totalPages={totalPages}
-          onPageChange={setPage}
-          noInternalScroll
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <FilterChip
+          label="All Offers"
+          count={counts.all}
+          active={filter === 'all'}
+          onClick={() => setFilter('all')}
+        />
+        <FilterChip
+          label="Pending"
+          count={counts.pending}
+          active={filter === 'pending'}
+          onClick={() => setFilter('pending')}
+        />
+        <FilterChip
+          label="Closed"
+          count={counts.closed}
+          active={filter === 'closed'}
+          onClick={() => setFilter('closed')}
+        />
+        <FilterChip
+          label="Unpaid Offers"
+          count={counts.unpaid}
+          active={filter === 'unpaid'}
+          onClick={() => setFilter('unpaid')}
+        />
+        <FilterChip
+          label="Paid Offers"
+          count={counts.paid}
+          active={filter === 'paid'}
+          onClick={() => setFilter('paid')}
         />
       </div>
+
+      <DataTable
+        columns={PLACEMENT_COLUMNS}
+        data={paged}
+        isLoading={isLoading}
+        emptyMessage="No placements found"
+        rowActions={(row) => [
+          { label: 'View', onClick: () => onView(row) },
+          { label: 'Edit', onClick: () => onEditPlacement(row) },
+          { label: 'Premium Payment', onClick: () => onPremiums(row) },
+          ...(row.status !== 'CANCELLED'
+            ? [{ label: 'Endorsement', onClick: () => onEndorsement(row) }]
+            : []),
+        ]}
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        noInternalScroll
+      />
     </div>
   );
 }
