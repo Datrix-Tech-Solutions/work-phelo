@@ -76,6 +76,141 @@ function totalPaidFor(payments: PlacementPayment[]): number {
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
 
+export type PlacementPaymentStatus = 'paid' | 'partial' | 'outstanding';
+
+/**
+ * Returns a map of placementId → payment status for placements that have at least one
+ * accepted/closed participant. Uses the same query keys as usePlacementPayments so results
+ * share the React Query cache with the per-row PaymentStatusCell queries.
+ */
+export function useCedantPlacementPaymentStatuses(
+  placements: Facultative[],
+): Map<string, PlacementPaymentStatus> {
+  const relevantPlacements = useMemo(
+    () =>
+      placements.filter((p) =>
+        p.participants.some((pt) => pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
+      ),
+    [placements],
+  );
+
+  const paymentQueries = useQueries({
+    queries: relevantPlacements.map((p) => ({
+      queryKey: paymentsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
+  return useMemo(() => {
+    const map = new Map<string, PlacementPaymentStatus>();
+    relevantPlacements.forEach((placement, i) => {
+      const payments = paymentQueries[i]?.data ?? [];
+      const net = netPremiumFor(placement);
+      const paid = totalPaidFor(payments);
+      if (net > 0 && paid >= net) {
+        map.set(placement.id, 'paid');
+      } else if (paid > 0) {
+        map.set(placement.id, 'partial');
+      } else {
+        map.set(placement.id, 'outstanding');
+      }
+    });
+    return map;
+  }, [relevantPlacements, paymentQueries]);
+}
+
+/**
+ * Returns paid disbursements (by currency ISO code) made to a specific reinsurer across all their
+ * placements. Uses the same query keys as usePlacementPayments so results share the cache.
+ */
+export function useReinsurerPaymentSummary(
+  placements: Facultative[],
+  reinsurerId: string,
+): { paidByCode: Map<string, number>; isLoading: boolean } {
+  const reinsuredPlacements = useMemo(
+    () =>
+      placements.filter((p) =>
+        p.participants.some(
+          (pt) =>
+            pt.counterpartyId === reinsurerId &&
+            (pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
+        ),
+      ),
+    [placements, reinsurerId],
+  );
+
+  const paymentQueries = useQueries({
+    queries: reinsuredPlacements.map((p) => ({
+      queryKey: paymentsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
+  const isLoading = paymentQueries.some((q) => q.isLoading);
+
+  const paidByCode = useMemo(() => {
+    const map = new Map<string, number>();
+    paymentQueries.forEach((q) => {
+      const payments = q.data ?? [];
+      payments
+        .filter(
+          (pmt) =>
+            pmt.type === 'REINSURER_DISBURSEMENT' &&
+            pmt.counterpartyId === reinsurerId &&
+            pmt.status === 'RECORDED',
+        )
+        .forEach((pmt) => {
+          map.set(pmt.currency, (map.get(pmt.currency) ?? 0) + parseFloat(pmt.amount));
+        });
+    });
+    return map;
+  }, [paymentQueries, reinsurerId]);
+
+  return { paidByCode, isLoading };
+}
+
+/**
+ * Returns paid premium receipts (by currency ISO code) across a set of placements (already
+ * filtered to one cedant). Uses the same query keys as usePlacementPayments so results share cache.
+ */
+export function useCedantPaymentSummary(placements: Facultative[]): {
+  paidByCode: Map<string, number>;
+  isLoading: boolean;
+} {
+  const paymentQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: paymentsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
+  const isLoading = paymentQueries.some((q) => q.isLoading);
+
+  const paidByCode = useMemo(() => {
+    const map = new Map<string, number>();
+    paymentQueries.forEach((q) => {
+      const payments = q.data ?? [];
+      payments
+        .filter((pmt) => pmt.type === 'PREMIUM_RECEIVED' && pmt.status === 'RECORDED')
+        .forEach((pmt) => {
+          map.set(pmt.currency, (map.get(pmt.currency) ?? 0) + parseFloat(pmt.amount));
+        });
+    });
+    return map;
+  }, [paymentQueries]);
+
+  return { paidByCode, isLoading };
+}
+
 /**
  * Returns a map of cedantId → count of placements with outstanding or partial payments.
  * Uses the same query keys as usePlacementPayments so results share the React Query cache.

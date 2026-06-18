@@ -13,7 +13,7 @@ export function EndorsedReferencePill({ id, reference }: EndorsedReferencePillPr
 
   return (
     <div className="relative inline-flex group">
-      <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-200/60 text-xs font-medium text-blue-700 backdrop-blur-md bg-blue-50/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] whitespace-nowrap transition-all duration-200 group-hover:bg-blue-50/80 group-hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_2px_12px_rgba(139,92,246,0.12)]">
+      <span className="inline-flex items-center px-3 py-1 rounded-full border border-blue-200/60 text-xs font-medium text-blue-700 backdrop-blur-md bg-blue-50/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] whitespace-nowrap transition-all duration-200 group-hover:bg-blue-50/80 group-hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_2px_12px_rgba(32,129,216,0.12)]">
         {reference}
         {count > 0 && (
           <span className="inline-block max-w-0 overflow-hidden group-hover:max-w-25 transition-[max-width] opacity-0 group-hover:opacity-100 duration-200 group-hover:ml-1.5 text-green-600 font-semibold whitespace-nowrap">
@@ -22,7 +22,7 @@ export function EndorsedReferencePill({ id, reference }: EndorsedReferencePillPr
         )}
       </span>
       {count > 0 && (
-        <div className="absolute -top-1 -right-0.5 size-2.5 rounded-full bg-green-500 pointer-events-none " />
+        <div className="absolute -top-1 right-0 size-2.5 rounded-full bg-green-500 pointer-events-none " />
       )}
     </div>
   );

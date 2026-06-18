@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useForm, UseFormReturn } from 'react-hook-form';
+import { useForm, UseFormReturn, Controller } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { DatePicker } from '@/components/atoms/DatePicker';
+import { FormSection } from '@/components/atoms/FormSection';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import {
   Facultative,
@@ -14,6 +16,8 @@ import {
 import { useCreateEndorsement, useUpdateFacultative, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
+
+type EndorsementFormValues = FacultativeFormValues & { effectiveDate: string };
 
 interface EndorsementPanelProps {
   isOpen: boolean;
@@ -52,7 +56,7 @@ function splitRiskDetails(
   };
 }
 
-function placementToFormValues(placement: Facultative): FacultativeFormValues {
+function placementToFormValues(placement: Facultative): EndorsementFormValues {
   return {
     ...FACULTATIVE_FORM_DEFAULTS,
     insuranceCompany: placement.cedant.id,
@@ -69,6 +73,7 @@ function placementToFormValues(placement: Facultative): FacultativeFormValues {
     periodTo: placement.expiryDate ?? '',
     riskDetails: mergeRiskDetails(placement.businessDetails, placement.offerDetails),
     comment: '',
+    effectiveDate: new Date().toISOString().split('T')[0],
   };
 }
 
@@ -78,14 +83,15 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
   const { data: allRiskTypes = [] } = useRiskTypes();
   const toast = useToastStore.getState;
 
-  const form = useForm<FacultativeFormValues>({
+  const form = useForm<EndorsementFormValues>({
     defaultValues: placementToFormValues(placement),
   });
 
   const {
     handleSubmit,
     reset,
-    formState: { isSubmitting },
+    control,
+    formState: { errors, isSubmitting },
   } = form;
 
   useEffect(() => {
@@ -97,7 +103,7 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
     onClose();
   };
 
-  const onSubmit = async (values: FacultativeFormValues) => {
+  const onSubmit = async (values: EndorsementFormValues) => {
     try {
       const selectedRiskType = allRiskTypes.find((rt) => rt.id === values.riskType);
       const { businessDetails, offerDetails } = splitRiskDetails(
@@ -124,7 +130,7 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
 
       await createEndorsement({
         type: 'POLICY_AMENDMENT',
-        effectiveDate: new Date().toISOString(),
+        effectiveDate: new Date(values.effectiveDate).toISOString(),
         reason: values.comment?.trim() || 'Policy endorsement',
         proposedSnapshot: {
           riskTypeId: placementUpdate.riskTypeId,
@@ -168,10 +174,28 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
         </div>
       }
     >
-      <FacultativeFormFields
-        form={form as unknown as UseFormReturn<FacultativeFormValues>}
-        commentLabel="Reason for Endorsement"
-      />
+      <div className="flex flex-col gap-7">
+        <FormSection title="Endorsement Details">
+          <Controller
+            name="effectiveDate"
+            control={control}
+            rules={{ required: 'Effective date is required' }}
+            render={({ field }) => (
+              <DatePicker
+                label="Effective Date"
+                value={field.value}
+                onChange={field.onChange}
+                error={errors.effectiveDate?.message}
+              />
+            )}
+          />
+        </FormSection>
+
+        <FacultativeFormFields
+          form={form as unknown as UseFormReturn<FacultativeFormValues>}
+          commentLabel="Reason for Endorsement"
+        />
+      </div>
     </SidePanel>
   );
 }
