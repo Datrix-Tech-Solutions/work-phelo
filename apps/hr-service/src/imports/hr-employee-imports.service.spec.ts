@@ -6,6 +6,11 @@ import {
   HrImportJobStatus,
   HrImportRowStatus,
 } from '../../prisma/generated/client';
+import {
+  EMPLOYEE_IMPORT_COLUMNS,
+  EMPLOYEE_IMPORT_OPTIONAL_COLUMNS,
+  EMPLOYEE_IMPORT_REQUIRED_COLUMNS,
+} from './employee-import-columns';
 
 describe('HrEmployeeImportsService', () => {
   const tenantId = 'tenant-1';
@@ -80,6 +85,23 @@ describe('HrEmployeeImportsService', () => {
       buffer,
     } as Express.Multer.File;
   }
+
+  it('generates a template whose columns match the dry-run accepted columns', () => {
+    const template = service.getEmployeeCsvTemplate();
+    const [header, sample] = template.trim().split('\n');
+    const columns = header.split(',');
+
+    expect(columns).toEqual([...EMPLOYEE_IMPORT_COLUMNS]);
+    expect(columns).toEqual(
+      expect.arrayContaining([...EMPLOYEE_IMPORT_REQUIRED_COLUMNS]),
+    );
+    expect(columns).toEqual(
+      expect.arrayContaining([...EMPLOYEE_IMPORT_OPTIONAL_COLUMNS]),
+    );
+    expect(sample.split(',')).toHaveLength(columns.length);
+    expect(sample).toContain('Human Resources');
+    expect(sample).toContain('Head Office');
+  });
 
   it('validates a valid CSV and persists valid row results', async () => {
     const result = await service.dryRunEmployees(

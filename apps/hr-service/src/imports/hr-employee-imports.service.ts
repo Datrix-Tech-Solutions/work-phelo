@@ -19,6 +19,12 @@ import {
   EmployeeImportDryRunRowDto,
   EmployeeImportRowIssueDto,
 } from './dto/employee-import-dry-run.dto';
+import {
+  buildEmployeeImportTemplateCsv,
+  EMPLOYEE_IMPORT_COLUMNS,
+  EMPLOYEE_IMPORT_REQUIRED_COLUMNS,
+  type EmployeeImportColumn,
+} from './employee-import-columns';
 
 type ImportFile = Pick<
   Express.Multer.File,
@@ -28,7 +34,7 @@ type ImportFile = Pick<
 type ParsedCsvRow = {
   rowNumber: number;
   rawData: Record<string, string>;
-  values: Partial<Record<EmployeeCsvColumn, string>>;
+  values: Partial<Record<EmployeeImportColumn, string>>;
 };
 
 type ValidatedRow = EmployeeImportDryRunRowDto & {
@@ -45,48 +51,8 @@ type ExistingEmployee = {
 const MAX_CSV_BYTES = 1024 * 1024;
 const MAX_CSV_ROWS = 1000;
 
-const REQUIRED_COLUMNS = [
-  'firstName',
-  'lastName',
-  'email',
-  'department',
-  'jobTitle',
-  'employmentType',
-  'hireDate',
-] as const;
-
-const OPTIONAL_COLUMNS = [
-  'employeeNumber',
-  'phone',
-  'gender',
-  'dateOfBirth',
-  'maritalStatus',
-  'nationality',
-  'address',
-  'city',
-  'region',
-  'branch',
-  'managerEmail',
-  'managerEmployeeNumber',
-  'probationEndsAt',
-  'contractEndDate',
-  'basicSalary',
-  'nationalId',
-  'bankName',
-  'bankAccountNumber',
-  'bankBranch',
-  'ssnit',
-  'tinNumber',
-  'emergencyName',
-  'emergencyPhone',
-  'emergencyRelation',
-] as const;
-
-const ALL_COLUMNS = [...REQUIRED_COLUMNS, ...OPTIONAL_COLUMNS] as const;
-type EmployeeCsvColumn = (typeof ALL_COLUMNS)[number];
-
-const COLUMN_LOOKUP = new Map<string, EmployeeCsvColumn>(
-  ALL_COLUMNS.map((column) => [column.toLowerCase(), column]),
+const COLUMN_LOOKUP = new Map<string, EmployeeImportColumn>(
+  EMPLOYEE_IMPORT_COLUMNS.map((column) => [column.toLowerCase(), column]),
 );
 
 const EMPLOYMENT_TYPES = new Set<string>(Object.values(EmploymentType));
@@ -96,6 +62,10 @@ const MARITAL_STATUSES = new Set<string>(Object.values(MaritalStatus));
 @Injectable()
 export class HrEmployeeImportsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  getEmployeeCsvTemplate() {
+    return buildEmployeeImportTemplateCsv();
+  }
 
   async dryRunEmployees(
     tenantId: string,
@@ -244,7 +214,7 @@ export class HrEmployeeImportsService {
 
     return dataRows.map(({ cells, rowNumber }) => {
       const rawData: Record<string, string> = {};
-      const values: Partial<Record<EmployeeCsvColumn, string>> = {};
+      const values: Partial<Record<EmployeeImportColumn, string>> = {};
 
       headers.forEach((header, index) => {
         const value = cells[index]?.trim() ?? '';
@@ -404,7 +374,7 @@ export class HrEmployeeImportsService {
     const warnings: EmployeeImportRowIssueDto[] = [];
     const values = row.values;
 
-    for (const column of REQUIRED_COLUMNS) {
+    for (const column of EMPLOYEE_IMPORT_REQUIRED_COLUMNS) {
       if (!values[column]?.trim()) {
         errors.push({
           field: column,
@@ -641,7 +611,7 @@ export class HrEmployeeImportsService {
   }
 
   private buildNormalizedData(
-    values: Partial<Record<EmployeeCsvColumn, string>>,
+    values: Partial<Record<EmployeeImportColumn, string>>,
     resolved: {
       email?: string;
       employeeNumber?: string;
@@ -693,7 +663,7 @@ export class HrEmployeeImportsService {
 
   private countColumn(
     rows: ParsedCsvRow[],
-    column: EmployeeCsvColumn,
+    column: EmployeeImportColumn,
     lowercase: boolean,
   ) {
     const counts = new Map<string, number>();
