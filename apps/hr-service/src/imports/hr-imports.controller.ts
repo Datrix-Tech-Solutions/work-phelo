@@ -1,10 +1,12 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
   Req,
+  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -15,12 +17,14 @@ import {
   ApiBody,
   ApiConsumes,
   ApiOperation,
+  ApiProduces,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { Permission } from '@work-phelo/config';
 import { RequestUser } from '@work-phelo/types';
 import { Request } from 'express';
+import { Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
@@ -30,6 +34,7 @@ import {
   EmployeeImportDryRunRequestDto,
   EmployeeImportDryRunResponseDto,
 } from './dto/employee-import-dry-run.dto';
+import { EMPLOYEE_IMPORT_TEMPLATE_FILENAME } from './employee-import-columns';
 import { HrEmployeeImportsService } from './hr-employee-imports.service';
 
 @ApiTags('Imports')
@@ -39,6 +44,37 @@ import { HrEmployeeImportsService } from './hr-employee-imports.service';
 @ApiBearerAuth('access-token')
 export class HrImportsController {
   constructor(private readonly importsService: HrEmployeeImportsService) {}
+
+  @Get('template')
+  @RequirePermissions(Permission.CREATE_EMPLOYEE)
+  @ApiOperation({
+    summary: 'Download the CSV template for employee imports',
+    description:
+      'Returns the exact employee import columns accepted by the dry-run validator, plus one sample row.',
+  })
+  @ApiProduces('text/csv')
+  @ApiResponse({
+    status: 200,
+    description: 'Employee import CSV template',
+    content: {
+      'text/csv': {
+        schema: {
+          type: 'string',
+          example:
+            'firstName,lastName,email,department,jobTitle,employmentType,hireDate\\nAma,Mensah,ama.mensah@example.com,Human Resources,HR Officer,FULL_TIME,2026-01-05\\n',
+        },
+      },
+    },
+  })
+  downloadEmployeeTemplate(@Res({ passthrough: true }) response: Response) {
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${EMPLOYEE_IMPORT_TEMPLATE_FILENAME}"`,
+    );
+
+    return this.importsService.getEmployeeCsvTemplate();
+  }
 
   @Post('dry-run')
   @HttpCode(HttpStatus.CREATED)
