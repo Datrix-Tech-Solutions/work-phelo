@@ -237,8 +237,8 @@ jobs:
       SUPER_ADMIN_EMAIL: ${{ secrets.PROD_SUPER_ADMIN_EMAIL }}
       HR_FIELD_ENCRYPTION_KEY: ${{ secrets.PROD_HR_FIELD_ENCRYPTION_KEY }}
       HR_FIELD_HMAC_KEY: ${{ secrets.PROD_HR_FIELD_HMAC_KEY }}
-      WEB_PUBLIC_API_URL: ${{ env.WEB_PUBLIC_API_URL }}
-      WEB_PUBLIC_APP_BASE_URL: ${{ env.WEB_PUBLIC_APP_BASE_URL }}
+      WEB_PUBLIC_API_URL: https://api.workphelo.com/api/v1
+      WEB_PUBLIC_APP_BASE_URL: https://app.workphelo.com
       BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
       BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
       IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
