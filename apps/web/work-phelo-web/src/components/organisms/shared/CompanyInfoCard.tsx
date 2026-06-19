@@ -111,6 +111,22 @@ export function CompanyInfoCard({
         </div>
       </div>
 
+      {/* ── Middle: company logo ── */}
+      <div className="px-5 py-4 border-b border-gray-100">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+          Company Logo
+        </p>
+        {logoUrl ? (
+          <div className="relative w-full max-w-55 h-16 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+            <Image src={logoUrl} alt={`${name} logo`} fill className="object-contain p-2" />
+          </div>
+        ) : (
+          <div className="w-full max-w-55 h-16 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center">
+            <span className="text-xs text-gray-400">No logo uploaded</span>
+          </div>
+        )}
+      </div>
+
       {/* ── Bottom: administrator ── */}
       <div className="px-5 py-4">
         <div className="flex items-center justify-between mb-3">

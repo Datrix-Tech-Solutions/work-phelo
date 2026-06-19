@@ -47,11 +47,11 @@ export function DocumentPrintLayout({
         }}
       >
         <Image
-          src="/iRiskwatermark.png"
+          src="/iRiskrewatermark.png"
           alt=""
-          width={900}
-          height={600}
-          style={{ objectFit: 'contain', opacity: 0.1 }}
+          width={450}
+          height={300}
+          style={{ objectFit: 'contain' }}
           priority
         />
       </div>

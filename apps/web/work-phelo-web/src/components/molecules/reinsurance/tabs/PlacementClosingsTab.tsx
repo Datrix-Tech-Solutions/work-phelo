@@ -106,7 +106,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
             icon={<Icons.Mail className="w-3.5 h-3.5 shrink-0" />}
             onClick={() => setCreditNoteRow(row)}
           >
-            View Credit Note
+            View Closings
           </TableActionButton>
           <TableActionButton
             icon={<Icons.SendHorizonal className="w-3.5 h-3.5 shrink-0" />}
