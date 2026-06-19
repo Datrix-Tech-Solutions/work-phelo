@@ -2,13 +2,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 
 export class EmployeeImportDryRunRequestDto {
-  @ApiProperty({
-    type: 'string',
-    format: 'binary',
-    description: 'CSV file containing employee rows to validate.',
-  })
-  file!: unknown;
-
   @ApiPropertyOptional({
     description:
       'Optional caller-provided key used to safely reuse an existing dry-run result for the same file.',

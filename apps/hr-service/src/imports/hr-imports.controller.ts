@@ -30,10 +30,7 @@ import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequireModule } from '../auth/decorators/module.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import {
-  EmployeeImportDryRunRequestDto,
-  EmployeeImportDryRunResponseDto,
-} from './dto/employee-import-dry-run.dto';
+import { EmployeeImportDryRunResponseDto } from './dto/employee-import-dry-run.dto';
 import { EMPLOYEE_IMPORT_TEMPLATE_FILENAME } from './employee-import-columns';
 import { HrEmployeeImportsService } from './hr-employee-imports.service';
 
@@ -90,7 +87,25 @@ export class HrImportsController {
       'Validates employee CSV rows for the current tenant. This endpoint never creates employees, auth users, leave balances, holidays, or invitation events.',
   })
   @ApiConsumes('multipart/form-data')
-  @ApiBody({ type: EmployeeImportDryRunRequestDto })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'CSV file containing employee rows to validate.',
+        },
+        idempotencyKey: {
+          type: 'string',
+          description:
+            'Optional caller-provided key used to safely reuse an existing dry-run result for the same file.',
+          example: 'employees-june-2026',
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 201,
     description: 'CSV validated and row-level results persisted',
@@ -107,14 +122,14 @@ export class HrImportsController {
   })
   dryRunEmployees(
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Body() dto: EmployeeImportDryRunRequestDto,
+    @Body('idempotencyKey') idempotencyKey: string | undefined,
     @Req() req: Request & { user: RequestUser },
   ) {
     return this.importsService.dryRunEmployees(
       req.user.tenantId,
       req.user.id,
       file,
-      dto.idempotencyKey,
+      idempotencyKey,
     );
   }
 }
