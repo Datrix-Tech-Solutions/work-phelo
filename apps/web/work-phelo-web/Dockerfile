@@ -10,7 +10,7 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/web/work-phelo-web/ .
-ARG NEXT_PUBLIC_API_URL=https://workphelo.com/api/v1
+ARG NEXT_PUBLIC_API_URL=https://api.workphelo.com/api/v1
 ARG NEXT_PUBLIC_APP_BASE_URL=https://app.workphelo.com
 ARG NEXT_PUBLIC_ENABLE_ANNOUNCEMENT_SMS=false
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -23,7 +23,7 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG NEXT_PUBLIC_API_URL=https://workphelo.com/api/v1
+ARG NEXT_PUBLIC_API_URL=https://api.workphelo.com/api/v1
 ARG NEXT_PUBLIC_APP_BASE_URL=https://app.workphelo.com
 ARG NEXT_PUBLIC_ENABLE_ANNOUNCEMENT_SMS=false
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
