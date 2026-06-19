@@ -2,7 +2,11 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
+import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { FacultativeStatus, TreatyType, toStatusLabel } from '@/types/reinsurance';
+
+export type OfferType = 'Facultative' | TreatyType;
 
 export interface ReinsurerParticipation {
   id: string;
@@ -12,6 +16,8 @@ export interface ReinsurerParticipation {
   role: string;
   sharePercent: string | null;
   participantStatus: string;
+  placementStatus: FacultativeStatus;
+  offerType: OfferType;
   inceptionDate: string | null;
   expiryDate: string | null;
 }
@@ -40,19 +46,19 @@ function statusLabel(status: string): string {
     .join(' ');
 }
 
-function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'neutral' {
-  switch (status) {
-    case 'ACCEPTED':
-    case 'CLOSED':
-      return 'success';
-    case 'QUOTED':
-      return 'warning';
-    case 'DECLINED':
-      return 'danger';
-    default:
-      return 'neutral';
-  }
-}
+const PLACEMENT_VARIANT_MAP: Record<
+  FacultativeStatus,
+  'success' | 'warning' | 'neutral' | 'danger'
+> = {
+  DRAFT: 'neutral',
+  MARKETING: 'warning',
+  PARTIALLY_PLACED: 'success',
+  PLACED: 'success',
+  CLOSING: 'success',
+  CLOSED: 'success',
+  DECLINED: 'danger',
+  CANCELLED: 'danger',
+};
 
 function formatRole(role: string): string {
   switch (role) {
@@ -73,20 +79,19 @@ const COLUMNS: Column<ReinsurerParticipation>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
-    width: '1fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.reference}</span>,
+    width: '190px',
+    render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
   },
   {
     key: 'title',
-    label: 'Insured',
-    width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{row.title}</span>,
-  },
-  {
-    key: 'cedant',
-    label: 'Cedant',
-    width: '1.5fr',
-    render: (row) => <span className="text-gray-600">{row.cedant}</span>,
+    label: 'Insured / Cedant',
+    width: '1.8fr',
+    render: (row) => (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
+        <span className="text-xs text-gray-400">{row.cedant}</span>
+      </div>
+    ),
   },
   {
     key: 'role',
@@ -95,24 +100,33 @@ const COLUMNS: Column<ReinsurerParticipation>[] = [
     render: (row) => <span className="text-gray-600">{formatRole(row.role)}</span>,
   },
   {
+    key: 'offerType',
+    label: 'Offer Type',
+    width: '150px',
+    render: (row) => <span className="text-gray-700 text-sm">{row.offerType}</span>,
+  },
+  {
     key: 'sharePercent',
     label: 'Share (%)',
     width: '100px',
     render: (row) => (
-      <span className="text-gray-700">
+      <span className="font-semibold text-gray-900">
         {row.sharePercent != null ? `${row.sharePercent}%` : '—'}
       </span>
     ),
   },
   {
-    key: 'participantStatus',
+    key: 'placementStatus',
     label: 'Status',
-    width: '120px',
+    width: '140px',
     render: (row) => (
-      <Badge
-        label={statusLabel(row.participantStatus)}
-        variant={statusVariant(row.participantStatus)}
-      />
+      <div className="flex flex-col gap-1 items-start">
+        <Badge
+          label={toStatusLabel(row.placementStatus)}
+          variant={PLACEMENT_VARIANT_MAP[row.placementStatus]}
+        />
+        <span className="text-xs text-gray-400">{statusLabel(row.participantStatus)}</span>
+      </div>
     ),
   },
   {
@@ -141,7 +155,7 @@ export function ReinsurerPoliciesTable({
       columns={COLUMNS}
       data={paged}
       isLoading={isLoading}
-      emptyMessage="No placements found for this reinsurer"
+      emptyMessage="No offers found for this reinsurer"
       onRowClick={onRowClick ? (row) => onRowClick(row.id) : undefined}
       currentPage={page}
       totalPages={totalPages}

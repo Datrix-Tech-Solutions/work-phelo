@@ -26,6 +26,8 @@ interface TopNavProps {
   notificationCount?: number;
   userInitials: string;
   userColor?: string;
+  logoVariant?: 'text' | 'image';
+  logoSrc?: string;
 }
 
 /* ── Profile dropdown ── */
@@ -33,12 +35,14 @@ function ProfileDropdown({
   userInitials,
   userColor,
   onProfileClick,
+  onSettingsClick,
   onLogoutClick,
   isSuperAdmin,
 }: {
   userInitials: string;
   userColor?: string;
   onProfileClick: () => void;
+  onSettingsClick: () => void;
   onLogoutClick: () => void;
   isSuperAdmin?: boolean;
 }) {
@@ -62,7 +66,10 @@ function ProfileDropdown({
       label: 'Settings',
       icon: <Settings className="w-5 h-5" />,
       danger: false,
-      onClick: () => setOpen(false),
+      onClick: () => {
+        setOpen(false);
+        onSettingsClick();
+      },
     },
     {
       label: 'Logout',
@@ -119,6 +126,8 @@ export function TopNav({
   notificationCount,
   userInitials,
   userColor,
+  logoVariant = 'text',
+  logoSrc,
 }: TopNavProps) {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -134,9 +143,23 @@ export function TopNav({
     performLogout(undefined, { onSuccess: () => router.push(redirectTo) });
   };
 
+  // Modules that have their own layout (sidebar) and dedicated profile/settings pages.
+  // Add a module here when its layout.tsx and profile/settings pages exist.
+  const LAYOUT_MODULES = new Set(['hr', 'operations']);
+
+  const currentModule = (() => {
+    const segment = pathname.split('/')[2];
+    return LAYOUT_MODULES.has(segment) ? segment : null;
+  })();
+
   const handleProfileClick = () => {
     const slug = user?.tenantSlug || pathname.split('/')[1];
-    router.push(`/${slug}/hr/profile`);
+    router.push(currentModule ? `/${slug}/${currentModule}/profile` : `/${slug}/profile`);
+  };
+
+  const handleSettingsClick = () => {
+    const slug = user?.tenantSlug || pathname.split('/')[1];
+    router.push(currentModule ? `/${slug}/${currentModule}/settings` : `/${slug}/settings`);
   };
 
   return (
@@ -154,7 +177,7 @@ export function TopNav({
         )}
 
         {/* Logo */}
-        <WorkPheloLogo className="text-base shrink-0" />
+        <WorkPheloLogo className="text-base shrink-0" variant={logoVariant} src={logoSrc} />
 
         <div className="flex-1" />
 
@@ -202,6 +225,7 @@ export function TopNav({
             userInitials={userInitials}
             userColor={userColor}
             onProfileClick={handleProfileClick}
+            onSettingsClick={handleSettingsClick}
             onLogoutClick={() => setLogoutOpen(true)}
             isSuperAdmin={user?.role === 'SUPER_ADMIN'}
           />

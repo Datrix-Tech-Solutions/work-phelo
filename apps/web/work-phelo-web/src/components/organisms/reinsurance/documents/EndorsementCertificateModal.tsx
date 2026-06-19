@@ -1,7 +1,7 @@
 'use client';
 
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
-import { Facultative, PlacementEndorsement, ENDORSEMENT_TYPE_LABELS } from '@/types/reinsurance';
+import { Facultative, PlacementEndorsement } from '@/types/reinsurance';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -71,6 +71,24 @@ export function EndorsementCertificateModal({
       documentTitle="Endorsement Certificate"
       onPrint={onPrint}
       onClose={onClose}
+      afterContent={
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            fontSize: '14px',
+            color: '#374151',
+          }}
+        >
+          <p style={{ margin: 0 }}>Thank You.</p>
+          <p style={{ margin: 0 }}>Yours faithfully,</p>
+          <div style={{ marginTop: '64px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director (AG)</p>
+          </div>
+        </div>
+      }
     >
       {/* Date + salutation */}
       <div className="flex flex-col gap-0.5 text-sm mb-4 mt-1">
@@ -86,7 +104,7 @@ export function EndorsementCertificateModal({
             { label: 'Cedant', value: placement.cedant.name },
             { label: 'Policy Number', value: placement.reference },
             { label: 'Endorsement Reference', value: endorsement.endorsementNumber },
-            { label: 'Endorsement Type', value: ENDORSEMENT_TYPE_LABELS[endorsement.type] },
+            { label: 'Risk Type', value: placement.classOfBusiness ?? '—' },
             { label: 'Effective Date', value: fmtDate(endorsement.effectiveDate) },
             { label: 'Reason', value: endorsement.reason },
           ].map((row) => (
@@ -111,7 +129,7 @@ export function EndorsementCertificateModal({
                   Parameter
                 </th>
                 <th className="py-2 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
-                  Previous
+                  Original
                 </th>
                 <th className="py-2 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
                   Revised

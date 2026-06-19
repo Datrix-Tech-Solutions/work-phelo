@@ -33,6 +33,7 @@ import {
   // Business / HR
   Building2,
   TrendingUp,
+  TrendingDown,
   CircleDollarSign,
 
   // Devices / Assets
@@ -69,6 +70,8 @@ import {
   Pencil,
   Check,
   SendHorizonal,
+  RotateCcw,
+  UserPlus,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -99,6 +102,7 @@ export const Icons = {
   GripVertical,
   Pencil,
   Check,
+  RotateCcw,
 
   // Time & Status
   Clock,
@@ -109,6 +113,7 @@ export const Icons = {
   User,
   Users,
   TrendingUp,
+  TrendingDown,
   CircleDollarSign,
 
   // Devices / Assets
@@ -151,6 +156,7 @@ export const ModuleIcons = {
   marketing: Activity,
   accounting: DollarSign,
   operations: Handshake,
+  recruitment: UserPlus,
 
   // ── HR features (mirror hr-nav.tsx exactly) ───────────────────────────
   dashboard: LayoutDashboard,

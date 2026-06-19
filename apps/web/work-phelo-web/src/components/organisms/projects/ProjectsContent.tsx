@@ -143,7 +143,7 @@ export function ProjectsContent({ tenantSlug }: Props) {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Projects & Tasks</h1>
         </div>
-        {canManageProjects && <Button onClick={() => setPanelOpen(true)}>+ New Project</Button>}
+        {canManageProjects && <Button onClick={() => setPanelOpen(true)}>New Project</Button>}
       </div>
 
       {/* Metric cards */}

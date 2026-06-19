@@ -156,9 +156,9 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0 overflow-y-auto">
+    <div className="flex flex-col gap-6">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-2 text-sm text-gray-400">
+      <nav className="sticky top-0 z-10 bg-app-bg-hr flex items-center gap-2 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50">
         <Link
           href={`/${tenantSlug}/hr/appraisal`}
           className="hover:text-gray-600 transition-colors"
@@ -169,118 +169,121 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
         <span className="text-gray-600">{cycle.title}</span>
       </nav>
 
-      {/* Cycle header */}
-      <div className="flex flex-col gap-1 shrink-0">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold text-gray-900">{cycle.title}</h1>
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
-            <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-            Completed
-          </span>
-        </div>
-        <p className="text-sm text-gray-500">
-          {formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}
-        </p>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-gray-200 shrink-0">
-        {(['overview', 'results'] as Tab[]).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={cn(
-              'px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
-              activeTab === tab
-                ? 'border-brand text-brand'
-                : 'border-transparent text-gray-500 hover:text-gray-700',
-            )}
-          >
-            {tab === 'overview' ? 'Overview' : 'Individual Results'}
-          </button>
-        ))}
-      </div>
-
-      {resultsLoading ? (
-        <div className="text-sm text-gray-400">Loading results…</div>
-      ) : activeTab === 'overview' ? (
-        <>
-          {/* Metric cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
-            <MetricCard
-              label="Total Reviewed"
-              value={summary?.reviewedCount ?? 0}
-              sub={`of ${summary?.totalEmployees ?? 0} employees`}
-            />
-            <MetricCard label="Completion Rate" value={`${summary?.completionRate ?? 0}%`} />
-            <MetricCard
-              label="Exceeded Expectations"
-              value={exceeded}
-              sub="Outstanding or Very Good"
-              highlight="green"
-            />
-            <MetricCard
-              label="Needs Improvement"
-              value={needsImprovement}
-              highlight={needsImprovement > 0 ? 'red' : undefined}
-            />
+      {/* Page body */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-8 flex flex-col gap-6">
+        {/* Cycle header */}
+        <div className="flex flex-col gap-1 shrink-0">
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-gray-900">{cycle.title}</h1>
+            <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
+              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+              Completed
+            </span>
           </div>
+          <p className="text-sm text-gray-500">
+            {formatDate(cycle.startDate)} – {formatDate(cycle.endDate)}
+          </p>
+        </div>
 
-          {/* Rating distribution */}
-          <div className="bg-white border border-gray-100 rounded-card shadow-sm shrink-0">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">Rating Distribution</h2>
+        {/* Tabs */}
+        <div className="flex items-center gap-1 border-b border-gray-200 shrink-0">
+          {(['overview', 'results'] as Tab[]).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                'px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px',
+                activeTab === tab
+                  ? 'border-brand text-brand'
+                  : 'border-transparent text-gray-500 hover:text-gray-700',
+              )}
+            >
+              {tab === 'overview' ? 'Overview' : 'Individual Results'}
+            </button>
+          ))}
+        </div>
+
+        {resultsLoading ? (
+          <div className="text-sm text-gray-400">Loading results…</div>
+        ) : activeTab === 'overview' ? (
+          <>
+            {/* Metric cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+              <MetricCard
+                label="Total Reviewed"
+                value={summary?.reviewedCount ?? 0}
+                sub={`of ${summary?.totalEmployees ?? 0} employees`}
+              />
+              <MetricCard label="Completion Rate" value={`${summary?.completionRate ?? 0}%`} />
+              <MetricCard
+                label="Exceeded Expectations"
+                value={exceeded}
+                sub="Outstanding or Very Good"
+                highlight="green"
+              />
+              <MetricCard
+                label="Needs Improvement"
+                value={needsImprovement}
+                highlight={needsImprovement > 0 ? 'red' : undefined}
+              />
             </div>
-            <RatingDistributionChart data={distribution} />
-          </div>
-        </>
-      ) : (
-        /* Results tab */
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-3 flex-wrap">
-            <select
-              value={deptFilter}
-              onChange={(e) => setDeptFilter(e.target.value)}
-              className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
-            >
-              <option value="">All Departments</option>
-              {departments.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-            <select
-              value={ratingFilter}
-              onChange={(e) => setRatingFilter(e.target.value)}
-              className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
-            >
-              <option value="">All Ratings</option>
-              {ALL_RATINGS.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
 
-          <DataTable<CycleResultItem>
-            columns={columns}
-            data={filtered}
-            isLoading={false}
-            searchPlaceholder="Search employee…"
-            onSearch={setSearch}
-            onRowClick={(row) =>
-              router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/employee/${row.id}`)
-            }
-            emptyMessage="No results match your filters"
-            currentPage={1}
-            totalPages={1}
-            onPageChange={() => {}}
-            noInternalScroll
-          />
-        </div>
-      )}
+            {/* Rating distribution */}
+            <div className="bg-white border border-gray-100 rounded-card shadow-sm shrink-0">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h2 className="text-sm font-semibold text-gray-900">Rating Distribution</h2>
+              </div>
+              <RatingDistributionChart data={distribution} />
+            </div>
+          </>
+        ) : (
+          /* Results tab */
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <select
+                value={deptFilter}
+                onChange={(e) => setDeptFilter(e.target.value)}
+                className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+              >
+                <option value="">All Departments</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={ratingFilter}
+                onChange={(e) => setRatingFilter(e.target.value)}
+                className="h-9 px-3 border border-gray-200 rounded-input text-sm text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-gray-400"
+              >
+                <option value="">All Ratings</option>
+                {ALL_RATINGS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <DataTable<CycleResultItem>
+              columns={columns}
+              data={filtered}
+              isLoading={false}
+              searchPlaceholder="Search employee…"
+              onSearch={setSearch}
+              onRowClick={(row) =>
+                router.push(`/${tenantSlug}/hr/appraisal/cycles/${cycleId}/employee/${row.id}`)
+              }
+              emptyMessage="No results match your filters"
+              currentPage={1}
+              totalPages={1}
+              onPageChange={() => {}}
+              noInternalScroll
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

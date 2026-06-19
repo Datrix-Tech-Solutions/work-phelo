@@ -21,6 +21,7 @@ interface CreateFacultativePanelProps {
 function splitRiskDetails(
   riskDetails: Record<string, string>,
   fields: RiskTypeField[],
+  extraRiskFields: { label: string; value: string }[],
 ): {
   businessDetails: Record<string, unknown> | undefined;
   offerDetails: Record<string, unknown> | undefined;
@@ -35,6 +36,12 @@ function splitRiskDetails(
       businessDetails[field.fieldKey] = val;
     } else if (field.section === 'OFFER_DETAILS') {
       offerDetails[field.fieldKey] = val;
+    }
+  }
+
+  for (const { label, value } of extraRiskFields) {
+    if (label.trim() && value.trim()) {
+      businessDetails[label.trim()] = value.trim();
     }
   }
 
@@ -69,6 +76,7 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
       const { businessDetails, offerDetails } = splitRiskDetails(
         values.riskDetails,
         selectedRiskType?.fields ?? [],
+        values.extraRiskFields ?? [],
       );
 
       await createFacultative({

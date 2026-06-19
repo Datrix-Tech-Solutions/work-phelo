@@ -41,12 +41,14 @@ export default function OperationsLayout({
   }));
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+    <div className="h-screen overflow-hidden bg-app-bg-operations flex flex-col layout-operations">
       <TopNav
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}
         userInitials={initials}
         notificationCount={0}
+        logoVariant="image"
+        logoSrc="/iriskre.png"
       />
       <div className="flex flex-1 min-h-0 relative">
         {/* Mobile backdrop */}

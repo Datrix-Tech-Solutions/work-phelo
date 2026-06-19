@@ -2,6 +2,7 @@
 
 import { use, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
@@ -28,6 +29,7 @@ export default function ReinsurerDetailPage({
   params: Promise<{ tenantSlug: string; reinsurerId: string }>;
 }) {
   const { tenantSlug, reinsurerId } = use(params);
+  const router = useRouter();
 
   const { data: reinsurers = [], isLoading: reinsurersLoading } = useReinsurers();
   const { data: placements = [], isLoading: placementsLoading } = useFacultatives();
@@ -53,6 +55,8 @@ export default function ReinsurerDetailPage({
           role: participant.role,
           sharePercent: participant.sharePercent,
           participantStatus: participant.status,
+          placementStatus: p.status,
+          offerType: 'Facultative',
           inceptionDate: p.inceptionDate,
           expiryDate: p.expiryDate,
         },
@@ -104,7 +108,9 @@ export default function ReinsurerDetailPage({
                   <ReinsurerPlacementsTab
                     participations={participations}
                     isLoading={placementsLoading}
-                    tenantSlug={tenantSlug}
+                    onView={(id) =>
+                      router.push(`/${tenantSlug}/operations/reinsurance/facultative/${id}`)
+                    }
                   />
                 )}
 

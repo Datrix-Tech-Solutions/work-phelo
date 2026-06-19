@@ -30,3 +30,6 @@ export * from './reinsurance/useBrokers';
 export * from './reinsurance/useRiskClasses';
 export * from './reinsurance/useRiskTypes';
 export * from './reinsurance/useCurrencies';
+export * from './reinsurance/usePayments';
+export * from './reinsurance/useReinsuranceDashboard';
+export * from './reinsurance/useClaims';

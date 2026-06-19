@@ -1,62 +1,111 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { StatCard } from '@/components/atoms/StatCard';
+import { useState, useMemo } from 'react';
+import { FilterChip } from '@/components/atoms/FilterChip';
 import {
   ReinsurerPoliciesTable,
   type ReinsurerParticipation,
 } from '@/components/molecules/reinsurance/tables/ReinsurerPoliciesTable';
 
+type ParticipationFilter = 'all' | 'accepted' | 'pending' | 'closed' | 'declined';
+
 interface ReinsurerPlacementsTabProps {
   participations: ReinsurerParticipation[];
   isLoading: boolean;
-  tenantSlug: string;
+  onView: (id: string, reference: string) => void;
 }
 
 export function ReinsurerPlacementsTab({
   participations,
   isLoading,
-  tenantSlug,
+  onView,
 }: ReinsurerPlacementsTabProps) {
-  const router = useRouter();
+  const [filter, setFilter] = useState<ParticipationFilter>('all');
 
-  const accepted = participations.filter((p) => p.participantStatus === 'ACCEPTED').length;
-  const closed = participations.filter((p) => p.participantStatus === 'CLOSED').length;
-  const pending = participations.filter((p) =>
-    ['INVITED', 'OFFER_SENT', 'QUOTED'].includes(p.participantStatus),
-  ).length;
-  const rejected = participations.filter((p) => p.participantStatus === 'DECLINED').length;
-  const decided = accepted + closed + rejected;
-  const acceptanceRate = decided > 0 ? Math.round(((accepted + closed) / decided) * 100) : null;
+  const counts = useMemo(
+    () => ({
+      all: participations.length,
+      accepted: participations.filter((p) => p.participantStatus === 'ACCEPTED').length,
+      pending: participations.filter(
+        (p) => p.placementStatus === 'DRAFT' || p.placementStatus === 'MARKETING',
+      ).length,
+      closed: participations.filter(
+        (p) =>
+          p.placementStatus === 'PARTIALLY_PLACED' ||
+          p.placementStatus === 'PLACED' ||
+          p.placementStatus === 'CLOSED',
+      ).length,
+      declined: participations.filter((p) => p.participantStatus === 'DECLINED').length,
+    }),
+    [participations],
+  );
+
+  const filtered = useMemo(() => {
+    switch (filter) {
+      case 'accepted':
+        return participations.filter((p) => p.participantStatus === 'ACCEPTED');
+      case 'pending':
+        return participations.filter(
+          (p) => p.placementStatus === 'DRAFT' || p.placementStatus === 'MARKETING',
+        );
+      case 'closed':
+        return participations.filter(
+          (p) =>
+            p.placementStatus === 'PARTIALLY_PLACED' ||
+            p.placementStatus === 'PLACED' ||
+            p.placementStatus === 'CLOSED',
+        );
+      case 'declined':
+        return participations.filter((p) => p.participantStatus === 'DECLINED');
+      default:
+        return participations;
+    }
+  }, [participations, filter]);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <StatCard
-          label="Accepted Offers"
-          value={accepted}
-          sub="Offer accepted and awaiting closing"
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        <FilterChip
+          label="All Offers"
+          count={counts.all}
+          active={filter === 'all'}
+          onClick={() => setFilter('all')}
         />
-        <StatCard label="Closed Offers" value={closed} sub="Fully closed participations" />
-        <StatCard label="Pending Offers" value={pending} sub="Offers sent and awaiting response" />
-        <StatCard label="Declined Offers" value={rejected} sub="Offers declined" />
-        <StatCard
-          label="Acceptance Rate"
-          value={acceptanceRate !== null ? `${acceptanceRate}%` : '—'}
-          sub="Accepted & closed / total decided"
+        <FilterChip
+          label="Accepted"
+          count={counts.accepted}
+          active={filter === 'accepted'}
+          onClick={() => setFilter('accepted')}
+        />
+        <FilterChip
+          label="Pending"
+          count={counts.pending}
+          active={filter === 'pending'}
+          onClick={() => setFilter('pending')}
+        />
+        <FilterChip
+          label="Closed"
+          count={counts.closed}
+          active={filter === 'closed'}
+          onClick={() => setFilter('closed')}
+        />
+        <FilterChip
+          label="Declined"
+          count={counts.declined}
+          active={filter === 'declined'}
+          onClick={() => setFilter('declined')}
         />
       </div>
 
-      <div className="flex flex-col gap-3">
-        <h3 className="text-sm font-semibold text-gray-900">Facultative Placements</h3>
-        <ReinsurerPoliciesTable
-          data={participations}
-          isLoading={isLoading}
-          onRowClick={(id) =>
-            router.push(`/${tenantSlug}/operations/reinsurance/facultative/${id}`)
-          }
-        />
-      </div>
+      <ReinsurerPoliciesTable
+        key={filter}
+        data={filtered}
+        isLoading={isLoading}
+        onRowClick={(id) => {
+          const participation = participations.find((p) => p.id === id);
+          if (participation) onView(participation.id, participation.reference);
+        }}
+      />
     </div>
   );
 }

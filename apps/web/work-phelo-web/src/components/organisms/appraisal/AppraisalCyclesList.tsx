@@ -74,9 +74,10 @@ interface CycleActionsProps {
   onDelete: (cycle: AppraisalCycle) => void;
   onStart: (cycle: AppraisalCycle) => void;
   onCancel: (cycle: AppraisalCycle) => void;
+  onReuse: (cycle: AppraisalCycle) => void;
 }
 
-function CycleActions({ cycle, onEdit, onDelete, onStart, onCancel }: CycleActionsProps) {
+function CycleActions({ cycle, onEdit, onDelete, onStart, onCancel, onReuse }: CycleActionsProps) {
   const status = useDerivedCycleStatus(cycle);
 
   return (
@@ -137,6 +138,15 @@ function CycleActions({ cycle, onEdit, onDelete, onStart, onCancel }: CycleActio
           </button>
         </>
       )}
+
+      {status === 'Cancelled' && (
+        <button
+          onClick={() => onReuse(cycle)}
+          className="text-sm font-semibold text-gray-800 hover:text-brand transition-colors"
+        >
+          Reuse
+        </button>
+      )}
     </div>
   );
 }
@@ -148,8 +158,10 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
   const [search, setSearch] = useState('');
   const [panelOpen, setPanelOpen] = useState(false);
   const [editCycle, setEditCycle] = useState<AppraisalCycle | undefined>();
+  const [forceCreate, setForceCreate] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AppraisalCycle | null>(null);
   const [cancelTarget, setCancelTarget] = useState<AppraisalCycle | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
   const [startTarget, setStartTarget] = useState<AppraisalCycle | null>(null);
 
   const PAGE_SIZE = 10;
@@ -221,12 +233,18 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
         <CycleActions
           cycle={row}
           onEdit={(c) => {
+            setForceCreate(false);
             setEditCycle(c);
             setPanelOpen(true);
           }}
           onDelete={setDeleteTarget}
           onStart={setStartTarget}
           onCancel={setCancelTarget}
+          onReuse={(c) => {
+            setForceCreate(true);
+            setEditCycle(c);
+            setPanelOpen(true);
+          }}
         />
       ),
     },
@@ -259,8 +277,10 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
         onClose={() => {
           setPanelOpen(false);
           setEditCycle(undefined);
+          setForceCreate(false);
         }}
         editCycle={editCycle}
+        forceCreate={forceCreate}
       />
 
       {/* Delete modal — Upcoming / Expired only */}
@@ -298,26 +318,37 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
       {/* Cancel modal — In Progress */}
       <Modal
         isOpen={!!cancelTarget}
-        onClose={() => setCancelTarget(null)}
+        onClose={() => {
+          setCancelTarget(null);
+          setCancelReason('');
+        }}
         title="Cancel Cycle"
         description={`Are you sure you want to cancel "${cancelTarget?.title}"? All in-progress appraisals will be stopped.`}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setCancelTarget(null)}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setCancelTarget(null);
+                setCancelReason('');
+              }}
+            >
               Back
             </Button>
             <Button
               variant="danger"
               isLoading={isCancelling}
               loadingText="Cancelling..."
+              disabled={!cancelReason.trim()}
               onClick={() =>
                 cancelTarget &&
                 cancelCycle(
-                  { id: cancelTarget.id },
+                  { id: cancelTarget.id, reason: cancelReason.trim() },
                   {
                     onSuccess: () => {
                       toast.success('Cycle cancelled');
                       setCancelTarget(null);
+                      setCancelReason('');
                     },
                     onError: (err) => toast.error(extractError(err, 'Failed to cancel cycle')),
                   },
@@ -328,7 +359,18 @@ export function AppraisalCyclesList({ tenantSlug }: Props) {
             </Button>
           </>
         }
-      />
+      >
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-gray-700">Reason for cancellation</label>
+          <textarea
+            rows={3}
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            placeholder="Enter reason…"
+            className="w-full rounded-input border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 resize-none"
+          />
+        </div>
+      </Modal>
 
       {/* Start modal */}
       <Modal

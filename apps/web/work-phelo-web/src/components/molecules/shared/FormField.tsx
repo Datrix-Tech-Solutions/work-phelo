@@ -10,6 +10,7 @@ interface FormFieldProps {
   placeholder?: string;
   readOnly?: boolean;
   rows?: number;
+  step?: string | number;
 }
 
 export function FormField({
@@ -20,6 +21,7 @@ export function FormField({
   placeholder,
   readOnly,
   rows,
+  step,
 }: FormFieldProps) {
   if (type === 'password') {
     return (
@@ -41,6 +43,7 @@ export function FormField({
       readOnly={readOnly}
       error={error?.message}
       rows={rows}
+      step={step}
       {...registration}
     />
   );

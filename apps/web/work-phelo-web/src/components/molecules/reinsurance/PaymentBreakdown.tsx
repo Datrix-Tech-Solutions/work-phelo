@@ -3,8 +3,8 @@
 import { Facultative } from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
 
-const NIC_RATE = 0.01;
-const WHT_RATE = 0.1;
+const NIC_RATE = 0;
+const WHT_RATE = 0;
 
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';
@@ -17,18 +17,37 @@ interface PaymentBreakdownProps {
 }
 
 export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProps) {
-  const { premium, commission, currency, reference, policyNumber } = placement ?? {
+  const {
+    premium,
+    commission,
+    facultativeOffer,
+    currency,
+    reference,
+    policyNumber,
+    title,
+    cedant,
+    classOfBusiness,
+  } = placement ?? {
     premium: 0,
     commission: 0,
+    facultativeOffer: 0,
     currency: null,
     reference: null,
     policyNumber: null,
+    title: null,
+    cedant: null,
+    classOfBusiness: null,
   };
 
   const grossPremium = premium ?? 0;
-  const cedantCommission = commission ?? 0;
-  const premiumToBePaid = paidAmount ?? 0;
-  const premiumBalance = grossPremium - premiumToBePaid;
+  const facOffer = facultativeOffer ?? 0;
+  const commissionRate = commission ?? 0;
+
+  const facPremium = (facOffer / 100) * grossPremium;
+  const netPremium = facPremium * (1 - commissionRate / 100);
+
+  const premiumToBePaid = Math.min(paidAmount ?? 0, netPremium);
+  const premiumBalance = netPremium - premiumToBePaid;
 
   const nic = premiumToBePaid * NIC_RATE;
   const wht = premiumToBePaid * WHT_RATE;
@@ -36,18 +55,35 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
   const reinsurers = bankBalance;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-3">
+    <div className="bg-white rounded-xl p-5 flex flex-col gap-3">
       {reference && (
         <>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-900">{reference}</span>
-            {policyNumber && <span className="text-xs text-gray-400">{policyNumber}</span>}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-900">{reference}</span>
+              {policyNumber && <span className="text-xs text-gray-400">{policyNumber}</span>}
+            </div>
+            {(title || cedant || classOfBusiness) && (
+              <div className="flex items-center gap-3">
+                {title && <span className="text-xs text-gray-600">{title}</span>}
+                {title && classOfBusiness && <span className="text-gray-400 text-xs">·</span>}
+                {cedant?.name && <span className="text-xs text-gray-400">{cedant.name}</span>}
+                {cedant?.name && title && <span className="text-gray-400 text-xs">·</span>}
+                {classOfBusiness && (
+                  <span className="text-xs text-gray-400">{classOfBusiness}</span>
+                )}
+              </div>
+            )}
           </div>
           <hr className="border-gray-100" />
         </>
       )}
       <DetailField horizontal label="Gross Premium" value={fmt(grossPremium, currency)} />
-      <DetailField horizontal label="Cedant's Commission" value={fmt(cedantCommission, currency)} />
+      <DetailField
+        horizontal
+        label="Premium"
+        value={<span className="font-semibold text-gray-900">{fmt(netPremium, currency)}</span>}
+      />
       <DetailField
         horizontal
         label="Premium to be Paid"

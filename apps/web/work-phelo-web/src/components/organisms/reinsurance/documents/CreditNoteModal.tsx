@@ -119,16 +119,18 @@ export function CreditNoteModal({
       pct: `${totalCommissionPct}%`,
       value: fmtAmount(commissionAmt, currency),
     },
-    {
-      label: 'NIC Levy',
-      pct: `${nicLevyPct}%`,
-      value: fmtAmount(nicLevyAmt, currency),
-    },
-    {
-      label: 'Withholding Tax',
-      pct: `${withholdingTaxPct}%`,
-      value: fmtAmount(withholdingTaxAmt, currency),
-    },
+    ...(nicLevyPct > 0
+      ? [{ label: 'NIC Levy', pct: `${nicLevyPct}%`, value: fmtAmount(nicLevyAmt, currency) }]
+      : []),
+    ...(withholdingTaxPct > 0
+      ? [
+          {
+            label: 'Withholding Tax',
+            pct: `${withholdingTaxPct}%`,
+            value: fmtAmount(withholdingTaxAmt, currency),
+          },
+        ]
+      : []),
     { label: '', divider: true },
     { label: 'Net Premium', value: fmtAmount(netPremium, currency), bold: true },
   ];
@@ -136,8 +138,26 @@ export function CreditNoteModal({
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
-      title={`Credit Note — ${reference}`}
-      documentTitle="Credit Note"
+      title={`Closings Note — ${reference}`}
+      documentTitle="Closings Note"
+      afterContent={
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            fontSize: '14px',
+            color: '#374151',
+          }}
+        >
+          <p style={{ margin: 0 }}>Thank You.</p>
+          <p style={{ margin: 0 }}>Yours faithfully,</p>
+          <div style={{ marginTop: '64px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director (AG)</p>
+          </div>
+        </div>
+      }
       onPrint={onPrint}
       onClose={onClose}
     >
@@ -155,6 +175,10 @@ export function CreditNoteModal({
         {reinsurerCity && <p className="text-gray-600">{reinsurerCity}</p>}
         {reinsurerRegionCountry && <p className="text-gray-600">{reinsurerRegionCountry}</p>}
         <p className="font-medium text-gray-900 mt-2">Dear Sir/Madam</p>
+        <p className="text-gray-700 mt-3 leading-relaxed">
+          We refer to the risk below and your subsequent acceptance of a share of the same risk.
+          Kindly issue your guarantee in accordance with the information below.
+        </p>
       </div>
 
       <table className="w-full text-sm border-collapse">

@@ -26,6 +26,8 @@ interface CompanyInfoCardProps {
   admin?: AdminInfo;
   onEditCompany: () => void;
   onEditAdmin: () => void;
+  onResendInvite?: () => void;
+  isResendingInvite?: boolean;
 }
 
 /* ── Sub-components ── */
@@ -115,9 +117,11 @@ export function CompanyInfoCard({
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
             Administrator
           </h3>
-          <Button variant="outline" size="sm" onClick={onEditAdmin}>
-            {admin ? 'Update Admin' : 'Assign Admin'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={onEditAdmin}>
+              {admin ? 'Update Admin' : 'Assign Admin'}
+            </Button>
+          </div>
         </div>
 
         {admin ? (

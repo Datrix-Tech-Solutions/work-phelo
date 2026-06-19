@@ -5,7 +5,7 @@ import Image from 'next/image';
 import QRCode from 'react-qr-code';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-import { DocumentPrintLayout } from '@/components/organisms/reinsurance/DocumentPrintLayout';
+import { DocumentPrintLayout } from '@/components/organisms/reinsurance/documents/DocumentPrintLayout';
 
 const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
 
@@ -72,7 +72,9 @@ export function DocumentPreviewModal({
             </div>
           </div>
 
-          {children}
+          <div className="flex justify-center pt-6">
+            <div className="w-full max-w-lg">{children}</div>
+          </div>
         </div>
       </Modal>
 
