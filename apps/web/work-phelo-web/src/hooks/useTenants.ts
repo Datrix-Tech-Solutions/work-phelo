@@ -174,3 +174,41 @@ export function useUpdateTenantAdmin(id: string) {
     },
   });
 }
+
+export function useTenantBranding(tenantId: string) {
+  return useQuery({
+    queryKey: ['tenant-branding', tenantId],
+    queryFn: () =>
+      api
+        .get<{
+          logoDisplayUrl: string | null;
+          logoObjectKey: string | null;
+          primaryColor: string;
+          secondaryColor: string;
+          accentColor: string;
+          sidebarColor: string;
+          defaultsApplied: boolean;
+        }>(`/auth/tenants/${tenantId}/branding`)
+        .then((r) => r.data),
+    enabled: !!tenantId,
+  });
+}
+
+export function useUpdateTenantBranding(tenantId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      logoDisplayUrl?: string | null;
+      logoObjectKey?: string | null;
+      primaryColor?: string | null;
+      secondaryColor?: string | null;
+      accentColor?: string | null;
+      sidebarColor?: string | null;
+      emailHeaderColor?: string | null;
+      documentHeaderColor?: string | null;
+    }) => api.patch(`/auth/tenants/${tenantId}/branding`, payload).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenant-branding', tenantId] });
+    },
+  });
+}
