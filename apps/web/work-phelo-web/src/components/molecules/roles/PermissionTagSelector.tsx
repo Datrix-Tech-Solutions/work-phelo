@@ -21,6 +21,7 @@ export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
   {
     group: 'People Management',
     tags: [
+      { key: 'can_edit_personal_profile', label: 'Can Edit Personal Profile' },
       { key: 'onboard_employee', label: 'Onboard Employee' },
       { key: 'offboard_employee', label: 'Offboard Employee' },
       { key: 'edit_all_employees', label: 'Edit All Employees' },
@@ -62,7 +63,6 @@ export const PERMISSION_TAG_GROUPS: PermissionTagGroup[] = [
 export const SELF_SERVICE_RESOURCES: Array<{ resource: string; action: string }> = [
   { resource: 'employees', action: 'VIEW' },
   { resource: 'employee-profile', action: 'VIEW' },
-  { resource: 'employee-profile', action: 'EDIT' },
   { resource: 'leave-self', action: 'VIEW' },
   { resource: 'leave-self', action: 'CREATE' },
   { resource: 'payslip-self', action: 'VIEW' },
@@ -84,6 +84,7 @@ export const PERMISSION_TAG_MAPPING: Record<
   grant_all_permissions: null,
 
   // People Management
+  can_edit_personal_profile: [{ resource: 'employee-profile', action: 'EDIT' }],
   onboard_employee: [{ resource: 'employees', action: 'CREATE' }],
   offboard_employee: [{ resource: 'offboarding', action: 'EDIT' }],
   edit_all_employees: [{ resource: 'employees', action: 'EDIT' }],
