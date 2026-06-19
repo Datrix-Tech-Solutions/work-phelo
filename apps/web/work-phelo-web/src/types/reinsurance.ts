@@ -633,6 +633,13 @@ export interface CreatePlacementPaymentPayload {
   notes?: string;
 }
 
+export interface PlacementLockStatus {
+  locked: boolean;
+  lockSource?: string | null;
+  lockedAt?: string | null;
+  message?: string | null;
+}
+
 /* ── Placement Claims ── */
 export type PlacementClaimStatus =
   | 'DRAFT'

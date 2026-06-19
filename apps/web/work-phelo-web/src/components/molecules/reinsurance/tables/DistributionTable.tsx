@@ -295,7 +295,7 @@ export function DistributionTable({
                 <Icons.RotateCcw className="w-4 h-4" />
               </button>
             )}
-            {!responded && (
+            {!isPlacementLocked && !responded && (
               <button
                 type="button"
                 title="Delete"
