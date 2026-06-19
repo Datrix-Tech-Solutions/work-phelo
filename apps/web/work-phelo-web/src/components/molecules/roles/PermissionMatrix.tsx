@@ -77,7 +77,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
       resignations: 'Resignation',
     },
     resourceActions: {
-      'employee-profile': ['VIEW', 'EDIT'],
+      'employee-profile': ['VIEW'],
       'leave-self': ['VIEW', 'CREATE'],
       'payslip-self': ['VIEW'],
       'self-appraisals': ['VIEW', 'EDIT'],
@@ -94,6 +94,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
     description: 'Company-wide employee, leave, appraisal, asset and communication workflows',
     resources: [
       'employees',
+      'employee-profile',
       'offboarding',
       'documents',
       'leave',
@@ -103,12 +104,14 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
       'announcements',
     ],
     resourceActions: {
+      'employee-profile': ['EDIT'],
       offboarding: ['EDIT'],
       leave: ['VIEW', 'APPROVE'],
       appraisals: ['VIEW', 'CREATE'],
       'appraisal-reviews': ['EDIT'],
     },
     resourceLabels: {
+      'employee-profile': 'Can edit personal profile',
       appraisals: 'Appraisals',
       offboarding: 'Offboarding',
       documents: 'Employee Documents',
@@ -118,6 +121,7 @@ const RESOURCE_GROUPS: ResourceGroup[] = [
       announcements: 'Announcements',
     },
     actionLabels: {
+      'employee-profile': { EDIT: 'Edit' },
       offboarding: { EDIT: 'Manage' },
       leave: { APPROVE: 'Approve' },
       'appraisal-reviews': { EDIT: 'Review' },

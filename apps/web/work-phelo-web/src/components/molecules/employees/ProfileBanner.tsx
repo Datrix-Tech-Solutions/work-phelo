@@ -8,6 +8,7 @@ import type { Employee } from '@/types/hr';
 interface ProfileBannerProps {
   employee: Employee;
   hasPendingResignation: boolean;
+  canEdit: boolean;
   onResign: () => void;
   onEdit: () => void;
 }
@@ -15,6 +16,7 @@ interface ProfileBannerProps {
 export function ProfileBanner({
   employee,
   hasPendingResignation,
+  canEdit,
   onResign,
   onEdit,
 }: ProfileBannerProps) {
@@ -64,10 +66,12 @@ export function ProfileBanner({
           >
             {hasPendingResignation ? 'Pending Resignation' : 'Resign'}
           </Button>
-          <Button size="sm" onClick={onEdit} className="gap-2">
-            Edit
-            <Pencil className="w-4 h-4" />
-          </Button>
+          {canEdit && (
+            <Button size="sm" onClick={onEdit} className="gap-2">
+              Edit
+              <Pencil className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>

@@ -8,6 +8,8 @@ import {
   useEmployeeOptions,
 } from '@/hooks/hr/useEmployees';
 import { useUserPermissions } from '@/hooks/hr/useRoles';
+import { usePermission } from '@/hooks/hr/usePermission';
+import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { pageBanner, pagePx, pageContent } from '@/lib/layout';
@@ -45,6 +47,7 @@ export function ProfileContent() {
   const { mutate: updateMyProfile, isPending: isUpdating } = useUpdateMyProfile();
   const { data: resignationRecord } = useResignationRecord(employee?.id ?? '');
   const { data: allEmployees = [] } = useEmployeeOptions();
+  const canEditProfile = usePermission(Permission.UPDATE_OWN_PROFILE);
   const { data: userPermsRaw } = useUserPermissions(employee?.userId ?? '');
 
   const userPermsTyped = userPermsRaw as
@@ -91,6 +94,7 @@ export function ProfileContent() {
         <ProfileBanner
           employee={employee}
           hasPendingResignation={hasPendingResignation}
+          canEdit={canEditProfile}
           onResign={() => setResignOpen(true)}
           onEdit={() => setEditOpen(true)}
         />

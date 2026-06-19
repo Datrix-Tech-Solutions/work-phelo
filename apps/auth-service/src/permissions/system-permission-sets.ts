@@ -33,7 +33,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
         'Starter baseline for employee self-service access after invite acceptance.',
       permissions: {
         employees: [PermissionAction.VIEW],
-        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'employee-profile': [PermissionAction.VIEW],
         'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
         attendance: [PermissionAction.CREATE],
         'time-corrections': [PermissionAction.CREATE],
@@ -49,7 +49,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
       description:
         'Starter template for line managers who approve people workflows without full HR administration.',
       permissions: {
-        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'employee-profile': [PermissionAction.VIEW],
         'leave-self': [PermissionAction.VIEW, PermissionAction.CREATE],
         attendance: [PermissionAction.CREATE, PermissionAction.VIEW],
         'time-corrections': [PermissionAction.CREATE, PermissionAction.APPROVE],
@@ -89,7 +89,7 @@ const DEFAULT_PERMISSION_TEMPLATE_DEFINITIONS: readonly DefaultPermissionTemplat
           PermissionAction.DELETE,
           PermissionAction.EXPORT,
         ],
-        'employee-profile': [PermissionAction.VIEW, PermissionAction.EDIT],
+        'employee-profile': [PermissionAction.VIEW],
         offboarding: [PermissionAction.EDIT],
         resignations: [PermissionAction.CREATE, PermissionAction.DELETE],
         documents: [
