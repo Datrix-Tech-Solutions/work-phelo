@@ -101,4 +101,40 @@ describe('ProxyController Reinsurance foundation', () => {
       false,
     );
   });
+
+  it('streams multipart write requests instead of JSON serializing them', () => {
+    const controller = new ProxyController() as unknown as {
+      shouldStreamRequestBody(req: {
+        method: string;
+        headers: Record<string, string>;
+      }): boolean;
+    };
+
+    expect(
+      controller.shouldStreamRequestBody({
+        method: 'POST',
+        headers: {
+          'content-type': 'multipart/form-data; boundary=----workphelo',
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('keeps JSON write requests on the existing JSON proxy path', () => {
+    const controller = new ProxyController() as unknown as {
+      shouldStreamRequestBody(req: {
+        method: string;
+        headers: Record<string, string>;
+      }): boolean;
+    };
+
+    expect(
+      controller.shouldStreamRequestBody({
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+        },
+      }),
+    ).toBe(false);
+  });
 });
