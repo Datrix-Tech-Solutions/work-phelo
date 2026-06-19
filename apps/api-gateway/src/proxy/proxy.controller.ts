@@ -126,6 +126,21 @@ export class ProxyController {
     );
   }
 
+  private shouldStreamRequestBody(req: Request): boolean {
+    if (!['POST', 'PUT', 'PATCH'].includes(req.method)) {
+      return false;
+    }
+
+    const contentTypeHeader = req.headers['content-type'];
+    const contentType = Array.isArray(contentTypeHeader)
+      ? contentTypeHeader.join(';')
+      : contentTypeHeader;
+
+    return (
+      contentType?.toLowerCase().startsWith('multipart/form-data') ?? false
+    );
+  }
+
   @All('api/v1/*')
   async proxy(@Req() req: Request, @Res() res: Response) {
     // pathParts: ['api', 'v1', 'auth', 'login', ...]
@@ -270,6 +285,11 @@ export class ProxyController {
         });
       }
     });
+
+    if (this.shouldStreamRequestBody(req)) {
+      req.pipe(proxyReq);
+      return;
+    }
 
     if (['POST', 'PUT', 'PATCH'].includes(req.method!) && req.body) {
       const body = JSON.stringify(req.body);
