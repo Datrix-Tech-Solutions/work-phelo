@@ -54,6 +54,7 @@ interface CreateCyclePanelProps {
   isOpen: boolean;
   onClose: () => void;
   editCycle?: AppraisalCycle;
+  forceCreate?: boolean;
 }
 
 type FormValues = {
@@ -428,9 +429,14 @@ function EmployeeSelect({
 }
 
 /* ── Main panel ── */
-export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePanelProps) {
+export function CreateCyclePanel({
+  isOpen,
+  onClose,
+  editCycle,
+  forceCreate,
+}: CreateCyclePanelProps) {
   const toast = useToast();
-  const isEditing = !!editCycle;
+  const isEditing = !!editCycle && !forceCreate;
 
   const { data: templates = [] } = useAppraisalTemplates();
   const { data: appraisalSettings } = useAppraisalSettings();
@@ -581,7 +587,13 @@ export function CreateCyclePanel({ isOpen, onClose, editCycle }: CreateCyclePane
     <SidePanel
       isOpen={isOpen}
       onClose={onClose}
-      title={isEditing ? 'Edit Appraisal Cycle' : 'Add New Appraisal Cycle'}
+      title={
+        isEditing
+          ? 'Edit Appraisal Cycle'
+          : forceCreate
+            ? 'New Cycle from Cancelled'
+            : 'Add New Appraisal Cycle'
+      }
       description="Schedule a performance review cycle for your organisation."
       footer={
         <div className="flex justify-end gap-3">

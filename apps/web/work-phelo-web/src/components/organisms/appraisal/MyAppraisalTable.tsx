@@ -12,7 +12,8 @@ type MyAppraisalStatus =
   | 'Pending Manager'
   | 'Pending Approval'
   | 'Completed'
-  | 'Overdue';
+  | 'Overdue'
+  | 'Cancelled';
 
 const STATUS_CONFIG: Record<MyAppraisalStatus, { dot: string; text: string }> = {
   'In Progress': { dot: 'bg-blue-500', text: 'text-blue-600' },
@@ -20,9 +21,15 @@ const STATUS_CONFIG: Record<MyAppraisalStatus, { dot: string; text: string }> = 
   'Pending Approval': { dot: 'bg-purple-400', text: 'text-purple-600' },
   Completed: { dot: 'bg-green-500', text: 'text-green-600' },
   Overdue: { dot: 'bg-red-500', text: 'text-red-500' },
+  Cancelled: { dot: 'bg-gray-300', text: 'text-gray-400' },
 };
 
-function deriveStatus(overallStatus: string, deadline: string): MyAppraisalStatus {
+function deriveStatus(
+  overallStatus: string,
+  cycleStatus: string,
+  deadline: string,
+): MyAppraisalStatus {
+  if (overallStatus === 'CANCELLED' || cycleStatus === 'CANCELLED') return 'Cancelled';
   if (overallStatus === 'Finalized') return 'Completed';
   if (overallStatus === 'ManagerSubmitted' || overallStatus === 'PendingFinalization')
     return 'Pending Approval';
@@ -91,7 +98,13 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
     }
     if (statusFilter) {
       rows = rows.filter(
-        (r) => deriveStatus(r.overallStatus, r.selfAssessmentDeadline) === statusFilter,
+        (r) =>
+          deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline) === statusFilter,
+      );
+    } else {
+      rows = rows.filter(
+        (r) =>
+          deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline) !== 'Cancelled',
       );
     }
     return rows;
@@ -132,7 +145,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
       label: 'Status',
       width: '130px',
       render: (r) => {
-        const status = deriveStatus(r.overallStatus, r.selfAssessmentDeadline);
+        const status = deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline);
         const s = STATUS_CONFIG[status];
         return (
           <span className={cn('inline-flex items-center gap-1.5 text-sm font-medium', s.text)}>
@@ -147,7 +160,8 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
       label: '',
       width: '160px',
       render: (r) => {
-        const status = deriveStatus(r.overallStatus, r.selfAssessmentDeadline);
+        const status = deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline);
+        if (status === 'Cancelled') return null;
         if (status === 'In Progress' || status === 'Overdue') {
           return (
             <button
@@ -196,6 +210,7 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
             <option value="Pending Approval">Pending Approval</option>
             <option value="Completed">Completed</option>
             <option value="Overdue">Overdue</option>
+            <option value="Cancelled">Cancelled</option>
           </select>
           <Icons.ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none h-4 w-4" />
         </div>
@@ -213,7 +228,8 @@ export function MyAppraisalsTable({ search, page, onPageChange }: Props) {
         totalPages={totalPages}
         onPageChange={onPageChange}
         onRowClick={(r) => {
-          const status = deriveStatus(r.overallStatus, r.selfAssessmentDeadline);
+          const status = deriveStatus(r.overallStatus, r.cycleStatus, r.selfAssessmentDeadline);
+          if (status === 'Cancelled') return;
           if (status === 'In Progress' || status === 'Overdue') {
             router.push(`/${tenantSlug}/hr/appraisal/cycles/${r.cycleId}/self-assessment/${r.id}`);
           } else {

@@ -950,6 +950,13 @@ export class EmployeesService {
       );
     }
 
+    if ('managerId' in rest) {
+      await this.prisma.appraisal.updateMany({
+        where: { tenantId, employeeId: id, status: 'IN_PROGRESS' },
+        data: { managerId: rest.managerId ?? null },
+      });
+    }
+
     return this.encryption.decryptEmployeeFields(updated);
   }
 
