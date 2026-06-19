@@ -251,6 +251,7 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
 
       - name: Validate deployment inputs
+        # Keep this preflight ahead of SSH so missing production secrets fail safely.
         run: bash .github/scripts/validate-deploy-env.sh prod
 
       # Upload the compose file — the server needs nothing else from the repo.
