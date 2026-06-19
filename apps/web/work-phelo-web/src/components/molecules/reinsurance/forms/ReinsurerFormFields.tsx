@@ -205,7 +205,7 @@ export function ReinsurerFormFields({
         </div>
       </FormSection>
 
-      {/* ── Address / Territory ── */}
+      {/* ── Location / Territory ── */}
       <CounterpartyAddressFields
         control={control}
         register={register}

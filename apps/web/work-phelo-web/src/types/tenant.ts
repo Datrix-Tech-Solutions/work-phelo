@@ -74,6 +74,7 @@ export interface AuditData {
 export interface Company {
   id: string;
   name: string;
+  email: string;
   dateCreated: string;
   contact: string;
   industry: string;

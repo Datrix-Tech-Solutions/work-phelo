@@ -6,5 +6,5 @@ export default async function ReinsuranceSettingsPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
-  redirect(`/${tenantSlug}/operations/reinsurance/settings/cedants`);
+  redirect(`/${tenantSlug}/operations/reinsurance/settings/risk-classes`);
 }

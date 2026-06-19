@@ -6,6 +6,7 @@ import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '../../atoms/NoSearchLogo';
 import { Icons } from '@/components/atoms/icons';
+import { Button } from '@/components/atoms/Button';
 
 export interface Column<T> {
   key: string;
@@ -34,8 +35,8 @@ interface DataTableProps<T extends { id: string | number }> {
   onFilter?: (value: string) => void;
   onExport?: () => void;
   extraFilters?: React.ReactNode;
-  secondaryButton?: { label: React.ReactNode; onClick: () => void };
-  secondaryButtons?: { label: React.ReactNode; onClick: () => void }[];
+  secondaryButton?: { label: string; onClick: () => void; badgeCount?: number };
+  secondaryButtons?: { label: string; onClick: () => void; badgeCount?: number }[];
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
   onRowClick?: (row: T) => void;
@@ -189,41 +190,42 @@ export function DataTable<T extends { id: string | number }>({
           <div className="flex-1" />
 
           {onExport && (
-            <button
-              onClick={onExport}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
+            <Button variant="secondary" size="sm" onClick={onExport} className="group">
               Export
-              <Icons.Upload className="w-5 h-5" />
-            </button>
+              <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
+                <Icons.Upload className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
+              </span>
+            </Button>
           )}
 
           {secondaryButton && (
-            <button
-              onClick={secondaryButton.onClick}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
+            <Button variant="secondary" size="sm" onClick={secondaryButton.onClick}>
               {secondaryButton.label}
-            </button>
+              {(secondaryButton.badgeCount ?? 0) > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
+                  {secondaryButton.badgeCount}
+                </span>
+              )}
+            </Button>
           )}
           {secondaryButtons?.map((btn, i) => (
-            <button
-              key={i}
-              onClick={btn.onClick}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-input text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-            >
+            <Button key={i} variant="secondary" size="sm" onClick={btn.onClick}>
               {btn.label}
-            </button>
+              {(btn.badgeCount ?? 0) > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
+                  {btn.badgeCount}
+                </span>
+              )}
+            </Button>
           ))}
 
           {actionButton && (
-            <button
-              onClick={actionButton.onClick}
-              className="flex items-center gap-2 px-4 py-2 bg-brand text-white rounded-input text-sm font-medium hover:bg-brand-hover transition-colors"
-            >
+            <Button size="sm" onClick={actionButton.onClick} className="group">
               {actionButton.label}
-              <Icons.Plus />
-            </button>
+              <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
+                <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
+              </span>
+            </Button>
           )}
         </div>
       )}
@@ -240,9 +242,9 @@ export function DataTable<T extends { id: string | number }>({
           <div className="min-w-max flex flex-col flex-1 min-h-0">
             {/* Header */}
             <div className="relative shrink-0">
-              <div className="absolute inset-y-0 left-4 right-4 bg-gray-100 rounded-lg" />
+              <div className="absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg" />
               <div
-                className="relative grid text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-3"
+                className="relative grid text-xs font-semibold text-gray-900 uppercase tracking-wide px-6 py-3"
                 style={{
                   gridTemplateColumns: [
                     ...columns.map((c) => c.width ?? '1fr'),
@@ -251,9 +253,9 @@ export function DataTable<T extends { id: string | number }>({
                 }}
               >
                 {columns.map((col) => (
-                  <span key={col.key} className={col.className}>
+                  <div key={col.key} className={col.className}>
                     {col.label}
-                  </span>
+                  </div>
                 ))}
                 {rowActions && <span />}
               </div>

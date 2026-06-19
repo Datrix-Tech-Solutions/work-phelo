@@ -14,7 +14,6 @@ import { codeToCountry } from '@/lib/geo';
 
 const PAGE_SIZE = 10;
 
-/** Format the primary address as "Region, Country" or just "Country". */
 function formatTerritory(addresses: Counterparty['addresses']): string {
   const primary = addresses.find((a) => a.isPrimary) ?? addresses[0];
   if (!primary) return '—';

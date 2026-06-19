@@ -81,13 +81,15 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
         )}
       </main>
 
-      <EditMyProfilePanel
-        isOpen={editOpen}
-        onClose={() => setEditOpen(false)}
-        employee={employee!}
-        onSave={handleSave}
-        isUpdating={isUpdating}
-      />
+      {employee && (
+        <EditMyProfilePanel
+          isOpen={editOpen}
+          onClose={() => setEditOpen(false)}
+          employee={employee}
+          onSave={handleSave}
+          isUpdating={isUpdating}
+        />
+      )}
     </div>
   );
 }

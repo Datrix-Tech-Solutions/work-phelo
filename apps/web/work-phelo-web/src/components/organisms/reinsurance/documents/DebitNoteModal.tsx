@@ -47,22 +47,7 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
     inceptionDate,
     expiryDate,
     cedant,
-    businessDetails,
-    offerDetails,
   } = placement;
-
-  const riskEntries = [
-    ...Object.entries(businessDetails ?? {}),
-    ...Object.entries(offerDetails ?? {}),
-  ];
-
-  const toLabel = (key: string) => key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-
-  const fmtFieldValue = (val: unknown): string => {
-    if (val == null) return '—';
-    if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-    return String(val);
-  };
 
   const fullCedant = cedants.find((c) => c.id === cedant.id);
   const primaryAddress =
@@ -86,7 +71,10 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
         <div className="w-64 border-b border-gray-400 mt-20" />
       </div>
 
-      <div className="flex flex-col gap-1 p-4 border border-gray-200 rounded-lg bg-gray-50 text-xs text-gray-700">
+      <div
+        className="flex flex-col gap-1 p-4 border border-gray-200 rounded-lg bg-gray-50 text-xs text-gray-700"
+        style={{ breakInside: 'avoid' }}
+      >
         <p className="font-semibold text-gray-900 mb-1">Bank Account</p>
         <p>iRisk Reinsurance Brokers Limited</p>
         <p>Access Bank PLC, Accra Newtown Branch</p>
@@ -94,8 +82,8 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
       </div>
 
       <p className="text-xs font-semibold text-gray-800 leading-relaxed">
-        NOTE: COVER IS SUBJECT TO &quot;NO PREMIUM NO COVER&quot;, PLEASE. WE WOULD THEREFORE
-        APPRECIATE PAYMENT AS SOON AS POSSIBLE.
+        NOTE: COVER IS SUBJECT TO PREMIUM PAYMENT WARRANTY, PLEASE. WE WOULD THEREFORE APPRECIATE
+        PAYMENT AS SOON AS POSSIBLE.
       </p>
     </div>
   );
@@ -149,15 +137,6 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
               <tr key={row.label} className="border-b border-gray-100">
                 <td className="py-2 px-4 text-gray-500 w-1/2">{row.label}</td>
                 <td className="py-2 px-4 text-right font-medium text-gray-900">{row.value}</td>
-              </tr>
-            ))}
-
-            {riskEntries.map(([key, val]) => (
-              <tr key={key} className="border-b border-gray-100">
-                <td className="py-2 px-4 text-gray-500 w-1/2">{toLabel(key)}</td>
-                <td className="py-2 px-4 text-right font-medium text-gray-900">
-                  {fmtFieldValue(val)}
-                </td>
               </tr>
             ))}
 

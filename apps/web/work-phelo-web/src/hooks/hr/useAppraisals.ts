@@ -213,6 +213,8 @@ export function useCancelAppraisalCycle() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appraisal-cycles'] });
       queryClient.invalidateQueries({ queryKey: ['cycle-appraisals'] });
+      queryClient.invalidateQueries({ queryKey: ['my-appraisals'] });
+      queryClient.invalidateQueries({ queryKey: ['team-appraisals'] });
     },
   });
 }

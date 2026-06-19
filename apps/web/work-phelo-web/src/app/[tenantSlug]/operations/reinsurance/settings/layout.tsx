@@ -1,57 +1,20 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname, useParams } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pagePx, pageHeader, pageContent } from '@/lib/layout';
-
-interface TabItem {
-  label: string;
-  href: string;
-}
-
-function SettingsTabs({ tabs }: { tabs: TabItem[] }) {
-  const pathname = usePathname();
-
-  return (
-    <div
-      className={cn(
-        pagePx,
-        'flex items-end gap-1 border-b border-gray-200 bg-white overflow-x-auto [&::-webkit-scrollbar]:hidden [scrollbar-width:none]',
-      )}
-    >
-      {tabs.map((tab) => {
-        const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className={cn(
-              'relative px-4 py-3 text-sm transition-colors whitespace-nowrap',
-              isActive
-                ? 'text-brand font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-brand after:rounded-t-full'
-                : 'text-gray-500 hover:text-gray-800',
-            )}
-          >
-            {tab.label}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
+import { TabBar } from '@/components/molecules/shared/TabBar';
 
 export default function ReinsuranceSettingsLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ tenantSlug: string }>();
   const base = `/${params.tenantSlug}/operations/reinsurance/settings`;
 
-  const tabs: TabItem[] = [
-    { label: 'Cedants', href: `${base}/cedants` },
-    { label: 'Reinsurers', href: `${base}/reinsurers` },
-    // { label: 'Brokers', href: `${base}/brokers` },
-    { label: 'Risk Class', href: `${base}/risk-classes` },
-    { label: 'Risk Types', href: `${base}/risk-types` },
-    { label: 'Currency', href: `${base}/currency` },
+  const tabs = [
+    { key: 'risk-classes', label: 'Risk Class', href: `${base}/risk-classes` },
+    { key: 'risk-types', label: 'Risk Types', href: `${base}/risk-types` },
+    { key: 'currency', label: 'Currency', href: `${base}/currency` },
+    { key: 'banks', label: 'Banks', href: `${base}/banks` },
+    { key: 'levytaxes', label: 'Liabilities', href: `${base}/levytaxes` },
   ];
 
   return (
@@ -61,7 +24,7 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
         <div className={pageHeader}>
           <h1 className="text-xl font-semibold text-gray-900">System Settings</h1>
         </div>
-        <SettingsTabs tabs={tabs} />
+        <TabBar tabs={tabs} className={cn(pagePx, 'bg-white')} />
       </div>
 
       {/* Content */}

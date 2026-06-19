@@ -112,7 +112,7 @@ export default function EmployeesPage({ params }: { params: Promise<{ tenantSlug
         <div>
           <h1 className="text-xl font-bold text-gray-900">Employee Directory</h1>
         </div>
-        {canInvite && <Button onClick={handleInviteClick}>+ Invite Employee</Button>}
+        {canInvite && <Button onClick={handleInviteClick}>Invite Employee</Button>}
       </div>
 
       {/* Summary cards */}

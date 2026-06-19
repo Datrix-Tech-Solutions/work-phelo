@@ -5,9 +5,17 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { FileUpload } from '@/components/atoms/FileUpload';
 import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect';
+import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
 import { Icons } from '@/components/atoms/icons';
 import { inputClass } from '@/lib/utils';
-import { Facultative } from '@/types/reinsurance';
+import { Facultative, PlacementClaim, PlacementClaimAllocation } from '@/types/reinsurance';
+import {
+  useUpdateClaimStatus,
+  useCreateClaimCashCall,
+  useUpdateClaimCashCallStatus,
+} from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 interface MailPreviewModalProps {
   isOpen: boolean;
@@ -16,6 +24,9 @@ interface MailPreviewModalProps {
   recipients: string[];
   onSend: () => void;
   onClose: () => void;
+  onClosePlacement?: () => void;
+  claim?: PlacementClaim;
+  allocation?: PlacementClaimAllocation;
 }
 
 export function MailPreviewModal({
@@ -24,6 +35,8 @@ export function MailPreviewModal({
   recipients,
   onSend,
   onClose,
+  claim,
+  allocation,
 }: MailPreviewModalProps) {
   const [localRecipients, setLocalRecipients] = useState<string[]>(recipients);
   const [addingRecipient, setAddingRecipient] = useState(false);
@@ -31,6 +44,12 @@ export function MailPreviewModal({
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [isSending, setIsSending] = useState(false);
+
+  const updateClaimStatus = useUpdateClaimStatus(placement.id, claim?.id ?? '');
+  const createCashCall = useCreateClaimCashCall(placement.id, claim?.id ?? '');
+  const updateCashCallStatus = useUpdateClaimCashCallStatus(placement.id, claim?.id ?? '');
+  const addToast = useToastStore((s) => s.addToast);
 
   const removeRecipient = (email: string) =>
     setLocalRecipients((prev) => prev.filter((e) => e !== email));
@@ -54,7 +73,22 @@ export function MailPreviewModal({
     onClose();
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
+    if (claim) {
+      setIsSending(true);
+      try {
+        await updateClaimStatus.mutateAsync('NOTIFIED');
+        if (allocation) {
+          const cashCall = await createCashCall.mutateAsync(allocation.id);
+          await updateCashCallStatus.mutateAsync({ cashCallId: cashCall.id, status: 'ISSUED' });
+        }
+      } catch (error) {
+        addToast({ message: extractError(error), type: 'error' });
+        setIsSending(false);
+        return;
+      }
+      setIsSending(false);
+    }
     setLocalRecipients([]);
     setSubject('');
     setBody('');
@@ -67,8 +101,8 @@ export function MailPreviewModal({
       isOpen={isOpen}
       onClose={handleClose}
       title={`Mail — ${placement.cedant.name}`}
-      width="sm:w-[30vw] sm:max-w-[40vw]"
-      height="sm:h-[70vh] sm:max-h-[90vh]"
+      width="sm:w-[50vw] sm:max-w-[60vw]"
+      height="sm:h-[80vh] sm:max-h-[90vh]"
       fullScreenMobile
       footer={
         <div className="flex items-end justify-between gap-4 w-full">
@@ -82,7 +116,9 @@ export function MailPreviewModal({
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={handleSend}>Send</Button>
+            <Button onClick={handleSend} isLoading={isSending} loadingText="Sending…">
+              Send
+            </Button>
           </div>
         </div>
       }
@@ -167,16 +203,13 @@ export function MailPreviewModal({
         </div>
 
         {/* Body */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-bold text-gray-900">Body</label>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder="Write your message here…"
-            rows={8}
-            className={inputClass(undefined, 'resize-none')}
-          />
-        </div>
+        <RichTextEditor
+          label="Body"
+          value={body}
+          onChange={setBody}
+          placeholder="Write your message here…"
+          minHeight={200}
+        />
       </div>
     </Modal>
   );

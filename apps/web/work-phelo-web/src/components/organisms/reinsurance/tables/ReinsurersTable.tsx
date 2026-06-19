@@ -2,11 +2,11 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
+import { ContactCard } from '@/components/molecules/ContactCard';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { AddReinsurancePanel } from '@/components/organisms/reinsurance/panels/AddReinsurancepanel';
-import { EditReinsurancePanel } from '@/components/organisms/reinsurance/panels/EditReinsurancePanel';
 import { AddContactPanel } from '@/components/organisms/reinsurance/panels/AddContactPanel';
 import { useReinsurers, useDeleteReinsurer } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
@@ -14,52 +14,14 @@ import { extractError } from '@/lib/extractError';
 import { Counterparty } from '@/types/reinsurance';
 import { codeToCountry } from '@/lib/geo';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
-/** Format the primary address as "Region, Country" or just "Country". */
 function formatTerritory(addresses: Counterparty['addresses']): string {
   const primary = addresses.find((a) => a.isPrimary) ?? addresses[0];
   if (!primary) return '—';
   const country = codeToCountry(primary.country);
   return primary.state ? `${primary.state}, ${country}` : country;
 }
-
-const COLUMNS: Column<Counterparty>[] = [
-  {
-    key: 'name',
-    label: 'Reinsurer Name',
-    width: '2fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-  },
-  {
-    key: 'email',
-    label: 'Email',
-    width: '2fr',
-    render: (row) => <span className="text-gray-700">{row.email ?? '—'}</span>,
-  },
-  {
-    key: 'phone',
-    label: 'Phone Number',
-    width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{row.phone ?? '—'}</span>,
-  },
-  {
-    key: 'addresses',
-    label: 'Territory',
-    width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{formatTerritory(row.addresses)}</span>,
-  },
-  {
-    key: 'brokerageFee',
-    label: 'Brokerage Fee',
-    width: '1fr',
-    render: (row) => (
-      <span className="text-gray-700">
-        {row.brokerageFee != null ? `${row.brokerageFee}%` : '—'}
-      </span>
-    ),
-  },
-];
 
 export function ReinsurersTable() {
   const toast = useToast();
@@ -68,7 +30,6 @@ export function ReinsurersTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Counterparty | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Counterparty | null>(null);
   const [contactTarget, setContactTarget] = useState<Counterparty | null>(null);
 
@@ -102,50 +63,36 @@ export function ReinsurersTable() {
 
   return (
     <>
-      <DataTable
-        columns={COLUMNS}
+      <DataCardGrid
         data={paged}
         isLoading={isLoading}
         searchPlaceholder="Search reinsurers…"
         searchValue={search}
-        onRowClick={(row) =>
-          router.push(`/${tenantSlug}/operations/reinsurance/settings/reinsurers/${row.id}`)
-        }
         onSearch={(q) => {
           setSearch(q);
           setPage(1);
         }}
         actionButton={{ label: 'Add Reinsurer', onClick: () => setPanelOpen(true) }}
-        rowActions={(row) => [
-          {
-            label: 'View',
-            onClick: () =>
-              router.push(`/${tenantSlug}/operations/reinsurance/settings/reinsurers/${row.id}`),
-          },
-          {
-            label: 'Edit',
-            onClick: () => setEditTarget(row),
-          },
-          {
-            label: 'Add Contact',
-            onClick: () => setContactTarget(row),
-          },
-          {
-            label: 'Archive',
-            onClick: () => setDeleteTarget(row),
-            danger: true,
-          },
-        ]}
         emptyMessage="No reinsurers found"
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
-        noInternalScroll
+        renderCard={(reinsurer) => (
+          <ContactCard
+            name={reinsurer.name}
+            location={formatTerritory(reinsurer.addresses)}
+            email={reinsurer.email ?? '—'}
+            phone={reinsurer.phone ?? '—'}
+            onClick={() =>
+              router.push(`/${tenantSlug}/operations/reinsurance/reinsurers/${reinsurer.id}`)
+            }
+            onAddPerson={() => setContactTarget(reinsurer)}
+            onDelete={() => setDeleteTarget(reinsurer)}
+          />
+        )}
       />
 
       <AddReinsurancePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
-
-      <EditReinsurancePanel reinsurer={editTarget} onClose={() => setEditTarget(null)} />
 
       <AddContactPanel counterparty={contactTarget} onClose={() => setContactTarget(null)} />
 

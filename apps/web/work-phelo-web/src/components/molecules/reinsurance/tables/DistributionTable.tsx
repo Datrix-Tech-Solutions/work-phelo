@@ -32,30 +32,38 @@ function fmtAmount(val: number) {
 
 interface DistributionTableProps {
   entries: DistributionEntry[];
-  facPremium: number;
+  premium: number;
   placement: Facultative;
   hasActiveEndorsement?: boolean;
   confirmedCounterpartyIds?: Set<string>;
+  isPlacementLocked?: boolean;
+  busyIds?: Set<string>;
   onShareCommit: (row: DistributionEntry, share: number) => void;
   onBrokerageCommit: (row: DistributionEntry, brokerage: number) => void;
   onMailSent: (row: DistributionEntry) => void;
   onAccept: (row: DistributionEntry) => void;
   onDecline: (row: DistributionEntry) => void;
   onDelete?: (row: DistributionEntry) => void;
+  onRevert?: (row: DistributionEntry) => void;
+  onClosePlacement?: () => void;
 }
 
 export function DistributionTable({
   entries,
-  facPremium,
+  premium,
   placement,
   hasActiveEndorsement = false,
   confirmedCounterpartyIds,
+  isPlacementLocked = false,
+  busyIds,
   onShareCommit,
   onBrokerageCommit,
   onMailSent,
   onAccept,
   onDecline,
   onDelete,
+  onRevert,
+  onClosePlacement,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [reconfirmedIds, setReconfirmedIds] = useState<Set<string>>(new Set());
@@ -130,8 +138,10 @@ export function DistributionTable({
       key: 'shareLine',
       label: 'Participant Share (%)',
       width: '1fr',
-      render: (row) =>
-        editingId === row.id ? (
+      render: (row) => {
+        const isPaid = isPlacementLocked;
+        if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
+        return editingId === row.id ? (
           <input
             type="number"
             min={0}
@@ -152,14 +162,17 @@ export function DistributionTable({
             <span>{row.shareLine}%</span>
             <Icons.Pencil className="w-3 h-3 text-gray-400 shrink-0" />
           </button>
-        ),
+        );
+      },
     },
     {
       key: 'brokerageFee',
       label: 'Brokerage Fee (%)',
       width: '1fr',
-      render: (row) =>
-        editingBrokerageId === row.id ? (
+      render: (row) => {
+        const isPaid = isPlacementLocked;
+        if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
+        return editingBrokerageId === row.id ? (
           <input
             type="number"
             min={0}
@@ -180,14 +193,15 @@ export function DistributionTable({
             <span>{row.brokerageFee}%</span>
             <Icons.Pencil className="w-3 h-3 text-gray-400 shrink-0" />
           </button>
-        ),
+        );
+      },
     },
     {
       key: 'premiumShare',
       label: 'Premium Share',
       width: '1.2fr',
       render: (row) => (
-        <span className="text-gray-700">{fmtAmount((row.shareLine / 100) * facPremium)}</span>
+        <span className="text-gray-700">{fmtAmount((row.shareLine / 100) * premium)}</span>
       ),
     },
     {
@@ -195,7 +209,7 @@ export function DistributionTable({
       label: 'Brokerage Amount',
       width: '1.2fr',
       render: (row) => {
-        const premiumShare = (row.shareLine / 100) * facPremium;
+        const premiumShare = (row.shareLine / 100) * premium;
         return (
           <span className="text-gray-700">
             {fmtAmount((row.brokerageFee / 100) * premiumShare)}
@@ -215,14 +229,15 @@ export function DistributionTable({
       width: '150px',
       render: (row) => {
         const mailed = mailedIds.has(row.id);
-        // Server state (persists across navigation) takes priority; session state gives instant feedback
         const hasReconfirmed =
           confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
         const responded = row.status === 'Declined' || row.status === 'Accepted';
-        // In endorsement mode, accepted participants re-confirm (no decline allowed)
         const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
-        const showAccept = isReconfirming || (mailed && !responded);
-        const showDecline = !isReconfirming && mailed && !responded;
+        const isBusy = busyIds?.has(row.id) ?? false;
+        const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
+        const showAccept = !isPlacementLocked && (isReconfirming || (mailed && !responded));
+        const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
+        const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
         return (
           <div className="flex items-center gap-2">
             <button
@@ -244,9 +259,12 @@ export function DistributionTable({
             {showAccept && (
               <button
                 type="button"
-                title="Accept"
-                onClick={() => handleAccept(row)}
-                className="text-green-500 hover:text-green-600 transition-colors"
+                title={isBusy ? 'Accepting line...' : 'Accept'}
+                onClick={() => {
+                  if (!isBusy) handleAccept(row);
+                }}
+                disabled={isBusy}
+                className={`text-green-500 hover:text-green-600 transition-colors ${disabledActionClass}`}
               >
                 <Icons.Check className="w-4 h-4" />
               </button>
@@ -255,18 +273,37 @@ export function DistributionTable({
               <button
                 type="button"
                 title="Decline"
-                onClick={() => handleDecline(row)}
-                className="text-red-400 hover:text-red-600 transition-colors"
+                onClick={() => {
+                  if (!isBusy) handleDecline(row);
+                }}
+                disabled={isBusy}
+                className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
                 <Icons.X className="w-4 h-4" />
+              </button>
+            )}
+            {showRevert && (
+              <button
+                type="button"
+                title="Revert to pending"
+                onClick={() => {
+                  if (!isBusy) onRevert?.(row);
+                }}
+                disabled={isBusy}
+                className={`text-amber-500 hover:text-amber-600 transition-colors ${disabledActionClass}`}
+              >
+                <Icons.RotateCcw className="w-4 h-4" />
               </button>
             )}
             {!responded && (
               <button
                 type="button"
                 title="Delete"
-                onClick={() => onDelete?.(row)}
-                className="text-red-400 hover:text-red-600 transition-colors"
+                onClick={() => {
+                  if (!isBusy) onDelete?.(row);
+                }}
+                disabled={isBusy}
+                className={`text-red-400 hover:text-red-600 transition-colors ${disabledActionClass}`}
               >
                 <Icons.Trash2 className="w-4 h-4" />
               </button>
@@ -300,6 +337,7 @@ export function DistributionTable({
         recipients={mailPreviewEntry?.emails ?? []}
         onSend={handleSend}
         onClose={() => setMailPreviewId(null)}
+        onClosePlacement={onClosePlacement}
       />
 
       <SlipPreviewModal

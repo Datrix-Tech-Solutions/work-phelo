@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
-import { Facultative, PlacementDisplayStatus, toDisplayStatus } from '@/types/reinsurance';
+import { Facultative, toDisplayStatus } from '@/types/reinsurance';
 
 function toLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -28,10 +28,7 @@ function fmtAmount(val: number | null, currency: string | null) {
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-const DISPLAY_STATUS_VARIANT_MAP: Record<
-  PlacementDisplayStatus,
-  'success' | 'warning' | 'neutral' | 'danger'
-> = {
+const DISPLAY_STATUS_VARIANT_MAP: Record<string, 'success' | 'warning' | 'neutral' | 'danger'> = {
   Open: 'warning',
   Closed: 'success',
   Cancelled: 'danger',

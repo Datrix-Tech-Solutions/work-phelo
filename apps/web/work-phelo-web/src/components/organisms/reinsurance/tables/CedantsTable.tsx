@@ -2,54 +2,26 @@
 
 import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
+import { ContactCard } from '@/components/molecules/ContactCard';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { AddCedantPanel } from '@/components/organisms/reinsurance/panels/AddCedantPanel';
-import { EditCedantPanel } from '@/components/organisms/reinsurance/panels/EditCedantPanel';
 import { AddContactPanel } from '@/components/organisms/reinsurance/panels/AddContactPanel';
-import { useCedants, useDeleteCedant } from '@/hooks';
+import { useCedants, useDeleteCedant, useCedantOutstandingCounts } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { Counterparty } from '@/types/reinsurance';
 import { codeToCountry } from '@/lib/geo';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 12;
 
-/** Format the primary address as "Region, Country" or just "Country". */
 function formatTerritory(addresses: Counterparty['addresses']): string {
   const primary = addresses.find((a) => a.isPrimary) ?? addresses[0];
   if (!primary) return '—';
   const country = codeToCountry(primary.country);
   return primary.state ? `${primary.state}, ${country}` : country;
 }
-
-const COLUMNS: Column<Counterparty>[] = [
-  {
-    key: 'name',
-    label: 'Cedant Name',
-    width: '2fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-  },
-  {
-    key: 'email',
-    label: 'Email',
-    width: '2fr',
-    render: (row) => <span className="text-gray-700">{row.email ?? '—'}</span>,
-  },
-  {
-    key: 'phone',
-    label: 'Phone Number',
-    width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{row.phone ?? '—'}</span>,
-  },
-  {
-    key: 'addresses',
-    label: 'Territory',
-    width: '1.5fr',
-    render: (row) => <span className="text-gray-700">{formatTerritory(row.addresses)}</span>,
-  },
-];
 
 export function CedantsTable() {
   const router = useRouter();
@@ -58,12 +30,12 @@ export function CedantsTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<Counterparty | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Counterparty | null>(null);
   const [contactTarget, setContactTarget] = useState<Counterparty | null>(null);
 
   const { data = [], isLoading } = useCedants();
   const { mutate: deleteCedant, isPending: isDeleting } = useDeleteCedant();
+  const outstandingCounts = useCedantOutstandingCounts();
 
   const filtered = useMemo(() => {
     if (!search) return data;
@@ -92,8 +64,7 @@ export function CedantsTable() {
 
   return (
     <>
-      <DataTable
-        columns={COLUMNS}
+      <DataCardGrid
         data={paged}
         isLoading={isLoading}
         searchPlaceholder="Search cedants…"
@@ -102,40 +73,31 @@ export function CedantsTable() {
           setSearch(q);
           setPage(1);
         }}
-        onRowClick={(row) =>
-          router.push(`/${tenantSlug}/operations/reinsurance/settings/cedants/${row.id}`)
-        }
         actionButton={{ label: 'Add Cedant', onClick: () => setPanelOpen(true) }}
-        rowActions={(row) => [
-          {
-            label: 'View',
-            onClick: () =>
-              router.push(`/${tenantSlug}/operations/reinsurance/settings/cedants/${row.id}`),
-          },
-          {
-            label: 'Edit',
-            onClick: () => setEditTarget(row),
-          },
-          {
-            label: 'Add Contact',
-            onClick: () => setContactTarget(row),
-          },
-          {
-            label: 'Archive',
-            onClick: () => setDeleteTarget(row),
-            danger: true,
-          },
-        ]}
         emptyMessage="No cedants found"
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
-        noInternalScroll
+        renderCard={(cedant) => {
+          const outstanding = outstandingCounts.get(cedant.id) ?? 0;
+          return (
+            <ContactCard
+              name={cedant.name}
+              location={formatTerritory(cedant.addresses)}
+              email={cedant.email ?? '—'}
+              phone={cedant.phone ?? '—'}
+              badge={outstanding > 0 ? { count: outstanding, label: 'Unpaid Policy' } : undefined}
+              onClick={() =>
+                router.push(`/${tenantSlug}/operations/reinsurance/cedants/${cedant.id}`)
+              }
+              onAddPerson={() => setContactTarget(cedant)}
+              onDelete={() => setDeleteTarget(cedant)}
+            />
+          );
+        }}
       />
 
       <AddCedantPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
-
-      <EditCedantPanel cedant={editTarget} onClose={() => setEditTarget(null)} />
 
       <AddContactPanel counterparty={contactTarget} onClose={() => setContactTarget(null)} />
 

@@ -150,7 +150,7 @@ export function AssetsContent() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Asset Management</h1>
         </div>
-        {canCreateAsset && <Button onClick={() => setPanel({ type: 'add' })}>+ Add Asset</Button>}
+        {canCreateAsset && <Button onClick={() => setPanel({ type: 'add' })}>Add Asset</Button>}
       </div>
 
       {/* Summary cards */}

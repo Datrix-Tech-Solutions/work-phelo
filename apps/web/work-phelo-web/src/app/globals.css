@@ -11,7 +11,7 @@
   --brand:              #0D2244;   /* primary navy — use bg-brand / text-brand */
   --brand-hover:        #162d56;   /* primary hover — use bg-brand-hover */
   --brand-accent:       #85B7EB;   /* secondary light-blue — use bg-brand-accent */
-  --brand-tint:         #EEF1F8;   /* active/selected bg, icon containers — use bg-brand-tint */
+  --brand-tint:         #beccee;   /* active/selected bg, icon containers — use bg-brand-tint */
   --brand-gradient-end: #1E3A8A;   /* gradient highlight — use to-brand-gradient-end or var() in inline styles */
 
   /* Scheduling shift colors */
@@ -21,7 +21,11 @@
   --module-hr:         #0D2244;  /* navy  — HR */
   --module-marketing:  #16A34A;  /* green — Marketing */
   --module-accounting: #ce2121;  /* red — Accounting */
-  --module-operations: #D97706;  /* amber — Operations */
+  --module-operations: #4906d9;  /* amber — Operations */
+
+  /* App shell background colors — change here to update all module layouts */
+  --app-bg-hr:         #f9fafb;  /* bg-gray-50  — HR module layout */
+  --app-bg-operations: #f3f4f6;  /* bg-gray-100 — Operations module layout */
 }
 
 @theme inline {
@@ -46,7 +50,15 @@
   --color-module-marketing:  var(--module-marketing);
   --color-module-accounting: var(--module-accounting);
   --color-module-operations: var(--module-operations);
+
+  /* App shell background tokens */
+  --color-app-bg-hr:         var(--app-bg-hr);
+  --color-app-bg-operations: var(--app-bg-operations);
 }
+
+/* Table header background, action button color, and sidebar accent inherit from the enclosing module layout */
+.layout-hr         { --table-header-bg: var(--app-bg-hr);         --module-btn-bg: var(--module-hr);         --module-btn-bg-hover: #162d56; --module-tint: var(--brand-tint); }
+.layout-operations { --table-header-bg: var(--app-bg-operations); --module-btn-bg: var(--module-operations); --module-btn-bg-hover: #4906d9; --module-tint: #c9c7fe; }
 
 @media (prefers-color-scheme: dark) {
   :root {

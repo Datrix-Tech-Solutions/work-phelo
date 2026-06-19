@@ -2,17 +2,18 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement } from '@/hooks';
-import { FacultativeOverview } from '@/components/molecules/reinsurance/FacultativeOverview';
-import { DistributionListTab } from '@/components/molecules/reinsurance/DistributionListTab';
-import { PlacementClosingsTab } from '@/components/molecules/reinsurance/PlacementClosingsTab';
+import { FacultativeOverview } from '@/components/molecules/reinsurance/stats/FacultativeOverview';
+import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
+import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/PlacementClosingsTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
-import { EndorsementTab } from '@/components/molecules/reinsurance/EndorsmentTab';
+import { EndorsementTab } from '@/components/molecules/reinsurance/tabs/EndorsmentTab';
 
 type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
 
@@ -28,6 +29,8 @@ export default function FacultativeDetailPage({
   params: Promise<{ tenantSlug: string; id: string }>;
 }) {
   const { tenantSlug, id } = use(params);
+  const searchParams = useSearchParams();
+  const fromClosing = searchParams.get('from') === 'closing';
   const { data: placement, isLoading } = useFacultativePlacement(id);
   const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
   const [editOpen, setEditOpen] = useState(false);
@@ -39,10 +42,10 @@ export default function FacultativeDetailPage({
       <div className={`${pageBreadcrumb} shrink-0 flex items-center justify-between`}>
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link
-            href={`/${tenantSlug}/operations/reinsurance/facultative`}
+            href={`/${tenantSlug}/operations/reinsurance/facultative${fromClosing ? '?tab=closing' : ''}`}
             className="hover:text-gray-700 transition-colors"
           >
-            Facultative
+            {fromClosing ? 'Closings' : 'Facultative'}
           </Link>
           <Icons.ChevronRight className="w-5 h-5" />
           <span className="text-gray-700 font-medium">{placement?.reference ?? '—'}</span>
@@ -52,7 +55,7 @@ export default function FacultativeDetailPage({
             {placement.participants.some(
               (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
             ) && (
-              <Button size="sm" variant="outline" onClick={() => setEndorsementOpen(true)}>
+              <Button size="sm" variant="secondary" onClick={() => setEndorsementOpen(true)}>
                 Endorse Policy
               </Button>
             )}

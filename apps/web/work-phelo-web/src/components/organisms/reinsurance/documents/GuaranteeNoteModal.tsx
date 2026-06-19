@@ -5,16 +5,6 @@ import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { useReinsurers, useCedants } from '@/hooks';
 
-function toLabel(key: string) {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function fmtFieldValue(val: unknown): string {
-  if (val == null) return '—';
-  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-  return String(val);
-}
-
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', {
@@ -74,14 +64,7 @@ export function GuaranteeNoteModal({
     expiryDate,
     cedant,
     participants,
-    businessDetails,
-    offerDetails,
   } = placement;
-
-  const riskEntries = [
-    ...Object.entries(businessDetails ?? {}),
-    ...Object.entries(offerDetails ?? {}),
-  ];
 
   const facOffer = facultativeOffer ?? 0;
   const facSumInsured = sumInsured != null ? (facOffer / 100) * sumInsured : null;
@@ -101,6 +84,24 @@ export function GuaranteeNoteModal({
       isOpen={isOpen}
       title={`Guarantee Note — ${reference}`}
       documentTitle="Guarantee Note"
+      afterContent={
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            fontSize: '14px',
+            color: '#374151',
+          }}
+        >
+          <p style={{ margin: 0 }}>Thank You.</p>
+          <p style={{ margin: 0 }}>Yours faithfully,</p>
+          <div style={{ marginTop: '64px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Nana Yaa Savage-Mensah</p>
+            <p style={{ margin: 0, fontWeight: 700, color: '#111827' }}>Managing Director (AG)</p>
+          </div>
+        </div>
+      }
       onPrint={onPrint}
       onClose={onClose}
     >
@@ -129,9 +130,6 @@ export function GuaranteeNoteModal({
         </p>
 
         <DetailField inline label="Cover Type" value={classOfBusiness ?? '—'} />
-        {riskEntries.map(([key, val]) => (
-          <DetailField key={key} inline label={toLabel(key)} value={fmtFieldValue(val)} />
-        ))}
         <DetailField inline label="Reinsured" value={cedant.name} />
         <DetailField inline label="Policy Number" value={reference} />
         <DetailField inline label="Original Insured" value={title} />

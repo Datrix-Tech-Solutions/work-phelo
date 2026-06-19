@@ -23,11 +23,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     ref,
   ) => {
     const base =
-      'inline-flex items-center justify-center font-medium rounded-input transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-70 disabled:cursor-not-allowed';
+      'inline-flex items-center justify-center font-medium rounded-input transition focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-70 disabled:cursor-not-allowed hover:scale-[1.1] active:scale-[0.97] disabled:hover:scale-100';
 
     const variants = {
-      primary: 'bg-brand text-white hover:bg-brand-hover focus:ring-brand',
-      secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200 focus:ring-gray-500',
+      primary:
+        'bg-(--module-btn-bg,var(--color-brand)) text-white hover:bg-(--module-btn-bg-hover,var(--color-brand-hover)) focus:ring-(--module-btn-bg,var(--color-brand))',
+      secondary:
+        'bg-gray-100 text-gray-900 border border-gray-200 hover:bg-(--module-tint,var(--color-brand-tint)) hover:border-(--module-btn-bg,var(--color-brand)) focus:ring-gray-500',
       outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500',
       ghost: 'text-gray-700 hover:bg-gray-100 focus:ring-gray-500',
       danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',

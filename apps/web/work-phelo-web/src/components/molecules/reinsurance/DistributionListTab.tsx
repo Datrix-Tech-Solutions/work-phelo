@@ -316,7 +316,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       <div className="mt-4">
         <DistributionTable
           entries={entries}
-          facPremium={facPremium}
+          premium={facPremium}
           placement={placement}
           hasActiveEndorsement={hasActiveEndorsement}
           confirmedCounterpartyIds={confirmedCounterpartyIds}
