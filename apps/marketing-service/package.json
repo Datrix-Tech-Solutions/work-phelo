@@ -10,7 +10,7 @@
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest",
     "db:migrate": "prisma migrate dev",
-    "db:generate": "prisma generate"
+    "db:generate": "echo \"No Prisma models to generate for marketing-service\""
   },
   "dependencies": {
     "@apollo/server": "^4.11.0",

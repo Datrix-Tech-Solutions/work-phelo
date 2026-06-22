@@ -4,10 +4,16 @@ import { BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import * as bcrypt from 'bcrypt';
 import { AuditService } from '../../src/audit/audit.service';
 import { AuthService } from '../../src/auth/auth.service';
 import { RabbitMQPublisher } from '../../src/messaging/rabbitmq.publisher';
 import { PrismaService } from '../../src/prisma/prisma.service';
+
+jest.mock('bcrypt', () => ({
+  hash: jest.fn(),
+  compare: jest.fn(),
+}));
 
 describe('AuthService password flows', () => {
   const tenant = {
@@ -67,6 +73,10 @@ describe('AuthService password flows', () => {
 
     service = moduleRef.get(AuthService);
     jest.clearAllMocks();
+    const hashMock = bcrypt.hash as unknown as {
+      mockResolvedValue(value: string): void;
+    };
+    hashMock.mockResolvedValue('hashed-password');
   });
 
   it('forgotPassword is tenant-safe: unknown tenant slug returns safe message and does not create OTP', async () => {
