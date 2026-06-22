@@ -11,7 +11,12 @@ import {
   ENDORSEMENT_STATUS_LABELS,
   ENDORSEMENT_STATUS_VARIANT,
 } from '@/types/reinsurance';
-import { usePlacementEndorsements, useReinsurers, useUpdateEndorsementStatus } from '@/hooks';
+import {
+  useCedants,
+  usePlacementEndorsements,
+  useReinsurers,
+  useUpdateEndorsementStatus,
+} from '@/hooks';
 import { EndorsementCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementCertificateModal';
 import { EndorsementReinsurerCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementReinsurerCertificateModal';
 
@@ -121,6 +126,8 @@ function EndorsementCard({
   const [reinsurerDocOpen, setReinsurerDocOpen] = useState(false);
 
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: cedants = [] } = useCedants();
+  const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
   const { mutate: updateStatus, isPending: isUpdatingStatus } = useUpdateEndorsementStatus(
     placement.id,
   );
@@ -204,6 +211,7 @@ function EndorsementCard({
         isOpen={cedantDocOpen}
         placement={placement}
         endorsement={endorsement}
+        cedant={fullCedant}
         onPrint={() => setCedantDocOpen(false)}
         onClose={() => setCedantDocOpen(false)}
       />
