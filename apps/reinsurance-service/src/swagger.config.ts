@@ -140,6 +140,10 @@ pipeline enables it for development only.
       'Reinsurer credit notes generated per confirmed closing',
     )
     .addTag(
+      'Reinsurance - Endorsement Notes',
+      'Endorsement debit and credit notes generated from confirmed endorsement closing snapshots',
+    )
+    .addTag(
       'Reinsurance - Claims',
       'Loss-event claim records, lifecycle and final loss updates',
     )
