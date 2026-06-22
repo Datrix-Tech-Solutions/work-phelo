@@ -53,6 +53,7 @@ const FORWARDED_AUTH_CONTEXT_HEADERS = [
   'x-tenant-slug',
   'x-tenant-name',
   'x-user-first-name',
+  'x-company-role-id',
   'x-user-permissions',
   'x-gateway-permissions-signature',
 ] as const;
@@ -188,6 +189,9 @@ export class ProxyController {
         req.headers['x-tenant-slug'] = payload.tenantSlug;
         req.headers['x-tenant-name'] = payload.tenantName ?? '';
         req.headers['x-user-first-name'] = payload.firstName ?? '';
+        if (payload.companyRoleId) {
+          req.headers['x-company-role-id'] = payload.companyRoleId;
+        }
 
         // Resolve and forward permissions for non-auth-service requests.
         // The JWT no longer embeds permissions (removed to keep Set-Cookie small),

@@ -606,16 +606,16 @@ export class PlacementDocumentsService {
     type: PlacementNoteType;
     noteNumber: string;
   }): PlacementDocumentType {
-    const isEndorsementNote =
-      note.noteNumber.startsWith('EDN-') || note.noteNumber.startsWith('ECN-');
-    if (note.type === PlacementNoteType.DEBIT_NOTE) {
-      return isEndorsementNote
-        ? PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE
-        : PlacementDocumentType.DEBIT_NOTE;
+    if (note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE) {
+      return PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE;
     }
-    return isEndorsementNote
-      ? PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE
-      : PlacementDocumentType.CREDIT_NOTE;
+    if (note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE) {
+      return PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE;
+    }
+    if (note.type === PlacementNoteType.DEBIT_NOTE) {
+      return PlacementDocumentType.DEBIT_NOTE;
+    }
+    return PlacementDocumentType.CREDIT_NOTE;
   }
 
   private prefixForDocumentType(type: PlacementDocumentType): string {

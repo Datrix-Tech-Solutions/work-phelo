@@ -176,7 +176,7 @@ describe('UsersService.acceptInvite after resend token rotation', () => {
     role: 'TENANT_ADMIN',
     status: 'PENDING_VERIFICATION',
     inviteToken: 'new-token',
-    inviteExpiresAt: new Date('2026-06-20T00:00:00.000Z'),
+    inviteExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     tenant,
   };
 

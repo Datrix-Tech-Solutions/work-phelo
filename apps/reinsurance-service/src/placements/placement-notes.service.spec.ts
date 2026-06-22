@@ -85,6 +85,11 @@ describe('PlacementNotesService', () => {
     },
     participant: null,
     closing: null,
+    endorsementId: null,
+    endorsementClosingId: null,
+    endorsementParticipantId: null,
+    endorsementParticipant: null,
+    endorsementClosing: null,
   };
 
   const confirmedClosing = {
@@ -118,9 +123,47 @@ describe('PlacementNotesService', () => {
     },
   };
 
+  const confirmedEndorsementClosing = {
+    id: 'endorsement-closing-1',
+    tenantId: 'tenant-1',
+    placementId: 'placement-1',
+    endorsementId: 'endorsement-1',
+    endorsementParticipantId: 'endorsement-participant-1',
+    closingNumber: 'ENC-001',
+    status: PlacementClosingStatus.CONFIRMED,
+    signedLinePercent: new Prisma.Decimal('10.0000'),
+    sharePercent: new Prisma.Decimal('10.0000'),
+    sumInsuredSnapshot: new Prisma.Decimal('100000.00'),
+    premiumSnapshot: new Prisma.Decimal('1500.00'),
+    commissionPercent: new Prisma.Decimal('10.0000'),
+    commissionAmount: new Prisma.Decimal('150.00'),
+    brokeragePercent: new Prisma.Decimal('7.50'),
+    brokerageAmount: new Prisma.Decimal('112.50'),
+    netPremium: new Prisma.Decimal('1237.50'),
+    currency: 'USD',
+    issuedAt: new Date('2026-06-05T10:00:00.000Z'),
+    confirmedAt: new Date('2026-06-05T11:00:00.000Z'),
+    createdByUserId: 'user-1',
+    createdAt: new Date('2026-06-05T09:00:00.000Z'),
+    updatedAt: new Date('2026-06-05T11:00:00.000Z'),
+    endorsementParticipant: {
+      id: 'endorsement-participant-1',
+      counterpartyId: 'reinsurer-1',
+      counterparty: {
+        id: 'reinsurer-1',
+        type: CounterpartyType.REINSURER,
+      },
+    },
+  };
+
   let prisma: {
     placement: { findFirst: PrismaMethod };
     placementClosing: {
+      findMany: PrismaMethod;
+      findFirst: PrismaMethod;
+    };
+    placementEndorsement: { findFirst: PrismaMethod };
+    placementEndorsementClosing: {
       findMany: PrismaMethod;
       findFirst: PrismaMethod;
     };
@@ -141,6 +184,13 @@ describe('PlacementNotesService', () => {
     prisma = {
       placement: { findFirst: jest.fn<Promise<unknown>, [unknown]>() },
       placementClosing: {
+        findMany: jest.fn<Promise<unknown>, [unknown]>(),
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementEndorsement: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementEndorsementClosing: {
         findMany: jest.fn<Promise<unknown>, [unknown]>(),
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
       },
@@ -389,6 +439,208 @@ describe('PlacementNotesService', () => {
     expect(result.noteNumber).toBe('CN-002');
   });
 
+  it('creates endorsement debit note from confirmed endorsement closing snapshots', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        premiumSnapshot: new Prisma.Decimal('1500.00'),
+        commissionAmount: new Prisma.Decimal('150.00'),
+        currency: 'USD',
+      },
+      {
+        premiumSnapshot: new Prisma.Decimal('500.00'),
+        commissionAmount: new Prisma.Decimal('50.00'),
+        currency: 'USD',
+      },
+    ]);
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      noteNumber: 'EDN-001',
+      endorsementId: 'endorsement-1',
+      grossAmount: new Prisma.Decimal('2000.00'),
+      commissionAmount: new Prisma.Decimal('200.00'),
+      netAmount: new Prisma.Decimal('1800.00'),
+    });
+
+    const result = await service.createEndorsementDebitNote(
+      user,
+      'placement-1',
+      'endorsement-1',
+    );
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      placementId: 'placement-1',
+      endorsementId: 'endorsement-1',
+      counterpartyId: 'cedant-1',
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+      noteNumber: 'EDN-001',
+      grossAmount: 2000,
+      commissionAmount: 200,
+      brokerageAmount: null,
+      netAmount: 1800,
+    });
+    expect(result.noteNumber).toBe('EDN-001');
+  });
+
+  it('rejects endorsement debit note when no confirmed endorsement closing exists', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.createEndorsementDebitNote(user, 'placement-1', 'endorsement-1'),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects duplicate active endorsement debit note', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findFirst.mockResolvedValue({ id: 'active-note' });
+
+    await expect(
+      service.createEndorsementDebitNote(user, 'placement-1', 'endorsement-1'),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('creates endorsement credit note from a confirmed endorsement closing snapshot', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findFirst.mockResolvedValue(
+      confirmedEndorsementClosing,
+    );
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue({
+      ...note,
+      id: 'endorsement-credit-note-1',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      noteNumber: 'ECN-001',
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      counterpartyId: 'reinsurer-1',
+    });
+
+    await service.createEndorsementCreditNote(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      placementId: 'placement-1',
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      counterpartyId: 'reinsurer-1',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      noteNumber: 'ECN-001',
+      grossAmount: 1500,
+      commissionPercent: 10,
+      commissionAmount: 150,
+      brokeragePercent: 7.5,
+      brokerageAmount: 112.5,
+      netAmount: 1237.5,
+    });
+  });
+
+  it('rejects endorsement credit note for non-confirmed or wrong-tenant closing', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createEndorsementCreditNote(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-closing-1',
+      ),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects duplicate active endorsement credit note', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findFirst.mockResolvedValue({ id: 'active-note' });
+
+    await expect(
+      service.createEndorsementCreditNote(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-closing-1',
+      ),
+    ).rejects.toThrow(ConflictException);
+  });
+
+  it('lists and gets endorsement notes scoped to tenant placement and endorsement', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findMany.mockResolvedValue([
+      {
+        ...note,
+        type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+        endorsementId: 'endorsement-1',
+      },
+    ]);
+    prisma.placementNote.findFirst.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      endorsementId: 'endorsement-1',
+    });
+
+    const list = await service.findAllEndorsementNotes(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+    const detail = await service.findEndorsementNote(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+    );
+
+    expect(prisma.placementNote.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          endorsementId: 'endorsement-1',
+        },
+      }),
+    );
+    expect(list).toHaveLength(1);
+    expect(detail.endorsementId).toBe('endorsement-1');
+  });
+
   it('issues a draft note', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placementNote.findFirst.mockResolvedValue(note);
@@ -401,6 +653,40 @@ describe('PlacementNotesService', () => {
     await service.issue(user, 'placement-1', 'note-1', {
       status: PlacementNoteStatus.ISSUED,
     });
+
+    const updateArgs = firstCallArg<Prisma.PlacementNoteUpdateArgs>(
+      prisma.placementNote.update,
+    );
+    expect(updateArgs.where).toEqual({ id: 'note-1' });
+    expect(updateArgs.data).toMatchObject({
+      status: PlacementNoteStatus.ISSUED,
+    });
+  });
+
+  it('issues a draft endorsement note', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findFirst.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      endorsementId: 'endorsement-1',
+    });
+    prisma.placementNote.update.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+      endorsementId: 'endorsement-1',
+      status: PlacementNoteStatus.ISSUED,
+      issuedAt: new Date('2026-06-04T13:00:00.000Z'),
+    });
+
+    await service.issueEndorsementNote(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      { status: PlacementNoteStatus.ISSUED },
+    );
 
     const updateArgs = firstCallArg<Prisma.PlacementNoteUpdateArgs>(
       prisma.placementNote.update,
@@ -440,6 +726,41 @@ describe('PlacementNotesService', () => {
     await service.void(user, 'placement-1', 'note-1', {
       voidReason: 'Issued in error',
     });
+
+    const updateArgs = firstCallArg<Prisma.PlacementNoteUpdateArgs>(
+      prisma.placementNote.update,
+    );
+    expect(updateArgs.data).toMatchObject({
+      status: PlacementNoteStatus.VOID,
+      voidReason: 'Issued in error',
+    });
+  });
+
+  it('voids draft or issued endorsement notes with a reason', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+    });
+    prisma.placementNote.findFirst.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      endorsementId: 'endorsement-1',
+      status: PlacementNoteStatus.ISSUED,
+    });
+    prisma.placementNote.update.mockResolvedValue({
+      ...note,
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      endorsementId: 'endorsement-1',
+      status: PlacementNoteStatus.VOID,
+      voidReason: 'Issued in error',
+    });
+
+    await service.voidEndorsementNote(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      { voidReason: 'Issued in error' },
+    );
 
     const updateArgs = firstCallArg<Prisma.PlacementNoteUpdateArgs>(
       prisma.placementNote.update,

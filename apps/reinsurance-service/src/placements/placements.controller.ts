@@ -1502,6 +1502,242 @@ export class PlacementsController {
     );
   }
 
+  @Get(':id/endorsements/:endorsementId/notes')
+  @ApiTags('Reinsurance - Endorsement Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'List endorsement debit and credit notes',
+    description:
+      'Returns endorsement-scoped debit/credit note records generated from confirmed endorsement closing snapshots. ' +
+      'Endorsement notes do not mutate original placement notes, closings or participants.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteListResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement endorsement is archived, missing or belongs to another tenant/placement.',
+  })
+  async findEndorsementNotes(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    const items = await this.notesService.findAllEndorsementNotes(
+      request.user.tenantId,
+      id,
+      endorsementId,
+    );
+    return { items };
+  }
+
+  @Get(':id/endorsements/:endorsementId/notes/:noteId')
+  @ApiTags('Reinsurance - Endorsement Notes')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get an endorsement note',
+    description:
+      'Returns one endorsement debit or credit note scoped to the authenticated tenant, placement and endorsement.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Endorsement note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The endorsement note is missing or belongs to another tenant/placement/endorsement.',
+  })
+  findEndorsementNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.findEndorsementNote(
+      request.user.tenantId,
+      id,
+      endorsementId,
+      noteId,
+    );
+  }
+
+  @Post(':id/endorsements/:endorsementId/notes/debit')
+  @ApiTags('Reinsurance - Endorsement Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create endorsement debit note',
+    description:
+      'Creates a DRAFT endorsement debit note for the cedant from all CONFIRMED endorsement closing snapshots. ' +
+      'Only one active endorsement debit note is allowed per endorsement; VOID notes are inactive and retain their numbers.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'No confirmed endorsement closing exists or required closing currency/amount data is missing.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'An active endorsement debit note already exists for this endorsement.',
+  })
+  createEndorsementDebitNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.createEndorsementDebitNote(
+      request.user,
+      id,
+      endorsementId,
+    );
+  }
+
+  @Post(':id/endorsements/:endorsementId/closings/:closingId/notes/credit')
+  @ApiTags('Reinsurance - Endorsement Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Create endorsement closing credit note',
+    description:
+      'Creates a DRAFT endorsement credit note for one CONFIRMED endorsement closing and its reinsurer. ' +
+      'Values are copied from PlacementEndorsementClosing snapshots; original placement records are not recalculated or mutated.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Confirmed endorsement closing ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Endorsement closing is not CONFIRMED, is missing snapshot data, or does not belong to a reinsurer.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'An active endorsement credit note already exists for this endorsement closing.',
+  })
+  createEndorsementCreditNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.createEndorsementCreditNote(
+      request.user,
+      id,
+      endorsementId,
+      closingId,
+    );
+  }
+
+  @Patch(':id/endorsements/:endorsementId/notes/:noteId/status')
+  @ApiTags('Reinsurance - Endorsement Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Issue a draft endorsement note',
+    description:
+      'Only DRAFT → ISSUED is supported. VOID uses the dedicated void endpoint. Settlement is deferred.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Endorsement note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Unsupported note status transition.',
+  })
+  issueEndorsementNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: UpdatePlacementNoteStatusDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.issueEndorsementNote(
+      request.user,
+      id,
+      endorsementId,
+      noteId,
+      dto,
+    );
+  }
+
+  @Post(':id/endorsements/:endorsementId/notes/:noteId/void')
+  @ApiTags('Reinsurance - Endorsement Notes')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Void a draft or issued endorsement note',
+    description:
+      'Moves DRAFT or ISSUED endorsement notes to VOID with a required void reason. VOID is terminal.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'noteId',
+    format: 'uuid',
+    description: 'Endorsement note ID.',
+  })
+  @ApiOkResponse({ type: PlacementNoteResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description: 'Void reason is missing or note is already terminal.',
+  })
+  voidEndorsementNote(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('noteId', ParseUUIDPipe) noteId: string,
+    @Body() dto: VoidPlacementNoteDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.notesService.voidEndorsementNote(
+      request.user,
+      id,
+      endorsementId,
+      noteId,
+      dto,
+    );
+  }
+
   @Get(':id/notes')
   @ApiTags('Reinsurance - Notes')
   @RequirePermissions(PlacementPermission.VIEW)
