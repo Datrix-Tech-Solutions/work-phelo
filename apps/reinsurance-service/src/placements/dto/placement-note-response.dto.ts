@@ -36,6 +36,22 @@ export class PlacementNoteClosingDto {
   closingNumber!: string;
 }
 
+export class PlacementNoteEndorsementParticipantDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  counterpartyId!: string;
+}
+
+export class PlacementNoteEndorsementClosingDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ example: 'ENC-001' })
+  closingNumber!: string;
+}
+
 export class PlacementNoteResponseDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -51,6 +67,15 @@ export class PlacementNoteResponseDto {
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   participantId!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  endorsementId!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  endorsementClosingId!: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  endorsementParticipantId!: string | null;
 
   @ApiProperty({ format: 'uuid' })
   counterpartyId!: string;
@@ -145,6 +170,18 @@ export class PlacementNoteResponseDto {
 
   @ApiPropertyOptional({ type: PlacementNoteClosingDto, nullable: true })
   closing!: PlacementNoteClosingDto | null;
+
+  @ApiPropertyOptional({
+    type: PlacementNoteEndorsementParticipantDto,
+    nullable: true,
+  })
+  endorsementParticipant!: PlacementNoteEndorsementParticipantDto | null;
+
+  @ApiPropertyOptional({
+    type: PlacementNoteEndorsementClosingDto,
+    nullable: true,
+  })
+  endorsementClosing!: PlacementNoteEndorsementClosingDto | null;
 }
 
 export class PlacementNoteListResponseDto {

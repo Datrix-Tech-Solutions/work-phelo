@@ -88,10 +88,16 @@ describe('PlacementsController', () => {
   const notesService = {
     findAll: jest.fn(),
     findOne: jest.fn(),
+    findAllEndorsementNotes: jest.fn(),
+    findEndorsementNote: jest.fn(),
     createDebitNote: jest.fn(),
     createCreditNote: jest.fn(),
+    createEndorsementDebitNote: jest.fn(),
+    createEndorsementCreditNote: jest.fn(),
     issue: jest.fn(),
+    issueEndorsementNote: jest.fn(),
     void: jest.fn(),
+    voidEndorsementNote: jest.fn(),
   };
   const paymentsService = {
     findAll: jest.fn(),
@@ -164,6 +170,8 @@ describe('PlacementsController', () => {
     ['findEndorsementParticipant', PlacementPermission.VIEW],
     ['findEndorsementClosings', PlacementPermission.VIEW],
     ['findEndorsementClosing', PlacementPermission.VIEW],
+    ['findEndorsementNotes', PlacementPermission.VIEW],
+    ['findEndorsementNote', PlacementPermission.VIEW],
     ['findNotes', PlacementPermission.VIEW],
     ['findNote', PlacementPermission.VIEW],
     ['findPayments', PlacementPermission.VIEW],
@@ -204,6 +212,10 @@ describe('PlacementsController', () => {
     ['voidDocument', PlacementPermission.EDIT],
     ['createDebitNote', PlacementPermission.EDIT],
     ['createCreditNote', PlacementPermission.EDIT],
+    ['createEndorsementDebitNote', PlacementPermission.EDIT],
+    ['createEndorsementCreditNote', PlacementPermission.EDIT],
+    ['issueEndorsementNote', PlacementPermission.EDIT],
+    ['voidEndorsementNote', PlacementPermission.EDIT],
     ['updateClaim', PlacementPermission.EDIT],
     ['changeClaimStatus', PlacementPermission.EDIT],
     ['generateClaimAllocations', PlacementPermission.EDIT],
@@ -757,6 +769,36 @@ describe('PlacementsController', () => {
     );
   });
 
+  it('delegates endorsement note reads with authenticated tenant context', async () => {
+    const controller = createController();
+    notesService.findAllEndorsementNotes.mockResolvedValue([]);
+
+    const listResult = await controller.findEndorsementNotes(
+      'placement-1',
+      'endorsement-1',
+      { user } as never,
+    );
+    await controller.findEndorsementNote(
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      { user } as never,
+    );
+
+    expect(notesService.findAllEndorsementNotes).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+    expect(listResult).toEqual({ items: [] });
+    expect(notesService.findEndorsementNote).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+    );
+  });
+
   it('delegates note create, issue and void with authenticated user context', async () => {
     const controller = createController();
 
@@ -795,6 +837,62 @@ describe('PlacementsController', () => {
     expect(notesService.void).toHaveBeenCalledWith(
       user,
       'placement-1',
+      'note-1',
+      expect.objectContaining({ voidReason: 'Issued in error' }),
+    );
+  });
+
+  it('delegates endorsement note create, issue and void with authenticated user context', async () => {
+    const controller = createController();
+
+    await controller.createEndorsementDebitNote(
+      'placement-1',
+      'endorsement-1',
+      { user } as never,
+    );
+    await controller.createEndorsementCreditNote(
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+      { user } as never,
+    );
+    await controller.issueEndorsementNote(
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      { status: PlacementNoteStatus.ISSUED },
+      { user } as never,
+    );
+    await controller.voidEndorsementNote(
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      { voidReason: 'Issued in error' },
+      { user } as never,
+    );
+
+    expect(notesService.createEndorsementDebitNote).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+    );
+    expect(notesService.createEndorsementCreditNote).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+    expect(notesService.issueEndorsementNote).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'note-1',
+      expect.objectContaining({ status: PlacementNoteStatus.ISSUED }),
+    );
+    expect(notesService.voidEndorsementNote).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'endorsement-1',
       'note-1',
       expect.objectContaining({ voidReason: 'Issued in error' }),
     );
