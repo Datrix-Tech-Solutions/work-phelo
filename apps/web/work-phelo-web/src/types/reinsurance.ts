@@ -530,6 +530,7 @@ export interface PlacementEndorsement {
   changeSummary: Record<string, unknown> | null;
   originalSnapshot: Record<string, unknown>;
   proposedSnapshot: Record<string, unknown> | null;
+  targetPercent: string | null;
   createdByUserId: string;
   closedAt: string | null;
   voidedAt: string | null;
@@ -555,6 +556,7 @@ export interface PlacementEndorsementParticipant {
   sharePercent: string | null;
   signedLinePercent: string | null;
   notes: string | null;
+  counterparty?: { id: string; name: string; registrationNumber: string | null };
   createdAt: string;
   updatedAt: string;
 }
@@ -567,12 +569,22 @@ export interface CreateEndorsementParticipantPayload {
   status?: PlacementEndorsementParticipantStatus;
 }
 
+export interface UpdateEndorsementParticipantPayload {
+  counterpartyId?: string;
+  originalParticipantId?: string | null;
+  sharePercent?: number;
+  signedLinePercent?: number;
+  status?: PlacementEndorsementParticipantStatus;
+  notes?: string;
+}
+
 export interface CreateEndorsementPayload {
   type: PlacementEndorsementType;
   effectiveDate: string;
   reason: string;
   description?: string;
   proposedSnapshot?: Record<string, unknown>;
+  targetPercent?: number;
 }
 
 /* ── Placement Payments ── */

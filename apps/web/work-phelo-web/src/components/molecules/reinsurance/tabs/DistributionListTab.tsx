@@ -9,7 +9,14 @@ import {
   DistributionEntry,
   DistributionStatus,
 } from '@/components/molecules/reinsurance/tables/DistributionTable';
-import { Facultative, PlacementParticipant, PlacementParticipantStatus } from '@/types/reinsurance';
+import {
+  Facultative,
+  PlacementEndorsement,
+  PlacementEndorsementParticipant,
+  PlacementEndorsementParticipantStatus,
+  PlacementParticipant,
+  PlacementParticipantStatus,
+} from '@/types/reinsurance';
 import { ReinsurerEntry } from '@/components/molecules/reinsurance/ReinsurerDistributionSelect';
 import {
   useReinsurers,
@@ -25,6 +32,9 @@ import {
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
+  useUpdateEndorsementParticipant,
+  useUpdateEndorsementParticipantStatus,
+  useDeleteEndorsementParticipant,
   facultativePlacementKey,
 } from '@/hooks';
 import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
@@ -44,12 +54,61 @@ const SEGMENT_COLORS = [
 
 interface DistributionListTabProps {
   placement: Facultative;
+  mode?: 'placement' | 'endorsement';
+  endorsement?: PlacementEndorsement;
 }
 
 function participantStatus(s: PlacementParticipantStatus): DistributionStatus {
   if (s === 'ACCEPTED' || s === 'CLOSED') return 'Accepted';
   if (s === 'DECLINED') return 'Declined';
   return 'Pending';
+}
+
+function endorsementParticipantStatus(
+  s: PlacementEndorsementParticipantStatus,
+): DistributionStatus {
+  if (s === 'ACCEPTED' || s === 'CLOSED') return 'Accepted';
+  if (s === 'DECLINED') return 'Declined';
+  return 'Pending';
+}
+
+function canEndorsementParticipantRespond(s: PlacementEndorsementParticipantStatus): boolean {
+  return s === 'OFFER_SENT' || s === 'QUOTED';
+}
+
+function numericValue(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function snapshotPlacement(snapshot: Record<string, unknown> | null | undefined) {
+  if (!snapshot) return {};
+  if (snapshot.placement && typeof snapshot.placement === 'object') {
+    return snapshot.placement as Record<string, unknown>;
+  }
+  return snapshot;
+}
+
+function endorsementCapacityPercent(
+  endorsement: PlacementEndorsement | undefined,
+  placement: Facultative,
+) {
+  if (!endorsement) return 0;
+
+  const explicitTarget = numericValue(endorsement.targetPercent);
+  if (explicitTarget != null && explicitTarget > 0) return explicitTarget;
+
+  const proposed = snapshotPlacement(endorsement.proposedSnapshot);
+  const original = snapshotPlacement(endorsement.originalSnapshot);
+  const proposedOffer = numericValue(proposed.facultativeOffer);
+  const originalOffer = numericValue(original.facultativeOffer) ?? placement.facultativeOffer ?? 0;
+
+  if (proposedOffer == null) return 0;
+  return Math.max(0, +(proposedOffer - originalOffer).toFixed(4));
 }
 
 function participantToEntry(
@@ -67,9 +126,33 @@ function participantToEntry(
   };
 }
 
-export function DistributionListTab({ placement }: DistributionListTabProps) {
+function endorsementParticipantToEntry(
+  p: PlacementEndorsementParticipant,
+  reinsurerEmails: Record<string, string[]>,
+  reinsurerNames: Record<string, string>,
+): DistributionEntry {
+  const share = parseFloat(p.sharePercent ?? p.signedLinePercent ?? '0');
+  return {
+    id: p.id,
+    counterpartyId: p.counterpartyId,
+    reinsurerCompany: p.counterparty?.name ?? reinsurerNames[p.counterpartyId] ?? p.counterpartyId,
+    emails: reinsurerEmails[p.counterpartyId] ?? [],
+    shareLine: Number.isFinite(share) ? share : 0,
+    brokerageFee: 0,
+    status: endorsementParticipantStatus(p.status),
+    canRespond: canEndorsementParticipantRespond(p.status),
+  };
+}
+
+export function DistributionListTab({
+  placement,
+  mode = 'placement',
+  endorsement,
+}: DistributionListTabProps) {
   const queryClient = useQueryClient();
-  const facOffer = placement.facultativeOffer ?? 0;
+  const isEndorsementMode = mode === 'endorsement';
+  const endorsementCapacity = endorsementCapacityPercent(endorsement, placement);
+  const facOffer = isEndorsementMode ? endorsementCapacity : (placement.facultativeOffer ?? 0);
   const premium = placement.premium ?? 0;
 
   const { data: reinsurers = [] } = useReinsurers();
@@ -91,11 +174,24 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const { data: endorsementParticipants = [] } = usePlacementEndorsementParticipants(
     placement.id,
-    activeEndorsement?.id,
+    isEndorsementMode ? endorsement?.id : activeEndorsement?.id,
   );
-  const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
+  const { mutateAsync: createEndorsementParticipant, isPending: isAddingEndorsementParticipant } =
+    useCreateEndorsementParticipant(
+      placement.id,
+      isEndorsementMode ? endorsement?.id : activeEndorsement?.id,
+    );
+  const { mutateAsync: updateEndorsementParticipant } = useUpdateEndorsementParticipant(
     placement.id,
-    activeEndorsement?.id,
+    endorsement?.id,
+  );
+  const { mutateAsync: updateEndorsementParticipantStatus } = useUpdateEndorsementParticipantStatus(
+    placement.id,
+    endorsement?.id,
+  );
+  const { mutateAsync: deleteEndorsementParticipant } = useDeleteEndorsementParticipant(
+    placement.id,
+    endorsement?.id,
   );
 
   const confirmedCounterpartyIds = new Set(
@@ -121,6 +217,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     [reinsurers],
   );
 
+  const reinsurerNames = useMemo<Record<string, string>>(
+    () => Object.fromEntries(reinsurers.map((r) => [r.id, r.name])),
+    [reinsurers],
+  );
+
   const toEntries = useCallback(
     (participants: PlacementParticipant[]) =>
       participants
@@ -131,9 +232,24 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     [reinsurerEmails],
   );
 
+  const toEndorsementEntries = useCallback(
+    (participants: PlacementEndorsementParticipant[]) =>
+      participants.map((p) => endorsementParticipantToEntry(p, reinsurerEmails, reinsurerNames)),
+    [reinsurerEmails, reinsurerNames],
+  );
+
   const serverEntries = useMemo(
-    () => toEntries(placement.participants),
-    [placement.participants, toEntries],
+    () =>
+      isEndorsementMode
+        ? toEndorsementEntries(endorsementParticipants)
+        : toEntries(placement.participants),
+    [
+      endorsementParticipants,
+      isEndorsementMode,
+      placement.participants,
+      toEndorsementEntries,
+      toEntries,
+    ],
   );
 
   const [patches, setPatches] = useState<Record<string, Partial<DistributionEntry>>>({});
@@ -163,18 +279,68 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     [closings],
   );
 
+  const endorsementParticipantById = useMemo(
+    () => Object.fromEntries(endorsementParticipants.map((p) => [p.id, p])),
+    [endorsementParticipants],
+  );
+
+  const activeEndorsementShare = useCallback(
+    (excludeId?: string) =>
+      entries
+        .filter((entry) => entry.id !== excludeId && entry.status !== 'Declined')
+        .reduce((sum, entry) => sum + entry.shareLine, 0),
+    [entries],
+  );
+
   const patch = (id: string, update: Partial<DistributionEntry>) =>
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
 
   const refreshPlacementAfterAccept = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
-    [placement.id, queryClient],
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: isEndorsementMode
+          ? ['facultative-placements', placement.id, 'endorsements']
+          : facultativePlacementKey(placement.id),
+      }),
+    [isEndorsementMode, placement.id, queryClient],
   );
 
   const handleAdd = async (newEntries: ReinsurerEntry[]) => {
-    const existingIds = new Set(placement.participants.map((p) => p.counterpartyId));
+    const existingIds = new Set(
+      isEndorsementMode
+        ? endorsementParticipants.map((p) => p.counterpartyId)
+        : placement.participants.map((p) => p.counterpartyId),
+    );
     const reinsurersById = Object.fromEntries(reinsurers.map((r) => [r.id, r]));
     const newOnes = newEntries.filter((e) => !existingIds.has(e.id));
+
+    if (isEndorsementMode) {
+      const remainingShare = Math.max(0, +(facOffer - activeEndorsementShare()).toFixed(4));
+      if (remainingShare <= 0) {
+        toast().addToast({
+          message: 'No endorsement capacity is available to offer.',
+          type: 'error',
+        });
+        return;
+      }
+
+      const sharePerEntry = +(remainingShare / Math.max(newOnes.length, 1)).toFixed(4);
+      const results = await Promise.allSettled(
+        newOnes.map((e) =>
+          createEndorsementParticipant({
+            counterpartyId: e.id,
+            sharePercent: sharePerEntry,
+            status: 'INVITED',
+          }),
+        ),
+      );
+
+      results.forEach((r) => {
+        if (r.status === 'rejected')
+          toast().addToast({ message: extractError(r.reason), type: 'error' });
+      });
+      return;
+    }
 
     const results = await Promise.allSettled(
       newOnes.map((e) =>
@@ -201,6 +367,27 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleShareCommit = (row: DistributionEntry, share: number) => {
+    if (isEndorsementMode) {
+      const nextTotal = activeEndorsementShare(row.id) + share;
+      if (nextTotal > facOffer) {
+        toast().addToast({
+          message: `Endorsement participant shares cannot exceed ${facOffer}%.`,
+          type: 'error',
+        });
+        return;
+      }
+
+      patch(row.id, { shareLine: share });
+      const payload =
+        row.status === 'Accepted'
+          ? { participantId: row.id, sharePercent: share, signedLinePercent: share }
+          : { participantId: row.id, sharePercent: share };
+      updateEndorsementParticipant(payload).catch((error) =>
+        toast().addToast({ message: extractError(error), type: 'error' }),
+      );
+      return;
+    }
+
     patch(row.id, { shareLine: share });
     // Also reset signedLinePercent so a previously-accepted (then reverted) participant
     // doesn't leave a stale signed line that exceeds the new sharePercent.
@@ -212,6 +399,8 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleBrokerageCommit = (row: DistributionEntry, brokerage: number) => {
+    if (isEndorsementMode) return;
+
     patch(row.id, { brokerageFee: brokerage });
     updateParticipant({ participantId: row.id, brokerageFee: brokerage }).catch((error) =>
       toast().addToast({ message: extractError(error), type: 'error' }),
@@ -219,6 +408,17 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleMailSent = (row: DistributionEntry) => {
+    if (isEndorsementMode) {
+      const participant = endorsementParticipantById[row.id];
+      if (!participant || participant.status !== 'INVITED') return;
+
+      updateEndorsementParticipantStatus({
+        participantId: row.id,
+        status: 'OFFER_SENT',
+      }).catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
+      return;
+    }
+
     // Skip status update when already accepted — ACCEPTED → OFFER_SENT is not a valid transition
     if (row.status === 'Accepted') return;
     updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) =>
@@ -228,6 +428,41 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleAccept = async (row: DistributionEntry) => {
     if (acceptingIds.has(row.id)) return;
+
+    if (isEndorsementMode) {
+      const nextTotal = activeEndorsementShare(row.id) + row.shareLine;
+      if (nextTotal > facOffer) {
+        toast().addToast({
+          message: `Endorsement accepted share cannot exceed ${facOffer}%.`,
+          type: 'error',
+        });
+        return;
+      }
+
+      setAcceptingIds((prev) => new Set([...prev, row.id]));
+      patch(row.id, { status: 'Accepted' });
+
+      try {
+        await updateEndorsementParticipant({
+          participantId: row.id,
+          sharePercent: row.shareLine,
+          signedLinePercent: row.shareLine,
+          status: 'ACCEPTED',
+          suppressInvalidation: true,
+        });
+      } catch (error) {
+        patch(row.id, { status: 'Pending' });
+        toast().addToast({ message: extractError(error), type: 'error' });
+      } finally {
+        await refreshPlacementAfterAccept();
+        setAcceptingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(row.id);
+          return next;
+        });
+      }
+      return;
+    }
 
     const isReconfirm = row.status === 'Accepted';
     setAcceptingIds((prev) => new Set([...prev, row.id]));
@@ -312,12 +547,16 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleClosePlacement = () => {
+    if (isEndorsementMode) return;
+
     updatePlacementStatus({ status: 'CLOSING' })
       .then(() => updatePlacementStatus({ status: 'CLOSED' }))
       .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
   };
 
   const handleRevert = (row: DistributionEntry) => {
+    if (isEndorsementMode) return;
+
     patch(row.id, { status: 'Pending' });
     const closing = closingByParticipantId[row.id];
     // Confirmed closings are immutable backend snapshots; do not void from frontend revert flow.
@@ -334,6 +573,17 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleDecline = (row: DistributionEntry) => {
+    if (isEndorsementMode) {
+      patch(row.id, { status: 'Declined', shareLine: 0 });
+      updateEndorsementParticipantStatus({ participantId: row.id, status: 'DECLINED' }).catch(
+        (error) => {
+          patch(row.id, { status: 'Pending', shareLine: row.shareLine });
+          toast().addToast({ message: extractError(error), type: 'error' });
+        },
+      );
+      return;
+    }
+
     patch(row.id, { status: 'Declined', shareLine: 0 });
     updateParticipant({ participantId: row.id, sharePercent: 0 })
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'DECLINED' }))
@@ -345,7 +595,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleDelete = (row: DistributionEntry) => {
     setDeletedIds((prev) => new Set([...prev, row.id]));
-    deleteParticipant(row.id).catch((error) => {
+    const deleteRequest = isEndorsementMode
+      ? deleteEndorsementParticipant(row.id)
+      : deleteParticipant(row.id);
+
+    deleteRequest.catch((error) => {
       setDeletedIds((prev) => {
         const s = new Set(prev);
         s.delete(row.id);
@@ -358,6 +612,12 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const acceptedEntries = entries.filter((e) => e.status === 'Accepted');
   const placedPct = +acceptedEntries.reduce((sum, e) => sum + e.shareLine, 0).toFixed(4);
   const availablePct = Math.max(0, +(facOffer - placedPct).toFixed(4));
+  const capacityBase = facOffer > 0 ? facOffer : 100;
+  const title = isEndorsementMode ? 'Market Share Breakdown' : 'Placement Share Breakdown';
+  const capacityLabel = isEndorsementMode ? 'Endorsement Capacity' : 'Fac. Offer';
+  const existingCounterpartyIds = isEndorsementMode
+    ? endorsementParticipants.map((p) => p.counterpartyId)
+    : placement.participants.map((p) => p.counterpartyId);
 
   const colorMap = Object.fromEntries(
     entries.map((e, i) => [e.id, SEGMENT_COLORS[i % SEGMENT_COLORS.length]]),
@@ -368,13 +628,17 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       <div className="bg-white rounded-xl border border-gray-200 p-5 flex flex-col gap-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-0.5">
-            <h3 className="text-sm font-semibold text-gray-900">Placement Share Breakdown</h3>
+            <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
             <p className="text-xs text-gray-400">
-              Distributed offers of the Fac. Offer{' '}
+              Distributed offers of the {capacityLabel}{' '}
               <span className="font-semibold text-gray-600">{facOffer}%</span>
             </p>
           </div>
-          <Button size="sm" onClick={() => setPanelOpen(true)} isLoading={isAdding}>
+          <Button
+            size="sm"
+            onClick={() => setPanelOpen(true)}
+            isLoading={isEndorsementMode ? isAddingEndorsementParticipant : isAdding}
+          >
             Add Reinsurers
           </Button>
         </div>
@@ -393,7 +657,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
               <div
                 key={entry.id}
                 style={{
-                  width: `${(entry.shareLine / facOffer) * 100}%`,
+                  width: `${(entry.shareLine / capacityBase) * 100}%`,
                   backgroundColor: colorMap[entry.id],
                 }}
                 className="h-full transition-all duration-500"
@@ -438,9 +702,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           entries={entries}
           premium={premium}
           placement={placement}
-          hasActiveEndorsement={hasActiveEndorsement}
-          confirmedCounterpartyIds={confirmedCounterpartyIds}
-          isPlacementLocked={isPlacementLocked}
+          hasActiveEndorsement={!isEndorsementMode && hasActiveEndorsement}
+          confirmedCounterpartyIds={isEndorsementMode ? undefined : confirmedCounterpartyIds}
+          isPlacementLocked={isEndorsementMode ? false : isPlacementLocked}
+          allowRevert={!isEndorsementMode}
+          disableBrokerageEdit={isEndorsementMode}
           busyIds={acceptingIds}
           onShareCommit={handleShareCommit}
           onBrokerageCommit={handleBrokerageCommit}
@@ -449,7 +715,9 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           onDecline={handleDecline}
           onDelete={handleDelete}
           onRevert={handleRevert}
-          onClosePlacement={placement.status === 'PLACED' ? handleClosePlacement : undefined}
+          onClosePlacement={
+            !isEndorsementMode && placement.status === 'PLACED' ? handleClosePlacement : undefined
+          }
         />
       </div>
 
@@ -457,7 +725,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
         onAdd={handleAdd}
-        existingIds={placement.participants.map((p) => p.counterpartyId)}
+        existingIds={existingCounterpartyIds}
       />
     </>
   );

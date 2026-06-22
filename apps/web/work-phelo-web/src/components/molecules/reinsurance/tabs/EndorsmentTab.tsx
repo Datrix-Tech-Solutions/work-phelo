@@ -14,6 +14,9 @@ import {
 import { usePlacementEndorsements, useReinsurers, useUpdateEndorsementStatus } from '@/hooks';
 import { EndorsementCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementCertificateModal';
 import { EndorsementReinsurerCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementReinsurerCertificateModal';
+import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 interface EndorsementTabProps {
   placement: Facultative;
@@ -124,6 +127,7 @@ function EndorsementCard({
   const { mutate: updateStatus, isPending: isUpdatingStatus } = useUpdateEndorsementStatus(
     placement.id,
   );
+  const toast = useToastStore.getState;
 
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = endorsement.proposedSnapshot
@@ -169,7 +173,20 @@ function EndorsementCard({
               <Button
                 size="sm"
                 isLoading={isUpdatingStatus}
-                onClick={() => updateStatus({ endorsementId: endorsement.id, status: 'MARKETING' })}
+                onClick={() =>
+                  updateStatus(
+                    { endorsementId: endorsement.id, status: 'MARKETING' },
+                    {
+                      onSuccess: () =>
+                        toast().addToast({
+                          message: 'Endorsement moved to market stage.',
+                          type: 'success',
+                        }),
+                      onError: (error) =>
+                        toast().addToast({ message: extractError(error), type: 'error' }),
+                    },
+                  )
+                }
               >
                 Send to Market
               </Button>
@@ -197,6 +214,16 @@ function EndorsementCard({
 
         {/* Side-by-side parameter cards (changed fields only) */}
         {proposed && <ParameterCards original={original} proposed={proposed} />}
+
+        {endorsement.status === 'MARKETING' && (
+          <div className="border-t border-gray-100 pt-5">
+            <DistributionListTab
+              placement={placement}
+              mode="endorsement"
+              endorsement={endorsement}
+            />
+          </div>
+        )}
       </div>
 
       {/* Cedant document */}

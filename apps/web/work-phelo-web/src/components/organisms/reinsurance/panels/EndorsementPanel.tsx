@@ -13,7 +13,7 @@ import {
   FACULTATIVE_FORM_DEFAULTS,
   RiskTypeField,
 } from '@/types/reinsurance';
-import { useCreateEndorsement, useUpdateFacultative, useRiskTypes } from '@/hooks';
+import { useCreateEndorsement, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -79,7 +79,6 @@ function placementToFormValues(placement: Facultative): EndorsementFormValues {
 
 export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPanelProps) {
   const { mutateAsync: createEndorsement, isPending } = useCreateEndorsement(placement.id);
-  const { mutateAsync: updateFacultative } = useUpdateFacultative();
   const { data: allRiskTypes = [] } = useRiskTypes();
   const toast = useToastStore.getState;
 
@@ -111,8 +110,7 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
         selectedRiskType?.fields ?? [],
       );
 
-      const placementUpdate = {
-        id: placement.id,
+      const proposedSnapshot = {
         riskTypeId: values.riskType || undefined,
         reference: values.reference,
         title: values.title,
@@ -127,29 +125,18 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
         businessDetails,
         offerDetails,
       };
+      const targetPercent = Math.max(
+        0,
+        Number(values.facultativeOffer || 0) - (placement.facultativeOffer ?? 0),
+      );
 
       await createEndorsement({
         type: 'POLICY_AMENDMENT',
         effectiveDate: new Date(values.effectiveDate).toISOString(),
         reason: values.comment?.trim() || 'Policy endorsement',
-        proposedSnapshot: {
-          riskTypeId: placementUpdate.riskTypeId,
-          reference: placementUpdate.reference,
-          title: placementUpdate.title,
-          sumInsured: placementUpdate.sumInsured,
-          rate: placementUpdate.rate,
-          premium: placementUpdate.premium,
-          facultativeOffer: placementUpdate.facultativeOffer,
-          commission: placementUpdate.commission,
-          currency: placementUpdate.currency,
-          inceptionDate: placementUpdate.inceptionDate,
-          expiryDate: placementUpdate.expiryDate,
-          ...(businessDetails ? { businessDetails } : {}),
-          ...(offerDetails ? { offerDetails } : {}),
-        },
+        proposedSnapshot,
+        ...(targetPercent > 0 ? { targetPercent } : {}),
       });
-
-      await updateFacultative(placementUpdate);
 
       toast().addToast({ message: 'Endorsement created successfully', type: 'success' });
       handleClose();

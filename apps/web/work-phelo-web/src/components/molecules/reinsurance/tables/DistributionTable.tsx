@@ -18,6 +18,7 @@ export interface DistributionEntry {
   shareLine: number;
   brokerageFee: number;
   status: DistributionStatus;
+  canRespond?: boolean;
 }
 
 const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'danger'> = {
@@ -37,6 +38,8 @@ interface DistributionTableProps {
   hasActiveEndorsement?: boolean;
   confirmedCounterpartyIds?: Set<string>;
   isPlacementLocked?: boolean;
+  allowRevert?: boolean;
+  disableBrokerageEdit?: boolean;
   busyIds?: Set<string>;
   onShareCommit: (row: DistributionEntry, share: number) => void;
   onBrokerageCommit: (row: DistributionEntry, brokerage: number) => void;
@@ -55,6 +58,8 @@ export function DistributionTable({
   hasActiveEndorsement = false,
   confirmedCounterpartyIds,
   isPlacementLocked = false,
+  allowRevert = true,
+  disableBrokerageEdit = false,
   busyIds,
   onShareCommit,
   onBrokerageCommit,
@@ -171,7 +176,8 @@ export function DistributionTable({
       width: '1fr',
       render: (row) => {
         const isPaid = isPlacementLocked;
-        if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
+        if (isPaid || disableBrokerageEdit)
+          return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
         return editingBrokerageId === row.id ? (
           <input
             type="number"
@@ -233,11 +239,13 @@ export function DistributionTable({
           confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
         const responded = row.status === 'Declined' || row.status === 'Accepted';
         const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
+        const canRespond = mailed || row.canRespond === true;
         const isBusy = busyIds?.has(row.id) ?? false;
         const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
-        const showAccept = !isPlacementLocked && (isReconfirming || (mailed && !responded));
-        const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
-        const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
+        const showAccept = !isPlacementLocked && (isReconfirming || (canRespond && !responded));
+        const showDecline = !isPlacementLocked && !isReconfirming && canRespond && !responded;
+        const showRevert =
+          allowRevert && !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
         return (
           <div className="flex items-center gap-2">
             <button
