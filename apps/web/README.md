@@ -3,8 +3,7 @@
 The web workspace contains the WorkPhelo Next.js application at
 `apps/web/work-phelo-web`.
 
-Current frontend/API domains are maintained in
-[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+Current frontend/API domains are listed in the root repository README.
 
 ## Active Hosts
 

@@ -7,9 +7,6 @@ The repository is a NestJS + Next.js monorepo managed with Turborepo.
 
 ## Current Environments
 
-The canonical environment reference is
-[`docs/platform/current-environments.md`](docs/platform/current-environments.md).
-
 | Environment    | Frontend                                              | API Gateway                            | Status                           |
 | -------------- | ----------------------------------------------------- | -------------------------------------- | -------------------------------- |
 | Local          | `http://localhost:3000`                               | `http://localhost:4000/api/v1`         | Developer machine                |
@@ -39,7 +36,6 @@ work-phelo/
 │   ├── schemas/
 │   ├── types/
 │   └── utils/
-├── docs/
 └── infrastructure/
 ```
 
@@ -104,8 +100,8 @@ production unless explicitly enabled for a controlled support window.
 | Marketing    | `https://dev-api.workphelo.com/api/v1/marketing/docs`              |
 | Reinsurance  | `https://dev-api.workphelo.com/api/v1/operations/reinsurance/docs` |
 
-See [`docs/platform/current-environments.md`](docs/platform/current-environments.md)
-for local and production Swagger notes.
+Production Swagger should remain disabled unless it is explicitly enabled for a
+short support window.
 
 ## Getting Started
 
@@ -191,19 +187,6 @@ npm run test:unit
 npm run build
 npm run lint
 ```
-
-Deployment details live in:
-
-- [`docs/deployment.md`](docs/deployment.md)
-- [`docs/deployment-operations.md`](docs/deployment-operations.md)
-- [`docs/domain-routing.md`](docs/domain-routing.md)
-
-## Documentation
-
-- Current environments: [`docs/platform/current-environments.md`](docs/platform/current-environments.md)
-- Documentation process: [`docs/processes/documentation-maintenance.md`](docs/processes/documentation-maintenance.md)
-- Reinsurance operations: [`docs/reinsurance-operations.md`](docs/reinsurance-operations.md)
-- Postman package: [`docs/postman/README.md`](docs/postman/README.md)
 
 When changing domains, deployments, API contracts or service exposure, update
 the documentation in the same PR.

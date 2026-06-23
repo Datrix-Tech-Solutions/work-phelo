@@ -1,9 +1,7 @@
 # WorkPhelo API Gateway
 
 The API Gateway is the public HTTP entry point for WorkPhelo backend services.
-
-Current environment URLs are maintained in
-[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+Current environment URLs are listed in the root repository README.
 
 ## Responsibilities
 

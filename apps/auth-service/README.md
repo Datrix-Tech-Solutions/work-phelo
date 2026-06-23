@@ -3,8 +3,7 @@
 The Auth Service owns platform authentication, tenants, users, roles,
 permissions, invite flows, OAuth callbacks and tenant branding metadata.
 
-Current environment URLs are maintained in
-[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+Current environment URLs are listed in the root repository README.
 
 ## Responsibilities
 

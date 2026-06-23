@@ -4,8 +4,7 @@ The Marketing Service is a scaffolded service for future marketing workflows.
 It is deployed in the current development environment but is not deployed in the
 current production Compose file.
 
-Current environment URLs are maintained in
-[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+Current environment URLs are listed in the root repository README.
 
 ## Gateway Prefix
 

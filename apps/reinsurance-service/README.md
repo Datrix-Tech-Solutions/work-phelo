@@ -3,8 +3,8 @@
 `reinsurance-service` is the bounded backend for broker-only Reinsurance
 Operations. It is intentionally separate from HR and platform Core domains.
 
-Current environment availability and Swagger URLs are maintained in
-[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+Current environment availability and Swagger URLs are listed in the root
+repository README.
 
 ## Current Surface
 

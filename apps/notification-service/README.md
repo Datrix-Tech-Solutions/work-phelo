@@ -2,8 +2,7 @@
 
 The notification-service owns outbound notification delivery for WorkPhelo. It handles email, SMS, in-app notification support, delivery logging, and provider integrations behind RabbitMQ events published by platform services.
 
-Current environment URLs are maintained in
-[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+Current environment URLs are listed in the root repository README.
 
 ## SMS Providers
 

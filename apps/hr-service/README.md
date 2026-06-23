@@ -4,8 +4,7 @@ The HR Service owns tenant HR operations: employees, departments, branches,
 leave, payroll, appraisals, assets, projects/tasks, announcements and employee
 import dry-run workflows.
 
-Current environment URLs are maintained in
-[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+Current environment URLs are listed in the root repository README.
 
 ## Responsibilities
 
