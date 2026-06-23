@@ -6,7 +6,9 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import {
   PlacementEndorsement,
+  PlacementEndorsementImpactType,
   PlacementEndorsementStatus,
+  PlacementEndorsementType,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -134,6 +136,13 @@ export class PlacementEndorsementsService {
           placementId,
           endorsementNumber,
           type: dto.type,
+          impactType: this.deriveValidatedImpactType({
+            requestedImpactType: dto.impactType,
+            type: dto.type,
+            originalPlacement: placement,
+            proposedSnapshot: dto.proposedSnapshot,
+            targetPercent: dto.targetPercent,
+          }),
           status: PlacementEndorsementStatus.DRAFT,
           effectiveDate: new Date(dto.effectiveDate),
           reason: this.cleanRequired(dto.reason, 'Reason is required'),
@@ -163,11 +172,34 @@ export class PlacementEndorsementsService {
       endorsementId,
     );
     this.assertEditable(endorsement);
+    const nextType = dto.type ?? endorsement.type;
+    const nextProposedSnapshot =
+      dto.proposedSnapshot !== undefined
+        ? dto.proposedSnapshot
+        : this.asRecord(endorsement.proposedSnapshot);
+    const nextTargetPercent =
+      dto.targetPercent !== undefined
+        ? dto.targetPercent
+        : this.toOptionalNumber(endorsement.targetPercent);
 
     return this.prisma.placementEndorsement.update({
       where: { id: endorsementId },
       data: {
         ...(dto.type !== undefined ? { type: dto.type } : {}),
+        ...(dto.type !== undefined ||
+        dto.proposedSnapshot !== undefined ||
+        dto.targetPercent !== undefined ||
+        dto.impactType !== undefined
+          ? {
+              impactType: this.deriveValidatedImpactType({
+                requestedImpactType: dto.impactType,
+                type: nextType,
+                originalSnapshot: this.asRecord(endorsement.originalSnapshot),
+                proposedSnapshot: nextProposedSnapshot,
+                targetPercent: nextTargetPercent ?? undefined,
+              }),
+            }
+          : {}),
         ...(dto.effectiveDate !== undefined
           ? { effectiveDate: new Date(dto.effectiveDate) }
           : {}),
@@ -356,6 +388,109 @@ export class PlacementEndorsementsService {
     }) as Record<string, unknown>;
   }
 
+  private deriveValidatedImpactType(input: {
+    requestedImpactType?: PlacementEndorsementImpactType;
+    type: PlacementEndorsementType;
+    originalPlacement?: PlacementSnapshotRecord;
+    originalSnapshot?: Record<string, unknown>;
+    proposedSnapshot?: Record<string, unknown>;
+    targetPercent?: number | null;
+  }): PlacementEndorsementImpactType {
+    const derived = this.deriveImpactType(input);
+    if (input.requestedImpactType && input.requestedImpactType !== derived) {
+      throw new BadRequestException(
+        `impactType ${input.requestedImpactType} does not match derived endorsement impact ${derived}`,
+      );
+    }
+    return derived;
+  }
+
+  private deriveImpactType(input: {
+    type: PlacementEndorsementType;
+    originalPlacement?: PlacementSnapshotRecord;
+    originalSnapshot?: Record<string, unknown>;
+    proposedSnapshot?: Record<string, unknown>;
+    targetPercent?: number | null;
+  }): PlacementEndorsementImpactType {
+    if (
+      input.type === PlacementEndorsementType.CANCELLATION ||
+      input.type === PlacementEndorsementType.PARTICIPANT_REMOVAL ||
+      input.type === PlacementEndorsementType.SUM_INSURED_DECREASE
+    ) {
+      return PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION;
+    }
+
+    const originalPlacement = this.extractOriginalPlacement(input);
+    const proposed = this.asRecord(input.proposedSnapshot);
+    const proposedPlacement = this.asRecord(proposed.placement);
+    const originalFacultativeOffer = this.firstOptionalNumber(
+      originalPlacement.facultativeOffer,
+    );
+    const proposedFacultativeOffer = this.firstOptionalNumber(
+      proposed.facultativeOffer,
+      proposedPlacement.facultativeOffer,
+      input.targetPercent,
+    );
+
+    if (
+      originalFacultativeOffer !== null &&
+      proposedFacultativeOffer !== null
+    ) {
+      if (proposedFacultativeOffer > originalFacultativeOffer) {
+        return PlacementEndorsementImpactType.CAPACITY_INCREASE;
+      }
+      if (proposedFacultativeOffer < originalFacultativeOffer) {
+        return PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION;
+      }
+    }
+
+    if (this.hasTermsChange(originalPlacement, proposed, proposedPlacement)) {
+      return PlacementEndorsementImpactType.TERMS_ONLY;
+    }
+
+    return PlacementEndorsementImpactType.ADMINISTRATIVE;
+  }
+
+  private extractOriginalPlacement(input: {
+    originalPlacement?: PlacementSnapshotRecord;
+    originalSnapshot?: Record<string, unknown>;
+  }): Record<string, unknown> {
+    if (input.originalPlacement) {
+      return input.originalPlacement as unknown as Record<string, unknown>;
+    }
+    return this.asRecord(this.asRecord(input.originalSnapshot).placement);
+  }
+
+  private hasTermsChange(
+    originalPlacement: Record<string, unknown>,
+    proposed: Record<string, unknown>,
+    proposedPlacement: Record<string, unknown>,
+  ): boolean {
+    const fields = [
+      'sumInsured',
+      'premium',
+      'rate',
+      'commission',
+      'preliminaryBrokerage',
+      'brokeragePercent',
+      'currency',
+      'inceptionDate',
+      'expiryDate',
+      'riskTypeId',
+      'businessDetails',
+      'offerDetails',
+    ];
+
+    return fields.some((field) => {
+      const proposedValue =
+        proposed[field] !== undefined
+          ? proposed[field]
+          : proposedPlacement[field];
+      if (proposedValue === undefined) return false;
+      return !this.valuesEqual(originalPlacement[field], proposedValue);
+    });
+  }
+
   private assertEditable(endorsement: { status: PlacementEndorsementStatus }) {
     if (endorsement.status !== PlacementEndorsementStatus.DRAFT) {
       throw new BadRequestException(
@@ -427,6 +562,61 @@ export class PlacementEndorsementsService {
   private toDecimalInput(value?: number): Prisma.Decimal | undefined {
     if (value === undefined) return undefined;
     return new Prisma.Decimal(value);
+  }
+
+  private toOptionalNumber(
+    value: Prisma.Decimal | number | string | null | undefined,
+  ): number | null {
+    if (value === null || value === undefined) return null;
+    const parsed = Number(value.toString());
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private firstOptionalNumber(...values: unknown[]): number | null {
+    for (const value of values) {
+      const parsed = this.parseOptionalNumber(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+  }
+
+  private parseOptionalNumber(value: unknown): number {
+    if (
+      value === null ||
+      value === undefined ||
+      (typeof value === 'string' && value.trim() === '')
+    ) {
+      return Number.NaN;
+    }
+    if (
+      value instanceof Prisma.Decimal ||
+      typeof value === 'number' ||
+      typeof value === 'string'
+    ) {
+      return Number(value.toString());
+    }
+    return Number.NaN;
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return value as Record<string, unknown>;
+  }
+
+  private valuesEqual(left: unknown, right: unknown): boolean {
+    const leftNumber = this.firstOptionalNumber(left);
+    const rightNumber = this.firstOptionalNumber(right);
+    if (leftNumber !== null || rightNumber !== null) {
+      return leftNumber === rightNumber;
+    }
+
+    const normalize = (value: unknown) => {
+      if (value instanceof Date) return value.toISOString();
+      if (value instanceof Prisma.Decimal) return value.toString();
+      return JSON.stringify(this.toPlainJson(value));
+    };
+
+    return normalize(left) === normalize(right);
   }
 
   private toJsonInput(

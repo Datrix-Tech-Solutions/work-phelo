@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import {
+  PlacementEndorsementImpactType,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
   PlacementStatus,
@@ -129,6 +130,7 @@ describe('PlacementEndorsementsService', () => {
     placementId: 'placement-1',
     endorsementNumber: 'END-001',
     type: PlacementEndorsementType.SUM_INSURED_INCREASE,
+    impactType: PlacementEndorsementImpactType.TERMS_ONLY,
     status: PlacementEndorsementStatus.DRAFT,
     effectiveDate: new Date('2026-06-04T00:00:00.000Z'),
     reason: 'Increase sum insured',
@@ -198,6 +200,7 @@ describe('PlacementEndorsementsService', () => {
       tenantId: 'tenant-1',
       placementId: 'placement-1',
       endorsementNumber: 'END-001',
+      impactType: PlacementEndorsementImpactType.TERMS_ONLY,
       status: PlacementEndorsementStatus.DRAFT,
       createdByUserId: 'user-1',
       updatedByUserId: 'user-1',
@@ -214,6 +217,137 @@ describe('PlacementEndorsementsService', () => {
       notes: [expect.objectContaining({ id: 'note-1' })],
     });
     expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('classifies facultative offer increase endorsements as capacity increase', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.count.mockResolvedValue(0);
+    prisma.placementEndorsement.create.mockResolvedValue({
+      ...endorsement,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+    });
+
+    await service.create(user, 'placement-1', {
+      type: PlacementEndorsementType.PARTICIPANT_ADDITION,
+      effectiveDate: '2026-06-04T00:00:00.000Z',
+      reason: 'Increase market capacity',
+      proposedSnapshot: { facultativeOffer: '80.0000' },
+    });
+
+    const createArgs = firstCallArg<Prisma.PlacementEndorsementCreateArgs>(
+      prisma.placementEndorsement.create,
+    );
+    expect(createArgs.data.impactType).toBe(
+      PlacementEndorsementImpactType.CAPACITY_INCREASE,
+    );
+  });
+
+  it('classifies sum insured, premium and period changes without capacity change as terms only', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.count.mockResolvedValue(0);
+    prisma.placementEndorsement.create.mockResolvedValue(endorsement);
+
+    await service.create(user, 'placement-1', {
+      type: PlacementEndorsementType.POLICY_AMENDMENT,
+      effectiveDate: '2026-06-04T00:00:00.000Z',
+      reason: 'Update terms',
+      proposedSnapshot: {
+        sumInsured: '150000.00',
+        premium: '3000.00',
+        inceptionDate: '2026-07-01T00:00:00.000Z',
+      },
+    });
+
+    const createArgs = firstCallArg<Prisma.PlacementEndorsementCreateArgs>(
+      prisma.placementEndorsement.create,
+    );
+    expect(createArgs.data.impactType).toBe(
+      PlacementEndorsementImpactType.TERMS_ONLY,
+    );
+  });
+
+  it('classifies facultative offer decrease and cancellation as decrease or cancellation', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.count.mockResolvedValue(0);
+    prisma.placementEndorsement.create.mockResolvedValue({
+      ...endorsement,
+      impactType: PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+    });
+
+    await service.create(user, 'placement-1', {
+      type: PlacementEndorsementType.POLICY_AMENDMENT,
+      effectiveDate: '2026-06-04T00:00:00.000Z',
+      reason: 'Reduce capacity',
+      proposedSnapshot: { facultativeOffer: '50.0000' },
+    });
+
+    let createArgs = firstCallArg<Prisma.PlacementEndorsementCreateArgs>(
+      prisma.placementEndorsement.create,
+    );
+    expect(createArgs.data.impactType).toBe(
+      PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+    );
+
+    jest.clearAllMocks();
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.count.mockResolvedValue(0);
+    prisma.placementEndorsement.create.mockResolvedValue({
+      ...endorsement,
+      impactType: PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+    });
+
+    await service.create(user, 'placement-1', {
+      type: PlacementEndorsementType.CANCELLATION,
+      effectiveDate: '2026-06-04T00:00:00.000Z',
+      reason: 'Cancel endorsement',
+    });
+
+    createArgs = firstCallArg<Prisma.PlacementEndorsementCreateArgs>(
+      prisma.placementEndorsement.create,
+    );
+    expect(createArgs.data.impactType).toBe(
+      PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+    );
+  });
+
+  it('classifies description or admin-only changes as administrative', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.count.mockResolvedValue(0);
+    prisma.placementEndorsement.create.mockResolvedValue({
+      ...endorsement,
+      impactType: PlacementEndorsementImpactType.ADMINISTRATIVE,
+    });
+
+    await service.create(user, 'placement-1', {
+      type: PlacementEndorsementType.OTHER,
+      effectiveDate: '2026-06-04T00:00:00.000Z',
+      reason: 'Correct wording',
+      description: 'Administrative correction only',
+    });
+
+    const createArgs = firstCallArg<Prisma.PlacementEndorsementCreateArgs>(
+      prisma.placementEndorsement.create,
+    );
+    expect(createArgs.data.impactType).toBe(
+      PlacementEndorsementImpactType.ADMINISTRATIVE,
+    );
+  });
+
+  it('rejects explicit impact type overrides that do not match derived impact', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.count.mockResolvedValue(0);
+
+    await expect(
+      service.create(user, 'placement-1', {
+        type: PlacementEndorsementType.PARTICIPANT_ADDITION,
+        impactType: PlacementEndorsementImpactType.ADMINISTRATIVE,
+        effectiveDate: '2026-06-04T00:00:00.000Z',
+        reason: 'Increase market capacity',
+        proposedSnapshot: { facultativeOffer: '80.0000' },
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.placementEndorsement.create).not.toHaveBeenCalled();
   });
 
   it('increments endorsement numbering per placement', async () => {
@@ -275,6 +409,36 @@ describe('PlacementEndorsementsService', () => {
     );
     expect(updateArgs.data).toMatchObject({
       reason: 'Updated',
+      updatedByUserId: 'user-1',
+    });
+  });
+
+  it('recalculates impact type when draft proposed snapshot changes', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      impactType: PlacementEndorsementImpactType.ADMINISTRATIVE,
+      originalSnapshot: {
+        placement: {
+          facultativeOffer: '70.0000',
+        },
+      },
+      proposedSnapshot: null,
+    });
+    prisma.placementEndorsement.update.mockResolvedValue({
+      ...endorsement,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+    });
+
+    await service.update(user, 'placement-1', 'endorsement-1', {
+      proposedSnapshot: { facultativeOffer: '80.0000' },
+    });
+
+    const updateArgs = firstCallArg<Prisma.PlacementEndorsementUpdateArgs>(
+      prisma.placementEndorsement.update,
+    );
+    expect(updateArgs.data).toMatchObject({
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
       updatedByUserId: 'user-1',
     });
   });
