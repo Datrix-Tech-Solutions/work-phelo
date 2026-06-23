@@ -59,6 +59,7 @@ import {
   PlacementEndorsementListResponseDto,
   PlacementEndorsementResponseDto,
 } from './dto/placement-endorsement-response.dto';
+import { PlacementEndorsementSummaryResponseDto } from './dto/placement-endorsement-summary-response.dto';
 import { UpdatePlacementEndorsementParticipantStatusDto } from './dto/update-placement-endorsement-participant-status.dto';
 import { UpdatePlacementEndorsementParticipantDto } from './dto/update-placement-endorsement-participant.dto';
 import { UpdatePlacementEndorsementClosingStatusDto } from './dto/update-placement-endorsement-closing-status.dto';
@@ -736,6 +737,38 @@ export class PlacementsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.endorsementsService.findOne(
+      request.user.tenantId,
+      id,
+      endorsementId,
+    );
+  }
+
+  @Get(':id/endorsements/:endorsementId/summary')
+  @ApiTags('Reinsurance - Endorsements')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get placement endorsement aggregate summary',
+    description:
+      'Returns read-only endorsement workflow totals using endorsement participants, endorsement closings and endorsement notes only. Original placement participants, closings and notes are excluded from capacity and completion calculations.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiOkResponse({ type: PlacementEndorsementSummaryResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement endorsement is missing or belongs to another tenant/placement.',
+  })
+  getEndorsementSummary(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.endorsementsService.getSummary(
       request.user.tenantId,
       id,
       endorsementId,

@@ -5,18 +5,52 @@ import {
 } from '@nestjs/common';
 import { RequestUser } from '@work-phelo/types';
 import {
+  PlacementClosingStatus,
   PlacementEndorsement,
   PlacementEndorsementImpactType,
+  PlacementEndorsementParticipantStatus,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
+  PlacementNoteStatus,
+  PlacementNoteType,
   Prisma,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
+import { PlacementEndorsementSummaryResponseDto } from './dto/placement-endorsement-summary-response.dto';
 import { UpdatePlacementEndorsementStatusDto } from './dto/update-placement-endorsement-status.dto';
 import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsement.dto';
 
 type PlacementEndorsementRecord = PlacementEndorsement;
+
+const endorsementSummaryInclude = {
+  participants: {
+    select: {
+      id: true,
+      status: true,
+      signedLinePercent: true,
+    },
+  },
+  closings: {
+    select: {
+      id: true,
+      endorsementParticipantId: true,
+      status: true,
+    },
+  },
+  notes: {
+    select: {
+      id: true,
+      type: true,
+      status: true,
+      endorsementClosingId: true,
+    },
+  },
+} satisfies Prisma.PlacementEndorsementInclude;
+
+type PlacementEndorsementSummaryRecord = Prisma.PlacementEndorsementGetPayload<{
+  include: typeof endorsementSummaryInclude;
+}>;
 
 type PlacementSnapshotRecord = Prisma.PlacementGetPayload<{
   include: {
@@ -113,6 +147,23 @@ export class PlacementEndorsementsService {
     return endorsement;
   }
 
+  async getSummary(
+    tenantId: string,
+    placementId: string,
+    endorsementId: string,
+  ): Promise<PlacementEndorsementSummaryResponseDto> {
+    await this.assertPlacement(tenantId, placementId);
+    const endorsement = await this.prisma.placementEndorsement.findFirst({
+      where: { id: endorsementId, tenantId, placementId },
+      include: endorsementSummaryInclude,
+    });
+    if (!endorsement) {
+      throw new NotFoundException('Placement endorsement not found');
+    }
+
+    return this.buildSummary(endorsement);
+  }
+
   async create(
     user: RequestUser,
     placementId: string,
@@ -158,6 +209,185 @@ export class PlacementEndorsementsService {
         },
       });
     });
+  }
+
+  private buildSummary(
+    endorsement: PlacementEndorsementSummaryRecord,
+  ): PlacementEndorsementSummaryResponseDto {
+    const acceptedStatuses: PlacementEndorsementParticipantStatus[] = [
+      PlacementEndorsementParticipantStatus.ACCEPTED,
+      PlacementEndorsementParticipantStatus.CLOSED,
+    ];
+    const acceptedParticipants = endorsement.participants.filter(
+      (participant) => acceptedStatuses.includes(participant.status),
+    );
+    const declinedParticipants = endorsement.participants.filter(
+      (participant) =>
+        participant.status === PlacementEndorsementParticipantStatus.DECLINED,
+    );
+    const placedPercent = acceptedParticipants.reduce(
+      (sum, participant) =>
+        sum + (this.toOptionalNumber(participant.signedLinePercent) ?? 0),
+      0,
+    );
+    const targetPercent = this.toOptionalNumber(endorsement.targetPercent);
+    const remainingPercent =
+      targetPercent === null
+        ? null
+        : Math.max(0, targetPercent - placedPercent);
+
+    const activeClosings = endorsement.closings.filter(
+      (closing) => closing.status !== PlacementClosingStatus.VOID,
+    );
+    const confirmedClosings = endorsement.closings.filter(
+      (closing) => closing.status === PlacementClosingStatus.CONFIRMED,
+    );
+    const activeConfirmedClosings = confirmedClosings.filter((closing) =>
+      activeClosings.some((activeClosing) => activeClosing.id === closing.id),
+    );
+    const activeClosingParticipantIds = new Set(
+      activeClosings.map((closing) => closing.endorsementParticipantId),
+    );
+    const confirmedClosingParticipantIds = new Set(
+      activeConfirmedClosings.map(
+        (closing) => closing.endorsementParticipantId,
+      ),
+    );
+    const acceptedWithoutActiveClosing = acceptedParticipants.filter(
+      (participant) => !activeClosingParticipantIds.has(participant.id),
+    );
+    const acceptedWithoutConfirmedClosing = acceptedParticipants.filter(
+      (participant) => !confirmedClosingParticipantIds.has(participant.id),
+    );
+
+    const activeNotes = endorsement.notes.filter(
+      (note) => note.status !== PlacementNoteStatus.VOID,
+    );
+    const activeDebitNotes = activeNotes.filter(
+      (note) => note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+    );
+    const activeCreditNotes = activeNotes.filter(
+      (note) => note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+    );
+    const creditNoteClosingIds = new Set(
+      activeCreditNotes
+        .map((note) => note.endorsementClosingId)
+        .filter((closingId): closingId is string => Boolean(closingId)),
+    );
+    const confirmedClosingsWithoutCreditNotes = activeConfirmedClosings.filter(
+      (closing) => !creditNoteClosingIds.has(closing.id),
+    );
+    const draftNotes = activeNotes.filter(
+      (note) => note.status === PlacementNoteStatus.DRAFT,
+    );
+
+    const pendingActions = new Set<string>();
+    if (endorsement.status === PlacementEndorsementStatus.DRAFT) {
+      pendingActions.add('SEND_TO_MARKET');
+    }
+    if (remainingPercent !== null && remainingPercent > 0) {
+      pendingActions.add('ADD_CAPACITY');
+    }
+    if (
+      remainingPercent !== null &&
+      remainingPercent === 0 &&
+      acceptedParticipants.length > 0 &&
+      endorsement.status === PlacementEndorsementStatus.MARKETING
+    ) {
+      pendingActions.add('ACCEPT_PARTICIPANTS');
+    }
+    if (acceptedWithoutActiveClosing.length > 0) {
+      pendingActions.add('CREATE_CLOSING');
+    }
+    if (
+      endorsement.closings.some(
+        (closing) => closing.status === PlacementClosingStatus.DRAFT,
+      )
+    ) {
+      pendingActions.add('ISSUE_CLOSING');
+    }
+    if (
+      endorsement.closings.some(
+        (closing) => closing.status === PlacementClosingStatus.ISSUED,
+      )
+    ) {
+      pendingActions.add('CONFIRM_CLOSING');
+    }
+    if (activeConfirmedClosings.length > 0 && activeDebitNotes.length === 0) {
+      pendingActions.add('GENERATE_NOTES');
+    }
+    if (confirmedClosingsWithoutCreditNotes.length > 0) {
+      pendingActions.add('GENERATE_NOTES');
+    }
+    if (draftNotes.length > 0) {
+      pendingActions.add('ISSUE_NOTES');
+    }
+    const terminalStatuses: PlacementEndorsementStatus[] = [
+      PlacementEndorsementStatus.CLOSED,
+      PlacementEndorsementStatus.DECLINED,
+      PlacementEndorsementStatus.VOID,
+    ];
+    if (
+      pendingActions.size === 0 &&
+      !terminalStatuses.includes(endorsement.status)
+    ) {
+      pendingActions.add('CLOSE_ENDORSEMENT');
+    }
+
+    return {
+      id: endorsement.id,
+      placementId: endorsement.placementId,
+      endorsementNumber: endorsement.endorsementNumber,
+      type: endorsement.type,
+      impactType: endorsement.impactType,
+      status: endorsement.status,
+      effectiveDate: endorsement.effectiveDate.toISOString(),
+      targetPercent,
+      placedPercent,
+      remainingPercent,
+      participants: {
+        total: endorsement.participants.length,
+        accepted: acceptedParticipants.length,
+        declined: declinedParticipants.length,
+      },
+      closings: {
+        total: endorsement.closings.length,
+        confirmed: confirmedClosings.length,
+        draft: endorsement.closings.filter(
+          (closing) => closing.status === PlacementClosingStatus.DRAFT,
+        ).length,
+        issued: endorsement.closings.filter(
+          (closing) => closing.status === PlacementClosingStatus.ISSUED,
+        ).length,
+        void: endorsement.closings.filter(
+          (closing) => closing.status === PlacementClosingStatus.VOID,
+        ).length,
+      },
+      notes: {
+        total: endorsement.notes.length,
+        endorsementDebitNotes: endorsement.notes.filter(
+          (note) => note.type === PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+        ).length,
+        endorsementCreditNotes: endorsement.notes.filter(
+          (note) => note.type === PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+        ).length,
+        issued: endorsement.notes.filter(
+          (note) => note.status === PlacementNoteStatus.ISSUED,
+        ).length,
+        draft: endorsement.notes.filter(
+          (note) => note.status === PlacementNoteStatus.DRAFT,
+        ).length,
+        void: endorsement.notes.filter(
+          (note) => note.status === PlacementNoteStatus.VOID,
+        ).length,
+      },
+      pendingActions: Array.from(pendingActions),
+      isComplete:
+        endorsement.status === PlacementEndorsementStatus.CLOSED &&
+        (remainingPercent === null || remainingPercent === 0) &&
+        acceptedWithoutConfirmedClosing.length === 0 &&
+        pendingActions.size === 0,
+    };
   }
 
   async update(

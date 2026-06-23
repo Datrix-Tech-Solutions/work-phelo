@@ -1,0 +1,140 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  PlacementEndorsementImpactType,
+  PlacementEndorsementStatus,
+  PlacementEndorsementType,
+} from '../../../prisma/generated/client';
+
+export class PlacementEndorsementParticipantSummaryCountsDto {
+  @ApiProperty({ example: 3 })
+  total!: number;
+
+  @ApiProperty({
+    example: 2,
+    description:
+      'Participants in ACCEPTED or CLOSED status. These count toward placed endorsement capacity.',
+  })
+  accepted!: number;
+
+  @ApiProperty({ example: 1 })
+  declined!: number;
+}
+
+export class PlacementEndorsementClosingSummaryCountsDto {
+  @ApiProperty({ example: 2 })
+  total!: number;
+
+  @ApiProperty({ example: 2 })
+  confirmed!: number;
+
+  @ApiProperty({ example: 0 })
+  draft!: number;
+
+  @ApiProperty({ example: 0 })
+  issued!: number;
+
+  @ApiProperty({ example: 0 })
+  void!: number;
+}
+
+export class PlacementEndorsementNoteSummaryCountsDto {
+  @ApiProperty({ example: 3 })
+  total!: number;
+
+  @ApiProperty({ example: 1 })
+  endorsementDebitNotes!: number;
+
+  @ApiProperty({ example: 2 })
+  endorsementCreditNotes!: number;
+
+  @ApiProperty({ example: 3 })
+  issued!: number;
+
+  @ApiProperty({ example: 0 })
+  draft!: number;
+
+  @ApiProperty({ example: 0 })
+  void!: number;
+}
+
+export class PlacementEndorsementSummaryResponseDto {
+  @ApiProperty({ format: 'uuid' })
+  id!: string;
+
+  @ApiProperty({ format: 'uuid' })
+  placementId!: string;
+
+  @ApiProperty({ example: 'END-001' })
+  endorsementNumber!: string;
+
+  @ApiProperty({
+    enum: PlacementEndorsementType,
+    example: PlacementEndorsementType.PARTICIPANT_ADDITION,
+  })
+  type!: PlacementEndorsementType;
+
+  @ApiProperty({
+    enum: PlacementEndorsementImpactType,
+    example: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+  })
+  impactType!: PlacementEndorsementImpactType;
+
+  @ApiProperty({
+    enum: PlacementEndorsementStatus,
+    example: PlacementEndorsementStatus.MARKETING,
+  })
+  status!: PlacementEndorsementStatus;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  effectiveDate!: string;
+
+  @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
+    example: 10,
+    description:
+      'Endorsement target capacity percentage. Null for non-capacity endorsements.',
+  })
+  targetPercent!: number | null;
+
+  @ApiProperty({
+    type: Number,
+    example: 10,
+    description:
+      'Accepted endorsement participant signed lines. Original placement participants are excluded.',
+  })
+  placedPercent!: number;
+
+  @ApiPropertyOptional({
+    type: Number,
+    nullable: true,
+    example: 0,
+    description:
+      'targetPercent minus placedPercent, floored at 0. Null when targetPercent is not set.',
+  })
+  remainingPercent!: number | null;
+
+  @ApiProperty({ type: PlacementEndorsementParticipantSummaryCountsDto })
+  participants!: PlacementEndorsementParticipantSummaryCountsDto;
+
+  @ApiProperty({ type: PlacementEndorsementClosingSummaryCountsDto })
+  closings!: PlacementEndorsementClosingSummaryCountsDto;
+
+  @ApiProperty({ type: PlacementEndorsementNoteSummaryCountsDto })
+  notes!: PlacementEndorsementNoteSummaryCountsDto;
+
+  @ApiProperty({
+    type: [String],
+    example: [],
+    description:
+      'Backend-derived workflow hints such as SEND_TO_MARKET, ADD_CAPACITY, ACCEPT_PARTICIPANTS, CREATE_CLOSING, ISSUE_CLOSING, CONFIRM_CLOSING, GENERATE_NOTES, ISSUE_NOTES or CLOSE_ENDORSEMENT.',
+  })
+  pendingActions!: string[];
+
+  @ApiProperty({
+    example: true,
+    description:
+      'True only when capacity is fully placed, required endorsement closings are confirmed and no pending workflow action remains.',
+  })
+  isComplete!: boolean;
+}
