@@ -205,6 +205,15 @@ enum PlacementEndorsementStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementEndorsementImpactType {
+  CAPACITY_INCREASE
+  TERMS_ONLY
+  DECREASE_OR_CANCELLATION
+  ADMINISTRATIVE
+
+  @@schema("reinsurance")
+}
+
 enum PlacementEndorsementParticipantStatus {
   INVITED
   OFFER_SENT
@@ -745,6 +754,7 @@ model PlacementEndorsement {
   placementId       String
   endorsementNumber String
   type              PlacementEndorsementType
+  impactType        PlacementEndorsementImpactType   @default(ADMINISTRATIVE)
   status            PlacementEndorsementStatus        @default(DRAFT)
   effectiveDate     DateTime
   reason            String
