@@ -790,6 +790,11 @@ export class PlacementsService {
       existing,
       participantId,
     );
+    await this.assertParticipantHasNoDependencies(
+      user.tenantId,
+      placementId,
+      participant.id,
+    );
 
     await this.prisma.placementParticipant.delete({
       where: { id: participant.id },
@@ -1178,6 +1183,72 @@ export class PlacementsService {
     }
 
     return participant;
+  }
+
+  private async assertParticipantHasNoDependencies(
+    tenantId: string,
+    placementId: string,
+    participantId: string,
+  ): Promise<void> {
+    const [
+      closingCount,
+      noteCount,
+      paymentCount,
+      claimAllocationCount,
+      documentCount,
+      endorsementParticipantCount,
+    ] = await Promise.all([
+      this.prisma.placementClosing.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementNote.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementPayment.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementClaimAllocation.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementDocument.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementEndorsementParticipant.count({
+        where: {
+          tenantId,
+          placementId,
+          originalParticipantId: participantId,
+        },
+      }),
+    ]);
+
+    const dependencies: string[] = [];
+    if (closingCount > 0) {
+      dependencies.push('placement closings');
+    }
+    if (noteCount > 0) {
+      dependencies.push('placement notes');
+    }
+    if (paymentCount > 0) {
+      dependencies.push('placement payments');
+    }
+    if (claimAllocationCount > 0) {
+      dependencies.push('claim allocations');
+    }
+    if (documentCount > 0) {
+      dependencies.push('placement documents');
+    }
+    if (endorsementParticipantCount > 0) {
+      dependencies.push('endorsement participants');
+    }
+
+    if (dependencies.length > 0) {
+      throw new ConflictException(
+        `Cannot delete placement participant because it has dependent financial/workflow records: ${dependencies.join(
+          ', ',
+        )}. Use the related workflow to void or reverse those records instead.`,
+      );
+    }
   }
 
   private assertParticipantCollection(
