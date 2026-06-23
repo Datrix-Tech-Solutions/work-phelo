@@ -2,6 +2,9 @@
 
 The notification-service owns outbound notification delivery for WorkPhelo. It handles email, SMS, in-app notification support, delivery logging, and provider integrations behind RabbitMQ events published by platform services.
 
+Current environment URLs are maintained in
+[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+
 ## SMS Providers
 
 SMS delivery is routed through the public `SmsService` API:
@@ -55,7 +58,8 @@ PILOSMS_SENDER_ID=WorkPhelo
 
 Runtime validation requires the API key and sender ID only for the selected SMS provider. Unsupported provider values fail fast during startup.
 
-Deployment scripts are not updated to activate PiloSMS in this PR. A later deployment activation PR should map environment-specific secrets into the runtime names above, for example:
+Development deployment wiring can map GitHub environment values into the runtime
+names above:
 
 ```env
 NOTIFY_SMS_PROVIDER=pilosms
@@ -63,7 +67,10 @@ NOTIFY_PILOSMS_API_KEY=
 NOTIFY_PILOSMS_SENDER_ID=WorkPhelo
 ```
 
-That activation PR should write `SMS_PROVIDER`, `PILOSMS_API_KEY`, and `PILOSMS_SENDER_ID` into the notification-service runtime env file.
+The deploy script writes `SMS_PROVIDER`, `PILOSMS_API_KEY`, and
+`PILOSMS_SENDER_ID` into the notification-service runtime env file when those
+values are configured. Production activation should be treated as an explicit
+environment/secrets rollout.
 
 ## PiloSMS Notes
 
@@ -110,7 +117,7 @@ Before:
 ```text
 WorkPhelo announcement: Test Announcement. Acme First Announcement test from WorkPhelo ERP
 
-View in WorkPhelo: https://example.workphelo.com/acme/login
+View in WorkPhelo: https://app.workphelo.com/acme/login
 ```
 
 After:

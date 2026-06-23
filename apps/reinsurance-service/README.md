@@ -3,6 +3,9 @@
 `reinsurance-service` is the bounded backend for broker-only Reinsurance
 Operations. It is intentionally separate from HR and platform Core domains.
 
+Current environment availability and Swagger URLs are maintained in
+[`../../docs/platform/current-environments.md`](../../docs/platform/current-environments.md).
+
 ## Current Surface
 
 The service foundation currently provides:
@@ -21,13 +24,18 @@ The service foundation currently provides:
   PlacementStatusHistory persistence built on active Counterparties.
 - Participant workflow, placement lifecycle transitions and capacity
   validation.
-- Financial lock policy foundation for direct-edit gating before payments,
-  endorsements, claims and accounting records are introduced.
+- Financial lock policy for direct-edit gating once placement payments exist.
 - Read-only offer and closing slip preview endpoints that mirror the current
   frontend formulas.
 - Email technical foundation for mailbox connection metadata, provider
   verification, sync proof-of-concept, thread/message metadata, attachment
   metadata and manual placement email links.
+- Placement closings, payments, debit/credit notes and reversal history.
+- Endorsements, endorsement participants, endorsement closings and endorsement
+  debit/credit notes.
+- Claims, claim allocations and claim cash calls.
+- Placement document registry, CLOSING_SLIP PDF rendering, private S3 storage
+  metadata and signed download URL foundation.
 - Development-only Swagger/OpenAPI documentation for live contract discovery.
 
 `/api/health` performs only a database connectivity check and is exposed
@@ -206,8 +214,12 @@ Lifecycle locks and financial locks are intentionally separate:
   with `Placement is financially locked. Changes require endorsement.`
 
 Payment records now provide the lock source. Debit/credit notes, endorsement
-foundation, endorsement participants and endorsement closings are available;
-receivable, payable, endorsement notes/payments and claims remain deferred.
+foundation, endorsement participants, endorsement closings, endorsement notes,
+claims, claim allocations, claim cash calls, placement email threads, outbound
+placement email persistence and document registry/PDF/S3 foundations are
+available. Endorsement payments, claim settlement payments, accounting,
+recoveries, generated email attachments and frontend-complete document delivery
+remain deferred.
 
 ## Placement Endorsement API
 
@@ -216,8 +228,10 @@ placement. They may be created once at least one placement closing exists. Befor
 payment, direct placement edits are still allowed but a broker may create an
 endorsement to formally version/document a change. After first payment, direct
 edits are financially locked and endorsement becomes mandatory for business
-changes. Endorsements do not add notes, payments, claims, accounting, PDFs,
-emails or frontend changes.
+changes. Endorsements do not mutate original placement financial records.
+Endorsement participants, closings and notes are endorsement-scoped child
+records. Endorsement payments, accounting, claim effects, generated PDFs and
+email delivery remain separate/future workflows.
 
 PR2 adds endorsement-scoped participants. These are separate market response
 records for the endorsement only; they do not alter original placement
@@ -381,8 +395,9 @@ Snapshot rules:
   `(signedLinePercent / 100) × endorsementPremiumSnapshot`.
 - `commissionAmount`, `brokerageAmount` and `netPremium` follow the same
   closing math used by placement closings.
-- No PDF, document storage, email, endorsement notes or endorsement payments are
-  created in this foundation.
+- No PDF, document storage, email or endorsement payments are created by closing
+  creation itself. Endorsement debit/credit notes are generated separately from
+  confirmed endorsement closing snapshots.
 
 Numbering and lifecycle:
 

@@ -1,17 +1,26 @@
 # WorkPhelo ERP
 
-## Live Dev Environment
+WorkPhelo is a multi-tenant ERP platform for HR, payroll, notifications,
+subscriptions, marketing workflows and broker-focused Reinsurance Operations.
 
-| Service      | URL                                   |
-| ------------ | ------------------------------------- |
-| Web App      | http://157.245.220.205                |
-| Auth Swagger | http://157.245.220.205/auth-docs/docs |
-| HR Swagger   | http://157.245.220.205/hr-docs/docs   |
-| API Base URL | http://157.245.220.205/api/v1         |
+The repository is a NestJS + Next.js monorepo managed with Turborepo.
+
+## Current Environments
+
+The canonical environment reference is
+[`docs/platform/current-environments.md`](docs/platform/current-environments.md).
+
+| Environment    | Frontend                                              | API Gateway                            | Status                           |
+| -------------- | ----------------------------------------------------- | -------------------------------------- | -------------------------------- |
+| Local          | `http://localhost:3000`                               | `http://localhost:4000/api/v1`         | Developer machine                |
+| Development    | `https://dev-app.workphelo.com`                       | `https://dev-api.workphelo.com/api/v1` | Auto-deployed from `dev`         |
+| Production app | `https://app.workphelo.com`                           | `https://api.workphelo.com/api/v1`     | Auto/manual deployed from `prod` |
+| Public landing | `https://workphelo.com` / `https://www.workphelo.com` | n/a                                    | Vercel-managed public site       |
+
+Legacy IP-based URLs and `workphelo.com/api/v1` are retired. Do not use them in
+new docs, examples or generated links.
 
 ## Architecture
-
-WorkPhelo is a **NestJS microservices monorepo** managed with Turborepo.
 
 ```
 work-phelo/
@@ -26,52 +35,77 @@ work-phelo/
 │   └── web/
 │       └── work-phelo-web/
 ├── packages/
-│   ├── types/
+│   ├── config/
 │   ├── schemas/
-│   ├── utils/
-│   └── config/
+│   ├── types/
+│   └── utils/
+├── docs/
 └── infrastructure/
-    └── docker-compose.dev.yml
 ```
 
-The broker-only Reinsurance Operations module is being introduced as a
-domain-specific service inside this monorepo. Detailed Reinsurance planning
-documentation is maintained internally/local-only and is intentionally not
-tracked in Git.
-
-## Tech Stack
-
-**Backend**
+### Backend
 
 - NestJS microservices
-- PostgreSQL 16 (multi-schema)
-- RabbitMQ (async messaging)
-- Redis (caching, sessions)
+- API Gateway route prefix: `/api/v1`
+- PostgreSQL 16 with service-owned schemas
 - Prisma ORM
-- JWT authentication (httpOnly cookies)
-- Resend (transactional email)
-- Notification-service SMS providers are configurable (`termii` or `pilosms`);
-  PiloSMS support is available in code, with deployment activation handled in a
-  separate environment/secrets PR.
+- RabbitMQ for async events
+- Redis for cache/session-related infrastructure
+- JWT auth with HTTP-only cookies
+- Resend email provider
+- Configurable SMS providers in notification-service
 
-**Frontend**
+### Frontend
 
-- Next.js 16 (App Router)
+- Next.js App Router
 - TypeScript
 - Tailwind CSS
-- Zustand (state management)
-- React Query (server state)
-- Atomic design system
+- React Query
+- Zustand
+- Atomic/component-driven UI structure
 
-**Infrastructure**
+### Infrastructure
 
-- Docker + Docker Compose
+- Docker and Docker Compose
 - GitHub Actions CI/CD
-- DigitalOcean (Ubuntu 24)
-- Nginx (reverse proxy)
-- GitHub Container Registry (GHCR)
+- GHCR images
+- DigitalOcean Ubuntu host
+- Nginx reverse proxy
+- Vercel for the public landing page
 
----
+## Deployed Service Inventory
+
+| Service              | Dev | Prod | Gateway prefix                     |
+| -------------------- | --- | ---- | ---------------------------------- |
+| Web app              | Yes | Yes  | n/a                                |
+| API Gateway          | Yes | Yes  | `/api/v1/*`                        |
+| Auth Service         | Yes | Yes  | `/api/v1/auth/*`                   |
+| HR Service           | Yes | Yes  | `/api/v1/hr/*`                     |
+| Notification Service | Yes | Yes  | `/api/v1/notification/*`           |
+| Subscription Service | Yes | No   | `/api/v1/subscription/*`           |
+| Marketing Service    | Yes | No   | `/api/v1/marketing/*`              |
+| Reinsurance Service  | Yes | No   | `/api/v1/operations/reinsurance/*` |
+
+Prod service exposure should be checked against
+[`infrastructure/docker-compose.prod.yml`](infrastructure/docker-compose.prod.yml)
+before planning a production release.
+
+## Swagger/OpenAPI
+
+Swagger is enabled in development deployments and normally disabled in
+production unless explicitly enabled for a controlled support window.
+
+| Service      | Dev Swagger                                                        |
+| ------------ | ------------------------------------------------------------------ |
+| Auth         | `https://dev-api.workphelo.com/api/v1/auth/docs`                   |
+| HR           | `https://dev-api.workphelo.com/api/v1/hr/docs`                     |
+| Notification | `https://dev-api.workphelo.com/api/v1/notification/docs`           |
+| Subscription | `https://dev-api.workphelo.com/api/v1/subscription/docs`           |
+| Marketing    | `https://dev-api.workphelo.com/api/v1/marketing/docs`              |
+| Reinsurance  | `https://dev-api.workphelo.com/api/v1/operations/reinsurance/docs` |
+
+See [`docs/platform/current-environments.md`](docs/platform/current-environments.md)
+for local and production Swagger notes.
 
 ## Getting Started
 
@@ -81,147 +115,95 @@ tracked in Git.
 - Docker Desktop
 - Git
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Datrix-Tech-Solutions/work-phelo.git
-
-cd work-phelo
-```
-
-### 2. Install dependencies
+### Install Dependencies
 
 ```bash
 npm install
 ```
 
-### 3. Set up environment variables
-
-Each service has its own `.env` file. Copy the examples:
+### Start Local Infrastructure
 
 ```bash
-cp apps/auth-service/.env.example apps/auth-service/.env
-
-cp apps/hr-service/.env.example apps/hr-service/.env
-
-cp apps/notification-service/.env.example apps/notification-service/.env
-
-cp apps/web/work-phelo-web/.env.example apps/web/work-phelo-web/.env.local
+docker compose -f infrastructure/docker-compose.dev.yml up -d redis rabbitmq
 ```
 
-### 4. Start infrastructure
+Use your service `.env` files for PostgreSQL, RabbitMQ, Redis and provider
+configuration. The deployed dev/prod environments are managed by GitHub Actions
+and server-side environment files.
+
+### Run Prisma Commands
+
+Run service Prisma commands from each service directory. Examples:
 
 ```bash
-docker compose -f infrastructure/docker-compose.dev.yml up -d postgres rabbitmq redis
-```
-
-### 5. Run migrations and seed
-
-```bash
-# Auth service
 cd apps/auth-service
-
 npx prisma migrate dev
-
 npx prisma db seed
-cd ../..
 
-# HR service
-cd apps/hr-service
-
+cd ../hr-service
 npx prisma migrate dev
-
-cd ../..
 ```
 
-### 6. Start services
+### Start Services
 
 ```bash
-# Start all backend services
+# All configured dev scripts through Turbo
 npm run dev
 
-# Or start a specific service
+# Or a single service
 npx turbo dev --filter=auth-service
-
 npx turbo dev --filter=hr-service
 ```
 
-### 7. Start the frontend
+### Start Frontend
 
 ```bash
 cd apps/web/work-phelo-web
-
-npm install
-
 npm run dev
-# → http://localhost:3000
 ```
 
----
+Local app URL: `http://localhost:3000`
 
-## API Overview
+## API Routing Rules
 
-All requests go through the API Gateway at `/api/v1/`.
+- Browser code should call same-origin `/api/v1/...`.
+- Next.js rewrites and Nginx route those requests to the API Gateway.
+- Direct API tooling can use `https://dev-api.workphelo.com/api/v1` or
+  `https://api.workphelo.com/api/v1`.
+- Application links must use `https://app.workphelo.com` in production and
+  `https://dev-app.workphelo.com` in development.
 
-See full API docs at the Swagger URLs above.
+## CI/CD
 
-In the development deployment, Reinsurance Operations OpenAPI documentation
-is exposed through `/api/v1/operations/reinsurance/docs` when enabled by its
-deployment flag. The
-`apps/reinsurance-service/README.md` contract includes frontend integration
-guidance for Counterparties, Risk Settings, Currency Settings, Placements,
-participant workflow, slip previews and the current UAT flow.
+| Branch | Workflow                            | Target                  |
+| ------ | ----------------------------------- | ----------------------- |
+| `dev`  | `.github/workflows/deploy-dev.yml`  | Development environment |
+| `prod` | `.github/workflows/deploy-prod.yml` | Production environment  |
 
----
+The `main` branch exists historically but is not the current production deploy
+branch. Production releases go through `prod`.
 
-## CI/CD Pipeline
+Core validation commands:
 
-Every push to `dev` triggers:
-
-1. **Quality Gates** — type checks + build validation for all backend services
-
-2. **Detect Changes** — only changed services are rebuilt
-
-3. **Build & Push** — Docker images pushed to GHCR
-
-4. **Next.js Build** — Docker image for frontend built and pushed
-
-5. **Deploy** — SSH into DigitalOcean, pull images, restart containers, run migrations, seed DB
-
-Branch strategy:
-
-- `dev` → development environment (auto-deploys)
-
-- `main` → production (merge from dev)
-
----
-
-## Project Structure — Frontend
-
-The frontend follows **atomic design** principles:
-
-```
-src/
-├── app/
-│   ├── (auth)/login/
-│   ├── [tenantSlug]/login/
-│   └── platform/dashboard/
-├── components/
-│   ├── atoms/
-│   ├── molecules/
-│   ├── organisms/
-│   └── templates/
-├── lib/
-│   ├── api.ts
-│   └── utils.ts
-├── providers/
-├── store/
-├── hooks/
-└── types/
+```bash
+npm run check-types
+npm run test:unit
+npm run build
+npm run lint
 ```
 
----
+Deployment details live in:
 
-## Contributing
+- [`docs/deployment.md`](docs/deployment.md)
+- [`docs/deployment-operations.md`](docs/deployment-operations.md)
+- [`docs/domain-routing.md`](docs/domain-routing.md)
 
-Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before making any changes.
+## Documentation
+
+- Current environments: [`docs/platform/current-environments.md`](docs/platform/current-environments.md)
+- Documentation process: [`docs/processes/documentation-maintenance.md`](docs/processes/documentation-maintenance.md)
+- Reinsurance operations: [`docs/reinsurance-operations.md`](docs/reinsurance-operations.md)
+- Postman package: [`docs/postman/README.md`](docs/postman/README.md)
+
+When changing domains, deployments, API contracts or service exposure, update
+the documentation in the same PR.
