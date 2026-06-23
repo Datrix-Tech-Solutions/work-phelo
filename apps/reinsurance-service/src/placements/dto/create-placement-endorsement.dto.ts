@@ -11,7 +11,10 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { PlacementEndorsementType } from '../../../prisma/generated/client';
+import {
+  PlacementEndorsementImpactType,
+  PlacementEndorsementType,
+} from '../../../prisma/generated/client';
 import { TrimmedString } from '../../counterparties/dto/string.transforms';
 
 export class CreatePlacementEndorsementDto {
@@ -23,6 +26,16 @@ export class CreatePlacementEndorsementDto {
   })
   @IsEnum(PlacementEndorsementType)
   type!: PlacementEndorsementType;
+
+  @ApiPropertyOptional({
+    enum: PlacementEndorsementImpactType,
+    example: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+    description:
+      'Optional explicit impact classification. When supplied, it must match the backend-derived impact from proposedSnapshot/targetPercent/type.',
+  })
+  @IsOptional()
+  @IsEnum(PlacementEndorsementImpactType)
+  impactType?: PlacementEndorsementImpactType;
 
   @ApiProperty({
     type: String,
