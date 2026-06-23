@@ -68,6 +68,7 @@ describe('PlacementsController', () => {
   const endorsementsService = {
     findAll: jest.fn(),
     findOne: jest.fn(),
+    getSummary: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     changeStatus: jest.fn(),
@@ -172,6 +173,7 @@ describe('PlacementsController', () => {
     ['getDocumentDownloadUrl', PlacementPermission.VIEW],
     ['findEndorsements', PlacementPermission.VIEW],
     ['findEndorsement', PlacementPermission.VIEW],
+    ['getEndorsementSummary', PlacementPermission.VIEW],
     ['findEndorsementParticipants', PlacementPermission.VIEW],
     ['findEndorsementParticipant', PlacementPermission.VIEW],
     ['findEndorsementClosings', PlacementPermission.VIEW],
@@ -385,11 +387,15 @@ describe('PlacementsController', () => {
   it('delegates endorsement reads with authenticated tenant context', async () => {
     const controller = createController();
     endorsementsService.findAll.mockResolvedValue([]);
+    endorsementsService.getSummary.mockResolvedValue({ id: 'summary-1' });
 
     const listResult = await controller.findEndorsements('placement-1', {
       user,
     } as never);
     await controller.findEndorsement('placement-1', 'endorsement-1', {
+      user,
+    } as never);
+    await controller.getEndorsementSummary('placement-1', 'endorsement-1', {
       user,
     } as never);
 
@@ -399,6 +405,11 @@ describe('PlacementsController', () => {
     );
     expect(listResult).toEqual({ items: [] });
     expect(endorsementsService.findOne).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+    expect(endorsementsService.getSummary).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
       'endorsement-1',
