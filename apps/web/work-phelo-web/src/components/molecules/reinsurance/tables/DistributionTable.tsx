@@ -8,7 +8,7 @@ import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreview
 import { Facultative } from '@/types/reinsurance';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
 
-export type DistributionStatus = 'Pending' | 'Accepted' | 'Declined';
+export type DistributionStatus = 'Pending' | 'Accepted' | 'Closed' | 'Declined';
 
 export interface DistributionEntry {
   id: string; // participant record ID
@@ -20,9 +20,10 @@ export interface DistributionEntry {
   status: DistributionStatus;
 }
 
-const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'danger'> = {
+const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'neutral' | 'danger'> = {
   Pending: 'warning',
-  Accepted: 'success',
+  Accepted: 'neutral',
+  Closed: 'success',
   Declined: 'danger',
 };
 
@@ -34,8 +35,6 @@ interface DistributionTableProps {
   entries: DistributionEntry[];
   premium: number;
   placement: Facultative;
-  hasActiveEndorsement?: boolean;
-  confirmedCounterpartyIds?: Set<string>;
   isPlacementLocked?: boolean;
   busyIds?: Set<string>;
   onShareCommit: (row: DistributionEntry, share: number) => void;
@@ -43,17 +42,15 @@ interface DistributionTableProps {
   onMailSent: (row: DistributionEntry) => void;
   onAccept: (row: DistributionEntry) => void;
   onDecline: (row: DistributionEntry) => void;
+  onClose?: (row: DistributionEntry) => void;
   onDelete?: (row: DistributionEntry) => void;
   onRevert?: (row: DistributionEntry) => void;
-  onClosePlacement?: () => void;
 }
 
 export function DistributionTable({
   entries,
   premium,
   placement,
-  hasActiveEndorsement = false,
-  confirmedCounterpartyIds,
   isPlacementLocked = false,
   busyIds,
   onShareCommit,
@@ -61,12 +58,11 @@ export function DistributionTable({
   onMailSent,
   onAccept,
   onDecline,
+  onClose,
   onDelete,
   onRevert,
-  onClosePlacement,
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
-  const [reconfirmedIds, setReconfirmedIds] = useState<Set<string>>(new Set());
   const [mailPreviewId, setMailPreviewId] = useState<string | null>(null);
   const [slipPreviewId, setSlipPreviewId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -110,7 +106,6 @@ export function DistributionTable({
 
   const handleAccept = (row: DistributionEntry) => {
     onAccept(row);
-    setReconfirmedIds((prev) => new Set([...prev, row.id]));
     setMailedIds((prev) => {
       const n = new Set(prev);
       n.delete(row.id);
@@ -139,7 +134,7 @@ export function DistributionTable({
       label: 'Participant Share (%)',
       width: '1fr',
       render: (row) => {
-        const isPaid = isPlacementLocked;
+        const isPaid = isPlacementLocked || row.status === 'Closed';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
         return editingId === row.id ? (
           <input
@@ -170,7 +165,7 @@ export function DistributionTable({
       label: 'Brokerage Fee (%)',
       width: '1fr',
       render: (row) => {
-        const isPaid = isPlacementLocked;
+        const isPaid = isPlacementLocked || row.status === 'Closed';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
         return editingBrokerageId === row.id ? (
           <input
@@ -229,15 +224,14 @@ export function DistributionTable({
       width: '150px',
       render: (row) => {
         const mailed = mailedIds.has(row.id);
-        const hasReconfirmed =
-          confirmedCounterpartyIds?.has(row.counterpartyId) ?? reconfirmedIds.has(row.id);
-        const responded = row.status === 'Declined' || row.status === 'Accepted';
-        const isReconfirming = hasActiveEndorsement && row.status === 'Accepted' && !hasReconfirmed;
+        const responded =
+          row.status === 'Declined' || row.status === 'Accepted' || row.status === 'Closed';
         const isBusy = busyIds?.has(row.id) ?? false;
         const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
-        const showAccept = !isPlacementLocked && (isReconfirming || (mailed && !responded));
-        const showDecline = !isPlacementLocked && !isReconfirming && mailed && !responded;
-        const showRevert = !isPlacementLocked && row.status === 'Accepted' && !isReconfirming;
+        const showAccept = !isPlacementLocked && mailed && !responded;
+        const showDecline = !isPlacementLocked && mailed && !responded;
+        const showRevert = !isPlacementLocked && row.status === 'Accepted';
+        const showClose = !isPlacementLocked && row.status === 'Accepted';
         return (
           <div className="flex items-center gap-2">
             <button
@@ -295,6 +289,18 @@ export function DistributionTable({
                 <Icons.RotateCcw className="w-4 h-4" />
               </button>
             )}
+            {showClose && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isBusy) onClose?.(row);
+                }}
+                disabled={isBusy}
+                className={`text-xs font-medium text-green-700 border border-green-600 hover:bg-green-600 hover:text-white active:scale-95 rounded px-2 py-0.5 transition-all ${disabledActionClass}`}
+              >
+                Validate
+              </button>
+            )}
             {!responded && (
               <button
                 type="button"
@@ -337,7 +343,6 @@ export function DistributionTable({
         recipients={mailPreviewEntry?.emails ?? []}
         onSend={handleSend}
         onClose={() => setMailPreviewId(null)}
-        onClosePlacement={onClosePlacement}
       />
 
       <SlipPreviewModal

@@ -15,6 +15,7 @@ import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
+import { useAuthStore } from '@/store/auth.store';
 import type {
   Announcement,
   AnnouncementAudienceType,
@@ -69,6 +70,8 @@ function buildDeliveryChannels(
 export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const toast = useToast();
+  const user = useAuthStore((s) => s.user);
+  const smsFeatureEnabled = user?.featureConfig?.hr?.smsAnnouncement ?? false;
   const { mutate: createAnnouncement, isPending: isCreating } = useCreateAnnouncement();
   const isPending = isCreating;
 
@@ -103,14 +106,14 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
         body: announcement?.body ?? '',
         expiresAt: announcement?.expiresAt ?? undefined,
         sendEmail: channels.includes('EMAIL') || announcement?.sendEmail === true,
-        sendSMS: SMS_DELIVERY_ENABLED && channels.includes('SMS'),
+        sendSMS: SMS_DELIVERY_ENABLED && smsFeatureEnabled && channels.includes('SMS'),
         audienceType: announcement?.audienceType ?? 'ALL',
         departmentIds: announcement?.targetDepartmentIds ?? [],
         branchIds: announcement?.targetBranchIds ?? [],
         employeeIds: announcement?.targetEmployeeIds ?? [],
       });
     }
-  }, [isOpen, announcement, reset]);
+  }, [isOpen, announcement, reset, smsFeatureEnabled]);
 
   const expiresAtValue = useWatch({ control, name: 'expiresAt' });
   const sendEmail = useWatch({ control, name: 'sendEmail' });
@@ -286,12 +289,14 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
             </div>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer group">
+          <label
+            className={`flex items-start gap-3 group ${smsFeatureEnabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-50 pointer-events-none'}`}
+          >
             <div className="relative mt-0.5 shrink-0">
               <input
                 type="checkbox"
                 className="sr-only peer"
-                disabled={!SMS_DELIVERY_ENABLED}
+                disabled={!SMS_DELIVERY_ENABLED || !smsFeatureEnabled}
                 {...register('sendSMS')}
               />
               <div className="w-5 h-5 rounded border-2 border-gray-300 bg-white peer-checked:bg-brand peer-checked:border-brand transition-colors group-hover:border-gray-400 flex items-center justify-center">
@@ -311,9 +316,11 @@ export function CreateAnnouncementPanel({ isOpen, onClose, announcement }: Props
             <div>
               <p className="text-sm font-bold text-gray-900">Notify via SMS</p>
               <p className="text-xs text-gray-500 mt-0.5">
-                {SMS_DELIVERY_ENABLED
-                  ? "Send this announcement to employees' phone numbers."
-                  : 'SMS delivery will be enabled after provider configuration.'}
+                {!smsFeatureEnabled
+                  ? 'SMS announcements are not enabled for this organisation.'
+                  : SMS_DELIVERY_ENABLED
+                    ? "Send this announcement to employees' phone numbers."
+                    : 'SMS delivery will be enabled after provider configuration.'}
               </p>
             </div>
           </label>

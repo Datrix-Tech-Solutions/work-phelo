@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
-import { SearchSelect } from '@/components/atoms/SearchSelect';
+import { Icons } from '@/components/atoms/icons';
+import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import {
   Facultative,
   PlacementEndorsement,
@@ -11,7 +12,16 @@ import {
   ENDORSEMENT_STATUS_LABELS,
   ENDORSEMENT_STATUS_VARIANT,
 } from '@/types/reinsurance';
-import { usePlacementEndorsements, useReinsurers, useUpdateEndorsementStatus } from '@/hooks';
+import {
+  useCedants,
+  usePlacementEndorsements,
+  usePlacementEndorsementParticipants,
+  useCreateEndorsementParticipant,
+  useReinsurers,
+  useUpdateEndorsementStatus,
+} from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 import { EndorsementCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementCertificateModal';
 import { EndorsementReinsurerCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementReinsurerCertificateModal';
 
@@ -54,6 +64,11 @@ function getSnapshotPlacement(snapshot: Record<string, unknown>): Record<string,
     return snapshot.placement as Record<string, unknown>;
   }
   return snapshot;
+}
+
+function getSnapshotParticipants(snapshot: Record<string, unknown>): Record<string, unknown>[] {
+  const ps = snapshot.participants;
+  return Array.isArray(ps) ? (ps as Record<string, unknown>[]) : [];
 }
 
 function ParameterCards({
@@ -109,6 +124,14 @@ function ParameterCards({
   );
 }
 
+interface EndorsementParticipantRow {
+  id: string;
+  counterpartyId: string;
+  reinsurerName: string;
+  originalShare: number;
+  brokerageFee: number;
+}
+
 function EndorsementCard({
   endorsement,
   placement,
@@ -117,12 +140,24 @@ function EndorsementCard({
   placement: Facultative;
 }) {
   const [cedantDocOpen, setCedantDocOpen] = useState(false);
-  const [selectedParticipantId, setSelectedParticipantId] = useState<string>('');
-  const [reinsurerDocOpen, setReinsurerDocOpen] = useState(false);
+  const [participantsExpanded, setParticipantsExpanded] = useState(false);
+  const [revisedShares, setRevisedShares] = useState<Record<string, string>>({});
+  const [busyEPIds, setBusyEPIds] = useState<Set<string>>(new Set());
+  const [tableDocCounterpartyId, setTableDocCounterpartyId] = useState<string | null>(null);
 
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: cedants = [] } = useCedants();
+  const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
   const { mutate: updateStatus, isPending: isUpdatingStatus } = useUpdateEndorsementStatus(
     placement.id,
+  );
+  const { data: endorsementParticipants = [] } = usePlacementEndorsementParticipants(
+    placement.id,
+    endorsement.id,
+  );
+  const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
+    placement.id,
+    endorsement.id,
   );
 
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
@@ -130,23 +165,137 @@ function EndorsementCard({
     ? getSnapshotPlacement(endorsement.proposedSnapshot)
     : null;
 
-  // Participants who have accepted / closed — these have a closing on the business
-  const closingParticipants = placement.participants.filter(
-    (p) => p.status === 'ACCEPTED' || p.status === 'CLOSED',
+  const snapshotParticipants = getSnapshotParticipants(endorsement.originalSnapshot).filter(
+    (p) => p.role === 'REINSURER' || p.role === 'LEAD_REINSURER' || p.role === 'CO_REINSURER',
   );
 
-  const reinsurerOptions = closingParticipants.map((p) => {
+  const acceptedCounterpartyIds = new Set(
+    endorsementParticipants
+      .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
+      .map((p) => p.counterpartyId),
+  );
+
+  const endorsementRows: EndorsementParticipantRow[] = snapshotParticipants.map((p) => {
     const r = reinsurers.find((r) => r.id === p.counterpartyId);
-    return { value: p.id, label: r?.name ?? p.counterpartyId };
+    const cid = String(p.counterpartyId);
+    return {
+      id: cid,
+      counterpartyId: cid,
+      reinsurerName: r?.name ?? cid,
+      originalShare: parseFloat(String(p.signedLinePercent ?? p.sharePercent ?? '0')),
+      brokerageFee: parseFloat(String(p.brokerageFee ?? '0')),
+    };
   });
 
-  const selectedParticipant = closingParticipants.find((p) => p.id === selectedParticipantId);
-  const selectedReinsurer = reinsurers.find((r) => r.id === selectedParticipant?.counterpartyId);
-
-  const handleSelectReinsurer = (id: string) => {
-    setSelectedParticipantId(id);
-    if (id) setReinsurerDocOpen(true);
+  const handleAcceptEndorsement = async (row: EndorsementParticipantRow) => {
+    setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
+    try {
+      const revised = parseFloat(revisedShares[row.counterpartyId] ?? String(row.originalShare));
+      const share = isNaN(revised) ? row.originalShare : revised;
+      await createEndorsementParticipant({
+        counterpartyId: row.counterpartyId,
+        sharePercent: share,
+        signedLinePercent: share,
+        status: 'ACCEPTED',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setBusyEPIds((prev) => {
+        const n = new Set(prev);
+        n.delete(row.counterpartyId);
+        return n;
+      });
+    }
   };
+
+  const epColumns: Column<EndorsementParticipantRow>[] = [
+    {
+      key: 'reinsurerName',
+      label: 'Reinsurer',
+      width: '2fr',
+      render: (row) => <span className="font-medium text-gray-900">{row.reinsurerName}</span>,
+    },
+    {
+      key: 'originalShare',
+      label: 'Original Share (%)',
+      width: '1fr',
+      render: (row) => <span className="text-gray-700">{row.originalShare}%</span>,
+    },
+    {
+      key: 'brokerageFee',
+      label: 'Brokerage (%)',
+      width: '1fr',
+      render: (row) => <span className="text-gray-700">{row.brokerageFee}%</span>,
+    },
+    {
+      key: 'counterpartyId',
+      label: 'Revised (%)',
+      width: '1fr',
+      render: (row) => {
+        const isAccepted = acceptedCounterpartyIds.has(row.counterpartyId);
+        if (isAccepted) {
+          const ep = endorsementParticipants.find((p) => p.counterpartyId === row.counterpartyId);
+          return (
+            <span className="text-gray-700">
+              {parseFloat(ep?.signedLinePercent ?? ep?.sharePercent ?? String(row.originalShare))}%
+            </span>
+          );
+        }
+        return (
+          <input
+            type="number"
+            min={0}
+            max={100}
+            value={revisedShares[row.counterpartyId] ?? String(row.originalShare)}
+            onChange={(e) =>
+              setRevisedShares((prev) => ({
+                ...prev,
+                [row.counterpartyId]: e.target.value,
+              }))
+            }
+            className="w-20 px-2 py-1 text-sm border border-gray-300 rounded bg-white text-gray-900 focus:outline-none focus:border-brand"
+          />
+        );
+      },
+    },
+    {
+      key: 'id' as keyof EndorsementParticipantRow,
+      label: 'Actions',
+      width: '130px',
+      render: (row) => {
+        const isAccepted = acceptedCounterpartyIds.has(row.counterpartyId);
+        const isBusy = busyEPIds.has(row.counterpartyId);
+        if (isAccepted) {
+          return (
+            <button
+              type="button"
+              onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
+              className="text-xs font-medium text-blue-600 hover:text-blue-800 transition-colors"
+            >
+              View Document
+            </button>
+          );
+        }
+        return (
+          <button
+            type="button"
+            disabled={isBusy}
+            onClick={() => handleAcceptEndorsement(row)}
+            className="text-xs font-medium text-green-700 border border-green-600 hover:bg-green-600 hover:text-white active:scale-95 rounded px-2 py-0.5 transition-all disabled:opacity-50 disabled:cursor-wait"
+          >
+            {isBusy ? 'Accepting…' : 'Accept'}
+          </button>
+        );
+      },
+    },
+  ];
+
+  const tableDocEP = endorsementParticipants.find(
+    (p) => p.counterpartyId === tableDocCounterpartyId,
+  );
+  const tableDocReinsurer = reinsurers.find((r) => r.id === tableDocCounterpartyId);
+  const tableDocRow = endorsementRows.find((r) => r.counterpartyId === tableDocCounterpartyId);
 
   return (
     <>
@@ -169,22 +318,19 @@ function EndorsementCard({
               <Button
                 size="sm"
                 isLoading={isUpdatingStatus}
-                onClick={() => updateStatus({ endorsementId: endorsement.id, status: 'MARKETING' })}
+                onClick={() => {
+                  updateStatus({ endorsementId: endorsement.id, status: 'MARKETING' });
+                  setParticipantsExpanded(true);
+                }}
               >
                 Send to Market
               </Button>
             )}
-            <Button size="sm" variant="secondary" onClick={() => setCedantDocOpen(true)}>
-              Cedant Document
-            </Button>
-            <SearchSelect
-              label=""
-              placeholder="Reinsurer Document…"
-              options={reinsurerOptions}
-              value={selectedParticipantId}
-              onChange={handleSelectReinsurer}
-              size="sm"
-            />
+            {endorsement.status !== 'DRAFT' && (
+              <Button size="sm" variant="secondary" onClick={() => setCedantDocOpen(true)}>
+                Cedant Document
+              </Button>
+            )}
           </div>
         </div>
 
@@ -197,6 +343,34 @@ function EndorsementCard({
 
         {/* Side-by-side parameter cards (changed fields only) */}
         {proposed && <ParameterCards original={original} proposed={proposed} />}
+
+        {/* Participants toggle */}
+        {endorsement.status !== 'DRAFT' && endorsementRows.length > 0 && (
+          <div className="flex flex-col gap-3">
+            <button
+              type="button"
+              onClick={() => setParticipantsExpanded((v) => !v)}
+              className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-gray-700 transition-colors w-fit"
+            >
+              <Icons.ChevronDown
+                className={`w-3.5 h-3.5 transition-transform duration-200 ${participantsExpanded ? 'rotate-180' : ''}`}
+              />
+              Participants at Endorsement ({endorsementRows.length})
+            </button>
+
+            {participantsExpanded && (
+              <DataTable
+                columns={epColumns}
+                data={endorsementRows}
+                emptyMessage="No participants recorded"
+                currentPage={1}
+                totalPages={1}
+                onPageChange={() => {}}
+                noInternalScroll
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* Cedant document */}
@@ -204,24 +378,27 @@ function EndorsementCard({
         isOpen={cedantDocOpen}
         placement={placement}
         endorsement={endorsement}
+        cedant={fullCedant}
         onPrint={() => setCedantDocOpen(false)}
         onClose={() => setCedantDocOpen(false)}
       />
 
-      {/* Reinsurer document */}
-      {selectedParticipant && selectedReinsurer && (
+      {/* Reinsurer document (via table View Document) */}
+      {tableDocCounterpartyId && tableDocReinsurer && tableDocRow && (
         <EndorsementReinsurerCertificateModal
-          isOpen={reinsurerDocOpen}
+          isOpen={!!tableDocCounterpartyId}
           placement={placement}
           endorsement={endorsement}
-          counterpartyId={selectedParticipant.counterpartyId}
-          reinsurerName={selectedReinsurer.name}
+          counterpartyId={tableDocCounterpartyId}
+          reinsurerName={tableDocReinsurer.name}
           sharePercent={parseFloat(
-            selectedParticipant.signedLinePercent ?? selectedParticipant.sharePercent ?? '0',
+            tableDocEP?.signedLinePercent ??
+              tableDocEP?.sharePercent ??
+              String(tableDocRow.originalShare),
           )}
-          brokerageFee={parseFloat(selectedParticipant.brokerageFee ?? '0')}
-          onPrint={() => setReinsurerDocOpen(false)}
-          onClose={() => setReinsurerDocOpen(false)}
+          brokerageFee={tableDocRow.brokerageFee}
+          onPrint={() => setTableDocCounterpartyId(null)}
+          onClose={() => setTableDocCounterpartyId(null)}
         />
       )}
     </>
