@@ -41,6 +41,7 @@ describe('PlacementsController', () => {
     addParticipant: jest.fn(),
     updateParticipant: jest.fn(),
     changeParticipantStatus: jest.fn(),
+    acceptParticipantAndConfirm: jest.fn(),
     deleteParticipant: jest.fn(),
     archive: jest.fn(),
   };
@@ -206,6 +207,7 @@ describe('PlacementsController', () => {
     ['addParticipant', PlacementPermission.EDIT],
     ['updateParticipant', PlacementPermission.EDIT],
     ['changeParticipantStatus', PlacementPermission.EDIT],
+    ['acceptParticipantAndConfirm', PlacementPermission.EDIT],
     ['deleteParticipant', PlacementPermission.EDIT],
     ['createClosing', PlacementPermission.EDIT],
     ['changeClosingStatus', PlacementPermission.EDIT],
@@ -266,6 +268,11 @@ describe('PlacementsController', () => {
       { status: PlacementParticipantStatus.OFFER_SENT },
       { user } as never,
     );
+    await controller.acceptParticipantAndConfirm(
+      'placement-1',
+      'participant-1',
+      { user } as never,
+    );
     await controller.deleteParticipant('placement-1', 'participant-1', {
       user,
     } as never);
@@ -286,6 +293,11 @@ describe('PlacementsController', () => {
       'placement-1',
       'participant-1',
       expect.objectContaining({ status: 'OFFER_SENT' }),
+    );
+    expect(service.acceptParticipantAndConfirm).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'participant-1',
     );
     expect(service.deleteParticipant).toHaveBeenCalledWith(
       user,

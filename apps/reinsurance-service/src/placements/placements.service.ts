@@ -8,6 +8,7 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
+  PlacementClosingStatus,
   PlacementParticipantRole,
   PlacementParticipantStatus,
   PlacementStatus,
@@ -55,6 +56,23 @@ const placementInclude = {
     take: 20,
   },
 } satisfies Prisma.PlacementInclude;
+
+const participantAcceptanceInclude = {
+  counterparty: {
+    select: {
+      id: true,
+      type: true,
+      name: true,
+      registrationNumber: true,
+    },
+  },
+} satisfies Prisma.PlacementParticipantInclude;
+
+const participantAcceptanceClosingInclude = {
+  participant: {
+    include: participantAcceptanceInclude,
+  },
+} satisfies Prisma.PlacementClosingInclude;
 
 const slipPreviewInclude = {
   cedant: {
@@ -116,6 +134,21 @@ type PlacementWithAggregates = PlacementRecord & {
 };
 
 type PlacementParticipantRecord = PlacementRecord['participants'][number];
+
+type PlacementParticipantAcceptanceRecord =
+  Prisma.PlacementParticipantGetPayload<{
+    include: typeof participantAcceptanceInclude;
+  }>;
+
+type PlacementParticipantAcceptanceClosingRecord =
+  Prisma.PlacementClosingGetPayload<{
+    include: typeof participantAcceptanceClosingInclude;
+  }>;
+
+type PlacementParticipantAcceptanceResult = {
+  participant: PlacementParticipantAcceptanceRecord;
+  closing: PlacementParticipantAcceptanceClosingRecord;
+};
 
 type ParticipantCapacityInput = {
   counterpartyId: string;
@@ -859,6 +892,53 @@ export class PlacementsService {
     return placement;
   }
 
+  async acceptParticipantAndConfirm(
+    user: RequestUser,
+    placementId: string,
+    participantId: string,
+  ): Promise<PlacementParticipantAcceptanceResult> {
+    const existing = await this.findOne(user.tenantId, placementId);
+    await this.assertEditable(existing);
+    this.assertPlacementParticipant(existing, participantId);
+
+    let result: PlacementParticipantAcceptanceResult | undefined;
+
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        result = await this.prisma.$transaction(
+          async (tx) =>
+            this.acceptParticipantAndConfirmInTransaction(
+              tx,
+              user,
+              placementId,
+              participantId,
+            ),
+          { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+        );
+        break;
+      } catch (error) {
+        if (attempt === 0 && this.isSerializableTransactionConflict(error)) {
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (!result) {
+      throw new ConflictException(
+        'Could not complete participant acceptance workflow',
+      );
+    }
+
+    const placement = await this.findOne(user.tenantId, placementId);
+    this.publish('updated', placement, user, {
+      before: this.auditSnapshot(existing),
+      after: this.auditSnapshot(placement),
+    });
+
+    return result;
+  }
+
   private async findSlipPreviewPlacement(
     tenantId: string,
     id: string,
@@ -1249,6 +1329,259 @@ export class PlacementsService {
         )}. Use the related workflow to void or reverse those records instead.`,
       );
     }
+  }
+
+  private async acceptParticipantAndConfirmInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    placementId: string,
+    participantId: string,
+  ): Promise<{
+    participant: PlacementParticipantAcceptanceRecord;
+    closing: PlacementParticipantAcceptanceClosingRecord;
+  }> {
+    const placement = await tx.placement.findFirst({
+      where: { id: placementId, tenantId: user.tenantId, archivedAt: null },
+      include: placementInclude,
+    });
+    if (!placement) {
+      throw new NotFoundException('Placement not found');
+    }
+
+    const participant = this.assertPlacementParticipant(
+      placement,
+      participantId,
+    );
+    if (participant.status !== PlacementParticipantStatus.ACCEPTED) {
+      this.assertParticipantStatusTransition(
+        participant.status,
+        PlacementParticipantStatus.ACCEPTED,
+      );
+    }
+
+    const nextParticipantInput = {
+      ...this.mergeParticipant(participant, {
+        status: PlacementParticipantStatus.ACCEPTED,
+      }),
+      status: PlacementParticipantStatus.ACCEPTED,
+    };
+    this.assertParticipantCollection(
+      placement.participants.map((item) =>
+        item.id === participantId ? nextParticipantInput : item,
+      ),
+      placement.facultativeOffer,
+    );
+
+    const signedLinePercent = this.decimalToNumber(
+      nextParticipantInput.signedLinePercent,
+    );
+    if (signedLinePercent <= 0) {
+      throw new BadRequestException(
+        'Participant must have a signed line percentage greater than zero',
+      );
+    }
+    if (placement.premium === null) {
+      throw new BadRequestException(
+        'Placement premium is required before creating a closing',
+      );
+    }
+
+    const acceptedParticipant =
+      participant.status === PlacementParticipantStatus.ACCEPTED
+        ? await tx.placementParticipant.findFirst({
+            where: {
+              id: participantId,
+              tenantId: user.tenantId,
+              placementId,
+            },
+            include: participantAcceptanceInclude,
+          })
+        : await tx.placementParticipant.update({
+            where: { id: participant.id },
+            data: { status: PlacementParticipantStatus.ACCEPTED },
+            include: participantAcceptanceInclude,
+          });
+    if (!acceptedParticipant) {
+      throw new NotFoundException('Placement participant not found');
+    }
+
+    await this.syncParticipantDrivenStatusInTransaction(
+      tx,
+      user,
+      placement,
+      participantId,
+      nextParticipantInput,
+    );
+
+    const closing = await this.createOrConfirmPlacementClosingInTransaction(
+      tx,
+      user,
+      placement,
+      participant,
+      signedLinePercent,
+    );
+
+    return {
+      participant: acceptedParticipant,
+      closing,
+    };
+  }
+
+  private async syncParticipantDrivenStatusInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    placement: PlacementRecord,
+    participantId: string,
+    nextParticipant: ParticipantCapacityInput & {
+      status: PlacementParticipantStatus;
+    },
+  ): Promise<void> {
+    const aggregate = this.calculateAggregates({
+      facultativeOffer: placement.facultativeOffer,
+      participants: placement.participants.map((item) =>
+        item.id === participantId ? nextParticipant : item,
+      ),
+    });
+    const nextStatus = this.deriveParticipantDrivenStatus({
+      ...placement,
+      ...aggregate,
+    });
+    if (!nextStatus || nextStatus === placement.status) return;
+
+    await tx.placementStatusHistory.create({
+      data: {
+        tenantId: user.tenantId,
+        placementId: placement.id,
+        fromStatus: placement.status,
+        toStatus: nextStatus,
+        changedByUserId: user.id,
+        note: 'Participant capacity recalculated placement status',
+      },
+    });
+
+    await tx.placement.update({
+      where: { id: placement.id },
+      data: { status: nextStatus, updatedByUserId: user.id },
+    });
+  }
+
+  private async createOrConfirmPlacementClosingInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    placement: PlacementRecord,
+    participant: PlacementParticipantRecord,
+    signedLinePercent: number,
+  ): Promise<PlacementParticipantAcceptanceClosingRecord> {
+    const activeClosing = await tx.placementClosing.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        placementId: placement.id,
+        participantId: participant.id,
+        status: { not: PlacementClosingStatus.VOID },
+      },
+      include: participantAcceptanceClosingInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (activeClosing) {
+      return this.confirmExistingPlacementClosingInTransaction(
+        tx,
+        activeClosing,
+      );
+    }
+
+    const count = await tx.placementClosing.count({
+      where: { tenantId: user.tenantId, placementId: placement.id },
+    });
+    const closingNumber = `CLO-${String(count + 1).padStart(3, '0')}`;
+    const snapshot = this.computePlacementClosingSnapshot(
+      placement,
+      participant,
+      signedLinePercent,
+    );
+
+    const draftClosing = await tx.placementClosing.create({
+      data: {
+        tenantId: user.tenantId,
+        placementId: placement.id,
+        participantId: participant.id,
+        closingNumber,
+        status: PlacementClosingStatus.DRAFT,
+        createdByUserId: user.id,
+        ...snapshot,
+      },
+      include: participantAcceptanceClosingInclude,
+    });
+
+    return this.confirmExistingPlacementClosingInTransaction(tx, draftClosing);
+  }
+
+  private async confirmExistingPlacementClosingInTransaction(
+    tx: Prisma.TransactionClient,
+    closing: PlacementParticipantAcceptanceClosingRecord,
+  ): Promise<PlacementParticipantAcceptanceClosingRecord> {
+    if (closing.status === PlacementClosingStatus.CONFIRMED) {
+      return closing;
+    }
+
+    let nextClosing = closing;
+    if (nextClosing.status === PlacementClosingStatus.DRAFT) {
+      nextClosing = await tx.placementClosing.update({
+        where: { id: nextClosing.id },
+        data: { status: PlacementClosingStatus.ISSUED, issuedAt: new Date() },
+        include: participantAcceptanceClosingInclude,
+      });
+    }
+
+    if (nextClosing.status === PlacementClosingStatus.ISSUED) {
+      return tx.placementClosing.update({
+        where: { id: nextClosing.id },
+        data: {
+          status: PlacementClosingStatus.CONFIRMED,
+          confirmedAt: new Date(),
+        },
+        include: participantAcceptanceClosingInclude,
+      });
+    }
+
+    throw new BadRequestException(
+      `Cannot move closing from ${nextClosing.status} to ${PlacementClosingStatus.CONFIRMED}`,
+    );
+  }
+
+  private computePlacementClosingSnapshot(
+    placement: {
+      premium: Prisma.Decimal | number | string | null;
+      commission: Prisma.Decimal | number | string | null;
+      currency: string | null;
+    },
+    participant: {
+      sharePercent: Prisma.Decimal | number | string | null;
+      brokerageFee: Prisma.Decimal | number | string | null;
+    },
+    signedLinePercent: number,
+  ) {
+    const sharePercent = this.nullableDecimalToNumber(participant.sharePercent);
+    const premium = this.decimalToNumber(placement.premium);
+    const commissionPct = this.decimalToNumber(placement.commission);
+    const brokeragePct = this.decimalToNumber(participant.brokerageFee);
+
+    const grossPremium = (signedLinePercent / 100) * premium;
+    const commissionAmount = (commissionPct / 100) * grossPremium;
+    const brokerageAmount = (brokeragePct / 100) * grossPremium;
+    const netPremium = grossPremium - commissionAmount - brokerageAmount;
+
+    return {
+      signedLinePercent,
+      sharePercent,
+      grossPremium,
+      commissionPercent: commissionPct,
+      commissionAmount,
+      brokeragePercent: brokeragePct,
+      brokerageAmount,
+      netPremium,
+      currency: placement.currency,
+    };
   }
 
   private assertParticipantCollection(
@@ -1952,5 +2285,12 @@ export class PlacementsService {
     ) {
       throw new NotFoundException('Placement not found');
     }
+  }
+
+  private isSerializableTransactionConflict(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2034'
+    );
   }
 }
