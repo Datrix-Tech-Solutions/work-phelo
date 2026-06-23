@@ -22,12 +22,8 @@ import {
   useUpdateClosingStatus,
   usePlacementClosings,
   usePlacementPayments,
-  usePlacementEndorsements,
-  usePlacementEndorsementParticipants,
-  useCreateEndorsementParticipant,
   facultativePlacementKey,
 } from '@/hooks';
-import { TERMINAL_ENDORSEMENT_STATUSES } from '@/types/reinsurance';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -47,7 +43,8 @@ interface DistributionListTabProps {
 }
 
 function participantStatus(s: PlacementParticipantStatus): DistributionStatus {
-  if (s === 'ACCEPTED' || s === 'CLOSED') return 'Accepted';
+  if (s === 'CLOSED') return 'Closed';
+  if (s === 'ACCEPTED') return 'Accepted';
   if (s === 'DECLINED') return 'Declined';
   return 'Pending';
 }
@@ -82,28 +79,6 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const { mutateAsync: updateClosingStatus } = useUpdateClosingStatus(placement.id);
   const { data: closings = [] } = usePlacementClosings(placement.id);
   const { data: payments = [] } = usePlacementPayments(placement.id);
-  const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
-
-  const activeEndorsement = endorsements.find(
-    (e) => !TERMINAL_ENDORSEMENT_STATUSES.includes(e.status),
-  );
-  const hasActiveEndorsement = !!activeEndorsement;
-
-  const { data: endorsementParticipants = [] } = usePlacementEndorsementParticipants(
-    placement.id,
-    activeEndorsement?.id,
-  );
-  const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
-    placement.id,
-    activeEndorsement?.id,
-  );
-
-  const confirmedCounterpartyIds = new Set(
-    endorsementParticipants
-      .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
-      .map((p) => p.counterpartyId),
-  );
-
   const [panelOpen, setPanelOpen] = useState(false);
 
   const reinsurerEmails = useMemo<Record<string, string[]>>(
@@ -228,79 +203,24 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
 
   const handleAccept = async (row: DistributionEntry) => {
     if (acceptingIds.has(row.id)) return;
-
-    const isReconfirm = row.status === 'Accepted';
     setAcceptingIds((prev) => new Set([...prev, row.id]));
     patch(row.id, { status: 'Accepted' });
 
     try {
-      if (isReconfirm) {
-        await updateParticipant({
-          participantId: row.id,
-          sharePercent: row.shareLine,
-          signedLinePercent: row.shareLine,
-          suppressInvalidation: true,
-        });
-        await createEndorsementParticipant({
-          counterpartyId: row.counterpartyId,
-          originalParticipantId: row.id,
-          sharePercent: row.shareLine,
-          signedLinePercent: row.shareLine,
-          status: 'ACCEPTED',
-        });
-      } else {
-        await updateParticipant({
-          participantId: row.id,
-          sharePercent: row.shareLine,
-          signedLinePercent: row.shareLine,
-          suppressInvalidation: true,
-        });
-        await updateParticipantStatus({
-          participantId: row.id,
-          status: 'ACCEPTED',
-          suppressInvalidation: true,
-        });
-        let closingId = closingByParticipantId[row.id]?.id;
-        let closingStatus = closingByParticipantId[row.id]?.status;
-
-        if (!closingId) {
-          const createdClosing = await createClosing({
-            participantId: row.id,
-            suppressInvalidation: true,
-          });
-          closingId = createdClosing.id;
-          closingStatus = 'DRAFT';
-        }
-
-        if (closingStatus === 'DRAFT') {
-          await updateClosingStatus({
-            closingId,
-            status: 'ISSUED',
-            suppressInvalidation: true,
-          });
-          await updateClosingStatus({
-            closingId,
-            status: 'CONFIRMED',
-            suppressInvalidation: true,
-          });
-        } else if (closingStatus === 'ISSUED') {
-          await updateClosingStatus({
-            closingId,
-            status: 'CONFIRMED',
-            suppressInvalidation: true,
-          });
-        }
-      }
+      await updateParticipant({
+        participantId: row.id,
+        sharePercent: row.shareLine,
+        signedLinePercent: row.shareLine,
+        suppressInvalidation: true,
+      });
+      await updateParticipantStatus({
+        participantId: row.id,
+        status: 'ACCEPTED',
+        suppressInvalidation: true,
+      });
     } catch (error) {
-      if (isReconfirm) {
-        toast().addToast({ message: extractError(error), type: 'error' });
-      } else {
-        patch(row.id, { status: 'Pending' });
-        toast().addToast({
-          message: `Participant acceptance did not fully complete. Refreshing placement state. ${extractError(error)}`,
-          type: 'error',
-        });
-      }
+      patch(row.id, { status: 'Pending' });
+      toast().addToast({ message: extractError(error), type: 'error' });
     } finally {
       await refreshPlacementAfterAccept();
       setAcceptingIds((prev) => {
@@ -311,10 +231,55 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     }
   };
 
-  const handleClosePlacement = () => {
-    updatePlacementStatus({ status: 'CLOSING' })
-      .then(() => updatePlacementStatus({ status: 'CLOSED' }))
-      .catch((error) => toast().addToast({ message: extractError(error), type: 'error' }));
+  const handleClose = async (row: DistributionEntry) => {
+    if (acceptingIds.has(row.id)) return;
+    setAcceptingIds((prev) => new Set([...prev, row.id]));
+    patch(row.id, { status: 'Closed' });
+
+    try {
+      let closingId = closingByParticipantId[row.id]?.id;
+      let closingStatus = closingByParticipantId[row.id]?.status;
+
+      if (!closingId) {
+        const createdClosing = await createClosing({
+          participantId: row.id,
+          suppressInvalidation: true,
+        });
+        closingId = createdClosing.id;
+        closingStatus = 'DRAFT';
+      }
+
+      if (closingStatus === 'DRAFT') {
+        await updateClosingStatus({ closingId, status: 'ISSUED', suppressInvalidation: true });
+        await updateClosingStatus({ closingId, status: 'CONFIRMED', suppressInvalidation: true });
+      } else if (closingStatus === 'ISSUED') {
+        await updateClosingStatus({ closingId, status: 'CONFIRMED', suppressInvalidation: true });
+      }
+
+      if (['DRAFT', 'MARKETING', 'PARTIALLY_PLACED'].includes(placement.status)) {
+        await updatePlacementStatus({ status: 'PLACED' });
+      }
+      await updatePlacementStatus({ status: 'CLOSING' });
+      await updateParticipantStatus({
+        participantId: row.id,
+        status: 'CLOSED',
+        suppressInvalidation: true,
+      });
+      toast().addToast({
+        message: `A closing for ${row.reinsurerCompany} with ${row.shareLine}% has been created`,
+        type: 'success',
+      });
+    } catch (error) {
+      patch(row.id, { status: 'Accepted' });
+      toast().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      await refreshPlacementAfterAccept();
+      setAcceptingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
+    }
   };
 
   const handleRevert = (row: DistributionEntry) => {
@@ -355,7 +320,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     });
   };
 
-  const acceptedEntries = entries.filter((e) => e.status === 'Accepted');
+  const acceptedEntries = entries.filter((e) => e.status === 'Accepted' || e.status === 'Closed');
   const placedPct = +acceptedEntries.reduce((sum, e) => sum + e.shareLine, 0).toFixed(4);
   const availablePct = Math.max(0, +(facOffer - placedPct).toFixed(4));
 
@@ -416,13 +381,22 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
                   <span
                     className="text-xs"
                     style={{
-                      color: entry.status === 'Accepted' ? colorMap[entry.id] : undefined,
+                      color:
+                        entry.status === 'Accepted' || entry.status === 'Closed'
+                          ? colorMap[entry.id]
+                          : undefined,
                     }}
                   >
-                    <span className={entry.status !== 'Accepted' ? 'text-gray-400' : 'font-medium'}>
+                    <span
+                      className={
+                        entry.status !== 'Accepted' && entry.status !== 'Closed'
+                          ? 'text-gray-400'
+                          : 'font-medium'
+                      }
+                    >
                       {entry.reinsurerCompany}
                     </span>
-                    {entry.status === 'Accepted' && (
+                    {(entry.status === 'Accepted' || entry.status === 'Closed') && (
                       <span className="text-gray-400 font-normal"> · {entry.shareLine}%</span>
                     )}
                   </span>
@@ -438,8 +412,6 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           entries={entries}
           premium={premium}
           placement={placement}
-          hasActiveEndorsement={hasActiveEndorsement}
-          confirmedCounterpartyIds={confirmedCounterpartyIds}
           isPlacementLocked={isPlacementLocked}
           busyIds={acceptingIds}
           onShareCommit={handleShareCommit}
@@ -447,9 +419,9 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
           onMailSent={handleMailSent}
           onAccept={handleAccept}
           onDecline={handleDecline}
+          onClose={handleClose}
           onDelete={handleDelete}
           onRevert={handleRevert}
-          onClosePlacement={placement.status === 'PLACED' ? handleClosePlacement : undefined}
         />
       </div>
 

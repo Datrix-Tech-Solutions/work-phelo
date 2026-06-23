@@ -70,7 +70,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const premium = placement.premium ?? 0;
 
   const rows: ClosingRow[] = placement.participants
-    .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
+    .filter((p) => p.status === 'CLOSED')
     .map((p) => toClosingRow(p, premium));
 
   const columns: Column<ClosingRow>[] = [

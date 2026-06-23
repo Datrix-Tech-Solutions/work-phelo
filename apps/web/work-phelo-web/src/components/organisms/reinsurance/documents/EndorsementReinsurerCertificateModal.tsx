@@ -22,20 +22,6 @@ function fmtAmount(val: number | null | undefined, currency: string | null) {
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-function fmtDiffAmount(prev: number, curr: number, currency: string | null) {
-  const diff = curr - prev;
-  if (diff === 0) return '—';
-  const sign = diff > 0 ? '+' : '';
-  return `${sign}${fmtAmount(diff, currency)}`;
-}
-
-function fmtDiffPercent(prev: number, curr: number) {
-  const diff = curr - prev;
-  if (diff === 0) return '—';
-  const sign = diff > 0 ? '+' : '';
-  return `${sign}${diff.toFixed(2)}%`;
-}
-
 function getSnapshotPlacement(snapshot: Record<string, unknown>): Record<string, unknown> {
   if (snapshot.placement && typeof snapshot.placement === 'object') {
     return snapshot.placement as Record<string, unknown>;
@@ -77,15 +63,44 @@ function renderFieldVal(val: unknown, type: FieldType, currency: string | null):
   return String(val);
 }
 
-function renderFieldDiff(
-  prev: unknown,
-  curr: unknown,
-  type: FieldType,
+function buildChangeSentence(
+  changedFields: { key: string; label: string; type: FieldType }[],
+  originalPlacement: Record<string, unknown>,
+  proposed: Record<string, unknown>,
+  effectiveDate: string,
+  prevCurrency: string | null,
   currency: string | null,
-): string {
-  if (type === 'amount') return fmtDiffAmount(toNum(prev), toNum(curr), currency);
-  if (type === 'percent') return fmtDiffPercent(toNum(prev), toNum(curr));
-  return '—';
+): React.ReactNode {
+  if (changedFields.length === 0) return null;
+
+  const clauses: React.ReactNode[] = changedFields.map(({ key, label, type }) => {
+    const prev = originalPlacement[key];
+    const curr = proposed[key];
+    const prevStr = renderFieldVal(prev, type, prevCurrency);
+    const currStr = renderFieldVal(curr, type, currency);
+    let verb = 'changed';
+    if (type === 'amount' || type === 'percent') {
+      verb = toNum(curr) > toNum(prev) ? 'increased' : 'decreased';
+    }
+    return (
+      <>
+        the {label.toLowerCase()} was {verb} from <strong>{prevStr}</strong> to{' '}
+        <strong>{currStr}</strong>
+      </>
+    );
+  });
+
+  const joined: React.ReactNode[] = [];
+  clauses.forEach((clause, i) => {
+    if (i > 0) joined.push(i === clauses.length - 1 ? ', and ' : ', ');
+    joined.push(clause);
+  });
+
+  return (
+    <>
+      Effective from <strong>{fmtDate(effectiveDate)}</strong>, {joined}.
+    </>
+  );
 }
 
 function SectionHeading({ children }: { children: React.ReactNode }) {
@@ -164,6 +179,18 @@ export function EndorsementReinsurerCertificateModal({
       })
     : [];
 
+  const narrative =
+    proposed && changedFields.length > 0
+      ? buildChangeSentence(
+          changedFields,
+          originalPlacement,
+          proposed,
+          endorsement.effectiveDate,
+          prevCurrency,
+          currency,
+        )
+      : null;
+
   return (
     <DocumentPreviewModal
       isOpen={isOpen}
@@ -197,54 +224,18 @@ export function EndorsementReinsurerCertificateModal({
       {/* ENDORSEMENT SUMMARY */}
       <SectionHeading>Endorsement Summary</SectionHeading>
       <div className="text-sm mb-2 space-y-2">
-        <div>
-          <span className="text-gray-500">Reason:</span>
-          <p className="text-gray-900 font-medium mt-0.5">{fmtVal(endorsement.reason)}</p>
-        </div>
-        <div>
-          <span className="text-gray-500">Effective From:</span>
-          <p className="text-gray-900 font-medium mt-0.5">{fmtDate(endorsement.effectiveDate)}</p>
-        </div>
+        {endorsement.reason && (
+          <div>
+            <span className="text-gray-500">Reason:</span>
+            <p className="text-gray-900 font-medium mt-0.5">{endorsement.reason}</p>
+          </div>
+        )}
+        {narrative ? (
+          <p className="text-gray-800 leading-relaxed">{narrative}</p>
+        ) : (
+          <p className="text-gray-400 italic">No parameter changes recorded.</p>
+        )}
       </div>
-
-      {/* CHANGES TO ORIGINAL POLICY */}
-      <SectionHeading>Changes to Original Policy</SectionHeading>
-      {changedFields.length === 0 ? (
-        <p className="text-sm text-gray-400 italic mb-2">No parameter changes recorded.</p>
-      ) : (
-        <table className="w-full text-sm border-collapse mb-2">
-          <thead>
-            <tr className="border-b border-gray-200">
-              <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/4" />
-              <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/4">
-                Previous
-              </th>
-              <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/4">
-                Revised
-              </th>
-              <th className="py-1.5 pl-4 text-left text-xs font-semibold text-gray-500 w-1/4">
-                Difference
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {changedFields.map(({ key, label, type }) => (
-              <tr key={key} className="border-b border-gray-50 last:border-0">
-                <td className="py-1.5 pr-4 text-gray-500">{label}</td>
-                <td className="py-1.5 px-4 text-gray-700">
-                  {renderFieldVal(originalPlacement[key], type, prevCurrency)}
-                </td>
-                <td className="py-1.5 px-4 text-gray-900">
-                  {renderFieldVal(proposed![key], type, currency)}
-                </td>
-                <td className="py-1.5 pl-4 text-gray-900 font-medium">
-                  {renderFieldDiff(originalPlacement[key], proposed![key], type, currency)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
 
       {/* REINSURER PARTICIPATION */}
       <SectionHeading>Reinsurer Participation</SectionHeading>
@@ -253,7 +244,7 @@ export function EndorsementReinsurerCertificateModal({
           <tr className="border-b border-gray-200">
             <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/3" />
             <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
-              Previous
+              Original
             </th>
             <th className="py-1.5 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
               Revised
@@ -263,31 +254,31 @@ export function EndorsementReinsurerCertificateModal({
         <tbody>
           {[
             {
-              label: 'Participation %',
+              label: 'Your Participation %',
               previous: prevShare ? `${prevShare}%` : 'no change',
               revised: `${sharePercent}%`,
               bold: false,
             },
             {
-              label: 'Share SI',
+              label: 'Your Share SI',
               previous: fmtAmount(prevYourSumInsured || null, prevCurrency),
               revised: fmtAmount(yourSumInsured, currency),
               bold: false,
             },
             {
-              label: 'Gross Premium',
+              label: 'Your Gross Premium',
               previous: fmtAmount(prevYourPremium || null, prevCurrency),
               revised: fmtAmount(yourPremium, currency),
               bold: false,
             },
             {
-              label: 'Commission',
+              label: 'Your Commission',
               previous: fmtAmount(prevCommissionAmt || null, prevCurrency),
               revised: fmtAmount(commissionAmt, currency),
               bold: false,
             },
             {
-              label: 'Net Premium',
+              label: 'Your Net Premium',
               previous: fmtAmount(prevNetPremium || null, prevCurrency),
               revised: fmtAmount(netPremium, currency),
               bold: true,
