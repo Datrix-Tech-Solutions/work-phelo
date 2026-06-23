@@ -22,6 +22,7 @@ import { PlacementDocumentsService } from './placement-documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementsController } from './placements.controller';
@@ -70,6 +71,9 @@ describe('PlacementsController', () => {
     create: jest.fn(),
     update: jest.fn(),
     changeStatus: jest.fn(),
+  };
+  const effectiveViewService = {
+    getEffectiveView: jest.fn(),
   };
   const endorsementParticipantsService = {
     findAll: jest.fn(),
@@ -135,6 +139,7 @@ describe('PlacementsController', () => {
       closingsService as unknown as PlacementClosingsService,
       documentsService as unknown as PlacementDocumentsService,
       endorsementsService as unknown as PlacementEndorsementsService,
+      effectiveViewService as unknown as PlacementEffectiveViewService,
       endorsementParticipantsService as unknown as PlacementEndorsementParticipantsService,
       endorsementClosingsService as unknown as PlacementEndorsementClosingsService,
       notesService as unknown as PlacementNotesService,
@@ -155,6 +160,7 @@ describe('PlacementsController', () => {
   it.each([
     ['findAll', PlacementPermission.VIEW],
     ['findOne', PlacementPermission.VIEW],
+    ['getEffectiveView', PlacementPermission.VIEW],
     ['getLockStatus', PlacementPermission.VIEW],
     ['getOfferSlipPreview', PlacementPermission.VIEW],
     ['getClosingSlipPreview', PlacementPermission.VIEW],
@@ -311,6 +317,17 @@ describe('PlacementsController', () => {
     await controller.getLockStatus('placement-1', { user } as never);
 
     expect(service.getLockStatus).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+  });
+
+  it('delegates effective view reads with authenticated tenant context', async () => {
+    const controller = createController();
+
+    await controller.getEffectiveView('placement-1', { user } as never);
+
+    expect(effectiveViewService.getEffectiveView).toHaveBeenCalledWith(
       'tenant-1',
       'placement-1',
     );

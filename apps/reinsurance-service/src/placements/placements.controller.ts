@@ -43,6 +43,7 @@ import {
   PaginatedPlacementsResponseDto,
   PlacementResponseDto,
 } from './dto/placement-response.dto';
+import { EffectivePlacementViewResponseDto } from './dto/placement-effective-view-response.dto';
 import { CreatePlacementClaimDto } from './dto/create-placement-claim.dto';
 import { CreatePlacementEndorsementDto } from './dto/create-placement-endorsement.dto';
 import { CreatePlacementEndorsementParticipantDto } from './dto/create-placement-endorsement-participant.dto';
@@ -66,6 +67,7 @@ import { UpdatePlacementEndorsementDto } from './dto/update-placement-endorsemen
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import {
   PlacementClaimCashCallListResponseDto,
   PlacementClaimCashCallResponseDto,
@@ -142,6 +144,7 @@ export class PlacementsController {
     private readonly closingsService: PlacementClosingsService,
     private readonly documentsService: PlacementDocumentsService,
     private readonly endorsementsService: PlacementEndorsementsService,
+    private readonly effectiveViewService: PlacementEffectiveViewService,
     private readonly endorsementParticipantsService: PlacementEndorsementParticipantsService,
     private readonly endorsementClosingsService: PlacementEndorsementClosingsService,
     private readonly notesService: PlacementNotesService,
@@ -149,6 +152,32 @@ export class PlacementsController {
     private readonly claimsService: PlacementClaimsService,
     private readonly claimCashCallsService: PlacementClaimCashCallsService,
   ) {}
+
+  @Get(':id/effective-view')
+  @ApiTags('Reinsurance - Placements')
+  @RequirePermissions(PlacementPermission.VIEW)
+  @ApiOperation({
+    summary: 'Get effective placement view',
+    description:
+      'Returns the read-only effective placement state after confirmed endorsement closings. ' +
+      'Original placement records remain immutable; DRAFT, MARKETING and otherwise unconfirmed endorsement activity is reported as pending.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: EffectivePlacementViewResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement is archived, missing or belongs to another tenant.',
+  })
+  getEffectiveView(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.effectiveViewService.getEffectiveView(
+      request.user.tenantId,
+      id,
+    );
+  }
 
   @Get()
   @ApiTags('Reinsurance - Placements')

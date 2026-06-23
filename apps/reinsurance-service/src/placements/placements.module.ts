@@ -12,6 +12,7 @@ import { PlacementDocumentsService } from './placement-documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
 import { PlacementEndorsementsService } from './placement-endorsements.service';
 import { PlacementEndorsementParticipantsService } from './placement-endorsement-participants.service';
+import { PlacementEffectiveViewService } from './placement-effective-view.service';
 import { PlacementNotesService } from './placement-notes.service';
 import { PlacementPaymentsService } from './placement-payments.service';
 import { PlacementDocumentTemplateRegistry } from './pdf/placement-document-template.registry';
@@ -33,6 +34,7 @@ import { S3DocumentStorageService } from './storage/s3-document-storage.service'
     PlacementEndorsementsService,
     PlacementEndorsementParticipantsService,
     PlacementEndorsementClosingsService,
+    PlacementEffectiveViewService,
     PlacementNotesService,
     PlacementPaymentsService,
     PlacementDocumentTemplateRegistry,
