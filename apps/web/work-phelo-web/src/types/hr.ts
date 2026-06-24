@@ -36,6 +36,8 @@ export type EmploymentStatus =
   | 'SUSPENDED'
   | 'TERMINATED'
   | 'OFFBOARDED';
+export type EmployeeCompensationType = 'SALARY' | 'COMMISSION' | 'SALARY_PLUS_COMMISSION';
+export type PayrollTaxPolicy = 'STANDARD_PAYE' | 'FIXED_AMOUNT' | 'EXEMPT';
 export type AllowanceType = 'TRANSPORT' | 'HOUSING' | 'MEDICAL' | 'CLOTHING' | 'OTHER';
 export type DocumentType =
   | 'CONTRACT'
@@ -79,6 +81,10 @@ export interface Employee {
   probationEndsAt?: string;
   contractEndDate?: string;
   basicSalary?: number;
+  compensationType?: EmployeeCompensationType;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number | null;
+  commissionTaxable?: boolean;
   departmentId?: string;
   department?: Department;
   branchId?: string;
@@ -189,6 +195,10 @@ export interface UpdateEmployeePayload {
   employmentType?: EmploymentType;
   employmentStatus?: EmploymentStatus;
   basicSalary?: number;
+  compensationType?: EmployeeCompensationType;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number | null;
+  commissionTaxable?: boolean;
   bankName?: string;
   bankAccountNumber?: string;
   bankBranch?: string;
@@ -216,6 +226,10 @@ export interface CreateEmployeePayload {
   employmentType: EmploymentType;
   hireDate: string;
   basicSalary?: number;
+  compensationType?: EmployeeCompensationType;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number | null;
+  commissionTaxable?: boolean;
   departmentId: string;
   branchId?: string;
   managerId?: string;

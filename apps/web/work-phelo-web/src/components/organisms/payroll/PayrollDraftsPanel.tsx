@@ -31,11 +31,20 @@ async function loadRunData(
   });
 
   const basicMap: Record<string, number> = {};
+  const commissionMap: Record<string, number> = {};
+  const taxPolicyMap: DraftLoadData['taxPolicyMap'] = {};
+  const fixedTaxAmountMap: DraftLoadData['fixedTaxAmountMap'] = {};
+  const commissionTaxableMap: DraftLoadData['commissionTaxableMap'] = {};
   const allowancesMap: Record<string, AllowanceItem[]> = {};
   const deductionItemsMap: Record<string, DeductionLineItem[]> = {};
 
   for (const item of detail.items) {
     basicMap[item.employeeId] = parseFloat(item.basicSalary);
+    commissionMap[item.employeeId] = parseFloat(item.commissionAmount ?? '0');
+    if (item.taxPolicySnapshot) taxPolicyMap[item.employeeId] = item.taxPolicySnapshot;
+    fixedTaxAmountMap[item.employeeId] =
+      item.fixedTaxAmount != null ? parseFloat(item.fixedTaxAmount) : null;
+    commissionTaxableMap[item.employeeId] = item.commissionTaxableSnapshot ?? true;
     if (item.allowanceItems?.length) {
       allowancesMap[item.employeeId] = item.allowanceItems.map((allowance) => ({
         name: allowance.name,
@@ -74,7 +83,15 @@ async function loadRunData(
     }
   }
 
-  return { basicMap, allowancesMap, deductionItemsMap };
+  return {
+    basicMap,
+    commissionMap,
+    taxPolicyMap,
+    fixedTaxAmountMap,
+    commissionTaxableMap,
+    allowancesMap,
+    deductionItemsMap,
+  };
 }
 
 function fmtRunMoney(run: PayrollRun, value: string | number) {

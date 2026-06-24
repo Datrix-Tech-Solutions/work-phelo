@@ -112,6 +112,9 @@ export function PayslipDocument({ item, companyName, employeeName }: PayslipDocu
         <div className="py-4">
           <SectionLabel>Earnings</SectionLabel>
           <DocRow label="Basic Salary" value={money(item.basicSalary)} />
+          {parseFloat(item.commissionAmount ?? '0') > 0 && (
+            <DocRow label="Commission" value={money(item.commissionAmount)} />
+          )}
           {allowanceRows.map((row, i) => (
             <DocRow key={`${row.label}-${i}`} label={row.label} value={money(row.amount)} />
           ))}
@@ -132,7 +135,11 @@ export function PayslipDocument({ item, companyName, employeeName }: PayslipDocu
         <div className="py-4">
           <SectionLabel>Deductions</SectionLabel>
           <DocRow label={labels.employeeLabel} value={inParens(item.employeeSSNIT)} deduction />
-          <DocRow label="PAYE Tax" value={inParens(item.payeTax)} deduction />
+          <DocRow
+            label={item.taxPolicySnapshot === 'FIXED_AMOUNT' ? 'PAYE Tax (Fixed)' : 'PAYE Tax'}
+            value={inParens(item.payeTax)}
+            deduction
+          />
           {tier3 > 0 && <DocRow label={tier3Label} value={inParens(tier3)} deduction />}
           {deductionRows.map((row, i) => (
             <DocRow
