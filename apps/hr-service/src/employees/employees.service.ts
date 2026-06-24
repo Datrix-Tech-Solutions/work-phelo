@@ -940,10 +940,19 @@ export class EmployeesService {
         ? new Date(contractEndDate)
         : (existing.contractEndDate ?? undefined),
     });
+    const effectiveTaxPolicy = taxPolicy ?? existing.taxPolicy;
+    const shouldUpdateFixedTaxAmount =
+      taxPolicy !== undefined || fixedTaxAmount !== undefined;
+    const normalizedFixedTaxAmount =
+      effectiveTaxPolicy === PayrollTaxPolicy.FIXED_AMOUNT
+        ? fixedTaxAmount !== undefined
+          ? fixedTaxAmount
+          : existing.fixedTaxAmount
+        : null;
+
     this.validatePayrollTaxPolicy({
-      taxPolicy: taxPolicy ?? existing.taxPolicy,
-      fixedTaxAmount:
-        fixedTaxAmount !== undefined ? fixedTaxAmount : existing.fixedTaxAmount,
+      taxPolicy: effectiveTaxPolicy,
+      fixedTaxAmount: normalizedFixedTaxAmount,
     });
 
     // Track status change
@@ -958,7 +967,9 @@ export class EmployeesService {
         ...encryptedRest,
         ...(compensationType !== undefined && { compensationType }),
         ...(taxPolicy !== undefined && { taxPolicy }),
-        ...(fixedTaxAmount !== undefined && { fixedTaxAmount }),
+        ...(shouldUpdateFixedTaxAmount && {
+          fixedTaxAmount: normalizedFixedTaxAmount,
+        }),
         ...(commissionTaxable !== undefined && { commissionTaxable }),
         ...(employmentStatus && { employmentStatus }),
         ...(statusChanged && {

@@ -11,6 +11,8 @@ import type { AllowanceItem } from '@/lib/payrollCalculations';
 
 export type PayrollRunStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
 export type PayrollCountry = 'GH' | 'NG' | 'KE';
+export type EmployeeCompensationType = 'SALARY' | 'COMMISSION' | 'SALARY_PLUS_COMMISSION';
+export type PayrollTaxPolicy = 'STANDARD_PAYE' | 'FIXED_AMOUNT' | 'EXEMPT';
 
 // ── Payroll run ────────────────────────────────────────────────────────────────
 
@@ -83,6 +85,7 @@ export interface PayrollItem {
   payrollRunId: string;
   employeeId: string;
   basicSalary: string;
+  commissionAmount: string;
   totalAllowances: string;
   allowanceItems?: PayrollItemAllowance[];
   transportAmount: string;
@@ -101,6 +104,10 @@ export interface PayrollItem {
   payeTax: string;
   totalDeductions: string;
   netSalary: string;
+  fixedTaxAmount?: string | null;
+  taxPolicySnapshot?: PayrollTaxPolicy;
+  compensationTypeSnapshot?: EmployeeCompensationType;
+  commissionTaxableSnapshot?: boolean;
   createdAt: string;
   updatedAt?: string;
   employee?: PayrollRunEmployeeSummary;
@@ -135,9 +142,13 @@ export interface RunPayrollDto {
 
 export interface UpdatePayrollItemDto {
   basicSalary?: number;
+  commissionAmount?: number;
   totalAllowances?: number;
   transportAmount?: number;
   otherDeductions?: number;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number | null;
+  commissionTaxable?: boolean;
   allowanceItems?: Array<{
     name: string;
     type?: string | null;
@@ -209,9 +220,13 @@ export interface PayslipYTD {
 /** Per-employee overrides passed into a payroll run. */
 export interface EmployeeOverride {
   basicSalary?: number;
+  commissionAmount?: number;
   totalAllowances?: number;
   transportAmount?: number;
   otherDeductions?: number;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number | null;
+  commissionTaxable?: boolean;
   allowanceItems?: Array<{
     name: string;
     type?: string | null;
@@ -234,6 +249,10 @@ export interface DeductionLineItem {
 /** Data loaded from a draft payroll run and passed to the run panel. */
 export interface DraftLoadData {
   basicMap: Record<string, number>;
+  commissionMap: Record<string, number>;
+  taxPolicyMap: Record<string, PayrollTaxPolicy>;
+  fixedTaxAmountMap: Record<string, number | null>;
+  commissionTaxableMap: Record<string, boolean>;
   allowancesMap: Record<string, AllowanceItem[]>;
   deductionItemsMap: Record<string, DeductionLineItem[]>;
 }
