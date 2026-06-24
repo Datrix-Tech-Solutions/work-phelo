@@ -62,6 +62,31 @@ describe('PlacementsService', () => {
     participants: [],
     statusHistory: [],
   };
+  const placementWithParticipant = (
+    status: PlacementParticipantStatus = PlacementParticipantStatus.INVITED,
+  ) => ({
+    ...placement,
+    participants: [
+      {
+        id: 'participant-1',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        counterpartyId: 'reinsurer-1',
+        role: PlacementParticipantRole.REINSURER,
+        status,
+        sharePercent: 20,
+        signedLinePercent: null,
+        brokerageFee: null,
+        notes: null,
+        counterparty: {
+          id: 'reinsurer-1',
+          type: CounterpartyType.REINSURER,
+          name: 'Ghana Re',
+          registrationNumber: null,
+        },
+      },
+    ],
+  });
 
   let prisma: {
     counterparty: {
@@ -82,6 +107,24 @@ describe('PlacementsService', () => {
       create: PrismaMethod;
       update: PrismaMethod;
       delete: PrismaMethod;
+    };
+    placementClosing: {
+      count: PrismaMethod;
+    };
+    placementNote: {
+      count: PrismaMethod;
+    };
+    placementPayment: {
+      count: PrismaMethod;
+    };
+    placementClaimAllocation: {
+      count: PrismaMethod;
+    };
+    placementDocument: {
+      count: PrismaMethod;
+    };
+    placementEndorsementParticipant: {
+      count: PrismaMethod;
     };
     placementStatusHistory: {
       create: PrismaMethod;
@@ -121,6 +164,24 @@ describe('PlacementsService', () => {
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
         delete: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementClosing: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+      },
+      placementNote: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+      },
+      placementPayment: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+      },
+      placementClaimAllocation: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+      },
+      placementDocument: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+      },
+      placementEndorsementParticipant: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
       },
       placementStatusHistory: {
         create: jest.fn<Promise<unknown>, [unknown]>(),
@@ -1475,29 +1536,7 @@ describe('PlacementsService', () => {
   });
 
   it('deletes one participant without archiving the placement', async () => {
-    const existingPlacement = {
-      ...placement,
-      participants: [
-        {
-          id: 'participant-1',
-          tenantId: 'tenant-1',
-          placementId: 'placement-1',
-          counterpartyId: 'reinsurer-1',
-          role: PlacementParticipantRole.REINSURER,
-          status: PlacementParticipantStatus.INVITED,
-          sharePercent: 20,
-          signedLinePercent: null,
-          brokerageFee: null,
-          notes: null,
-          counterparty: {
-            id: 'reinsurer-1',
-            type: CounterpartyType.REINSURER,
-            name: 'Ghana Re',
-            registrationNumber: null,
-          },
-        },
-      ],
-    };
+    const existingPlacement = placementWithParticipant();
     prisma.placement.findFirst
       .mockResolvedValueOnce(existingPlacement)
       .mockResolvedValueOnce(placement);
@@ -1511,6 +1550,47 @@ describe('PlacementsService', () => {
       where: { id: 'participant-1' },
     });
     expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant deletion when a placement closing depends on it', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementClosing.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow('placement closings');
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant deletion when notes or payments depend on it', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementNote.count.mockResolvedValueOnce(1);
+    prisma.placementPayment.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow('placement notes, placement payments');
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant deletion when claim allocations, documents, or endorsement participants depend on it', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementClaimAllocation.count.mockResolvedValueOnce(1);
+    prisma.placementDocument.count.mockResolvedValueOnce(1);
+    prisma.placementEndorsementParticipant.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow(
+      'claim allocations, placement documents, endorsement participants',
+    );
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
   });
 
   it('does not fail a completed write when audit event delivery fails', async () => {
