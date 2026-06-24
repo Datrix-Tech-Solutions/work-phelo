@@ -19,14 +19,17 @@ import { PlacementDocumentTemplateRegistry } from './pdf/placement-document-temp
 import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.service';
 import { PlacementsController } from './placements.controller';
 import { PlacementsService } from './placements.service';
+import { ReinsuranceDashboardController } from './reinsurance-dashboard.controller';
+import { ReinsuranceDashboardService } from './reinsurance-dashboard.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 import { S3DocumentStorageService } from './storage/s3-document-storage.service';
 
 @Module({
   imports: [PrismaModule, RabbitMQModule],
-  controllers: [PlacementsController],
+  controllers: [PlacementsController, ReinsuranceDashboardController],
   providers: [
     PlacementsService,
+    ReinsuranceDashboardService,
     PlacementClaimsService,
     PlacementClaimCashCallsService,
     PlacementClosingsService,

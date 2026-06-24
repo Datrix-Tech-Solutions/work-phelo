@@ -546,6 +546,7 @@ model PlacementClosing {
   @@index([tenantId, placementId])
   @@index([tenantId, participantId])
   @@index([tenantId, placementId, status])
+  @@index([tenantId, status, placementId])
   @@schema("reinsurance")
 }
 
@@ -613,6 +614,7 @@ model PlacementClaimAllocation {
   @@unique([id, tenantId])
   @@index([tenantId, placementId, claimId])
   @@index([tenantId, claimId, status])
+  @@index([tenantId, status, placementId])
   @@index([tenantId, placementClosingId])
   @@index([tenantId, endorsementClosingId])
   @@index([tenantId, counterpartyId, createdAt])
@@ -650,6 +652,7 @@ model PlacementClaimCashCall {
   @@index([tenantId, placementId, claimId, status, createdAt])
   @@index([tenantId, claimId, status])
   @@index([tenantId, allocationId, status])
+  @@index([tenantId, status, placementId])
   @@index([tenantId, counterpartyId, createdAt])
   @@schema("reinsurance")
 }
@@ -684,6 +687,7 @@ model PlacementPayment {
   @@unique([id, tenantId])
   @@index([tenantId, placementId, status, createdAt])
   @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, status, currency, placementId])
   @@index([tenantId, counterpartyId, createdAt])
   @@index([tenantId, participantId, createdAt])
   @@index([tenantId, closingId, createdAt])
@@ -738,6 +742,7 @@ model PlacementNote {
   @@unique([tenantId, placementId, noteNumber])
   @@index([tenantId, placementId, status, createdAt])
   @@index([tenantId, placementId, type, createdAt])
+  @@index([tenantId, status, placementId])
   @@index([tenantId, closingId, status])
   @@index([tenantId, participantId, createdAt])
   @@index([tenantId, endorsementId, status, createdAt])
@@ -754,7 +759,7 @@ model PlacementEndorsement {
   placementId       String
   endorsementNumber String
   type              PlacementEndorsementType
-  impactType        PlacementEndorsementImpactType   @default(ADMINISTRATIVE)
+  impactType        PlacementEndorsementImpactType    @default(ADMINISTRATIVE)
   status            PlacementEndorsementStatus        @default(DRAFT)
   effectiveDate     DateTime
   reason            String
@@ -850,6 +855,7 @@ model PlacementEndorsementClosing {
   @@index([tenantId, endorsementId])
   @@index([tenantId, endorsementParticipantId])
   @@index([tenantId, placementId, status])
+  @@index([tenantId, status, placementId])
   @@schema("reinsurance")
 }
 
