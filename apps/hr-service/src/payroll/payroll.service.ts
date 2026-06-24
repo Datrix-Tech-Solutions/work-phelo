@@ -858,9 +858,11 @@ export class PayrollService {
     };
     const taxPolicySnapshot = dto.taxPolicy ?? currentItem.taxPolicySnapshot;
     const fixedTaxAmount =
-      dto.fixedTaxAmount != null
-        ? new Decimal(dto.fixedTaxAmount).toFixed(2)
-        : (currentItem.fixedTaxAmount?.toString() ?? null);
+      taxPolicySnapshot === PayrollTaxPolicy.FIXED_AMOUNT
+        ? dto.fixedTaxAmount != null
+          ? new Decimal(dto.fixedTaxAmount).toFixed(2)
+          : (currentItem.fixedTaxAmount?.toString() ?? null)
+        : null;
     const commissionTaxableSnapshot =
       dto.commissionTaxable ?? currentItem.commissionTaxableSnapshot;
     const commissionAmount =

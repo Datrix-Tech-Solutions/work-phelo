@@ -14,6 +14,8 @@ import {
   EmploymentType,
   EmploymentStatus,
   Gender,
+  EmployeeCompensationType,
+  PayrollTaxPolicy,
 } from '@/types/hr';
 import { CurrencyInput } from '@/components/atoms/CurrencyInput';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
@@ -21,6 +23,7 @@ import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { isAtLeastMinimumEmployeeAge, MIN_EMPLOYEE_AGE } from '@/lib/employeeAge';
 import { useTenantConfig } from '@/hooks/useTenantConfig';
+import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
 
 interface EditEmployeePanelProps {
   isOpen: boolean;
@@ -58,6 +61,13 @@ export function EditEmployeePanel({
   const editStatusValue = useWatch({ control: editForm.control, name: 'employmentStatus' });
   const editGenderValue = useWatch({ control: editForm.control, name: 'gender' });
   const basicSalaryValue = useWatch({ control: editForm.control, name: 'basicSalary' });
+  const compensationTypeValue =
+    useWatch({ control: editForm.control, name: 'compensationType' }) ?? 'SALARY';
+  const taxPolicyValue =
+    useWatch({ control: editForm.control, name: 'taxPolicy' }) ?? 'STANDARD_PAYE';
+  const fixedTaxAmountValue = useWatch({ control: editForm.control, name: 'fixedTaxAmount' });
+  const commissionTaxableValue =
+    useWatch({ control: editForm.control, name: 'commissionTaxable' }) ?? true;
   const probationValue = useWatch({ control: editForm.control, name: 'probationEndsAt' });
   const contractEndValue = useWatch({ control: editForm.control, name: 'contractEndDate' });
 
@@ -86,6 +96,10 @@ export function EditEmployeePanel({
       emergencyPhone: employee.emergencyPhone ?? '',
       emergencyRelation: employee.emergencyRelation ?? '',
       basicSalary: employee.basicSalary,
+      compensationType: employee.compensationType ?? 'SALARY',
+      taxPolicy: employee.taxPolicy ?? 'STANDARD_PAYE',
+      fixedTaxAmount: employee.fixedTaxAmount ?? undefined,
+      commissionTaxable: employee.commissionTaxable ?? true,
       bankName: employee.bankName ?? '',
       bankAccountNumber: employee.bankAccountNumber ?? '',
       bankBranch: employee.bankBranch ?? '',
@@ -136,6 +150,8 @@ export function EditEmployeePanel({
               for (const field of relationFields) {
                 if (!data[field]) data[field] = undefined;
               }
+              if (data.taxPolicy !== 'FIXED_AMOUNT') data.fixedTaxAmount = undefined;
+              if (data.compensationType === 'SALARY') data.commissionTaxable = true;
               onSave(data);
             })}
           >
@@ -283,10 +299,52 @@ export function EditEmployeePanel({
           label="Basic Salary"
           value={basicSalaryValue}
           currency={salaryCurrency}
-          onValueChange={(v) => editForm.setValue('basicSalary', parseFloat(v) || undefined)}
+          onValueChange={(v) => editForm.setValue('basicSalary', v === '' ? undefined : Number(v))}
           onCurrencyChange={setSalaryCurrency}
           placeholder="0.00"
         />
+        <SearchSelect
+          label="Compensation Type"
+          placeholder="Select compensation type"
+          value={compensationTypeValue}
+          onChange={(v) => editForm.setValue('compensationType', v as EmployeeCompensationType)}
+          options={[
+            { value: 'SALARY', label: 'Salary' },
+            { value: 'COMMISSION', label: 'Commission' },
+            { value: 'SALARY_PLUS_COMMISSION', label: 'Salary + Commission' },
+          ]}
+        />
+        <SearchSelect
+          label="Tax Policy"
+          placeholder="Select tax policy"
+          value={taxPolicyValue}
+          onChange={(v) => editForm.setValue('taxPolicy', v as PayrollTaxPolicy)}
+          options={[
+            { value: 'STANDARD_PAYE', label: 'Standard PAYE' },
+            { value: 'FIXED_AMOUNT', label: 'Fixed Amount' },
+            { value: 'EXEMPT', label: 'Exempt' },
+          ]}
+        />
+        {taxPolicyValue === 'FIXED_AMOUNT' && (
+          <CurrencyInput
+            label="Fixed Tax Amount"
+            value={fixedTaxAmountValue ?? ''}
+            currency={salaryCurrency}
+            onValueChange={(v) =>
+              editForm.setValue('fixedTaxAmount', v === '' ? undefined : Number(v))
+            }
+            onCurrencyChange={setSalaryCurrency}
+            placeholder="0.00"
+          />
+        )}
+        {compensationTypeValue !== 'SALARY' && (
+          <ToggleRow
+            label="Commission taxable"
+            description="Include commission earnings in PAYE taxable income."
+            enabled={commissionTaxableValue}
+            onChange={(value) => editForm.setValue('commissionTaxable', value)}
+          />
+        )}
       </div>
     </SidePanel>
   );

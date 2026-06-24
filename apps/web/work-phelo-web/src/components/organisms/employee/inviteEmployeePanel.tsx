@@ -17,6 +17,10 @@ import { useBranchOptions } from '@/hooks/hr/useBranches';
 import { useCompanyPoliciesSettings } from '@/hooks';
 import { MonthPicker } from '@/components/atoms/endDatePicker';
 import { usePermissionSets, useAssignPermissionSet } from '@/hooks/hr/useRoles';
+import { CurrencyInput } from '@/components/atoms/CurrencyInput';
+import { ToggleRow } from '@/components/molecules/shared/ToggleRow';
+import { useTenantConfig } from '@/hooks/useTenantConfig';
+import type { EmployeeCompensationType, PayrollTaxPolicy } from '@/types/hr';
 
 /* ── Types ── */
 
@@ -34,6 +38,11 @@ interface InviteForm {
   hireDate: string;
   probationEndsAt?: string;
   contractEndDate?: string;
+  basicSalary?: number;
+  compensationType?: EmployeeCompensationType;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: number;
+  commissionTaxable?: boolean;
 }
 
 interface InviteEmployeePanelProps {
@@ -48,9 +57,11 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
   const { data: departments = [] } = useDepartmentOptions(true);
   const { data: branches = [] } = useBranchOptions(true);
   const { data: policiesSettings } = useCompanyPoliciesSettings();
+  const { currency: tenantCurrency } = useTenantConfig();
   const { data: permissionSetsRaw = [] } = usePermissionSets();
   const { mutateAsync: assignPermissionSet } = useAssignPermissionSet();
   const [selectedPermissionSetId, setSelectedPermissionSetId] = useState('');
+  const [salaryCurrency, setSalaryCurrency] = useState(tenantCurrency);
 
   const {
     register,
@@ -60,7 +71,13 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
     reset,
     formState: { errors },
   } = useForm<InviteForm>({
-    defaultValues: { employmentType: 'FULL_TIME', phone: '' },
+    defaultValues: {
+      employmentType: 'FULL_TIME',
+      phone: '',
+      compensationType: 'SALARY',
+      taxPolicy: 'STANDARD_PAYE',
+      commissionTaxable: true,
+    },
   });
 
   const phoneValue = useWatch({ control, name: 'phone' });
@@ -72,6 +89,11 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
   const managerValue = useWatch({ control, name: 'managerId' });
   const employmentTypeValue = useWatch({ control, name: 'employmentType' });
   const genderValue = useWatch({ control, name: 'gender' });
+  const basicSalaryValue = useWatch({ control, name: 'basicSalary' });
+  const compensationTypeValue = useWatch({ control, name: 'compensationType' }) ?? 'SALARY';
+  const taxPolicyValue = useWatch({ control, name: 'taxPolicy' }) ?? 'STANDARD_PAYE';
+  const fixedTaxAmountValue = useWatch({ control, name: 'fixedTaxAmount' });
+  const commissionTaxableValue = useWatch({ control, name: 'commissionTaxable' }) ?? true;
 
   useEffect(() => {
     if (
@@ -107,6 +129,8 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
     const normalized = { ...d };
     if (normalized.probationEndsAt?.length === 7) normalized.probationEndsAt += '-01';
     if (normalized.contractEndDate?.length === 7) normalized.contractEndDate += '-01';
+    if (normalized.taxPolicy !== 'FIXED_AMOUNT') normalized.fixedTaxAmount = undefined;
+    if (normalized.compensationType === 'SALARY') normalized.commissionTaxable = true;
 
     const payload = Object.fromEntries(
       Object.entries(normalized).filter(([, v]) => v !== '' && v !== undefined && v !== null),
@@ -134,6 +158,11 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
         hireDate: undefined,
         probationEndsAt: undefined,
         contractEndDate: undefined,
+        basicSalary: undefined,
+        compensationType: 'SALARY',
+        taxPolicy: 'STANDARD_PAYE',
+        fixedTaxAmount: undefined,
+        commissionTaxable: true,
       });
       setSelectedPermissionSetId('');
       onClose();
@@ -294,6 +323,60 @@ function InviteEmployeeForm({ isOpen, onClose, onSuccess, employees }: InviteEmp
             value={selectedPermissionSetId}
             onChange={setSelectedPermissionSetId}
             options={permissionSetsRaw.map((s) => ({ value: s.id, label: s.name }))}
+          />
+        )}
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+          Payroll Profile
+        </p>
+        <CurrencyInput
+          label="Basic Salary"
+          value={basicSalaryValue}
+          currency={salaryCurrency}
+          onValueChange={(v) => setValue('basicSalary', v === '' ? undefined : Number(v))}
+          onCurrencyChange={setSalaryCurrency}
+          placeholder="0.00"
+        />
+        <SearchSelect
+          label="Compensation Type"
+          placeholder="Select compensation type"
+          value={compensationTypeValue}
+          onChange={(v) => setValue('compensationType', v as EmployeeCompensationType)}
+          options={[
+            { value: 'SALARY', label: 'Salary' },
+            { value: 'COMMISSION', label: 'Commission' },
+            { value: 'SALARY_PLUS_COMMISSION', label: 'Salary + Commission' },
+          ]}
+        />
+        <SearchSelect
+          label="Tax Policy"
+          placeholder="Select tax policy"
+          value={taxPolicyValue}
+          onChange={(v) => setValue('taxPolicy', v as PayrollTaxPolicy)}
+          options={[
+            { value: 'STANDARD_PAYE', label: 'Standard PAYE' },
+            { value: 'FIXED_AMOUNT', label: 'Fixed Amount' },
+            { value: 'EXEMPT', label: 'Exempt' },
+          ]}
+        />
+        {taxPolicyValue === 'FIXED_AMOUNT' && (
+          <CurrencyInput
+            label="Fixed Tax Amount"
+            value={fixedTaxAmountValue ?? ''}
+            currency={salaryCurrency}
+            onValueChange={(v) => setValue('fixedTaxAmount', v === '' ? undefined : Number(v))}
+            onCurrencyChange={setSalaryCurrency}
+            placeholder="0.00"
+          />
+        )}
+        {compensationTypeValue !== 'SALARY' && (
+          <ToggleRow
+            label="Commission taxable"
+            description="Include commission earnings in PAYE taxable income."
+            enabled={commissionTaxableValue}
+            onChange={(value) => setValue('commissionTaxable', value)}
           />
         )}
       </div>
