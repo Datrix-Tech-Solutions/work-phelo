@@ -5,15 +5,18 @@ import {
   IsDateString,
   IsNumber,
   IsUUID,
+  IsBoolean,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  EmployeeCompensationType,
   EmploymentType,
   EmploymentStatus,
   Gender,
   MaritalStatus,
+  PayrollTaxPolicy,
 } from '../../../prisma/generated/client';
 
 export class UpdateEmployeeDto {
@@ -232,4 +235,42 @@ export class UpdateEmployeeDto {
   @Min(0)
   @Type(() => Number)
   basicSalary?: number;
+
+  @ApiPropertyOptional({
+    description: 'Updated payroll compensation model',
+    enum: EmployeeCompensationType,
+    example: EmployeeCompensationType.SALARY_PLUS_COMMISSION,
+  })
+  @IsOptional()
+  @IsEnum(EmployeeCompensationType)
+  compensationType?: EmployeeCompensationType;
+
+  @ApiPropertyOptional({
+    description: 'Updated payroll tax handling policy',
+    enum: PayrollTaxPolicy,
+    example: PayrollTaxPolicy.STANDARD_PAYE,
+  })
+  @IsOptional()
+  @IsEnum(PayrollTaxPolicy)
+  taxPolicy?: PayrollTaxPolicy;
+
+  @ApiPropertyOptional({
+    description: 'Fixed tax amount used when taxPolicy is FIXED_AMOUNT',
+    example: 250,
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Type(() => Number)
+  fixedTaxAmount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether commission earnings should be included in PAYE taxable income',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  commissionTaxable?: boolean;
 }
