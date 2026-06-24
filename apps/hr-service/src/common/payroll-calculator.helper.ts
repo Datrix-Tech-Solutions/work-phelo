@@ -1,10 +1,14 @@
 import Decimal from 'decimal.js';
-import { PayrollCountry } from '../../prisma/generated/client';
+import {
+  PayrollCountry,
+  PayrollTaxPolicy,
+} from '../../prisma/generated/client';
 
 Decimal.config({ precision: 20, rounding: Decimal.ROUND_HALF_UP });
 
 type EditablePayrollValues = {
   basicSalary: string;
+  commissionAmount: string;
   totalAllowances: string;
   transportAmount: string;
   otherDeductions: string;
@@ -16,6 +20,9 @@ export type PayrollCalculationSettings = {
   payrollCountry: PayrollCountry;
   tier3Enabled: boolean;
   tier3Rate: string | null;
+  taxPolicy?: PayrollTaxPolicy;
+  fixedTaxAmount?: string | null;
+  commissionTaxable?: boolean;
 };
 
 export type CalculatedCountryPayrollValues = EditablePayrollValues & {
@@ -187,10 +194,16 @@ export function calculatePayrollForCountry(
   settings: PayrollCalculationSettings,
 ): CalculatedCountryPayrollValues {
   const basicSalary = new Decimal(values.basicSalary);
+  const commissionAmount = new Decimal(values.commissionAmount);
   const totalAllowances = new Decimal(values.totalAllowances);
   const transportAmount = new Decimal(values.transportAmount);
   const otherDeductions = new Decimal(values.otherDeductions);
-  const grossSalary = basicSalary.plus(totalAllowances).plus(transportAmount);
+  const grossSalary = basicSalary
+    .plus(commissionAmount)
+    .plus(totalAllowances)
+    .plus(transportAmount);
+  const excludedCommission =
+    settings.commissionTaxable === false ? commissionAmount : new Decimal(0);
 
   let employeeStatutory = new Decimal(0);
   let employerStatutory = new Decimal(0);
@@ -205,7 +218,9 @@ export function calculatePayrollForCountry(
       employeeStatutory = basicSalary.times(NIGERIA.employeePensionRate);
       employerStatutory = basicSalary.times(NIGERIA.employerPensionRate);
       // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base
-      taxableIncome = maxZero(grossSalary.minus(employeeStatutory));
+      taxableIncome = maxZero(
+        grossSalary.minus(excludedCommission).minus(employeeStatutory),
+      );
       payeTax = calculateNigeriaMonthlyPaye(taxableIncome, grossSalary);
       break;
     }
@@ -214,7 +229,9 @@ export function calculatePayrollForCountry(
       employeeStatutory = calculateKenyaNssf(basicSalary);
       employerStatutory = employeeStatutory;
       // otherDeductions (loans, advances) are post-tax — do not reduce the PAYE base
-      taxableIncome = maxZero(grossSalary.minus(employeeStatutory));
+      taxableIncome = maxZero(
+        grossSalary.minus(excludedCommission).minus(employeeStatutory),
+      );
       payeTax = Decimal.max(
         new Decimal(0),
         calculateProgressiveTax(taxableIncome, KENYA.payeBands).minus(
@@ -242,6 +259,7 @@ export function calculatePayrollForCountry(
       // but remains in gross and therefore in netSalary.
       taxableIncome = maxZero(
         grossSalary
+          .minus(excludedCommission)
           .minus(employeeStatutory)
           .minus(tier3Employee)
           .minus(transportAmount),
@@ -249,6 +267,17 @@ export function calculatePayrollForCountry(
       payeTax = calculateProgressiveTax(taxableIncome, GHANA.payeBands);
       break;
     }
+  }
+
+  if (settings.taxPolicy === PayrollTaxPolicy.FIXED_AMOUNT) {
+    payeTax = Decimal.max(
+      new Decimal(0),
+      new Decimal(settings.fixedTaxAmount ?? 0),
+    );
+  }
+
+  if (settings.taxPolicy === PayrollTaxPolicy.EXEMPT) {
+    payeTax = new Decimal(0);
   }
 
   const totalDeductions = otherDeductions
