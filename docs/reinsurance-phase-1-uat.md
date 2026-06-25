@@ -2,11 +2,11 @@
 
 ## Phase 1 User Acceptance Testing Document
 
-**Document version:** Draft 1  
-**Module:** Reinsurance Operations  
-**UAT phase:** Phase 1 - Integrated Core Workflows  
-**Prepared for:** Business stakeholders, operations users, finance users, and QA reviewers  
-**Prepared by:** WorkPhelo Product and Engineering Team  
+**Document version:** Draft 1
+**Module:** Reinsurance Operations
+**UAT phase:** Phase 1 - Integrated Core Workflows
+**Prepared for:** Business stakeholders, operations users, finance users, and QA reviewers
+**Prepared by:** WorkPhelo Product and Engineering Team
 **Date:** June 2026
 
 ---
@@ -380,4 +380,3 @@ The following test data should be prepared before testing:
 |  |  | Accepted / Accepted with issues / Rejected |  |  |
 |  |  | Accepted / Accepted with issues / Rejected |  |  |
 |  |  | Accepted / Accepted with issues / Rejected |  |  |
-
