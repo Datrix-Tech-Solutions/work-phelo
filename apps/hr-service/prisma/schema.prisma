@@ -82,6 +82,22 @@ enum PayrollCountry {
   @@schema("hr")
 }
 
+enum EmployeeCompensationType {
+  SALARY
+  COMMISSION
+  SALARY_PLUS_COMMISSION
+
+  @@schema("hr")
+}
+
+enum PayrollTaxPolicy {
+  STANDARD_PAYE
+  FIXED_AMOUNT
+  EXEMPT
+
+  @@schema("hr")
+}
+
 enum AppraisalStatus {
   DRAFT
   IN_PROGRESS
@@ -375,9 +391,9 @@ model Department {
 // ── Employee ──────────────────────────────────────────────────────────────
 
 model Employee {
-  id                   String           @id @default(uuid())
+  id                   String                   @id @default(uuid())
   tenantId             String
-  userId               String?          @unique
+  userId               String?                  @unique
   employeeNumber       String
   firstName            String
   lastName             String
@@ -397,8 +413,8 @@ model Employee {
   branchId             String?
   managerId            String?
   jobTitle             String
-  employmentType       EmploymentType   @default(FULL_TIME)
-  employmentStatus     EmploymentStatus @default(PROBATION)
+  employmentType       EmploymentType           @default(FULL_TIME)
+  employmentStatus     EmploymentStatus         @default(PROBATION)
   statusChangedAt      DateTime?
   statusChangedById    String?
   statusChangedByEmail String?
@@ -413,11 +429,15 @@ model Employee {
   nationalId           String?
   ssnit                String?
   tinNumber            String?
-  basicSalary          Decimal          @db.Decimal(15, 2)
+  basicSalary          Decimal                  @db.Decimal(15, 2)
+  compensationType     EmployeeCompensationType @default(SALARY)
+  taxPolicy            PayrollTaxPolicy         @default(STANDARD_PAYE)
+  fixedTaxAmount       Decimal?                 @db.Decimal(15, 2)
+  commissionTaxable    Boolean                  @default(true)
   emailHash            String?
   avatarUrl            String?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
 
   department            Department?               @relation(fields: [departmentId], references: [id])
   branch                Branch?                   @relation(fields: [branchId], references: [id])
@@ -1020,29 +1040,34 @@ model PayrollRun {
 }
 
 model PayrollItem {
-  id                String   @id @default(uuid())
-  tenantId          String
-  payrollRunId      String
-  employeeId        String
-  basicSalary       Decimal  @db.Decimal(15, 2)
-  totalAllowances   Decimal  @default(0) @db.Decimal(15, 2)
-  transportAmount   Decimal  @default(0) @db.Decimal(15, 2)
-  otherDeductions   Decimal  @default(0) @db.Decimal(15, 2)
-  overtimePay       Decimal  @default(0) @db.Decimal(15, 2)
-  bonus             Decimal  @default(0) @db.Decimal(15, 2)
-  thirteenthMonth   Decimal  @default(0) @db.Decimal(15, 2)
-  grossSalary       Decimal  @db.Decimal(15, 2)
-  employeeSSNIT     Decimal  @db.Decimal(15, 2)
-  employerSSNIT     Decimal  @db.Decimal(15, 2)
-  tier1Contribution Decimal  @default(0) @db.Decimal(15, 2)
-  tier2Contribution Decimal  @default(0) @db.Decimal(15, 2)
-  tier3Employee     Decimal  @default(0) @db.Decimal(15, 2)
-  taxableIncome     Decimal  @default(0) @db.Decimal(15, 2)
-  payeTax           Decimal  @db.Decimal(15, 2)
-  totalDeductions   Decimal  @db.Decimal(15, 2)
-  netSalary         Decimal  @db.Decimal(15, 2)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                        String                   @id @default(uuid())
+  tenantId                  String
+  payrollRunId              String
+  employeeId                String
+  basicSalary               Decimal                  @db.Decimal(15, 2)
+  commissionAmount          Decimal                  @default(0) @db.Decimal(15, 2)
+  totalAllowances           Decimal                  @default(0) @db.Decimal(15, 2)
+  transportAmount           Decimal                  @default(0) @db.Decimal(15, 2)
+  otherDeductions           Decimal                  @default(0) @db.Decimal(15, 2)
+  overtimePay               Decimal                  @default(0) @db.Decimal(15, 2)
+  bonus                     Decimal                  @default(0) @db.Decimal(15, 2)
+  thirteenthMonth           Decimal                  @default(0) @db.Decimal(15, 2)
+  grossSalary               Decimal                  @db.Decimal(15, 2)
+  employeeSSNIT             Decimal                  @db.Decimal(15, 2)
+  employerSSNIT             Decimal                  @db.Decimal(15, 2)
+  tier1Contribution         Decimal                  @default(0) @db.Decimal(15, 2)
+  tier2Contribution         Decimal                  @default(0) @db.Decimal(15, 2)
+  tier3Employee             Decimal                  @default(0) @db.Decimal(15, 2)
+  taxableIncome             Decimal                  @default(0) @db.Decimal(15, 2)
+  payeTax                   Decimal                  @db.Decimal(15, 2)
+  fixedTaxAmount            Decimal?                 @db.Decimal(15, 2)
+  taxPolicySnapshot         PayrollTaxPolicy         @default(STANDARD_PAYE)
+  compensationTypeSnapshot  EmployeeCompensationType @default(SALARY)
+  commissionTaxableSnapshot Boolean                  @default(true)
+  totalDeductions           Decimal                  @db.Decimal(15, 2)
+  netSalary                 Decimal                  @db.Decimal(15, 2)
+  createdAt                 DateTime                 @default(now())
+  updatedAt                 DateTime                 @updatedAt
 
   payrollRun     PayrollRun             @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
   employee       Employee               @relation(fields: [employeeId], references: [id])

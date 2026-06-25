@@ -37,6 +37,7 @@ import {
   AllowanceType,
   AssetStatus,
   EmploymentStatus,
+  PayrollTaxPolicy,
   Prisma,
 } from '../../prisma/generated/client';
 import {
@@ -255,6 +256,10 @@ export class EmployeesService {
             bankBranch: this.encryption.encrypt(dto.bankBranch),
             ssnit: this.encryption.encrypt(dto.ssnit),
             tinNumber: this.encryption.encrypt(dto.tinNumber),
+            compensationType: dto.compensationType,
+            taxPolicy: dto.taxPolicy,
+            fixedTaxAmount: dto.fixedTaxAmount,
+            commissionTaxable: dto.commissionTaxable,
             ...(dto.departmentId && { departmentId: dto.departmentId }),
             ...(dto.branchId && { branchId: dto.branchId }),
             ...(dto.managerId && { managerId: dto.managerId }),
@@ -290,6 +295,20 @@ export class EmployeesService {
     if (input.contractEndDate && input.contractEndDate < input.hireDate) {
       throw new BadRequestException(
         'Contract end date cannot be before the hire date.',
+      );
+    }
+  }
+
+  private validatePayrollTaxPolicy(input: {
+    taxPolicy?: PayrollTaxPolicy;
+    fixedTaxAmount?: number | { toString(): string } | null;
+  }) {
+    if (
+      input.taxPolicy === PayrollTaxPolicy.FIXED_AMOUNT &&
+      input.fixedTaxAmount == null
+    ) {
+      throw new BadRequestException(
+        'fixedTaxAmount is required when taxPolicy is FIXED_AMOUNT.',
       );
     }
   }
@@ -446,6 +465,10 @@ export class EmployeesService {
         ? new Date(dto.contractEndDate)
         : undefined,
     });
+    this.validatePayrollTaxPolicy({
+      taxPolicy: dto.taxPolicy,
+      fixedTaxAmount: dto.fixedTaxAmount,
+    });
 
     let provisionedUser;
     try {
@@ -594,6 +617,10 @@ export class EmployeesService {
           avatarUrl: true,
           userId: true,
           basicSalary: true,
+          compensationType: true,
+          taxPolicy: true,
+          fixedTaxAmount: true,
+          commissionTaxable: true,
           ssnit: true,
           allowances: {
             select: {
@@ -875,6 +902,10 @@ export class EmployeesService {
       dateOfBirth,
       probationEndsAt,
       contractEndDate,
+      compensationType,
+      taxPolicy,
+      fixedTaxAmount,
+      commissionTaxable,
       ...rest
     } = updateData;
 
@@ -909,6 +940,20 @@ export class EmployeesService {
         ? new Date(contractEndDate)
         : (existing.contractEndDate ?? undefined),
     });
+    const effectiveTaxPolicy = taxPolicy ?? existing.taxPolicy;
+    const shouldUpdateFixedTaxAmount =
+      taxPolicy !== undefined || fixedTaxAmount !== undefined;
+    const normalizedFixedTaxAmount =
+      effectiveTaxPolicy === PayrollTaxPolicy.FIXED_AMOUNT
+        ? fixedTaxAmount !== undefined
+          ? fixedTaxAmount
+          : existing.fixedTaxAmount
+        : null;
+
+    this.validatePayrollTaxPolicy({
+      taxPolicy: effectiveTaxPolicy,
+      fixedTaxAmount: normalizedFixedTaxAmount,
+    });
 
     // Track status change
     const statusChanged =
@@ -920,6 +965,12 @@ export class EmployeesService {
       where: { id },
       data: {
         ...encryptedRest,
+        ...(compensationType !== undefined && { compensationType }),
+        ...(taxPolicy !== undefined && { taxPolicy }),
+        ...(shouldUpdateFixedTaxAmount && {
+          fixedTaxAmount: normalizedFixedTaxAmount,
+        }),
+        ...(commissionTaxable !== undefined && { commissionTaxable }),
         ...(employmentStatus && { employmentStatus }),
         ...(statusChanged && {
           statusChangedAt: new Date(),

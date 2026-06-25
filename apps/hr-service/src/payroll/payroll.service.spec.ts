@@ -6,6 +6,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { FieldEncryptionService } from '../crypto/field-encryption.service';
 import { RequestUser } from '@work-phelo/types';
+import {
+  PayrollCountry,
+  PayrollTaxPolicy,
+} from '../../prisma/generated/client';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -53,8 +57,10 @@ const PAYROLL_RUN = {
 
 function makePrismaMock() {
   return {
+    $transaction: jest.fn(),
     payrollRun: { findFirst: jest.fn() },
     employee: { findFirst: jest.fn(), findMany: jest.fn() },
+    tenantConfig: { findUnique: jest.fn() },
     payrollItem: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -179,6 +185,103 @@ describe('PayrollService', () => {
       );
 
       expect(result.items[0].employee.bankAccountNumber).toBeNull();
+    });
+  });
+
+  describe('updatePayrollItem()', () => {
+    const editableRun = {
+      id: 'run-uuid',
+      tenantId: 'tenant-uuid',
+      status: 'DRAFT',
+      payrollCountry: PayrollCountry.GH,
+      payrollCurrency: 'GHS',
+      tier3Enabled: false,
+      tier3Rate: null,
+      tier3SchemeName: null,
+      items: [
+        {
+          id: 'item-uuid',
+          tenantId: 'tenant-uuid',
+          payrollRunId: 'run-uuid',
+          employeeId: 'employee-uuid',
+          basicSalary: '0',
+          commissionAmount: '1000',
+          totalAllowances: '0',
+          transportAmount: '0',
+          otherDeductions: '0',
+          fixedTaxAmount: '150',
+          taxPolicySnapshot: PayrollTaxPolicy.FIXED_AMOUNT,
+          commissionTaxableSnapshot: true,
+          allowanceItems: [],
+          deductionItems: [],
+        },
+      ],
+    };
+
+    function arrangeUpdateTransaction() {
+      const tx = {
+        payrollItem: {
+          update: jest.fn(),
+          findMany: jest.fn().mockResolvedValue([]),
+        },
+        payrollItemAllowance: {
+          deleteMany: jest.fn(),
+          createMany: jest.fn(),
+        },
+        payrollItemDeduction: {
+          deleteMany: jest.fn(),
+          createMany: jest.fn(),
+        },
+        payrollRun: {
+          update: jest.fn(),
+          findFirst: jest.fn().mockResolvedValue({ ...editableRun, items: [] }),
+        },
+      };
+
+      prisma.$transaction.mockImplementation((callback) => callback(tx));
+      return tx;
+    }
+
+    it('clears fixedTaxAmount when tax policy changes away from FIXED_AMOUNT', async () => {
+      prisma.payrollRun.findFirst.mockResolvedValue(editableRun);
+      prisma.tenantConfig.findUnique.mockResolvedValue(null);
+      const tx = arrangeUpdateTransaction();
+
+      await service.updatePayrollItem('tenant-uuid', 'run-uuid', 'item-uuid', {
+        taxPolicy: PayrollTaxPolicy.EXEMPT,
+      });
+
+      expect(tx.payrollItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'item-uuid' },
+          data: expect.objectContaining({
+            taxPolicySnapshot: PayrollTaxPolicy.EXEMPT,
+            fixedTaxAmount: null,
+            payeTax: '0',
+          }),
+        }),
+      );
+    });
+
+    it('keeps fixedTaxAmount when tax policy remains FIXED_AMOUNT', async () => {
+      prisma.payrollRun.findFirst.mockResolvedValue(editableRun);
+      prisma.tenantConfig.findUnique.mockResolvedValue(null);
+      const tx = arrangeUpdateTransaction();
+
+      await service.updatePayrollItem('tenant-uuid', 'run-uuid', 'item-uuid', {
+        taxPolicy: PayrollTaxPolicy.FIXED_AMOUNT,
+        fixedTaxAmount: 200,
+      });
+
+      expect(tx.payrollItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            taxPolicySnapshot: PayrollTaxPolicy.FIXED_AMOUNT,
+            fixedTaxAmount: '200.00',
+            payeTax: '200',
+          }),
+        }),
+      );
     });
   });
 });

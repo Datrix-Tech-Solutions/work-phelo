@@ -190,6 +190,7 @@ export async function downloadPayrollPDFFormat(
           'Employee',
           'Employee Number',
           'Basic Salary',
+          'Commission',
           'Allowances',
           'Gross',
           payrollLabels.employeeLabel,
@@ -205,6 +206,7 @@ export async function downloadPayrollPDFFormat(
         item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
         item.employee?.employeeNumber ?? '',
         fmtNum(item.basicSalary),
+        fmtNum(item.commissionAmount ?? 0),
         lineItemsSummary(payrollAllowanceRows(item), item.totalAllowances),
         fmtNum(item.grossSalary),
         fmtNum(item.employeeSSNIT),
@@ -227,6 +229,7 @@ export async function downloadPayrollPDFFormat(
           'TOTAL',
           '',
           sum('basicSalary'),
+          sum('commissionAmount'),
           sumAllowances(),
           sum('grossSalary'),
           sum('employeeSSNIT'),
@@ -547,6 +550,8 @@ export async function downloadPayslipPDF(
   const earningsStartY = y;
 
   const earningsRows: string[][] = [['Basic Salary', fmtNum(item.basicSalary)]];
+  if (parseFloat(item.commissionAmount ?? '0') > 0)
+    earningsRows.push(['Commission', fmtNum(item.commissionAmount)]);
   payrollAllowanceRows(item).forEach(([name, amount]) => {
     earningsRows.push([name, fmtNum(amount)]);
   });
@@ -558,7 +563,10 @@ export async function downloadPayslipPDF(
 
   const deductionRows: string[][] = [
     [payrollLabels.employeeLabel, fmtNum(item.employeeSSNIT)],
-    ['Income Tax (PAYE)', fmtNum(item.payeTax)],
+    [
+      item.taxPolicySnapshot === 'FIXED_AMOUNT' ? 'Income Tax (PAYE - Fixed)' : 'Income Tax (PAYE)',
+      fmtNum(item.payeTax),
+    ],
   ];
   if (parseFloat(item.tier3Employee) > 0)
     deductionRows.push(['Tier 3', fmtNum(item.tier3Employee)]);
@@ -771,6 +779,7 @@ export function downloadPayrollFullFormat(
     'Employee Number',
     'Job Title',
     `Basic Salary (${currency})`,
+    `Commission (${currency})`,
     `Allowances (${currency})`,
     `Gross Salary (${currency})`,
     `${payrollLabels.employeeLabel} (${currency})`,
@@ -784,6 +793,7 @@ export function downloadPayrollFullFormat(
     item.employee?.employeeNumber ?? '',
     item.employee?.jobTitle ?? '',
     fmtNum(item.basicSalary),
+    fmtNum(item.commissionAmount ?? 0),
     lineItemsSummary(payrollAllowanceRows(item), item.totalAllowances),
     fmtNum(item.grossSalary),
     fmtNum(item.employeeSSNIT),
@@ -966,6 +976,7 @@ export async function downloadTAXFormPDF(
 
   const cellRowDefs = [
     { key: 'basicSalary', label: 'Basic Salary' },
+    { key: 'commissionAmount', label: 'Commission' },
     { key: 'grossSalary', label: 'Gross Earnings' },
     { key: 'employeeSSNIT', label: payrollLabels.employeeLabel },
     { key: 'taxableIncome', label: 'Taxable Income' },

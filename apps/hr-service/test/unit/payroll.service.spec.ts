@@ -13,6 +13,10 @@ import { RabbitMQPublisher } from '../../src/messaging/rabbitmq.publisher';
 import { NotificationsService } from '../../src/notifications/notifications.service';
 import { FieldEncryptionService } from '../../src/crypto/field-encryption.service';
 import { RequestUser } from '@work-phelo/types';
+import {
+  EmployeeCompensationType,
+  PayrollTaxPolicy,
+} from '../../prisma/generated/client';
 
 const actor = (overrides: Partial<RequestUser> = {}): RequestUser => ({
   id: 'user-1',
@@ -259,6 +263,110 @@ describe('PayrollService', () => {
   });
 
   // ── submitPayrollForApproval ───────────────────────────────────────────────
+
+  describe('updatePayrollItem commission fields', () => {
+    const draftCommissionRun = {
+      ...draftRun,
+      status: 'DRAFT',
+      payrollCountry: 'GH',
+      payrollCurrency: 'GHS',
+      tier3Enabled: false,
+      tier3Rate: null,
+      tier3SchemeName: null,
+      items: [
+        {
+          id: 'item-1',
+          basicSalary: '0',
+          commissionAmount: '0',
+          totalAllowances: '0',
+          transportAmount: '0',
+          otherDeductions: '0',
+          fixedTaxAmount: null,
+          taxPolicySnapshot: PayrollTaxPolicy.STANDARD_PAYE,
+          compensationTypeSnapshot: EmployeeCompensationType.COMMISSION,
+          commissionTaxableSnapshot: true,
+          allowanceItems: [],
+          deductionItems: [],
+        },
+      ],
+    };
+
+    it('recalculates a draft payroll item with commission and fixed tax', async () => {
+      prisma.payrollRun.findFirst
+        .mockResolvedValueOnce(draftCommissionRun)
+        .mockResolvedValueOnce({
+          ...draftCommissionRun,
+          items: [],
+        });
+      prisma.tenantConfig.findUnique.mockResolvedValueOnce(null);
+      prisma.$transaction.mockImplementation(async (fn: any) => fn(prisma));
+      prisma.payrollItem.update.mockResolvedValueOnce({});
+      prisma.payrollItem.findMany.mockResolvedValueOnce([
+        {
+          grossSalary: '2000',
+          netSalary: '1850',
+          employeeSSNIT: '0',
+          employerSSNIT: '0',
+          tier1Contribution: '0',
+          tier2Contribution: '0',
+          tier3Employee: '0',
+          payeTax: '150',
+        },
+      ]);
+      prisma.payrollRun.update.mockResolvedValueOnce({});
+
+      await service.updatePayrollItem('tenant-1', 'run-1', 'item-1', {
+        commissionAmount: 2000,
+        taxPolicy: PayrollTaxPolicy.FIXED_AMOUNT,
+        fixedTaxAmount: 150,
+      });
+
+      expect(prisma.payrollItem.update).toHaveBeenCalledWith({
+        where: { id: 'item-1' },
+        data: expect.objectContaining({
+          basicSalary: '0',
+          commissionAmount: '2000.00',
+          grossSalary: '2000',
+          taxableIncome: '2000',
+          payeTax: '150',
+          fixedTaxAmount: '150.00',
+          taxPolicySnapshot: PayrollTaxPolicy.FIXED_AMOUNT,
+          commissionTaxableSnapshot: true,
+          netSalary: '1850',
+        }),
+      });
+    });
+
+    it('rejects commission edits when the payroll item is not in a draft run', async () => {
+      prisma.payrollRun.findFirst.mockResolvedValueOnce({
+        ...draftCommissionRun,
+        status: 'APPROVED',
+      });
+
+      await expect(
+        service.updatePayrollItem('tenant-1', 'run-1', 'item-1', {
+          commissionAmount: 2000,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(prisma.payrollItem.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects FIXED_AMOUNT tax policy without a fixed tax amount', async () => {
+      prisma.payrollRun.findFirst.mockResolvedValueOnce(draftCommissionRun);
+
+      await expect(
+        service.updatePayrollItem('tenant-1', 'run-1', 'item-1', {
+          commissionAmount: 2000,
+          taxPolicy: PayrollTaxPolicy.FIXED_AMOUNT,
+        }),
+      ).rejects.toThrow(
+        'fixedTaxAmount is required when taxPolicy is FIXED_AMOUNT.',
+      );
+
+      expect(prisma.payrollItem.update).not.toHaveBeenCalled();
+    });
+  });
 
   describe('submitPayrollForApproval', () => {
     it('throws BadRequestException when the draft run has no payroll items', async () => {

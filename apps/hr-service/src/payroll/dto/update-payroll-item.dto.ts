@@ -2,6 +2,8 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,6 +11,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { PayrollTaxPolicy } from '../../../prisma/generated/client';
 
 export class PayrollAllowanceLineItemDto {
   @ApiPropertyOptional({ example: 'Transport Allowance' })
@@ -63,6 +66,17 @@ export class UpdatePayrollItemDto {
   basicSalary?: number;
 
   @ApiPropertyOptional({
+    description: 'Commission earnings for this draft payroll item',
+    example: 1800,
+    minimum: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  commissionAmount?: number;
+
+  @ApiPropertyOptional({
     description: 'Override non-transport allowances for this payroll run item',
     example: 350,
     minimum: 0,
@@ -94,6 +108,37 @@ export class UpdatePayrollItemDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   otherDeductions?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional payroll tax policy override for this draft payroll item',
+    enum: PayrollTaxPolicy,
+    example: PayrollTaxPolicy.FIXED_AMOUNT,
+  })
+  @IsOptional()
+  @IsEnum(PayrollTaxPolicy)
+  taxPolicy?: PayrollTaxPolicy;
+
+  @ApiPropertyOptional({
+    description: 'Fixed tax amount used when taxPolicy is FIXED_AMOUNT',
+    example: 250,
+    minimum: 0,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  fixedTaxAmount?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Whether commission earnings should be included in PAYE taxable income for this draft item',
+    example: true,
+  })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  commissionTaxable?: boolean;
 
   @ApiPropertyOptional({
     type: [PayrollAllowanceLineItemDto],

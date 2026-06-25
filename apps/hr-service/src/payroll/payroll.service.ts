@@ -23,8 +23,10 @@ import { RabbitMQPublisher } from '../messaging/rabbitmq.publisher';
 import { FieldEncryptionService } from '../crypto/field-encryption.service';
 import {
   EmploymentStatus,
+  EmployeeCompensationType,
   PayrollCountry,
   PayrollItem,
+  PayrollTaxPolicy,
   Prisma,
 } from '../../prisma/generated/client';
 
@@ -39,6 +41,7 @@ type PayrollSettingsSnapshot = {
 
 type EditablePayrollValues = {
   basicSalary: string;
+  commissionAmount: string;
   totalAllowances: string;
   transportAmount: string;
   otherDeductions: string;
@@ -75,6 +78,10 @@ type CalculatedPayrollValues = EditablePayrollValues & {
 type PayrollItemSeed = CalculatedPayrollValues & {
   allowanceItems: PayrollAllowanceLineItem[];
   deductionItems: PayrollDeductionLineItem[];
+  fixedTaxAmount: string | null;
+  taxPolicySnapshot: PayrollTaxPolicy;
+  compensationTypeSnapshot: EmployeeCompensationType;
+  commissionTaxableSnapshot: boolean;
 };
 
 type PayrollNotificationRecipient = {
@@ -143,9 +150,27 @@ export class PayrollService {
 
   private calculatePayrollItemValues(
     values: EditablePayrollValues,
-    settings: PayrollSettingsSnapshot,
+    settings: PayrollSettingsSnapshot & {
+      taxPolicy?: PayrollTaxPolicy;
+      fixedTaxAmount?: string | null;
+      commissionTaxable?: boolean;
+    },
   ): CalculatedPayrollValues {
     return calculatePayrollForCountry(values, settings);
+  }
+
+  private assertValidPayrollTaxPolicy(input: {
+    taxPolicy?: PayrollTaxPolicy;
+    fixedTaxAmount?: string | null;
+  }) {
+    if (
+      input.taxPolicy === PayrollTaxPolicy.FIXED_AMOUNT &&
+      input.fixedTaxAmount == null
+    ) {
+      throw new BadRequestException(
+        'fixedTaxAmount is required when taxPolicy is FIXED_AMOUNT.',
+      );
+    }
   }
 
   private isTransportAllowanceLine(item: {
@@ -194,6 +219,7 @@ export class PayrollService {
 
   private buildEditableValuesFromLineItems(
     basicSalary: string,
+    commissionAmount: string,
     allowanceItems: PayrollAllowanceLineItem[],
     deductionItems: PayrollDeductionLineItem[],
   ): EditablePayrollValues {
@@ -207,6 +233,7 @@ export class PayrollService {
 
     return {
       basicSalary,
+      commissionAmount,
       totalAllowances: totalAllowances.toString(),
       transportAmount: transportAmount.toString(),
       otherDeductions: otherDeductions.toString(),
@@ -216,6 +243,11 @@ export class PayrollService {
   private buildSeedFromEmployee(
     employee: {
       basicSalary: { toString(): string };
+      commissionAmount?: { toString(): string } | string | number | null;
+      fixedTaxAmount?: { toString(): string } | string | number | null;
+      taxPolicy: PayrollTaxPolicy;
+      compensationType: EmployeeCompensationType;
+      commissionTaxable: boolean;
       allowances: Array<{
         amount: { toString(): string };
         type: string;
@@ -235,6 +267,10 @@ export class PayrollService {
     values: EditablePayrollValues;
     allowanceItems: PayrollAllowanceLineItem[];
     deductionItems: PayrollDeductionLineItem[];
+    fixedTaxAmount: string | null;
+    taxPolicySnapshot: PayrollTaxPolicy;
+    compensationTypeSnapshot: EmployeeCompensationType;
+    commissionTaxableSnapshot: boolean;
   } {
     const allowanceItems = employee.allowances
       .map((allowance) => ({
@@ -266,11 +302,16 @@ export class PayrollService {
     return {
       values: this.buildEditableValuesFromLineItems(
         employee.basicSalary.toString(),
+        employee.commissionAmount?.toString() ?? '0',
         allowanceItems,
         deductionItems,
       ),
       allowanceItems,
       deductionItems,
+      fixedTaxAmount: employee.fixedTaxAmount?.toString() ?? null,
+      taxPolicySnapshot: employee.taxPolicy,
+      compensationTypeSnapshot: employee.compensationType,
+      commissionTaxableSnapshot: employee.commissionTaxable,
     };
   }
 
@@ -661,10 +702,23 @@ export class PayrollService {
     const payrollItems: PayrollItemSeed[] = verifiedEmployees.map(
       (employee) => {
         const seed = this.buildSeedFromEmployee(employee, end);
+        this.assertValidPayrollTaxPolicy({
+          taxPolicy: seed.taxPolicySnapshot,
+          fixedTaxAmount: seed.fixedTaxAmount,
+        });
         return {
-          ...this.calculatePayrollItemValues(seed.values, settings),
+          ...this.calculatePayrollItemValues(seed.values, {
+            ...settings,
+            taxPolicy: seed.taxPolicySnapshot,
+            fixedTaxAmount: seed.fixedTaxAmount,
+            commissionTaxable: seed.commissionTaxableSnapshot,
+          }),
           allowanceItems: seed.allowanceItems,
           deductionItems: seed.deductionItems,
+          fixedTaxAmount: seed.fixedTaxAmount,
+          taxPolicySnapshot: seed.taxPolicySnapshot,
+          compensationTypeSnapshot: seed.compensationTypeSnapshot,
+          commissionTaxableSnapshot: seed.commissionTaxableSnapshot,
         };
       },
     );
@@ -802,6 +856,23 @@ export class PayrollService {
       tier3SchemeName: run.tier3SchemeName,
       country: run.payrollCountry,
     };
+    const taxPolicySnapshot = dto.taxPolicy ?? currentItem.taxPolicySnapshot;
+    const fixedTaxAmount =
+      taxPolicySnapshot === PayrollTaxPolicy.FIXED_AMOUNT
+        ? dto.fixedTaxAmount != null
+          ? new Decimal(dto.fixedTaxAmount).toFixed(2)
+          : (currentItem.fixedTaxAmount?.toString() ?? null)
+        : null;
+    const commissionTaxableSnapshot =
+      dto.commissionTaxable ?? currentItem.commissionTaxableSnapshot;
+    const commissionAmount =
+      dto.commissionAmount != null
+        ? new Decimal(dto.commissionAmount).toFixed(2)
+        : currentItem.commissionAmount.toString();
+    this.assertValidPayrollTaxPolicy({
+      taxPolicy: taxPolicySnapshot,
+      fixedTaxAmount,
+    });
     const allowanceItems =
       dto.allowanceItems != null
         ? this.normalizeAllowanceLineItems(dto.allowanceItems)
@@ -825,6 +896,7 @@ export class PayrollService {
             dto.basicSalary != null
               ? new Decimal(dto.basicSalary).toFixed(2)
               : currentItem.basicSalary.toString(),
+            commissionAmount,
             dto.allowanceItems != null
               ? allowanceItems
               : [
@@ -857,6 +929,7 @@ export class PayrollService {
               dto.basicSalary != null
                 ? new Decimal(dto.basicSalary).toFixed(2)
                 : currentItem.basicSalary.toString(),
+            commissionAmount,
             totalAllowances:
               dto.totalAllowances != null
                 ? new Decimal(dto.totalAllowances).toFixed(2)
@@ -870,13 +943,23 @@ export class PayrollService {
                 ? new Decimal(dto.otherDeductions).toFixed(2)
                 : currentItem.otherDeductions.toString(),
           },
-      settings,
+      {
+        ...settings,
+        taxPolicy: taxPolicySnapshot,
+        fixedTaxAmount,
+        commissionTaxable: commissionTaxableSnapshot,
+      },
     );
 
     return this.prisma.$transaction(async (tx) => {
       await tx.payrollItem.update({
         where: { id: itemId },
-        data: recalculatedItem,
+        data: {
+          ...recalculatedItem,
+          fixedTaxAmount,
+          taxPolicySnapshot,
+          commissionTaxableSnapshot,
+        },
       });
 
       if (dto.allowanceItems != null) {
