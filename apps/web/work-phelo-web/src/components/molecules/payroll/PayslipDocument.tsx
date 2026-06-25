@@ -72,6 +72,10 @@ function Separator() {
   return <div className="border-t border-gray-200 my-1" />;
 }
 
+function r2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
 export function PayslipDocument({ item, companyName, employeeName }: PayslipDocumentProps) {
   const country = item.payrollRun?.payrollCountry;
   const currency = item.payrollRun?.payrollCurrency;
@@ -82,6 +86,10 @@ export function PayslipDocument({ item, companyName, employeeName }: PayslipDocu
     if (!amt || amt <= 0) return null;
     return `(${money(amt)})`;
   };
+
+  const isBoth = item.compensationTypeSnapshot === 'SALARY_PLUS_COMMISSION';
+  const commissionTax = isBoth ? r2(parseFloat(item.commissionAmount) * 0.1) : 0;
+  const salaryPaye = isBoth ? r2(parseFloat(item.payeTax) - commissionTax) : null;
 
   const period = item.payrollRun
     ? payrollMonthLabel(item.payrollRun.month, item.payrollRun.year)
@@ -111,7 +119,9 @@ export function PayslipDocument({ item, companyName, employeeName }: PayslipDocu
         {/* Earnings */}
         <div className="py-4">
           <SectionLabel>Earnings</SectionLabel>
-          <DocRow label="Basic Salary" value={money(item.basicSalary)} />
+          {parseFloat(item.basicSalary) > 0 && (
+            <DocRow label="Basic Salary" value={money(item.basicSalary)} />
+          )}
           {parseFloat(item.commissionAmount ?? '0') > 0 && (
             <DocRow label="Commission" value={money(item.commissionAmount)} />
           )}
@@ -135,11 +145,24 @@ export function PayslipDocument({ item, companyName, employeeName }: PayslipDocu
         <div className="py-4">
           <SectionLabel>Deductions</SectionLabel>
           <DocRow label={labels.employeeLabel} value={inParens(item.employeeSSNIT)} deduction />
-          <DocRow
-            label={item.taxPolicySnapshot === 'FIXED_AMOUNT' ? 'PAYE Tax (Fixed)' : 'PAYE Tax'}
-            value={inParens(item.payeTax)}
-            deduction
-          />
+          {isBoth ? (
+            <>
+              <DocRow label="PAYE Tax" value={inParens(salaryPaye!)} deduction />
+              <DocRow label="Commission Tax (10%)" value={inParens(commissionTax)} deduction />
+            </>
+          ) : (
+            <DocRow
+              label={
+                item.compensationTypeSnapshot === 'COMMISSION'
+                  ? 'Commission Tax (10%)'
+                  : item.taxPolicySnapshot === 'FIXED_AMOUNT'
+                    ? 'PAYE Tax (Fixed)'
+                    : 'PAYE Tax'
+              }
+              value={inParens(item.payeTax)}
+              deduction
+            />
+          )}
           {tier3 > 0 && <DocRow label={tier3Label} value={inParens(tier3)} deduction />}
           {deductionRows.map((row, i) => (
             <DocRow

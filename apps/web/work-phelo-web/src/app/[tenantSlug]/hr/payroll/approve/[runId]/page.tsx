@@ -1,13 +1,13 @@
 'use client';
 
-import { use, useState } from 'react';
+import { use, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
-import { usePayrollRun, useApprovePayroll, useReturnPayrollToDraft } from '@/hooks';
+import { usePayrollRun, useReturnPayrollToDraft } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { PayrollItem } from '@/types/hr';
@@ -17,19 +17,79 @@ import {
   getPayrollLabels,
   normalizePayrollCountry,
 } from '@/lib/payrollDisplay';
+import { ApprovePayrollPanel } from '@/components/organisms/payroll/ApprovePayrollPanel';
 
-function totalAllowances(row: PayrollItem): number {
+function itemAllowances(row: PayrollItem): number {
   if (row.allowanceItems?.length) {
     return row.allowanceItems.reduce((s, a) => s + parseFloat(a.amount), 0);
   }
   return parseFloat(row.totalAllowances) + parseFloat(row.transportAmount);
 }
 
-function totalDeductions(row: PayrollItem): number {
+function itemDeductions(row: PayrollItem): number {
   if (row.deductionItems?.length) {
     return row.deductionItems.reduce((s, d) => s + parseFloat(d.amount), 0);
   }
   return parseFloat(row.otherDeductions);
+}
+
+// Round to 2dp to match the Decimal.js precision the backend uses when storing payeTax.
+function r2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+// For SALARY_PLUS_COMMISSION, derive salary-only figures from the combined payroll item.
+// The backend stores payeTax = salary_progressive_PAYE + commission × 0.10.
+// We must use the same rounded commissionTax (r2) that the backend applied, otherwise
+// the subtraction leaves a floating-point residual in the displayed salary PAYE.
+function salarySectionFigures(row: PayrollItem) {
+  if (row.compensationTypeSnapshot !== 'SALARY_PLUS_COMMISSION') return null;
+  const commission = parseFloat(row.commissionAmount);
+  const commissionTax = r2(commission * 0.1);
+  const commissionNet = commission - commissionTax;
+  return {
+    gross: parseFloat(row.grossSalary) - commission,
+    paye: r2(parseFloat(row.payeTax) - commissionTax),
+    net: r2(parseFloat(row.netSalary) - commissionNet),
+  };
+}
+
+// For SALARY_PLUS_COMMISSION, commission section shows commission-only figures.
+// Allowances and deductions are already shown in the salary section.
+// For pure COMMISSION, use the stored figures directly — the backend calculates those
+// with allowances included and flat 10% tax (via our compensationType branch).
+function commissionSectionFigures(row: PayrollItem) {
+  const commission = parseFloat(row.commissionAmount);
+  if (row.compensationTypeSnapshot === 'SALARY_PLUS_COMMISSION') {
+    const tax = r2(commission * 0.1);
+    return {
+      commission,
+      allowances: 0,
+      deductions: 0,
+      gross: commission,
+      tax,
+      net: r2(commission - tax),
+    };
+  }
+  return {
+    commission,
+    allowances: itemAllowances(row),
+    deductions: itemDeductions(row),
+    gross: parseFloat(row.grossSalary),
+    tax: parseFloat(row.payeTax),
+    net: parseFloat(row.netSalary),
+  };
+}
+
+function EmployeeCell({ row }: { row: PayrollItem }) {
+  return (
+    <div>
+      <p className="font-medium text-gray-900">
+        {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
+      </p>
+      {row.employee?.jobTitle && <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>}
+    </div>
+  );
 }
 
 export default function ApprovePayrollDetailPage({
@@ -42,15 +102,12 @@ export default function ApprovePayrollDetailPage({
   const toast = useToast();
 
   const { data: run, isLoading } = usePayrollRun(runId);
-  const { mutateAsync: approvePayroll, isPending: isApproving } = useApprovePayroll();
   const { mutateAsync: returnToDraft, isPending: isRejecting } = useReturnPayrollToDraft();
 
-  const [showApproveModal, setShowApproveModal] = useState(false);
+  const [showApprovePanel, setShowApprovePanel] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
-  const [approvalNote, setApprovalNote] = useState('');
   const [returnNote, setReturnNote] = useState('');
 
-  const isPending = isApproving || isRejecting;
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
   const backHref = `/${tenantSlug}/hr/payroll?tab=approve`;
   const payrollLabels = getPayrollLabels(run?.payrollCountry);
@@ -58,29 +115,37 @@ export default function ApprovePayrollDetailPage({
     formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
   const showGhanaTiers = normalizePayrollCountry(run?.payrollCountry) === 'GH';
 
-  const columns: Column<PayrollItem>[] = [
+  const allItems = run?.items ?? [];
+
+  const salaryItems = useMemo(
+    () => allItems.filter((i) => i.compensationTypeSnapshot !== 'COMMISSION'),
+    [allItems],
+  );
+
+  const commissionItems = useMemo(
+    () => allItems.filter((i) => i.compensationTypeSnapshot !== 'SALARY'),
+    [allItems],
+  );
+
+  // ── Salary columns ──────────────────────────────────────────────────────────
+  const salaryColumns: Column<PayrollItem>[] = [
     {
       key: 'employee',
       label: 'Employee',
       width: '2fr',
-      render: (row) => (
-        <div>
-          <p className="font-medium text-gray-900">
-            {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
-          </p>
-          {row.employee?.jobTitle && (
-            <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>
-          )}
-        </div>
-      ),
+      render: (row) => <EmployeeCell row={row} />,
     },
     { key: 'basicSalary', label: 'Basic Salary', render: (row) => money(row.basicSalary) },
-    { key: 'totalAllowances', label: 'Allowances', render: (row) => money(totalAllowances(row)) },
-    { key: 'otherDeductions', label: 'Deductions', render: (row) => money(totalDeductions(row)) },
-    { key: 'grossSalary', label: 'Gross', render: (row) => money(row.grossSalary) },
-    // For Ghana show Tier 1 (0.5%) and Tier 2 (5%) separately; for other countries show the
-    // combined statutory contribution. Both represent the same employee-side deduction — never show
-    // the combined column alongside the tier breakdown or the total will appear doubled.
+    { key: 'allowances', label: 'Allowances', render: (row) => money(itemAllowances(row)) },
+    { key: 'deductions', label: 'Deductions', render: (row) => money(itemDeductions(row)) },
+    {
+      key: 'grossSalary',
+      label: 'Gross',
+      render: (row) => {
+        const s = salarySectionFigures(row);
+        return money(s ? s.gross : parseFloat(row.grossSalary));
+      },
+    },
     ...(showGhanaTiers
       ? [
           {
@@ -101,25 +166,73 @@ export default function ApprovePayrollDetailPage({
             render: (row: PayrollItem) => money(row.employeeSSNIT),
           },
         ]),
-    { key: 'payeTax', label: 'PAYE', render: (row) => money(row.payeTax) },
+    {
+      key: 'payeTax',
+      label: 'PAYE',
+      render: (row) => {
+        const s = salarySectionFigures(row);
+        return money(s ? s.paye : parseFloat(row.payeTax));
+      },
+    },
     {
       key: 'netSalary',
       label: 'Net Salary',
-      render: (row) => (
-        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
-      ),
+      render: (row) => {
+        const s = salarySectionFigures(row);
+        return (
+          <span className="font-semibold text-emerald-600">
+            {money(s ? s.net : parseFloat(row.netSalary))}
+          </span>
+        );
+      },
     },
   ];
 
-  const handleApprove = async () => {
-    try {
-      await approvePayroll({ id: runId, note: approvalNote.trim() });
-      toast.success(`${periodLabel} payroll approved`);
-      router.push(backHref);
-    } catch (err) {
-      toast.error(extractError(err, 'Failed to approve payroll'));
-    }
-  };
+  // ── Commission columns ──────────────────────────────────────────────────────
+  const commissionColumns: Column<PayrollItem>[] = [
+    {
+      key: 'employee',
+      label: 'Employee',
+      width: '2fr',
+      render: (row) => <EmployeeCell row={row} />,
+    },
+    {
+      key: 'commissionAmount',
+      label: 'Commission',
+      render: (row) => money(commissionSectionFigures(row).commission),
+    },
+    {
+      key: 'allowances',
+      label: 'Allowances',
+      render: (row) => money(commissionSectionFigures(row).allowances),
+    },
+    {
+      key: 'deductions',
+      label: 'Deductions',
+      render: (row) => money(commissionSectionFigures(row).deductions),
+    },
+    {
+      key: 'gross',
+      label: 'Gross',
+      render: (row) => money(commissionSectionFigures(row).gross),
+    },
+    {
+      key: 'tax',
+      label: 'Tax (10%)',
+      render: (row) => (
+        <span className="text-amber-600">{money(commissionSectionFigures(row).tax)}</span>
+      ),
+    },
+    {
+      key: 'netPay',
+      label: 'Net Pay',
+      render: (row) => (
+        <span className="font-semibold text-emerald-600">
+          {money(commissionSectionFigures(row).net)}
+        </span>
+      ),
+    },
+  ];
 
   const handleReject = async () => {
     try {
@@ -131,8 +244,11 @@ export default function ApprovePayrollDetailPage({
     }
   };
 
+  const hasBoth = salaryItems.length > 0 && commissionItems.length > 0;
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 h-full">
+      {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <nav className="flex items-center gap-2 text-sm text-gray-400">
           <Link href={backHref} className="hover:text-gray-700 transition-colors">
@@ -143,88 +259,69 @@ export default function ApprovePayrollDetailPage({
         </nav>
 
         <div className="flex items-center gap-3">
-          <Button variant="outline" onClick={() => setShowRejectModal(true)} disabled={isPending}>
+          <Button variant="outline" onClick={() => setShowRejectModal(true)} disabled={isRejecting}>
             Reject
           </Button>
-          <Button
-            onClick={() => setShowApproveModal(true)}
-            disabled={isPending || !approvalNote.trim()}
-          >
+          <Button onClick={() => setShowApprovePanel(true)} disabled={isRejecting}>
             Approve Payroll
           </Button>
         </div>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={run?.items ?? []}
-        isLoading={isLoading}
-        currentPage={1}
-        totalPages={1}
-        onPageChange={() => {}}
+      {/* Salary section */}
+      {(salaryItems.length > 0 || isLoading) && (
+        <div className="flex flex-col gap-3">
+          {hasBoth && (
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Salary</p>
+          )}
+          <DataTable
+            columns={salaryColumns}
+            data={salaryItems}
+            isLoading={isLoading}
+            currentPage={1}
+            totalPages={1}
+            onPageChange={() => {}}
+          />
+        </div>
+      )}
+
+      {/* Commission section */}
+      {commissionItems.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {hasBoth && (
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              Commission
+            </p>
+          )}
+          <DataTable
+            columns={commissionColumns}
+            data={commissionItems}
+            isLoading={isLoading}
+            currentPage={1}
+            totalPages={1}
+            onPageChange={() => {}}
+          />
+        </div>
+      )}
+
+      <ApprovePayrollPanel
+        run={showApprovePanel ? (run ?? null) : null}
+        onClose={() => setShowApprovePanel(false)}
+        onApproved={() => router.push(backHref)}
       />
 
-      <label className="text-sm font-bold text-gray-900">
-        Approval Note <span className="text-red-500">*</span>
-      </label>
-      <textarea
-        rows={4}
-        placeholder="Explain why this payroll is being approved…"
-        value={approvalNote}
-        onChange={(e) => setApprovalNote(e.target.value)}
-        className="w-full px-3 py-2.5 text-sm rounded-lg border text-gray-900 border-gray-200 bg-white focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 placeholder:text-gray-400 resize-none transition-colors"
-      />
-
-      {/* Approve confirmation */}
-      <Modal
-        isOpen={showApproveModal}
-        onClose={() => !isPending && setShowApproveModal(false)}
-        title="Approve Payroll"
-        hideClose={isPending}
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => setShowApproveModal(false)}
-              disabled={isPending}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleApprove}
-              isLoading={isApproving}
-              loadingText="Approving…"
-              disabled={!approvalNote.trim()}
-            >
-              Approve Payroll
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm text-gray-600 leading-relaxed mt-2">
-          You are about to approve the payroll for{' '}
-          <span className="font-medium text-gray-900">{periodLabel}</span>. Once approved, payslips
-          will be finalised and the payroll will be marked as ready for payment.
-        </p>
-        {approvalNote.trim() && (
-          <p className="text-sm text-gray-500 leading-relaxed mt-3">
-            Approval note: <span className="text-gray-700">{approvalNote.trim()}</span>
-          </p>
-        )}
-      </Modal>
-
-      {/* Reject confirmation */}
+      {/* Reject modal */}
       <Modal
         isOpen={showRejectModal}
-        onClose={() => !isPending && setShowRejectModal(false)}
+        onClose={() => !isRejecting && setShowRejectModal(false)}
         title="Reject Payroll"
-        hideClose={isPending}
+        hideClose={isRejecting}
         footer={
           <>
             <Button
               variant="outline"
               onClick={() => setShowRejectModal(false)}
-              disabled={isPending}
+              disabled={isRejecting}
             >
               Cancel
             </Button>

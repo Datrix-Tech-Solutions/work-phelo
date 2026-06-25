@@ -170,6 +170,7 @@ export function ApprovePayrollTab() {
         data={pending}
         emptyMessage="You have no payrolls to approve"
         isLoading={isLoading}
+        onRowClick={(row) => router.push(`/${params.tenantSlug}/hr/payroll/approve/${row.id}`)}
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}

@@ -23,6 +23,7 @@ export type PayrollCalculationSettings = {
   taxPolicy?: PayrollTaxPolicy;
   fixedTaxAmount?: string | null;
   commissionTaxable?: boolean;
+  compensationType?: 'SALARY' | 'COMMISSION' | 'SALARY_PLUS_COMMISSION';
 };
 
 export type CalculatedCountryPayrollValues = EditablePayrollValues & {
@@ -198,12 +199,49 @@ export function calculatePayrollForCountry(
   const totalAllowances = new Decimal(values.totalAllowances);
   const transportAmount = new Decimal(values.transportAmount);
   const otherDeductions = new Decimal(values.otherDeductions);
+
+  // Pure commission employees: no SSNIT/Tier, flat 10% tax on commission only
+  if (settings.compensationType === 'COMMISSION') {
+    const commissionTax = commissionAmount.times(new Decimal('0.10'));
+    const grossSalaryC = commissionAmount
+      .plus(totalAllowances)
+      .plus(transportAmount);
+    const totalDeductionsC = otherDeductions.plus(commissionTax);
+    const netSalaryC = maxZero(grossSalaryC.minus(totalDeductionsC));
+    return {
+      basicSalary: '0.00',
+      commissionAmount: values.commissionAmount,
+      totalAllowances: values.totalAllowances,
+      transportAmount: values.transportAmount,
+      otherDeductions: values.otherDeductions,
+      overtimePay: '0',
+      bonus: '0',
+      thirteenthMonth: '0',
+      grossSalary: money(grossSalaryC),
+      employeeSSNIT: '0.00',
+      employerSSNIT: '0.00',
+      tier1Contribution: '0.00',
+      tier2Contribution: '0.00',
+      tier3Employee: '0.00',
+      taxableIncome: money(commissionAmount),
+      payeTax: money(commissionTax),
+      totalDeductions: money(totalDeductionsC),
+      netSalary: money(netSalaryC),
+    };
+  }
+
   const grossSalary = basicSalary
     .plus(commissionAmount)
     .plus(totalAllowances)
     .plus(transportAmount);
+
+  // For SALARY_PLUS_COMMISSION, always exclude commission from the PAYE base —
+  // it is taxed separately at a flat 10% rate below.
   const excludedCommission =
-    settings.commissionTaxable === false ? commissionAmount : new Decimal(0);
+    settings.compensationType === 'SALARY_PLUS_COMMISSION' ||
+    settings.commissionTaxable === false
+      ? commissionAmount
+      : new Decimal(0);
 
   let employeeStatutory = new Decimal(0);
   let employerStatutory = new Decimal(0);
@@ -267,6 +305,11 @@ export function calculatePayrollForCountry(
       payeTax = calculateProgressiveTax(taxableIncome, GHANA.payeBands);
       break;
     }
+  }
+
+  // For SALARY_PLUS_COMMISSION, add flat 10% on commission on top of salary PAYE
+  if (settings.compensationType === 'SALARY_PLUS_COMMISSION') {
+    payeTax = payeTax.plus(commissionAmount.times(new Decimal('0.10')));
   }
 
   if (settings.taxPolicy === PayrollTaxPolicy.FIXED_AMOUNT) {

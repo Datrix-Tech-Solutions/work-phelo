@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useRef, useEffect } from 'react';
+import { use, useState, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { Download, Loader2 } from 'lucide-react';
 import { Icons } from '@/components/atoms/icons';
@@ -17,7 +17,11 @@ import {
   downloadPayrollFullFormat,
   downloadPayrollPDFFormat,
 } from '@/lib/payrollUtils';
-import { formatPayrollMoney, getPayrollLabels } from '@/lib/payrollDisplay';
+import {
+  formatPayrollMoney,
+  getPayrollLabels,
+  normalizePayrollCountry,
+} from '@/lib/payrollDisplay';
 
 function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: string }) {
   const [open, setOpen] = useState(false);
@@ -116,18 +120,68 @@ function DownloadAllMenu({ detail, label }: { detail: PayrollRunDetail; label: s
   );
 }
 
-function totalAllowances(row: PayrollItem): number {
+function r2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+function itemAllowances(row: PayrollItem): number {
   if (row.allowanceItems?.length) {
     return row.allowanceItems.reduce((s, a) => s + parseFloat(a.amount), 0);
   }
   return parseFloat(row.totalAllowances) + parseFloat(row.transportAmount);
 }
 
-function totalDeductions(row: PayrollItem): number {
+function itemDeductions(row: PayrollItem): number {
   if (row.deductionItems?.length) {
     return row.deductionItems.reduce((s, d) => s + parseFloat(d.amount), 0);
   }
   return parseFloat(row.otherDeductions);
+}
+
+function salarySectionFigures(row: PayrollItem) {
+  if (row.compensationTypeSnapshot !== 'SALARY_PLUS_COMMISSION') return null;
+  const commission = parseFloat(row.commissionAmount);
+  const commissionTax = r2(commission * 0.1);
+  const commissionNet = commission - commissionTax;
+  return {
+    gross: parseFloat(row.grossSalary) - commission,
+    paye: r2(parseFloat(row.payeTax) - commissionTax),
+    net: r2(parseFloat(row.netSalary) - commissionNet),
+  };
+}
+
+function commissionSectionFigures(row: PayrollItem) {
+  const commission = parseFloat(row.commissionAmount);
+  if (row.compensationTypeSnapshot === 'SALARY_PLUS_COMMISSION') {
+    const tax = r2(commission * 0.1);
+    return {
+      commission,
+      allowances: 0,
+      deductions: 0,
+      gross: commission,
+      tax,
+      net: r2(commission - tax),
+    };
+  }
+  return {
+    commission,
+    allowances: itemAllowances(row),
+    deductions: itemDeductions(row),
+    gross: parseFloat(row.grossSalary),
+    tax: parseFloat(row.payeTax),
+    net: parseFloat(row.netSalary),
+  };
+}
+
+function EmployeeCell({ row }: { row: PayrollItem }) {
+  return (
+    <div>
+      <p className="font-medium text-gray-900">
+        {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
+      </p>
+      {row.employee?.jobTitle && <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>}
+    </div>
+  );
 }
 
 export default function PayrollHistoryDetailPage({
@@ -143,6 +197,11 @@ export default function PayrollHistoryDetailPage({
   const periodLabel = run ? payrollMonthLabel(run.month, run.year) : '—';
   const fileLabel = periodLabel.replace(' ', '-');
   const isPaid = run?.status === 'PAID';
+  const payrollLabels = getPayrollLabels(run?.payrollCountry);
+  const showGhanaTiers = normalizePayrollCountry(run?.payrollCountry) === 'GH';
+
+  const money = (value: string | number | null | undefined) =>
+    formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
 
   const handleMarkPaid = () => {
     markPaid(runId, {
@@ -150,41 +209,124 @@ export default function PayrollHistoryDetailPage({
       onError: (err) => toast.error(extractError(err, 'Failed to mark payroll as paid')),
     });
   };
-  const payrollLabels = getPayrollLabels(run?.payrollCountry);
-  const money = (value: string | number | null | undefined) =>
-    formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
 
-  const columns: Column<PayrollItem>[] = [
+  const allItems = run?.items ?? [];
+
+  const salaryItems = useMemo(
+    () => allItems.filter((i) => i.compensationTypeSnapshot !== 'COMMISSION'),
+    [allItems],
+  );
+
+  const commissionItems = useMemo(
+    () => allItems.filter((i) => i.compensationTypeSnapshot !== 'SALARY'),
+    [allItems],
+  );
+
+  const hasBoth = salaryItems.length > 0 && commissionItems.length > 0;
+
+  // ── Salary columns ──────────────────────────────────────────────────────────
+  const salaryColumns: Column<PayrollItem>[] = [
     {
       key: 'employee',
       label: 'Employee',
       width: '2fr',
-      render: (row) => (
-        <div>
-          <p className="font-medium text-gray-900">
-            {row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : '—'}
-          </p>
-          {row.employee?.jobTitle && (
-            <p className="text-xs text-gray-400">{row.employee.jobTitle}</p>
-          )}
-        </div>
-      ),
+      render: (row) => <EmployeeCell row={row} />,
     },
     { key: 'basicSalary', label: 'Basic Salary', render: (row) => money(row.basicSalary) },
-    { key: 'totalAllowances', label: 'Allowances', render: (row) => money(totalAllowances(row)) },
-    { key: 'otherDeductions', label: 'Deductions', render: (row) => money(totalDeductions(row)) },
-    { key: 'grossSalary', label: 'Gross', render: (row) => money(row.grossSalary) },
+    { key: 'allowances', label: 'Allowances', render: (row) => money(itemAllowances(row)) },
+    { key: 'deductions', label: 'Deductions', render: (row) => money(itemDeductions(row)) },
     {
-      key: 'employeeSSNIT',
-      label: payrollLabels.employeeLabel,
-      render: (row) => money(row.employeeSSNIT),
+      key: 'grossSalary',
+      label: 'Gross',
+      render: (row) => {
+        const s = salarySectionFigures(row);
+        return money(s ? s.gross : parseFloat(row.grossSalary));
+      },
     },
-    { key: 'payeTax', label: 'PAYE', render: (row) => money(row.payeTax) },
+    ...(showGhanaTiers
+      ? [
+          {
+            key: 'tier1Contribution',
+            label: 'Tier 1 (0.5%)',
+            render: (row: PayrollItem) => money(row.tier1Contribution),
+          },
+          {
+            key: 'tier2Contribution',
+            label: 'Tier 2 (5%)',
+            render: (row: PayrollItem) => money(row.tier2Contribution),
+          },
+        ]
+      : [
+          {
+            key: 'employeeSSNIT',
+            label: payrollLabels.employeeLabel,
+            render: (row: PayrollItem) => money(row.employeeSSNIT),
+          },
+        ]),
+    {
+      key: 'payeTax',
+      label: 'PAYE',
+      render: (row) => {
+        const s = salarySectionFigures(row);
+        return money(s ? s.paye : parseFloat(row.payeTax));
+      },
+    },
     {
       key: 'netSalary',
       label: 'Net Salary',
+      render: (row) => {
+        const s = salarySectionFigures(row);
+        return (
+          <span className="font-semibold text-emerald-600">
+            {money(s ? s.net : parseFloat(row.netSalary))}
+          </span>
+        );
+      },
+    },
+  ];
+
+  // ── Commission columns ──────────────────────────────────────────────────────
+  const commissionColumns: Column<PayrollItem>[] = [
+    {
+      key: 'employee',
+      label: 'Employee',
+      width: '2fr',
+      render: (row) => <EmployeeCell row={row} />,
+    },
+    {
+      key: 'commissionAmount',
+      label: 'Commission',
+      render: (row) => money(commissionSectionFigures(row).commission),
+    },
+    {
+      key: 'allowances',
+      label: 'Allowances',
+      render: (row) => money(commissionSectionFigures(row).allowances),
+    },
+    {
+      key: 'deductions',
+      label: 'Deductions',
+      render: (row) => money(commissionSectionFigures(row).deductions),
+    },
+    {
+      key: 'gross',
+      label: 'Gross',
+      render: (row) => money(commissionSectionFigures(row).gross),
+    },
+    {
+      key: 'tax',
+      label: 'Tax (10%)',
       render: (row) => (
-        <span className="font-semibold text-emerald-600">{money(row.netSalary)}</span>
+        <span className="text-amber-600">{money(commissionSectionFigures(row).tax)}</span>
+      ),
+    },
+    {
+      key: 'netPay',
+      label: 'Net Pay',
+      render: (row) => (
+        <span className="font-semibold text-emerald-600">
+          {money(commissionSectionFigures(row).net)}
+        </span>
       ),
     },
   ];
@@ -213,14 +355,41 @@ export default function PayrollHistoryDetailPage({
           ))}
       </div>
 
-      <DataTable
-        columns={columns}
-        data={run?.items ?? []}
-        isLoading={isLoading}
-        currentPage={1}
-        totalPages={1}
-        onPageChange={() => {}}
-      />
+      {/* Salary section */}
+      {(salaryItems.length > 0 || isLoading) && (
+        <div className="flex flex-col gap-3">
+          {hasBoth && (
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Salary</p>
+          )}
+          <DataTable
+            columns={salaryColumns}
+            data={salaryItems}
+            isLoading={isLoading}
+            currentPage={1}
+            totalPages={1}
+            onPageChange={() => {}}
+          />
+        </div>
+      )}
+
+      {/* Commission section */}
+      {commissionItems.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {hasBoth && (
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+              Commission
+            </p>
+          )}
+          <DataTable
+            columns={commissionColumns}
+            data={commissionItems}
+            isLoading={isLoading}
+            currentPage={1}
+            totalPages={1}
+            onPageChange={() => {}}
+          />
+        </div>
+      )}
     </div>
   );
 }
