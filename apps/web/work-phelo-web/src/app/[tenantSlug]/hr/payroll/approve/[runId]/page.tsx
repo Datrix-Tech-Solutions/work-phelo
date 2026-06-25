@@ -115,7 +115,7 @@ export default function ApprovePayrollDetailPage({
     formatPayrollMoney(value, run?.payrollCurrency, run?.payrollCountry);
   const showGhanaTiers = normalizePayrollCountry(run?.payrollCountry) === 'GH';
 
-  const allItems = run?.items ?? [];
+  const allItems = useMemo(() => run?.items ?? [], [run]);
 
   const salaryItems = useMemo(
     () => allItems.filter((i) => i.compensationTypeSnapshot !== 'COMMISSION'),

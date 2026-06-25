@@ -78,7 +78,6 @@ export default function ReinsurerDetailPage({
   params: Promise<{ tenantSlug: string; reinsurerId: string }>;
 }) {
   const { tenantSlug, reinsurerId } = use(params);
-
   const { data: reinsurers = [], isLoading: reinsurersLoading } = useReinsurers();
   const { data: placements = [], isLoading: placementsLoading } = useFacultatives();
   const { data: currencies = [] } = useCurrencies();
@@ -193,6 +192,9 @@ export default function ReinsurerDetailPage({
                     participations={participations}
                     isLoading={placementsLoading}
                     onView={(id, reference) => setActiveView({ placementId: id, reference })}
+                    // onView={(id) =>
+                    //   router.push(`/${tenantSlug}/operations/reinsurance/facultative/${id}`)
+                    // }
                   />
                 )}
 

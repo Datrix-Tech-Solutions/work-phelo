@@ -210,7 +210,7 @@ export default function PayrollHistoryDetailPage({
     });
   };
 
-  const allItems = run?.items ?? [];
+  const allItems = useMemo(() => run?.items ?? [], [run]);
 
   const salaryItems = useMemo(
     () => allItems.filter((i) => i.compensationTypeSnapshot !== 'COMMISSION'),
