@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
+import { TableButton } from '@/components/atoms/TableButton';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { Facultative } from '@/types/reinsurance';
 import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
@@ -290,16 +291,15 @@ export function DistributionTable({
               </button>
             )}
             {showClose && (
-              <button
-                type="button"
+              <TableButton
+                isLoading={isBusy}
+                tooltip="Validate to close the offer"
                 onClick={() => {
                   if (!isBusy) onClose?.(row);
                 }}
-                disabled={isBusy}
-                className={`text-xs font-medium text-green-700 border border-green-600 hover:bg-green-600 hover:text-white active:scale-95 rounded px-2 py-0.5 transition-all ${disabledActionClass}`}
               >
                 Validate
-              </button>
+              </TableButton>
             )}
             {!responded && (
               <button

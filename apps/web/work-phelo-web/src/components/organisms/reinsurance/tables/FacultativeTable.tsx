@@ -197,7 +197,11 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
   'CANCELLED',
 ];
 
-export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 'closing' }) {
+export function FacultativeTable({
+  tab = 'placements',
+}: {
+  tab?: 'placements' | 'closing' | 'deleted';
+}) {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
@@ -243,6 +247,7 @@ export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 
   }, [closingRows, paymentQueries]);
 
   const filtered = useMemo(() => {
+    if (tab === 'deleted') return [];
     let rows = allRows;
     const allowed = tab === 'placements' ? PLACEMENT_STATUSES : CLOSING_STATUSES;
     rows = rows.filter((r) => allowed.includes(r.status));
@@ -297,7 +302,13 @@ export function FacultativeTable({ tab = 'placements' }: { tab?: 'placements' | 
           setSearch(q);
           setPage(1);
         }}
-        filterOptions={tab === 'placements' ? PLACEMENTS_FILTER_OPTIONS : CLOSING_FILTER_OPTIONS}
+        filterOptions={
+          tab === 'placements'
+            ? PLACEMENTS_FILTER_OPTIONS
+            : tab === 'closing'
+              ? CLOSING_FILTER_OPTIONS
+              : []
+        }
         onFilter={(v) => {
           setStatusFilter(v);
           setPage(1);

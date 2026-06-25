@@ -588,6 +588,17 @@ export interface PlacementParticipantClosing {
   updatedAt: string;
 }
 
+export interface EndorsementParticipantClosing {
+  id: string;
+  placementId: string;
+  endorsementId: string;
+  endorsementParticipantId: string;
+  status: PlacementParticipantClosingStatus;
+  closingNumber: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PlacementPaymentType =
   | 'PREMIUM_RECEIVED'
   | 'REINSURER_DISBURSEMENT'

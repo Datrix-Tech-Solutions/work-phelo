@@ -234,7 +234,6 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const handleClose = async (row: DistributionEntry) => {
     if (acceptingIds.has(row.id)) return;
     setAcceptingIds((prev) => new Set([...prev, row.id]));
-    patch(row.id, { status: 'Closed' });
 
     try {
       let closingId = closingByParticipantId[row.id]?.id;
@@ -265,12 +264,13 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
         status: 'CLOSED',
         suppressInvalidation: true,
       });
+
+      patch(row.id, { status: 'Closed' });
       toast().addToast({
         message: `A closing for ${row.reinsurerCompany} with ${row.shareLine}% has been created`,
         type: 'success',
       });
     } catch (error) {
-      patch(row.id, { status: 'Accepted' });
       toast().addToast({ message: extractError(error), type: 'error' });
     } finally {
       await refreshPlacementAfterAccept();

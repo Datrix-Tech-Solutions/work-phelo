@@ -5,11 +5,12 @@ import { useSearchParams } from 'next/navigation';
 import { FacultativeTable } from '@/components/organisms/reinsurance/tables/FacultativeTable';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 
-type FacultativePageTab = 'placements' | 'closing';
+type FacultativePageTab = 'placements' | 'closing' | 'deleted';
 
 const TABS = [
   { key: 'placements', label: 'Offers' },
   { key: 'closing', label: 'Closings' },
+  { key: 'deleted', label: 'Deleted' },
 ];
 
 export default function FacultativePage() {
