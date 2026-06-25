@@ -4,6 +4,7 @@ import { RiskClass, CreateRiskClassPayload, UpdateRiskClassPayload } from '@/typ
 
 const BASE = '/operations/reinsurance/settings/risk-classes';
 const RISK_CLASSES_KEY = ['reinsurance', 'risk-classes'] as const;
+const STABLE_SETTINGS_STALE_TIME_MS = 5 * 60 * 1000;
 
 function extractList(data: unknown): RiskClass[] {
   if (Array.isArray(data)) return data as RiskClass[];
@@ -14,21 +15,22 @@ function extractList(data: unknown): RiskClass[] {
 export function useRiskClasses() {
   return useQuery({
     queryKey: RISK_CLASSES_KEY,
-    queryFn: async () => {
-      const res = await api.get(BASE);
-      return extractList(res.data);
-    },
+    queryFn: fetchRiskClasses,
+    staleTime: STABLE_SETTINGS_STALE_TIME_MS,
   });
+}
+
+async function fetchRiskClasses() {
+  const res = await api.get(BASE);
+  return extractList(res.data);
 }
 
 export function useRiskClassOptions() {
   return useQuery({
-    queryKey: [...RISK_CLASSES_KEY, 'options'],
-    queryFn: async () => {
-      const res = await api.get(BASE);
-      const list = extractList(res.data);
-      return list.map((rc) => ({ value: rc.id, label: rc.name }));
-    },
+    queryKey: RISK_CLASSES_KEY,
+    queryFn: fetchRiskClasses,
+    select: (list) => list.map((rc) => ({ value: rc.id, label: rc.name })),
+    staleTime: STABLE_SETTINGS_STALE_TIME_MS,
   });
 }
 

@@ -9,6 +9,7 @@ import {
 
 const BASE = '/operations/reinsurance/settings/risk-types';
 const RISK_TYPES_KEY = ['reinsurance', 'risk-types'] as const;
+const STABLE_SETTINGS_STALE_TIME_MS = 5 * 60 * 1000;
 
 function extractList(data: unknown): RiskType[] {
   if (Array.isArray(data)) return data as RiskType[];
@@ -18,13 +19,16 @@ function extractList(data: unknown): RiskType[] {
 
 export function useRiskTypes(riskClassId?: string) {
   return useQuery({
-    queryKey: [...RISK_TYPES_KEY, riskClassId ?? 'all'],
-    queryFn: async () => {
-      const res = await api.get(BASE);
-      const list = extractList(res.data);
-      return riskClassId ? list.filter((rt) => rt.riskClassId === riskClassId) : list;
-    },
+    queryKey: RISK_TYPES_KEY,
+    queryFn: fetchRiskTypes,
+    select: (list) => (riskClassId ? list.filter((rt) => rt.riskClassId === riskClassId) : list),
+    staleTime: STABLE_SETTINGS_STALE_TIME_MS,
   });
+}
+
+async function fetchRiskTypes() {
+  const res = await api.get(BASE);
+  return extractList(res.data);
 }
 
 export function useCreateRiskType() {
@@ -95,12 +99,12 @@ export function useCreateRiskTypeField() {
 
 export function useRiskTypeOptions(riskClassId?: string) {
   return useQuery({
-    queryKey: [...RISK_TYPES_KEY, riskClassId ?? 'all', 'options'],
-    queryFn: async () => {
-      const res = await api.get(BASE);
-      const list = extractList(res.data);
+    queryKey: RISK_TYPES_KEY,
+    queryFn: fetchRiskTypes,
+    select: (list) => {
       const filtered = riskClassId ? list.filter((rt) => rt.riskClassId === riskClassId) : list;
       return filtered.map((rt) => ({ value: rt.id, label: rt.name }));
     },
+    staleTime: STABLE_SETTINGS_STALE_TIME_MS,
   });
 }

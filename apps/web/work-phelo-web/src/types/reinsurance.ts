@@ -588,6 +588,27 @@ export interface PlacementParticipantClosing {
   updatedAt: string;
 }
 
+export type PlacementFinancialLockSource =
+  | 'NONE'
+  | 'PREMIUM_PAYMENT'
+  | 'REINSURER_PAYMENT'
+  | 'CLAIM_SETTLEMENT'
+  | 'STATUS_TERMINAL';
+
+export interface PlacementLockStatus {
+  editable: boolean;
+  locked: boolean;
+  endorsementRequired: boolean;
+  reason: string;
+  lockSource?: PlacementFinancialLockSource;
+  lockedAt?: string;
+}
+
+export interface AcceptPlacementParticipantResponse {
+  participant: PlacementParticipant;
+  closing: PlacementParticipantClosing;
+}
+
 export interface EndorsementParticipantClosing {
   id: string;
   placementId: string;

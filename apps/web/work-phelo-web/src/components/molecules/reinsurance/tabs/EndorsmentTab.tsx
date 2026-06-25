@@ -18,10 +18,8 @@ import {
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
-  useUpdateParticipant,
   useReinsurers,
   useUpdateEndorsementStatus,
-  facultativePlacementKey,
 } from '@/hooks';
 import { EditEndorsementPanel } from '@/components/organisms/reinsurance/panels/EditEndorsementPanel';
 import { TableButton } from '@/components/atoms/TableButton';
@@ -185,7 +183,6 @@ function EndorsementCard({
     placement.id,
     endorsement.id,
   );
-  const { mutateAsync: updateParticipant } = useUpdateParticipant(placement.id);
   const queryClient = useQueryClient();
 
   const original = getSnapshotPlacement(endorsement.originalSnapshot);
@@ -256,15 +253,9 @@ function EndorsementCard({
         signedLinePercent: share,
         status: 'ACCEPTED',
       });
-
-      if (originalParticipant) {
-        await updateParticipant({
-          participantId: originalParticipant.id,
-          signedLinePercent: share,
-        });
-      }
-
-      await queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) });
+      await queryClient.invalidateQueries({
+        queryKey: ['reinsurance', 'placements', placement.id, 'endorsements'],
+      });
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
     } finally {

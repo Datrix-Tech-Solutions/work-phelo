@@ -7,8 +7,12 @@ import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents
 import { CreditNoteModal } from '@/components/organisms/reinsurance/documents/CreditNoteModal';
 import { DebitNoteModal } from '@/components/organisms/reinsurance/documents/DebitNoteModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
-import { useCedants, useReinsurers } from '@/hooks';
-import { Facultative, PlacementParticipant } from '@/types/reinsurance';
+import { useCedants, usePlacementClosings, useReinsurers } from '@/hooks';
+import {
+  Facultative,
+  PlacementParticipant,
+  PlacementParticipantClosing,
+} from '@/types/reinsurance';
 
 interface ClosingRow {
   id: string;
@@ -17,6 +21,7 @@ interface ClosingRow {
   signedShare: number;
   signedGrossPremium: number;
   brokerageFee: number;
+  closing: PlacementParticipantClosing;
 }
 
 function fmtPct(val: number) {
@@ -27,15 +32,20 @@ function fmtAmount(val: number, currency: string | null) {
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-function toClosingRow(p: PlacementParticipant, premium: number): ClosingRow {
+function toClosingRow(
+  closing: PlacementParticipantClosing,
+  p: PlacementParticipant,
+  premium: number,
+): ClosingRow {
   const signedShare = parseFloat(p.signedLinePercent ?? p.sharePercent ?? '0');
   return {
-    id: p.id,
+    id: closing.id,
     counterpartyId: p.counterpartyId,
     reinsurerCompany: p.counterparty.name,
     signedShare,
     signedGrossPremium: (signedShare / 100) * premium,
     brokerageFee: parseFloat(p.brokerageFee ?? '0'),
+    closing,
   };
 }
 
@@ -52,6 +62,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
 
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: closings = [], isLoading } = usePlacementClosings(placement.id);
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
 
@@ -68,9 +79,15 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
 
   const premium = placement.premium ?? 0;
 
-  const rows: ClosingRow[] = placement.participants
-    .filter((p) => p.status === 'CLOSED')
-    .map((p) => toClosingRow(p, premium));
+  const participantById = Object.fromEntries(placement.participants.map((p) => [p.id, p]));
+
+  const rows: ClosingRow[] = closings
+    .filter((closing) => closing.status !== 'VOID')
+    .map((closing) => {
+      const participant = participantById[closing.participantId];
+      return participant ? toClosingRow(closing, participant, premium) : null;
+    })
+    .filter((row): row is ClosingRow => row !== null);
 
   const columns: Column<ClosingRow>[] = [
     {
@@ -115,7 +132,8 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       <DataTable
         columns={columns}
         data={rows}
-        emptyMessage="No accepted participants yet"
+        isLoading={isLoading}
+        emptyMessage="No closings have been created yet"
         currentPage={1}
         totalPages={1}
         onPageChange={() => {}}

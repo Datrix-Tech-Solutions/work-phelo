@@ -9,6 +9,7 @@ import {
 
 const REINSURERS_KEY = ['reinsurance', 'counterparties', 'REINSURER'] as const;
 const ENDPOINT = '/operations/reinsurance/counterparties';
+const STABLE_LOOKUP_STALE_TIME_MS = 5 * 60 * 1000;
 
 export function useReinsurers() {
   return useQuery({
@@ -19,6 +20,7 @@ export function useReinsurers() {
       });
       return res.data.items ?? [];
     },
+    staleTime: STABLE_LOOKUP_STALE_TIME_MS,
   });
 }
 

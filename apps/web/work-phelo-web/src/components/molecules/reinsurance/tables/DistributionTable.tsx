@@ -301,7 +301,7 @@ export function DistributionTable({
                 Validate
               </TableButton>
             )}
-            {!responded && (
+            {!isPlacementLocked && !responded && (
               <button
                 type="button"
                 title="Delete"

@@ -15,6 +15,8 @@ import {
   CreateEndorsementParticipantPayload,
   PlacementParticipantClosing,
   EndorsementParticipantClosing,
+  PlacementLockStatus,
+  AcceptPlacementParticipantResponse,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
@@ -24,6 +26,8 @@ const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placeme
 export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
 export const placementClosingsKey = (placementId: string) =>
   [...placementQueryKey(placementId), 'closings'] as const;
+export const placementLockStatusKey = (placementId: string) =>
+  [...placementQueryKey(placementId), 'lock-status'] as const;
 
 type SuppressInvalidationOption = {
   suppressInvalidation?: boolean;
@@ -130,6 +134,17 @@ export function useDeleteFacultative() {
   });
 }
 
+export function usePlacementLockStatus(placementId: string) {
+  return useQuery({
+    queryKey: placementLockStatusKey(placementId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/lock-status`);
+      return res.data as PlacementLockStatus;
+    },
+    enabled: !!placementId,
+  });
+}
+
 export function useAddParticipant(placementId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -186,6 +201,23 @@ export function useUpdateParticipantStatus(placementId: string) {
   });
 }
 
+export function useAcceptAndConfirmParticipant(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ participantId }: { participantId: string }) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/participants/${participantId}/accept-and-confirm`,
+      );
+      return res.data as AcceptPlacementParticipantResponse;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+    },
+  });
+}
+
 export function useDeleteParticipant(placementId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -226,6 +258,7 @@ export function useCreateClosing(placementId: string) {
         typeof variables !== 'string' && variables.suppressInvalidation === true;
       if (!suppressInvalidation) {
         queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+        queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
       }
     },
   });
@@ -250,6 +283,7 @@ export function useUpdateClosingStatus(placementId: string) {
     onSuccess: (_data, variables) => {
       if (!variables.suppressInvalidation) {
         queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
+        queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
       }
     },
   });

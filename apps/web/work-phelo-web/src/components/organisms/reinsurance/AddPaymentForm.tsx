@@ -13,7 +13,8 @@ import {
 import { useFacultatives, useCreatePlacementPayment, useFacultativePlacement } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
-import { Facultative, PlacementPayment } from '@/types/reinsurance';
+import { api } from '@/lib/api';
+import { Facultative, PlacementParticipantClosing, PlacementPayment } from '@/types/reinsurance';
 import { PaymentReceiptModal } from '@/components/organisms/reinsurance/documents/PaymentReceiptModal';
 
 interface AddPaymentFormProps {
@@ -41,6 +42,7 @@ export default function AddPaymentForm({
     placement: Facultative;
   } | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [paymentGuardError, setPaymentGuardError] = useState<string | null>(null);
 
   const { data: facultatives = [] } = useFacultatives();
   const { data: singlePlacement } = useFacultativePlacement(placementId ?? '');
@@ -54,6 +56,7 @@ export default function AddPaymentForm({
   } = form;
 
   const onSubmit = async (values: AddPaymentFormValues) => {
+    setPaymentGuardError(null);
     const selectedFacs = facultatives.filter((f) => values.businessIds.includes(f.id));
     if (selectedFacs.length === 0) return;
 
@@ -82,6 +85,24 @@ export default function AddPaymentForm({
     const notesStr = values.paymentType === 'cheque' ? 'Cheque payment' : 'Bank transfer';
 
     try {
+      const closingChecks = await Promise.all(
+        selectedFacs.map(async (f) => {
+          const res = await api.get(`/operations/reinsurance/placements/${f.id}/closings`);
+          const closings = (res.data?.items ?? res.data ?? []) as PlacementParticipantClosing[];
+          return {
+            placement: f,
+            hasConfirmedClosing: closings.some((closing) => closing.status === 'CONFIRMED'),
+          };
+        }),
+      );
+      const missingConfirmedClosing = closingChecks.find((check) => !check.hasConfirmedClosing);
+      if (missingConfirmedClosing) {
+        const message = `At least one confirmed closing is required before recording payment for ${missingConfirmedClosing.placement.reference}.`;
+        setPaymentGuardError(message);
+        addToast({ message, type: 'error' });
+        return;
+      }
+
       const calls = selectedFacs.map(async (f) => {
         let rawAmount: number;
         if (selectedFacs.length === 1) {
@@ -183,13 +204,20 @@ export default function AddPaymentForm({
           </div>
         }
       >
-        <form id="add-payment-form" onSubmit={handleSubmit(onSubmit)}>
-          <AddPaymentFormFields
-            form={form}
-            placementId={placementId}
-            onPlacementsChange={onPlacementsChange}
-          />
-        </form>
+        {panelOpen && (
+          <form id="add-payment-form" onSubmit={handleSubmit(onSubmit)}>
+            {paymentGuardError && (
+              <p className="mb-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
+                {paymentGuardError}
+              </p>
+            )}
+            <AddPaymentFormFields
+              form={form}
+              placementId={placementId}
+              onPlacementsChange={onPlacementsChange}
+            />
+          </form>
+        )}
       </SidePanel>
 
       {/* Receipt prompt popup */}
