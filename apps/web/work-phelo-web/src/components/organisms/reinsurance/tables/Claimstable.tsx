@@ -1,16 +1,14 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { useQueries } from '@tanstack/react-query';
-import { api } from '@/lib/api';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { useMemo, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { Badge } from '@/components/atoms/Badge';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { Facultative, FacultativeStatus, PlacementClaim } from '@/types/reinsurance';
-import { useFacultatives } from '@/hooks';
+import { DataTable, type Column } from '@/components/organisms/shared/DataTable';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
+import { useFacultatives, usePlacementClaims } from '@/hooks';
+import type { Facultative, FacultativeStatus, PlacementClaim } from '@/types/reinsurance';
 
 const PAGE_SIZE = 10;
 
@@ -24,7 +22,8 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
 ];
 
 interface PlacementWithClaim extends Facultative {
-  latestClaim?: PlacementClaim;
+  claimsLoaded?: boolean;
+  latestClaim?: PlacementClaim | null;
 }
 
 function fmtAmount(val: number | string | null | undefined, currency?: string | null) {
@@ -32,7 +31,10 @@ function fmtAmount(val: number | string | null | undefined, currency?: string | 
   const num = typeof val === 'string' ? parseFloat(val) : val;
   if (isNaN(num)) return '—';
   const prefix = currency ? `${currency} ` : '';
-  return `${prefix}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return `${prefix}${num.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function netPremiumFor(row: Facultative): number {
@@ -129,12 +131,11 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
     label: 'Claim Status',
     width: '140px',
     className: 'pr-6',
-    render: (row) =>
-      row.latestClaim ? (
-        <Badge label="Claimed" variant="success" />
-      ) : (
-        <Badge label="Unclaimed" variant="neutral" />
-      ),
+    render: (row) => {
+      if (row.latestClaim) return <Badge label="Claimed" variant="success" />;
+      if (row.claimsLoaded) return <Badge label="Unclaimed" variant="neutral" />;
+      return <Badge label="Review" variant="neutral" />;
+    },
   },
 ];
 
@@ -147,29 +148,28 @@ export function ClaimsTable() {
   const [panelTarget, setPanelTarget] = useState<PlacementWithClaim | null>(null);
 
   const { data: allRows = [], isLoading } = useFacultatives();
+  const selectedPlacementId = panelTarget?.id ?? '';
+  const { data: selectedPlacementClaims = [], isFetching: isLoadingSelectedClaims } =
+    usePlacementClaims(selectedPlacementId);
+  const selectedClaim = selectedPlacementClaims[0] ?? null;
 
   const closingRows = useMemo(
     () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
     [allRows],
   );
 
-  const claimQueries = useQueries({
-    queries: closingRows.map((row) => ({
-      queryKey: ['reinsurance', 'placements', row.id, 'claims'] as const,
-      queryFn: async () => {
-        const res = await api.get(`/operations/reinsurance/placements/${row.id}/claims`);
-        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
-      },
-    })),
-  });
-
   const tableRows = useMemo<PlacementWithClaim[]>(
     () =>
-      closingRows.map((placement, i) => ({
-        ...placement,
-        latestClaim: claimQueries[i]?.data?.[0],
-      })),
-    [closingRows, claimQueries],
+      closingRows.map((placement) => {
+        const claimsLoaded = placement.id === selectedPlacementId && !isLoadingSelectedClaims;
+
+        return {
+          ...placement,
+          claimsLoaded,
+          latestClaim: claimsLoaded ? selectedClaim : undefined,
+        };
+      }),
+    [closingRows, isLoadingSelectedClaims, selectedClaim, selectedPlacementId],
   );
 
   const cedantOptions = useMemo(() => {
@@ -192,14 +192,13 @@ export function ClaimsTable() {
           (r.latestClaim?.claimNumber.toLowerCase().includes(q) ?? false),
       );
     }
-    if (cedantFilter) {
-      rows = rows.filter((r) => r.cedant.id === cedantFilter);
-    }
+    if (cedantFilter) rows = rows.filter((r) => r.cedant.id === cedantFilter);
     return rows;
   }, [tableRows, search, cedantFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const panelPlacement = isLoadingSelectedClaims ? undefined : (panelTarget ?? undefined);
 
   return (
     <>
@@ -234,7 +233,11 @@ export function ClaimsTable() {
             onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/claims/${row.id}`),
           },
           {
-            label: row.latestClaim ? 'Edit Claim' : 'Make Claim',
+            label: row.latestClaim
+              ? 'Edit Claim'
+              : row.claimsLoaded
+                ? 'Make Claim'
+                : 'Manage Claim',
             onClick: () => setPanelTarget(row),
           },
         ]}
@@ -247,8 +250,8 @@ export function ClaimsTable() {
 
       <MakeClaimPanel
         isOpen={!!panelTarget}
-        placement={panelTarget ?? undefined}
-        claim={panelTarget?.latestClaim}
+        placement={panelPlacement}
+        claim={selectedClaim}
         onClose={() => setPanelTarget(null)}
       />
     </>

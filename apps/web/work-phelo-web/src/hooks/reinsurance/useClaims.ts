@@ -11,6 +11,7 @@ import {
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
+const CLAIMS_STALE_TIME_MS = 60_000;
 
 export const claimsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'claims'] as const;
@@ -32,6 +33,7 @@ export function usePlacementClaims(placementId: string) {
       return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
     },
     enabled: !!placementId,
+    staleTime: CLAIMS_STALE_TIME_MS,
   });
 }
 
@@ -43,6 +45,7 @@ export function usePlacementClaim(placementId: string, claimId: string) {
       return res.data as PlacementClaim;
     },
     enabled: !!placementId && !!claimId,
+    staleTime: CLAIMS_STALE_TIME_MS,
   });
 }
 
@@ -102,6 +105,7 @@ export function useClaimAllocations(placementId: string, claimId: string) {
       return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
     },
     enabled: !!placementId && !!claimId,
+    staleTime: CLAIMS_STALE_TIME_MS,
   });
 }
 
@@ -126,6 +130,7 @@ export function useClaimCashCalls(placementId: string, claimId: string) {
       return (res.data?.items ?? res.data ?? []) as PlacementClaimCashCall[];
     },
     enabled: !!placementId && !!claimId,
+    staleTime: CLAIMS_STALE_TIME_MS,
   });
 }
 

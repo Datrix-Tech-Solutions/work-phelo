@@ -21,6 +21,7 @@ import {
 
 const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
+const PLACEMENT_LIST_STALE_TIME_MS = 60_000;
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
 
 export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
@@ -67,6 +68,7 @@ export function useFacultatives() {
       const res = await api.get(BASE);
       return extractList(res.data);
     },
+    staleTime: PLACEMENT_LIST_STALE_TIME_MS,
   });
 }
 
