@@ -7,9 +7,20 @@ import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents
 import { CreditNoteModal } from '@/components/organisms/reinsurance/documents/CreditNoteModal';
 import { DebitNoteModal } from '@/components/organisms/reinsurance/documents/DebitNoteModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
-import { useCedants, usePlacementClosings, useReinsurers } from '@/hooks';
+import {
+  useCedants,
+  useGenerateClosingSlipDocument,
+  usePlacementClosings,
+  usePlacementDocuments,
+  useRenderPlacementDocumentPdf,
+  useReinsurers,
+} from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { openPdfBlob } from '@/lib/openPdfBlob';
+import { useToastStore } from '@/store/toast.store';
 import {
   Facultative,
+  PlacementDocument,
   PlacementParticipant,
   PlacementParticipantClosing,
 } from '@/types/reinsurance';
@@ -59,10 +70,15 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [creditNoteRow, setCreditNoteRow] = useState<ClosingRow | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
   const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
+  const [renderingClosingId, setRenderingClosingId] = useState<string | null>(null);
 
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
   const { data: closings = [], isLoading } = usePlacementClosings(placement.id);
+  const { data: documents = [] } = usePlacementDocuments(placement.id);
+  const generateClosingSlipDocument = useGenerateClosingSlipDocument(placement.id);
+  const renderDocumentPdf = useRenderPlacementDocumentPdf(placement.id);
+  const addToast = useToastStore((s) => s.addToast);
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
 
@@ -88,6 +104,32 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       return participant ? toClosingRow(closing, participant, premium) : null;
     })
     .filter((row): row is ClosingRow => row !== null);
+
+  const findClosingSlipDocument = (closingId: string): PlacementDocument | undefined =>
+    documents
+      .filter(
+        (document) =>
+          document.type === 'CLOSING_SLIP' &&
+          document.status !== 'VOID' &&
+          document.closingId === closingId,
+      )
+      .sort((a, b) => b.version - a.version || b.createdAt.localeCompare(a.createdAt))[0];
+
+  const handleViewClosingSlip = async (row: ClosingRow) => {
+    setRenderingClosingId(row.id);
+    try {
+      const document =
+        findClosingSlipDocument(row.closing.id) ??
+        (await generateClosingSlipDocument.mutateAsync(row.closing.id));
+      const pdf = await renderDocumentPdf.mutateAsync(document.id);
+      openPdfBlob(pdf, `${document.documentNumber}.pdf`);
+      addToast({ message: 'Closing slip PDF generated successfully', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setRenderingClosingId(null);
+    }
+  };
 
   const columns: Column<ClosingRow>[] = [
     {
@@ -115,10 +157,16 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'actions',
       label: 'Actions',
-      width: '1fr',
+      width: '1.6fr',
       render: (row) => (
         <div className="flex items-center gap-3">
           <TableButton onClick={() => setCreditNoteRow(row)}>View Closings</TableButton>
+          <TableButton
+            onClick={() => handleViewClosingSlip(row)}
+            isLoading={renderingClosingId === row.id}
+          >
+            View Slip
+          </TableButton>
           <TableButton variant="blue" onClick={() => setMailToReinsurerRow(row)}>
             Mail Reinsurer
           </TableButton>

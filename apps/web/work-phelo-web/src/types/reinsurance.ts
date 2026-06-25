@@ -620,6 +620,53 @@ export interface EndorsementParticipantClosing {
   updatedAt: string;
 }
 
+export type PlacementDocumentType =
+  | 'OFFER_SLIP'
+  | 'CLOSING_SLIP'
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_SLIP'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE'
+  | 'CLAIM_CASH_CALL'
+  | 'CLAIM_NOTICE';
+
+export type PlacementDocumentStatus = 'DRAFT' | 'GENERATED' | 'FAILED' | 'VOID';
+
+export interface PlacementDocument {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  participantId: string | null;
+  closingId: string | null;
+  noteId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  claimId: string | null;
+  claimCashCallId: string | null;
+  type: PlacementDocumentType;
+  status: PlacementDocumentStatus;
+  documentNumber: string;
+  version: number;
+  title: string;
+  currency: string | null;
+  sourceSnapshot: Record<string, unknown>;
+  renderPayload: Record<string, unknown>;
+  storageProvider: string | null;
+  objectKey: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+  checksum: string | null;
+  generatedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  failureReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PlacementPaymentType =
   | 'PREMIUM_RECEIVED'
   | 'REINSURER_DISBURSEMENT'
