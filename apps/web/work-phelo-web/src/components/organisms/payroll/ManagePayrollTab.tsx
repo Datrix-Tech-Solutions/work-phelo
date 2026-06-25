@@ -58,7 +58,6 @@ interface PayrollRow {
   employeeName: string;
   avatarUrl?: string;
   basicSalary: number;
-  commissionAmount: number;
   allowances: number;
   deductions: number;
   grossSalary: number;
@@ -92,7 +91,6 @@ export function ManagePayrollTab() {
   ).length;
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
-  const [commissionMap, setCommissionMap] = useState<Record<string, number>>({});
   const [taxPolicyMap, setTaxPolicyMap] = useState<Record<string, PayrollTaxPolicy>>({});
   const [fixedTaxAmountMap, setFixedTaxAmountMap] = useState<Record<string, number | null>>({});
   const [commissionTaxableMap, setCommissionTaxableMap] = useState<Record<string, boolean>>({});
@@ -142,11 +140,12 @@ export function ManagePayrollTab() {
   const payrollRows: PayrollRow[] = useMemo(() => {
     const employees: Employee[] = (empData?.data ?? []).filter(
       (e) =>
-        PAYROLL_ELIGIBLE.includes(e.employmentStatus) && e.userStatus !== 'PENDING_VERIFICATION',
+        PAYROLL_ELIGIBLE.includes(e.employmentStatus) &&
+        e.userStatus !== 'PENDING_VERIFICATION' &&
+        e.compensationType !== 'COMMISSION',
     );
     return employees.map((e) => {
       const basic = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
-      const commissionAmount = commissionMap[e.id] ?? 0;
       const savedAllowances: AllowanceItem[] =
         e.allowances?.map((a) => ({
           name: a.name ?? (a.type as string),
@@ -162,7 +161,6 @@ export function ManagePayrollTab() {
         employeeName: `${e.firstName} ${e.lastName}`,
         avatarUrl: e.avatarUrl,
         basicSalary: basic,
-        commissionAmount,
         allowances: totalAllowances,
         deductions: otherDeductions,
         department: e.department?.name,
@@ -183,19 +181,17 @@ export function ManagePayrollTab() {
               }
             : {}),
         });
-        const grossSalary = calc.grossSalary + commissionAmount;
-        const netSalary = calc.netSalary + commissionAmount;
         return {
           ...baseRow,
-          grossSalary,
+          grossSalary: calc.grossSalary,
           employeeStatutoryContrib: calc.employeeStatutoryContrib,
           employerStatutoryContrib: calc.employerStatutoryContrib,
           tier1Contribution: calc.tier1Contribution ?? 0,
           tier2Contribution: calc.tier2Contribution ?? 0,
           taxableIncome: calc.taxableIncome,
           paye: calc.paye,
-          netSalary,
-          totalEmployerCost: calc.totalEmployerCost + commissionAmount,
+          netSalary: calc.netSalary,
+          totalEmployerCost: calc.totalEmployerCost,
         };
       } catch (err) {
         return {
@@ -216,7 +212,6 @@ export function ManagePayrollTab() {
   }, [
     empData,
     basicMap,
-    commissionMap,
     allowancesMap,
     deductionItemsMap,
     payrollCountry,
@@ -259,7 +254,9 @@ export function ManagePayrollTab() {
     const result: Record<string, EmployeeOverride> = {};
     const employees = (empData?.data ?? []).filter(
       (e) =>
-        PAYROLL_ELIGIBLE.includes(e.employmentStatus) && e.userStatus !== 'PENDING_VERIFICATION',
+        PAYROLL_ELIGIBLE.includes(e.employmentStatus) &&
+        e.userStatus !== 'PENDING_VERIFICATION' &&
+        e.compensationType !== 'COMMISSION',
     );
 
     for (const e of employees) {
@@ -273,7 +270,6 @@ export function ManagePayrollTab() {
       const allowances = allowancesMap[e.id] ?? savedAllowances;
       const deductionItems = deductionItemsMap[e.id] ?? profileDeductionItems[e.id] ?? [];
       const basicSalary = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
-      const commissionAmount = commissionMap[e.id] ?? 0;
       const taxPolicy = taxPolicyMap[e.id] ?? e.taxPolicy ?? 'STANDARD_PAYE';
       const fixedTaxAmount =
         fixedTaxAmountMap[e.id] !== undefined
@@ -290,7 +286,7 @@ export function ManagePayrollTab() {
 
       result[e.id] = {
         basicSalary,
-        commissionAmount,
+        commissionAmount: 0,
         totalAllowances: nonTransportAllowances,
         transportAmount,
         taxPolicy,
@@ -310,7 +306,6 @@ export function ManagePayrollTab() {
   }, [
     empData,
     basicMap,
-    commissionMap,
     taxPolicyMap,
     fixedTaxAmountMap,
     commissionTaxableMap,
@@ -321,10 +316,6 @@ export function ManagePayrollTab() {
 
   const handleBasicChange = (employeeId: string, amount: number) => {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
-  };
-
-  const handleCommissionChange = (employeeId: string, amount: number) => {
-    setCommissionMap((prev) => ({ ...prev, [employeeId]: amount }));
   };
 
   const handleRunPayroll = () => {
@@ -373,16 +364,6 @@ export function ManagePayrollTab() {
       label: 'Basic Salary',
       render: (row) => (
         <BasicSalaryCell value={row.basicSalary} onChange={(n) => handleBasicChange(row.id, n)} />
-      ),
-    },
-    {
-      key: 'commissionAmount',
-      label: 'Commission',
-      render: (row) => (
-        <BasicSalaryCell
-          value={row.commissionAmount}
-          onChange={(n) => handleCommissionChange(row.id, n)}
-        />
       ),
     },
     {
@@ -550,7 +531,6 @@ export function ManagePayrollTab() {
         onClose={() => setDraftsPanelOpen(false)}
         onLoad={({
           basicMap,
-          commissionMap,
           taxPolicyMap,
           fixedTaxAmountMap,
           commissionTaxableMap,
@@ -558,7 +538,6 @@ export function ManagePayrollTab() {
           deductionItemsMap,
         }: DraftLoadData) => {
           setBasicMap(basicMap);
-          setCommissionMap(commissionMap);
           setTaxPolicyMap(taxPolicyMap);
           setFixedTaxAmountMap(fixedTaxAmountMap);
           setCommissionTaxableMap(commissionTaxableMap);

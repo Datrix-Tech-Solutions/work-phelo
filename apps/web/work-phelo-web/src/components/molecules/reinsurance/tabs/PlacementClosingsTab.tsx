@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { TableActionButton } from '@/components/atoms/TableActionButton';
-import { Icons } from '@/components/atoms/icons';
+import { TableButton } from '@/components/atoms/TableButton';
 import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents/GuaranteeNoteModal';
 import { CreditNoteModal } from '@/components/organisms/reinsurance/documents/CreditNoteModal';
 import { DebitNoteModal } from '@/components/organisms/reinsurance/documents/DebitNoteModal';
@@ -99,21 +98,13 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     {
       key: 'actions',
       label: 'Actions',
-      width: '2.5fr',
+      width: '1fr',
       render: (row) => (
-        <div className="flex items-center gap-5 w-full justify-end">
-          <TableActionButton
-            icon={<Icons.Mail className="w-3.5 h-3.5 shrink-0" />}
-            onClick={() => setCreditNoteRow(row)}
-          >
-            View Closings
-          </TableActionButton>
-          <TableActionButton
-            icon={<Icons.SendHorizonal className="w-3.5 h-3.5 shrink-0" />}
-            onClick={() => setMailToReinsurerRow(row)}
-          >
-            Mail reinsurer
-          </TableActionButton>
+        <div className="flex items-center gap-3">
+          <TableButton onClick={() => setCreditNoteRow(row)}>View Closings</TableButton>
+          <TableButton variant="blue" onClick={() => setMailToReinsurerRow(row)}>
+            Mail Reinsurer
+          </TableButton>
         </div>
       ),
     },
