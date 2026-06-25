@@ -15,9 +15,10 @@ import { PensionTab_NG } from '@/components/organisms/payroll/PensionTab_NG';
 import { NSSFTab_KE } from '@/components/organisms/payroll/NSSFTab_KE';
 import { ApprovePayrollTab } from '@/components/organisms/payroll/ApprovePayrollTab';
 import { PayrollHistoryTab } from '@/components/organisms/payroll/PayrollHistoryTab';
+import { CommissionsTab } from '@/components/organisms/payroll/CommissionsTab';
 import { usePayrollSettings } from '@/hooks';
 
-type Tab = 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history';
+type Tab = 'payslip' | 'manage' | 'commissions' | 'ssnit' | 'approve' | 'history';
 
 export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
@@ -32,6 +33,7 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
     }
   }, [user, tenantSlug, router]);
 
+  const hasHRProfile = user?.role === 'EMPLOYEE';
   const canManagePayroll = usePermission(Permission.RUN_PAYROLL);
   const canApprovePayroll = usePermission(Permission.APPROVE_PAYROLL);
   const canViewHistory = canManagePayroll || canApprovePayroll;
@@ -43,8 +45,9 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
     if (t === 'approve' && canApprovePayroll) return 'approve';
     if (t === 'ssnit' && canManagePayroll) return 'ssnit';
     if (t === 'manage' && canManagePayroll) return 'manage';
-    return canManagePayroll ? 'manage' : 'payslip';
-  }, [searchParams, canApprovePayroll, canManagePayroll, canViewHistory]);
+    if (t === 'payslip' && hasHRProfile) return 'payslip';
+    return canManagePayroll ? 'manage' : hasHRProfile ? 'payslip' : 'commissions';
+  }, [searchParams, canApprovePayroll, canManagePayroll, canViewHistory, hasHRProfile]);
 
   const [tab, setTab] = useState<Tab>(initialTab);
 
@@ -65,6 +68,7 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
       </div>
       <PayrollTabs
         activeTab={tab}
+        isEmployee={hasHRProfile}
         canManage={canManagePayroll}
         canApprove={canApprovePayroll}
         canViewHistory={canViewHistory}
@@ -72,8 +76,9 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
         onTabChange={setTab}
       />
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {tab === 'payslip' && <MyPayslipTab />}
+        {tab === 'payslip' && hasHRProfile && <MyPayslipTab />}
         {tab === 'manage' && canManagePayroll && <ManagePayrollTab />}
+        {tab === 'commissions' && canManagePayroll && <CommissionsTab />}
         {tab === 'ssnit' && canManagePayroll && renderContributionsTab()}
         {tab === 'approve' && canApprovePayroll && <ApprovePayrollTab />}
         {tab === 'history' && canViewHistory && <PayrollHistoryTab />}
