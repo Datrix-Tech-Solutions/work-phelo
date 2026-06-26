@@ -196,6 +196,7 @@ export function EndorsementReinsurerCertificateModal({
       isOpen={isOpen}
       title={`Endorsement Certificate — ${endorsement.endorsementNumber}`}
       documentTitle="Endorsement Certificate"
+      previewOnly
       onPrint={onPrint}
       onClose={onClose}
     >

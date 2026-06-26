@@ -93,6 +93,7 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
       isOpen={isOpen}
       title={`Debit Note — ${reference}`}
       documentTitle="Debit Note"
+      previewOnly
       onPrint={onPrint}
       onClose={onClose}
       afterContent={debitAfterContent}

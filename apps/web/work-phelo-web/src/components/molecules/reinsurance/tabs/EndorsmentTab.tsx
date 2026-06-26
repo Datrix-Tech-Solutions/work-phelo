@@ -6,6 +6,7 @@ import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { ReinsuranceNotesTable } from '@/components/molecules/reinsurance/ReinsuranceNotesTable';
 import {
   Facultative,
   PlacementEndorsement,
@@ -15,12 +16,18 @@ import {
 } from '@/types/reinsurance';
 import {
   useCedants,
+  useEndorsementClosings,
+  useEndorsementNotes,
+  useGenerateEndorsementCreditNote,
+  useGenerateEndorsementDebitNote,
+  useIssueEndorsementNote,
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
   useUpdateParticipant,
   useReinsurers,
   useUpdateEndorsementStatus,
+  useVoidEndorsementNote,
   facultativePlacementKey,
 } from '@/hooks';
 import { EditEndorsementPanel } from '@/components/organisms/reinsurance/panels/EditEndorsementPanel';
@@ -181,10 +188,27 @@ function EndorsementCard({
     placement.id,
     endorsement.id,
   );
+  const { data: endorsementClosings = [], isLoading: endorsementClosingsLoading } =
+    useEndorsementClosings(placement.id, endorsement.id);
+  const {
+    data: endorsementNotes = [],
+    isLoading: endorsementNotesLoading,
+    isError: endorsementNotesError,
+  } = useEndorsementNotes(placement.id, endorsement.id);
   const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
     placement.id,
     endorsement.id,
   );
+  const generateEndorsementDebitNote = useGenerateEndorsementDebitNote(
+    placement.id,
+    endorsement.id,
+  );
+  const generateEndorsementCreditNote = useGenerateEndorsementCreditNote(
+    placement.id,
+    endorsement.id,
+  );
+  const issueEndorsementNote = useIssueEndorsementNote(placement.id, endorsement.id);
+  const voidEndorsementNote = useVoidEndorsementNote(placement.id, endorsement.id);
   const { mutateAsync: updateParticipant } = useUpdateParticipant(placement.id);
   const queryClient = useQueryClient();
 
@@ -361,7 +385,7 @@ function EndorsementCard({
               variant="blue"
               onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
             >
-              View Document
+              Preview Only
             </TableButton>
           );
         }
@@ -379,6 +403,56 @@ function EndorsementCard({
   );
   const tableDocReinsurer = reinsurers.find((r) => r.id === tableDocCounterpartyId);
   const tableDocRow = endorsementRows.find((r) => r.counterpartyId === tableDocCounterpartyId);
+  const confirmedEndorsementClosings = endorsementClosings.filter(
+    (closing) => closing.status === 'CONFIRMED',
+  );
+  const hasEndorsementNoteWorkflow = endorsement.status !== 'DRAFT';
+
+  const handleGenerateEndorsementDebitNote = async () => {
+    try {
+      await generateEndorsementDebitNote.mutateAsync();
+      useToastStore
+        .getState()
+        .addToast({ message: 'Endorsement debit note generated', type: 'success' });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleGenerateEndorsementCreditNote = async (closingId: string) => {
+    try {
+      await generateEndorsementCreditNote.mutateAsync(closingId);
+      useToastStore
+        .getState()
+        .addToast({ message: 'Endorsement credit note generated', type: 'success' });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleIssueEndorsementNote = async (noteId: string) => {
+    try {
+      await issueEndorsementNote.mutateAsync(noteId);
+      useToastStore.getState().addToast({ message: 'Endorsement note issued', type: 'success' });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
+  const handleVoidEndorsementNote = async ({
+    noteId,
+    voidReason,
+  }: {
+    noteId: string;
+    voidReason: string;
+  }) => {
+    try {
+      await voidEndorsementNote.mutateAsync({ noteId, voidReason });
+      useToastStore.getState().addToast({ message: 'Endorsement note voided', type: 'success' });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
 
   return (
     <>
@@ -416,7 +490,7 @@ function EndorsementCard({
             )}
             {endorsement.status !== 'DRAFT' && (
               <Button size="sm" variant="secondary" onClick={() => setCedantDocOpen(true)}>
-                Cedant Document
+                Preview Only Certificate
               </Button>
             )}
           </div>
@@ -527,6 +601,64 @@ function EndorsementCard({
             </div>
           </div>
         )}
+
+        {hasEndorsementNoteWorkflow && (
+          <div className="flex flex-col gap-3 border-t border-gray-100 pt-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Endorsement Notes
+                </p>
+                <p className="text-xs text-gray-400">
+                  Backend-backed debit/credit notes generated from confirmed endorsement closings.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  isLoading={generateEndorsementDebitNote.isPending}
+                  disabled={confirmedEndorsementClosings.length === 0}
+                  onClick={handleGenerateEndorsementDebitNote}
+                >
+                  Generate Debit Note
+                </Button>
+                {confirmedEndorsementClosings.map((closing) => (
+                  <Button
+                    key={closing.id}
+                    size="sm"
+                    variant="secondary"
+                    isLoading={generateEndorsementCreditNote.isPending}
+                    onClick={() => handleGenerateEndorsementCreditNote(closing.id)}
+                  >
+                    Generate Credit Note {closing.closingNumber}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            {endorsementClosingsLoading ? (
+              <p className="text-xs text-gray-400">Loading endorsement closings…</p>
+            ) : confirmedEndorsementClosings.length === 0 ? (
+              <p className="text-xs text-gray-400">
+                Confirm an endorsement closing before generating endorsement notes.
+              </p>
+            ) : null}
+
+            <ReinsuranceNotesTable
+              notes={endorsementNotes.filter(
+                (note) =>
+                  note.type === 'ENDORSEMENT_DEBIT_NOTE' || note.type === 'ENDORSEMENT_CREDIT_NOTE',
+              )}
+              isLoading={endorsementNotesLoading}
+              isError={endorsementNotesError}
+              emptyMessage="No endorsement notes yet"
+              onIssue={handleIssueEndorsementNote}
+              onVoid={handleVoidEndorsementNote}
+              isVoidPending={voidEndorsementNote.isPending}
+            />
+          </div>
+        )}
       </div>
 
       <EditEndorsementPanel
@@ -546,7 +678,7 @@ function EndorsementCard({
         onClose={() => setCedantDocOpen(false)}
       />
 
-      {/* Reinsurer document (via table View Document) */}
+      {/* Reinsurer certificate preview, opened from the endorsement participant table. */}
       {tableDocCounterpartyId && tableDocReinsurer && tableDocRow && (
         <EndorsementReinsurerCertificateModal
           isOpen={!!tableDocCounterpartyId}

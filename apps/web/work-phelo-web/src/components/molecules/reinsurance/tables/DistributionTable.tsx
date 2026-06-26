@@ -237,7 +237,7 @@ export function DistributionTable({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              title="Preview Slip"
+              title="Preview Only Offer Slip"
               onClick={() => setSlipPreviewId(row.id)}
               className="text-blue-500 hover:text-blue-600 transition-colors"
             >
@@ -245,7 +245,7 @@ export function DistributionTable({
             </button>
             <button
               type="button"
-              title="Send mail"
+              title="Preview Email"
               onClick={() => setMailPreviewId(row.id)}
               className="text-green-500 hover:text-green-700 transition-colors"
             >
@@ -341,6 +341,8 @@ export function DistributionTable({
         placement={placement}
         brokerageFee={mailPreviewEntry?.brokerageFee ?? 0}
         recipients={mailPreviewEntry?.emails ?? []}
+        primaryActionLabel="Mark as Sent"
+        primaryActionLoadingText="Updating…"
         onSend={handleSend}
         onClose={() => setMailPreviewId(null)}
       />

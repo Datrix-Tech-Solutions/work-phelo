@@ -156,6 +156,7 @@ export function PaymentReceiptModal({
       isOpen={isOpen}
       title={`Payment Receipt — ${reference}`}
       documentTitle="Payment Receipt"
+      previewOnly
       onPrint={onPrint}
       onClose={onClose}
       afterContent={afterContent}
