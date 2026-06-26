@@ -6,6 +6,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'sm' | 'md' | 'lg';
   isLoading?: boolean;
   loadingText?: string;
+  icon?: React.ReactNode;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -15,6 +16,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       size = 'md',
       isLoading,
       loadingText,
+      icon,
       className,
       children,
       disabled,
@@ -29,7 +31,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       primary:
         'bg-(--module-btn-bg,var(--color-brand)) text-white hover:bg-(--module-btn-bg-hover,var(--color-brand-hover)) focus:ring-(--module-btn-bg,var(--color-brand))',
       secondary:
-        'bg-gray-100 text-gray-900 border border-gray-200 hover:bg-(--module-tint,var(--color-brand-tint)) hover:border-(--module-btn-bg,var(--color-brand)) focus:ring-gray-500',
+        'bg-gray-100 text-gray-900 border border-gray-400 hover:bg-(--module-tint,var(--color-brand-tint)) hover:border-(--module-btn-bg,var(--color-brand)) focus:ring-gray-500',
       outline: 'border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500',
       ghost: 'text-gray-700 hover:bg-gray-100 focus:ring-gray-500',
       danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
@@ -37,7 +39,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const sizes = {
       sm: 'px-4 py-2 text-sm',
-      md: 'px-5 py-3 text-sm',
+      md: 'px-5 py-2 text-sm',
       lg: 'px-6 py-4 text-base',
     };
 
@@ -45,7 +47,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         disabled={disabled || isLoading}
-        className={cn(base, variants[variant], sizes[size], className)}
+        className={cn(base, variants[variant], sizes[size], icon && 'group', className)}
         {...props}
       >
         {isLoading ? (
@@ -57,7 +59,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
             </div>
           </span>
         ) : (
-          children
+          <>
+            {children}
+            {icon && (
+              <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
+                <span className="shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out">
+                  {icon}
+                </span>
+              </span>
+            )}
+          </>
         )}
       </button>
     );
