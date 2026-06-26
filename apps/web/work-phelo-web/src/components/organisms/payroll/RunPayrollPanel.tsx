@@ -24,14 +24,23 @@ const YEARS = Array.from({ length: 3 }, (_, i) => {
 
 interface Totals {
   gross: number;
+  net: number;
   paye: number;
+  statutory: number;
   employerCost: number;
+}
+
+interface CommissionTotals {
+  gross: number;
+  tax: number;
+  net: number;
 }
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   totals: Totals;
+  commissionTotals?: CommissionTotals;
   overrides: Record<string, EmployeeOverride>;
   payrollCountry?: string;
   payrollCurrency?: string;
@@ -41,6 +50,7 @@ export function RunPayrollPanel({
   isOpen,
   onClose,
   totals,
+  commissionTotals,
   overrides,
   payrollCountry,
   payrollCurrency,
@@ -128,13 +138,23 @@ export function RunPayrollPanel({
           </div>
 
           <MetricPreview
-            title="Payroll Summary"
+            title="Salary Summary"
             metrics={[
               { label: 'Total Gross', value: money(totals.gross) },
               { label: 'Total PAYE', value: money(totals.paye) },
               { label: 'Employer Cost', value: money(totals.employerCost), highlight: true },
             ]}
           />
+          {commissionTotals && commissionTotals.gross > 0 && (
+            <MetricPreview
+              title="Commission Summary"
+              metrics={[
+                { label: 'Total Gross', value: money(commissionTotals.gross) },
+                { label: 'Total Tax (10%)', value: money(commissionTotals.tax) },
+                { label: 'Total Net Pay', value: money(commissionTotals.net), highlight: true },
+              ]}
+            />
+          )}
         </div>
       </SidePanel>
 
@@ -159,10 +179,21 @@ export function RunPayrollPanel({
           <span className="font-medium text-gray-900">
             {selectedMonthLabel} {year}
           </span>
-          . Payslips will be calculated for all active employees and submitted for approval. The
-          total employer cost for this period is{' '}
-          <span className="font-semibold text-orange-500">{money(totals.employerCost)}</span>. This
-          action cannot be undone once submitted.
+          . Payslips will be calculated for all active employees and submitted for approval.{' '}
+          {commissionTotals && commissionTotals.gross > 0 ? (
+            <>
+              Total employer cost:{' '}
+              <span className="font-semibold text-orange-500">{money(totals.employerCost)}</span>.
+              Commission net payout:{' '}
+              <span className="font-semibold text-orange-500">{money(commissionTotals.net)}</span>.
+            </>
+          ) : (
+            <>
+              The total employer cost for this period is{' '}
+              <span className="font-semibold text-orange-500">{money(totals.employerCost)}</span>.
+            </>
+          )}{' '}
+          This action cannot be undone once submitted.
         </p>
       </Modal>
     </>

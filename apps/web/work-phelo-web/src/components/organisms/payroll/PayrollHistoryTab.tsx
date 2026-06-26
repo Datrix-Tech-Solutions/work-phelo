@@ -276,6 +276,7 @@ export function PayrollHistoryTab() {
         columns={columns}
         data={paged}
         isLoading={isLoading}
+        onRowClick={(row) => router.push(`/${params.tenantSlug}/hr/payroll/history/${row.id}`)}
         emptyMessage="No payroll history found"
         extraFilters={
           <>

@@ -15,10 +15,9 @@ import { PensionTab_NG } from '@/components/organisms/payroll/PensionTab_NG';
 import { NSSFTab_KE } from '@/components/organisms/payroll/NSSFTab_KE';
 import { ApprovePayrollTab } from '@/components/organisms/payroll/ApprovePayrollTab';
 import { PayrollHistoryTab } from '@/components/organisms/payroll/PayrollHistoryTab';
-import { CommissionsTab } from '@/components/organisms/payroll/CommissionsTab';
 import { usePayrollSettings } from '@/hooks';
 
-type Tab = 'payslip' | 'manage' | 'commissions' | 'ssnit' | 'approve' | 'history';
+type Tab = 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history';
 
 export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
@@ -46,7 +45,7 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
     if (t === 'ssnit' && canManagePayroll) return 'ssnit';
     if (t === 'manage' && canManagePayroll) return 'manage';
     if (t === 'payslip' && hasHRProfile) return 'payslip';
-    return canManagePayroll ? 'manage' : hasHRProfile ? 'payslip' : 'commissions';
+    return canManagePayroll ? 'manage' : hasHRProfile ? 'payslip' : 'manage';
   }, [searchParams, canApprovePayroll, canManagePayroll, canViewHistory, hasHRProfile]);
 
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -78,7 +77,6 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
       <div className="flex-1 min-h-0 overflow-y-auto">
         {tab === 'payslip' && hasHRProfile && <MyPayslipTab />}
         {tab === 'manage' && canManagePayroll && <ManagePayrollTab />}
-        {tab === 'commissions' && canManagePayroll && <CommissionsTab />}
         {tab === 'ssnit' && canManagePayroll && renderContributionsTab()}
         {tab === 'approve' && canApprovePayroll && <ApprovePayrollTab />}
         {tab === 'history' && canViewHistory && <PayrollHistoryTab />}

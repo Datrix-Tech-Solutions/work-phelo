@@ -15,9 +15,10 @@ import { formatPayrollMoney } from '@/lib/payrollDisplay';
 interface Props {
   run: PayrollRun | null;
   onClose: () => void;
+  onApproved?: () => void;
 }
 
-export function ApprovePayrollPanel({ run, onClose }: Props) {
+export function ApprovePayrollPanel({ run, onClose, onApproved }: Props) {
   const toast = useToast();
   useTenantConfig();
   const [showConfirm, setShowConfirm] = useState(false);
@@ -45,6 +46,7 @@ export function ApprovePayrollPanel({ run, onClose }: Props) {
           setShowConfirm(false);
           setApprovalNote('');
           onClose();
+          onApproved?.();
         },
         onError: (err) => toast.error(extractError(err, 'Failed to approve payroll')),
       },

@@ -72,6 +72,7 @@ import {
   SendHorizonal,
   RotateCcw,
   UserPlus,
+  Save,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -103,6 +104,7 @@ export const Icons = {
   Pencil,
   Check,
   RotateCcw,
+  Save,
 
   // Time & Status
   Clock,

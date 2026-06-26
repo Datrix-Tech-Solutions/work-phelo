@@ -9,13 +9,16 @@ import { usePayrollSettings, usePayrollRuns } from '@/hooks';
 import { useAllEmployees } from '@/hooks/hr/useEmployees';
 import { calculatePayroll, AllowanceItem, Country } from '@/lib/payrollCalculations';
 import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
+import { cn } from '@/lib/utils';
 import { Employee, PayrollTaxPolicy } from '@/types/hr';
 import { AllowancesPanel } from './AllowancesPanel';
 import { DeductionLineItem, DeductionsPanel } from './DeductionsPanel';
 import { RunPayrollPanel, EmployeeOverride } from './RunPayrollPanel';
 import { PayrollDraftsPanel, DraftLoadData } from './PayrollDraftsPanel';
 
-function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
+const COMMISSION_TAX_RATE = 0.1;
+
+function NumberCell({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [local, setLocal] = useState(() => (value === 0 ? '' : String(value)));
   const [focused, setFocused] = useState(false);
 
@@ -56,7 +59,6 @@ function BasicSalaryCell({ value, onChange }: { value: number; onChange: (n: num
 interface PayrollRow {
   id: string;
   employeeName: string;
-  avatarUrl?: string;
   basicSalary: number;
   allowances: number;
   deductions: number;
@@ -72,6 +74,20 @@ interface PayrollRow {
   department?: string;
   validationError?: string;
 }
+
+interface CommissionRow {
+  id: string;
+  employeeName: string;
+  department?: string;
+  commission: number;
+  allowances: number;
+  deductions: number;
+  gross: number;
+  tax: number;
+  netPay: number;
+}
+
+type PayrollView = 'salary' | 'commission';
 
 // Keep in sync with hr-service/src/payroll/payroll.service.ts employee eligibility filter
 const PAYROLL_ELIGIBLE: Employee['employmentStatus'][] = ['ACTIVE', 'PROBATION', 'ON_LEAVE'];
@@ -89,8 +105,11 @@ export function ManagePayrollTab() {
   const rejectedDraftsCount = runs.filter(
     (r) => r.status === 'DRAFT' && !!r.returnToDraftNote,
   ).length;
+
+  const [view, setView] = useState<PayrollView>('salary');
   const [searchQuery, setSearchQuery] = useState('');
   const [basicMap, setBasicMap] = useState<Record<string, number>>({});
+  const [commissionMap, setCommissionMap] = useState<Record<string, number>>({});
   const [taxPolicyMap, setTaxPolicyMap] = useState<Record<string, PayrollTaxPolicy>>({});
   const [fixedTaxAmountMap, setFixedTaxAmountMap] = useState<Record<string, number | null>>({});
   const [commissionTaxableMap, setCommissionTaxableMap] = useState<Record<string, boolean>>({});
@@ -98,7 +117,6 @@ export function ManagePayrollTab() {
   const [deductionItemsMap, setDeductionItemsMap] = useState<Record<string, DeductionLineItem[]>>(
     {},
   );
-
   const [allowancePanel, setAllowancePanel] = useState<{ rowId: string; rowName: string } | null>(
     null,
   );
@@ -107,6 +125,7 @@ export function ManagePayrollTab() {
   );
   const [runPanelOpen, setRunPanelOpen] = useState(false);
   const [draftsPanelOpen, setDraftsPanelOpen] = useState(false);
+
   const payrollCountry = (payrollSettings?.payrollCountry ?? 'GH') as Country;
   const payrollCurrency = resolvePayrollCurrency(payrollSettings?.payrollCurrency, payrollCountry);
   const payrollLabels = getPayrollLabels(payrollCountry);
@@ -137,6 +156,7 @@ export function ManagePayrollTab() {
     return map;
   }, [empData]);
 
+  // ── Salary rows (SALARY + SALARY_PLUS_COMMISSION) ──────────────────────────
   const payrollRows: PayrollRow[] = useMemo(() => {
     const employees: Employee[] = (empData?.data ?? []).filter(
       (e) =>
@@ -159,13 +179,11 @@ export function ManagePayrollTab() {
       const baseRow = {
         id: e.id,
         employeeName: `${e.firstName} ${e.lastName}`,
-        avatarUrl: e.avatarUrl,
         basicSalary: basic,
         allowances: totalAllowances,
         deductions: otherDeductions,
         department: e.department?.name,
       };
-
       try {
         const calc = calculatePayroll({
           basicSalary: basic,
@@ -220,13 +238,59 @@ export function ManagePayrollTab() {
     tier3Rate,
   ]);
 
-  const filteredData = useMemo(() => {
+  // ── Commission rows (COMMISSION + SALARY_PLUS_COMMISSION) ──────────────────
+  const commissionRows: CommissionRow[] = useMemo(() => {
+    const employees: Employee[] = (empData?.data ?? []).filter(
+      (e) =>
+        PAYROLL_ELIGIBLE.includes(e.employmentStatus) &&
+        e.userStatus !== 'PENDING_VERIFICATION' &&
+        e.compensationType !== 'SALARY',
+    );
+    return employees.map((e) => {
+      const commission = commissionMap[e.id] ?? 0;
+      // SALARY_PLUS_COMMISSION: allowances and deductions are already accounted for
+      // in the salary section — exclude them here so figures aren't double-counted.
+      const isBoth = e.compensationType === 'SALARY_PLUS_COMMISSION';
+      const savedAllowances: AllowanceItem[] =
+        e.allowances?.map((a) => ({
+          name: a.name ?? (a.type as string),
+          type: a.type,
+          amount: Number(a.amount),
+        })) ?? [];
+      const allowanceItems = allowancesMap[e.id] ?? savedAllowances;
+      const allowances = isBoth ? 0 : allowanceItems.reduce((sum, a) => sum + a.amount, 0);
+      const deductionItems = deductionItemsMap[e.id] ?? profileDeductionItems[e.id] ?? [];
+      const deductions = isBoth ? 0 : deductionItems.reduce((sum, d) => sum + d.amount, 0);
+      const gross = commission + allowances;
+      const tax = +(commission * COMMISSION_TAX_RATE).toFixed(2);
+      const netPay = Math.max(0, gross - tax - deductions);
+      return {
+        id: e.id,
+        employeeName: `${e.firstName} ${e.lastName}`.trim(),
+        department: e.department?.name,
+        commission,
+        allowances,
+        deductions,
+        gross,
+        tax,
+        netPay,
+      };
+    });
+  }, [empData, commissionMap, allowancesMap, deductionItemsMap, profileDeductionItems]);
+
+  const filteredSalaryRows = useMemo(() => {
     if (!searchQuery) return payrollRows;
     const q = searchQuery.toLowerCase();
     return payrollRows.filter((r) => r.employeeName.toLowerCase().includes(q));
   }, [payrollRows, searchQuery]);
 
-  const sumRows = (rows: PayrollRow[]) =>
+  const filteredCommissionRows = useMemo(() => {
+    if (!searchQuery) return commissionRows;
+    const q = searchQuery.toLowerCase();
+    return commissionRows.filter((r) => r.employeeName.toLowerCase().includes(q));
+  }, [commissionRows, searchQuery]);
+
+  const sumSalaryRows = (rows: PayrollRow[]) =>
     rows
       .filter((r) => !r.validationError)
       .reduce(
@@ -240,25 +304,31 @@ export function ManagePayrollTab() {
         { gross: 0, net: 0, paye: 0, statutory: 0, employerCost: 0 },
       );
 
-  // Metric cards show totals for what's currently visible (respects search filter).
-  const totals = useMemo(() => sumRows(filteredData), [filteredData]);
+  const sumCommissionRows = (rows: CommissionRow[]) =>
+    rows.reduce(
+      (acc, r) => ({
+        gross: acc.gross + r.gross,
+        tax: acc.tax + r.tax,
+        net: acc.net + r.netPay,
+      }),
+      { gross: 0, tax: 0, net: 0 },
+    );
 
-  // RunPayrollPanel preview must always reflect ALL eligible employees, not just
-  // the filtered subset, because the backend runs payroll for every employee.
-  const allTotals = useMemo(() => sumRows(payrollRows), [payrollRows]);
+  const salaryTotals = useMemo(() => sumSalaryRows(filteredSalaryRows), [filteredSalaryRows]);
+  const commissionTotals = useMemo(
+    () => sumCommissionRows(filteredCommissionRows),
+    [filteredCommissionRows],
+  );
+  const allSalaryTotals = useMemo(() => sumSalaryRows(payrollRows), [payrollRows]);
+  const allCommissionTotals = useMemo(() => sumCommissionRows(commissionRows), [commissionRows]);
 
-  // Build a complete override for every eligible employee so that profile-based
-  // allowances and deductions are always sent to the backend on run, not just
-  // values the user manually edited in this session.
+  // ── Overrides (all eligible employees) ─────────────────────────────────────
   const overrides = useMemo(() => {
     const result: Record<string, EmployeeOverride> = {};
     const employees = (empData?.data ?? []).filter(
       (e) =>
-        PAYROLL_ELIGIBLE.includes(e.employmentStatus) &&
-        e.userStatus !== 'PENDING_VERIFICATION' &&
-        e.compensationType !== 'COMMISSION',
+        PAYROLL_ELIGIBLE.includes(e.employmentStatus) && e.userStatus !== 'PENDING_VERIFICATION',
     );
-
     for (const e of employees) {
       const savedAllowances: AllowanceItem[] =
         e.allowances?.map((a) => ({
@@ -266,27 +336,26 @@ export function ManagePayrollTab() {
           type: a.type,
           amount: Number(a.amount),
         })) ?? [];
-
       const allowances = allowancesMap[e.id] ?? savedAllowances;
       const deductionItems = deductionItemsMap[e.id] ?? profileDeductionItems[e.id] ?? [];
-      const basicSalary = basicMap[e.id] ?? (Number(e.basicSalary) || 0);
+      const basicSalary =
+        e.compensationType === 'COMMISSION' ? 0 : (basicMap[e.id] ?? (Number(e.basicSalary) || 0));
+      const commissionAmount = e.compensationType === 'SALARY' ? 0 : (commissionMap[e.id] ?? 0);
       const taxPolicy = taxPolicyMap[e.id] ?? e.taxPolicy ?? 'STANDARD_PAYE';
       const fixedTaxAmount =
         fixedTaxAmountMap[e.id] !== undefined
           ? fixedTaxAmountMap[e.id]
           : (e.fixedTaxAmount ?? null);
       const commissionTaxable = commissionTaxableMap[e.id] ?? e.commissionTaxable ?? true;
-
       const nonTransportAllowances = allowances
         .filter((item) => !isTransportAllowance(item))
         .reduce((sum, item) => sum + item.amount, 0);
       const transportAmount = allowances
         .filter(isTransportAllowance)
         .reduce((sum, item) => sum + item.amount, 0);
-
       result[e.id] = {
         basicSalary,
-        commissionAmount: 0,
+        commissionAmount,
         totalAllowances: nonTransportAllowances,
         transportAmount,
         taxPolicy,
@@ -301,11 +370,11 @@ export function ManagePayrollTab() {
         deductionItems,
       };
     }
-
     return result;
   }, [
     empData,
     basicMap,
+    commissionMap,
     taxPolicyMap,
     fixedTaxAmountMap,
     commissionTaxableMap,
@@ -318,6 +387,10 @@ export function ManagePayrollTab() {
     setBasicMap((prev) => ({ ...prev, [employeeId]: amount }));
   };
 
+  const handleCommissionChange = (employeeId: string, amount: number) => {
+    setCommissionMap((prev) => ({ ...prev, [employeeId]: amount }));
+  };
+
   const handleRunPayroll = () => {
     const invalidRows = payrollRows.filter((r) => r.validationError);
     if (invalidRows.length > 0) {
@@ -328,7 +401,8 @@ export function ManagePayrollTab() {
     setRunPanelOpen(true);
   };
 
-  const columns: Column<PayrollRow>[] = [
+  // ── Salary columns ──────────────────────────────────────────────────────────
+  const salaryColumns: Column<PayrollRow>[] = [
     {
       key: 'employee',
       label: 'Employee',
@@ -363,7 +437,7 @@ export function ManagePayrollTab() {
       key: 'basicSalary',
       label: 'Basic Salary',
       render: (row) => (
-        <BasicSalaryCell value={row.basicSalary} onChange={(n) => handleBasicChange(row.id, n)} />
+        <NumberCell value={row.basicSalary} onChange={(n) => handleBasicChange(row.id, n)} />
       ),
     },
     {
@@ -437,63 +511,231 @@ export function ManagePayrollTab() {
     },
   ];
 
+  // ── Commission columns ──────────────────────────────────────────────────────
+  const commissionColumns: Column<CommissionRow>[] = [
+    {
+      key: 'employeeName',
+      label: 'Employee',
+      width: '2fr',
+      render: (row) => (
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-brand flex items-center justify-center text-white text-xs font-medium shrink-0">
+            {row.employeeName.substring(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <p className="font-medium text-gray-900">{row.employeeName}</p>
+            {row.department && <p className="text-xs text-gray-500">{row.department}</p>}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'commission',
+      label: 'Commission',
+      render: (row) => (
+        <NumberCell value={row.commission} onChange={(n) => handleCommissionChange(row.id, n)} />
+      ),
+    },
+    {
+      key: 'allowances',
+      label: 'Allowances',
+      render: (row) => (
+        <button
+          onClick={() => setAllowancePanel({ rowId: row.id, rowName: row.employeeName })}
+          className="group w-28 flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
+        >
+          <span className="truncate">
+            {row.allowances > 0 ? (
+              row.allowances.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
+            ) : (
+              <span className="text-gray-400">Add</span>
+            )}
+          </span>
+          <Pencil className="w-3 h-3 shrink-0 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+      ),
+    },
+    {
+      key: 'deductions',
+      label: 'Deductions',
+      render: (row) => (
+        <button
+          onClick={() => setDeductionPanel({ rowId: row.id, rowName: row.employeeName })}
+          className="group w-28 flex items-center justify-between px-2.5 py-1.5 rounded-lg border border-dashed border-gray-300 text-sm text-gray-700 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors cursor-pointer"
+        >
+          <span className="truncate">
+            {row.deductions > 0 ? (
+              row.deductions.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
+            ) : (
+              <span className="text-gray-400">Add</span>
+            )}
+          </span>
+          <Pencil className="w-3 h-3 shrink-0 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </button>
+      ),
+    },
+    {
+      key: 'gross',
+      label: 'Gross',
+      render: (row) => money(row.gross),
+    },
+    {
+      key: 'tax',
+      label: 'Tax (10%)',
+      render: (row) => <span className="text-amber-600">{money(row.tax)}</span>,
+    },
+    {
+      key: 'netPay',
+      label: 'Net Pay',
+      render: (row) => <span className="font-semibold text-emerald-600">{money(row.netPay)}</span>,
+    },
+  ];
+
+  const hasSalaryEmployees = payrollRows.length > 0;
+  const hasCommissionEmployees = commissionRows.length > 0;
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
-        <MetricCard
-          title="Total Gross"
-          value={money(totals.gross)}
-          icon={TrendingUp}
-          variant="highlight"
-        />
-        <MetricCard
-          title="Total Net Pay"
-          value={money(totals.net)}
-          icon={TrendingUp}
-          variant="success"
-        />
-        <MetricCard
-          title="Total PAYE"
-          value={money(totals.paye)}
-          icon={TrendingDown}
-          variant="warning"
-        />
-        <MetricCard
-          title={payrollLabels.summaryLabel}
-          value={money(totals.statutory)}
-          icon={TrendingUp}
-          variant="highlight"
-        />
-        <MetricCard
-          title="Employer Cost"
-          value={money(totals.employerCost)}
-          icon={TrendingUp}
-          variant="highlight"
-        />
-      </div>
+      {/* Metric cards — context-aware */}
+      {view === 'salary' ? (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 shrink-0">
+          <MetricCard
+            title="Total Gross"
+            value={money(salaryTotals.gross)}
+            icon={TrendingUp}
+            variant="highlight"
+          />
+          <MetricCard
+            title="Total Net Pay"
+            value={money(salaryTotals.net)}
+            icon={TrendingUp}
+            variant="success"
+          />
+          <MetricCard
+            title="Total PAYE"
+            value={money(salaryTotals.paye)}
+            icon={TrendingDown}
+            variant="warning"
+          />
+          <MetricCard
+            title={payrollLabels.summaryLabel}
+            value={money(salaryTotals.statutory)}
+            icon={TrendingUp}
+            variant="highlight"
+          />
+          <MetricCard
+            title="Employer Cost"
+            value={money(salaryTotals.employerCost)}
+            icon={TrendingUp}
+            variant="highlight"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 shrink-0">
+          <MetricCard
+            title="Total Gross"
+            value={money(commissionTotals.gross)}
+            icon={TrendingUp}
+            variant="highlight"
+          />
+          <MetricCard
+            title="Total Tax (10%)"
+            value={money(commissionTotals.tax)}
+            icon={TrendingDown}
+            variant="warning"
+          />
+          <MetricCard
+            title="Total Net Pay"
+            value={money(commissionTotals.net)}
+            icon={TrendingUp}
+            variant="success"
+          />
+        </div>
+      )}
 
-      <DataTable
-        columns={columns}
-        data={filteredData}
-        isLoading={isLoading}
-        emptyMessage={
-          payrollRows.length === 0
-            ? 'No payroll-eligible employees found. Employees must be Active or Probation.'
-            : 'No employees match your search.'
-        }
-        searchPlaceholder="Search employee name..."
-        onSearch={setSearchQuery}
-        secondaryButton={{
-          label: 'Drafts',
-          badgeCount: rejectedDraftsCount,
-          onClick: () => setDraftsPanelOpen(true),
-        }}
-        actionButton={{ label: 'Run Payroll', onClick: handleRunPayroll }}
-        currentPage={1}
-        totalPages={1}
-        onPageChange={() => {}}
-        noInternalScroll
-      />
+      {/* Toggle — only shown when both types of employees exist */}
+      {hasSalaryEmployees && hasCommissionEmployees && (
+        <div className="flex p-1 bg-gray-100 rounded-lg w-fit gap-1">
+          <button
+            onClick={() => {
+              setView('salary');
+              setSearchQuery('');
+            }}
+            className={cn(
+              'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+              view === 'salary'
+                ? 'bg-white shadow-sm text-gray-900'
+                : 'text-gray-500 hover:text-gray-700',
+            )}
+          >
+            Salary
+          </button>
+          <button
+            onClick={() => {
+              setView('commission');
+              setSearchQuery('');
+            }}
+            className={cn(
+              'px-4 py-1.5 text-sm font-medium rounded-md transition-colors',
+              view === 'commission'
+                ? 'bg-white shadow-sm text-gray-900'
+                : 'text-gray-500 hover:text-gray-700',
+            )}
+          >
+            Commission
+          </button>
+        </div>
+      )}
+
+      {view === 'salary' ? (
+        <DataTable
+          columns={salaryColumns}
+          data={filteredSalaryRows}
+          isLoading={isLoading}
+          emptyMessage={
+            payrollRows.length === 0
+              ? 'No salary employees found. Employees must be Active or Probation with Salary or Salary + Commission type.'
+              : 'No employees match your search.'
+          }
+          searchPlaceholder="Search employee name..."
+          onSearch={setSearchQuery}
+          secondaryButton={{
+            label: 'Drafts',
+            badgeCount: rejectedDraftsCount,
+            onClick: () => setDraftsPanelOpen(true),
+          }}
+          actionButton={{ label: 'Run Payroll', onClick: handleRunPayroll }}
+          currentPage={1}
+          totalPages={1}
+          onPageChange={() => {}}
+          noInternalScroll
+        />
+      ) : (
+        <DataTable
+          columns={commissionColumns}
+          data={filteredCommissionRows}
+          isLoading={isLoading}
+          emptyMessage="No commission employees found."
+          searchPlaceholder="Search employee name..."
+          onSearch={setSearchQuery}
+          secondaryButton={{
+            label: 'Drafts',
+            badgeCount: rejectedDraftsCount,
+            onClick: () => setDraftsPanelOpen(true),
+          }}
+          actionButton={{ label: 'Run Payroll', onClick: handleRunPayroll }}
+          currentPage={1}
+          totalPages={1}
+          onPageChange={() => {}}
+          noInternalScroll
+        />
+      )}
 
       <AllowancesPanel
         isOpen={!!allowancePanel}
@@ -520,7 +762,8 @@ export function ManagePayrollTab() {
       <RunPayrollPanel
         isOpen={runPanelOpen}
         onClose={() => setRunPanelOpen(false)}
-        totals={allTotals}
+        totals={allSalaryTotals}
+        commissionTotals={allCommissionTotals}
         overrides={overrides}
         payrollCountry={payrollCountry}
         payrollCurrency={payrollCurrency}
@@ -531,6 +774,7 @@ export function ManagePayrollTab() {
         onClose={() => setDraftsPanelOpen(false)}
         onLoad={({
           basicMap,
+          commissionMap,
           taxPolicyMap,
           fixedTaxAmountMap,
           commissionTaxableMap,
@@ -538,6 +782,7 @@ export function ManagePayrollTab() {
           deductionItemsMap,
         }: DraftLoadData) => {
           setBasicMap(basicMap);
+          setCommissionMap(commissionMap);
           setTaxPolicyMap(taxPolicyMap);
           setFixedTaxAmountMap(fixedTaxAmountMap);
           setCommissionTaxableMap(commissionTaxableMap);
