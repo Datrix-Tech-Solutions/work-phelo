@@ -22,6 +22,15 @@ export interface RowAction {
   danger?: boolean;
 }
 
+interface ToolbarAction {
+  label: string;
+  onClick: () => void;
+  badgeCount?: number;
+  disabled?: boolean;
+  isLoading?: boolean;
+  loadingText?: string;
+}
+
 interface DataTableProps<T extends { id: string | number }> {
   columns: Column<T>[];
   data: T[];
@@ -35,9 +44,9 @@ interface DataTableProps<T extends { id: string | number }> {
   onFilter?: (value: string) => void;
   onExport?: () => void;
   extraFilters?: React.ReactNode;
-  secondaryButton?: { label: string; onClick: () => void; badgeCount?: number };
-  secondaryButtons?: { label: string; onClick: () => void; badgeCount?: number }[];
-  actionButton?: { label: string; onClick: () => void };
+  secondaryButton?: ToolbarAction;
+  secondaryButtons?: ToolbarAction[];
+  actionButton?: ToolbarAction;
   rowActions?: (row: T) => RowAction[];
   onRowClick?: (row: T) => void;
   currentPage: number;
@@ -199,7 +208,14 @@ export function DataTable<T extends { id: string | number }>({
           )}
 
           {secondaryButton && (
-            <Button variant="secondary" size="sm" onClick={secondaryButton.onClick}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={secondaryButton.onClick}
+              disabled={secondaryButton.disabled}
+              isLoading={secondaryButton.isLoading}
+              loadingText={secondaryButton.loadingText}
+            >
               {secondaryButton.label}
               {(secondaryButton.badgeCount ?? 0) > 0 && (
                 <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
@@ -209,7 +225,15 @@ export function DataTable<T extends { id: string | number }>({
             </Button>
           )}
           {secondaryButtons?.map((btn, i) => (
-            <Button key={i} variant="secondary" size="sm" onClick={btn.onClick}>
+            <Button
+              key={i}
+              variant="secondary"
+              size="sm"
+              onClick={btn.onClick}
+              disabled={btn.disabled}
+              isLoading={btn.isLoading}
+              loadingText={btn.loadingText}
+            >
               {btn.label}
               {(btn.badgeCount ?? 0) > 0 && (
                 <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
@@ -220,7 +244,14 @@ export function DataTable<T extends { id: string | number }>({
           ))}
 
           {actionButton && (
-            <Button size="sm" onClick={actionButton.onClick} className="group">
+            <Button
+              size="sm"
+              onClick={actionButton.onClick}
+              disabled={actionButton.disabled}
+              isLoading={actionButton.isLoading}
+              loadingText={actionButton.loadingText}
+              className="group"
+            >
               {actionButton.label}
               <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
                 <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />

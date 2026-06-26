@@ -224,14 +224,14 @@ export default function AddPaymentForm({
       <Modal
         isOpen={!!receiptPrompt}
         onClose={handleLater}
-        title="Generate Receipt"
-        description="Payment recorded successfully. Would you like to generate a receipt?"
+        title="Preview Receipt"
+        description="Payment recorded successfully. Would you like to preview a receipt?"
         footer={
           <>
             <Button variant="outline" onClick={handleLater}>
               Later
             </Button>
-            <Button onClick={handleGenerateReceipt}>Generate</Button>
+            <Button onClick={handleGenerateReceipt}>Preview</Button>
           </>
         }
       />

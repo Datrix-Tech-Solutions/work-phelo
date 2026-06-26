@@ -121,7 +121,7 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
         onPageChange={() => {}}
         noInternalScroll
         rowActions={(row: PlacementPayment) => [
-          { label: 'Receipt', onClick: () => setReceiptTarget(row) },
+          { label: 'Preview Receipt', onClick: () => setReceiptTarget(row) },
           ...(row.status === 'RECORDED' && !row.reversalOfPaymentId
             ? [{ label: 'Reverse', onClick: () => handleReverse(row) }]
             : []),

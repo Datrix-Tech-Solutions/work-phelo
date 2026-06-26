@@ -712,6 +712,65 @@ export interface CreatePlacementPaymentPayload {
   notes?: string;
 }
 
+/* ── Placement Notes ── */
+export type PlacementNoteType =
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE'
+  | 'ENDORSEMENT_DEBIT_NOTE'
+  | 'ENDORSEMENT_CREDIT_NOTE';
+
+export type PlacementNoteDirection = 'CEDANT_TO_BROKER' | 'BROKER_TO_REINSURER';
+export type PlacementNoteStatus = 'DRAFT' | 'ISSUED' | 'VOID';
+
+export interface PlacementNote {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  closingId: string | null;
+  participantId: string | null;
+  endorsementId: string | null;
+  endorsementClosingId: string | null;
+  endorsementParticipantId: string | null;
+  counterpartyId: string;
+  settledByPaymentId: string | null;
+  type: PlacementNoteType;
+  direction: PlacementNoteDirection;
+  noteNumber: string;
+  status: PlacementNoteStatus;
+  currency: string;
+  grossAmount: string;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  nicLevyPercent: string;
+  nicLevyAmount: string;
+  withholdingTaxPercent: string;
+  withholdingTaxAmount: string;
+  netAmount: string;
+  noteDate: string;
+  issuedAt: string | null;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  counterparty: {
+    id: string;
+    type: CounterpartyType;
+    name: string;
+    registrationNumber: string | null;
+  };
+  participant: { id: string; counterpartyId: string } | null;
+  closing: { id: string; closingNumber: string } | null;
+  endorsementParticipant: { id: string; counterpartyId: string } | null;
+  endorsementClosing: { id: string; closingNumber: string } | null;
+}
+
+export interface PlacementNoteListResponse {
+  items: PlacementNote[];
+}
+
 /* ── Placement Claims ── */
 export type PlacementClaimStatus =
   | 'DRAFT'

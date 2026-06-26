@@ -1,19 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { useRef, useState } from 'react';
+import { DataTable } from '@/components/organisms/shared/DataTable';
+import type { Column } from '@/components/organisms/shared/DataTable';
 import { TableButton } from '@/components/atoms/TableButton';
 import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents/GuaranteeNoteModal';
-import { CreditNoteModal } from '@/components/organisms/reinsurance/documents/CreditNoteModal';
-import { DebitNoteModal } from '@/components/organisms/reinsurance/documents/DebitNoteModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
+import { ReinsuranceNotesTable } from '@/components/molecules/reinsurance/ReinsuranceNotesTable';
+import { PlacementNotePreviewModal } from '@/components/organisms/reinsurance/documents/PlacementNotePreviewModal';
 import {
   useCedants,
   useGenerateClosingSlipDocument,
+  useGeneratePlacementCreditNote,
+  useGeneratePlacementDebitNote,
+  useIssuePlacementNote,
   usePlacementClosings,
   usePlacementDocuments,
-  useRenderPlacementDocumentPdf,
+  usePlacementNotes,
   useReinsurers,
+  useRenderPlacementDocumentPdf,
+  useVoidPlacementNote,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { openPdfBlob } from '@/lib/openPdfBlob';
@@ -21,17 +27,21 @@ import { useToastStore } from '@/store/toast.store';
 import {
   Facultative,
   PlacementDocument,
+  PlacementNote,
   PlacementParticipant,
   PlacementParticipantClosing,
 } from '@/types/reinsurance';
 
 interface ClosingRow {
   id: string;
+  participantId: string;
   counterpartyId: string;
   reinsurerCompany: string;
   signedShare: number;
   signedGrossPremium: number;
   brokerageFee: number;
+  status: PlacementParticipantClosing['status'];
+  closingNumber: string;
   closing: PlacementParticipantClosing;
 }
 
@@ -43,19 +53,30 @@ function fmtAmount(val: number, currency: string | null) {
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
+function parseAmount(val: string | number | null | undefined) {
+  if (val == null) return 0;
+  const amount = typeof val === 'number' ? val : parseFloat(val);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 function toClosingRow(
   closing: PlacementParticipantClosing,
-  p: PlacementParticipant,
+  participant: PlacementParticipant | undefined,
   premium: number,
 ): ClosingRow {
-  const signedShare = parseFloat(p.signedLinePercent ?? p.sharePercent ?? '0');
+  const fallbackCounterpartyId = participant?.counterpartyId ?? '';
+  const fallbackName = participant?.counterparty?.name ?? 'Unknown reinsurer';
+  const signedShare = parseAmount(participant?.signedLinePercent ?? participant?.sharePercent);
   return {
     id: closing.id,
-    counterpartyId: p.counterpartyId,
-    reinsurerCompany: p.counterparty.name,
+    participantId: closing.participantId,
+    counterpartyId: fallbackCounterpartyId,
+    reinsurerCompany: fallbackName,
     signedShare,
     signedGrossPremium: (signedShare / 100) * premium,
-    brokerageFee: parseFloat(p.brokerageFee ?? '0'),
+    brokerageFee: parseAmount(participant?.brokerageFee),
+    status: closing.status,
+    closingNumber: closing.closingNumber,
     closing,
   };
 }
@@ -66,18 +87,31 @@ interface PlacementClosingsTabProps {
 
 export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [guaranteeNoteOpen, setGuaranteeNoteOpen] = useState(false);
-  const [debitNoteOpen, setDebitNoteOpen] = useState(false);
-  const [creditNoteRow, setCreditNoteRow] = useState<ClosingRow | null>(null);
+  const [notePreviewTarget, setNotePreviewTarget] = useState<PlacementNote | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
   const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
   const [renderingClosingId, setRenderingClosingId] = useState<string | null>(null);
+  const [isOpeningDebitNote, setIsOpeningDebitNote] = useState(false);
+  const [openingCreditNoteId, setOpeningCreditNoteId] = useState<string | null>(null);
+  const debitNoteInFlightRef = useRef(false);
+  const creditNoteInFlightRef = useRef<Set<string>>(new Set());
 
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
-  const { data: closings = [], isLoading } = usePlacementClosings(placement.id);
+  const { data: closings = [], isLoading: closingsLoading } = usePlacementClosings(placement.id);
   const { data: documents = [] } = usePlacementDocuments(placement.id);
+  const {
+    data: notes = [],
+    isLoading: notesLoading,
+    isError: notesError,
+    refetch: refetchNotes,
+  } = usePlacementNotes(placement.id);
   const generateClosingSlipDocument = useGenerateClosingSlipDocument(placement.id);
   const renderDocumentPdf = useRenderPlacementDocumentPdf(placement.id);
+  const generateDebitNote = useGeneratePlacementDebitNote(placement.id);
+  const generateCreditNote = useGeneratePlacementCreditNote(placement.id);
+  const issueNote = useIssuePlacementNote(placement.id);
+  const voidNote = useVoidPlacementNote(placement.id);
   const addToast = useToastStore((s) => s.addToast);
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
@@ -95,15 +129,19 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
 
   const premium = placement.premium ?? 0;
 
-  const participantById = Object.fromEntries(placement.participants.map((p) => [p.id, p]));
-
   const rows: ClosingRow[] = closings
     .filter((closing) => closing.status !== 'VOID')
-    .map((closing) => {
-      const participant = participantById[closing.participantId];
-      return participant ? toClosingRow(closing, participant, premium) : null;
-    })
-    .filter((row): row is ClosingRow => row !== null);
+    .map((closing) =>
+      toClosingRow(
+        closing,
+        placement.participants.find((p) => p.id === closing.participantId),
+        premium,
+      ),
+    );
+
+  const placementNotes = notes.filter(
+    (note) => note.type === 'DEBIT_NOTE' || note.type === 'CREDIT_NOTE',
+  );
 
   const findClosingSlipDocument = (closingId: string): PlacementDocument | undefined =>
     documents
@@ -114,6 +152,22 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           document.closingId === closingId,
       )
       .sort((a, b) => b.version - a.version || b.createdAt.localeCompare(a.createdAt))[0];
+
+  const findActiveDebitNote = (source = placementNotes) =>
+    source.find((note) => note.type === 'DEBIT_NOTE' && note.status !== 'VOID');
+
+  const findActiveCreditNote = (closingId: string, source = placementNotes) =>
+    source.find(
+      (note) =>
+        note.type === 'CREDIT_NOTE' && note.closingId === closingId && note.status !== 'VOID',
+    );
+
+  const getLatestPlacementNotes = async () => {
+    const latest = await refetchNotes();
+    return (
+      latest.data?.filter((item) => item.type === 'DEBIT_NOTE' || item.type === 'CREDIT_NOTE') ?? []
+    );
+  };
 
   const handleViewClosingSlip = async (row: ClosingRow) => {
     setRenderingClosingId(row.id);
@@ -131,7 +185,83 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     }
   };
 
+  const handleViewDebitNote = async () => {
+    if (debitNoteInFlightRef.current) return;
+    debitNoteInFlightRef.current = true;
+    setIsOpeningDebitNote(true);
+    try {
+      let note = findActiveDebitNote();
+      if (!note) {
+        note = findActiveDebitNote(await getLatestPlacementNotes());
+      }
+      if (!note) {
+        try {
+          note = await generateDebitNote.mutateAsync();
+        } catch (error) {
+          note = findActiveDebitNote(await getLatestPlacementNotes());
+          if (!note) throw error;
+        }
+      }
+      setNotePreviewTarget(note);
+    } catch (error) {
+      addToast({ message: extractError(error, 'Failed to open debit note'), type: 'error' });
+    } finally {
+      debitNoteInFlightRef.current = false;
+      setIsOpeningDebitNote(false);
+    }
+  };
+
+  const handleViewCreditNote = async (closingId: string) => {
+    if (creditNoteInFlightRef.current.has(closingId)) return;
+    creditNoteInFlightRef.current.add(closingId);
+    setOpeningCreditNoteId(closingId);
+    try {
+      let note = findActiveCreditNote(closingId);
+      if (!note) {
+        note = findActiveCreditNote(closingId, await getLatestPlacementNotes());
+      }
+      if (!note) {
+        try {
+          note = await generateCreditNote.mutateAsync(closingId);
+        } catch (error) {
+          note = findActiveCreditNote(closingId, await getLatestPlacementNotes());
+          if (!note) throw error;
+        }
+      }
+      setNotePreviewTarget(note);
+    } catch (error) {
+      addToast({ message: extractError(error, 'Failed to open credit note'), type: 'error' });
+    } finally {
+      creditNoteInFlightRef.current.delete(closingId);
+      setOpeningCreditNoteId((current) => (current === closingId ? null : current));
+    }
+  };
+
+  const handleIssueNote = async (noteId: string) => {
+    try {
+      await issueNote.mutateAsync(noteId);
+      addToast({ message: 'Note issued', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error, 'Failed to issue note'), type: 'error' });
+    }
+  };
+
+  const handleVoidNote = async ({ noteId, voidReason }: { noteId: string; voidReason: string }) => {
+    try {
+      await voidNote.mutateAsync({ noteId, voidReason });
+      addToast({ message: 'Note voided', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error, 'Failed to void note'), type: 'error' });
+    }
+  };
+
   const columns: Column<ClosingRow>[] = [
+    {
+      key: 'closingNumber',
+      label: 'Closing No.',
+      width: '1fr',
+      render: (row) => <span className="font-medium text-gray-900">{row.closingNumber}</span>,
+    },
     {
       key: 'reinsurerCompany',
       label: 'Reinsurance Company',
@@ -155,17 +285,36 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       ),
     },
     {
+      key: 'status',
+      label: 'Status',
+      width: '1fr',
+      render: (row) => <span className="text-gray-700">{row.status}</span>,
+    },
+    {
       key: 'actions',
       label: 'Actions',
-      width: '1.6fr',
+      width: '2fr',
       render: (row) => (
         <div className="flex items-center gap-3">
-          <TableButton onClick={() => setCreditNoteRow(row)}>View Closings</TableButton>
           <TableButton
             onClick={() => handleViewClosingSlip(row)}
             isLoading={renderingClosingId === row.id}
           >
-            View Slip
+            View PDF
+          </TableButton>
+          <TableButton
+            onClick={() => handleViewCreditNote(row.id)}
+            isLoading={openingCreditNoteId === row.id}
+            disabled={row.status !== 'CONFIRMED' || !!openingCreditNoteId}
+            tooltip={
+              row.status !== 'CONFIRMED'
+                ? 'Credit notes require a confirmed closing.'
+                : openingCreditNoteId && openingCreditNoteId !== row.id
+                  ? 'Another credit note is opening.'
+                  : undefined
+            }
+          >
+            View Credit Note
           </TableButton>
           <TableButton variant="blue" onClick={() => setMailToReinsurerRow(row)}>
             Mail Reinsurer
@@ -180,7 +329,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       <DataTable
         columns={columns}
         data={rows}
-        isLoading={isLoading}
+        isLoading={closingsLoading}
         emptyMessage="No closings have been created yet"
         currentPage={1}
         totalPages={1}
@@ -188,10 +337,37 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         noInternalScroll
         secondaryButtons={[
           { label: 'View Guarantee Note', onClick: () => setGuaranteeNoteOpen(true) },
-          { label: 'View Debit Note', onClick: () => setDebitNoteOpen(true) },
+          {
+            label: 'View Debit Note',
+            onClick: handleViewDebitNote,
+            isLoading: isOpeningDebitNote,
+            disabled: isOpeningDebitNote,
+            loadingText: 'Opening...',
+          },
         ]}
-        actionButton={{ label: 'Mail to cedant', onClick: () => setMailToCedantOpen(true) }}
+        actionButton={{ label: 'Mail to Cedant', onClick: () => setMailToCedantOpen(true) }}
       />
+
+      <div className="mt-6">
+        <div className="mb-2 flex flex-col gap-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Backend Notes History
+          </p>
+          <p className="text-xs text-gray-400">
+            Saved debit and credit notes for this placement. Use the closings actions above for the
+            primary document workflow.
+          </p>
+        </div>
+        <ReinsuranceNotesTable
+          notes={placementNotes}
+          isLoading={notesLoading}
+          isError={notesError}
+          emptyMessage="No placement notes yet"
+          onIssue={handleIssueNote}
+          onVoid={handleVoidNote}
+          isVoidPending={voidNote.isPending}
+        />
+      </div>
 
       <GuaranteeNoteModal
         isOpen={guaranteeNoteOpen}
@@ -202,23 +378,12 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         onClose={() => setGuaranteeNoteOpen(false)}
       />
 
-      <DebitNoteModal
-        isOpen={debitNoteOpen}
-        placement={placement}
-        onPrint={() => setDebitNoteOpen(false)}
-        onClose={() => setDebitNoteOpen(false)}
-      />
-
-      {creditNoteRow && (
-        <CreditNoteModal
-          isOpen={!!creditNoteRow}
-          placement={placement}
-          sharePercent={creditNoteRow.signedShare}
-          brokerageFee={creditNoteRow.brokerageFee}
-          counterpartyId={creditNoteRow.counterpartyId}
-          reinsurerCompany={creditNoteRow.reinsurerCompany}
-          onPrint={() => setCreditNoteRow(null)}
-          onClose={() => setCreditNoteRow(null)}
+      {notePreviewTarget && (
+        <PlacementNotePreviewModal
+          isOpen
+          note={notePreviewTarget}
+          onPrint={() => setNotePreviewTarget(null)}
+          onClose={() => setNotePreviewTarget(null)}
         />
       )}
 
@@ -227,6 +392,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         placement={placement}
         brokerageFee={0}
         recipients={fullCedant?.email ? [fullCedant.email] : []}
+        primaryActionLabel="Close Preview"
         onSend={() => setMailToCedantOpen(false)}
         onClose={() => setMailToCedantOpen(false)}
       />
@@ -237,6 +403,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           placement={placement}
           brokerageFee={mailToReinsurerRow.brokerageFee}
           recipients={reinsurerEmails[mailToReinsurerRow.counterpartyId] ?? []}
+          primaryActionLabel="Close Preview"
           onSend={() => setMailToReinsurerRow(null)}
           onClose={() => setMailToReinsurerRow(null)}
         />

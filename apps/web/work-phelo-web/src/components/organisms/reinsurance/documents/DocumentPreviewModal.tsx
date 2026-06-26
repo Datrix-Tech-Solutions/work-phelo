@@ -17,6 +17,7 @@ interface DocumentPreviewModalProps {
   onClose: () => void;
   children: ReactNode;
   afterContent?: ReactNode;
+  previewOnly?: boolean;
 }
 
 export function DocumentPreviewModal({
@@ -27,6 +28,7 @@ export function DocumentPreviewModal({
   onClose,
   children,
   afterContent,
+  previewOnly = false,
 }: DocumentPreviewModalProps) {
   const handlePrint = () => {
     const el = document.getElementById('irisk-print-root');
@@ -55,6 +57,12 @@ export function DocumentPreviewModal({
         }
       >
         <div className="flex flex-col gap-2">
+          {previewOnly && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              Preview only. This document has not been generated or stored by the backend yet.
+            </div>
+          )}
+
           <div className="grid grid-cols-3 items-center pb-2 border-b border-gray-100">
             <Image
               src="/iriskre.png"

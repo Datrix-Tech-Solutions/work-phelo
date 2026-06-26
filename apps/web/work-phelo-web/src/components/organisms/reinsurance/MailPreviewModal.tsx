@@ -27,6 +27,8 @@ interface MailPreviewModalProps {
   onClosePlacement?: () => void;
   claim?: PlacementClaim;
   allocation?: PlacementClaimAllocation;
+  primaryActionLabel?: string;
+  primaryActionLoadingText?: string;
 }
 
 export function MailPreviewModal({
@@ -37,6 +39,8 @@ export function MailPreviewModal({
   onClose,
   claim,
   allocation,
+  primaryActionLabel = 'Close Preview',
+  primaryActionLoadingText = 'Updating…',
 }: MailPreviewModalProps) {
   const [localRecipients, setLocalRecipients] = useState<string[]>(recipients);
   const [addingRecipient, setAddingRecipient] = useState(false);
@@ -100,7 +104,7 @@ export function MailPreviewModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`Mail — ${placement.cedant.name}`}
+      title={`Email Preview — ${placement.cedant.name}`}
       width="sm:w-[50vw] sm:max-w-[60vw]"
       height="sm:h-[80vh] sm:max-h-[90vh]"
       fullScreenMobile
@@ -116,8 +120,12 @@ export function MailPreviewModal({
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={handleSend} isLoading={isSending} loadingText="Sending…">
-              Send
+            <Button
+              onClick={handleSend}
+              isLoading={isSending}
+              loadingText={primaryActionLoadingText}
+            >
+              {primaryActionLabel}
             </Button>
           </div>
         </div>

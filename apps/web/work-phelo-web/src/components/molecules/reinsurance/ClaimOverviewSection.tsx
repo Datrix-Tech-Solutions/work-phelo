@@ -249,7 +249,7 @@ function ClaimReinsurersTable({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              title="Preview Debit Note"
+              title="Preview Only Claim Debit Note"
               className="text-blue-500 hover:text-blue-600 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
@@ -260,7 +260,7 @@ function ClaimReinsurersTable({
             </button>
             <button
               type="button"
-              title="Send Mail"
+              title="Preview Email / Issue Cash Call"
               className="text-green-500 hover:text-green-700 transition-colors"
               onClick={(e) => {
                 e.stopPropagation();
@@ -367,6 +367,8 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
           recipients={mailRecipients}
           claim={claim}
           allocation={mailAllocation}
+          primaryActionLabel={mailAllocation ? 'Issue Cash Call' : 'Mark Claim Notified'}
+          primaryActionLoadingText="Updating…"
           onSend={() => setMailTarget(null)}
           onClose={() => setMailTarget(null)}
         />
