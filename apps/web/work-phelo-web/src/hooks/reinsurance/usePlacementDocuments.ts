@@ -42,7 +42,7 @@ export function useRenderPlacementDocumentPdf(placementId: string) {
     mutationFn: async (documentId: string) => {
       const res = await api.post(
         `${BASE}/${placementId}/documents/${documentId}/render-pdf`,
-        null,
+        undefined,
         {
           responseType: 'blob',
           headers: { Accept: 'application/pdf' },
