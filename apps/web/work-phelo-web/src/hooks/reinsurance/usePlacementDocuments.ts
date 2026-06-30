@@ -37,6 +37,25 @@ export function useGenerateClosingSlipDocument(placementId: string) {
   });
 }
 
+export function useGenerateParticipantOfferSlipDocument(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (participantId: string) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/participants/${participantId}/documents/offer-slip`,
+      );
+      return res.data as PlacementDocument;
+    },
+    onSuccess: (document) => {
+      queryClient.setQueryData<PlacementDocument[]>(
+        placementDocumentsKey(placementId),
+        (current = []) => [document, ...current.filter((item) => item.id !== document.id)],
+      );
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
 export function useRenderPlacementDocumentPdf(placementId: string) {
   return useMutation({
     mutationFn: async (documentId: string) => {

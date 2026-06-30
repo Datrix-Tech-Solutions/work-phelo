@@ -7,7 +7,13 @@ import { Icons } from '@/components/atoms/icons';
 import { TableButton } from '@/components/atoms/TableButton';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { Facultative } from '@/types/reinsurance';
-import { SlipPreviewModal } from '@/components/organisms/reinsurance/documents/SlipPreviewModal';
+import {
+  useGenerateParticipantOfferSlipDocument,
+  usePlacementDocuments,
+  useRenderPlacementDocumentPdf,
+} from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 export type DistributionStatus = 'Pending' | 'Accepted' | 'Closed' | 'Declined';
 
@@ -30,6 +36,19 @@ const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'neutra
 
 function fmtAmount(val: number) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function openPdfBlob(blob: Blob, fileName: string) {
+  const pdfBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
+  const url = URL.createObjectURL(pdfBlob);
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+  }
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 interface DistributionTableProps {
@@ -65,11 +84,18 @@ export function DistributionTable({
 }: DistributionTableProps) {
   const [mailedIds, setMailedIds] = useState<Set<string>>(new Set());
   const [mailPreviewId, setMailPreviewId] = useState<string | null>(null);
-  const [slipPreviewId, setSlipPreviewId] = useState<string | null>(null);
+  const [offerSlipLoadingIds, setOfferSlipLoadingIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftShare, setDraftShare] = useState('');
   const [editingBrokerageId, setEditingBrokerageId] = useState<string | null>(null);
   const [draftBrokerage, setDraftBrokerage] = useState('');
+  const { data: placementDocuments = [], refetch: refetchPlacementDocuments } =
+    usePlacementDocuments(placement.id);
+  const { mutateAsync: generateParticipantOfferSlipDocument } =
+    useGenerateParticipantOfferSlipDocument(placement.id);
+  const { mutateAsync: renderPlacementDocumentPdf } =
+    useRenderPlacementDocumentPdf(placement.id);
+  const toast = useToastStore.getState;
 
   const startEdit = (row: DistributionEntry) => {
     setEditingId(row.id);
@@ -121,6 +147,51 @@ export function DistributionTable({
       n.delete(row.id);
       return n;
     });
+  };
+
+  const findActiveOfferSlip = (
+    participantId: string,
+    documents = placementDocuments,
+  ) =>
+    documents.find(
+      (document) =>
+        document.type === 'OFFER_SLIP' &&
+        document.status !== 'VOID' &&
+        document.participantId === participantId,
+    );
+
+  const handleViewOfferSlip = async (row: DistributionEntry) => {
+    if (offerSlipLoadingIds.has(row.id)) return;
+    setOfferSlipLoadingIds((prev) => new Set([...prev, row.id]));
+
+    try {
+      let document = findActiveOfferSlip(row.id);
+
+      if (!document) {
+        try {
+          document = await generateParticipantOfferSlipDocument(row.id);
+        } catch (error) {
+          // If another click/session created the active document first, reuse it instead of surfacing a duplicate error.
+          const refreshed = await refetchPlacementDocuments();
+          document = findActiveOfferSlip(row.id, refreshed.data ?? []);
+          if (!document) throw error;
+        }
+      }
+
+      const pdf = await renderPlacementDocumentPdf(document.id);
+      openPdfBlob(pdf, `${document.documentNumber}.pdf`);
+    } catch (error) {
+      toast().addToast({
+        message: extractError(error) || 'Unable to open offer slip PDF.',
+        type: 'error',
+      });
+    } finally {
+      setOfferSlipLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
+    }
   };
 
   const columns: Column<DistributionEntry>[] = [
@@ -228,6 +299,7 @@ export function DistributionTable({
         const responded =
           row.status === 'Declined' || row.status === 'Accepted' || row.status === 'Closed';
         const isBusy = busyIds?.has(row.id) ?? false;
+        const isOfferSlipLoading = offerSlipLoadingIds.has(row.id);
         const disabledActionClass = isBusy ? 'opacity-50 cursor-wait' : '';
         const showAccept = !isPlacementLocked && mailed && !responded;
         const showDecline = !isPlacementLocked && mailed && !responded;
@@ -237,9 +309,12 @@ export function DistributionTable({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              title="Preview Only Offer Slip"
-              onClick={() => setSlipPreviewId(row.id)}
-              className="text-blue-500 hover:text-blue-600 transition-colors"
+              title={isOfferSlipLoading ? 'Opening offer slip...' : 'View Offer Slip'}
+              onClick={() => handleViewOfferSlip(row)}
+              disabled={isOfferSlipLoading}
+              className={`text-blue-500 hover:text-blue-600 transition-colors ${
+                isOfferSlipLoading ? 'opacity-50 cursor-wait' : ''
+              }`}
             >
               <Icons.Eye className="w-4 h-4" />
             </button>
@@ -321,7 +396,6 @@ export function DistributionTable({
   ];
 
   const mailPreviewEntry = entries.find((e) => e.id === mailPreviewId);
-  const slipPreviewEntry = entries.find((e) => e.id === slipPreviewId);
 
   return (
     <>
@@ -347,13 +421,6 @@ export function DistributionTable({
         onClose={() => setMailPreviewId(null)}
       />
 
-      <SlipPreviewModal
-        isOpen={!!slipPreviewId}
-        placement={placement}
-        brokerageFee={slipPreviewEntry?.brokerageFee ?? 0}
-        onPrint={() => setSlipPreviewId(null)}
-        onClose={() => setSlipPreviewId(null)}
-      />
     </>
   );
 }
