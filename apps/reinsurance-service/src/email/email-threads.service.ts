@@ -13,6 +13,8 @@ import {
   Prisma,
 } from '../../prisma/generated/client';
 import { EmailEventPublisher } from '../messaging/email-event.publisher';
+import { PlacementAttachmentsService } from '../placements/placement-attachments.service';
+import { PlacementDocumentsService } from '../placements/placement-documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LinkPlacementEmailDto } from './dto/link-placement-email.dto';
 import { QueryEmailMessagesDto } from './dto/query-email-messages.dto';
@@ -24,6 +26,7 @@ import {
 import { EmailTokenEncryptionService } from './email-token-encryption.service';
 import { EmailProviderRegistry } from './providers/email-provider.registry';
 import {
+  EmailProviderFileAttachment,
   EmailProviderRecipient,
   EmailProviderSentMessage,
 } from './providers/email-provider.interface';
@@ -105,6 +108,10 @@ type PlacementThreadDetailRecord = Prisma.PlacementEmailLinkGetPayload<{
 type OutboundMailboxRecord = Prisma.MailboxConnectionGetPayload<{
   select: typeof mailboxOutboundSelect;
 }>;
+type WorkflowEmailAttachment = EmailProviderFileAttachment & {
+  providerAttachmentId: string;
+};
+const MAX_INLINE_EMAIL_ATTACHMENT_BYTES = 3 * 1024 * 1024;
 
 @Injectable()
 export class EmailThreadsService {
@@ -115,6 +122,8 @@ export class EmailThreadsService {
     private readonly publisher: EmailEventPublisher,
     private readonly providers: EmailProviderRegistry,
     private readonly encryption: EmailTokenEncryptionService,
+    private readonly documentsService: PlacementDocumentsService,
+    private readonly attachmentsService: PlacementAttachmentsService,
   ) {}
 
   async findThreads(tenantId: string, query: QueryEmailThreadsDto) {
@@ -261,6 +270,11 @@ export class EmailThreadsService {
     }
 
     await this.assertPlacement(user.tenantId, placementId);
+    const attachments = await this.prepareWorkflowAttachments(
+      user.tenantId,
+      placementId,
+      dto,
+    );
     const mailbox = await this.findOutboundMailbox(
       user.tenantId,
       dto.mailboxConnectionId,
@@ -288,6 +302,7 @@ export class EmailThreadsService {
             }),
             lastMessageAt: now,
             messageCount: 1,
+            hasAttachments: attachments.length > 0,
           },
         });
 
@@ -309,6 +324,8 @@ export class EmailThreadsService {
             bodyPreview: this.preview(dto.bodyText, dto.bodyHtml),
             bodyText: this.cleanOptional(dto.bodyText),
             bodyHtml: this.cleanOptional(dto.bodyHtml),
+            hasAttachments: attachments.length > 0,
+            attachments: this.attachmentCreateInput(user.tenantId, attachments),
           },
           include: messageInclude,
         });
@@ -343,6 +360,7 @@ export class EmailThreadsService {
           bcc: this.toProviderRecipients(dto.bcc),
           bodyText: this.providerBody(dto.bodyText),
           bodyHtml: this.providerBody(dto.bodyHtml),
+          ...this.providerAttachmentInput(attachments),
         }),
     );
 
@@ -419,6 +437,11 @@ export class EmailThreadsService {
       user.tenantId,
       thread.mailboxConnectionId,
     );
+    const attachments = await this.prepareWorkflowAttachments(
+      user.tenantId,
+      placementId,
+      dto,
+    );
 
     const parentMessage = await this.prisma.emailMessage.findFirst({
       where: {
@@ -462,6 +485,8 @@ export class EmailThreadsService {
         bodyHtml: this.cleanOptional(dto.bodyHtml),
         parentMessageId: parentMessage.id,
         inReplyToMessageId: parentMessage.id,
+        hasAttachments: attachments.length > 0,
+        attachments: this.attachmentCreateInput(user.tenantId, attachments),
       },
       include: messageInclude,
     });
@@ -480,6 +505,7 @@ export class EmailThreadsService {
           bcc: this.toProviderRecipients(dto.bcc),
           bodyText: this.providerBody(dto.bodyText),
           bodyHtml: this.providerBody(dto.bodyHtml),
+          ...this.providerAttachmentInput(attachments),
         }),
     );
 
@@ -680,6 +706,103 @@ export class EmailThreadsService {
 
   private jsonOrUndefined(value: unknown): Prisma.InputJsonValue | undefined {
     return value === undefined ? undefined : (value as Prisma.InputJsonValue);
+  }
+
+  private async prepareWorkflowAttachments(
+    tenantId: string,
+    placementId: string,
+    dto: Pick<SendPlacementEmailDto, 'documentIds' | 'attachmentIds'>,
+  ): Promise<WorkflowEmailAttachment[]> {
+    const documentIds = this.uniqueIds(dto.documentIds);
+    const attachmentIds = this.uniqueIds(dto.attachmentIds);
+    if (documentIds.length + attachmentIds.length > 10) {
+      throw new BadRequestException(
+        'At most 10 workflow attachments can be sent in one email',
+      );
+    }
+
+    const documents = await Promise.all(
+      documentIds.map(async (documentId) => {
+        const file = await this.documentsService.readStoredPdfForEmail(
+          tenantId,
+          placementId,
+          documentId,
+        );
+        return {
+          providerAttachmentId: `document:${documentId}`,
+          fileName: file.fileName,
+          contentType: file.mimeType,
+          contentBytes: file.body,
+          sizeBytes: file.sizeBytes,
+        };
+      }),
+    );
+    const uploadedAttachments = await Promise.all(
+      attachmentIds.map(async (attachmentId) => {
+        const file = await this.attachmentsService.readStoredAttachmentForEmail(
+          tenantId,
+          placementId,
+          attachmentId,
+        );
+        return {
+          providerAttachmentId: `attachment:${attachmentId}`,
+          fileName: file.fileName,
+          contentType: file.mimeType,
+          contentBytes: file.body,
+          sizeBytes: file.sizeBytes,
+        };
+      }),
+    );
+
+    const attachments = [...documents, ...uploadedAttachments];
+    const oversized = attachments.find(
+      (attachment) =>
+        attachment.contentBytes.byteLength >= MAX_INLINE_EMAIL_ATTACHMENT_BYTES,
+    );
+    if (oversized) {
+      throw new BadRequestException(
+        `Attachment "${oversized.fileName}" must be smaller than 3 MB for workflow email sending`,
+      );
+    }
+
+    return attachments;
+  }
+
+  private uniqueIds(ids?: string[]): string[] {
+    return Array.from(new Set(ids ?? []));
+  }
+
+  private attachmentCreateInput(
+    tenantId: string,
+    attachments: WorkflowEmailAttachment[],
+  ):
+    | Prisma.EmailAttachmentMetadataCreateNestedManyWithoutMessageInput
+    | undefined {
+    if (!attachments.length) return undefined;
+    return {
+      create: attachments.map((attachment) => ({
+        tenantId,
+        providerAttachmentId: attachment.providerAttachmentId,
+        fileName: attachment.fileName,
+        contentType: attachment.contentType,
+        sizeBytes: attachment.sizeBytes,
+        isInline: false,
+      })),
+    };
+  }
+
+  private providerAttachmentInput(attachments: WorkflowEmailAttachment[]): {
+    attachments?: EmailProviderFileAttachment[];
+  } {
+    if (!attachments.length) return {};
+    return {
+      attachments: attachments.map((attachment) => ({
+        fileName: attachment.fileName,
+        contentType: attachment.contentType,
+        contentBytes: attachment.contentBytes,
+        sizeBytes: attachment.sizeBytes,
+      })),
+    };
   }
 
   private async sendWithFailureStatus(

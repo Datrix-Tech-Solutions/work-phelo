@@ -35,6 +35,14 @@ describe('MicrosoftGraphEmailProvider outbound send/reply', () => {
       cc: [{ email: 'broker@example.com' }],
       bcc: [{ email: 'audit@example.com' }],
       bodyText: 'Please review.',
+      attachments: [
+        {
+          fileName: 'offer-slip.pdf',
+          contentType: 'application/pdf',
+          contentBytes: Buffer.from('%PDF-offer'),
+          sizeBytes: 10,
+        },
+      ],
     });
 
     const calls = fetchMock.mock.calls;
@@ -55,6 +63,14 @@ describe('MicrosoftGraphEmailProvider outbound send/reply', () => {
       ],
       ccRecipients: [{ emailAddress: { address: 'broker@example.com' } }],
       bccRecipients: [{ emailAddress: { address: 'audit@example.com' } }],
+      attachments: [
+        {
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: 'offer-slip.pdf',
+          contentType: 'application/pdf',
+          contentBytes: Buffer.from('%PDF-offer').toString('base64'),
+        },
+      ],
     });
     expect(urlOf(calls[1]?.[0])).toBe(
       'https://graph.microsoft.com/v1.0/me/messages/immutable-draft-message-1/send',
@@ -88,6 +104,13 @@ describe('MicrosoftGraphEmailProvider outbound send/reply', () => {
       providerMessageId: 'immutable-parent-message-1',
       to: [{ email: 'cedant@example.com' }],
       bodyHtml: '<p>Thanks.</p>',
+      attachments: [
+        {
+          fileName: 'closing-slip.pdf',
+          contentType: 'application/pdf',
+          contentBytes: Buffer.from('%PDF-closing'),
+        },
+      ],
     });
 
     const calls = fetchMock.mock.calls;
@@ -112,6 +135,14 @@ describe('MicrosoftGraphEmailProvider outbound send/reply', () => {
     expect(jsonBodyOf(calls[1]?.[1])).toMatchObject({
       body: { contentType: 'HTML', content: '<p>Thanks.</p>' },
       toRecipients: [{ emailAddress: { address: 'cedant@example.com' } }],
+      attachments: [
+        {
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: 'closing-slip.pdf',
+          contentType: 'application/pdf',
+          contentBytes: Buffer.from('%PDF-closing').toString('base64'),
+        },
+      ],
     });
     expect(urlOf(calls[2]?.[0])).toBe(
       'https://graph.microsoft.com/v1.0/me/messages/immutable-reply-message-1/send',

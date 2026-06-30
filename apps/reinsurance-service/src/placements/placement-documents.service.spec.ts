@@ -182,6 +182,7 @@ describe('PlacementDocumentsService', () => {
   let documentStorage: {
     storePdf: jest.Mock;
     signedDownloadUrl: jest.Mock;
+    readStoredObject: jest.Mock;
   };
   let service: PlacementDocumentsService;
   let lockPolicy: PlacementFinancialLockPolicy;
@@ -250,6 +251,12 @@ describe('PlacementDocumentsService', () => {
         expiresAt: new Date('2026-06-11T12:05:00.000Z'),
         mimeType: 'application/pdf',
         fileName: 'DOC-CS-001.pdf',
+      }),
+      readStoredObject: jest.fn().mockResolvedValue({
+        body: Buffer.from('%PDF stored'),
+        mimeType: 'application/pdf',
+        fileName: 'DOC-OS-001.pdf',
+        sizeBytes: Buffer.from('%PDF stored').byteLength,
       }),
     };
     service = new PlacementDocumentsService(
@@ -878,6 +885,65 @@ describe('PlacementDocumentsService', () => {
     });
     expect(updateArgs.data.generatedAt).toBeInstanceOf(Date);
     expect(result.storageProvider).toBe('S3');
+  });
+
+  it('reads an existing stored OFFER_SLIP PDF for an outbound email', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.OFFER_SLIP,
+      objectKey: 'reinsurance/offer-slip.pdf',
+      fileName: 'DOC-OS-001.pdf',
+      mimeType: 'application/pdf',
+    });
+
+    const result = await service.readStoredPdfForEmail(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(documentStorage.storePdf).not.toHaveBeenCalled();
+    expect(documentStorage.readStoredObject).toHaveBeenCalledWith({
+      objectKey: 'reinsurance/offer-slip.pdf',
+      mimeType: 'application/pdf',
+      fileName: 'DOC-OS-001.pdf',
+    });
+    expect(result.body).toEqual(Buffer.from('%PDF stored'));
+  });
+
+  it('renders and stores an unstored CLOSING_SLIP before reading it for email', async () => {
+    const closingDocument = {
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      documentNumber: 'DOC-CS-001',
+      renderPayload: {
+        documentType: PlacementDocumentType.CLOSING_SLIP,
+        closing: { closingNumber: 'CLO-001' },
+      },
+    };
+    const storedDocument = {
+      ...closingDocument,
+      objectKey: 'reinsurance/closing-slip.pdf',
+      fileName: 'DOC-CS-001.pdf',
+      mimeType: 'application/pdf',
+      storageProvider: 'S3',
+      sizeBytes: 9,
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(closingDocument);
+    prisma.placementDocument.update.mockResolvedValue(storedDocument);
+
+    await service.readStoredPdfForEmail(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(documentStorage.storePdf).toHaveBeenCalled();
+    expect(documentStorage.readStoredObject).toHaveBeenCalledWith({
+      objectKey: 'reinsurance/closing-slip.pdf',
+      mimeType: 'application/pdf',
+      fileName: 'DOC-CS-001.pdf',
+    });
   });
 
   it('rejects already stored documents during render-and-store', async () => {

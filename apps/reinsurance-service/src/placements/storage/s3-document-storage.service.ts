@@ -52,6 +52,13 @@ export interface SignedDocumentUrlResult {
   fileName: string;
 }
 
+export interface StoredObjectResult {
+  body: Buffer;
+  mimeType: string;
+  fileName: string;
+  sizeBytes: number;
+}
+
 interface S3DocumentStorageConfig {
   bucket: string;
   region: string;
@@ -149,6 +156,34 @@ export class S3DocumentStorageService {
       expiresAt,
       mimeType: input.mimeType,
       fileName: input.fileName,
+    };
+  }
+
+  async readStoredObject(input: {
+    objectKey: string;
+    mimeType: string;
+    fileName: string;
+  }): Promise<StoredObjectResult> {
+    const config = this.config();
+    const response = await this.s3(config).send(
+      new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: input.objectKey,
+        ResponseContentType: input.mimeType,
+        ResponseContentDisposition: `inline; filename="${input.fileName}"`,
+      }),
+    );
+
+    const bytes = await response.Body?.transformToByteArray();
+    if (!bytes?.byteLength) {
+      throw new InternalServerErrorException('Stored object body was empty');
+    }
+    const body = Buffer.from(bytes);
+    return {
+      body,
+      mimeType: input.mimeType,
+      fileName: input.fileName,
+      sizeBytes: body.byteLength,
     };
   }
 

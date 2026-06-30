@@ -18,6 +18,7 @@ import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.servic
 import {
   S3DocumentStorageService,
   SignedDocumentUrlResult,
+  StoredObjectResult,
 } from './storage/s3-document-storage.service';
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
 import { PlacementsService } from './placements.service';
@@ -534,6 +535,35 @@ export class PlacementDocumentsService {
     }
 
     return this.documentStorage.signedDownloadUrl({
+      objectKey: document.objectKey,
+      mimeType: document.mimeType ?? 'application/pdf',
+      fileName: document.fileName ?? `${document.documentNumber}.pdf`,
+    });
+  }
+
+  async readStoredPdfForEmail(
+    tenantId: string,
+    placementId: string,
+    documentId: string,
+  ): Promise<StoredObjectResult> {
+    let document = await this.findOne(tenantId, placementId, documentId);
+    this.assertPdfRenderable(document);
+
+    if (!document.objectKey) {
+      document = await this.renderAndStorePdf(
+        tenantId,
+        placementId,
+        documentId,
+      );
+    }
+
+    if (!document.objectKey) {
+      throw new InternalServerErrorException(
+        'Document PDF storage metadata is missing',
+      );
+    }
+
+    return this.documentStorage.readStoredObject({
       objectKey: document.objectKey,
       mimeType: document.mimeType ?? 'application/pdf',
       fileName: document.fileName ?? `${document.documentNumber}.pdf`,

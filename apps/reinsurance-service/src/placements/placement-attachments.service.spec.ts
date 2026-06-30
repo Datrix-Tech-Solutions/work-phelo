@@ -82,6 +82,7 @@ describe('PlacementAttachmentsService', () => {
   let storage: {
     storeAttachment: jest.Mock;
     signedDownloadUrl: jest.Mock;
+    readStoredObject: jest.Mock;
   };
   let service: PlacementAttachmentsService;
 
@@ -116,6 +117,7 @@ describe('PlacementAttachmentsService', () => {
     storage = {
       storeAttachment: jest.fn(),
       signedDownloadUrl: jest.fn(),
+      readStoredObject: jest.fn(),
     };
     service = new PlacementAttachmentsService(
       prisma as unknown as PrismaService,
@@ -269,6 +271,58 @@ describe('PlacementAttachmentsService', () => {
       mimeType: 'application/pdf',
       fileName: 'supporting schedule.pdf',
     });
+  });
+
+  it('reads only active tenant-scoped attachments for outbound email', async () => {
+    prisma.placementAttachment.findFirst.mockResolvedValue(attachment);
+    storage.readStoredObject.mockResolvedValue({
+      body: Buffer.from('hello world!'),
+      mimeType: attachment.mimeType,
+      fileName: attachment.fileName,
+      sizeBytes: attachment.sizeBytes,
+    });
+
+    const result = await service.readStoredAttachmentForEmail(
+      'tenant-1',
+      'placement-1',
+      'attachment-1',
+    );
+
+    expect(prisma.placementAttachment.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'attachment-1',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        status: PlacementAttachmentStatus.ACTIVE,
+        participantId: null,
+        closingId: null,
+        endorsementId: null,
+        endorsementParticipantId: null,
+        endorsementClosingId: null,
+        claimId: null,
+        claimCashCallId: null,
+        paymentId: null,
+      },
+    });
+    expect(storage.readStoredObject).toHaveBeenCalledWith({
+      objectKey: attachment.objectKey,
+      mimeType: attachment.mimeType,
+      fileName: attachment.fileName,
+    });
+    expect(result.body).toEqual(Buffer.from('hello world!'));
+  });
+
+  it('rejects void or cross-tenant attachments for outbound email', async () => {
+    prisma.placementAttachment.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.readStoredAttachmentForEmail(
+        'tenant-1',
+        'placement-1',
+        'attachment-from-another-scope',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(storage.readStoredObject).not.toHaveBeenCalled();
   });
 
   it('voids attachments without deleting the stored object or audit row', async () => {

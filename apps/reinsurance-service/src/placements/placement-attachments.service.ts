@@ -13,7 +13,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PlacementDocumentDownloadUrlDto } from './dto/placement-document-download-url.dto';
 import { UploadPlacementAttachmentDto } from './dto/upload-placement-attachment.dto';
 import { VoidPlacementAttachmentDto } from './dto/void-placement-attachment.dto';
-import { S3DocumentStorageService } from './storage/s3-document-storage.service';
+import {
+  S3DocumentStorageService,
+  StoredObjectResult,
+} from './storage/s3-document-storage.service';
 
 export type AttachmentParentType =
   | 'PLACEMENT'
@@ -162,6 +165,36 @@ export class PlacementAttachmentsService {
       ...signedUrl,
       expiresAt: signedUrl.expiresAt.toISOString(),
     };
+  }
+
+  async readStoredAttachmentForEmail(
+    tenantId: string,
+    placementId: string,
+    attachmentId: string,
+  ): Promise<StoredObjectResult> {
+    const attachment = await this.prisma.placementAttachment.findFirst({
+      where: {
+        id: attachmentId,
+        tenantId,
+        placementId,
+        status: PlacementAttachmentStatus.ACTIVE,
+        participantId: null,
+        closingId: null,
+        endorsementId: null,
+        endorsementParticipantId: null,
+        endorsementClosingId: null,
+        claimId: null,
+        claimCashCallId: null,
+        paymentId: null,
+      },
+    });
+    if (!attachment) throw new NotFoundException('Attachment not found');
+
+    return this.storage.readStoredObject({
+      objectKey: attachment.objectKey,
+      mimeType: attachment.mimeType,
+      fileName: attachment.fileName,
+    });
   }
 
   async void(

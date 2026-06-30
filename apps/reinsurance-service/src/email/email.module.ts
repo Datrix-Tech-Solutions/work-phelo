@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
+import { PlacementsModule } from '../placements/placements.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { EmailMailboxesController } from './email-mailboxes.controller';
 import { EmailMailboxService } from './email-mailbox.service';
@@ -11,7 +12,7 @@ import { EmailProviderRegistry } from './providers/email-provider.registry';
 import { MicrosoftGraphEmailProvider } from './providers/microsoft-graph-email.provider';
 
 @Module({
-  imports: [PrismaModule, RabbitMQModule],
+  imports: [PrismaModule, RabbitMQModule, PlacementsModule],
   controllers: [
     EmailMailboxesController,
     EmailThreadsController,
