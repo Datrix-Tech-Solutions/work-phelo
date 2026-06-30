@@ -8,6 +8,7 @@ import {
   EmailProviderReplyInput,
   EmailProviderSendInput,
   EmailProviderSentMessage,
+  EmailProviderFileAttachment,
   EmailProviderSyncInput,
   EmailProviderSyncResult,
   EmailProviderVerifyInput,
@@ -128,6 +129,7 @@ export class MicrosoftGraphEmailProvider implements EmailProvider {
       toRecipients: this.toGraphRecipients(input.to),
       ccRecipients: this.toGraphRecipients(input.cc),
       bccRecipients: this.toGraphRecipients(input.bcc),
+      attachments: this.toGraphAttachments(input.attachments),
     });
 
     await this.sendDraft(accessToken, draft.id);
@@ -149,6 +151,9 @@ export class MicrosoftGraphEmailProvider implements EmailProvider {
       ...(input.cc ? { ccRecipients: this.toGraphRecipients(input.cc) } : {}),
       ...(input.bcc
         ? { bccRecipients: this.toGraphRecipients(input.bcc) }
+        : {}),
+      ...(input.attachments?.length
+        ? { attachments: this.toGraphAttachments(input.attachments) }
         : {}),
     });
 
@@ -300,6 +305,18 @@ export class MicrosoftGraphEmailProvider implements EmailProvider {
         address: recipient.email,
         ...(recipient.name ? { name: recipient.name } : {}),
       },
+    }));
+  }
+
+  private toGraphAttachments(
+    attachments?: EmailProviderFileAttachment[],
+  ): unknown[] | undefined {
+    if (!attachments?.length) return undefined;
+    return attachments.map((attachment) => ({
+      '@odata.type': '#microsoft.graph.fileAttachment',
+      name: attachment.fileName,
+      contentType: attachment.contentType,
+      contentBytes: attachment.contentBytes.toString('base64'),
     }));
   }
 

@@ -56,6 +56,11 @@ import { S3DocumentStorageService } from './storage/s3-document-storage.service'
     ClosingSnapshotReader,
     ClaimAllocationCalculator,
   ],
-  exports: [PlacementsService],
+  exports: [
+    PlacementsService,
+    PlacementAttachmentsService,
+    PlacementDocumentsService,
+    S3DocumentStorageService,
+  ],
 })
 export class PlacementsModule {}

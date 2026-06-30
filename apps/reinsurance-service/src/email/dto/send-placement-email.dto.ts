@@ -75,6 +75,32 @@ export class SendPlacementEmailDto {
   @IsString()
   @MaxLength(50000)
   bodyHtml?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    description:
+      'Generated placement document IDs to attach as PDFs. Phase 1 supports OFFER_SLIP and CLOSING_SLIP documents only.',
+    example: ['1c3f2d4a-8b2f-4f0f-b4f2-1f5a2c0a9d18'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  documentIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    description:
+      'Uploaded placement attachment IDs to attach from private storage.',
+    example: ['9f5f8ff6-1058-4437-ae97-bae93bb05012'],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  attachmentIds?: string[];
 }
 
 export class ReplyPlacementEmailDto {
@@ -118,4 +144,28 @@ export class ReplyPlacementEmailDto {
   @IsString()
   @MaxLength(50000)
   bodyHtml?: string;
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    description:
+      'Generated placement document IDs to attach as PDFs. Phase 1 supports OFFER_SLIP and CLOSING_SLIP documents only.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  documentIds?: string[];
+
+  @ApiPropertyOptional({
+    type: [String],
+    format: 'uuid',
+    description:
+      'Uploaded placement attachment IDs to attach from private storage.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUUID('4', { each: true })
+  attachmentIds?: string[];
 }
