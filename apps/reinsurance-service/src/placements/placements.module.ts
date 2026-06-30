@@ -7,6 +7,8 @@ import { PlacementFinancialActivityReader } from './placement-financial-activity
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementClaimCashCallsService } from './placement-claim-cash-calls.service';
 import { PlacementClaimsService } from './placement-claims.service';
+import { PlacementAttachmentsController } from './placement-attachments.controller';
+import { PlacementAttachmentsService } from './placement-attachments.service';
 import { PlacementClosingsService } from './placement-closings.service';
 import { PlacementDocumentsService } from './placement-documents.service';
 import { PlacementEndorsementClosingsService } from './placement-endorsement-closings.service';
@@ -26,10 +28,15 @@ import { S3DocumentStorageService } from './storage/s3-document-storage.service'
 
 @Module({
   imports: [PrismaModule, RabbitMQModule],
-  controllers: [PlacementsController, ReinsuranceDashboardController],
+  controllers: [
+    PlacementsController,
+    PlacementAttachmentsController,
+    ReinsuranceDashboardController,
+  ],
   providers: [
     PlacementsService,
     ReinsuranceDashboardService,
+    PlacementAttachmentsService,
     PlacementClaimsService,
     PlacementClaimCashCallsService,
     PlacementClosingsService,

@@ -26,6 +26,25 @@ export interface StoredPdfResult {
   sizeBytes: number;
 }
 
+export interface StoreAttachmentInput {
+  tenantId: string;
+  placementId: string;
+  attachmentId: string;
+  parentType: string;
+  body: Buffer;
+  checksum: string;
+  contentType: string;
+  originalFileName: string;
+}
+
+export interface StoredAttachmentResult {
+  storageProvider: 'S3';
+  objectKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 export interface SignedDocumentUrlResult {
   url: string;
   expiresAt: Date;
@@ -62,6 +81,38 @@ export class S3DocumentStorageService {
           tenantId: input.tenantId,
           placementId: input.placementId,
           documentId: input.documentId,
+        },
+      }),
+    );
+
+    return {
+      storageProvider: 'S3',
+      objectKey,
+      fileName,
+      mimeType: input.contentType,
+      sizeBytes: input.body.byteLength,
+    };
+  }
+
+  async storeAttachment(
+    input: StoreAttachmentInput,
+  ): Promise<StoredAttachmentResult> {
+    const config = this.config();
+    const fileName = this.safeFileName(input.originalFileName);
+    const objectKey = this.attachmentObjectKey(config.prefix, input, fileName);
+
+    await this.s3(config).send(
+      new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: objectKey,
+        Body: input.body,
+        ContentType: input.contentType,
+        Metadata: {
+          checksum: input.checksum,
+          tenantId: input.tenantId,
+          placementId: input.placementId,
+          attachmentId: input.attachmentId,
+          parentType: input.parentType,
         },
       }),
     );
@@ -159,6 +210,35 @@ export class S3DocumentStorageService {
     ]
       .filter(Boolean)
       .join('/');
+  }
+
+  private attachmentObjectKey(
+    prefix: string,
+    input: StoreAttachmentInput,
+    fileName: string,
+  ): string {
+    return [
+      this.cleanPrefix(prefix),
+      'tenants',
+      input.tenantId,
+      'placements',
+      input.placementId,
+      'attachments',
+      input.parentType.toLowerCase(),
+      input.attachmentId,
+      fileName,
+    ]
+      .filter(Boolean)
+      .join('/');
+  }
+
+  private safeFileName(fileName: string): string {
+    const cleaned = fileName
+      .trim()
+      .replace(/[^\w.\- ]+/g, '_')
+      .replace(/\s+/g, ' ')
+      .slice(0, 180);
+    return cleaned || 'attachment';
   }
 
   private cleanPrefix(prefix: string): string {
