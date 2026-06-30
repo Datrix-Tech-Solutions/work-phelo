@@ -1,4 +1,5 @@
 import {
+  EmployeeCompensationType,
   PayrollCountry,
   PayrollTaxPolicy,
 } from '../../prisma/generated/client';
@@ -41,6 +42,7 @@ describe('calculatePayrollForCountry commission payroll MVP', () => {
       { ...baseValues, commissionAmount: '2000' },
       {
         ...ghSettings,
+        compensationType: EmployeeCompensationType.COMMISSION,
         taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
         commissionTaxable: true,
       },
@@ -62,6 +64,7 @@ describe('calculatePayrollForCountry commission payroll MVP', () => {
       { ...baseValues, commissionAmount: '2000' },
       {
         ...ghSettings,
+        compensationType: EmployeeCompensationType.COMMISSION,
         taxPolicy: PayrollTaxPolicy.FIXED_AMOUNT,
         fixedTaxAmount: '150',
       },
@@ -80,6 +83,7 @@ describe('calculatePayrollForCountry commission payroll MVP', () => {
       { ...baseValues, commissionAmount: '2000' },
       {
         ...ghSettings,
+        compensationType: EmployeeCompensationType.COMMISSION,
         taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
         commissionTaxable: false,
       },
@@ -93,11 +97,12 @@ describe('calculatePayrollForCountry commission payroll MVP', () => {
     });
   });
 
-  it('calculates salary-plus-commission employees in one gross pay base', () => {
+  it('calculates salary-plus-commission employees with separate commission tax', () => {
     const result = calculatePayrollForCountry(
       { ...baseValues, basicSalary: '1000', commissionAmount: '500' },
       {
         ...ghSettings,
+        compensationType: EmployeeCompensationType.SALARY_PLUS_COMMISSION,
         taxPolicy: PayrollTaxPolicy.STANDARD_PAYE,
         commissionTaxable: true,
       },
@@ -108,9 +113,9 @@ describe('calculatePayrollForCountry commission payroll MVP', () => {
       commissionAmount: '500',
       grossSalary: '1500',
       employeeSSNIT: '55',
-      taxableIncome: '1445',
-      payeTax: '143.63',
-      netSalary: '1301.38',
+      taxableIncome: '945',
+      payeTax: '106.13',
+      netSalary: '1338.88',
     });
   });
 
@@ -119,6 +124,7 @@ describe('calculatePayrollForCountry commission payroll MVP', () => {
       { ...baseValues, commissionAmount: '2000' },
       {
         ...ghSettings,
+        compensationType: EmployeeCompensationType.COMMISSION,
         taxPolicy: PayrollTaxPolicy.EXEMPT,
         commissionTaxable: false,
       },

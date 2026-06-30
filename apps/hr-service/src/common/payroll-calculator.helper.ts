@@ -200,36 +200,6 @@ export function calculatePayrollForCountry(
   const transportAmount = new Decimal(values.transportAmount);
   const otherDeductions = new Decimal(values.otherDeductions);
 
-  // Pure commission employees: no SSNIT/Tier, flat 10% tax on commission only
-  if (settings.compensationType === 'COMMISSION') {
-    const commissionTax = commissionAmount.times(new Decimal('0.10'));
-    const grossSalaryC = commissionAmount
-      .plus(totalAllowances)
-      .plus(transportAmount);
-    const totalDeductionsC = otherDeductions.plus(commissionTax);
-    const netSalaryC = maxZero(grossSalaryC.minus(totalDeductionsC));
-    return {
-      basicSalary: '0.00',
-      commissionAmount: values.commissionAmount,
-      totalAllowances: values.totalAllowances,
-      transportAmount: values.transportAmount,
-      otherDeductions: values.otherDeductions,
-      overtimePay: '0',
-      bonus: '0',
-      thirteenthMonth: '0',
-      grossSalary: money(grossSalaryC),
-      employeeSSNIT: '0.00',
-      employerSSNIT: '0.00',
-      tier1Contribution: '0.00',
-      tier2Contribution: '0.00',
-      tier3Employee: '0.00',
-      taxableIncome: money(commissionAmount),
-      payeTax: money(commissionTax),
-      totalDeductions: money(totalDeductionsC),
-      netSalary: money(netSalaryC),
-    };
-  }
-
   const grossSalary = basicSalary
     .plus(commissionAmount)
     .plus(totalAllowances)
