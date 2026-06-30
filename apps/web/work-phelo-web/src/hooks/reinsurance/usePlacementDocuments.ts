@@ -1,11 +1,31 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { PlacementDocument } from '@/types/reinsurance';
+import { PlacementDocument, PlacementNote } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
 
 export const placementDocumentsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'documents'] as const;
+
+export function findActivePlacementNoteDocument(
+  documents: PlacementDocument[],
+  note: PlacementNote,
+) {
+  return documents
+    .filter((document) => {
+      if (
+        document.noteId !== note.id ||
+        document.type !== note.type ||
+        document.status === 'VOID'
+      ) {
+        return false;
+      }
+      const snapshot = document.renderPayload.note;
+      if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false;
+      return (snapshot as Record<string, unknown>).status === note.status;
+    })
+    .sort((a, b) => b.version - a.version || b.createdAt.localeCompare(a.createdAt))[0];
+}
 
 export function usePlacementDocuments(placementId: string) {
   return useQuery({
@@ -15,6 +35,7 @@ export function usePlacementDocuments(placementId: string) {
       return (res.data?.items ?? res.data ?? []) as PlacementDocument[];
     },
     enabled: !!placementId,
+    staleTime: 30_000,
   });
 }
 
@@ -44,6 +65,23 @@ export function useGenerateParticipantOfferSlipDocument(placementId: string) {
       const res = await api.post(
         `${BASE}/${placementId}/participants/${participantId}/documents/offer-slip`,
       );
+      return res.data as PlacementDocument;
+    },
+    onSuccess: (document) => {
+      queryClient.setQueryData<PlacementDocument[]>(
+        placementDocumentsKey(placementId),
+        (current = []) => [document, ...current.filter((item) => item.id !== document.id)],
+      );
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
+export function useGeneratePlacementNoteDocument(placementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (noteId: string) => {
+      const res = await api.post(`${BASE}/${placementId}/notes/${noteId}/documents`);
       return res.data as PlacementDocument;
     },
     onSuccess: (document) => {

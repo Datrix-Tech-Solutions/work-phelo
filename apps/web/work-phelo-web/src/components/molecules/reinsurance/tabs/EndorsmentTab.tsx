@@ -10,27 +10,33 @@ import { ReinsuranceNotesTable } from '@/components/molecules/reinsurance/Reinsu
 import {
   Facultative,
   PlacementEndorsement,
+  PlacementNote,
   ENDORSEMENT_TYPE_LABELS,
   ENDORSEMENT_STATUS_LABELS,
   ENDORSEMENT_STATUS_VARIANT,
 } from '@/types/reinsurance';
 import {
+  findActivePlacementNoteDocument,
   useCedants,
   useEndorsementClosings,
   useEndorsementNotes,
   useGenerateEndorsementCreditNote,
   useGenerateEndorsementDebitNote,
+  useGeneratePlacementNoteDocument,
   useIssueEndorsementNote,
+  usePlacementDocuments,
   usePlacementEndorsements,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
   useReinsurers,
+  useRenderPlacementDocumentPdf,
   useUpdateEndorsementStatus,
   useVoidEndorsementNote,
 } from '@/hooks';
 import { EditEndorsementPanel } from '@/components/organisms/reinsurance/panels/EditEndorsementPanel';
 import { TableButton } from '@/components/atoms/TableButton';
 import { extractError } from '@/lib/extractError';
+import { openPdfBlob } from '@/lib/openPdfBlob';
 import { useToastStore } from '@/store/toast.store';
 import { EndorsementCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementCertificateModal';
 import { EndorsementReinsurerCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementReinsurerCertificateModal';
@@ -175,6 +181,10 @@ function EndorsementCard({
   const [revisedShares, setRevisedShares] = useState<Record<string, string>>({});
   const [busyEPIds, setBusyEPIds] = useState<Set<string>>(new Set());
   const [tableDocCounterpartyId, setTableDocCounterpartyId] = useState<string | null>(null);
+  const [isOpeningDebitNote, setIsOpeningDebitNote] = useState(false);
+  const [openingCreditNoteId, setOpeningCreditNoteId] = useState<string | null>(null);
+  const debitNoteInFlightRef = useRef(false);
+  const creditNoteInFlightRef = useRef<Set<string>>(new Set());
 
   const { data: reinsurers = [] } = useReinsurers();
   const { data: cedants = [] } = useCedants();
@@ -192,7 +202,9 @@ function EndorsementCard({
     data: endorsementNotes = [],
     isLoading: endorsementNotesLoading,
     isError: endorsementNotesError,
+    refetch: refetchEndorsementNotes,
   } = useEndorsementNotes(placement.id, endorsement.id);
+  const { data: documents = [], refetch: refetchDocuments } = usePlacementDocuments(placement.id);
   const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
     placement.id,
     endorsement.id,
@@ -205,6 +217,8 @@ function EndorsementCard({
     placement.id,
     endorsement.id,
   );
+  const generateNoteDocument = useGeneratePlacementNoteDocument(placement.id);
+  const renderDocumentPdf = useRenderPlacementDocumentPdf(placement.id);
   const issueEndorsementNote = useIssueEndorsementNote(placement.id, endorsement.id);
   const voidEndorsementNote = useVoidEndorsementNote(placement.id, endorsement.id);
   const queryClient = useQueryClient();
@@ -399,25 +413,117 @@ function EndorsementCard({
   );
   const hasEndorsementNoteWorkflow = endorsement.status !== 'DRAFT';
 
-  const handleGenerateEndorsementDebitNote = async () => {
+  const activeEndorsementNotes = endorsementNotes.filter(
+    (note) => note.type === 'ENDORSEMENT_DEBIT_NOTE' || note.type === 'ENDORSEMENT_CREDIT_NOTE',
+  );
+
+  const findActiveDebitNote = (source = activeEndorsementNotes) =>
+    source.find(
+      (note) =>
+        note.type === 'ENDORSEMENT_DEBIT_NOTE' &&
+        note.endorsementId === endorsement.id &&
+        note.status !== 'VOID',
+    );
+
+  const findActiveCreditNote = (closingId: string, source = activeEndorsementNotes) =>
+    source.find(
+      (note) =>
+        note.type === 'ENDORSEMENT_CREDIT_NOTE' &&
+        note.endorsementClosingId === closingId &&
+        note.status !== 'VOID',
+    );
+
+  const getLatestEndorsementNotes = async () => {
+    const latest = await refetchEndorsementNotes();
+    return (
+      latest.data?.filter(
+        (note) => note.type === 'ENDORSEMENT_DEBIT_NOTE' || note.type === 'ENDORSEMENT_CREDIT_NOTE',
+      ) ?? []
+    );
+  };
+
+  const getLatestPlacementDocuments = async () => {
+    const latest = await refetchDocuments();
+    return latest.data ?? [];
+  };
+
+  const ensureNoteDocument = async (note: PlacementNote) => {
+    let document = findActivePlacementNoteDocument(documents, note);
+    if (!document) {
+      document = findActivePlacementNoteDocument(await getLatestPlacementDocuments(), note);
+    }
+    if (!document) {
+      try {
+        document = await generateNoteDocument.mutateAsync(note.id);
+      } catch (error) {
+        document = findActivePlacementNoteDocument(await getLatestPlacementDocuments(), note);
+        if (!document) throw error;
+      }
+    }
+    return document;
+  };
+
+  const openOfficialNotePdf = async (note: PlacementNote) => {
+    const document = await ensureNoteDocument(note);
+    const pdf = await renderDocumentPdf.mutateAsync(document.id);
+    openPdfBlob(pdf, `${document.documentNumber}.pdf`);
+  };
+
+  const handleViewEndorsementDebitNote = async () => {
+    if (debitNoteInFlightRef.current) return;
+    debitNoteInFlightRef.current = true;
+    setIsOpeningDebitNote(true);
     try {
-      await generateEndorsementDebitNote.mutateAsync();
+      let note = findActiveDebitNote();
+      if (!note) {
+        note = findActiveDebitNote(await getLatestEndorsementNotes());
+      }
+      if (!note) {
+        try {
+          note = await generateEndorsementDebitNote.mutateAsync();
+        } catch (error) {
+          note = findActiveDebitNote(await getLatestEndorsementNotes());
+          if (!note) throw error;
+        }
+      }
+      await openOfficialNotePdf(note);
       useToastStore
         .getState()
-        .addToast({ message: 'Endorsement debit note generated', type: 'success' });
+        .addToast({ message: 'Official endorsement debit note PDF opened', type: 'success' });
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      debitNoteInFlightRef.current = false;
+      setIsOpeningDebitNote(false);
     }
   };
 
-  const handleGenerateEndorsementCreditNote = async (closingId: string) => {
+  const handleViewEndorsementCreditNote = async (closingId: string) => {
+    if (creditNoteInFlightRef.current.has(closingId)) return;
+    creditNoteInFlightRef.current.add(closingId);
+    setOpeningCreditNoteId(closingId);
     try {
-      await generateEndorsementCreditNote.mutateAsync(closingId);
+      let note = findActiveCreditNote(closingId);
+      if (!note) {
+        note = findActiveCreditNote(closingId, await getLatestEndorsementNotes());
+      }
+      if (!note) {
+        try {
+          note = await generateEndorsementCreditNote.mutateAsync(closingId);
+        } catch (error) {
+          note = findActiveCreditNote(closingId, await getLatestEndorsementNotes());
+          if (!note) throw error;
+        }
+      }
+      await openOfficialNotePdf(note);
       useToastStore
         .getState()
-        .addToast({ message: 'Endorsement credit note generated', type: 'success' });
+        .addToast({ message: 'Official endorsement credit note PDF opened', type: 'success' });
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      creditNoteInFlightRef.current.delete(closingId);
+      setOpeningCreditNoteId((current) => (current === closingId ? null : current));
     }
   };
 
@@ -608,21 +714,22 @@ function EndorsementCard({
                 <Button
                   size="sm"
                   variant="secondary"
-                  isLoading={generateEndorsementDebitNote.isPending}
+                  isLoading={isOpeningDebitNote}
                   disabled={confirmedEndorsementClosings.length === 0}
-                  onClick={handleGenerateEndorsementDebitNote}
+                  onClick={handleViewEndorsementDebitNote}
                 >
-                  Generate Debit Note
+                  View Endorsement Debit Note
                 </Button>
                 {confirmedEndorsementClosings.map((closing) => (
                   <Button
                     key={closing.id}
                     size="sm"
                     variant="secondary"
-                    isLoading={generateEndorsementCreditNote.isPending}
-                    onClick={() => handleGenerateEndorsementCreditNote(closing.id)}
+                    isLoading={openingCreditNoteId === closing.id}
+                    disabled={!!openingCreditNoteId && openingCreditNoteId !== closing.id}
+                    onClick={() => handleViewEndorsementCreditNote(closing.id)}
                   >
-                    Generate Credit Note {closing.closingNumber}
+                    View Endorsement Credit Note {closing.closingNumber}
                   </Button>
                 ))}
               </div>
@@ -637,10 +744,7 @@ function EndorsementCard({
             ) : null}
 
             <ReinsuranceNotesTable
-              notes={endorsementNotes.filter(
-                (note) =>
-                  note.type === 'ENDORSEMENT_DEBIT_NOTE' || note.type === 'ENDORSEMENT_CREDIT_NOTE',
-              )}
+              notes={activeEndorsementNotes}
               isLoading={endorsementNotesLoading}
               isError={endorsementNotesError}
               emptyMessage="No endorsement notes yet"

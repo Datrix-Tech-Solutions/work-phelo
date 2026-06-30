@@ -10,6 +10,11 @@ const endorsementNotesKey = (placementId: string, endorsementId: string) =>
 
 export { placementNotesKey, endorsementNotesKey };
 
+const upsertNote = (current: PlacementNote[] | undefined, note: PlacementNote) => [
+  note,
+  ...(current ?? []).filter((item) => item.id !== note.id),
+];
+
 export function usePlacementNotes(placementId: string) {
   return useQuery({
     queryKey: placementNotesKey(placementId),
@@ -30,7 +35,10 @@ export function useGeneratePlacementDebitNote(placementId: string) {
       const res = await api.post<PlacementNote>(`${BASE}/${placementId}/notes/debit`);
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
+      queryClient.setQueryData<PlacementNote[]>(placementNotesKey(placementId), (current) =>
+        upsertNote(current, note),
+      );
       queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
     },
   });
@@ -46,7 +54,10 @@ export function useGeneratePlacementCreditNote(placementId: string) {
       );
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
+      queryClient.setQueryData<PlacementNote[]>(placementNotesKey(placementId), (current) =>
+        upsertNote(current, note),
+      );
       queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
     },
   });
@@ -62,7 +73,10 @@ export function useIssuePlacementNote(placementId: string) {
       });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
+      queryClient.setQueryData<PlacementNote[]>(placementNotesKey(placementId), (current) =>
+        upsertNote(current, note),
+      );
       queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
     },
   });
@@ -78,7 +92,10 @@ export function useVoidPlacementNote(placementId: string) {
       });
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
+      queryClient.setQueryData<PlacementNote[]>(placementNotesKey(placementId), (current) =>
+        upsertNote(current, note),
+      );
       queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
     },
   });
@@ -111,7 +128,11 @@ export function useGenerateEndorsementDebitNote(
       );
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
+      queryClient.setQueryData<PlacementNote[]>(
+        endorsementNotesKey(placementId, endorsementId ?? ''),
+        (current) => upsertNote(current, note),
+      );
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
@@ -132,7 +153,11 @@ export function useGenerateEndorsementCreditNote(
       );
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
+      queryClient.setQueryData<PlacementNote[]>(
+        endorsementNotesKey(placementId, endorsementId ?? ''),
+        (current) => upsertNote(current, note),
+      );
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
@@ -153,7 +178,11 @@ export function useIssueEndorsementNote(placementId: string, endorsementId: stri
       );
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
+      queryClient.setQueryData<PlacementNote[]>(
+        endorsementNotesKey(placementId, endorsementId ?? ''),
+        (current) => upsertNote(current, note),
+      );
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
@@ -174,7 +203,11 @@ export function useVoidEndorsementNote(placementId: string, endorsementId: strin
       );
       return res.data;
     },
-    onSuccess: () => {
+    onSuccess: (note) => {
+      queryClient.setQueryData<PlacementNote[]>(
+        endorsementNotesKey(placementId, endorsementId ?? ''),
+        (current) => upsertNote(current, note),
+      );
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });

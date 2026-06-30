@@ -7,10 +7,11 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { GuaranteeNoteModal } from '@/components/organisms/reinsurance/documents/GuaranteeNoteModal';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { ReinsuranceNotesTable } from '@/components/molecules/reinsurance/ReinsuranceNotesTable';
-import { PlacementNotePreviewModal } from '@/components/organisms/reinsurance/documents/PlacementNotePreviewModal';
 import {
+  findActivePlacementNoteDocument,
   useCedants,
   useGenerateClosingSlipDocument,
+  useGeneratePlacementNoteDocument,
   useGeneratePlacementCreditNote,
   useGeneratePlacementDebitNote,
   useIssuePlacementNote,
@@ -87,7 +88,6 @@ interface PlacementClosingsTabProps {
 
 export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const [guaranteeNoteOpen, setGuaranteeNoteOpen] = useState(false);
-  const [notePreviewTarget, setNotePreviewTarget] = useState<PlacementNote | null>(null);
   const [mailToCedantOpen, setMailToCedantOpen] = useState(false);
   const [mailToReinsurerRow, setMailToReinsurerRow] = useState<ClosingRow | null>(null);
   const [renderingClosingId, setRenderingClosingId] = useState<string | null>(null);
@@ -99,7 +99,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const { data: cedants = [] } = useCedants();
   const { data: reinsurers = [] } = useReinsurers();
   const { data: closings = [], isLoading: closingsLoading } = usePlacementClosings(placement.id);
-  const { data: documents = [] } = usePlacementDocuments(placement.id);
+  const { data: documents = [], refetch: refetchDocuments } = usePlacementDocuments(placement.id);
   const {
     data: notes = [],
     isLoading: notesLoading,
@@ -107,6 +107,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     refetch: refetchNotes,
   } = usePlacementNotes(placement.id);
   const generateClosingSlipDocument = useGenerateClosingSlipDocument(placement.id);
+  const generateNoteDocument = useGeneratePlacementNoteDocument(placement.id);
   const renderDocumentPdf = useRenderPlacementDocumentPdf(placement.id);
   const generateDebitNote = useGeneratePlacementDebitNote(placement.id);
   const generateCreditNote = useGeneratePlacementCreditNote(placement.id);
@@ -169,6 +170,33 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     );
   };
 
+  const getLatestPlacementDocuments = async () => {
+    const latest = await refetchDocuments();
+    return latest.data ?? [];
+  };
+
+  const ensureNoteDocument = async (note: PlacementNote) => {
+    let document = findActivePlacementNoteDocument(documents, note);
+    if (!document) {
+      document = findActivePlacementNoteDocument(await getLatestPlacementDocuments(), note);
+    }
+    if (!document) {
+      try {
+        document = await generateNoteDocument.mutateAsync(note.id);
+      } catch (error) {
+        document = findActivePlacementNoteDocument(await getLatestPlacementDocuments(), note);
+        if (!document) throw error;
+      }
+    }
+    return document;
+  };
+
+  const openOfficialNotePdf = async (note: PlacementNote) => {
+    const document = await ensureNoteDocument(note);
+    const pdf = await renderDocumentPdf.mutateAsync(document.id);
+    openPdfBlob(pdf, `${document.documentNumber}.pdf`);
+  };
+
   const handleViewClosingSlip = async (row: ClosingRow) => {
     setRenderingClosingId(row.id);
     try {
@@ -202,7 +230,8 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           if (!note) throw error;
         }
       }
-      setNotePreviewTarget(note);
+      await openOfficialNotePdf(note);
+      addToast({ message: 'Official debit note PDF opened', type: 'success' });
     } catch (error) {
       addToast({ message: extractError(error, 'Failed to open debit note'), type: 'error' });
     } finally {
@@ -228,7 +257,8 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           if (!note) throw error;
         }
       }
-      setNotePreviewTarget(note);
+      await openOfficialNotePdf(note);
+      addToast({ message: 'Official credit note PDF opened', type: 'success' });
     } catch (error) {
       addToast({ message: extractError(error, 'Failed to open credit note'), type: 'error' });
     } finally {
@@ -377,15 +407,6 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
         onPrint={() => setGuaranteeNoteOpen(false)}
         onClose={() => setGuaranteeNoteOpen(false)}
       />
-
-      {notePreviewTarget && (
-        <PlacementNotePreviewModal
-          isOpen
-          note={notePreviewTarget}
-          onPrint={() => setNotePreviewTarget(null)}
-          onClose={() => setNotePreviewTarget(null)}
-        />
-      )}
 
       <MailPreviewModal
         isOpen={mailToCedantOpen}
