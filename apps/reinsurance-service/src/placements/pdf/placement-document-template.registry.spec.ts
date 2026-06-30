@@ -56,6 +56,59 @@ describe('PlacementDocumentTemplateRegistry', () => {
       documentFamily: 'Reinsurance Operations',
     },
   };
+  const notePayload = (type: PlacementDocumentType) => ({
+    documentType: type,
+    note: {
+      type,
+      noteNumber:
+        type === PlacementDocumentType.DEBIT_NOTE
+          ? 'DN-001'
+          : type === PlacementDocumentType.CREDIT_NOTE
+            ? 'CN-001'
+            : type === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE
+              ? 'EDN-001'
+              : 'ECN-001',
+      status: 'ISSUED',
+      direction:
+        type === PlacementDocumentType.DEBIT_NOTE ||
+        type === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE
+          ? 'CEDANT_TO_BROKER'
+          : 'BROKER_TO_REINSURER',
+      noteDate: '2026-06-12T00:00:00.000Z',
+      currency: 'GHS',
+      grossAmount: '5000',
+      commissionPercent: '10',
+      commissionAmount: '500',
+      brokeragePercent: '5',
+      brokerageAmount: '250',
+      nicLevyPercent: '1',
+      nicLevyAmount: '50',
+      withholdingTaxPercent: '2',
+      withholdingTaxAmount: '100',
+      netAmount: '4100',
+      placement: {
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+      },
+      counterparty: {
+        name:
+          type === PlacementDocumentType.DEBIT_NOTE ||
+          type === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE
+            ? 'Acme Insurance'
+            : 'Avenue Re',
+        registrationNumber: 'REG-001',
+        email: 'finance@example.com',
+        country: 'GH',
+      },
+      closing: { closingNumber: 'CLO-001' },
+      endorsement: { endorsementNumber: 'END-001' },
+      endorsementClosing: { closingNumber: 'END-CLO-001' },
+    },
+    branding: {
+      productName: 'WorkPhelo',
+      documentFamily: 'Reinsurance Operations',
+    },
+  });
 
   it('resolves CLOSING_SLIP templates', () => {
     const html = registry.renderHtml(
@@ -103,14 +156,49 @@ describe('PlacementDocumentTemplateRegistry', () => {
     expect(html).toContain('Net Premium');
   });
 
+  it.each([
+    [PlacementDocumentType.DEBIT_NOTE, 'Debit Note', 'Acme Insurance'],
+    [PlacementDocumentType.CREDIT_NOTE, 'Credit Note', 'Avenue Re'],
+    [
+      PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE,
+      'Endorsement Debit Note',
+      'Acme Insurance',
+    ],
+    [
+      PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      'Endorsement Credit Note',
+      'Avenue Re',
+    ],
+  ])('resolves %s templates', (type, title, counterparty) => {
+    const html = registry.renderHtml(type, notePayload(type), {
+      documentNumber: 'DOC-NOTE-001',
+      title,
+      generatedAt: '2026-06-12T00:00:00.000Z',
+    });
+
+    expect(html).toContain(title);
+    expect(html).toContain('DOC-NOTE-001');
+    expect(html).toContain(counterparty);
+    expect(html).toContain('Gross Amount');
+    expect(html).toContain('Commission');
+    expect(html).toContain('Brokerage');
+    expect(html).toContain('NIC Levy');
+    expect(html).toContain('Withholding Tax');
+    expect(html).toContain('Net Amount');
+    expect(html).toContain('Authorized signature / stamp');
+    expect(html).toContain(
+      'rendered from an immutable PlacementDocument payload',
+    );
+  });
+
   it('rejects unsupported document types', () => {
     expect(() =>
       registry.renderHtml(
-        PlacementDocumentType.DEBIT_NOTE,
-        { documentType: PlacementDocumentType.DEBIT_NOTE },
+        PlacementDocumentType.ENDORSEMENT_SLIP,
+        { documentType: PlacementDocumentType.ENDORSEMENT_SLIP },
         {
-          documentNumber: 'DOC-DN-001',
-          title: 'Debit Note',
+          documentNumber: 'DOC-ES-001',
+          title: 'Endorsement Slip',
           generatedAt: null,
         },
       ),
@@ -143,5 +231,26 @@ describe('PlacementDocumentTemplateRegistry', () => {
         },
       ),
     ).toThrow(BadRequestException);
+  });
+
+  it('rejects malformed note render payloads', () => {
+    expect(() =>
+      registry.renderHtml(
+        PlacementDocumentType.DEBIT_NOTE,
+        {
+          documentType: PlacementDocumentType.DEBIT_NOTE,
+          note: {
+            type: PlacementDocumentType.DEBIT_NOTE,
+            noteNumber: 'DN-001',
+            currency: 'GHS',
+          },
+        },
+        {
+          documentNumber: 'DOC-DN-001',
+          title: 'Debit Note',
+          generatedAt: null,
+        },
+      ),
+    ).toThrow('DEBIT_NOTE renderPayload is missing valid immutable note data');
   });
 });

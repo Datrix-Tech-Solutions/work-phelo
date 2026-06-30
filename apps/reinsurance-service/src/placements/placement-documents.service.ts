@@ -222,6 +222,17 @@ export class PlacementDocumentsService {
     const note = await this.prisma.placementNote.findFirst({
       where: { id: noteId, tenantId: user.tenantId, placementId },
       include: {
+        placement: {
+          select: {
+            id: true,
+            reference: true,
+            title: true,
+            classOfBusiness: true,
+            inceptionDate: true,
+            expiryDate: true,
+            currency: true,
+          },
+        },
         counterparty: {
           select: {
             id: true,
@@ -235,6 +246,21 @@ export class PlacementDocumentsService {
         },
         closing: { select: { id: true, closingNumber: true } },
         participant: { select: { id: true, counterpartyId: true } },
+        endorsement: {
+          select: {
+            id: true,
+            endorsementNumber: true,
+            type: true,
+            impactType: true,
+            effectiveDate: true,
+          },
+        },
+        endorsementClosing: {
+          select: { id: true, closingNumber: true },
+        },
+        endorsementParticipant: {
+          select: { id: true, counterpartyId: true },
+        },
       },
     });
     if (!note) throw new NotFoundException('Placement note not found');
@@ -250,11 +276,17 @@ export class PlacementDocumentsService {
       renderPayload: {
         documentType: type,
         note: snapshot,
+        branding: {
+          productName: 'WorkPhelo',
+          documentFamily: 'Reinsurance Operations',
+        },
       },
       sourceLinks: {
         noteId: note.id,
         closingId: note.closingId,
         participantId: note.participantId,
+        endorsementId: note.endorsementId,
+        endorsementClosingId: note.endorsementClosingId,
       },
     });
   }
@@ -574,10 +606,14 @@ export class PlacementDocumentsService {
     const renderableTypes = new Set<PlacementDocumentType>([
       PlacementDocumentType.CLOSING_SLIP,
       PlacementDocumentType.OFFER_SLIP,
+      PlacementDocumentType.DEBIT_NOTE,
+      PlacementDocumentType.CREDIT_NOTE,
+      PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE,
+      PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
     ]);
     if (!renderableTypes.has(document.type)) {
       throw new BadRequestException(
-        'PDF rendering is currently supported only for CLOSING_SLIP and OFFER_SLIP documents',
+        'PDF rendering is currently supported only for OFFER_SLIP, CLOSING_SLIP, DEBIT_NOTE, CREDIT_NOTE, ENDORSEMENT_DEBIT_NOTE and ENDORSEMENT_CREDIT_NOTE documents',
       );
     }
     if (document.status === PlacementDocumentStatus.VOID) {

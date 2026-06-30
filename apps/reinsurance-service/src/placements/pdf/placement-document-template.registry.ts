@@ -9,6 +9,10 @@ import {
   isOfferSlipPayload,
   renderOfferSlipTemplate,
 } from './templates/offer-slip.template';
+import {
+  isNoteDocumentPayload,
+  renderNoteTemplate,
+} from './templates/note.template';
 
 @Injectable()
 export class PlacementDocumentTemplateRegistry {
@@ -35,6 +39,21 @@ export class PlacementDocumentTemplateRegistry {
       }
 
       return renderOfferSlipTemplate(payload, context);
+    }
+
+    if (
+      type === PlacementDocumentType.DEBIT_NOTE ||
+      type === PlacementDocumentType.CREDIT_NOTE ||
+      type === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE ||
+      type === PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE
+    ) {
+      if (!isNoteDocumentPayload(payload)) {
+        throw new BadRequestException(
+          `${type} renderPayload is missing valid immutable note data`,
+        );
+      }
+
+      return renderNoteTemplate(payload, context);
     }
 
     throw new BadRequestException(`PDF rendering is not supported for ${type}`);

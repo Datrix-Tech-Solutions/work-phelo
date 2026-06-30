@@ -515,17 +515,38 @@ describe('PlacementDocumentsService', () => {
   it('generates note documents from PlacementNote values', async () => {
     prisma.placementNote.findFirst.mockResolvedValue({
       id: 'note-1',
+      placementId: 'placement-1',
       closingId: 'closing-1',
       participantId: 'participant-1',
+      endorsementId: null,
+      endorsementClosingId: null,
       noteNumber: 'DN-001',
       type: PlacementNoteType.DEBIT_NOTE,
       direction: PlacementNoteDirection.CEDANT_TO_BROKER,
       status: PlacementNoteStatus.ISSUED,
       currency: 'GHS',
       grossAmount: new Prisma.Decimal('5000.00'),
-      counterparty: { id: 'cedant-1', name: 'Acme Insurance' },
+      commissionAmount: new Prisma.Decimal('500.00'),
+      brokerageAmount: null,
+      nicLevyAmount: new Prisma.Decimal('50.00'),
+      withholdingTaxAmount: new Prisma.Decimal('100.00'),
+      netAmount: new Prisma.Decimal('4350.00'),
+      noteDate: new Date('2026-06-12T00:00:00.000Z'),
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+      },
+      counterparty: {
+        id: 'cedant-1',
+        name: 'Acme Insurance',
+        registrationNumber: 'CED-001',
+      },
       closing: { id: 'closing-1', closingNumber: 'CLO-001' },
       participant: { id: 'participant-1', counterpartyId: 'reinsurer-1' },
+      endorsement: null,
+      endorsementClosing: null,
+      endorsementParticipant: null,
     });
     prisma.placementDocument.create.mockResolvedValue({
       ...document,
@@ -547,6 +568,108 @@ describe('PlacementDocumentsService', () => {
     });
     expect(jsonRecord(createArgs.data.sourceSnapshot)).toMatchObject({
       grossAmount: '5000',
+    });
+    expect(jsonRecord(createArgs.data.renderPayload)).toMatchObject({
+      documentType: PlacementDocumentType.DEBIT_NOTE,
+      note: {
+        noteNumber: 'DN-001',
+        grossAmount: '5000',
+        commissionAmount: '500',
+        nicLevyAmount: '50',
+        withholdingTaxAmount: '100',
+        netAmount: '4350',
+        placement: {
+          reference: 'FAC-001',
+          title: 'Engineering Risk',
+        },
+        counterparty: {
+          name: 'Acme Insurance',
+        },
+      },
+      branding: {
+        productName: 'WorkPhelo',
+        documentFamily: 'Reinsurance Operations',
+      },
+    });
+  });
+
+  it('generates endorsement note documents with immutable endorsement context', async () => {
+    prisma.placementNote.findFirst.mockResolvedValue({
+      id: 'note-1',
+      placementId: 'placement-1',
+      closingId: null,
+      participantId: null,
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      noteNumber: 'ECN-001',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      status: PlacementNoteStatus.ISSUED,
+      currency: 'USD',
+      grossAmount: new Prisma.Decimal('2500.00'),
+      commissionAmount: new Prisma.Decimal('250.00'),
+      brokerageAmount: new Prisma.Decimal('125.00'),
+      nicLevyAmount: new Prisma.Decimal('0'),
+      withholdingTaxAmount: new Prisma.Decimal('0'),
+      netAmount: new Prisma.Decimal('2125.00'),
+      noteDate: new Date('2026-06-12T00:00:00.000Z'),
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+      },
+      counterparty: {
+        id: 'reinsurer-1',
+        name: 'Avenue Re',
+        registrationNumber: 'RE-001',
+      },
+      closing: null,
+      participant: null,
+      endorsement: {
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        type: 'ADDITION',
+        impactType: 'CAPACITY_INCREASE',
+        effectiveDate: new Date('2026-06-01T00:00:00.000Z'),
+      },
+      endorsementClosing: {
+        id: 'endorsement-closing-1',
+        closingNumber: 'END-CLO-001',
+      },
+      endorsementParticipant: {
+        id: 'endorsement-participant-1',
+        counterpartyId: 'reinsurer-1',
+      },
+    });
+    prisma.placementDocument.create.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      documentNumber: 'DOC-ECN-001',
+    });
+
+    await service.generateNoteDocument(user, 'placement-1', 'note-1');
+
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      noteId: 'note-1',
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      type: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      documentNumber: 'DOC-ECN-001',
+    });
+    expect(jsonRecord(createArgs.data.renderPayload)).toMatchObject({
+      documentType: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      note: {
+        noteNumber: 'ECN-001',
+        grossAmount: '2500',
+        netAmount: '2125',
+        endorsement: { endorsementNumber: 'END-001' },
+        endorsementClosing: { closingNumber: 'END-CLO-001' },
+        counterparty: { name: 'Avenue Re' },
+      },
     });
   });
 
@@ -820,6 +943,49 @@ describe('PlacementDocumentsService', () => {
     );
   });
 
+  it.each([
+    PlacementDocumentType.DEBIT_NOTE,
+    PlacementDocumentType.CREDIT_NOTE,
+    PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE,
+    PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+  ])('renders %s documents as PDF using renderPayload', async (type) => {
+    const noteDocument = {
+      ...document,
+      type,
+      documentNumber: 'DOC-NOTE-001',
+      title: 'Note',
+      renderPayload: {
+        documentType: type,
+        note: {
+          type,
+          noteNumber: 'NOTE-001',
+          status: PlacementNoteStatus.ISSUED,
+          direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+          noteDate: '2026-06-12T00:00:00.000Z',
+          currency: 'GHS',
+          grossAmount: '5000',
+          netAmount: '4500',
+          counterparty: { name: 'Avenue Re' },
+        },
+      },
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(noteDocument);
+
+    const pdf = await service.renderPdf(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(pdf.toString()).toBe('%PDF test');
+    expect(pdfRenderer.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type,
+        renderPayload: noteDocument.renderPayload,
+      }),
+    );
+  });
+
   it('renders and stores a CLOSING_SLIP PDF with checksum and storage metadata', async () => {
     const closingDocument = {
       ...document,
@@ -1039,7 +1205,7 @@ describe('PlacementDocumentsService', () => {
   it('rejects unsupported document types for PDF rendering', async () => {
     prisma.placementDocument.findFirst.mockResolvedValue({
       ...document,
-      type: PlacementDocumentType.DEBIT_NOTE,
+      type: PlacementDocumentType.ENDORSEMENT_SLIP,
     });
 
     await expect(
