@@ -10,6 +10,8 @@ import {
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
+  PlacementParticipantRole,
+  PlacementParticipantStatus,
   PlacementPaymentType,
   PlacementStatus,
   Prisma,
@@ -93,9 +95,64 @@ describe('PlacementDocumentsService', () => {
       id: 'placement-1',
       reference: 'FAC-001',
       currency: 'GHS',
+      policyNumber: 'POL-001',
+      sumInsured: 1000000,
+      premium: 50000,
+      facultativeOffer: 60,
     },
     cedant: { id: 'cedant-1', name: 'Acme Insurance' },
-    participantPreviews: [],
+    businessEntries: [{ label: 'Original Insured', value: 'Acme Plant' }],
+    offerEntries: [{ label: 'Policy Number', value: 'POL-001' }],
+    debitGuaranteeFinancials: {
+      currency: 'GHS',
+      grossPremium: 50000,
+      commissionPct: 10,
+      commissionAmount: 5000,
+      netPremium: 45000,
+    },
+    participantPreviews: [
+      {
+        participant: {
+          id: 'participant-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.OFFER_SENT,
+          sharePercent: 40,
+          signedLinePercent: null,
+          brokerageFee: 5,
+          notes: null,
+          counterparty: { id: 'reinsurer-1', name: 'Avenue Re' },
+        },
+        slipFinancials: {
+          currency: 'GHS',
+          sumInsured: 1000000,
+          grossPremium: 50000,
+          facultativeOfferPct: 60,
+          facultativeOfferAmount: 600000,
+          commissionPct: 10,
+          commissionAmount: 5000,
+          nicLevyPct: 0,
+          nicLevyAmount: 0,
+          withholdingTaxPct: 0,
+          withholdingTaxAmount: 0,
+          netPremium: 45000,
+        },
+        distributionFinancials: {
+          currency: 'GHS',
+          offeredLinePct: 40,
+          signedLinePct: null,
+          brokerageFeePct: 5,
+          offeredCapacityAmount: 400000,
+          signedCapacityAmount: null,
+          grossPremium: 20000,
+          brokerageAmount: 1000,
+          netPremium: 19000,
+        },
+      },
+    ],
+    totalOfferedPercent: 40,
+    totalAcceptedPercent: 0,
+    remainingPercent: 20,
   };
 
   let prisma: {
@@ -107,6 +164,7 @@ describe('PlacementDocumentsService', () => {
       create: PrismaMethod;
       update: PrismaMethod;
     };
+    placementParticipant: { findFirst: PrismaMethod };
     placementClosing: { findFirst: PrismaMethod; update: PrismaMethod };
     placementNote: { findFirst: PrismaMethod; update: PrismaMethod };
     placementEndorsement: { findFirst: PrismaMethod; update: PrismaMethod };
@@ -137,6 +195,9 @@ describe('PlacementDocumentsService', () => {
         count: jest.fn<Promise<unknown>, [unknown]>(),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementParticipant: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementClosing: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
@@ -201,6 +262,9 @@ describe('PlacementDocumentsService', () => {
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
     );
     prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementParticipant.findFirst.mockResolvedValue({
+      id: 'participant-1',
+    });
     prisma.placementDocument.count.mockResolvedValue(0);
     prisma.placementDocument.create.mockResolvedValue(document);
   });
@@ -257,6 +321,153 @@ describe('PlacementDocumentsService', () => {
     expect(
       jsonRecord(jsonRecord(createArgs.data.renderPayload).placement),
     ).toMatchObject({ reference: 'FAC-001' });
+  });
+
+  it('generates a participant-scoped offer slip document for one reinsurer', async () => {
+    prisma.placementDocument.create.mockResolvedValue({
+      ...document,
+      participantId: 'participant-1',
+      title: 'Offer Slip FAC-001 - Avenue Re',
+    });
+
+    await service.generateParticipantOfferSlip(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+
+    expect(prisma.placementParticipant.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'participant-1',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+      },
+      select: { id: true },
+    });
+    expect(placementsService.getOfferSlipPreview).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      participantId: 'participant-1',
+      type: PlacementDocumentType.OFFER_SLIP,
+      documentNumber: 'DOC-OS-001',
+      version: 1,
+      title: 'Offer Slip FAC-001 - Avenue Re',
+      currency: 'GHS',
+      status: PlacementDocumentStatus.GENERATED,
+    });
+    const sourceSnapshot = jsonRecord(createArgs.data.sourceSnapshot);
+    expect(sourceSnapshot.participantPreviews).toBeUndefined();
+    expect(jsonRecord(sourceSnapshot.placement)).toMatchObject({
+      reference: 'FAC-001',
+      policyNumber: 'POL-001',
+    });
+    expect(jsonRecord(sourceSnapshot.cedant)).toMatchObject({
+      name: 'Acme Insurance',
+    });
+    expect(
+      jsonRecord(jsonRecord(sourceSnapshot.participantPreview).participant),
+    ).toMatchObject({
+      id: 'participant-1',
+      counterpartyId: 'reinsurer-1',
+      sharePercent: 40,
+    });
+    expect(jsonRecord(sourceSnapshot.offerContext)).toMatchObject({
+      participantId: 'participant-1',
+      counterpartyId: 'reinsurer-1',
+      reinsurerName: 'Avenue Re',
+      offeredLinePercent: 40,
+      totalOfferedPercent: 40,
+      remainingPercent: 20,
+    });
+    expect(jsonRecord(sourceSnapshot.branding)).toMatchObject({
+      productName: 'WorkPhelo',
+    });
+  });
+
+  it('reuses an active participant offer slip instead of creating duplicates', async () => {
+    const existing = {
+      ...document,
+      id: 'document-existing',
+      participantId: 'participant-1',
+      type: PlacementDocumentType.OFFER_SLIP,
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(existing);
+
+    const result = await service.generateParticipantOfferSlip(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+
+    expect(result).toBe(existing);
+    const expectedWhere: Prisma.PlacementDocumentWhereInput = {
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      participantId: 'participant-1',
+      type: PlacementDocumentType.OFFER_SLIP,
+      status: { not: PlacementDocumentStatus.VOID },
+    };
+    const findFirstArgs = firstCallArg<Prisma.PlacementDocumentFindFirstArgs>(
+      prisma.placementDocument.findFirst,
+    );
+    expect(findFirstArgs.where).toMatchObject(expectedWhere);
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant-scoped offer slips for participant placement mismatches', async () => {
+    prisma.placementParticipant.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.generateParticipantOfferSlip(
+        user,
+        'placement-1',
+        'participant-other-placement',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(placementsService.getOfferSlipPreview).not.toHaveBeenCalled();
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant-scoped offer slips when the participant is not a reinsurer preview', async () => {
+    placementsService.getOfferSlipPreview.mockResolvedValueOnce({
+      ...offerPreview,
+      participantPreviews: [],
+    });
+
+    await expect(
+      service.generateParticipantOfferSlip(
+        user,
+        'placement-1',
+        'participant-1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('does not expose another tenant participant when generating participant offer slips', async () => {
+    prisma.placementParticipant.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.generateParticipantOfferSlip(
+        user,
+        'placement-1',
+        'participant-1',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.placementParticipant.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'participant-1',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+      },
+      select: { id: true },
+    });
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
   });
 
   it('generates a closing slip from a PlacementClosing snapshot', async () => {

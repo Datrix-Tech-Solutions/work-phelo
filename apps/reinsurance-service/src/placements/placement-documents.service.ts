@@ -35,6 +35,7 @@ type DocumentSourceDescriptor = {
   currency: string | null;
   sourceSnapshot: unknown;
   renderPayload: unknown;
+  reuseActive?: boolean;
   sourceLinks?: Pick<
     Prisma.PlacementDocumentUncheckedCreateInput,
     | 'participantId'
@@ -98,6 +99,72 @@ export class PlacementDocumentsService {
       currency: preview.placement.currency,
       sourceSnapshot: preview,
       renderPayload: preview,
+    });
+  }
+
+  async generateParticipantOfferSlip(
+    user: RequestUser,
+    placementId: string,
+    participantId: string,
+  ): Promise<PlacementDocumentRecord> {
+    const participant = await this.prisma.placementParticipant.findFirst({
+      where: {
+        id: participantId,
+        tenantId: user.tenantId,
+        placementId,
+      },
+      select: { id: true },
+    });
+    if (!participant) {
+      throw new NotFoundException('Placement participant not found');
+    }
+
+    const preview = await this.placementsService.getOfferSlipPreview(
+      user.tenantId,
+      placementId,
+    );
+    const participantPreview = preview.participantPreviews.find(
+      (item) => item.participant.id === participantId,
+    );
+    if (!participantPreview) {
+      throw new BadRequestException(
+        'Offer slip documents can only be generated for placement reinsurers',
+      );
+    }
+
+    const participantPayload = {
+      documentType: PlacementDocumentType.OFFER_SLIP,
+      placement: preview.placement,
+      cedant: preview.cedant,
+      businessEntries: preview.businessEntries,
+      offerEntries: preview.offerEntries,
+      debitGuaranteeFinancials: preview.debitGuaranteeFinancials,
+      participantPreview,
+      offerContext: {
+        participantId,
+        counterpartyId: participantPreview.participant.counterpartyId,
+        reinsurerName: participantPreview.participant.counterparty.name,
+        offeredLinePercent: participantPreview.participant.sharePercent,
+        signedLinePercent: participantPreview.participant.signedLinePercent,
+        totalOfferedPercent: preview.totalOfferedPercent,
+        totalAcceptedPercent: preview.totalAcceptedPercent,
+        remainingPercent: preview.remainingPercent,
+      },
+      branding: {
+        productName: 'WorkPhelo',
+        documentFamily: 'Reinsurance Operations',
+      },
+    };
+
+    return this.createGeneratedDocument(user, placementId, {
+      type: PlacementDocumentType.OFFER_SLIP,
+      prefix: 'DOC-OS-',
+      title: `Offer Slip ${preview.placement.reference} - ${participantPreview.participant.counterparty.name}`,
+      currency: preview.placement.currency,
+      sourceSnapshot: participantPayload,
+      renderPayload: participantPayload,
+      sourceLinks: { participantId },
+      reuseActive: true,
     });
   }
 
@@ -505,6 +572,21 @@ export class PlacementDocumentsService {
     await this.assertPlacement(user.tenantId, placementId);
 
     return this.prisma.$transaction(async (tx) => {
+      if (descriptor.reuseActive) {
+        const existing = await tx.placementDocument.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            placementId,
+            type: descriptor.type,
+            status: { not: PlacementDocumentStatus.VOID },
+            ...this.versionSourceWhere(descriptor.sourceLinks),
+          },
+          include: documentInclude,
+          orderBy: { createdAt: 'desc' },
+        });
+        if (existing) return existing;
+      }
+
       const documentNumber = await this.nextDocumentNumber(
         tx,
         user.tenantId,
@@ -589,6 +671,9 @@ export class PlacementDocumentsService {
     if (!sourceLinks) return {};
     if (sourceLinks.noteId) return { noteId: sourceLinks.noteId };
     if (sourceLinks.closingId) return { closingId: sourceLinks.closingId };
+    if (sourceLinks.participantId) {
+      return { participantId: sourceLinks.participantId };
+    }
     if (sourceLinks.endorsementClosingId) {
       return { endorsementClosingId: sourceLinks.endorsementClosingId };
     }
