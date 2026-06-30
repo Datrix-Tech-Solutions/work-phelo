@@ -177,6 +177,13 @@ enum PlacementDocumentStatus {
   @@schema("reinsurance")
 }
 
+enum PlacementAttachmentStatus {
+  ACTIVE
+  VOID
+
+  @@schema("reinsurance")
+}
+
 enum PlacementEndorsementType {
   SUM_INSURED_INCREASE
   SUM_INSURED_DECREASE
@@ -374,6 +381,7 @@ model Placement {
   claimAllocations        PlacementClaimAllocation[]
   claimCashCalls          PlacementClaimCashCall[]
   documents               PlacementDocument[]
+  attachments             PlacementAttachment[]
   endorsements            PlacementEndorsement[]
   endorsementParticipants PlacementEndorsementParticipant[]
   endorsementClosings     PlacementEndorsementClosing[]
@@ -503,6 +511,7 @@ model PlacementParticipant {
   payments                PlacementPayment[]
   placementNotes          PlacementNote[]
   documents               PlacementDocument[]
+  attachments             PlacementAttachment[]
   claimAllocations        PlacementClaimAllocation[]
   endorsementParticipants PlacementEndorsementParticipant[] @relation("PlacementEndorsementOriginalParticipant")
 
@@ -540,6 +549,7 @@ model PlacementClosing {
   payments          PlacementPayment[]
   notes             PlacementNote[]
   documents         PlacementDocument[]
+  attachments       PlacementAttachment[]
   claimAllocations  PlacementClaimAllocation[]
 
   @@unique([tenantId, placementId, closingNumber])
@@ -575,6 +585,7 @@ model PlacementClaim {
   allocations         PlacementClaimAllocation[]
   cashCalls           PlacementClaimCashCall[]
   documents           PlacementDocument[]
+  attachments         PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, claimNumber])
@@ -646,6 +657,7 @@ model PlacementClaimCashCall {
   allocation        PlacementClaimAllocation     @relation(fields: [allocationId, tenantId], references: [id, tenantId], onDelete: Restrict)
   counterparty      Counterparty                 @relation("PlacementClaimCashCallCounterparty", fields: [counterpartyId, tenantId], references: [id, tenantId], onDelete: Restrict)
   documents         PlacementDocument[]
+  attachments       PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, cashCallNumber])
@@ -683,6 +695,7 @@ model PlacementPayment {
   reversalOfPayment   PlacementPayment?         @relation("PlacementPaymentReversal", fields: [reversalOfPaymentId], references: [id], onDelete: Restrict)
   reversalPayments    PlacementPayment[]        @relation("PlacementPaymentReversal")
   settledNotes        PlacementNote[]           @relation("PlacementNoteSettlement")
+  attachments         PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, status, createdAt])
@@ -779,6 +792,7 @@ model PlacementEndorsement {
   closings          PlacementEndorsementClosing[]
   notes             PlacementNote[]
   documents         PlacementDocument[]
+  attachments       PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, endorsementNumber])
@@ -809,6 +823,7 @@ model PlacementEndorsementParticipant {
   closings              PlacementEndorsementClosing[]
   endorsementNotes      PlacementNote[]
   claimAllocations      PlacementClaimAllocation[]
+  attachments           PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@index([tenantId, placementId, endorsementId])
@@ -848,6 +863,7 @@ model PlacementEndorsementClosing {
   claimAllocations         PlacementClaimAllocation[]
   notes                    PlacementNote[]
   documents                PlacementDocument[]
+  attachments              PlacementAttachment[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, placementId, closingNumber])
@@ -911,6 +927,56 @@ model PlacementDocument {
   @@index([tenantId, endorsementClosingId, createdAt])
   @@index([tenantId, claimId, createdAt])
   @@index([tenantId, claimCashCallId, createdAt])
+  @@schema("reinsurance")
+}
+
+model PlacementAttachment {
+  id                       String                           @id @default(uuid())
+  tenantId                 String
+  placementId              String
+  participantId            String?
+  closingId                String?
+  endorsementId            String?
+  endorsementParticipantId String?
+  endorsementClosingId     String?
+  claimId                  String?
+  claimCashCallId          String?
+  paymentId                String?
+  status                   PlacementAttachmentStatus        @default(ACTIVE)
+  title                    String?
+  description              String?
+  originalFileName         String
+  fileName                 String
+  mimeType                 String
+  sizeBytes                Int
+  checksum                 String
+  storageProvider          String
+  objectKey                String
+  voidedAt                 DateTime?
+  voidReason               String?
+  createdByUserId          String
+  createdAt                DateTime                         @default(now())
+  updatedAt                DateTime                         @updatedAt
+  placement                Placement                        @relation(fields: [placementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  participant              PlacementParticipant?            @relation(fields: [participantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  closing                  PlacementClosing?                @relation(fields: [closingId], references: [id], onDelete: Restrict)
+  endorsement              PlacementEndorsement?            @relation(fields: [endorsementId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsementParticipant   PlacementEndorsementParticipant? @relation(fields: [endorsementParticipantId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  endorsementClosing       PlacementEndorsementClosing?     @relation(fields: [endorsementClosingId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claim                    PlacementClaim?                  @relation(fields: [claimId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  claimCashCall            PlacementClaimCashCall?          @relation(fields: [claimCashCallId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  payment                  PlacementPayment?                @relation(fields: [paymentId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@index([tenantId, placementId, status, createdAt])
+  @@index([tenantId, participantId, status, createdAt])
+  @@index([tenantId, closingId, status, createdAt])
+  @@index([tenantId, endorsementId, status, createdAt])
+  @@index([tenantId, endorsementParticipantId, status, createdAt])
+  @@index([tenantId, endorsementClosingId, status, createdAt])
+  @@index([tenantId, claimId, status, createdAt])
+  @@index([tenantId, claimCashCallId, status, createdAt])
+  @@index([tenantId, paymentId, status, createdAt])
   @@schema("reinsurance")
 }
 
