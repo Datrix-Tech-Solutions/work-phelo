@@ -98,4 +98,56 @@ describe('PlacementPdfRendererService', () => {
       }),
     );
   });
+
+  it('renders participant offer slip payloads through the shared registry', async () => {
+    const renderer = new PlacementPdfRendererService(
+      new PlacementDocumentTemplateRegistry(),
+    );
+
+    await renderer.render({
+      documentNumber: 'DOC-OS-001',
+      title: 'Offer Slip FAC-001 - Avenue Re',
+      type: PlacementDocumentType.OFFER_SLIP,
+      status: PlacementDocumentStatus.GENERATED,
+      generatedAt: '2026-06-12T00:00:00.000Z',
+      renderPayload: {
+        documentType: PlacementDocumentType.OFFER_SLIP,
+        placement: {
+          reference: 'FAC-001',
+          currency: 'GHS',
+          sumInsured: 1000000,
+          premium: 50000,
+          commission: 10,
+          facultativeOffer: 60,
+        },
+        cedant: { name: 'Acme Insurance' },
+        participantPreview: {
+          participant: {
+            sharePercent: 40,
+            brokerageFee: 7.5,
+            counterparty: { name: 'Avenue Re' },
+          },
+          slipFinancials: { facOffer: 60, facSumInsured: 600000 },
+          distributionFinancials: {
+            premiumShare: 12000,
+            brokerageFee: 7.5,
+            brokerageAmount: 900,
+          },
+        },
+        offerContext: { offeredLinePercent: 40 },
+        branding: { productName: 'WorkPhelo' },
+      },
+    });
+
+    expect(setContentMock).toHaveBeenCalledWith(
+      expect.stringContaining('Avenue Re'),
+      { waitUntil: 'networkidle' },
+    );
+    expect(pdfMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        format: 'A4',
+        printBackground: true,
+      }),
+    );
+  });
 });
