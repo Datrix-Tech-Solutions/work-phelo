@@ -1,7 +1,7 @@
 'use client';
 
 import { use } from 'react';
-import { ProjectTasksTable } from '@/components/organisms/projects/ProjectTasksTable';
+import { ProjectTasksTable } from '@/components/organisms/hr/projects/ProjectTasksTable';
 
 export default function ProjectTaskPage({
   params,

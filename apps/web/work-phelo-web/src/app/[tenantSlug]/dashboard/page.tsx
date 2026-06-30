@@ -9,7 +9,7 @@ import { TopNav } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { getGreeting } from '@/lib/formatters';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
-import { AgreementGate } from '@/components/organisms/companyPolicies/AgreementGate';
+import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
 
 /* ── Module definitions ── */
 interface ModuleDef {

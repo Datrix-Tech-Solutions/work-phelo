@@ -17,7 +17,7 @@ import {
   getPayrollLabels,
   normalizePayrollCountry,
 } from '@/lib/payrollDisplay';
-import { ApprovePayrollPanel } from '@/components/organisms/payroll/ApprovePayrollPanel';
+import { ApprovePayrollPanel } from '@/components/organisms/hr/payroll/ApprovePayrollPanel';
 
 function itemAllowances(row: PayrollItem): number {
   if (row.allowanceItems?.length) {

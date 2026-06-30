@@ -9,9 +9,9 @@ import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { HR_NAV_GROUPS } from '@/config/hr-nav';
 import { usePermission, usePermissionRule } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
-import { AppraisalReminderModal } from '@/components/organisms/appraisal/AppraisalReminderModal';
-import { LeaveReminderModal } from '@/components/organisms/leave/LeaveReminderModal';
-import { AgreementGate } from '@/components/organisms/companyPolicies/AgreementGate';
+import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
+import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
+import { LeaveReminderModal } from '@/components/organisms/hr/leave/LeaveReminderModal';
 
 export default function HRLayout({
   children,

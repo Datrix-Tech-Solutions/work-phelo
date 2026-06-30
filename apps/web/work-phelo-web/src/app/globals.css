@@ -19,14 +19,15 @@
 
   /* Module identity colors — used for icon backgrounds */
   --module-hr:         #0D2244;  /* navy  — HR */
-  --module-marketing:  #16A34A;  /* green — Marketing */
-  --module-accounting: #ce8021;  /* red — Accounting */
+  --module-marketing:  #0466f8;  /* green — Marketing */
+  --module-accounting: #064707;  /* red — Accounting */
   --module-operations: #4906d9;  /* purple — Operations */
 
   /* App shell background colors — change here to update all module layouts */
   --app-bg-hr:         #f3f4f6;  /* bg-gray-100  — HR module layout */
   --app-bg-operations: #f3f4f6;  /* bg-gray-100 — Operations module layout */
   --app-bg-accounting: #f3f4f6;  /* bg-gray-100  — Accounting module layout */
+  --app-bg-marketing:  #f3f4f6;  /* bg-gray-100  — Marketing module layout */
 
   /* Module palette fallbacks — used outside any layout class (brand colors) */
   --module-btn-bg:       var(--brand);
@@ -63,6 +64,7 @@
   --color-app-bg-hr:         var(--app-bg-hr);
   --color-app-bg-operations: var(--app-bg-operations);
   --color-app-bg-accounting: var(--app-bg-accounting);
+  --color-app-bg-marketing:  var(--app-bg-marketing);
 }
 
 /* Module layout classes — each defines the full derived palette from its identity color */
@@ -89,6 +91,14 @@
   --module-tint:         color-mix(in oklch, var(--module-accounting) 12%, white);
   --module-accent:       color-mix(in oklch, var(--module-accounting) 40%, white);
   --module-gradient-end: color-mix(in oklch, var(--module-accounting) 88%, black);
+}
+.layout-marketing {
+  --table-header-bg:     var(--app-bg-marketing);
+  --module-btn-bg:       var(--module-marketing);
+  --module-btn-bg-hover: color-mix(in oklch, var(--module-marketing) 82%, black);
+  --module-tint:         color-mix(in oklch, var(--module-marketing) 12%, white);
+  --module-accent:       color-mix(in oklch, var(--module-marketing) 40%, white);
+  --module-gradient-end: color-mix(in oklch, var(--module-marketing) 88%, black);
 }
 
 @media (prefers-color-scheme: dark) {

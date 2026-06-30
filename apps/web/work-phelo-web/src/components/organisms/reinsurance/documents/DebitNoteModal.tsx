@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative } from '@/types/reinsurance';
 import { useCedants } from '@/hooks';
@@ -68,7 +69,14 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
 
       <div className="flex flex-col gap-1">
         <span className="text-xs text-gray-500">Signature / Stamp</span>
-        <div className="w-64 border-b border-gray-400 mt-20" />
+        <Image
+          src="/signature.png"
+          alt="Signature"
+          width={160}
+          height={80}
+          className="object-contain mt-2"
+        />
+        <div className="w-64 border-b border-gray-400" />
       </div>
 
       <div

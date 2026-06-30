@@ -36,7 +36,7 @@ const COLUMNS: Column<JournalEntry>[] = [
   {
     key: 'refNo',
     label: 'Ref No.',
-    width: '0.5fr',
+    width: '130px',
     render: (row) => (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
         {row.refNo}
@@ -46,13 +46,25 @@ const COLUMNS: Column<JournalEntry>[] = [
   {
     key: 'date',
     label: 'Date',
-    width: '0.5fr',
+    width: '130px',
     render: (row) => <span className="text-gray-700 text-sm">{fmtDate(row.date)}</span>,
+  },
+  {
+    key: 'createdBy',
+    label: 'Created By',
+    width: '1fr',
+    render: (row) => <span className="text-gray-700 text-sm">{row.createdBy}</span>,
+  },
+  {
+    key: 'description',
+    label: 'Description',
+    width: '1fr',
+    render: (row) => <span className="text-gray-700 text-sm">{row.createdBy}</span>,
   },
   {
     key: 'currency',
     label: 'Currency',
-    width: '0.5fr',
+    width: '100px',
     render: (row) => (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
         {row.currency}
@@ -62,7 +74,7 @@ const COLUMNS: Column<JournalEntry>[] = [
   {
     key: 'debitTotal',
     label: 'Debit Total',
-    width: '1fr',
+    width: '170px',
     render: (row) => (
       <span className="block text-right text-sm font-medium text-gray-900">
         {fmtAmount(row.debitTotal, row.currency)}
@@ -72,19 +84,14 @@ const COLUMNS: Column<JournalEntry>[] = [
   {
     key: 'creditTotal',
     label: 'Credit Total',
-    width: '1fr',
+    width: '170px',
     render: (row) => (
       <span className="block text-right text-sm font-medium text-gray-900">
         {fmtAmount(row.creditTotal, row.currency)}
       </span>
     ),
   },
-  {
-    key: 'createdBy',
-    label: 'Created By',
-    width: '1fr',
-    render: (row) => <span className="text-gray-700 text-sm">{row.createdBy}</span>,
-  },
+
   {
     key: 'status',
     label: 'Status',

@@ -38,7 +38,7 @@ const COLUMNS: Column<AccountsReceivableInvoice>[] = [
   {
     key: 'invoiceNumber',
     label: 'Invoice No.',
-    width: '0.6fr',
+    width: '140px',
     render: (row) => (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
         {row.invoiceNumber}
@@ -48,25 +48,25 @@ const COLUMNS: Column<AccountsReceivableInvoice>[] = [
   {
     key: 'customer',
     label: 'Customer',
-    width: '1.2fr',
+    width: '1fr',
     render: (row) => <span className="text-sm text-gray-800 font-medium">{row.customer}</span>,
   },
   {
     key: 'invoiceDate',
     label: 'Invoice Date',
-    width: '0.8fr',
+    width: '130px',
     render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.invoiceDate)}</span>,
   },
   {
     key: 'dueDate',
     label: 'Due Date',
-    width: '0.8fr',
+    width: '130px',
     render: (row) => <span className="text-sm text-gray-700">{fmtDate(row.dueDate)}</span>,
   },
   {
     key: 'amount',
     label: 'Amount',
-    width: '1fr',
+    width: '170px',
     render: (row) => (
       <span className="block text-right text-sm font-medium text-gray-900">
         {fmtAmount(row.amount, row.currency)}

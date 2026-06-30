@@ -36,7 +36,7 @@ const COLUMNS: Column<ChartOfAccount>[] = [
   {
     key: 'accountCode',
     label: 'Account Code',
-    width: '0.5fr',
+    width: '140px',
     render: (row) => (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
         {row.accountCode}
@@ -52,7 +52,7 @@ const COLUMNS: Column<ChartOfAccount>[] = [
   {
     key: 'type',
     label: 'Type',
-    width: '0.5fr',
+    width: '120px',
     render: (row) => <AccountTypePill type={row.type} />,
   },
   {
@@ -64,7 +64,7 @@ const COLUMNS: Column<ChartOfAccount>[] = [
   {
     key: 'currency',
     label: 'Currency',
-    width: '0.5fr',
+    width: '100px',
     render: (row) => (
       <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
         {row.currency}
