@@ -502,6 +502,43 @@ export class PlacementsController {
     return this.documentsService.generateOfferSlip(request.user, id);
   }
 
+  @Post(':id/participants/:participantId/documents/offer-slip')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate participant-scoped offer slip document registry entry',
+    description:
+      'Creates or reuses an active GENERATED OFFER_SLIP document row scoped to one placement reinsurer. The payload is addressed/contextualized to that participant and does not mutate placement or participant records. PDF rendering is not currently supported for OFFER_SLIP documents.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is missing, archived or belongs to another tenant.',
+  })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The participant is not a reinsurer eligible for an offer slip.',
+  })
+  generateParticipantOfferSlipDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateParticipantOfferSlip(
+      request.user,
+      id,
+      participantId,
+    );
+  }
+
   @Post(':id/closings/:closingId/documents/closing-slip')
   @ApiTags('Reinsurance - Documents')
   @RequirePermissions(PlacementPermission.EDIT)
