@@ -764,6 +764,55 @@ describe('PlacementDocumentsService', () => {
     expect(documentStorage.storePdf).not.toHaveBeenCalled();
   });
 
+  it('renders a participant-scoped OFFER_SLIP document as PDF using renderPayload', async () => {
+    const participantOfferDocument = {
+      ...document,
+      type: PlacementDocumentType.OFFER_SLIP,
+      participantId: 'participant-1',
+      documentNumber: 'DOC-OS-001',
+      title: 'Offer Slip FAC-001 - Avenue Re',
+      sourceSnapshot: {
+        documentType: PlacementDocumentType.OFFER_SLIP,
+        participantPreview: offerPreview.participantPreviews[0],
+      },
+      renderPayload: {
+        documentType: PlacementDocumentType.OFFER_SLIP,
+        placement: offerPreview.placement,
+        cedant: offerPreview.cedant,
+        businessEntries: offerPreview.businessEntries,
+        offerEntries: offerPreview.offerEntries,
+        debitGuaranteeFinancials: offerPreview.debitGuaranteeFinancials,
+        participantPreview: offerPreview.participantPreviews[0],
+        offerContext: {
+          participantId: 'participant-1',
+          reinsurerName: 'Avenue Re',
+          offeredLinePercent: 40,
+        },
+        branding: {
+          productName: 'WorkPhelo',
+          documentFamily: 'Reinsurance Operations',
+        },
+      },
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(
+      participantOfferDocument,
+    );
+
+    const pdf = await service.renderPdf(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(pdf.toString()).toBe('%PDF test');
+    expect(pdfRenderer.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PlacementDocumentType.OFFER_SLIP,
+        renderPayload: participantOfferDocument.renderPayload,
+      }),
+    );
+  });
+
   it('renders and stores a CLOSING_SLIP PDF with checksum and storage metadata', async () => {
     const closingDocument = {
       ...document,
@@ -924,7 +973,7 @@ describe('PlacementDocumentsService', () => {
   it('rejects unsupported document types for PDF rendering', async () => {
     prisma.placementDocument.findFirst.mockResolvedValue({
       ...document,
-      type: PlacementDocumentType.OFFER_SLIP,
+      type: PlacementDocumentType.DEBIT_NOTE,
     });
 
     await expect(

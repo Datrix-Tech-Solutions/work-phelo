@@ -541,9 +541,13 @@ export class PlacementDocumentsService {
   }
 
   private assertPdfRenderable(document: PlacementDocumentRecord): void {
-    if (document.type !== PlacementDocumentType.CLOSING_SLIP) {
+    const renderableTypes = new Set<PlacementDocumentType>([
+      PlacementDocumentType.CLOSING_SLIP,
+      PlacementDocumentType.OFFER_SLIP,
+    ]);
+    if (!renderableTypes.has(document.type)) {
       throw new BadRequestException(
-        'PDF rendering is currently supported only for CLOSING_SLIP documents',
+        'PDF rendering is currently supported only for CLOSING_SLIP and OFFER_SLIP documents',
       );
     }
     if (document.status === PlacementDocumentStatus.VOID) {
