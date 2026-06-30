@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative, PlacementEndorsement } from '@/types/reinsurance';
 
@@ -83,16 +84,22 @@ function buildChangeSentence(
       verb = toNum(curr) > toNum(prev) ? 'increased' : 'decreased';
     }
     return (
-      <>
+      <React.Fragment key={key}>
         the {label.toLowerCase()} was {verb} from <strong>{prevStr}</strong> to{' '}
         <strong>{currStr}</strong>
-      </>
+      </React.Fragment>
     );
   });
 
   const joined: React.ReactNode[] = [];
   clauses.forEach((clause, i) => {
-    if (i > 0) joined.push(i === clauses.length - 1 ? ', and ' : ', ');
+    if (i > 0) {
+      joined.push(
+        <React.Fragment key={`sep-${i}`}>
+          {i === clauses.length - 1 ? ', and ' : ', '}
+        </React.Fragment>,
+      );
+    }
     joined.push(clause);
   });
 

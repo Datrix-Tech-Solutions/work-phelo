@@ -12,7 +12,7 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
   const tabs = [
     { key: 'risk-classes', label: 'Risk Class', href: `${base}/risk-classes` },
     { key: 'risk-types', label: 'Risk Types', href: `${base}/risk-types` },
-    { key: 'currency', label: 'Currency', href: `${base}/currency` },
+    // { key: 'currency', label: 'Currency', href: `${base}/currency` },
     { key: 'banks', label: 'Banks', href: `${base}/banks` },
     { key: 'levytaxes', label: 'Liabilities', href: `${base}/levytaxes` },
   ];

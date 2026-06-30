@@ -48,73 +48,81 @@ export function InlineTable({
         </Button>
       </div>
 
-      {/* Column headers — floating pill matching DataTable */}
-      <div className="pt-3">
-        <div className="relative shrink-0">
-          <div className="absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg" />
-          <div
-            className="relative grid text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-3"
-            style={{ gridTemplateColumns: colTemplate }}
-          >
-            {columns.map((col) => (
-              <span key={col.key} className={col.align === 'right' ? 'text-right' : ''}>
-                {col.label}
-              </span>
-            ))}
-            <span />
-          </div>
-        </div>
-      </div>
-
-      {/* Rows */}
-      {fieldIds.map((id, index) => (
-        <div
-          key={id}
-          className="grid border-b border-gray-100 last:border-b-0 items-start px-4"
-          style={{ gridTemplateColumns: colTemplate }}
-        >
-          {columns.map((col) => (
-            <div key={col.key} className="p-2">
-              {col.renderField(index)}
+      {/* Scrollable table body */}
+      <div className="overflow-x-auto">
+        <div className="min-w-max">
+          {/* Column headers — floating pill matching DataTable */}
+          <div className="pt-3">
+            <div className="relative shrink-0">
+              <div className="absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg" />
+              <div
+                className="relative grid text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-3"
+                style={{ gridTemplateColumns: colTemplate }}
+              >
+                {columns.map((col) => (
+                  <span key={col.key} className={col.align === 'right' ? 'text-right' : ''}>
+                    {col.label}
+                  </span>
+                ))}
+                <span />
+              </div>
             </div>
-          ))}
-          <div className="p-2 flex items-center justify-center">
-            <button
-              type="button"
-              onClick={() => fieldIds.length > 1 && onRemoveRow(index)}
-              disabled={fieldIds.length === 1}
-              className="p-2 text-gray-500 hover:text-red-700 disabled:opacity-90 disabled:cursor-not-allowed transition-colors rounded-lg hover:bg-red-200"
-              aria-label="Remove row"
-            >
-              <Icons.Trash2 className="w-5 h-5" />
-            </button>
           </div>
-        </div>
-      ))}
 
-      {/* Footer — floating pill matching column header */}
-      {hasFooter && (
-        <div className="pb-3">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg" />
-            <div className="relative grid px-6 py-3" style={{ gridTemplateColumns: colTemplate }}>
+          {/* Rows */}
+          {fieldIds.map((id, index) => (
+            <div
+              key={id}
+              className="grid border-b border-gray-100 last:border-b-0 items-start px-4"
+              style={{ gridTemplateColumns: colTemplate }}
+            >
               {columns.map((col) => (
-                <div
-                  key={col.key}
-                  className={
-                    col.align === 'right'
-                      ? 'flex items-center justify-end text-sm font-semibold text-gray-900'
-                      : 'flex items-center text-xs font-semibold text-gray-500 uppercase tracking-wide'
-                  }
-                >
-                  {col.renderFooter?.()}
+                <div key={col.key} className="p-2">
+                  {col.renderField(index)}
                 </div>
               ))}
-              <div />
+              <div className="p-2 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => fieldIds.length > 1 && onRemoveRow(index)}
+                  disabled={fieldIds.length === 1}
+                  className="p-2 text-gray-500 hover:text-red-700 disabled:opacity-90 disabled:cursor-not-allowed transition-colors rounded-lg hover:bg-red-200"
+                  aria-label="Remove row"
+                >
+                  <Icons.Trash2 className="w-5 h-5" />
+                </button>
+              </div>
             </div>
-          </div>
+          ))}
+
+          {/* Footer — floating pill matching column header */}
+          {hasFooter && (
+            <div className="pb-3">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg" />
+                <div
+                  className="relative grid px-6 py-3"
+                  style={{ gridTemplateColumns: colTemplate }}
+                >
+                  {columns.map((col) => (
+                    <div
+                      key={col.key}
+                      className={
+                        col.align === 'right'
+                          ? 'flex items-center justify-end text-sm font-semibold text-gray-900'
+                          : 'flex items-center text-xs font-semibold text-gray-500 uppercase tracking-wide'
+                      }
+                    >
+                      {col.renderFooter?.()}
+                    </div>
+                  ))}
+                  <div />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

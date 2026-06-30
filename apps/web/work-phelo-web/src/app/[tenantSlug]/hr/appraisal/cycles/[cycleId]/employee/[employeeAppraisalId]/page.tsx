@@ -13,7 +13,7 @@ import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { cn } from '@/lib/utils';
 import { FinalRating, DEFAULT_PERFORMANCE_BANDS } from '@/types/hr';
-import { RatingBadge } from '@/components/molecules/appraisal/RatingBadge';
+import { RatingBadge } from '@/components/molecules/hr/appraisal/RatingBadge';
 
 function deriveRating(score: number): FinalRating {
   const band = DEFAULT_PERFORMANCE_BANDS.find(

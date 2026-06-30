@@ -10,7 +10,6 @@ import { useLeaveBalances, useMyLeaveRequests } from '@/hooks/hr/useLeave';
 import { useMyPayslips } from '@/hooks/hr/usePayroll';
 import { usePublicHolidays } from '@/hooks/hr/usePublicHolidays';
 import { useClockIn, useClockOut } from '@/hooks/hr/useTimeClock';
-import { ApplyLeavePanel } from '@/components/organisms/leave/ApplyLeavePanel';
 import { DashboardWelcomeBanner } from '@/components/molecules/dashboard/DashboardWelcomeBanner';
 import { QuickActionsCard } from '@/components/molecules/dashboard/QuickActionsCard';
 import { UpcomingHolidaysCard } from '@/components/molecules/dashboard/UpcomingHolidaysCard';
@@ -24,6 +23,7 @@ import { MySchedulesPanel } from '@/components/organisms/dashboard/MySchedulesPa
 import { MyProjectsPanel } from '@/components/organisms/dashboard/MyProjectsPanel';
 import { DashboardSkeleton } from '@/components/molecules/dashboard/DashboardSkeleton';
 import { formatTime, resolveHolidayUpcomingDate } from '@/lib/formatters';
+import { ApplyLeavePanel } from '@/components/organisms/hr/leave/ApplyLeavePanel';
 
 /* ── Avatar colour picker ──
    Intentional variety palette for employee initials.

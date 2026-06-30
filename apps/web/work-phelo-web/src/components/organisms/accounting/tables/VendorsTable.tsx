@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { AddVendorPanel } from '@/components/organisms/accounting/panels/AddVendorPanel';
@@ -55,9 +56,7 @@ const COLUMNS: Column<Vendor>[] = [
     label: 'Outstanding Balance',
     width: '1fr',
     render: (row) => (
-      <span
-        className={`block text-right text-sm font-medium ${row.outstandingBalance > 0 ? 'text-red-600' : 'text-gray-700'}`}
-      >
+      <span className="text-sm text-gray-700">
         {fmtBalance(row.outstandingBalance, row.currency)}
       </span>
     ),
@@ -73,6 +72,8 @@ const COLUMNS: Column<Vendor>[] = [
 ];
 
 export function VendorsTable() {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -104,6 +105,7 @@ export function VendorsTable() {
           setSearch(q);
           setPage(1);
         }}
+        onRowClick={(row) => router.push(`/${tenantSlug}/accounting/settings/vendors/${row.id}`)}
         actionButton={{ label: 'Add Vendor', onClick: () => setPanelOpen(true) }}
         rowActions={() => [
           { label: 'Edit', onClick: () => {} },

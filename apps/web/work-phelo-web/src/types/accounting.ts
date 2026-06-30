@@ -100,6 +100,15 @@ export interface AccountsPayableInvoice {
   status: InvoiceStatus;
 }
 
+export interface AccountingContact {
+  id: string;
+  fullName: string;
+  jobTitle: string | null;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
+}
+
 export type VendorStatus = 'Active' | 'Inactive';
 
 export interface Vendor {
@@ -112,4 +121,65 @@ export interface Vendor {
   outstandingBalance: number;
   currency: string;
   status: VendorStatus;
+  contacts: AccountingContact[];
+}
+
+export interface AccountingCurrency {
+  id: string;
+  name: string;
+  symbol: string;
+  isoCode: string;
+  exchangeRateToBase: string | null;
+  isBaseCurrency: boolean;
+}
+
+export type AccountTransactionType = 'Credit' | 'Debit';
+
+export interface AccountTransaction {
+  id: string;
+  date: string;
+  description: string;
+  reference: string;
+  type: AccountTransactionType;
+  debit: number | null;
+  credit: number | null;
+  balance: number;
+  currency: string;
+}
+
+export interface AccountTypeRecord {
+  id: string;
+  accountName: string;
+  accountType: string;
+  bankName: string;
+  bankCode: string;
+  bankBranch: string;
+  accountNumber: string;
+  status: 'Active' | 'Inactive';
+}
+
+export interface BudgetForecast {
+  id: string;
+  budgetName: string;
+  department: string;
+  fiscalYear: string;
+  version: string;
+  amount: number;
+  actualSpend: number;
+  currency: string;
+}
+
+export type CustomerStatus = 'Active' | 'Inactive';
+
+export interface Customer {
+  id: string;
+  customerCode: string;
+  customerName: string;
+  contactPerson: string | null;
+  email: string | null;
+  phone: string | null;
+  outstandingBalance: number;
+  currency: string;
+  status: CustomerStatus;
+  contacts: AccountingContact[];
 }

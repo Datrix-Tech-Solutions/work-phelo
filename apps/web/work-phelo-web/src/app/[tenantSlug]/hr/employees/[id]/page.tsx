@@ -18,19 +18,19 @@ import {
   useUserPermissions,
 } from '@/hooks/hr/useRoles';
 import { useToast } from '@/hooks/useToast';
-import { Breadcrumb } from '@/components/molecules/employees/employeebreadcrumps';
-import { EmployeeDetailBanner } from '@/components/molecules/employees/EmployeeDetailBanner';
-import { EmployeeDetailSidebar } from '@/components/molecules/employees/EmployeeDetailSidebar';
-import { PersonalInformationSection } from '@/components/molecules/employees/PersonalInformationSection';
-import { AssetsSection } from '@/components/molecules/employees/assetSection';
-import { EmergencyContactSection } from '@/components/molecules/employees/emergencyContactSection';
-import { EmployeeDetailSkeleton } from '@/components/molecules/employees/employeeDetailSkeleton';
+import { Breadcrumb } from '@/components/molecules/hr/employees/employeebreadcrumps';
+import { EmployeeDetailBanner } from '@/components/molecules/hr/employees/EmployeeDetailBanner';
+import { EmployeeDetailSidebar } from '@/components/molecules/hr/employees/EmployeeDetailSidebar';
+import { PersonalInformationSection } from '@/components/molecules/hr/employees/PersonalInformationSection';
+import { AssetsSection } from '@/components/molecules/hr/employees/assetSection';
+import { EmergencyContactSection } from '@/components/molecules/hr/employees/emergencyContactSection';
+import { EmployeeDetailSkeleton } from '@/components/molecules/hr/employees/employeeDetailSkeleton';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import {
   EmployeeDetailPanels,
   type EmployeeDetailPanel,
-} from '@/components/organisms/employee/EmployeeDetailPanels';
-import { EmployeePayslipTab } from '@/components/molecules/employees/EmployeePayslipTab';
+} from '@/components/organisms/hr/employee/EmployeeDetailPanels';
+import { EmployeePayslipTab } from '@/components/molecules/hr/employees/EmployeePayslipTab';
 import { pageBreadcrumb, pageBanner, pagePx, pageContent } from '@/lib/layout';
 
 type EmployeeTab = 'personal' | 'payroll';

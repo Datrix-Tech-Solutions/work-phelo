@@ -15,9 +15,6 @@ export default function AccountsReceivablePage() {
     <div className="flex flex-col gap-6 p-6 overflow-y-auto flex-1">
       <div className="shrink-0">
         <h2 className="text-base font-semibold text-gray-900">Accounts Receivable</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Track customer invoices, collections, and outstanding balances
-        </p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">

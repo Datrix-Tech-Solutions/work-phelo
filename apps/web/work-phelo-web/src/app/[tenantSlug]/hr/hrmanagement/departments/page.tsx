@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
-import { DepartmentsTable } from '@/components/organisms/departments/departmentTable';
+import { DepartmentsTable } from '@/components/organisms/hr/departments/departmentTable';
 
 export default function DepartmentsPage() {
   const router = useRouter();

@@ -1,6 +1,6 @@
 import { Project } from '@/types/hr';
 import { Users, CalendarDays } from 'lucide-react';
-import { ProjectStatusBadge } from '@/components/molecules/projects/ProjectStatusBadge';
+import { ProjectStatusBadge } from '@/components/molecules/hr/projects/ProjectStatusBadge';
 
 function formatDate(iso?: string) {
   if (!iso) return '—';

@@ -4,7 +4,7 @@ import { use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAppraisal, useCycleKpis, useAppraisalCycles } from '@/hooks';
-import { SelfAssessmentForm } from '@/components/organisms/appraisal/SelfAssessmentForm';
+import { SelfAssessmentForm } from '@/components/organisms/hr/appraisal/SelfAssessmentForm';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { cn } from '@/lib/utils';

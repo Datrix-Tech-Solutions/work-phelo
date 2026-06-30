@@ -5,9 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
-import { LeaveTabs } from '@/components/molecules/leave/LeaveTabs';
-import { MyLeaveTab } from '@/components/organisms/leave/MyLeaveTab';
-import { LeaveRequestsTab } from '@/components/organisms/leave/LeaveRequestsTab';
+import { LeaveTabs } from '@/components/molecules/hr/leave/LeaveTabs';
+import { MyLeaveTab } from '@/components/organisms/hr/leave/MyLeaveTab';
+import { LeaveRequestsTab } from '@/components/organisms/hr/leave/LeaveRequestsTab';
 
 const VALID_TABS = ['my', 'requests'] as const;
 type Tab = (typeof VALID_TABS)[number];

@@ -1,7 +1,7 @@
 'use client';
 
 import { use } from 'react';
-import { SchedulingContent } from '@/components/organisms/scheduling/SchedulingContent';
+import { SchedulingContent } from '@/components/organisms/hr/scheduling/SchedulingContent';
 
 export default function SchedulingPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
