@@ -2,8 +2,8 @@
 
 import { use, useMemo } from 'react';
 import { useCycleAppraisals } from '@/hooks/hr/useAppraisals';
-import { CycleInProgressContent } from '@/components/organisms/appraisal/CycleInProgressContent';
-import { CycleResultsContent } from '@/components/organisms/appraisal/CycleResultsContent';
+import { CycleInProgressContent } from '@/components/organisms/hr/appraisal/CycleInProgressContent';
+import { CycleResultsContent } from '@/components/organisms/hr/appraisal/CycleResultsContent';
 
 function CycleDetailRouter({ tenantSlug, cycleId }: { tenantSlug: string; cycleId: string }) {
   const { data: raw, isLoading } = useCycleAppraisals(cycleId);

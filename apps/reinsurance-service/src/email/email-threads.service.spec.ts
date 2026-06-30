@@ -7,6 +7,8 @@ import {
   MailboxProvider,
 } from '../../prisma/generated/client';
 import { EmailEventPublisher } from '../messaging/email-event.publisher';
+import { PlacementAttachmentsService } from '../placements/placement-attachments.service';
+import { PlacementDocumentsService } from '../placements/placement-documents.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailTokenEncryptionService } from './email-token-encryption.service';
 import { EmailThreadsService } from './email-threads.service';
@@ -48,6 +50,8 @@ describe('EmailThreadsService', () => {
   };
   let registry: { get: jest.Mock };
   let encryption: { decrypt: jest.Mock };
+  let documentsService: { readStoredPdfForEmail: jest.Mock };
+  let attachmentsService: { readStoredAttachmentForEmail: jest.Mock };
   let service: EmailThreadsService;
 
   beforeEach(() => {
@@ -90,11 +94,15 @@ describe('EmailThreadsService', () => {
     };
     registry = { get: jest.fn().mockReturnValue(provider) };
     encryption = { decrypt: jest.fn().mockReturnValue('access-token') };
+    documentsService = { readStoredPdfForEmail: jest.fn() };
+    attachmentsService = { readStoredAttachmentForEmail: jest.fn() };
     service = new EmailThreadsService(
       prisma as unknown as PrismaService,
       publisher as unknown as EmailEventPublisher,
       registry as unknown as EmailProviderRegistry,
       encryption as unknown as EmailTokenEncryptionService,
+      documentsService as unknown as PlacementDocumentsService,
+      attachmentsService as unknown as PlacementAttachmentsService,
     );
   });
 
@@ -465,6 +473,247 @@ describe('EmailThreadsService', () => {
       errorMessage: null,
     });
     expect(result.message.status).toBe(EmailMessageStatus.SENT);
+  });
+
+  it('sends a placement email with generated offer and closing slip PDFs attached', async () => {
+    const sentAt = new Date('2026-06-11T10:00:00.000Z');
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    documentsService.readStoredPdfForEmail
+      .mockResolvedValueOnce({
+        body: Buffer.from('%PDF-offer'),
+        mimeType: 'application/pdf',
+        fileName: 'offer-slip.pdf',
+        sizeBytes: 10,
+      })
+      .mockResolvedValueOnce({
+        body: Buffer.from('%PDF-closing'),
+        mimeType: 'application/pdf',
+        fileName: 'closing-slip.pdf',
+        sizeBytes: 12,
+      });
+    prisma.mailboxConnection.findFirst.mockResolvedValue(activeMailbox);
+    prisma.emailThread.create.mockResolvedValue({
+      id: 'thread-1',
+      subject: 'Offer and closing slips',
+    });
+    prisma.emailMessage.create.mockResolvedValue({
+      id: 'message-1',
+      status: EmailMessageStatus.SENDING,
+      direction: EmailMessageDirection.OUTBOUND,
+      attachments: [],
+    });
+    prisma.placementEmailLink.create.mockResolvedValue({ id: 'link-1' });
+    provider.sendMessage.mockResolvedValue({
+      providerThreadId: 'provider-thread-1',
+      providerMessageId: 'provider-message-1',
+      internetMessageId: 'internet-1',
+      sentAt,
+    });
+    prisma.emailThread.update.mockResolvedValue({ id: 'thread-1' });
+    prisma.emailMessage.update.mockResolvedValue({
+      id: 'message-1',
+      status: EmailMessageStatus.SENT,
+      providerMessageId: 'provider-message-1',
+      sentAt,
+      attachments: [
+        {
+          providerAttachmentId: 'document:offer-document-1',
+          fileName: 'offer-slip.pdf',
+        },
+        {
+          providerAttachmentId: 'document:closing-document-1',
+          fileName: 'closing-slip.pdf',
+        },
+      ],
+    });
+    prisma.placementEmailLink.findFirst.mockResolvedValue(placementThreadLink);
+
+    await service.sendPlacementEmail(user, 'placement-1', {
+      mailboxConnectionId: 'mailbox-1',
+      subject: 'Offer and closing slips',
+      to: [{ email: 'reinsurer@example.com', name: 'Reinsurer' }],
+      bodyText: 'Please review the attached documents.',
+      documentIds: ['offer-document-1', 'closing-document-1'],
+    });
+
+    expect(documentsService.readStoredPdfForEmail).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'offer-document-1',
+    );
+    expect(documentsService.readStoredPdfForEmail).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+      'closing-document-1',
+    );
+    const threadCreateCalls = prisma.emailThread.create.mock
+      .calls as unknown as Array<[{ data: Record<string, unknown> }]>;
+    expect(threadCreateCalls[0]?.[0].data).toMatchObject({
+      hasAttachments: true,
+    });
+    const messageCreateCalls = prisma.emailMessage.create.mock
+      .calls as unknown as Array<[{ data: Record<string, unknown> }]>;
+    expect(messageCreateCalls[0]?.[0].data).toMatchObject({
+      hasAttachments: true,
+      attachments: {
+        create: [
+          {
+            tenantId: 'tenant-1',
+            providerAttachmentId: 'document:offer-document-1',
+            fileName: 'offer-slip.pdf',
+            contentType: 'application/pdf',
+            sizeBytes: 10,
+            isInline: false,
+          },
+          {
+            tenantId: 'tenant-1',
+            providerAttachmentId: 'document:closing-document-1',
+            fileName: 'closing-slip.pdf',
+            contentType: 'application/pdf',
+            sizeBytes: 12,
+            isInline: false,
+          },
+        ],
+      },
+    });
+    expect(provider.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          {
+            fileName: 'offer-slip.pdf',
+            contentType: 'application/pdf',
+            contentBytes: Buffer.from('%PDF-offer'),
+            sizeBytes: 10,
+          },
+          {
+            fileName: 'closing-slip.pdf',
+            contentType: 'application/pdf',
+            contentBytes: Buffer.from('%PDF-closing'),
+            sizeBytes: 12,
+          },
+        ],
+      }),
+    );
+  });
+
+  it('sends a placement email with uploaded placement attachments', async () => {
+    const sentAt = new Date('2026-06-11T10:00:00.000Z');
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    attachmentsService.readStoredAttachmentForEmail.mockResolvedValue({
+      body: Buffer.from('supporting-file'),
+      mimeType: 'application/pdf',
+      fileName: 'supporting-file.pdf',
+      sizeBytes: 15,
+    });
+    prisma.mailboxConnection.findFirst.mockResolvedValue(activeMailbox);
+    prisma.emailThread.create.mockResolvedValue({ id: 'thread-1' });
+    prisma.emailMessage.create.mockResolvedValue({
+      id: 'message-1',
+      status: EmailMessageStatus.SENDING,
+      attachments: [],
+    });
+    prisma.placementEmailLink.create.mockResolvedValue({ id: 'link-1' });
+    provider.sendMessage.mockResolvedValue({
+      providerThreadId: 'provider-thread-1',
+      providerMessageId: 'provider-message-1',
+      sentAt,
+    });
+    prisma.emailThread.update.mockResolvedValue({ id: 'thread-1' });
+    prisma.emailMessage.update.mockResolvedValue({
+      id: 'message-1',
+      status: EmailMessageStatus.SENT,
+      attachments: [],
+    });
+    prisma.placementEmailLink.findFirst.mockResolvedValue(placementThreadLink);
+
+    await service.sendPlacementEmail(user, 'placement-1', {
+      mailboxConnectionId: 'mailbox-1',
+      subject: 'Supporting file',
+      to: [{ email: 'cedant@example.com' }],
+      bodyText: 'Please see attached.',
+      attachmentIds: ['attachment-1'],
+    });
+
+    expect(
+      attachmentsService.readStoredAttachmentForEmail,
+    ).toHaveBeenCalledWith('tenant-1', 'placement-1', 'attachment-1');
+    expect(provider.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          {
+            fileName: 'supporting-file.pdf',
+            contentType: 'application/pdf',
+            contentBytes: Buffer.from('supporting-file'),
+            sizeBytes: 15,
+          },
+        ],
+      }),
+    );
+  });
+
+  it('rejects generated document attachments outside the placement scope', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    documentsService.readStoredPdfForEmail.mockRejectedValue(
+      new NotFoundException('Document not found'),
+    );
+
+    await expect(
+      service.sendPlacementEmail(user, 'placement-1', {
+        mailboxConnectionId: 'mailbox-1',
+        subject: 'Offer slip',
+        to: [{ email: 'reinsurer@example.com' }],
+        bodyText: 'Please review.',
+        documentIds: ['other-placement-document'],
+      }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(prisma.mailboxConnection.findFirst).not.toHaveBeenCalled();
+    expect(provider.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported generated document types before sending', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    documentsService.readStoredPdfForEmail.mockRejectedValue(
+      new BadRequestException('Document type cannot be rendered as PDF'),
+    );
+
+    await expect(
+      service.sendPlacementEmail(user, 'placement-1', {
+        mailboxConnectionId: 'mailbox-1',
+        subject: 'Debit note',
+        to: [{ email: 'cedant@example.com' }],
+        bodyText: 'Please review.',
+        documentIds: ['debit-note-document'],
+      }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(prisma.mailboxConnection.findFirst).not.toHaveBeenCalled();
+    expect(provider.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('rejects attachments that require a provider upload session', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    documentsService.readStoredPdfForEmail.mockResolvedValue({
+      body: Buffer.alloc(3 * 1024 * 1024),
+      mimeType: 'application/pdf',
+      fileName: 'large-offer-slip.pdf',
+      sizeBytes: 3 * 1024 * 1024,
+    });
+
+    await expect(
+      service.sendPlacementEmail(user, 'placement-1', {
+        mailboxConnectionId: 'mailbox-1',
+        subject: 'Offer slip',
+        to: [{ email: 'reinsurer@example.com' }],
+        bodyText: 'Please review.',
+        documentIds: ['large-document'],
+      }),
+    ).rejects.toThrow(
+      'Attachment "large-offer-slip.pdf" must be smaller than 3 MB',
+    );
+
+    expect(prisma.mailboxConnection.findFirst).not.toHaveBeenCalled();
+    expect(provider.sendMessage).not.toHaveBeenCalled();
   });
 
   it('stores a failed outbound message when provider sending fails', async () => {

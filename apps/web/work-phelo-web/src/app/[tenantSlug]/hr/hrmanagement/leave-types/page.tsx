@@ -3,7 +3,7 @@
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { LeaveTypesList } from '@/components/organisms/leave/LeaveTypesList';
+import { LeaveTypesList } from '@/components/organisms/hr/leave/LeaveTypesList';
 import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 
 export default function LeaveTypesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {

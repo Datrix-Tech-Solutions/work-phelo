@@ -341,7 +341,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Render a placement document as PDF',
     description:
-      'Renders an existing generated CLOSING_SLIP document registry row to a PDF using PlacementDocument.renderPayload only. The sourceSnapshot and renderPayload are not mutated. S3 upload, signed URLs and email sending are deferred.',
+      'Renders an existing generated OFFER_SLIP, CLOSING_SLIP, placement debit/credit note or endorsement debit/credit note registry row to a PDF using PlacementDocument.renderPayload only. The immutable sourceSnapshot and renderPayload are not mutated.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -386,7 +386,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Render and store a placement document PDF in private S3',
     description:
-      'Renders an existing generated CLOSING_SLIP document from PlacementDocument.renderPayload, uploads the PDF to private S3, stores object metadata and checksum on the document row, and returns the updated registry entry. Existing stored PDFs are not overwritten in the MVP.',
+      'Renders a supported generated placement document from PlacementDocument.renderPayload, uploads the PDF to private S3, stores object metadata and checksum on the document row, and returns the updated registry entry. Existing stored PDFs are not overwritten in the MVP.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -502,6 +502,43 @@ export class PlacementsController {
     return this.documentsService.generateOfferSlip(request.user, id);
   }
 
+  @Post(':id/participants/:participantId/documents/offer-slip')
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate participant-scoped offer slip document registry entry',
+    description:
+      'Creates or reuses an active GENERATED OFFER_SLIP document row scoped to one placement reinsurer. The payload is addressed/contextualized to that participant, can be rendered through the shared render-pdf endpoint, and does not mutate placement or participant records.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'participantId',
+    format: 'uuid',
+    description: 'Placement participant ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The placement or participant is missing, archived or belongs to another tenant.',
+  })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'The participant is not a reinsurer eligible for an offer slip.',
+  })
+  generateParticipantOfferSlipDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('participantId', ParseUUIDPipe) participantId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateParticipantOfferSlip(
+      request.user,
+      id,
+      participantId,
+    );
+  }
+
   @Post(':id/closings/:closingId/documents/closing-slip')
   @ApiTags('Reinsurance - Documents')
   @RequirePermissions(PlacementPermission.EDIT)
@@ -535,7 +572,7 @@ export class PlacementsController {
   @ApiOperation({
     summary: 'Generate note document registry entry',
     description:
-      'Creates a generated debit/credit note document row from PlacementNote values. The endpoint infers debit, credit and future endorsement-note document types from the note record.',
+      'Creates a generated placement or endorsement debit/credit note document row from immutable PlacementNote values. The endpoint infers the document type from the note record and captures placement, closing, endorsement and counterparty context for PDF rendering.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({

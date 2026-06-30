@@ -1,7 +1,12 @@
 import type { PayrollRunDetail, PayrollItem, AllowanceType } from '@/types/hr';
 import type { PayslipCompanyInfo, PayslipEmployeeInfo, PayslipYTD } from '@/types/payroll';
 export type { PayslipCompanyInfo, PayslipEmployeeInfo, PayslipYTD };
-import { formatPayrollMoney, getPayrollLabels, resolvePayrollCurrency } from '@/lib/payrollDisplay';
+import {
+  formatPayrollMoney,
+  getPayrollLabels,
+  resolvePayrollCurrency,
+  normalizePayrollCountry,
+} from '@/lib/payrollDisplay';
 import type { SearchSelectOption } from '@/components/atoms/SearchSelect';
 
 export const MONTH_NAMES = [
@@ -123,6 +128,11 @@ function sumLineItems(rows: Array<[string, number]>, fallback: string | number):
   return Number.isFinite(value) ? value : 0;
 }
 
+// Round to 2dp — matches backend Decimal.js precision
+function r2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
 function triggerCSV(filename: string, rows: string[][]): void {
   const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
   const blob = new Blob([csv], { type: 'text/csv' });
@@ -164,119 +174,329 @@ export async function downloadPayrollPDFFormat(
   doc.text(label, 14, headerY);
   doc.setTextColor(0, 0, 0);
 
-  const sum = (key: keyof (typeof detail.items)[0]) =>
-    fmtNum(detail.items.reduce((s, i) => s + parseFloat((i[key] as string) || '0'), 0));
-  const sumAllowances = () =>
-    fmtNum(
-      detail.items.reduce(
-        (s, item) => s + sumLineItems(payrollAllowanceRows(item), parseFloat(item.totalAllowances)),
-        0,
-      ),
-    );
-  const sumDeductions = () =>
-    fmtNum(
-      detail.items.reduce(
-        (s, item) => s + sumLineItems(payrollDeductionRows(item), parseFloat(item.otherDeductions)),
-        0,
-      ),
-    );
-
-  const isFull = format === 'full';
   const payrollLabels = getPayrollLabels(detail.payrollCountry);
+  const isGhana = normalizePayrollCountry(detail.payrollCountry) === 'GH';
+  const startY = companyName ? 37 : 30;
 
-  const head = isFull
-    ? [
+  // r2 is module-scoped below — no need to redefine here
+
+  // Derive salary-only figures for SALARY_PLUS_COMMISSION items
+  function salarySectionFigs(item: PayrollItem) {
+    if (item.compensationTypeSnapshot !== 'SALARY_PLUS_COMMISSION') return null;
+    const commission = parseFloat(item.commissionAmount);
+    const commissionTax = r2(commission * 0.1);
+    return {
+      gross: parseFloat(item.grossSalary) - commission,
+      paye: r2(parseFloat(item.payeTax) - commissionTax),
+      net: r2(parseFloat(item.netSalary) - (commission - commissionTax)),
+    };
+  }
+
+  // Derive commission-only figures for commission section
+  function commissionSectionFigs(item: PayrollItem) {
+    const commission = parseFloat(item.commissionAmount);
+    if (item.compensationTypeSnapshot === 'SALARY_PLUS_COMMISSION') {
+      const tax = r2(commission * 0.1);
+      return {
+        commission,
+        allowances: 0,
+        deductions: 0,
+        gross: commission,
+        tax,
+        net: r2(commission - tax),
+      };
+    }
+    return {
+      commission,
+      allowances: sumLineItems(payrollAllowanceRows(item), parseFloat(item.totalAllowances)),
+      deductions: sumLineItems(payrollDeductionRows(item), parseFloat(item.otherDeductions)),
+      gross: parseFloat(item.grossSalary),
+      tax: parseFloat(item.payeTax),
+      net: parseFloat(item.netSalary),
+    };
+  }
+
+  const sharedTableStyles = {
+    headStyles: {
+      fillColor: [13, 31, 68] as [number, number, number],
+      textColor: 255 as unknown as [number, number, number],
+      fontStyle: 'bold' as const,
+      fontSize: 8,
+    },
+    bodyStyles: { fontSize: 8 },
+    footStyles: {
+      fillColor: [240, 242, 247] as [number, number, number],
+      textColor: [13, 31, 68] as [number, number, number],
+      fontStyle: 'bold' as const,
+      fontSize: 8,
+    },
+    alternateRowStyles: { fillColor: [248, 249, 250] as [number, number, number] },
+    showFoot: 'lastPage' as const,
+  };
+
+  function sectionLabel(text: string, y: number) {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(100, 100, 100);
+    doc.text(text, 14, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+  }
+
+  function lastTableY(): number {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (doc as any).lastAutoTable?.finalY ?? startY + 20;
+  }
+
+  if (format === 'bank') {
+    const head = [
+      ['Employee', 'Employee Number', 'Bank Name', 'Bank Branch', 'Account Number', 'Net Salary'],
+    ];
+    const body = detail.items.map((item) => [
+      item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
+      item.employee?.employeeNumber ?? '',
+      item.employee?.bankName ?? '',
+      item.employee?.bankBranch ?? '',
+      item.employee?.bankAccountNumber ?? '',
+      fmtNum(item.netSalary),
+    ]);
+    const foot = [
+      [
+        'TOTAL',
+        '',
+        '',
+        '',
+        '',
+        fmtNum(detail.items.reduce((s, i) => s + parseFloat(i.netSalary || '0'), 0)),
+      ],
+    ];
+
+    autoTable(doc, {
+      startY,
+      head,
+      body,
+      foot,
+      ...sharedTableStyles,
+      columnStyles: { 5: { halign: 'right' as const, fontStyle: 'bold' as const } },
+      didParseCell: (data) => {
+        if (data.section === 'foot' && data.column.index === 5) data.cell.styles.halign = 'right';
+      },
+    });
+  } else {
+    const salaryItems = detail.items.filter((i) => i.compensationTypeSnapshot !== 'COMMISSION');
+    const commissionItems = detail.items.filter((i) => i.compensationTypeSnapshot !== 'SALARY');
+    const hasBoth = salaryItems.length > 0 && commissionItems.length > 0;
+    let currentY = startY;
+
+    // ── Salary section ─────────────────────────────────────────────────────────
+    if (salaryItems.length > 0) {
+      if (hasBoth) {
+        sectionLabel('SALARY', currentY);
+        currentY += 5;
+      }
+
+      const ssnitHeaders = isGhana
+        ? ['Tier 1 (0.5%)', 'Tier 2 (5%)']
+        : [payrollLabels.employeeLabel];
+      const salaryHead = [
         [
           'Employee',
           'Employee Number',
           'Basic Salary',
-          'Commission',
           'Allowances',
           'Gross',
-          payrollLabels.employeeLabel,
+          ...ssnitHeaders,
           'PAYE',
           'Deductions',
           'Net Salary',
         ],
-      ]
-    : [['Employee', 'Employee Number', 'Bank Name', 'Bank Branch', 'Account Number', 'Net Salary']];
+      ];
 
-  const body = isFull
-    ? detail.items.map((item) => [
-        item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
-        item.employee?.employeeNumber ?? '',
-        fmtNum(item.basicSalary),
-        fmtNum(item.commissionAmount ?? 0),
-        lineItemsSummary(payrollAllowanceRows(item), item.totalAllowances),
-        fmtNum(item.grossSalary),
-        fmtNum(item.employeeSSNIT),
-        fmtNum(item.payeTax),
-        lineItemsSummary(payrollDeductionRows(item), item.otherDeductions),
-        fmtNum(item.netSalary),
-      ])
-    : detail.items.map((item) => [
-        item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
-        item.employee?.employeeNumber ?? '',
-        item.employee?.bankName ?? '',
-        item.employee?.bankBranch ?? '',
-        item.employee?.bankAccountNumber ?? '',
-        fmtNum(item.netSalary),
-      ]);
+      const salaryBody = salaryItems.map((item) => {
+        const s = salarySectionFigs(item);
+        const allowances = sumLineItems(
+          payrollAllowanceRows(item),
+          parseFloat(item.totalAllowances),
+        );
+        const deductions = sumLineItems(
+          payrollDeductionRows(item),
+          parseFloat(item.otherDeductions),
+        );
+        const ssnitVals = isGhana
+          ? [fmtNum(item.tier1Contribution), fmtNum(item.tier2Contribution)]
+          : [fmtNum(item.employeeSSNIT)];
+        return [
+          item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
+          item.employee?.employeeNumber ?? '',
+          fmtNum(item.basicSalary),
+          fmtNum(allowances),
+          fmtNum(s ? s.gross : parseFloat(item.grossSalary)),
+          ...ssnitVals,
+          fmtNum(s ? s.paye : parseFloat(item.payeTax)),
+          fmtNum(deductions),
+          fmtNum(s ? s.net : parseFloat(item.netSalary)),
+        ];
+      });
 
-  const foot = isFull
-    ? [
+      const st = {
+        basicSalary: salaryItems.reduce((a, i) => a + parseFloat(i.basicSalary || '0'), 0),
+        allowances: salaryItems.reduce(
+          (a, i) => a + sumLineItems(payrollAllowanceRows(i), parseFloat(i.totalAllowances)),
+          0,
+        ),
+        gross: salaryItems.reduce((a, i) => {
+          const s = salarySectionFigs(i);
+          return a + (s ? s.gross : parseFloat(i.grossSalary));
+        }, 0),
+        tier1: isGhana
+          ? salaryItems.reduce((a, i) => a + parseFloat(i.tier1Contribution || '0'), 0)
+          : 0,
+        tier2: isGhana
+          ? salaryItems.reduce((a, i) => a + parseFloat(i.tier2Contribution || '0'), 0)
+          : 0,
+        ssnit: !isGhana
+          ? salaryItems.reduce((a, i) => a + parseFloat(i.employeeSSNIT || '0'), 0)
+          : 0,
+        paye: salaryItems.reduce((a, i) => {
+          const s = salarySectionFigs(i);
+          return a + (s ? s.paye : parseFloat(i.payeTax || '0'));
+        }, 0),
+        deductions: salaryItems.reduce(
+          (a, i) => a + sumLineItems(payrollDeductionRows(i), parseFloat(i.otherDeductions)),
+          0,
+        ),
+        net: salaryItems.reduce((a, i) => {
+          const s = salarySectionFigs(i);
+          return a + (s ? s.net : parseFloat(i.netSalary || '0'));
+        }, 0),
+      };
+      const ssnitTotals = isGhana ? [fmtNum(st.tier1), fmtNum(st.tier2)] : [fmtNum(st.ssnit)];
+      const salaryFoot = [
         [
           'TOTAL',
           '',
-          sum('basicSalary'),
-          sum('commissionAmount'),
-          sumAllowances(),
-          sum('grossSalary'),
-          sum('employeeSSNIT'),
-          sum('payeTax'),
-          sumDeductions(),
-          sum('netSalary'),
+          fmtNum(st.basicSalary),
+          fmtNum(st.allowances),
+          fmtNum(st.gross),
+          ...ssnitTotals,
+          fmtNum(st.paye),
+          fmtNum(st.deductions),
+          fmtNum(st.net),
         ],
-      ]
-    : [['TOTAL', '', '', '', '', sum('netSalary')]];
+      ];
 
-  // numeric column indices (all columns except Employee and Employee #)
-  const numericCols = isFull ? [2, 3, 4, 5, 6, 7, 8] : [5];
-  const lastCol = isFull ? 8 : 5;
+      const totalCols = salaryHead[0].length;
+      const salaryNumericCols = Array.from({ length: totalCols - 2 }, (_, i) => i + 2);
+      const salaryLastCol = totalCols - 1;
 
-  const colStyles = Object.fromEntries(
-    numericCols.map((i) => [
-      i,
-      {
-        halign: 'right' as const,
-        fontStyle: i === lastCol ? ('bold' as const) : ('normal' as const),
-      },
-    ]),
-  );
+      autoTable(doc, {
+        startY: currentY,
+        head: salaryHead,
+        body: salaryBody,
+        foot: salaryFoot,
+        ...sharedTableStyles,
+        columnStyles: Object.fromEntries(
+          salaryNumericCols.map((i) => [
+            i,
+            {
+              halign: 'right' as const,
+              fontStyle: i === salaryLastCol ? ('bold' as const) : ('normal' as const),
+            },
+          ]),
+        ),
+        didParseCell: (data) => {
+          if (data.section === 'foot' && salaryNumericCols.includes(data.column.index)) {
+            data.cell.styles.halign = 'right';
+          }
+        },
+      });
 
-  autoTable(doc, {
-    startY: companyName ? 37 : 30,
-    head,
-    body,
-    foot,
-    showFoot: 'lastPage',
-    headStyles: { fillColor: [13, 31, 68], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-    bodyStyles: { fontSize: 8 },
-    footStyles: {
-      fillColor: [240, 242, 247],
-      textColor: [13, 31, 68],
-      fontStyle: 'bold',
-      fontSize: 8,
-    },
-    alternateRowStyles: { fillColor: [248, 249, 250] },
-    columnStyles: colStyles,
-    // force right-align on numeric footer cells (columnStyles halign can be overridden by footStyles)
-    didParseCell: (data) => {
-      if (data.section === 'foot' && numericCols.includes(data.column.index)) {
-        data.cell.styles.halign = 'right';
+      currentY = lastTableY() + (hasBoth ? 10 : 0);
+    }
+
+    // ── Commission section ──────────────────────────────────────────────────────
+    if (commissionItems.length > 0) {
+      if (hasBoth) {
+        sectionLabel('COMMISSION', currentY);
+        currentY += 5;
       }
-    },
-  });
+
+      const commHead = [
+        [
+          'Employee',
+          'Employee Number',
+          'Commission',
+          'Allowances',
+          'Deductions',
+          'Gross',
+          'Tax (10%)',
+          'Net Pay',
+        ],
+      ];
+
+      const commBody = commissionItems.map((item) => {
+        const c = commissionSectionFigs(item);
+        return [
+          item.employee ? `${item.employee.firstName} ${item.employee.lastName}` : '',
+          item.employee?.employeeNumber ?? '',
+          fmtNum(c.commission),
+          fmtNum(c.allowances),
+          fmtNum(c.deductions),
+          fmtNum(c.gross),
+          fmtNum(c.tax),
+          fmtNum(c.net),
+        ];
+      });
+
+      const ct = commissionItems.reduce(
+        (acc, item) => {
+          const c = commissionSectionFigs(item);
+          return {
+            commission: acc.commission + c.commission,
+            allowances: acc.allowances + c.allowances,
+            deductions: acc.deductions + c.deductions,
+            gross: acc.gross + c.gross,
+            tax: acc.tax + c.tax,
+            net: acc.net + c.net,
+          };
+        },
+        { commission: 0, allowances: 0, deductions: 0, gross: 0, tax: 0, net: 0 },
+      );
+      const commFoot = [
+        [
+          'TOTAL',
+          '',
+          fmtNum(ct.commission),
+          fmtNum(ct.allowances),
+          fmtNum(ct.deductions),
+          fmtNum(ct.gross),
+          fmtNum(ct.tax),
+          fmtNum(ct.net),
+        ],
+      ];
+
+      autoTable(doc, {
+        startY: currentY,
+        head: commHead,
+        body: commBody,
+        foot: commFoot,
+        ...sharedTableStyles,
+        columnStyles: {
+          2: { halign: 'right' as const },
+          3: { halign: 'right' as const },
+          4: { halign: 'right' as const },
+          5: { halign: 'right' as const },
+          6: { halign: 'right' as const },
+          7: { halign: 'right' as const, fontStyle: 'bold' as const },
+        },
+        didParseCell: (data) => {
+          if (data.section === 'foot' && [2, 3, 4, 5, 6, 7].includes(data.column.index)) {
+            data.cell.styles.halign = 'right';
+          }
+        },
+      });
+    }
+  }
 
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
@@ -549,7 +769,9 @@ export async function downloadPayslipPDF(
   const tableW = colW - 2;
   const earningsStartY = y;
 
-  const earningsRows: string[][] = [['Basic Salary', fmtNum(item.basicSalary)]];
+  const earningsRows: string[][] = [];
+  if (parseFloat(item.basicSalary) > 0)
+    earningsRows.push(['Basic Salary', fmtNum(item.basicSalary)]);
   if (parseFloat(item.commissionAmount ?? '0') > 0)
     earningsRows.push(['Commission', fmtNum(item.commissionAmount)]);
   payrollAllowanceRows(item).forEach(([name, amount]) => {
@@ -561,13 +783,27 @@ export async function downloadPayslipPDF(
   if (parseFloat(item.thirteenthMonth) > 0)
     earningsRows.push(['13th Month', fmtNum(item.thirteenthMonth)]);
 
-  const deductionRows: string[][] = [
-    [payrollLabels.employeeLabel, fmtNum(item.employeeSSNIT)],
-    [
-      item.taxPolicySnapshot === 'FIXED_AMOUNT' ? 'Income Tax (PAYE - Fixed)' : 'Income Tax (PAYE)',
+  const isBothPDF = item.compensationTypeSnapshot === 'SALARY_PLUS_COMMISSION';
+  const isCommissionOnly = item.compensationTypeSnapshot === 'COMMISSION';
+  const commissionTaxPDF = isBothPDF ? r2(parseFloat(item.commissionAmount) * 0.1) : 0;
+  const salaryPayePDF = isBothPDF ? r2(parseFloat(item.payeTax) - commissionTaxPDF) : 0;
+
+  const deductionRows: string[][] = [];
+  if (parseFloat(item.employeeSSNIT) > 0)
+    deductionRows.push([payrollLabels.employeeLabel, fmtNum(item.employeeSSNIT)]);
+  if (isBothPDF) {
+    deductionRows.push(['Income Tax (PAYE)', fmtNum(salaryPayePDF)]);
+    deductionRows.push(['Commission Tax (10%)', fmtNum(commissionTaxPDF)]);
+  } else {
+    deductionRows.push([
+      isCommissionOnly
+        ? 'Commission Tax (10%)'
+        : item.taxPolicySnapshot === 'FIXED_AMOUNT'
+          ? 'Income Tax (PAYE - Fixed)'
+          : 'Income Tax (PAYE)',
       fmtNum(item.payeTax),
-    ],
-  ];
+    ]);
+  }
   if (parseFloat(item.tier3Employee) > 0)
     deductionRows.push(['Tier 3', fmtNum(item.tier3Employee)]);
   payrollDeductionRows(item).forEach(([name, amount]) => {

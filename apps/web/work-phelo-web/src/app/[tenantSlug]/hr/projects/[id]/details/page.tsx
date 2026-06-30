@@ -2,8 +2,8 @@
 
 import { use } from 'react';
 import { useProject } from '@/hooks';
-import { ProjectDetailsCard } from '@/components/molecules/projects/ProjectDetailsCard';
-import { ProjectMembersTable } from '@/components/organisms/projects/ProjectMembersTable';
+import { ProjectDetailsCard } from '@/components/molecules/hr/projects/ProjectDetailsCard';
+import { ProjectMembersTable } from '@/components/organisms/hr/projects/ProjectMembersTable';
 
 export default function ProjectDetailsPage({
   params,

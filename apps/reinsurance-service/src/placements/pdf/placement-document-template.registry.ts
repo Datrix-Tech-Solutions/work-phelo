@@ -5,6 +5,14 @@ import {
   PlacementDocumentTemplateContext,
   renderClosingSlipTemplate,
 } from './templates/closing-slip.template';
+import {
+  isOfferSlipPayload,
+  renderOfferSlipTemplate,
+} from './templates/offer-slip.template';
+import {
+  isNoteDocumentPayload,
+  renderNoteTemplate,
+} from './templates/note.template';
 
 @Injectable()
 export class PlacementDocumentTemplateRegistry {
@@ -13,18 +21,41 @@ export class PlacementDocumentTemplateRegistry {
     payload: unknown,
     context: PlacementDocumentTemplateContext,
   ): string {
-    if (type !== PlacementDocumentType.CLOSING_SLIP) {
-      throw new BadRequestException(
-        `PDF rendering is not supported for ${type}`,
-      );
+    if (type === PlacementDocumentType.CLOSING_SLIP) {
+      if (!isClosingSlipPayload(payload)) {
+        throw new BadRequestException(
+          'CLOSING_SLIP renderPayload is missing closing data',
+        );
+      }
+
+      return renderClosingSlipTemplate(payload, context);
     }
 
-    if (!isClosingSlipPayload(payload)) {
-      throw new BadRequestException(
-        'CLOSING_SLIP renderPayload is missing closing data',
-      );
+    if (type === PlacementDocumentType.OFFER_SLIP) {
+      if (!isOfferSlipPayload(payload)) {
+        throw new BadRequestException(
+          'OFFER_SLIP renderPayload is missing participant offer data',
+        );
+      }
+
+      return renderOfferSlipTemplate(payload, context);
     }
 
-    return renderClosingSlipTemplate(payload, context);
+    if (
+      type === PlacementDocumentType.DEBIT_NOTE ||
+      type === PlacementDocumentType.CREDIT_NOTE ||
+      type === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE ||
+      type === PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE
+    ) {
+      if (!isNoteDocumentPayload(payload)) {
+        throw new BadRequestException(
+          `${type} renderPayload is missing valid immutable note data`,
+        );
+      }
+
+      return renderNoteTemplate(payload, context);
+    }
+
+    throw new BadRequestException(`PDF rendering is not supported for ${type}`);
   }
 }

@@ -154,6 +154,7 @@ export class PayrollService {
       taxPolicy?: PayrollTaxPolicy;
       fixedTaxAmount?: string | null;
       commissionTaxable?: boolean;
+      compensationType?: 'SALARY' | 'COMMISSION' | 'SALARY_PLUS_COMMISSION';
     },
   ): CalculatedPayrollValues {
     return calculatePayrollForCountry(values, settings);
@@ -301,7 +302,11 @@ export class PayrollService {
 
     return {
       values: this.buildEditableValuesFromLineItems(
-        employee.basicSalary.toString(),
+        // Commission-only employees have no basic salary — zero it out regardless of
+        // what may be stored on the employee record from a prior compensation type.
+        employee.compensationType === 'COMMISSION'
+          ? '0'
+          : employee.basicSalary.toString(),
         employee.commissionAmount?.toString() ?? '0',
         allowanceItems,
         deductionItems,
@@ -712,6 +717,7 @@ export class PayrollService {
             taxPolicy: seed.taxPolicySnapshot,
             fixedTaxAmount: seed.fixedTaxAmount,
             commissionTaxable: seed.commissionTaxableSnapshot,
+            compensationType: seed.compensationTypeSnapshot,
           }),
           allowanceItems: seed.allowanceItems,
           deductionItems: seed.deductionItems,
@@ -948,6 +954,7 @@ export class PayrollService {
         taxPolicy: taxPolicySnapshot,
         fixedTaxAmount,
         commissionTaxable: commissionTaxableSnapshot,
+        compensationType: currentItem.compensationTypeSnapshot,
       },
     );
 

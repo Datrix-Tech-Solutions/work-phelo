@@ -55,6 +55,7 @@ describe('PlacementsController', () => {
     findAll: jest.fn(),
     findOne: jest.fn(),
     generateOfferSlip: jest.fn(),
+    generateParticipantOfferSlip: jest.fn(),
     generateClosingSlip: jest.fn(),
     generateNoteDocument: jest.fn(),
     generateEndorsementSlip: jest.fn(),
@@ -212,6 +213,7 @@ describe('PlacementsController', () => {
     ['createClosing', PlacementPermission.EDIT],
     ['changeClosingStatus', PlacementPermission.EDIT],
     ['generateOfferSlipDocument', PlacementPermission.EDIT],
+    ['generateParticipantOfferSlipDocument', PlacementPermission.EDIT],
     ['generateClosingSlipDocument', PlacementPermission.EDIT],
     ['generateNoteDocument', PlacementPermission.EDIT],
     ['generateEndorsementSlipDocument', PlacementPermission.EDIT],
@@ -679,6 +681,11 @@ describe('PlacementsController', () => {
     await controller.generateOfferSlipDocument('placement-1', {
       user,
     } as never);
+    await controller.generateParticipantOfferSlipDocument(
+      'placement-1',
+      'participant-1',
+      { user } as never,
+    );
     await controller.generateClosingSlipDocument('placement-1', 'closing-1', {
       user,
     } as never);
@@ -745,6 +752,11 @@ describe('PlacementsController', () => {
     expect(documentsService.generateOfferSlip).toHaveBeenCalledWith(
       user,
       'placement-1',
+    );
+    expect(documentsService.generateParticipantOfferSlip).toHaveBeenCalledWith(
+      user,
+      'placement-1',
+      'participant-1',
     );
     expect(documentsService.generateClosingSlip).toHaveBeenCalledWith(
       user,

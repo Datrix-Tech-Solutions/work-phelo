@@ -3,7 +3,7 @@
 import { use, useState } from 'react';
 import Link from 'next/link';
 import { useAppraisal, useCycleKpis, useAppraisalCycles, useReopenAppraisal } from '@/hooks';
-import { ManagerReviewForm } from '@/components/organisms/appraisal/ManagerReviewForm';
+import { ManagerReviewForm } from '@/components/organisms/hr/appraisal/ManagerReviewForm';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { cn } from '@/lib/utils';
@@ -190,12 +190,10 @@ export default function ManagerReviewPage({
                       onSuccess: () => {
                         setRejectOpen(false);
                         setRejectReason('');
-                        useToastStore
-                          .getState()
-                          .addToast({
-                            message: 'Assessment sent back to employee',
-                            type: 'success',
-                          });
+                        useToastStore.getState().addToast({
+                          message: 'Assessment sent back to employee',
+                          type: 'success',
+                        });
                       },
                       onError: (err) =>
                         useToastStore

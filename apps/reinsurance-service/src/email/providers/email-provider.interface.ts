@@ -54,6 +54,13 @@ export interface EmailProviderRecipient {
   name?: string;
 }
 
+export interface EmailProviderFileAttachment {
+  fileName: string;
+  contentType: string;
+  contentBytes: Buffer;
+  sizeBytes?: number;
+}
+
 export interface EmailProviderSendInput {
   accessToken?: string;
   subject: string;
@@ -62,6 +69,7 @@ export interface EmailProviderSendInput {
   bcc?: EmailProviderRecipient[];
   bodyText?: string;
   bodyHtml?: string;
+  attachments?: EmailProviderFileAttachment[];
 }
 
 export interface EmailProviderReplyInput {
@@ -72,6 +80,7 @@ export interface EmailProviderReplyInput {
   bcc?: EmailProviderRecipient[];
   bodyText?: string;
   bodyHtml?: string;
+  attachments?: EmailProviderFileAttachment[];
 }
 
 export interface EmailProviderSentMessage {

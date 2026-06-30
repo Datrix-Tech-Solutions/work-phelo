@@ -3,7 +3,7 @@
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { PublicHolidaysList } from '@/components/organisms/leave/PublicHolidaysList';
+import { PublicHolidaysList } from '@/components/organisms/hr/leave/PublicHolidaysList';
 import { useHrManagementAccess } from '@/hooks/hr/useHrManagementAccess';
 
 export default function PublicHolidaysPage({

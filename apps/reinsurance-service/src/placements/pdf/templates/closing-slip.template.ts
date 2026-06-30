@@ -11,7 +11,7 @@ interface ClosingSlipPayload {
   closing?: Record<string, unknown>;
 }
 
-function toDisplayString(value: unknown): string {
+export function toDisplayString(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString();
   if (
@@ -25,7 +25,7 @@ function toDisplayString(value: unknown): string {
   return JSON.stringify(value) ?? '';
 }
 
-function escapeHtml(value: unknown): string {
+export function escapeHtml(value: unknown): string {
   return toDisplayString(value)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -34,13 +34,13 @@ function escapeHtml(value: unknown): string {
     .replace(/'/g, '&#39;');
 }
 
-function getRecord(value: unknown): Record<string, unknown> | null {
+export function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object'
     ? (value as Record<string, unknown>)
     : null;
 }
 
-function getNested(
+export function getNested(
   source: Record<string, unknown> | null,
   path: string[],
 ): unknown {
@@ -50,12 +50,12 @@ function getNested(
   }, source);
 }
 
-function text(value: unknown, fallback = '—'): string {
+export function text(value: unknown, fallback = '—'): string {
   if (value === null || value === undefined || value === '') return fallback;
   return escapeHtml(value);
 }
 
-function dateText(value: unknown): string {
+export function dateText(value: unknown): string {
   if (!value) return '—';
   const parsed = new Date(toDisplayString(value));
   if (Number.isNaN(parsed.getTime())) return text(value);
@@ -66,7 +66,7 @@ function dateText(value: unknown): string {
   });
 }
 
-function moneyText(value: unknown, currency: unknown): string {
+export function moneyText(value: unknown, currency: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
   const numeric = Number(value);
   const amount = Number.isFinite(numeric)
@@ -78,7 +78,7 @@ function moneyText(value: unknown, currency: unknown): string {
   return `${text(currency, '').trim()} ${escapeHtml(amount)}`.trim();
 }
 
-function percentText(value: unknown): string {
+export function percentText(value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return `${text(value)}%`;
@@ -88,7 +88,7 @@ function percentText(value: unknown): string {
   })}%`;
 }
 
-function detail(label: string, value: string): string {
+export function detail(label: string, value: string): string {
   return `
     <div class="detail">
       <dt>${escapeHtml(label)}</dt>
@@ -97,7 +97,11 @@ function detail(label: string, value: string): string {
   `;
 }
 
-function moneyRow(label: string, value: unknown, currency: unknown): string {
+export function moneyRow(
+  label: string,
+  value: unknown,
+  currency: unknown,
+): string {
   return `
     <tr>
       <th>${escapeHtml(label)}</th>

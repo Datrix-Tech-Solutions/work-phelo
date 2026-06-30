@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBadRequestResponse,
   ApiCookieAuth,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -107,10 +108,15 @@ export class PlacementEmailThreadsController {
   @ApiOperation({
     summary: 'Send a new placement email',
     description:
-      'Creates a placement-linked email thread, persists an outbound SENDING message, sends through the mailbox provider, and updates the message to SENT or FAILED.',
+      'Creates a placement-linked email thread, optionally attaches tenant-scoped OFFER_SLIP/CLOSING_SLIP PDFs or private placement attachments, sends through the mailbox provider, and updates the outbound message to SENT or FAILED.',
   })
   @ApiParam({ name: 'placementId', format: 'uuid' })
   @ApiOkResponse({ type: PlacementEmailSendResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Invalid recipients/body, unsupported document type, or attachment too large.',
+  })
   @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   sendPlacementEmail(
     @Param('placementId', ParseUUIDPipe) placementId: string,
@@ -129,11 +135,16 @@ export class PlacementEmailThreadsController {
   @ApiOperation({
     summary: 'Reply to a placement email thread',
     description:
-      'Requires the thread to already be linked to the placement. Persists the outbound reply in the same thread and sends through the mailbox provider.',
+      'Requires the thread to already be linked to the placement. Persists the outbound reply in the same thread and can attach the same supported workflow documents or private placement attachments.',
   })
   @ApiParam({ name: 'placementId', format: 'uuid' })
   @ApiParam({ name: 'threadId', format: 'uuid' })
   @ApiOkResponse({ type: PlacementEmailSendResponseDto })
+  @ApiBadRequestResponse({
+    type: ApiErrorResponseDto,
+    description:
+      'Invalid reply body, unsupported document type, or attachment too large.',
+  })
   @ApiNotFoundResponse({ type: ApiErrorResponseDto })
   replyToPlacementEmail(
     @Param('placementId', ParseUUIDPipe) placementId: string,

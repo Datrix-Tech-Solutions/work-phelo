@@ -10,6 +10,8 @@ import {
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
+  PlacementParticipantRole,
+  PlacementParticipantStatus,
   PlacementPaymentType,
   PlacementStatus,
   Prisma,
@@ -93,9 +95,64 @@ describe('PlacementDocumentsService', () => {
       id: 'placement-1',
       reference: 'FAC-001',
       currency: 'GHS',
+      policyNumber: 'POL-001',
+      sumInsured: 1000000,
+      premium: 50000,
+      facultativeOffer: 60,
     },
     cedant: { id: 'cedant-1', name: 'Acme Insurance' },
-    participantPreviews: [],
+    businessEntries: [{ label: 'Original Insured', value: 'Acme Plant' }],
+    offerEntries: [{ label: 'Policy Number', value: 'POL-001' }],
+    debitGuaranteeFinancials: {
+      currency: 'GHS',
+      grossPremium: 50000,
+      commissionPct: 10,
+      commissionAmount: 5000,
+      netPremium: 45000,
+    },
+    participantPreviews: [
+      {
+        participant: {
+          id: 'participant-1',
+          counterpartyId: 'reinsurer-1',
+          role: PlacementParticipantRole.REINSURER,
+          status: PlacementParticipantStatus.OFFER_SENT,
+          sharePercent: 40,
+          signedLinePercent: null,
+          brokerageFee: 5,
+          notes: null,
+          counterparty: { id: 'reinsurer-1', name: 'Avenue Re' },
+        },
+        slipFinancials: {
+          currency: 'GHS',
+          sumInsured: 1000000,
+          grossPremium: 50000,
+          facultativeOfferPct: 60,
+          facultativeOfferAmount: 600000,
+          commissionPct: 10,
+          commissionAmount: 5000,
+          nicLevyPct: 0,
+          nicLevyAmount: 0,
+          withholdingTaxPct: 0,
+          withholdingTaxAmount: 0,
+          netPremium: 45000,
+        },
+        distributionFinancials: {
+          currency: 'GHS',
+          offeredLinePct: 40,
+          signedLinePct: null,
+          brokerageFeePct: 5,
+          offeredCapacityAmount: 400000,
+          signedCapacityAmount: null,
+          grossPremium: 20000,
+          brokerageAmount: 1000,
+          netPremium: 19000,
+        },
+      },
+    ],
+    totalOfferedPercent: 40,
+    totalAcceptedPercent: 0,
+    remainingPercent: 20,
   };
 
   let prisma: {
@@ -107,6 +164,7 @@ describe('PlacementDocumentsService', () => {
       create: PrismaMethod;
       update: PrismaMethod;
     };
+    placementParticipant: { findFirst: PrismaMethod };
     placementClosing: { findFirst: PrismaMethod; update: PrismaMethod };
     placementNote: { findFirst: PrismaMethod; update: PrismaMethod };
     placementEndorsement: { findFirst: PrismaMethod; update: PrismaMethod };
@@ -124,6 +182,7 @@ describe('PlacementDocumentsService', () => {
   let documentStorage: {
     storePdf: jest.Mock;
     signedDownloadUrl: jest.Mock;
+    readStoredObject: jest.Mock;
   };
   let service: PlacementDocumentsService;
   let lockPolicy: PlacementFinancialLockPolicy;
@@ -137,6 +196,9 @@ describe('PlacementDocumentsService', () => {
         count: jest.fn<Promise<unknown>, [unknown]>(),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+      },
+      placementParticipant: {
+        findFirst: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementClosing: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
@@ -190,6 +252,12 @@ describe('PlacementDocumentsService', () => {
         mimeType: 'application/pdf',
         fileName: 'DOC-CS-001.pdf',
       }),
+      readStoredObject: jest.fn().mockResolvedValue({
+        body: Buffer.from('%PDF stored'),
+        mimeType: 'application/pdf',
+        fileName: 'DOC-OS-001.pdf',
+        sizeBytes: Buffer.from('%PDF stored').byteLength,
+      }),
     };
     service = new PlacementDocumentsService(
       prisma as unknown as PrismaService,
@@ -201,6 +269,9 @@ describe('PlacementDocumentsService', () => {
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
     );
     prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementParticipant.findFirst.mockResolvedValue({
+      id: 'participant-1',
+    });
     prisma.placementDocument.count.mockResolvedValue(0);
     prisma.placementDocument.create.mockResolvedValue(document);
   });
@@ -259,6 +330,153 @@ describe('PlacementDocumentsService', () => {
     ).toMatchObject({ reference: 'FAC-001' });
   });
 
+  it('generates a participant-scoped offer slip document for one reinsurer', async () => {
+    prisma.placementDocument.create.mockResolvedValue({
+      ...document,
+      participantId: 'participant-1',
+      title: 'Offer Slip FAC-001 - Avenue Re',
+    });
+
+    await service.generateParticipantOfferSlip(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+
+    expect(prisma.placementParticipant.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'participant-1',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+      },
+      select: { id: true },
+    });
+    expect(placementsService.getOfferSlipPreview).toHaveBeenCalledWith(
+      'tenant-1',
+      'placement-1',
+    );
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      participantId: 'participant-1',
+      type: PlacementDocumentType.OFFER_SLIP,
+      documentNumber: 'DOC-OS-001',
+      version: 1,
+      title: 'Offer Slip FAC-001 - Avenue Re',
+      currency: 'GHS',
+      status: PlacementDocumentStatus.GENERATED,
+    });
+    const sourceSnapshot = jsonRecord(createArgs.data.sourceSnapshot);
+    expect(sourceSnapshot.participantPreviews).toBeUndefined();
+    expect(jsonRecord(sourceSnapshot.placement)).toMatchObject({
+      reference: 'FAC-001',
+      policyNumber: 'POL-001',
+    });
+    expect(jsonRecord(sourceSnapshot.cedant)).toMatchObject({
+      name: 'Acme Insurance',
+    });
+    expect(
+      jsonRecord(jsonRecord(sourceSnapshot.participantPreview).participant),
+    ).toMatchObject({
+      id: 'participant-1',
+      counterpartyId: 'reinsurer-1',
+      sharePercent: 40,
+    });
+    expect(jsonRecord(sourceSnapshot.offerContext)).toMatchObject({
+      participantId: 'participant-1',
+      counterpartyId: 'reinsurer-1',
+      reinsurerName: 'Avenue Re',
+      offeredLinePercent: 40,
+      totalOfferedPercent: 40,
+      remainingPercent: 20,
+    });
+    expect(jsonRecord(sourceSnapshot.branding)).toMatchObject({
+      productName: 'WorkPhelo',
+    });
+  });
+
+  it('reuses an active participant offer slip instead of creating duplicates', async () => {
+    const existing = {
+      ...document,
+      id: 'document-existing',
+      participantId: 'participant-1',
+      type: PlacementDocumentType.OFFER_SLIP,
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(existing);
+
+    const result = await service.generateParticipantOfferSlip(
+      user,
+      'placement-1',
+      'participant-1',
+    );
+
+    expect(result).toBe(existing);
+    const expectedWhere: Prisma.PlacementDocumentWhereInput = {
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      participantId: 'participant-1',
+      type: PlacementDocumentType.OFFER_SLIP,
+      status: { not: PlacementDocumentStatus.VOID },
+    };
+    const findFirstArgs = firstCallArg<Prisma.PlacementDocumentFindFirstArgs>(
+      prisma.placementDocument.findFirst,
+    );
+    expect(findFirstArgs.where).toMatchObject(expectedWhere);
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant-scoped offer slips for participant placement mismatches', async () => {
+    prisma.placementParticipant.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.generateParticipantOfferSlip(
+        user,
+        'placement-1',
+        'participant-other-placement',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(placementsService.getOfferSlipPreview).not.toHaveBeenCalled();
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant-scoped offer slips when the participant is not a reinsurer preview', async () => {
+    placementsService.getOfferSlipPreview.mockResolvedValueOnce({
+      ...offerPreview,
+      participantPreviews: [],
+    });
+
+    await expect(
+      service.generateParticipantOfferSlip(
+        user,
+        'placement-1',
+        'participant-1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('does not expose another tenant participant when generating participant offer slips', async () => {
+    prisma.placementParticipant.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.generateParticipantOfferSlip(
+        user,
+        'placement-1',
+        'participant-1',
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.placementParticipant.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'participant-1',
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+      },
+      select: { id: true },
+    });
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
   it('generates a closing slip from a PlacementClosing snapshot', async () => {
     const closing = {
       id: 'closing-1',
@@ -297,17 +515,38 @@ describe('PlacementDocumentsService', () => {
   it('generates note documents from PlacementNote values', async () => {
     prisma.placementNote.findFirst.mockResolvedValue({
       id: 'note-1',
+      placementId: 'placement-1',
       closingId: 'closing-1',
       participantId: 'participant-1',
+      endorsementId: null,
+      endorsementClosingId: null,
       noteNumber: 'DN-001',
       type: PlacementNoteType.DEBIT_NOTE,
       direction: PlacementNoteDirection.CEDANT_TO_BROKER,
       status: PlacementNoteStatus.ISSUED,
       currency: 'GHS',
       grossAmount: new Prisma.Decimal('5000.00'),
-      counterparty: { id: 'cedant-1', name: 'Acme Insurance' },
+      commissionAmount: new Prisma.Decimal('500.00'),
+      brokerageAmount: null,
+      nicLevyAmount: new Prisma.Decimal('50.00'),
+      withholdingTaxAmount: new Prisma.Decimal('100.00'),
+      netAmount: new Prisma.Decimal('4350.00'),
+      noteDate: new Date('2026-06-12T00:00:00.000Z'),
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+      },
+      counterparty: {
+        id: 'cedant-1',
+        name: 'Acme Insurance',
+        registrationNumber: 'CED-001',
+      },
       closing: { id: 'closing-1', closingNumber: 'CLO-001' },
       participant: { id: 'participant-1', counterpartyId: 'reinsurer-1' },
+      endorsement: null,
+      endorsementClosing: null,
+      endorsementParticipant: null,
     });
     prisma.placementDocument.create.mockResolvedValue({
       ...document,
@@ -329,6 +568,108 @@ describe('PlacementDocumentsService', () => {
     });
     expect(jsonRecord(createArgs.data.sourceSnapshot)).toMatchObject({
       grossAmount: '5000',
+    });
+    expect(jsonRecord(createArgs.data.renderPayload)).toMatchObject({
+      documentType: PlacementDocumentType.DEBIT_NOTE,
+      note: {
+        noteNumber: 'DN-001',
+        grossAmount: '5000',
+        commissionAmount: '500',
+        nicLevyAmount: '50',
+        withholdingTaxAmount: '100',
+        netAmount: '4350',
+        placement: {
+          reference: 'FAC-001',
+          title: 'Engineering Risk',
+        },
+        counterparty: {
+          name: 'Acme Insurance',
+        },
+      },
+      branding: {
+        productName: 'WorkPhelo',
+        documentFamily: 'Reinsurance Operations',
+      },
+    });
+  });
+
+  it('generates endorsement note documents with immutable endorsement context', async () => {
+    prisma.placementNote.findFirst.mockResolvedValue({
+      id: 'note-1',
+      placementId: 'placement-1',
+      closingId: null,
+      participantId: null,
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      noteNumber: 'ECN-001',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      status: PlacementNoteStatus.ISSUED,
+      currency: 'USD',
+      grossAmount: new Prisma.Decimal('2500.00'),
+      commissionAmount: new Prisma.Decimal('250.00'),
+      brokerageAmount: new Prisma.Decimal('125.00'),
+      nicLevyAmount: new Prisma.Decimal('0'),
+      withholdingTaxAmount: new Prisma.Decimal('0'),
+      netAmount: new Prisma.Decimal('2125.00'),
+      noteDate: new Date('2026-06-12T00:00:00.000Z'),
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+      },
+      counterparty: {
+        id: 'reinsurer-1',
+        name: 'Avenue Re',
+        registrationNumber: 'RE-001',
+      },
+      closing: null,
+      participant: null,
+      endorsement: {
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        type: 'ADDITION',
+        impactType: 'CAPACITY_INCREASE',
+        effectiveDate: new Date('2026-06-01T00:00:00.000Z'),
+      },
+      endorsementClosing: {
+        id: 'endorsement-closing-1',
+        closingNumber: 'END-CLO-001',
+      },
+      endorsementParticipant: {
+        id: 'endorsement-participant-1',
+        counterpartyId: 'reinsurer-1',
+      },
+    });
+    prisma.placementDocument.create.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      documentNumber: 'DOC-ECN-001',
+    });
+
+    await service.generateNoteDocument(user, 'placement-1', 'note-1');
+
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      noteId: 'note-1',
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      type: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      documentNumber: 'DOC-ECN-001',
+    });
+    expect(jsonRecord(createArgs.data.renderPayload)).toMatchObject({
+      documentType: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      note: {
+        noteNumber: 'ECN-001',
+        grossAmount: '2500',
+        netAmount: '2125',
+        endorsement: { endorsementNumber: 'END-001' },
+        endorsementClosing: { closingNumber: 'END-CLO-001' },
+        counterparty: { name: 'Avenue Re' },
+      },
     });
   });
 
@@ -553,6 +894,98 @@ describe('PlacementDocumentsService', () => {
     expect(documentStorage.storePdf).not.toHaveBeenCalled();
   });
 
+  it('renders a participant-scoped OFFER_SLIP document as PDF using renderPayload', async () => {
+    const participantOfferDocument = {
+      ...document,
+      type: PlacementDocumentType.OFFER_SLIP,
+      participantId: 'participant-1',
+      documentNumber: 'DOC-OS-001',
+      title: 'Offer Slip FAC-001 - Avenue Re',
+      sourceSnapshot: {
+        documentType: PlacementDocumentType.OFFER_SLIP,
+        participantPreview: offerPreview.participantPreviews[0],
+      },
+      renderPayload: {
+        documentType: PlacementDocumentType.OFFER_SLIP,
+        placement: offerPreview.placement,
+        cedant: offerPreview.cedant,
+        businessEntries: offerPreview.businessEntries,
+        offerEntries: offerPreview.offerEntries,
+        debitGuaranteeFinancials: offerPreview.debitGuaranteeFinancials,
+        participantPreview: offerPreview.participantPreviews[0],
+        offerContext: {
+          participantId: 'participant-1',
+          reinsurerName: 'Avenue Re',
+          offeredLinePercent: 40,
+        },
+        branding: {
+          productName: 'WorkPhelo',
+          documentFamily: 'Reinsurance Operations',
+        },
+      },
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(
+      participantOfferDocument,
+    );
+
+    const pdf = await service.renderPdf(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(pdf.toString()).toBe('%PDF test');
+    expect(pdfRenderer.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: PlacementDocumentType.OFFER_SLIP,
+        renderPayload: participantOfferDocument.renderPayload,
+      }),
+    );
+  });
+
+  it.each([
+    PlacementDocumentType.DEBIT_NOTE,
+    PlacementDocumentType.CREDIT_NOTE,
+    PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE,
+    PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+  ])('renders %s documents as PDF using renderPayload', async (type) => {
+    const noteDocument = {
+      ...document,
+      type,
+      documentNumber: 'DOC-NOTE-001',
+      title: 'Note',
+      renderPayload: {
+        documentType: type,
+        note: {
+          type,
+          noteNumber: 'NOTE-001',
+          status: PlacementNoteStatus.ISSUED,
+          direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+          noteDate: '2026-06-12T00:00:00.000Z',
+          currency: 'GHS',
+          grossAmount: '5000',
+          netAmount: '4500',
+          counterparty: { name: 'Avenue Re' },
+        },
+      },
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(noteDocument);
+
+    const pdf = await service.renderPdf(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(pdf.toString()).toBe('%PDF test');
+    expect(pdfRenderer.render).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type,
+        renderPayload: noteDocument.renderPayload,
+      }),
+    );
+  });
+
   it('renders and stores a CLOSING_SLIP PDF with checksum and storage metadata', async () => {
     const closingDocument = {
       ...document,
@@ -618,6 +1051,65 @@ describe('PlacementDocumentsService', () => {
     });
     expect(updateArgs.data.generatedAt).toBeInstanceOf(Date);
     expect(result.storageProvider).toBe('S3');
+  });
+
+  it('reads an existing stored OFFER_SLIP PDF for an outbound email', async () => {
+    prisma.placementDocument.findFirst.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.OFFER_SLIP,
+      objectKey: 'reinsurance/offer-slip.pdf',
+      fileName: 'DOC-OS-001.pdf',
+      mimeType: 'application/pdf',
+    });
+
+    const result = await service.readStoredPdfForEmail(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(documentStorage.storePdf).not.toHaveBeenCalled();
+    expect(documentStorage.readStoredObject).toHaveBeenCalledWith({
+      objectKey: 'reinsurance/offer-slip.pdf',
+      mimeType: 'application/pdf',
+      fileName: 'DOC-OS-001.pdf',
+    });
+    expect(result.body).toEqual(Buffer.from('%PDF stored'));
+  });
+
+  it('renders and stores an unstored CLOSING_SLIP before reading it for email', async () => {
+    const closingDocument = {
+      ...document,
+      type: PlacementDocumentType.CLOSING_SLIP,
+      documentNumber: 'DOC-CS-001',
+      renderPayload: {
+        documentType: PlacementDocumentType.CLOSING_SLIP,
+        closing: { closingNumber: 'CLO-001' },
+      },
+    };
+    const storedDocument = {
+      ...closingDocument,
+      objectKey: 'reinsurance/closing-slip.pdf',
+      fileName: 'DOC-CS-001.pdf',
+      mimeType: 'application/pdf',
+      storageProvider: 'S3',
+      sizeBytes: 9,
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(closingDocument);
+    prisma.placementDocument.update.mockResolvedValue(storedDocument);
+
+    await service.readStoredPdfForEmail(
+      'tenant-1',
+      'placement-1',
+      'document-1',
+    );
+
+    expect(documentStorage.storePdf).toHaveBeenCalled();
+    expect(documentStorage.readStoredObject).toHaveBeenCalledWith({
+      objectKey: 'reinsurance/closing-slip.pdf',
+      mimeType: 'application/pdf',
+      fileName: 'DOC-CS-001.pdf',
+    });
   });
 
   it('rejects already stored documents during render-and-store', async () => {
@@ -713,7 +1205,7 @@ describe('PlacementDocumentsService', () => {
   it('rejects unsupported document types for PDF rendering', async () => {
     prisma.placementDocument.findFirst.mockResolvedValue({
       ...document,
-      type: PlacementDocumentType.OFFER_SLIP,
+      type: PlacementDocumentType.ENDORSEMENT_SLIP,
     });
 
     await expect(

@@ -10,7 +10,7 @@ import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
 import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 
-import { CorrectionRequestPanel } from '@/components/organisms/time-clock/CorrectionRequestPanel';
+import { CorrectionRequestPanel } from '@/components/organisms/hr/time-clock/CorrectionRequestPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 
@@ -23,11 +23,11 @@ import {
   useCorrectionRequests,
   useReviewCorrectionRequest,
 } from '@/hooks/hr/useTimeClock';
-import { TimeClockTabs } from '@/components/molecules/time-clock/TimeClockTabs';
-import { MyTimeSection } from '@/components/organisms/time-clock/MyTimeSection';
-import { LiveAttendanceTable } from '@/components/organisms/time-clock/LiveAttendanceTable';
-import { RecordsSection } from '@/components/organisms/time-clock/RecordSection';
-import { CorrectionsSection } from '@/components/organisms/time-clock/CorrectionSection';
+import { TimeClockTabs } from '@/components/molecules/hr/time-clock/TimeClockTabs';
+import { MyTimeSection } from '@/components/organisms/hr/time-clock/MyTimeSection';
+import { LiveAttendanceTable } from '@/components/organisms/hr/time-clock/LiveAttendanceTable';
+import { RecordsSection } from '@/components/organisms/hr/time-clock/RecordSection';
+import { CorrectionsSection } from '@/components/organisms/hr/time-clock/CorrectionSection';
 
 export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);

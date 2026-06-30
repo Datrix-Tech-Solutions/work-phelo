@@ -26,11 +26,37 @@ export interface StoredPdfResult {
   sizeBytes: number;
 }
 
+export interface StoreAttachmentInput {
+  tenantId: string;
+  placementId: string;
+  attachmentId: string;
+  parentType: string;
+  body: Buffer;
+  checksum: string;
+  contentType: string;
+  originalFileName: string;
+}
+
+export interface StoredAttachmentResult {
+  storageProvider: 'S3';
+  objectKey: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}
+
 export interface SignedDocumentUrlResult {
   url: string;
   expiresAt: Date;
   mimeType: string;
   fileName: string;
+}
+
+export interface StoredObjectResult {
+  body: Buffer;
+  mimeType: string;
+  fileName: string;
+  sizeBytes: number;
 }
 
 interface S3DocumentStorageConfig {
@@ -75,6 +101,38 @@ export class S3DocumentStorageService {
     };
   }
 
+  async storeAttachment(
+    input: StoreAttachmentInput,
+  ): Promise<StoredAttachmentResult> {
+    const config = this.config();
+    const fileName = this.safeFileName(input.originalFileName);
+    const objectKey = this.attachmentObjectKey(config.prefix, input, fileName);
+
+    await this.s3(config).send(
+      new PutObjectCommand({
+        Bucket: config.bucket,
+        Key: objectKey,
+        Body: input.body,
+        ContentType: input.contentType,
+        Metadata: {
+          checksum: input.checksum,
+          tenantId: input.tenantId,
+          placementId: input.placementId,
+          attachmentId: input.attachmentId,
+          parentType: input.parentType,
+        },
+      }),
+    );
+
+    return {
+      storageProvider: 'S3',
+      objectKey,
+      fileName,
+      mimeType: input.contentType,
+      sizeBytes: input.body.byteLength,
+    };
+  }
+
   async signedDownloadUrl(input: {
     objectKey: string;
     mimeType: string;
@@ -98,6 +156,34 @@ export class S3DocumentStorageService {
       expiresAt,
       mimeType: input.mimeType,
       fileName: input.fileName,
+    };
+  }
+
+  async readStoredObject(input: {
+    objectKey: string;
+    mimeType: string;
+    fileName: string;
+  }): Promise<StoredObjectResult> {
+    const config = this.config();
+    const response = await this.s3(config).send(
+      new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: input.objectKey,
+        ResponseContentType: input.mimeType,
+        ResponseContentDisposition: `inline; filename="${input.fileName}"`,
+      }),
+    );
+
+    const bytes = await response.Body?.transformToByteArray();
+    if (!bytes?.byteLength) {
+      throw new InternalServerErrorException('Stored object body was empty');
+    }
+    const body = Buffer.from(bytes);
+    return {
+      body,
+      mimeType: input.mimeType,
+      fileName: input.fileName,
+      sizeBytes: body.byteLength,
     };
   }
 
@@ -159,6 +245,35 @@ export class S3DocumentStorageService {
     ]
       .filter(Boolean)
       .join('/');
+  }
+
+  private attachmentObjectKey(
+    prefix: string,
+    input: StoreAttachmentInput,
+    fileName: string,
+  ): string {
+    return [
+      this.cleanPrefix(prefix),
+      'tenants',
+      input.tenantId,
+      'placements',
+      input.placementId,
+      'attachments',
+      input.parentType.toLowerCase(),
+      input.attachmentId,
+      fileName,
+    ]
+      .filter(Boolean)
+      .join('/');
+  }
+
+  private safeFileName(fileName: string): string {
+    const cleaned = fileName
+      .trim()
+      .replace(/[^\w.\- ]+/g, '_')
+      .replace(/\s+/g, ' ')
+      .slice(0, 180);
+    return cleaned || 'attachment';
   }
 
   private cleanPrefix(prefix: string): string {

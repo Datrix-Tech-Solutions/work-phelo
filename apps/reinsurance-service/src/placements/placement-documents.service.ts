@@ -18,6 +18,7 @@ import { PlacementPdfRendererService } from './pdf/placement-pdf-renderer.servic
 import {
   S3DocumentStorageService,
   SignedDocumentUrlResult,
+  StoredObjectResult,
 } from './storage/s3-document-storage.service';
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
 import { PlacementsService } from './placements.service';
@@ -35,6 +36,7 @@ type DocumentSourceDescriptor = {
   currency: string | null;
   sourceSnapshot: unknown;
   renderPayload: unknown;
+  reuseActive?: boolean;
   sourceLinks?: Pick<
     Prisma.PlacementDocumentUncheckedCreateInput,
     | 'participantId'
@@ -101,6 +103,72 @@ export class PlacementDocumentsService {
     });
   }
 
+  async generateParticipantOfferSlip(
+    user: RequestUser,
+    placementId: string,
+    participantId: string,
+  ): Promise<PlacementDocumentRecord> {
+    const participant = await this.prisma.placementParticipant.findFirst({
+      where: {
+        id: participantId,
+        tenantId: user.tenantId,
+        placementId,
+      },
+      select: { id: true },
+    });
+    if (!participant) {
+      throw new NotFoundException('Placement participant not found');
+    }
+
+    const preview = await this.placementsService.getOfferSlipPreview(
+      user.tenantId,
+      placementId,
+    );
+    const participantPreview = preview.participantPreviews.find(
+      (item) => item.participant.id === participantId,
+    );
+    if (!participantPreview) {
+      throw new BadRequestException(
+        'Offer slip documents can only be generated for placement reinsurers',
+      );
+    }
+
+    const participantPayload = {
+      documentType: PlacementDocumentType.OFFER_SLIP,
+      placement: preview.placement,
+      cedant: preview.cedant,
+      businessEntries: preview.businessEntries,
+      offerEntries: preview.offerEntries,
+      debitGuaranteeFinancials: preview.debitGuaranteeFinancials,
+      participantPreview,
+      offerContext: {
+        participantId,
+        counterpartyId: participantPreview.participant.counterpartyId,
+        reinsurerName: participantPreview.participant.counterparty.name,
+        offeredLinePercent: participantPreview.participant.sharePercent,
+        signedLinePercent: participantPreview.participant.signedLinePercent,
+        totalOfferedPercent: preview.totalOfferedPercent,
+        totalAcceptedPercent: preview.totalAcceptedPercent,
+        remainingPercent: preview.remainingPercent,
+      },
+      branding: {
+        productName: 'WorkPhelo',
+        documentFamily: 'Reinsurance Operations',
+      },
+    };
+
+    return this.createGeneratedDocument(user, placementId, {
+      type: PlacementDocumentType.OFFER_SLIP,
+      prefix: 'DOC-OS-',
+      title: `Offer Slip ${preview.placement.reference} - ${participantPreview.participant.counterparty.name}`,
+      currency: preview.placement.currency,
+      sourceSnapshot: participantPayload,
+      renderPayload: participantPayload,
+      sourceLinks: { participantId },
+      reuseActive: true,
+    });
+  }
+
   async generateClosingSlip(
     user: RequestUser,
     placementId: string,
@@ -154,6 +222,17 @@ export class PlacementDocumentsService {
     const note = await this.prisma.placementNote.findFirst({
       where: { id: noteId, tenantId: user.tenantId, placementId },
       include: {
+        placement: {
+          select: {
+            id: true,
+            reference: true,
+            title: true,
+            classOfBusiness: true,
+            inceptionDate: true,
+            expiryDate: true,
+            currency: true,
+          },
+        },
         counterparty: {
           select: {
             id: true,
@@ -167,6 +246,21 @@ export class PlacementDocumentsService {
         },
         closing: { select: { id: true, closingNumber: true } },
         participant: { select: { id: true, counterpartyId: true } },
+        endorsement: {
+          select: {
+            id: true,
+            endorsementNumber: true,
+            type: true,
+            impactType: true,
+            effectiveDate: true,
+          },
+        },
+        endorsementClosing: {
+          select: { id: true, closingNumber: true },
+        },
+        endorsementParticipant: {
+          select: { id: true, counterpartyId: true },
+        },
       },
     });
     if (!note) throw new NotFoundException('Placement note not found');
@@ -182,11 +276,17 @@ export class PlacementDocumentsService {
       renderPayload: {
         documentType: type,
         note: snapshot,
+        branding: {
+          productName: 'WorkPhelo',
+          documentFamily: 'Reinsurance Operations',
+        },
       },
       sourceLinks: {
         noteId: note.id,
         closingId: note.closingId,
         participantId: note.participantId,
+        endorsementId: note.endorsementId,
+        endorsementClosingId: note.endorsementClosingId,
       },
     });
   }
@@ -473,10 +573,47 @@ export class PlacementDocumentsService {
     });
   }
 
+  async readStoredPdfForEmail(
+    tenantId: string,
+    placementId: string,
+    documentId: string,
+  ): Promise<StoredObjectResult> {
+    let document = await this.findOne(tenantId, placementId, documentId);
+    this.assertPdfRenderable(document);
+
+    if (!document.objectKey) {
+      document = await this.renderAndStorePdf(
+        tenantId,
+        placementId,
+        documentId,
+      );
+    }
+
+    if (!document.objectKey) {
+      throw new InternalServerErrorException(
+        'Document PDF storage metadata is missing',
+      );
+    }
+
+    return this.documentStorage.readStoredObject({
+      objectKey: document.objectKey,
+      mimeType: document.mimeType ?? 'application/pdf',
+      fileName: document.fileName ?? `${document.documentNumber}.pdf`,
+    });
+  }
+
   private assertPdfRenderable(document: PlacementDocumentRecord): void {
-    if (document.type !== PlacementDocumentType.CLOSING_SLIP) {
+    const renderableTypes = new Set<PlacementDocumentType>([
+      PlacementDocumentType.CLOSING_SLIP,
+      PlacementDocumentType.OFFER_SLIP,
+      PlacementDocumentType.DEBIT_NOTE,
+      PlacementDocumentType.CREDIT_NOTE,
+      PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE,
+      PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+    ]);
+    if (!renderableTypes.has(document.type)) {
       throw new BadRequestException(
-        'PDF rendering is currently supported only for CLOSING_SLIP documents',
+        'PDF rendering is currently supported only for OFFER_SLIP, CLOSING_SLIP, DEBIT_NOTE, CREDIT_NOTE, ENDORSEMENT_DEBIT_NOTE and ENDORSEMENT_CREDIT_NOTE documents',
       );
     }
     if (document.status === PlacementDocumentStatus.VOID) {
@@ -505,6 +642,21 @@ export class PlacementDocumentsService {
     await this.assertPlacement(user.tenantId, placementId);
 
     return this.prisma.$transaction(async (tx) => {
+      if (descriptor.reuseActive) {
+        const existing = await tx.placementDocument.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            placementId,
+            type: descriptor.type,
+            status: { not: PlacementDocumentStatus.VOID },
+            ...this.versionSourceWhere(descriptor.sourceLinks),
+          },
+          include: documentInclude,
+          orderBy: { createdAt: 'desc' },
+        });
+        if (existing) return existing;
+      }
+
       const documentNumber = await this.nextDocumentNumber(
         tx,
         user.tenantId,
@@ -589,6 +741,9 @@ export class PlacementDocumentsService {
     if (!sourceLinks) return {};
     if (sourceLinks.noteId) return { noteId: sourceLinks.noteId };
     if (sourceLinks.closingId) return { closingId: sourceLinks.closingId };
+    if (sourceLinks.participantId) {
+      return { participantId: sourceLinks.participantId };
+    }
     if (sourceLinks.endorsementClosingId) {
       return { endorsementClosingId: sourceLinks.endorsementClosingId };
     }

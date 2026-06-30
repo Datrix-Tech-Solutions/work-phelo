@@ -3,7 +3,7 @@
 import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
-import { ProjectsContent } from '@/components/organisms/projects/ProjectsContent';
+import { ProjectsContent } from '@/components/organisms/hr/projects/ProjectsContent';
 
 export default function ProjectsPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);

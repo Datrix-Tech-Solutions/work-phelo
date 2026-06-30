@@ -116,6 +116,41 @@ describe('S3DocumentStorageService', () => {
     });
   });
 
+  it('reads a private stored object for an outbound workflow attachment', async () => {
+    const transformToByteArray = jest
+      .fn()
+      .mockResolvedValue(Uint8Array.from(Buffer.from('%PDF')));
+    sendMock.mockResolvedValueOnce({
+      Body: { transformToByteArray },
+    } as never);
+    const service = new S3DocumentStorageService();
+
+    const result = await service.readStoredObject({
+      objectKey: 'reinsurance/document.pdf',
+      mimeType: 'application/pdf',
+      fileName: 'DOC-OS-001.pdf',
+    });
+
+    const sendCalls = sendMock.mock.calls as Array<
+      [PutObjectCommand | GetObjectCommand]
+    >;
+    const sentCommand = sendCalls[0][0];
+    expect(sentCommand).toBeInstanceOf(GetObjectCommand);
+    expect(sentCommand.input).toMatchObject({
+      Bucket: 'workphelo-documents',
+      Key: 'reinsurance/document.pdf',
+      ResponseContentType: 'application/pdf',
+      ResponseContentDisposition: 'inline; filename="DOC-OS-001.pdf"',
+    });
+    expect(transformToByteArray).toHaveBeenCalled();
+    expect(result).toEqual({
+      body: Buffer.from('%PDF'),
+      mimeType: 'application/pdf',
+      fileName: 'DOC-OS-001.pdf',
+      sizeBytes: 4,
+    });
+  });
+
   it('fails fast when required S3 configuration is missing', async () => {
     delete process.env.REINSURANCE_DOCUMENT_S3_BUCKET;
     const service = new S3DocumentStorageService();

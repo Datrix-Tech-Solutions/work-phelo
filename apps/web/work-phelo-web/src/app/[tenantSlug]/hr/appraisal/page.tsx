@@ -8,10 +8,10 @@ import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useTeamAppraisals } from '@/hooks';
-import { AppraisalTabs } from '@/components/molecules/appraisal/AppraisalTabs';
-import { MyAppraisalsTable } from '@/components/organisms/appraisal/MyAppraisalTable';
-import { TeamReviewTable } from '@/components/organisms/appraisal/TeamReviewTable';
-import { HRAppraisalsTable } from '@/components/organisms/appraisal/HRAppraisalTable';
+import { AppraisalTabs } from '@/components/molecules/hr/appraisal/AppraisalTabs';
+import { MyAppraisalsTable } from '@/components/organisms/hr/appraisal/MyAppraisalTable';
+import { TeamReviewTable } from '@/components/organisms/hr/appraisal/TeamReviewTable';
+import { HRAppraisalsTable } from '@/components/organisms/hr/appraisal/HRAppraisalTable';
 
 export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);

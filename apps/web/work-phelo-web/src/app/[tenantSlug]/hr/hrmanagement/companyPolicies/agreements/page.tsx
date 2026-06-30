@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { AddAgreementPanel } from '@/components/organisms/companyPolicies/AddAgreementPanel';
-import { AgreementViewModal } from '@/components/organisms/companyPolicies/AgreementViewModal';
+import { AddAgreementPanel } from '@/components/organisms/hr/companyPolicies/AddAgreementPanel';
+import { AgreementViewModal } from '@/components/organisms/hr/companyPolicies/AgreementViewModal';
 import {
   useCompanyAgreements,
   useMyCompanyAgreements,
