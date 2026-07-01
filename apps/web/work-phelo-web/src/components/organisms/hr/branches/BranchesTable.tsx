@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { MapPin } from 'lucide-react';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
-import { BranchStatus } from '@/components/molecules/hr/branches/BranchStatus';
+import { BranchStatus, HeadOfficeTag } from '@/components/molecules/hr/branches/BranchStatus';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { useBranches, useDeleteBranch, useUpdateBranch, useEmployeeOptions } from '@/hooks';
@@ -22,6 +23,8 @@ function branchLocation(b: Branch) {
 }
 
 export function BranchesTable() {
+  const params = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const toast = useToast();
   const canCreate = usePermission(Permission.CREATE_BRANCH);
   const canUpdate = usePermission(Permission.UPDATE_BRANCH);
@@ -64,16 +67,18 @@ export function BranchesTable() {
 
   const columns: Column<Branch>[] = [
     {
+      key: 'code',
+      label: 'Code',
+      width: '110px',
+      render: (row) => <span className="text-sm text-gray-500">{row.code ?? '—'}</span>,
+    },
+    {
       key: 'name',
       label: 'Branch Name',
       render: (row) => (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-1 items-start">
           <span className="font-medium text-gray-900">{row.name}</span>
-          {row.code && (
-            <span className="text-xs text-gray-400 font-mono bg-gray-100 px-1.5 py-0.5 rounded">
-              {row.code}
-            </span>
-          )}
+          {row.isHeadOffice && <HeadOfficeTag />}
         </div>
       ),
     },
@@ -113,14 +118,7 @@ export function BranchesTable() {
     {
       key: 'status',
       label: 'Status',
-
-      render: (row) => (
-        <BranchStatus
-          count={row._count?.employees ?? 0}
-          isActive={row.isActive}
-          isHeadOffice={row.isHeadOffice}
-        />
-      ),
+      render: (row) => <BranchStatus count={row._count?.employees ?? 0} isActive={row.isActive} />,
     },
   ];
 
@@ -149,31 +147,34 @@ export function BranchesTable() {
         {...(canCreate && {
           actionButton: { label: 'New Branch', onClick: () => setCreateOpen(true) },
         })}
-        rowActions={
-          canUpdate || canDelete
-            ? (row) => [
-                ...(canUpdate
-                  ? [
-                      { label: 'Edit Branch', onClick: () => setEditTarget(row) },
-                      { label: 'Add Members', onClick: () => setMembersTarget(row) },
-                      {
-                        label: row.isActive ? 'Deactivate' : 'Activate',
-                        onClick: () => setToggleActiveTarget(row),
-                      },
-                    ]
-                  : []),
-                ...(canDelete
-                  ? [
-                      {
-                        label: 'Delete Branch',
-                        danger: true,
-                        onClick: () => setDeleteTarget(row),
-                      },
-                    ]
-                  : []),
-              ]
-            : undefined
+        onRowClick={(row) =>
+          router.push(`/${params.tenantSlug}/hr/hrmanagement/branches/${row.id}`)
         }
+        rowActions={(row) => [
+          {
+            label: 'View Branch',
+            onClick: () => router.push(`/${params.tenantSlug}/hr/hrmanagement/branches/${row.id}`),
+          },
+          ...(canUpdate
+            ? [
+                { label: 'Edit Branch', onClick: () => setEditTarget(row) },
+                { label: 'Add Members', onClick: () => setMembersTarget(row) },
+                {
+                  label: row.isActive ? 'Deactivate' : 'Activate',
+                  onClick: () => setToggleActiveTarget(row),
+                },
+              ]
+            : []),
+          ...(canDelete
+            ? [
+                {
+                  label: 'Delete Branch',
+                  danger: true,
+                  onClick: () => setDeleteTarget(row),
+                },
+              ]
+            : []),
+        ]}
         emptyMessage="No branches found"
         currentPage={page}
         totalPages={totalPages}
