@@ -1,6 +1,7 @@
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementEndorsementImpactType,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
 } from '../../prisma/generated/client';
@@ -85,6 +86,7 @@ describe('PlacementEffectiveViewService', () => {
       id: 'endorsement-1',
       endorsementNumber: 'END-001',
       type: PlacementEndorsementType.PARTICIPANT_ADDITION,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
       status: PlacementEndorsementStatus.CLOSING,
       effectiveDate: new Date('2026-06-10T00:00:00.000Z'),
       targetPercent: '70.0000',
@@ -213,14 +215,15 @@ describe('PlacementEffectiveViewService', () => {
           sourceType: 'ENDORSEMENT_CLOSING',
           closingId: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
+          originalParticipantId: 'participant-a',
           counterpartyId: 'reinsurer-a',
-          signedLinePercent: 10,
-          premium: 15000,
+          signedLinePercent: 50,
+          premium: 75000,
           commissionPercent: 10,
-          commissionAmount: 1500,
+          commissionAmount: 7500,
           brokeragePercent: 7.5,
-          brokerageAmount: 1125,
-          netPremium: 12375,
+          brokerageAmount: 5625,
+          netPremium: 61875,
           currency: 'USD',
         },
       ],
@@ -233,7 +236,7 @@ describe('PlacementEffectiveViewService', () => {
             closingNumber: 'ENC-001',
             status: PlacementClosingStatus.CONFIRMED,
             endorsementParticipantId: 'endorsement-participant-1',
-            signedLinePercent: '10.0000',
+            signedLinePercent: '50.0000',
             endorsementParticipant: { counterpartyId: 'reinsurer-a' },
           },
         ],
@@ -246,7 +249,155 @@ describe('PlacementEffectiveViewService', () => {
     );
 
     expect(avenue?.signedLinePercent).toBe(50);
-    expect(avenue?.sources).toHaveLength(2);
+    expect(avenue?.sources).toEqual([
+      expect.objectContaining({
+        sourceType: 'ENDORSEMENT_CLOSING',
+        signedLinePercent: 50,
+      }),
+    ]);
+  });
+
+  it('replaces an absolute revised facultative offer instead of adding it to the base', async () => {
+    tx.placement.findFirst.mockResolvedValue({
+      ...placement,
+      facultativeOffer: '40.0000',
+    });
+    closingSnapshotReader.findConfirmedPlacementClosingSnapshots.mockResolvedValue(
+      [placementSnapshots[0]],
+    );
+    closingSnapshotReader.findConfirmedEndorsementClosingSnapshots.mockResolvedValue(
+      [
+        {
+          sourceType: 'ENDORSEMENT_CLOSING',
+          closingId: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          originalParticipantId: 'participant-a',
+          counterpartyId: 'reinsurer-a',
+          signedLinePercent: 45,
+          premium: 45000,
+          commissionPercent: 10,
+          commissionAmount: 4500,
+          brokeragePercent: 7.5,
+          brokerageAmount: 3375,
+          netPremium: 37125,
+          currency: 'USD',
+        },
+      ],
+    );
+    tx.placementEndorsement.findMany.mockResolvedValue([
+      makeConfirmedEndorsement({
+        targetPercent: '5.0000',
+        proposedSnapshot: {
+          facultativeOffer: '45.0000',
+          premium: '100000.00',
+          currency: 'USD',
+        },
+        closings: [
+          {
+            id: 'endorsement-closing-1',
+            closingNumber: 'ENC-001',
+            status: PlacementClosingStatus.CONFIRMED,
+            endorsementParticipantId: 'endorsement-participant-1',
+            signedLinePercent: '45.0000',
+            endorsementParticipant: { counterpartyId: 'reinsurer-a' },
+          },
+        ],
+      }),
+    ]);
+
+    const result = await service.getEffectiveView(tenantId, placementId);
+
+    expect(result.basePlacement.facultativeOfferPercent).toBe(40);
+    expect(result.effectiveTotals.facultativeOfferPercent).toBe(45);
+    expect(result.effectiveTotals.facultativeOfferPercent).not.toBe(85);
+    expect(result.effectiveParticipants).toEqual([
+      expect.objectContaining({
+        counterpartyId: 'reinsurer-a',
+        signedLinePercent: 45,
+      }),
+    ]);
+  });
+
+  it('applies multiple absolute endorsement revisions in chronological order', async () => {
+    tx.placement.findFirst.mockResolvedValue({
+      ...placement,
+      facultativeOffer: '40.0000',
+    });
+    closingSnapshotReader.findConfirmedPlacementClosingSnapshots.mockResolvedValue(
+      [placementSnapshots[0]],
+    );
+    closingSnapshotReader.findConfirmedEndorsementClosingSnapshots.mockResolvedValue(
+      [
+        {
+          sourceType: 'ENDORSEMENT_CLOSING',
+          closingId: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          originalParticipantId: 'participant-a',
+          counterpartyId: 'reinsurer-a',
+          signedLinePercent: 45,
+          premium: 45000,
+          commissionPercent: 10,
+          commissionAmount: 4500,
+          brokeragePercent: 7.5,
+          brokerageAmount: 3375,
+          netPremium: 37125,
+          currency: 'USD',
+        },
+        {
+          sourceType: 'ENDORSEMENT_CLOSING',
+          closingId: 'endorsement-closing-2',
+          endorsementParticipantId: 'endorsement-participant-2',
+          originalParticipantId: 'participant-a',
+          counterpartyId: 'reinsurer-a',
+          signedLinePercent: 50,
+          premium: 60000,
+          commissionPercent: 10,
+          commissionAmount: 6000,
+          brokeragePercent: 7.5,
+          brokerageAmount: 4500,
+          netPremium: 49500,
+          currency: 'USD',
+        },
+      ],
+    );
+    tx.placementEndorsement.findMany.mockResolvedValue([
+      makeConfirmedEndorsement({
+        proposedSnapshot: {
+          facultativeOffer: '45.0000',
+          premium: '110000.00',
+        },
+      }),
+      makeConfirmedEndorsement({
+        id: 'endorsement-2',
+        endorsementNumber: 'END-002',
+        effectiveDate: new Date('2026-06-20T00:00:00.000Z'),
+        proposedSnapshot: {
+          facultativeOffer: '50.0000',
+          premium: '120000.00',
+        },
+        closings: [
+          {
+            id: 'endorsement-closing-2',
+            closingNumber: 'ENC-002',
+            status: PlacementClosingStatus.CONFIRMED,
+            endorsementParticipantId: 'endorsement-participant-2',
+            signedLinePercent: '50.0000',
+            endorsementParticipant: { counterpartyId: 'reinsurer-a' },
+          },
+        ],
+      }),
+    ]);
+
+    const result = await service.getEffectiveView(tenantId, placementId);
+
+    expect(result.effectiveTotals.facultativeOfferPercent).toBe(50);
+    expect(result.effectiveTotals.premium).toBe(120000);
+    expect(result.effectiveParticipants).toEqual([
+      expect.objectContaining({
+        counterpartyId: 'reinsurer-a',
+        signedLinePercent: 50,
+      }),
+    ]);
   });
 
   it('does not apply unconfirmed endorsement closings and reports them as pending', async () => {
@@ -314,6 +465,40 @@ describe('PlacementEffectiveViewService', () => {
     expect(result.appliedEndorsements).toEqual([]);
     expect(result.pendingEndorsements).toEqual([]);
   });
+
+  it.each([
+    PlacementEndorsementImpactType.TERMS_ONLY,
+    PlacementEndorsementImpactType.ADMINISTRATIVE,
+  ])(
+    'applies a closed %s endorsement without inventing capacity closings',
+    async (impactType) => {
+      tx.placementEndorsement.findMany.mockResolvedValue([
+        makeConfirmedEndorsement({
+          type: PlacementEndorsementType.PREMIUM_ADJUSTMENT,
+          impactType,
+          status: PlacementEndorsementStatus.CLOSED,
+          targetPercent: null,
+          proposedSnapshot: {
+            premium: '120000.00',
+            currency: 'USD',
+          },
+          closings: [],
+        }),
+      ]);
+
+      const result = await service.getEffectiveView(tenantId, placementId);
+
+      expect(result.effectiveTotals.premium).toBe(120000);
+      expect(result.effectiveTotals.facultativeOfferPercent).toBe(60);
+      expect(result.effectiveParticipants).toHaveLength(2);
+      expect(result.appliedEndorsements).toHaveLength(1);
+      expect(result.appliedEndorsements[0].confirmedClosings).toEqual([]);
+      expect(result.pendingEndorsements).toEqual([]);
+      expect(result.warnings).toContain(
+        'Closed non-capacity endorsement terms are applied to the effective placement fields; closing-derived premium amounts remain based on confirmed closing snapshots.',
+      );
+    },
+  );
 
   it('does not mutate placement, closings, notes or participants', async () => {
     await service.getEffectiveView(tenantId, placementId);
