@@ -431,6 +431,8 @@ export interface Facultative {
   totalOfferedPercent: number;
   totalAcceptedPercent: number;
   remainingPercent: number;
+  confirmedClosingCount: number;
+  confirmedPlacedPercent: number;
 }
 
 /* ── Facultative API payloads ── */
@@ -538,6 +540,124 @@ export interface PlacementEndorsement {
   voidedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type PlacementEndorsementPendingAction =
+  | 'SEND_TO_MARKET'
+  | 'ADD_CAPACITY'
+  | 'ACCEPT_PARTICIPANTS'
+  | 'CREATE_CLOSING'
+  | 'ISSUE_CLOSING'
+  | 'CONFIRM_CLOSING'
+  | 'GENERATE_NOTES'
+  | 'ISSUE_NOTES'
+  | 'CLOSE_ENDORSEMENT';
+
+export interface PlacementEndorsementSummary {
+  id: string;
+  placementId: string;
+  endorsementNumber: string;
+  type: PlacementEndorsementType;
+  status: PlacementEndorsementStatus;
+  targetPercent: number | null;
+  placedPercent: number;
+  remainingPercent: number | null;
+  participants: {
+    total: number;
+    accepted: number;
+    declined: number;
+  };
+  closings: {
+    total: number;
+    confirmed: number;
+    draft: number;
+    issued: number;
+    void: number;
+  };
+  notes: {
+    total: number;
+    endorsementDebitNotes: number;
+    endorsementCreditNotes: number;
+    issued: number;
+    draft: number;
+    void: number;
+  };
+  pendingActions: PlacementEndorsementPendingAction[];
+  isComplete: boolean;
+}
+
+export interface EffectivePlacementView {
+  basePlacement: {
+    id: string;
+    reference: string;
+    title: string;
+    cedantId: string;
+    currency: string | null;
+    sumInsured: number | null;
+    premium: number | null;
+    commissionPercent: number | null;
+    brokeragePercent: number | null;
+    facultativeOfferPercent: number | null;
+  };
+  effectiveTotals: {
+    facultativeOfferPercent: number;
+    participantCount: number;
+    sumInsured: number | null;
+    premium: number | null;
+    currency: string | null;
+    commissionPercent: number | null;
+    brokeragePercent: number | null;
+    grossPremium: number;
+    commissionAmount: number;
+    brokerageAmount: number;
+    netPremium: number;
+  };
+  effectiveParticipants: Array<{
+    counterpartyId: string;
+    counterparty: {
+      id: string;
+      type: string;
+      name: string;
+      registrationNumber: string | null;
+    };
+    signedLinePercent: number;
+    grossPremium: number;
+    commissionAmount: number;
+    brokerageAmount: number;
+    netPremium: number;
+    sources: Array<{
+      sourceType: 'PLACEMENT_CLOSING' | 'ENDORSEMENT_CLOSING';
+      closingId: string;
+      participantId?: string;
+      endorsementParticipantId?: string;
+      signedLinePercent: number;
+    }>;
+  }>;
+  appliedEndorsements: Array<{
+    id: string;
+    endorsementNumber: string;
+    type: PlacementEndorsementType;
+    status: PlacementEndorsementStatus;
+    effectiveDate: string;
+    targetPercent: number | null;
+    confirmedClosings: Array<{
+      id: string;
+      closingNumber: string;
+      endorsementParticipantId: string;
+      counterpartyId: string;
+      signedLinePercent: number;
+    }>;
+  }>;
+  pendingEndorsements: Array<{
+    id: string;
+    endorsementNumber: string;
+    type: PlacementEndorsementType;
+    status: PlacementEndorsementStatus;
+    effectiveDate: string;
+    targetPercent: number | null;
+    confirmedClosingCount: number;
+  }>;
+  warnings: string[];
 }
 
 export type PlacementEndorsementParticipantStatus =

@@ -139,17 +139,14 @@ const COLUMNS: Column<Facultative>[] = [
     className: 'pr-6',
     render: (row) => {
       const facOffer = row.facultativeOffer ?? 0;
-      const closedPercent =
-        row.participants
-          ?.filter((p) => p.status === 'CLOSED')
-          .reduce((sum, p) => sum + parseFloat(p.signedLinePercent ?? p.sharePercent ?? '0'), 0) ??
-        0;
-      const barWidth = facOffer > 0 ? Math.min(100, (closedPercent / facOffer) * 100) : 0;
+      const placedPercent = row.confirmedPlacedPercent ?? 0;
+      const acceptedPercent = row.totalAcceptedPercent ?? 0;
+      const barWidth = facOffer > 0 ? Math.min(100, (placedPercent / facOffer) * 100) : 0;
       return (
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-medium text-gray-700">{closedPercent.toFixed(1)}%</span>
-            <span className="text-gray-400">{barWidth.toFixed(0)}% Closed</span>
+            <span className="font-medium text-gray-700">{placedPercent.toFixed(1)}% placed</span>
+            <span className="text-gray-400">{acceptedPercent.toFixed(1)}% accepted</span>
           </div>
           <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
             <div
@@ -168,13 +165,13 @@ const COLUMNS: Column<Facultative>[] = [
     width: '110px',
     render: (row) => {
       const total = row.participants?.length ?? 0;
-      const closed = row.participants?.filter((p) => p.status === 'CLOSED').length ?? 0;
+      const confirmed = row.confirmedClosingCount ?? 0;
       return (
         <div className="flex flex-col gap-0.5">
           <span className="font-semibold text-gray-900">
-            {closed} / {total}
+            {confirmed} / {total}
           </span>
-          <span className="text-xs text-gray-400">closed</span>
+          <span className="text-xs text-gray-400">validated</span>
         </div>
       );
     },

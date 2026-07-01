@@ -9,6 +9,7 @@ import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { ReinsuranceNotesTable } from '@/components/molecules/reinsurance/ReinsuranceNotesTable';
 import {
   Facultative,
+  EffectivePlacementView,
   PlacementEndorsement,
   PlacementNote,
   ENDORSEMENT_TYPE_LABELS,
@@ -17,7 +18,14 @@ import {
 } from '@/types/reinsurance';
 import {
   findActivePlacementNoteDocument,
+  endorsementClosingsKey,
+  endorsementKey,
+  endorsementNotesKey,
+  endorsementSummaryKey,
+  facultativePlacementKey,
+  placementEffectiveViewKey,
   useCedants,
+  useCreateEndorsementClosing,
   useEndorsementClosings,
   useEndorsementNotes,
   useGenerateEndorsementCreditNote,
@@ -26,11 +34,14 @@ import {
   useIssueEndorsementNote,
   usePlacementDocuments,
   usePlacementEndorsements,
+  usePlacementEndorsementSummary,
+  usePlacementEffectiveView,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
   useReinsurers,
   useRenderPlacementDocumentPdf,
   useUpdateEndorsementStatus,
+  useUpdateEndorsementClosingStatus,
   useVoidEndorsementNote,
 } from '@/hooks';
 import { EditEndorsementPanel } from '@/components/organisms/reinsurance/panels/EditEndorsementPanel';
@@ -69,6 +80,118 @@ function fmtVal(val: unknown): string {
   if (val == null || val === '') return '—';
   if (typeof val === 'number') return val.toLocaleString();
   return String(val);
+}
+
+function fmtMoney(value: number | null, currency: string | null): string {
+  if (value === null) return '—';
+  return `${currency ? `${currency} ` : ''}${value.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function EffectivePlacementSection({
+  view,
+  isLoading,
+  isError,
+}: {
+  view: EffectivePlacementView | undefined;
+  isLoading: boolean;
+  isError: boolean;
+}) {
+  if (isLoading) {
+    return <p className="text-sm text-gray-400">Loading latest confirmed placement position…</p>;
+  }
+  if (isError || !view) {
+    return (
+      <p className="text-sm text-red-500">
+        Latest confirmed placement position could not be loaded.
+      </p>
+    );
+  }
+
+  const totals = view.effectiveTotals;
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-5 flex flex-col gap-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h4 className="text-sm font-semibold text-gray-900">
+            Latest Confirmed Placement Position
+          </h4>
+          <p className="text-xs text-gray-500 mt-1">
+            Read-only view from confirmed placement and endorsement closings. The original placement
+            remains unchanged.
+          </p>
+        </div>
+        <Badge label="Read only" variant="neutral" />
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          ['Facultative Offer', `${totals.facultativeOfferPercent}%`],
+          ['Sum Insured', fmtMoney(totals.sumInsured, totals.currency)],
+          ['Effective Premium', fmtMoney(totals.premium, totals.currency)],
+          ['Closing Net Premium', fmtMoney(totals.netPremium, totals.currency)],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+            <p className="text-xs text-gray-500">{label}</p>
+            <p className="text-sm font-semibold text-gray-900 mt-1">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+          Effective Reinsurer Lines ({totals.participantCount})
+        </p>
+        {view.effectiveParticipants.length === 0 ? (
+          <p className="text-xs text-gray-400">No confirmed participant lines yet.</p>
+        ) : (
+          <div className="flex flex-col divide-y divide-gray-100">
+            {view.effectiveParticipants.map((participant) => (
+              <div
+                key={participant.counterpartyId}
+                className="py-2 flex items-center justify-between gap-3"
+              >
+                <span className="text-sm text-gray-700">{participant.counterparty.name}</span>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">
+                    {participant.signedLinePercent}%
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Net {fmtMoney(participant.netPremium, totals.currency)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {view.pendingEndorsements.length > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold text-amber-800">Pending endorsements</p>
+          <p className="text-xs text-amber-700 mt-1">
+            {view.pendingEndorsements
+              .map(
+                (item) => `${item.endorsementNumber} (${ENDORSEMENT_STATUS_LABELS[item.status]})`,
+              )
+              .join(', ')}
+          </p>
+        </div>
+      )}
+
+      {view.warnings.length > 0 && (
+        <div className="flex flex-col gap-1">
+          {view.warnings.map((warning) => (
+            <p key={warning} className="text-xs text-amber-700">
+              {warning}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const PARAM_FIELDS: { key: string; label: string }[] = [
@@ -189,9 +312,12 @@ function EndorsementCard({
   const { data: reinsurers = [] } = useReinsurers();
   const { data: cedants = [] } = useCedants();
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
-  const { mutate: updateStatus, isPending: isUpdatingStatus } = useUpdateEndorsementStatus(
-    placement.id,
-  );
+  const {
+    mutate: updateStatus,
+    mutateAsync: updateStatusAsync,
+    isPending: isUpdatingStatus,
+  } = useUpdateEndorsementStatus(placement.id);
+  const { data: endorsementSummary } = usePlacementEndorsementSummary(placement.id, endorsement.id);
   const { data: endorsementParticipants = [] } = usePlacementEndorsementParticipants(
     placement.id,
     endorsement.id,
@@ -219,6 +345,11 @@ function EndorsementCard({
   );
   const generateNoteDocument = useGeneratePlacementNoteDocument(placement.id);
   const renderDocumentPdf = useRenderPlacementDocumentPdf(placement.id);
+  const createEndorsementClosing = useCreateEndorsementClosing(placement.id, endorsement.id);
+  const updateEndorsementClosingStatus = useUpdateEndorsementClosingStatus(
+    placement.id,
+    endorsement.id,
+  );
   const issueEndorsementNote = useIssueEndorsementNote(placement.id, endorsement.id);
   const voidEndorsementNote = useVoidEndorsementNote(placement.id, endorsement.id);
   const queryClient = useQueryClient();
@@ -261,6 +392,79 @@ function EndorsementCard({
       .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
       .map((p) => p.counterpartyId),
   );
+
+  const handleValidateEndorsementParticipant = async (counterpartyId: string) => {
+    const participant = endorsementParticipants.find(
+      (item) => item.counterpartyId === counterpartyId,
+    );
+    if (!participant || participant.status !== 'ACCEPTED') return;
+
+    setBusyEPIds((previous) => new Set([...previous, counterpartyId]));
+    try {
+      let closing = endorsementClosings.find(
+        (item) => item.endorsementParticipantId === participant.id && item.status !== 'VOID',
+      );
+      if (!closing) {
+        closing = await createEndorsementClosing.mutateAsync({
+          endorsementParticipantId: participant.id,
+          suppressInvalidation: true,
+        });
+      }
+      if (closing.status === 'DRAFT') {
+        closing = await updateEndorsementClosingStatus.mutateAsync({
+          closingId: closing.id,
+          status: 'ISSUED',
+          suppressInvalidation: true,
+        });
+      }
+      if (closing.status === 'ISSUED') {
+        await updateEndorsementClosingStatus.mutateAsync({
+          closingId: closing.id,
+          status: 'CONFIRMED',
+          suppressInvalidation: true,
+        });
+      }
+      useToastStore.getState().addToast({
+        message: 'Endorsement participant validated and closing confirmed',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({
+        message: extractError(error),
+        type: 'error',
+      });
+    } finally {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: endorsementClosingsKey(placement.id, endorsement.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: endorsementNotesKey(placement.id, endorsement.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: endorsementKey(placement.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: endorsementSummaryKey(placement.id, endorsement.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: placementEffectiveViewKey(placement.id),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: facultativePlacementKey(placement.id),
+          exact: true,
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['reinsurance', 'dashboard'],
+        }),
+      ]);
+      setBusyEPIds((previous) => {
+        const next = new Set(previous);
+        next.delete(counterpartyId);
+        return next;
+      });
+    }
+  };
 
   const endorsementRows: EndorsementParticipantRow[] = snapshotParticipants.map((p) => {
     const r = reinsurers.find((r) => r.id === p.counterpartyId);
@@ -384,14 +588,47 @@ function EndorsementCard({
       render: (row) => {
         const isAccepted = acceptedCounterpartyIds.has(row.counterpartyId);
         const isBusy = busyEPIds.has(row.counterpartyId);
-        if (isAccepted) {
+        if (endorsement.status === 'CLOSED') {
           return (
-            <TableButton
-              variant="blue"
-              onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
-            >
-              Preview Only
-            </TableButton>
+            <div className="flex items-center gap-2">
+              <TableButton
+                variant="blue"
+                onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
+              >
+                Preview Only
+              </TableButton>
+              <Badge label="Closed" variant="success" />
+            </div>
+          );
+        }
+        if (isAccepted) {
+          const participant = endorsementParticipants.find(
+            (item) => item.counterpartyId === row.counterpartyId,
+          );
+          const isValidated = endorsementClosings.some(
+            (closing) =>
+              closing.endorsementParticipantId === participant?.id &&
+              closing.status === 'CONFIRMED',
+          );
+          return (
+            <div className="flex items-center gap-2">
+              <TableButton
+                variant="blue"
+                onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
+              >
+                Preview Only
+              </TableButton>
+              {isValidated ? (
+                <Badge label="Validated" variant="success" />
+              ) : (
+                <TableButton
+                  isLoading={isBusy}
+                  onClick={() => handleValidateEndorsementParticipant(row.counterpartyId)}
+                >
+                  Validate
+                </TableButton>
+              )}
+            </div>
           );
         }
         return (
@@ -412,6 +649,45 @@ function EndorsementCard({
     (closing) => closing.status === 'CONFIRMED',
   );
   const hasEndorsementNoteWorkflow = endorsement.status !== 'DRAFT';
+  const pendingActions = endorsementSummary?.pendingActions ?? [];
+  const isReadyToClose = pendingActions.includes('CLOSE_ENDORSEMENT');
+  const isInClosingPhase =
+    !isReadyToClose &&
+    endorsement.status !== 'CLOSED' &&
+    (endorsementSummary?.closings.confirmed ?? 0) > 0;
+  const displayedStatusLabel = isReadyToClose
+    ? 'Ready to Close'
+    : isInClosingPhase
+      ? 'Closing'
+      : ENDORSEMENT_STATUS_LABELS[endorsement.status];
+  const displayedStatusVariant = isReadyToClose
+    ? 'success'
+    : isInClosingPhase
+      ? 'warning'
+      : ENDORSEMENT_STATUS_VARIANT[endorsement.status];
+  const pendingWorkflowMessage = pendingActions.includes('ISSUE_NOTES')
+    ? 'Issue the draft endorsement notes before closing.'
+    : pendingActions.includes('GENERATE_NOTES')
+      ? 'Generate the required endorsement notes before closing.'
+      : isReadyToClose
+        ? 'All required endorsement work is complete. Ready for manual close.'
+        : null;
+
+  const handleCloseEndorsement = async () => {
+    if (!isReadyToClose) return;
+    try {
+      await updateStatusAsync({ endorsementId: endorsement.id, status: 'CLOSED' });
+      useToastStore.getState().addToast({
+        message: 'Endorsement closed',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({
+        message: extractError(error),
+        type: 'error',
+      });
+    }
+  };
 
   const activeEndorsementNotes = endorsementNotes.filter(
     (note) => note.type === 'ENDORSEMENT_DEBIT_NOTE' || note.type === 'ENDORSEMENT_CREDIT_NOTE',
@@ -561,10 +837,7 @@ function EndorsementCard({
               {endorsement.endorsementNumber}
             </span>
             <Badge label={ENDORSEMENT_TYPE_LABELS[endorsement.type]} variant="neutral" />
-            <Badge
-              label={ENDORSEMENT_STATUS_LABELS[endorsement.status]}
-              variant={ENDORSEMENT_STATUS_VARIANT[endorsement.status]}
-            />
+            <Badge label={displayedStatusLabel} variant={displayedStatusVariant} />
             <span className="text-xs text-gray-400">{fmtDate(endorsement.effectiveDate)}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -590,8 +863,17 @@ function EndorsementCard({
                 Preview Only Certificate
               </Button>
             )}
+            {isReadyToClose && endorsement.status !== 'CLOSED' && (
+              <Button size="sm" isLoading={isUpdatingStatus} onClick={handleCloseEndorsement}>
+                Close Endorsement
+              </Button>
+            )}
           </div>
         </div>
+
+        {pendingWorkflowMessage && (
+          <p className="text-xs text-gray-500">{pendingWorkflowMessage}</p>
+        )}
 
         {/* Reason */}
         {endorsement.reason && (
@@ -797,10 +1079,23 @@ function EndorsementCard({
 
 export function EndorsementTab({ placement }: EndorsementTabProps) {
   const { data: endorsements = [], isLoading } = usePlacementEndorsements(placement.id);
+  const {
+    data: effectiveView,
+    isLoading: effectiveViewLoading,
+    isError: effectiveViewError,
+  } = usePlacementEffectiveView(placement.id);
 
   return (
     <div className="flex flex-col gap-5">
       <h3 className="text-base font-semibold text-gray-900">Policy Endorsement</h3>
+
+      {endorsements.length > 0 && (
+        <EffectivePlacementSection
+          view={effectiveView}
+          isLoading={effectiveViewLoading}
+          isError={effectiveViewError}
+        />
+      )}
 
       {isLoading ? (
         <p className="text-sm text-gray-400">Loading endorsements…</p>
