@@ -319,6 +319,34 @@ describe('PlacementsService', () => {
       totalOfferedPercent: 0,
       totalAcceptedPercent: 0,
       remainingPercent: 0,
+      confirmedClosingCount: 0,
+      confirmedPlacedPercent: 0,
+    });
+  });
+
+  it('returns confirmed closing count and placed capacity from closing snapshots', async () => {
+    prisma.placement.findMany.mockResolvedValue([
+      {
+        ...placement,
+        closings: [
+          {
+            participantId: 'participant-1',
+            signedLinePercent: '40.0000',
+          },
+          {
+            participantId: 'participant-2',
+            signedLinePercent: '20.0000',
+          },
+        ],
+      },
+    ]);
+    prisma.placement.count.mockResolvedValue(1);
+
+    const result = await service.findAll('tenant-1', { page: 1, limit: 20 });
+
+    expect(result.items[0]).toMatchObject({
+      confirmedClosingCount: 2,
+      confirmedPlacedPercent: 60,
     });
   });
 
