@@ -194,6 +194,13 @@ export class PlacementsService {
             },
           }
         : {}),
+      ...(query.paymentEligible
+        ? {
+            closings: {
+              some: { status: PlacementClosingStatus.CONFIRMED },
+            },
+          }
+        : {}),
       ...(query.search
         ? {
             OR: [

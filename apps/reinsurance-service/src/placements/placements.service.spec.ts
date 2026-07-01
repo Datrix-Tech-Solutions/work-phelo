@@ -322,6 +322,27 @@ describe('PlacementsService', () => {
     });
   });
 
+  it('filters payment-eligible placements by confirmed closing', async () => {
+    prisma.placement.findMany.mockResolvedValue([placement]);
+    prisma.placement.count.mockResolvedValue(1);
+
+    await service.findAll('tenant-1', {
+      paymentEligible: true,
+      page: 1,
+      limit: 20,
+    });
+
+    expect(prisma.placement.findMany.mock.calls[0]?.[0]).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        archivedAt: null,
+        closings: {
+          some: { status: PlacementClosingStatus.CONFIRMED },
+        },
+      },
+    });
+  });
+
   it('does not expose another tenant record by id', async () => {
     prisma.placement.findFirst.mockResolvedValue(null);
 

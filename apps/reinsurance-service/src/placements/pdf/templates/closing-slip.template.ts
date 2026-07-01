@@ -1,14 +1,23 @@
 import { PlacementDocumentType } from '../../../../prisma/generated/client';
+import {
+  brokerDocumentCss,
+  renderBrokerFooter,
+  renderBrokerHeader,
+  renderBrokerWatermark,
+} from './broker-document.template';
 
 export interface PlacementDocumentTemplateContext {
   documentNumber: string;
   title: string;
   generatedAt: Date | string | null;
+  qrCodeDataUrl?: string;
 }
 
 interface ClosingSlipPayload {
   documentType?: string;
   closing?: Record<string, unknown>;
+  endorsementClosing?: Record<string, unknown>;
+  branding?: Record<string, unknown>;
 }
 
 export function toDisplayString(value: unknown): string {
@@ -114,13 +123,15 @@ export function renderClosingSlipTemplate(
   payload: ClosingSlipPayload,
   context: PlacementDocumentTemplateContext,
 ): string {
-  const closing = getRecord(payload.closing);
+  const closing =
+    getRecord(payload.closing) ?? getRecord(payload.endorsementClosing);
   const participant = getRecord(closing?.participant);
   const counterparty =
     getRecord(participant?.counterparty) ??
     getRecord(getNested(closing, ['endorsementParticipant', 'counterparty']));
   const placement = getRecord(closing?.placement);
   const cedant = getRecord(placement?.cedant);
+  const branding = getRecord(payload.branding);
   const currency = closing?.currency ?? placement?.currency;
 
   return `<!doctype html>
@@ -227,28 +238,48 @@ export function renderClosingSlipTemplate(
         color: #6b7280;
         font-size: 10px;
       }
+      .letter-recipient { margin-bottom: 14px; line-height: 1.55; }
+      .letter-copy { margin: 0 0 16px; text-align: justify; }
+      .letter-signoff { margin-top: 24px; }
+      .signature-line { width: 220px; margin-top: 48px; border-top: 1px solid #172033; padding-top: 6px; }
+      ${brokerDocumentCss}
     </style>
   </head>
   <body>
-    <header>
-      <div class="brand">
-        <h1>Closing Slip</h1>
-        <p>Generated from an immutable placement closing document payload.</p>
-      </div>
-      <div class="meta">
-        <strong>${text(context.documentNumber)}</strong>
-        <p>${text(closing?.closingNumber)}</p>
-        <p>Generated: ${dateText(context.generatedAt ?? new Date())}</p>
-      </div>
-    </header>
+    <main class="document-shell">
+    ${renderBrokerWatermark(branding)}
+    ${renderBrokerHeader(
+      'Closing Slip',
+      `Closing ${toDisplayString(closing?.closingNumber || context.documentNumber)}`,
+      context,
+      branding,
+    )}
+
+    <div class="letter-recipient">
+      <strong>The Managing Director</strong><br />
+      ${text(counterparty?.name)}<br />
+      ${text(counterparty?.address ?? counterparty?.country, '')}
+    </div>
+    <p>Dear Sir / Madam,</p>
+    <p class="letter-copy">
+      We refer to the facultative risk detailed below and confirm the line placed with your
+      company. Kindly acknowledge this closing and issue your guarantee in accordance with
+      the agreed terms.
+    </p>
 
     <section class="section">
       <h2>Placement Details</h2>
       <div class="grid">
         ${detail('Placement Reference', text(placement?.reference ?? closing?.placementId))}
+        ${detail('Policy Number', text(placement?.policyNumber))}
+        ${detail('Risk', text(placement?.classOfBusiness ?? placement?.title))}
         ${detail('Cedant', text(cedant?.name))}
         ${detail('Currency', text(currency))}
         ${detail('Closing Status', text(closing?.status))}
+        ${detail(
+          'Insurance Period',
+          `${dateText(placement?.inceptionDate)} - ${dateText(placement?.expiryDate)}`,
+        )}
       </div>
     </section>
 
@@ -294,10 +325,13 @@ export function renderClosingSlipTemplate(
       </table>
     </section>
 
-    <footer>
-      This PDF was rendered from PlacementDocument.renderPayload only. The source placement,
-      participant, closing and financial records were not recalculated or mutated.
-    </footer>
+    <div class="letter-signoff">
+      <p>Thank you.</p>
+      <p>Yours faithfully,</p>
+      <div class="signature-line">For Broker / WorkPhelo</div>
+    </div>
+    ${renderBrokerFooter(context, branding)}
+    </main>
   </body>
 </html>`;
 }
@@ -308,6 +342,7 @@ export function isClosingSlipPayload(
   const record = getRecord(payload);
   return (
     record?.documentType === PlacementDocumentType.CLOSING_SLIP &&
-    getRecord(record.closing) !== null
+    (getRecord(record.closing) !== null ||
+      getRecord(record.endorsementClosing) !== null)
   );
 }

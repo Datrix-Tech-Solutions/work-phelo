@@ -205,6 +205,13 @@ export class PlacementsController {
     required: false,
     schema: { type: 'string', format: 'uuid' },
   })
+  @ApiQuery({
+    name: 'paymentEligible',
+    required: false,
+    type: Boolean,
+    description:
+      'When true, returns only placements with at least one CONFIRMED placement closing.',
+  })
   @ApiQuery({ name: 'page', required: false, example: 1 })
   @ApiQuery({ name: 'limit', required: false, example: 20 })
   @ApiOkResponse({ type: PaginatedPlacementsResponseDto })

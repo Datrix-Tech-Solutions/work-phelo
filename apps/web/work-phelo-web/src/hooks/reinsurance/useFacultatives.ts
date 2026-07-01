@@ -21,6 +21,7 @@ import {
 
 const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
+export const facultativePlacementsKey = FACULTATIVES_KEY;
 const PLACEMENT_LIST_STALE_TIME_MS = 60_000;
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
 
@@ -66,6 +67,19 @@ export function useFacultatives() {
     queryKey: FACULTATIVES_KEY,
     queryFn: async () => {
       const res = await api.get(BASE);
+      return extractList(res.data);
+    },
+    staleTime: PLACEMENT_LIST_STALE_TIME_MS,
+  });
+}
+
+export function usePaymentEligibleFacultatives() {
+  return useQuery({
+    queryKey: [...FACULTATIVES_KEY, 'payment-eligible'] as const,
+    queryFn: async () => {
+      const res = await api.get(BASE, {
+        params: { paymentEligible: true, limit: 100 },
+      });
       return extractList(res.data);
     },
     staleTime: PLACEMENT_LIST_STALE_TIME_MS,
@@ -213,9 +227,11 @@ export function useAcceptAndConfirmParticipant(placementId: string) {
       return res.data as AcceptPlacementParticipantResponse;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
       queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
     },
   });
 }
