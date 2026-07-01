@@ -5,6 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { AccountTypeRecord } from '@/types/accounting';
+import { AddAccountPanel } from '@/components/organisms/accounting/panels/AddAccountPanel';
 
 const PAGE_SIZE = 10;
 
@@ -65,6 +66,7 @@ export function AccountTypeTable() {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [panelOpen, setPanelOpen] = useState(false);
 
   const filtered = useMemo(() => {
     if (!search) return MOCK_DATA;
@@ -82,31 +84,32 @@ export function AccountTypeTable() {
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
-    <DataTable
-      columns={COLUMNS}
-      data={paged}
-      isLoading={false}
-      searchPlaceholder="Search accounts…"
-      searchValue={search}
-      onSearch={(q) => {
-        setSearch(q);
-        setPage(1);
-      }}
-      actionButton={{
-        label: 'Add Account',
-        onClick: () => {
-          // TODO: open AddAccountPanel once built
-        },
-      }}
-      rowActions={() => [
-        { label: 'Edit', onClick: () => {} },
-        { label: 'Delete', onClick: () => {}, danger: true },
-      ]}
-      onRowClick={(row) => router.push(`/${tenantSlug}/accounting/settings/account-type/${row.id}`)}
-      emptyMessage="No accounts found"
-      currentPage={page}
-      totalPages={totalPages}
-      onPageChange={setPage}
-    />
+    <>
+      <DataTable
+        columns={COLUMNS}
+        data={paged}
+        isLoading={false}
+        searchPlaceholder="Search accounts…"
+        searchValue={search}
+        onSearch={(q) => {
+          setSearch(q);
+          setPage(1);
+        }}
+        actionButton={{ label: 'Add Account', onClick: () => setPanelOpen(true) }}
+        rowActions={() => [
+          { label: 'Edit', onClick: () => {} },
+          { label: 'Delete', onClick: () => {}, danger: true },
+        ]}
+        onRowClick={(row) =>
+          router.push(`/${tenantSlug}/accounting/settings/account-type/${row.id}`)
+        }
+        emptyMessage="No accounts found"
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+      />
+
+      <AddAccountPanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} />
+    </>
   );
 }

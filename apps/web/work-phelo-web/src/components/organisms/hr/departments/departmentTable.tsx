@@ -15,7 +15,7 @@ import { useEmployeeOptions, useUpdateEmployee } from '@/hooks/hr/useEmployees';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { extractError } from '@/lib/extractError';
 import type { Department } from '@/types/hr';
 import { AddMembersPanel } from './addMembersPanel';
@@ -26,6 +26,7 @@ const PAGE_SIZE = 8;
 
 export function DepartmentsTable() {
   const params = useParams<{ tenantSlug: string }>();
+  const router = useRouter();
   const toast = useToast();
 
   const canCreate = usePermission(Permission.CREATE_DEPARTMENT);
@@ -155,25 +156,29 @@ export function DepartmentsTable() {
         {...(canCreate && {
           actionButton: { label: 'New Department', onClick: () => setCreateOpen(true) },
         })}
-        rowActions={
-          canUpdate || canDelete
-            ? (row) => [
-                ...(canUpdate
-                  ? [
-                      { label: 'Edit Department', onClick: () => setEditTarget(row) },
-                      { label: 'Add Members', onClick: () => setMembersTarget(row) },
-                      {
-                        label: row.isActive ? 'Deactivate' : 'Activate',
-                        onClick: () => setToggleActiveTarget(row),
-                      },
-                    ]
-                  : []),
-                ...(canDelete
-                  ? [{ label: 'Delete', onClick: () => setDeleteTarget(row), danger: true }]
-                  : []),
-              ]
-            : undefined
+        onRowClick={(row) =>
+          router.push(`/${params.tenantSlug}/hr/hrmanagement/departments/${row.id}`)
         }
+        rowActions={(row) => [
+          {
+            label: 'View Department',
+            onClick: () =>
+              router.push(`/${params.tenantSlug}/hr/hrmanagement/departments/${row.id}`),
+          },
+          ...(canUpdate
+            ? [
+                { label: 'Edit Department', onClick: () => setEditTarget(row) },
+                { label: 'Add Members', onClick: () => setMembersTarget(row) },
+                {
+                  label: row.isActive ? 'Deactivate' : 'Activate',
+                  onClick: () => setToggleActiveTarget(row),
+                },
+              ]
+            : []),
+          ...(canDelete
+            ? [{ label: 'Delete', onClick: () => setDeleteTarget(row), danger: true }]
+            : []),
+        ]}
         emptyMessage="No departments found"
         currentPage={page}
         totalPages={totalPages}
