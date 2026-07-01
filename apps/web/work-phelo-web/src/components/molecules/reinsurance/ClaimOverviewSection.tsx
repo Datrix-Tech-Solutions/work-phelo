@@ -5,6 +5,7 @@ import {
   Facultative,
   PlacementClaim,
   PlacementClaimAllocation,
+  PlacementClaimCashCall,
   PlacementClaimStatus,
   PlacementParticipant,
 } from '@/types/reinsurance';
@@ -14,7 +15,17 @@ import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
-import { useReinsurers, useClaimAllocations } from '@/hooks';
+import { ClaimCashCallsTable } from '@/components/molecules/reinsurance/ClaimCashCallsTable';
+import {
+  useClaimAllocations,
+  useClaimCashCalls,
+  useCreateClaimCashCall,
+  useReinsurers,
+  useUpdateClaimCashCallStatus,
+  useVoidClaimCashCall,
+} from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 
 const CLAIM_STATUS_VARIANT: Record<
   PlacementClaimStatus,
@@ -172,6 +183,7 @@ function ClaimReinsurersTable({
   commission,
   onMail,
   onPreview,
+  mailPendingParticipantId,
 }: {
   participants: PlacementParticipant[];
   allocations: PlacementClaimAllocation[];
@@ -181,6 +193,7 @@ function ClaimReinsurersTable({
   commission: number;
   onMail: (participant: PlacementParticipant) => void;
   onPreview: (participant: PlacementParticipant) => void;
+  mailPendingParticipantId: string | null;
 }) {
   const reinsurers = useMemo(
     () => participants.filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED'),
@@ -260,8 +273,9 @@ function ClaimReinsurersTable({
             </button>
             <button
               type="button"
-              title="Preview Email / Issue Cash Call"
-              className="text-green-500 hover:text-green-700 transition-colors"
+              title="Preview Cash Call Email"
+              disabled={mailPendingParticipantId === row.id}
+              className="text-green-500 hover:text-green-700 transition-colors disabled:cursor-wait disabled:opacity-50"
               onClick={(e) => {
                 e.stopPropagation();
                 onMail(row);
@@ -273,7 +287,16 @@ function ClaimReinsurersTable({
         ),
       },
     ],
-    [allocations, claimAmount, currency, grossPremium, commission, onMail, onPreview],
+    [
+      allocations,
+      claimAmount,
+      currency,
+      grossPremium,
+      commission,
+      mailPendingParticipantId,
+      onMail,
+      onPreview,
+    ],
   );
 
   return (
@@ -295,15 +318,23 @@ function ClaimReinsurersTable({
 }
 
 export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionProps) {
-  const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
+  const [mailCashCall, setMailCashCall] = useState<PlacementClaimCashCall | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
+  const [creatingParticipantId, setCreatingParticipantId] = useState<string | null>(null);
+  const [busyCashCallId, setBusyCashCallId] = useState<string | null>(null);
   const { data: reinsurers = [] } = useReinsurers();
   const { data: allocations = [] } = useClaimAllocations(placement.id, claim?.id ?? '');
+  const {
+    data: cashCalls = [],
+    isLoading: cashCallsLoading,
+    isError: cashCallsError,
+  } = useClaimCashCalls(placement.id, claim?.id ?? '');
+  const createCashCall = useCreateClaimCashCall(placement.id, claim?.id ?? '');
+  const updateCashCallStatus = useUpdateClaimCashCallStatus(placement.id, claim?.id ?? '');
+  const voidCashCall = useVoidClaimCashCall(placement.id, claim?.id ?? '');
+  const addToast = useToastStore((state) => state.addToast);
 
   const claimAmount = claim ? parseFloat(claim.estimatedLossAmount) : null;
-  const mailAllocation = mailTarget
-    ? allocations.find((a) => a.participantId === mailTarget.id)
-    : undefined;
 
   const reinsurerEmails = useMemo<Record<string, string[]>>(
     () =>
@@ -320,7 +351,70 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
     [reinsurers],
   );
 
-  const mailRecipients = mailTarget ? (reinsurerEmails[mailTarget.counterpartyId] ?? []) : [];
+  const mailRecipients = mailCashCall
+    ? (reinsurerEmails[mailCashCall.counterpartyId] ?? [])
+    : [];
+
+  const handlePreviewCashCallEmail = async (participant: PlacementParticipant) => {
+    if (creatingParticipantId) return;
+    const allocation = allocations.find((item) => item.participantId === participant.id);
+    if (!allocation) {
+      addToast({
+        message: 'Generate claim allocations before creating a cash call.',
+        type: 'error',
+      });
+      return;
+    }
+
+    setCreatingParticipantId(participant.id);
+    try {
+      const existing = cashCalls.find(
+        (cashCall) =>
+          cashCall.allocationId === allocation.id && cashCall.status !== 'VOID',
+      );
+      const cashCall = existing ?? (await createCashCall.mutateAsync(allocation.id));
+      setMailCashCall(cashCall);
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setCreatingParticipantId(null);
+    }
+  };
+
+  const handleIssueCashCall = async (cashCall: PlacementClaimCashCall) => {
+    if (busyCashCallId) return;
+    setBusyCashCallId(cashCall.id);
+    try {
+      await updateCashCallStatus.mutateAsync({
+        cashCallId: cashCall.id,
+        status: 'ISSUED',
+      });
+      addToast({ message: 'Cash call issued.', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setBusyCashCallId(null);
+    }
+  };
+
+  const handleVoidCashCall = async (
+    cashCall: PlacementClaimCashCall,
+    voidReason: string,
+  ) => {
+    if (busyCashCallId) return;
+    setBusyCashCallId(cashCall.id);
+    try {
+      await voidCashCall.mutateAsync({
+        cashCallId: cashCall.id,
+        voidReason,
+      });
+      addToast({ message: 'Cash call voided.', type: 'success' });
+    } catch (error) {
+      addToast({ message: extractError(error), type: 'error' });
+    } finally {
+      setBusyCashCallId(null);
+    }
+  };
 
   const totalActualClaim = useMemo(() => {
     if (claimAmount == null) return null;
@@ -346,8 +440,9 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
             currency={claim?.currency ?? placement.currency}
             grossPremium={placement.premium ?? 0}
             commission={placement.commission ?? 0}
-            onMail={setMailTarget}
+            onMail={handlePreviewCashCallEmail}
             onPreview={setDebitNoteTarget}
+            mailPendingParticipantId={creatingParticipantId}
           />
         </div>
       </div>
@@ -359,18 +454,27 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
         </span>
       </div>
 
-      {mailTarget && (
+      <ClaimCashCallsTable
+        cashCalls={cashCalls}
+        isLoading={cashCallsLoading}
+        isError={cashCallsError}
+        busyCashCallId={busyCashCallId}
+        onIssue={handleIssueCashCall}
+        onVoid={handleVoidCashCall}
+        onPreviewEmail={setMailCashCall}
+      />
+
+      {mailCashCall && (
         <MailPreviewModal
           isOpen
           placement={placement}
-          brokerageFee={parseFloat(mailTarget.brokerageFee ?? '0')}
+          brokerageFee={0}
           recipients={mailRecipients}
-          claim={claim}
-          allocation={mailAllocation}
-          primaryActionLabel={mailAllocation ? 'Issue Cash Call' : 'Mark Claim Notified'}
-          primaryActionLoadingText="Updating…"
-          onSend={() => setMailTarget(null)}
-          onClose={() => setMailTarget(null)}
+          primaryActionLabel="Close Preview"
+          previewOnly
+          previewTitle={`Email Preview Only — ${mailCashCall.counterparty.name}`}
+          onSend={() => setMailCashCall(null)}
+          onClose={() => setMailCashCall(null)}
         />
       )}
 
