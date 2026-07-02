@@ -13,6 +13,7 @@ import {
   PlacementEndorsementParticipant,
   CreateEndorsementPayload,
   CreateEndorsementParticipantPayload,
+  UpdateEndorsementParticipantPayload,
   PlacementParticipantClosing,
   EndorsementParticipantClosing,
   PlacementLockStatus,
@@ -479,9 +480,42 @@ export function useCreateEndorsementParticipant(
       return res.data as PlacementEndorsementParticipant;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
-      });
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+        }),
+        queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) }),
+      ]);
+    },
+  });
+}
+
+export function useUpdateEndorsementParticipant(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ participantId, ...payload }: UpdateEndorsementParticipantPayload) => {
+      const res = await api.patch(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}`,
+        payload,
+      );
+      return res.data as PlacementEndorsementParticipant;
+    },
+    onSuccess: () => {
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+        }),
+        queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) }),
+      ]);
     },
   });
 }

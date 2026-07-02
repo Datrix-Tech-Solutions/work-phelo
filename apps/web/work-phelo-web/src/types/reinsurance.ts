@@ -479,6 +479,12 @@ export type PlacementEndorsementType =
   | 'CANCELLATION'
   | 'OTHER';
 
+export type PlacementEndorsementImpactType =
+  | 'CAPACITY_INCREASE'
+  | 'TERMS_ONLY'
+  | 'DECREASE_OR_CANCELLATION'
+  | 'ADMINISTRATIVE';
+
 export const ENDORSEMENT_TYPE_LABELS: Record<PlacementEndorsementType, string> = {
   SUM_INSURED_INCREASE: 'Sum Insured Increase',
   SUM_INSURED_DECREASE: 'Sum Insured Decrease',
@@ -528,6 +534,7 @@ export interface PlacementEndorsement {
   placementId: string;
   endorsementNumber: string;
   type: PlacementEndorsementType;
+  impactType: PlacementEndorsementImpactType;
   status: PlacementEndorsementStatus;
   effectiveDate: string;
   reason: string;
@@ -535,6 +542,7 @@ export interface PlacementEndorsement {
   changeSummary: Record<string, unknown> | null;
   originalSnapshot: Record<string, unknown>;
   proposedSnapshot: Record<string, unknown> | null;
+  targetPercent: string | null;
   createdByUserId: string;
   closedAt: string | null;
   voidedAt: string | null;
@@ -558,6 +566,7 @@ export interface PlacementEndorsementSummary {
   placementId: string;
   endorsementNumber: string;
   type: PlacementEndorsementType;
+  impactType: PlacementEndorsementImpactType;
   status: PlacementEndorsementStatus;
   targetPercent: number | null;
   placedPercent: number;
@@ -678,6 +687,11 @@ export interface PlacementEndorsementParticipant {
   sharePercent: string | null;
   signedLinePercent: string | null;
   notes: string | null;
+  counterparty?: {
+    id: string;
+    name: string;
+    registrationNumber: string | null;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -690,12 +704,17 @@ export interface CreateEndorsementParticipantPayload {
   status?: PlacementEndorsementParticipantStatus;
 }
 
+export interface UpdateEndorsementParticipantPayload extends Partial<CreateEndorsementParticipantPayload> {
+  participantId: string;
+}
+
 export interface CreateEndorsementPayload {
   type: PlacementEndorsementType;
   effectiveDate: string;
   reason: string;
   description?: string;
   proposedSnapshot?: Record<string, unknown>;
+  targetPercent?: number;
 }
 
 /* ── Placement Payments ── */
@@ -739,6 +758,28 @@ export interface EndorsementParticipantClosing {
   endorsementParticipantId: string;
   status: PlacementParticipantClosingStatus;
   closingNumber: string;
+  signedLinePercent: string;
+  sharePercent: string | null;
+  sumInsuredSnapshot: string | null;
+  premiumSnapshot: string;
+  commissionPercent: string | null;
+  commissionAmount: string | null;
+  brokeragePercent: string | null;
+  brokerageAmount: string | null;
+  netPremium: string | null;
+  currency: string | null;
+  issuedAt: string | null;
+  confirmedAt: string | null;
+  endorsementParticipant: {
+    id: string;
+    counterpartyId: string;
+    status: PlacementEndorsementParticipantStatus;
+    counterparty: {
+      id: string;
+      name: string;
+      registrationNumber: string | null;
+    };
+  };
   createdAt: string;
   updatedAt: string;
 }

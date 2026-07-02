@@ -38,6 +38,7 @@ import {
   usePlacementEffectiveView,
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
+  useUpdateEndorsementParticipant,
   useReinsurers,
   useRenderPlacementDocumentPdf,
   useUpdateEndorsementStatus,
@@ -51,6 +52,7 @@ import { openPdfBlob } from '@/lib/openPdfBlob';
 import { useToastStore } from '@/store/toast.store';
 import { EndorsementCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementCertificateModal';
 import { EndorsementReinsurerCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementReinsurerCertificateModal';
+import { AddEndorsementReinsurerPanel } from '@/components/organisms/reinsurance/panels/AddEndorsementReinsurerPanel';
 
 interface EndorsementTabProps {
   placement: Facultative;
@@ -276,10 +278,13 @@ function ParameterCards({
 
 interface EndorsementParticipantRow {
   id: string;
+  participantId?: string;
   counterpartyId: string;
   reinsurerName: string;
   originalShare: number;
+  offeredShare: number;
   brokerageFee: number;
+  isNewReinsurer: boolean;
 }
 
 function EndorsementCard({
@@ -291,6 +296,7 @@ function EndorsementCard({
 }) {
   const [cedantDocOpen, setCedantDocOpen] = useState(false);
   const [editPanelOpen, setEditPanelOpen] = useState(false);
+  const [addReinsurerOpen, setAddReinsurerOpen] = useState(false);
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
   const participantsRef = useRef<HTMLDivElement>(null);
 
@@ -331,7 +337,12 @@ function EndorsementCard({
     refetch: refetchEndorsementNotes,
   } = useEndorsementNotes(placement.id, endorsement.id);
   const { data: documents = [], refetch: refetchDocuments } = usePlacementDocuments(placement.id);
-  const { mutateAsync: createEndorsementParticipant } = useCreateEndorsementParticipant(
+  const createEndorsementParticipantMutation = useCreateEndorsementParticipant(
+    placement.id,
+    endorsement.id,
+  );
+  const createEndorsementParticipant = createEndorsementParticipantMutation.mutateAsync;
+  const updateEndorsementParticipant = useUpdateEndorsementParticipant(
     placement.id,
     endorsement.id,
   );
@@ -392,6 +403,73 @@ function EndorsementCard({
       .filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED')
       .map((p) => p.counterpartyId),
   );
+
+  const snapshotShareByParticipantId = new Map(
+    snapshotParticipants.map((participant) => [
+      String(participant.id),
+      parseFloat(String(participant.signedLinePercent ?? participant.sharePercent ?? '0')),
+    ]),
+  );
+  const snapshotShareByCounterpartyId = new Map(
+    snapshotParticipants.map((participant) => [
+      String(participant.counterpartyId),
+      parseFloat(String(participant.signedLinePercent ?? participant.sharePercent ?? '0')),
+    ]),
+  );
+  const additionalCapacityFor = (
+    participant: (typeof endorsementParticipants)[number],
+    value: number,
+  ) => {
+    if (!participant.originalParticipantId) return value;
+    const originalShare =
+      snapshotShareByParticipantId.get(participant.originalParticipantId) ??
+      snapshotShareByCounterpartyId.get(participant.counterpartyId) ??
+      0;
+    return Math.max(0, value - originalShare);
+  };
+  const acceptedAdditionalCapacity = endorsementParticipants
+    .filter((participant) => participant.status === 'ACCEPTED' || participant.status === 'CLOSED')
+    .reduce(
+      (sum, participant) =>
+        sum +
+        additionalCapacityFor(
+          participant,
+          parseFloat(participant.signedLinePercent ?? participant.sharePercent ?? '0'),
+        ),
+      0,
+    );
+  const reservedAdditionalCapacity = endorsementParticipants
+    .filter(
+      (participant) =>
+        participant.status === 'INVITED' ||
+        participant.status === 'OFFER_SENT' ||
+        participant.status === 'QUOTED',
+    )
+    .reduce(
+      (sum, participant) =>
+        sum + additionalCapacityFor(participant, parseFloat(participant.sharePercent ?? '0')),
+      0,
+    );
+  const remainingCapacity = Math.max(
+    0,
+    +(addedCapacity - acceptedAdditionalCapacity - reservedAdditionalCapacity).toFixed(4),
+  );
+  const impactType =
+    endorsementSummary?.impactType ??
+    endorsement.impactType ??
+    (addedCapacity > 0 ? 'CAPACITY_INCREASE' : undefined);
+  const marketActivityStatuses = new Set(['MARKETING', 'PARTIALLY_ACCEPTED', 'ACCEPTED']);
+  const canAddReinsurer =
+    impactType === 'CAPACITY_INCREASE' &&
+    remainingCapacity > 0 &&
+    marketActivityStatuses.has(endorsement.status);
+  const unavailableReinsurerIds = new Set([
+    ...snapshotParticipants.map((participant) => String(participant.counterpartyId)),
+    ...endorsementParticipants.map((participant) => participant.counterpartyId),
+  ]);
+  const availableReinsurerOptions = reinsurers
+    .filter((reinsurer) => !unavailableReinsurerIds.has(reinsurer.id))
+    .map((reinsurer) => ({ value: reinsurer.id, label: reinsurer.name }));
 
   const handleValidateEndorsementParticipant = async (counterpartyId: string) => {
     const participant = endorsementParticipants.find(
@@ -466,37 +544,89 @@ function EndorsementCard({
     }
   };
 
-  const endorsementRows: EndorsementParticipantRow[] = snapshotParticipants.map((p) => {
-    const r = reinsurers.find((r) => r.id === p.counterpartyId);
-    const cid = String(p.counterpartyId);
+  const snapshotRows: EndorsementParticipantRow[] = snapshotParticipants.map((participant) => {
+    const counterpartyId = String(participant.counterpartyId);
+    const endorsementParticipant = endorsementParticipants.find(
+      (item) => item.counterpartyId === counterpartyId,
+    );
+    const originalShare = parseFloat(
+      String(participant.signedLinePercent ?? participant.sharePercent ?? '0'),
+    );
     return {
-      id: cid,
-      counterpartyId: cid,
-      reinsurerName: r?.name ?? cid,
-      originalShare: parseFloat(String(p.signedLinePercent ?? p.sharePercent ?? '0')),
-      brokerageFee: parseFloat(String(p.brokerageFee ?? '0')),
+      id: endorsementParticipant?.id ?? counterpartyId,
+      participantId: endorsementParticipant?.id,
+      counterpartyId,
+      reinsurerName:
+        endorsementParticipant?.counterparty?.name ??
+        reinsurers.find((reinsurer) => reinsurer.id === counterpartyId)?.name ??
+        counterpartyId,
+      originalShare,
+      offeredShare: parseFloat(endorsementParticipant?.sharePercent ?? String(originalShare)),
+      brokerageFee: parseFloat(String(participant.brokerageFee ?? '0')),
+      isNewReinsurer: false,
     };
   });
+  const newReinsurerRows: EndorsementParticipantRow[] = endorsementParticipants
+    .filter(
+      (participant) =>
+        !participant.originalParticipantId &&
+        !snapshotShareByCounterpartyId.has(participant.counterpartyId),
+    )
+    .map((participant) => ({
+      id: participant.id,
+      participantId: participant.id,
+      counterpartyId: participant.counterpartyId,
+      reinsurerName:
+        participant.counterparty?.name ??
+        reinsurers.find((reinsurer) => reinsurer.id === participant.counterpartyId)?.name ??
+        participant.counterpartyId,
+      originalShare: 0,
+      offeredShare: parseFloat(participant.sharePercent ?? '0'),
+      brokerageFee: 0,
+      isNewReinsurer: true,
+    }));
+  const endorsementRows = [...snapshotRows, ...newReinsurerRows];
 
   const handleAcceptEndorsement = async (row: EndorsementParticipantRow) => {
     setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
     try {
-      const revised = parseFloat(revisedShares[row.counterpartyId] ?? String(row.originalShare));
-      const share = isNaN(revised) ? row.originalShare : revised;
+      const revised = parseFloat(revisedShares[row.counterpartyId] ?? String(row.offeredShare));
+      const share = isNaN(revised) ? row.offeredShare : revised;
+      if (share <= 0 || (row.isNewReinsurer && share > row.offeredShare)) {
+        useToastStore.getState().addToast({
+          message: row.isNewReinsurer
+            ? `Accepted line must be greater than 0% and cannot exceed the offered ${row.offeredShare}%.`
+            : 'Accepted line must be greater than 0%.',
+          type: 'error',
+        });
+        return;
+      }
 
-      const originalParticipant = placement.participants.find(
-        (p) => p.counterpartyId === row.counterpartyId,
-      );
-
-      await createEndorsementParticipant({
-        counterpartyId: row.counterpartyId,
-        originalParticipantId: originalParticipant?.id,
-        sharePercent: share,
-        signedLinePercent: share,
-        status: 'ACCEPTED',
-      });
+      if (row.participantId) {
+        await updateEndorsementParticipant.mutateAsync({
+          participantId: row.participantId,
+          sharePercent: row.offeredShare,
+          signedLinePercent: share,
+          status: 'ACCEPTED',
+        });
+      } else {
+        const originalParticipant = placement.participants.find(
+          (participant) => participant.counterpartyId === row.counterpartyId,
+        );
+        await createEndorsementParticipant({
+          counterpartyId: row.counterpartyId,
+          originalParticipantId: originalParticipant?.id,
+          sharePercent: share,
+          signedLinePercent: share,
+          status: 'ACCEPTED',
+        });
+      }
       await queryClient.invalidateQueries({
         queryKey: ['reinsurance', 'placements', placement.id, 'endorsements'],
+      });
+      useToastStore.getState().addToast({
+        message: `${row.reinsurerName} line accepted`,
+        type: 'success',
       });
     } catch (error) {
       useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
@@ -509,18 +639,45 @@ function EndorsementCard({
     }
   };
 
+  const handleAddReinsurer = async (counterpartyId: string, offeredPercent: number) => {
+    try {
+      await createEndorsementParticipant({
+        counterpartyId,
+        sharePercent: offeredPercent,
+        status: 'OFFER_SENT',
+      });
+      setAddReinsurerOpen(false);
+      setParticipantsExpanded(true);
+      useToastStore.getState().addToast({
+        message: 'Reinsurer added to the endorsement capacity offer',
+        type: 'success',
+      });
+    } catch (error) {
+      useToastStore.getState().addToast({ message: extractError(error), type: 'error' });
+    }
+  };
+
   const epColumns: Column<EndorsementParticipantRow>[] = [
     {
       key: 'reinsurerName',
       label: 'Reinsurer',
       width: '2fr',
-      render: (row) => <span className="font-medium text-gray-900">{row.reinsurerName}</span>,
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-gray-900">{row.reinsurerName}</span>
+          {row.isNewReinsurer && <Badge label="New" variant="neutral" />}
+        </div>
+      ),
     },
     {
       key: 'originalShare',
       label: 'Original Share (%)',
       width: '1fr',
-      render: (row) => <span className="text-gray-700">{row.originalShare}%</span>,
+      render: (row) => (
+        <span className="text-gray-700">
+          {row.isNewReinsurer ? 'New reinsurer' : `${row.originalShare}%`}
+        </span>
+      ),
     },
     {
       key: 'brokerageFee',
@@ -546,8 +703,8 @@ function EndorsementCard({
           <input
             type="number"
             min={0}
-            max={100}
-            value={revisedShares[row.counterpartyId] ?? String(row.originalShare)}
+            max={row.isNewReinsurer ? row.offeredShare : 100}
+            value={revisedShares[row.counterpartyId] ?? String(row.offeredShare)}
             onChange={(e) =>
               setRevisedShares((prev) => ({
                 ...prev,
@@ -567,7 +724,7 @@ function EndorsementCard({
         const ep = endorsementParticipants.find((p) => p.counterpartyId === row.counterpartyId);
         const effectiveShare = acceptedCounterpartyIds.has(row.counterpartyId)
           ? parseFloat(ep?.signedLinePercent ?? ep?.sharePercent ?? String(row.originalShare))
-          : parseFloat(revisedShares[row.counterpartyId] ?? String(row.originalShare));
+          : parseFloat(revisedShares[row.counterpartyId] ?? String(row.offeredShare));
         const premium = placement.premium ?? 0;
         const netPremium = (effectiveShare / 100) * premium;
         return (
@@ -633,7 +790,7 @@ function EndorsementCard({
         }
         return (
           <TableButton isLoading={isBusy} onClick={() => handleAcceptEndorsement(row)}>
-            Accept
+            Accept Line
           </TableButton>
         );
       },
@@ -886,18 +1043,32 @@ function EndorsementCard({
         {proposed && <ParameterCards original={original} proposed={proposed} />}
 
         {/* Participants toggle */}
-        {endorsement.status !== 'DRAFT' && endorsementRows.length > 0 && (
+        {endorsement.status !== 'DRAFT' && (endorsementRows.length > 0 || canAddReinsurer) && (
           <div className="flex flex-col gap-3">
-            <button
-              type="button"
-              onClick={() => setParticipantsExpanded((v) => !v)}
-              className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-gray-700 transition-colors w-fit"
-            >
-              <Icons.ChevronDown
-                className={`w-3.5 h-3.5 transition-transform duration-600 ${!participantsExpanded ? '-rotate-90' : ''}`}
-              />
-              Participants at Endorsement ({endorsementRows.length})
-            </button>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setParticipantsExpanded((v) => !v)}
+                className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wide hover:text-gray-700 transition-colors w-fit"
+              >
+                <Icons.ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-600 ${!participantsExpanded ? '-rotate-90' : ''}`}
+                />
+                Participants at Endorsement ({endorsementRows.length})
+              </button>
+              {canAddReinsurer && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setAddReinsurerOpen(true);
+                    setParticipantsExpanded(true);
+                  }}
+                >
+                  Add Reinsurer
+                </Button>
+              )}
+            </div>
 
             <div
               ref={participantsRef}
@@ -905,6 +1076,21 @@ function EndorsementCard({
               style={{ gridTemplateRows: participantsExpanded ? '1fr' : '0fr' }}
             >
               <div className="overflow-hidden flex flex-col gap-4">
+                {impactType === 'CAPACITY_INCREASE' && addedCapacity > 0 && (
+                  <div className="grid grid-cols-3 gap-3 pt-1">
+                    {[
+                      ['Endorsement Capacity', addedCapacity],
+                      ['Already Accepted', acceptedAdditionalCapacity],
+                      ['Remaining Capacity', remainingCapacity],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <p className="text-xs text-gray-500">{label}</p>
+                        <p className="mt-1 text-sm font-semibold text-gray-900">{value}%</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Snapshot capacity bar — accepted + added capacity */}
                 {endorsementBarTotal > 0 && (
                   <div className="flex flex-col gap-2 pt-1">
@@ -981,6 +1167,84 @@ function EndorsementCard({
           </div>
         )}
 
+        {(endorsementClosingsLoading || endorsementClosings.length > 0) && (
+          <div className="flex flex-col gap-3 border-t border-gray-100 pt-4">
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                Endorsement Closings
+              </p>
+              <p className="text-xs text-gray-400">
+                Confirmed contract records created from validated endorsement lines.
+              </p>
+            </div>
+            {endorsementClosingsLoading ? (
+              <p className="text-xs text-gray-400">Loading endorsement closings…</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-100">
+                {endorsementClosings.map((closing) => {
+                  const premium = Number(closing.premiumSnapshot);
+                  const netPremium =
+                    closing.netPremium === null ? null : Number(closing.netPremium);
+                  return (
+                    <div
+                      key={closing.id}
+                      className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-5 sm:items-center"
+                    >
+                      <div>
+                        <p className="text-xs text-gray-400">Closing</p>
+                        <p className="text-sm font-medium text-gray-900">{closing.closingNumber}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Reinsurer</p>
+                        <p className="text-sm text-gray-700">
+                          {closing.endorsementParticipant.counterparty.name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Signed Line</p>
+                        <p className="text-sm text-gray-700">{closing.signedLinePercent}%</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-400">Premium / Net</p>
+                        <p className="text-sm text-gray-700">
+                          {fmtMoney(Number.isFinite(premium) ? premium : null, closing.currency)}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Net{' '}
+                          {fmtMoney(
+                            netPremium !== null && Number.isFinite(netPremium) ? netPremium : null,
+                            closing.currency,
+                          )}
+                        </p>
+                      </div>
+                      <div className="sm:text-right">
+                        <Badge
+                          label={
+                            closing.status === 'CONFIRMED'
+                              ? 'Confirmed'
+                              : closing.status === 'ISSUED'
+                                ? 'Issued'
+                                : closing.status === 'VOID'
+                                  ? 'Void'
+                                  : 'Draft'
+                          }
+                          variant={
+                            closing.status === 'CONFIRMED'
+                              ? 'success'
+                              : closing.status === 'VOID'
+                                ? 'danger'
+                                : 'warning'
+                          }
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {hasEndorsementNoteWorkflow && (
           <div className="flex flex-col gap-3 border-t border-gray-100 pt-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -1044,6 +1308,17 @@ function EndorsementCard({
         endorsement={endorsement}
         onClose={() => setEditPanelOpen(false)}
       />
+
+      {addReinsurerOpen && (
+        <AddEndorsementReinsurerPanel
+          isOpen
+          isSaving={createEndorsementParticipantMutation.isPending}
+          remainingPercent={remainingCapacity}
+          reinsurerOptions={availableReinsurerOptions}
+          onClose={() => setAddReinsurerOpen(false)}
+          onAdd={handleAddReinsurer}
+        />
+      )}
 
       {/* Cedant document */}
       <EndorsementCertificateModal
