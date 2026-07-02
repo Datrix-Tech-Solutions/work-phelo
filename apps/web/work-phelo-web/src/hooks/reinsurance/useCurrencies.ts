@@ -4,6 +4,7 @@ import { Currency, CreateCurrencyPayload, UpdateCurrencyPayload } from '@/types/
 
 const BASE = '/operations/reinsurance/settings/currencies';
 const CURRENCIES_KEY = ['reinsurance', 'currencies'] as const;
+const STABLE_SETTINGS_STALE_TIME_MS = 5 * 60 * 1000;
 
 function extractList(data: unknown): Currency[] {
   if (Array.isArray(data)) return data as Currency[];
@@ -14,11 +15,14 @@ function extractList(data: unknown): Currency[] {
 export function useCurrencies() {
   return useQuery({
     queryKey: CURRENCIES_KEY,
-    queryFn: async () => {
-      const res = await api.get(BASE);
-      return extractList(res.data);
-    },
+    queryFn: fetchCurrencies,
+    staleTime: STABLE_SETTINGS_STALE_TIME_MS,
   });
+}
+
+async function fetchCurrencies() {
+  const res = await api.get(BASE);
+  return extractList(res.data);
 }
 
 export function useCreateCurrency() {
@@ -61,14 +65,13 @@ export function useDeleteCurrency() {
 
 export function useCurrencyOptions() {
   return useQuery({
-    queryKey: [...CURRENCIES_KEY, 'options'],
-    queryFn: async () => {
-      const res = await api.get(BASE);
-      const list = extractList(res.data);
-      return list.map((c) => ({
+    queryKey: CURRENCIES_KEY,
+    queryFn: fetchCurrencies,
+    select: (list) =>
+      list.map((c) => ({
         value: c.isoCode,
         label: c.symbol ? `${c.symbol} ${c.isoCode} – ${c.name}` : `${c.isoCode} – ${c.name}`,
-      }));
-    },
+      })),
+    staleTime: STABLE_SETTINGS_STALE_TIME_MS,
   });
 }

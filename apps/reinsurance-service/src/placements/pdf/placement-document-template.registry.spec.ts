@@ -52,8 +52,11 @@ describe('PlacementDocumentTemplateRegistry', () => {
       offeredLinePercent: 40,
     },
     branding: {
-      productName: 'WorkPhelo',
+      productName: 'iRisk Reinsurance Brokers',
       documentFamily: 'Reinsurance Operations',
+      logoDataUrl: 'data:image/png;base64,dGVuYW50LWxvZ28=',
+      watermarkDataUrl: 'data:image/png;base64,dGVuYW50LWxvZ28=',
+      documentHeaderColor: '#173f5f',
     },
   };
   const notePayload = (type: PlacementDocumentType) => ({
@@ -128,6 +131,7 @@ describe('PlacementDocumentTemplateRegistry', () => {
         documentNumber: 'DOC-CS-001',
         title: 'Closing Slip CLO-001',
         generatedAt: '2026-06-12T00:00:00.000Z',
+        qrCodeDataUrl: 'data:image/png;base64,qr',
       },
     );
 
@@ -135,6 +139,9 @@ describe('PlacementDocumentTemplateRegistry', () => {
     expect(html).toContain('DOC-CS-001');
     expect(html).toContain('CLO-001');
     expect(html).toContain('Avenue Re');
+    expect(html).toContain('The Managing Director');
+    expect(html).toContain('broker-watermark');
+    expect(html).toContain('Document verification');
   });
 
   it('resolves OFFER_SLIP templates', () => {
@@ -145,6 +152,7 @@ describe('PlacementDocumentTemplateRegistry', () => {
         documentNumber: 'DOC-OS-001',
         title: 'Offer Slip FAC-001 - Avenue Re',
         generatedAt: '2026-06-12T00:00:00.000Z',
+        qrCodeDataUrl: 'data:image/png;base64,qr',
       },
     );
 
@@ -154,6 +162,11 @@ describe('PlacementDocumentTemplateRegistry', () => {
     expect(html).toContain('POL-001');
     expect(html).toContain('100% Sum Insured');
     expect(html).toContain('Net Premium');
+    expect(html).toContain('broker-watermark');
+    expect(html).toContain('Document verification');
+    expect(html).toContain('Acceptance');
+    expect(html).toContain('iRisk Reinsurance Brokers logo');
+    expect(html).toContain('broker-watermark-image');
   });
 
   it.each([
@@ -186,9 +199,15 @@ describe('PlacementDocumentTemplateRegistry', () => {
     expect(html).toContain('Withholding Tax');
     expect(html).toContain('Net Amount');
     expect(html).toContain('Authorized signature / stamp');
-    expect(html).toContain(
-      'rendered from an immutable PlacementDocument payload',
-    );
+    expect(html).toContain('broker-watermark');
+    expect(html).toContain('Document verification');
+    if (
+      type === PlacementDocumentType.DEBIT_NOTE ||
+      type === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE
+    ) {
+      expect(html).toContain('Payment Instructions and Premium Warranty');
+      expect(html).toContain('Bank account');
+    }
   });
 
   it('rejects unsupported document types', () => {

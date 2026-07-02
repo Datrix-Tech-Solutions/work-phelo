@@ -1,5 +1,6 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsEnum,
   IsInt,
   IsOptional,
@@ -68,6 +69,20 @@ export class QueryPlacementsDto {
   @IsString()
   @MaxLength(100)
   classOfBusiness?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'When true, return only placements with at least one CONFIRMED placement closing.',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    return value;
+  })
+  @IsBoolean()
+  paymentEligible?: boolean;
 
   @ApiPropertyOptional({ example: 1, default: 1, minimum: 1 })
   @IsOptional()

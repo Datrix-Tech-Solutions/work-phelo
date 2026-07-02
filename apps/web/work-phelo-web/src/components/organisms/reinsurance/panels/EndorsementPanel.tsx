@@ -13,7 +13,7 @@ import {
   FACULTATIVE_FORM_DEFAULTS,
   RiskTypeField,
 } from '@/types/reinsurance';
-import { useCreateEndorsement, useUpdateFacultative, useRiskTypes } from '@/hooks';
+import { useCreateEndorsement, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
@@ -79,7 +79,6 @@ function placementToFormValues(placement: Facultative): EndorsementFormValues {
 
 export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPanelProps) {
   const { mutateAsync: createEndorsement, isPending } = useCreateEndorsement(placement.id);
-  const { mutateAsync: updateFacultative } = useUpdateFacultative();
   const { data: allRiskTypes = [] } = useRiskTypes();
   const toast = useToastStore.getState;
 
@@ -148,8 +147,6 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
           ...(offerDetails ? { offerDetails } : {}),
         },
       });
-
-      await updateFacultative(placementUpdate);
 
       toast().addToast({ message: 'Endorsement created successfully', type: 'success' });
       handleClose();

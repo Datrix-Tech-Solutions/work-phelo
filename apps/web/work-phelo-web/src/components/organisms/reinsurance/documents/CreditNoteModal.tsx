@@ -141,6 +141,7 @@ export function CreditNoteModal({
       isOpen={isOpen}
       title={`Closings — ${reference}`}
       documentTitle="Closings"
+      previewOnly
       afterContent={
         <div
           style={{

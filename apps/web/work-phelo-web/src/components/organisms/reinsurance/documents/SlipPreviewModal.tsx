@@ -90,6 +90,7 @@ export function SlipPreviewModal({
       isOpen={isOpen}
       title={`Offer Slip — ${title}`}
       documentTitle="Facultative Offer Slip"
+      previewOnly
       onPrint={onPrint}
       onClose={onClose}
     >

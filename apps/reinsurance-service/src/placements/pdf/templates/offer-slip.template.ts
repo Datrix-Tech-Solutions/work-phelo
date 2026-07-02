@@ -8,7 +8,14 @@ import {
   percentText,
   PlacementDocumentTemplateContext,
   text,
+  toDisplayString,
 } from './closing-slip.template';
+import {
+  brokerDocumentCss,
+  renderBrokerFooter,
+  renderBrokerHeader,
+  renderBrokerWatermark,
+} from './broker-document.template';
 
 interface OfferSlipPayload {
   documentType?: string;
@@ -251,27 +258,18 @@ export function renderOfferSlipTemplate(
         color: #6b7280;
         font-size: 10px;
       }
+      ${brokerDocumentCss}
     </style>
   </head>
   <body>
-    <header>
-      <div class="brand">
-        <h1>Offer Slip</h1>
-        <p>${text(branding?.productName, 'WorkPhelo')} ${text(
-          branding?.documentFamily,
-          'Reinsurance Operations',
-        )}</p>
-        <p>Participant-specific facultative offer addressed to ${text(
-          reinsurer?.name,
-          'the selected reinsurer',
-        )}.</p>
-      </div>
-      <div class="meta">
-        <strong>${text(context.documentNumber)}</strong>
-        <p>${text(placement?.reference)}</p>
-        <p>Issued: ${dateText(context.generatedAt ?? new Date())}</p>
-      </div>
-    </header>
+    <main class="document-shell">
+    ${renderBrokerWatermark(branding)}
+    ${renderBrokerHeader(
+      'Offer Slip',
+      `Facultative offer to ${toDisplayString(reinsurer?.name || 'selected reinsurer')}`,
+      context,
+      branding,
+    )}
 
     <section class="section">
       <h2>Placement / Risk</h2>
@@ -353,10 +351,8 @@ export function renderOfferSlipTemplate(
       </div>
     </section>
 
-    <footer>
-      This PDF was rendered from the immutable participant-scoped PlacementDocument.renderPayload.
-      Source placement and participant records were not recalculated or mutated.
-    </footer>
+    ${renderBrokerFooter(context, branding)}
+    </main>
   </body>
 </html>`;
 }

@@ -194,6 +194,25 @@ export function useTenantBranding(tenantId: string) {
   });
 }
 
+export function usePublicTenantBranding(tenantSlug: string) {
+  return useQuery({
+    queryKey: ['tenant-branding', 'public', tenantSlug],
+    queryFn: () =>
+      api
+        .get<{
+          tenantName: string;
+          logoDisplayUrl: string | null;
+          primaryColor: string;
+          secondaryColor: string;
+          accentColor: string;
+          documentHeaderColor: string;
+        }>(`/auth/tenants/slug/${encodeURIComponent(tenantSlug)}/branding`)
+        .then((response) => response.data),
+    enabled: !!tenantSlug,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useUpdateTenantBranding(tenantId: string) {
   const queryClient = useQueryClient();
   return useMutation({

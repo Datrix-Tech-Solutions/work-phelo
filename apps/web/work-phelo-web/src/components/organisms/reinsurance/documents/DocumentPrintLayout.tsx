@@ -2,36 +2,35 @@
 
 import { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import Image from 'next/image';
 import QRCode from 'react-qr-code';
 
-const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
+const COMPANY_URL = 'https://app.workphelo.com';
 const HEADER_H = 100; // px — must match the fixed header height
 const FOOTER_H = 56; // px — must match the fixed footer height
 const PAGE_GAP = 32; // px — breathing room below header on every printed page
-
-const FOOTER_LINES = [
-  'Location: No. D17 Boundary Road, Near Kaiser Kitchen Appliances, East Legon, Accra',
-  'Address: P. O. Box MD2671, Madina - Accra',
-  'Tel: +233 (501) 605 643 / +233 (246) 923 436',
-];
 
 interface DocumentPrintLayoutProps {
   documentTitle: string;
   children: ReactNode;
   afterContent?: ReactNode;
+  branding?: {
+    tenantName: string;
+    logoUrl: string | null;
+    documentHeaderColor: string;
+  };
 }
 
 export function DocumentPrintLayout({
   documentTitle,
   children,
   afterContent,
+  branding,
 }: DocumentPrintLayoutProps) {
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div
-      id="irisk-print-root"
+      id="workphelo-print-root"
       style={{ display: 'none', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
     >
       {/* Watermark */}
@@ -46,14 +45,37 @@ export function DocumentPrintLayout({
           zIndex: 0,
         }}
       >
-        <Image
-          src="/iRiskrewatermark.png"
-          alt=""
-          width={450}
-          height={300}
-          style={{ objectFit: 'contain' }}
-          priority
-        />
+        {branding?.logoUrl ? (
+          <div
+            style={{
+              width: '420px',
+              height: '360px',
+              backgroundImage: `url("${branding.logoUrl}")`,
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: 'contain',
+              opacity: 0.08,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: '280px',
+              height: '320px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '48% 48% 58% 58%',
+              backgroundColor: '#173f5f',
+              color: '#d6a84b',
+              fontSize: '120px',
+              fontWeight: 800,
+              opacity: 0.06,
+            }}
+          >
+            W
+          </div>
+        )}
       </div>
 
       {/* Fixed header — repeats on every page */}
@@ -73,14 +95,38 @@ export function DocumentPrintLayout({
           zIndex: 2,
         }}
       >
-        <Image
-          src="/iriskre.png"
-          alt="iRisk logo"
-          width={130}
-          height={65}
-          style={{ objectFit: 'contain' }}
-          priority
-        />
+        {branding?.logoUrl ? (
+          <div
+            aria-label={`${branding.tenantName} logo`}
+            style={{
+              width: '130px',
+              height: '65px',
+              backgroundImage: `url("${branding.logoUrl}")`,
+              backgroundPosition: 'left center',
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: 'contain',
+            }}
+          />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#173f5f' }}>
+            <div
+              style={{
+                width: '36px',
+                height: '44px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: '45% 45% 55% 55%',
+                backgroundColor: '#173f5f',
+                color: '#d6a84b',
+                fontWeight: 800,
+              }}
+            >
+              W
+            </div>
+            <strong>{branding?.tenantName ?? 'WorkPhelo'}</strong>
+          </div>
+        )}
         <h1
           style={{
             fontSize: '14px',
@@ -118,7 +164,7 @@ export function DocumentPrintLayout({
           zIndex: 2,
         }}
       >
-        {FOOTER_LINES.map((line) => (
+        {[branding?.tenantName ?? 'WorkPhelo', 'Reinsurance Operations'].map((line) => (
           <p
             key={line}
             style={{ fontSize: '9px', color: '#6b7280', margin: 0, textAlign: 'center' }}

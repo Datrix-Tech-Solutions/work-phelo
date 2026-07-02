@@ -22,6 +22,7 @@ import {
 } from './storage/s3-document-storage.service';
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
 import { PlacementsService } from './placements.service';
+import { TenantDocumentBrandingService } from './tenant-document-branding.service';
 
 const documentInclude = {} satisfies Prisma.PlacementDocumentInclude;
 
@@ -56,6 +57,7 @@ export class PlacementDocumentsService {
     private readonly placementsService: PlacementsService,
     private readonly pdfRenderer: PlacementPdfRendererService,
     private readonly documentStorage: S3DocumentStorageService,
+    private readonly documentBranding: TenantDocumentBrandingService,
   ) {}
 
   async findAll(
@@ -92,14 +94,19 @@ export class PlacementDocumentsService {
       user.tenantId,
       placementId,
     );
+    const branding = await this.documentBranding.resolve(user);
 
     return this.createGeneratedDocument(user, placementId, {
       type: PlacementDocumentType.OFFER_SLIP,
       prefix: 'DOC-OS-',
       title: `Offer Slip ${preview.placement.reference}`,
       currency: preview.placement.currency,
-      sourceSnapshot: preview,
-      renderPayload: preview,
+      sourceSnapshot: { ...preview, branding },
+      renderPayload: {
+        ...preview,
+        documentType: PlacementDocumentType.OFFER_SLIP,
+        branding,
+      },
     });
   }
 
@@ -151,10 +158,7 @@ export class PlacementDocumentsService {
         totalAcceptedPercent: preview.totalAcceptedPercent,
         remainingPercent: preview.remainingPercent,
       },
-      branding: {
-        productName: 'WorkPhelo',
-        documentFamily: 'Reinsurance Operations',
-      },
+      branding: await this.documentBranding.resolve(user),
     };
 
     return this.createGeneratedDocument(user, placementId, {
@@ -177,6 +181,20 @@ export class PlacementDocumentsService {
     const closing = await this.prisma.placementClosing.findFirst({
       where: { id: closingId, tenantId: user.tenantId, placementId },
       include: {
+        placement: {
+          include: {
+            cedant: {
+              select: {
+                id: true,
+                name: true,
+                registrationNumber: true,
+                email: true,
+                phone: true,
+                country: true,
+              },
+            },
+          },
+        },
         participant: {
           include: {
             counterparty: {
@@ -197,6 +215,7 @@ export class PlacementDocumentsService {
     if (!closing) throw new NotFoundException('Placement closing not found');
 
     const snapshot = this.toJsonSafe(closing);
+    const branding = await this.documentBranding.resolve(user);
     return this.createGeneratedDocument(user, placementId, {
       type: PlacementDocumentType.CLOSING_SLIP,
       prefix: 'DOC-CS-',
@@ -206,6 +225,7 @@ export class PlacementDocumentsService {
       renderPayload: {
         documentType: PlacementDocumentType.CLOSING_SLIP,
         closing: snapshot,
+        branding,
       },
       sourceLinks: {
         closingId: closing.id,
@@ -267,6 +287,7 @@ export class PlacementDocumentsService {
 
     const type = this.documentTypeForNote(note);
     const snapshot = this.toJsonSafe(note);
+    const branding = await this.documentBranding.resolve(user);
     return this.createGeneratedDocument(user, placementId, {
       type,
       prefix: this.prefixForDocumentType(type),
@@ -276,10 +297,7 @@ export class PlacementDocumentsService {
       renderPayload: {
         documentType: type,
         note: snapshot,
-        branding: {
-          productName: 'WorkPhelo',
-          documentFamily: 'Reinsurance Operations',
-        },
+        branding,
       },
       sourceLinks: {
         noteId: note.id,
@@ -359,6 +377,7 @@ export class PlacementDocumentsService {
     }
 
     const snapshot = this.toJsonSafe(closing);
+    const branding = await this.documentBranding.resolve(user);
     return this.createGeneratedDocument(user, placementId, {
       type: PlacementDocumentType.CLOSING_SLIP,
       prefix: 'DOC-CS-',
@@ -368,6 +387,7 @@ export class PlacementDocumentsService {
       renderPayload: {
         documentType: PlacementDocumentType.CLOSING_SLIP,
         endorsementClosing: snapshot,
+        branding,
       },
       sourceLinks: {
         endorsementId: closing.endorsementId,

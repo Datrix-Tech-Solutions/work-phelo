@@ -23,6 +23,7 @@ import { PlacementFinancialActivityReader } from './placement-financial-activity
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementsService } from './placements.service';
 import { S3DocumentStorageService } from './storage/s3-document-storage.service';
+import { TenantDocumentBrandingService } from './tenant-document-branding.service';
 
 describe('PlacementDocumentsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
@@ -184,6 +185,9 @@ describe('PlacementDocumentsService', () => {
     signedDownloadUrl: jest.Mock;
     readStoredObject: jest.Mock;
   };
+  let documentBranding: {
+    resolve: jest.Mock;
+  };
   let service: PlacementDocumentsService;
   let lockPolicy: PlacementFinancialLockPolicy;
 
@@ -259,11 +263,24 @@ describe('PlacementDocumentsService', () => {
         sizeBytes: Buffer.from('%PDF stored').byteLength,
       }),
     };
+    documentBranding = {
+      resolve: jest.fn().mockResolvedValue({
+        productName: 'Broker Ltd',
+        documentFamily: 'Reinsurance Operations',
+        logoDataUrl: 'data:image/png;base64,dGVzdA==',
+        watermarkDataUrl: 'data:image/png;base64,dGVzdA==',
+        primaryColor: '#173f5f',
+        secondaryColor: '#85b7eb',
+        accentColor: '#d6a84b',
+        documentHeaderColor: '#173f5f',
+      }),
+    };
     service = new PlacementDocumentsService(
       prisma as unknown as PrismaService,
       placementsService as unknown as PlacementsService,
       pdfRenderer as unknown as PlacementPdfRendererService,
       documentStorage as unknown as S3DocumentStorageService,
+      documentBranding as unknown as TenantDocumentBrandingService,
     );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
@@ -392,7 +409,8 @@ describe('PlacementDocumentsService', () => {
       remainingPercent: 20,
     });
     expect(jsonRecord(sourceSnapshot.branding)).toMatchObject({
-      productName: 'WorkPhelo',
+      productName: 'Broker Ltd',
+      logoDataUrl: 'data:image/png;base64,dGVzdA==',
     });
   });
 
@@ -587,8 +605,9 @@ describe('PlacementDocumentsService', () => {
         },
       },
       branding: {
-        productName: 'WorkPhelo',
+        productName: 'Broker Ltd',
         documentFamily: 'Reinsurance Operations',
+        logoDataUrl: 'data:image/png;base64,dGVzdA==',
       },
     });
   });
@@ -919,8 +938,9 @@ describe('PlacementDocumentsService', () => {
           offeredLinePercent: 40,
         },
         branding: {
-          productName: 'WorkPhelo',
+          productName: 'Broker Ltd',
           documentFamily: 'Reinsurance Operations',
+          logoDataUrl: 'data:image/png;base64,dGVzdA==',
         },
       },
     };

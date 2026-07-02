@@ -11,6 +11,7 @@ import {
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
+const CLAIMS_STALE_TIME_MS = 60_000;
 
 export const claimsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'claims'] as const;
@@ -24,6 +25,45 @@ const allocationsKey = (placementId: string, claimId: string) =>
 const cashCallsKey = (placementId: string, claimId: string) =>
   [...claimKey(placementId, claimId), 'cash-calls'] as const;
 
+function upsertCashCall(
+  current: PlacementClaimCashCall[] | undefined,
+  cashCall: PlacementClaimCashCall,
+) {
+  return [
+    cashCall,
+    ...(current ?? []).filter((item) => item.id !== cashCall.id),
+  ];
+}
+
+function refreshClaimWorkflow(
+  queryClient: ReturnType<typeof useQueryClient>,
+  placementId: string,
+  claimId: string,
+) {
+  void Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: claimsKey(placementId),
+      exact: true,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: claimKey(placementId, claimId),
+      exact: true,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: allocationsKey(placementId, claimId),
+      exact: true,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: cashCallsKey(placementId, claimId),
+      exact: true,
+    }),
+    queryClient.invalidateQueries({
+      queryKey: ['reinsurance', 'dashboard', 'claims'],
+      exact: true,
+    }),
+  ]);
+}
+
 export function usePlacementClaims(placementId: string) {
   return useQuery({
     queryKey: claimsKey(placementId),
@@ -32,6 +72,7 @@ export function usePlacementClaims(placementId: string) {
       return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
     },
     enabled: !!placementId,
+    staleTime: CLAIMS_STALE_TIME_MS,
   });
 }
 
@@ -43,6 +84,7 @@ export function usePlacementClaim(placementId: string, claimId: string) {
       return res.data as PlacementClaim;
     },
     enabled: !!placementId && !!claimId,
+    staleTime: CLAIMS_STALE_TIME_MS,
   });
 }
 
@@ -102,6 +144,7 @@ export function useClaimAllocations(placementId: string, claimId: string) {
       return (res.data?.items ?? res.data ?? []) as PlacementClaimAllocation[];
     },
     enabled: !!placementId && !!claimId,
+    staleTime: CLAIMS_STALE_TIME_MS,
   });
 }
 
@@ -126,6 +169,7 @@ export function useClaimCashCalls(placementId: string, claimId: string) {
       return (res.data?.items ?? res.data ?? []) as PlacementClaimCashCall[];
     },
     enabled: !!placementId && !!claimId,
+    staleTime: CLAIMS_STALE_TIME_MS,
   });
 }
 
@@ -133,13 +177,52 @@ export function useCreateClaimCashCall(placementId: string, claimId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (allocationId: string) => {
-      const res = await api.post(
-        `${BASE}/${placementId}/claims/${claimId}/allocations/${allocationId}/cash-calls`,
+      const cached = queryClient.getQueryData<PlacementClaimCashCall[]>(
+        cashCallsKey(placementId, claimId),
       );
-      return res.data as PlacementClaimCashCall;
+      const existing = cached?.find(
+        (cashCall) =>
+          cashCall.allocationId === allocationId && cashCall.status !== 'VOID',
+      );
+      if (existing) return existing;
+
+      try {
+        const res = await api.post(
+          `${BASE}/${placementId}/claims/${claimId}/allocations/${allocationId}/cash-calls`,
+        );
+        return res.data as PlacementClaimCashCall;
+      } catch (error) {
+        const status = (
+          error as { response?: { status?: number } }
+        ).response?.status;
+        if (status !== 409) throw error;
+
+        // Another click/session may have created the active call first.
+        const res = await api.get(
+          `${BASE}/${placementId}/claims/${claimId}/cash-calls`,
+        );
+        const cashCalls = (res.data?.items ??
+          res.data ??
+          []) as PlacementClaimCashCall[];
+        queryClient.setQueryData(
+          cashCallsKey(placementId, claimId),
+          cashCalls,
+        );
+        const active = cashCalls.find(
+          (cashCall) =>
+            cashCall.allocationId === allocationId &&
+            cashCall.status !== 'VOID',
+        );
+        if (!active) throw error;
+        return active;
+      }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
+    onSuccess: (cashCall) => {
+      queryClient.setQueryData<PlacementClaimCashCall[]>(
+        cashCallsKey(placementId, claimId),
+        (current) => upsertCashCall(current, cashCall),
+      );
+      refreshClaimWorkflow(queryClient, placementId, claimId);
     },
   });
 }
@@ -160,8 +243,12 @@ export function useUpdateClaimCashCallStatus(placementId: string, claimId: strin
       );
       return res.data as PlacementClaimCashCall;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
+    onSuccess: (cashCall) => {
+      queryClient.setQueryData<PlacementClaimCashCall[]>(
+        cashCallsKey(placementId, claimId),
+        (current) => upsertCashCall(current, cashCall),
+      );
+      refreshClaimWorkflow(queryClient, placementId, claimId);
     },
   });
 }
@@ -176,8 +263,12 @@ export function useVoidClaimCashCall(placementId: string, claimId: string) {
       );
       return res.data as PlacementClaimCashCall;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
+    onSuccess: (cashCall) => {
+      queryClient.setQueryData<PlacementClaimCashCall[]>(
+        cashCallsKey(placementId, claimId),
+        (current) => upsertCashCall(current, cashCall),
+      );
+      refreshClaimWorkflow(queryClient, placementId, claimId);
     },
   });
 }

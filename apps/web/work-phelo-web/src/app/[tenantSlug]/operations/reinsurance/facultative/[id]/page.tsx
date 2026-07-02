@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
-import { useFacultativePlacement } from '@/hooks';
+import { useFacultativePlacement, usePlacementLockStatus } from '@/hooks';
 import { FacultativeOverview } from '@/components/molecules/reinsurance/stats/FacultativeOverview';
 import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
 import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/PlacementClosingsTab';
@@ -32,6 +32,7 @@ export default function FacultativeDetailPage({
   const searchParams = useSearchParams();
   const fromClosing = searchParams.get('from') === 'closing';
   const { data: placement, isLoading } = useFacultativePlacement(id);
+  const { data: lockStatus } = usePlacementLockStatus(id);
   const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
   const [editOpen, setEditOpen] = useState(false);
   const [endorsementOpen, setEndorsementOpen] = useState(false);
@@ -59,7 +60,11 @@ export default function FacultativeDetailPage({
                 Endorse Policy
               </Button>
             )}
-            <Button size="sm" onClick={() => setEditOpen(true)}>
+            <Button
+              size="sm"
+              onClick={() => setEditOpen(true)}
+              disabled={lockStatus ? !lockStatus.editable : false}
+            >
               Edit
             </Button>
           </div>
@@ -99,14 +104,14 @@ export default function FacultativeDetailPage({
         )}
       </div>
 
-      {placement && (
+      {placement && editOpen && (
         <EditFacultativePanel
           isOpen={editOpen}
           placement={placement}
           onClose={() => setEditOpen(false)}
         />
       )}
-      {placement && (
+      {placement && endorsementOpen && (
         <EndorsementPanel
           isOpen={endorsementOpen}
           placement={placement}

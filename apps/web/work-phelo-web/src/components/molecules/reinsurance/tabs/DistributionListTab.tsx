@@ -18,11 +18,13 @@ import {
   useUpdateParticipantStatus,
   useUpdateFacultativeStatus,
   useDeleteParticipant,
-  useCreateClosing,
   useUpdateClosingStatus,
   usePlacementClosings,
-  usePlacementPayments,
+  usePlacementLockStatus,
+  useAcceptAndConfirmParticipant,
+  facultativePlacementsKey,
   facultativePlacementKey,
+  placementClosingsKey,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
@@ -75,10 +77,10 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const { mutateAsync: updateParticipantStatus } = useUpdateParticipantStatus(placement.id);
   const { mutateAsync: updatePlacementStatus } = useUpdateFacultativeStatus(placement.id);
   const { mutateAsync: deleteParticipant } = useDeleteParticipant(placement.id);
-  const { mutateAsync: createClosing } = useCreateClosing(placement.id);
   const { mutateAsync: updateClosingStatus } = useUpdateClosingStatus(placement.id);
   const { data: closings = [] } = usePlacementClosings(placement.id);
-  const { data: payments = [] } = usePlacementPayments(placement.id);
+  const { data: lockStatus } = usePlacementLockStatus(placement.id);
+  const { mutateAsync: acceptAndConfirmParticipant } = useAcceptAndConfirmParticipant(placement.id);
   const [panelOpen, setPanelOpen] = useState(false);
 
   const reinsurerEmails = useMemo<Record<string, string[]>>(
@@ -115,20 +117,31 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
 
+  const confirmedParticipantIds = useMemo(
+    () =>
+      new Set(
+        closings
+          .filter((closing) => closing.status === 'CONFIRMED')
+          .map((closing) => closing.participantId),
+      ),
+    [closings],
+  );
+
   const entries = useMemo(
     () =>
       serverEntries
         .filter((e) => !deletedIds.has(e.id))
-        .map((e) => ({ ...e, ...(patches[e.id] ?? {}) })),
-    [serverEntries, patches, deletedIds],
+        .map((e) => ({
+          ...e,
+          ...(patches[e.id] ?? {}),
+          ...(confirmedParticipantIds.has(e.id) ? { status: 'Closed' as const } : {}),
+        })),
+    [serverEntries, patches, deletedIds, confirmedParticipantIds],
   );
 
   const toast = useToastStore.getState;
 
-  const isPlacementLocked = useMemo(
-    () => payments.some((p) => p.status === 'RECORDED'),
-    [payments],
-  );
+  const isPlacementLocked = lockStatus ? !lockStatus.editable : false;
 
   const closingByParticipantId = useMemo(
     () =>
@@ -142,11 +155,29 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     setPatches((prev) => ({ ...prev, [id]: { ...prev[id], ...update } }));
 
   const refreshPlacementAfterAccept = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
+    () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: facultativePlacementsKey }),
+        queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
+        queryClient.invalidateQueries({ queryKey: placementClosingsKey(placement.id) }),
+        queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] }),
+      ]),
     [placement.id, queryClient],
   );
 
+  const showLockedToast = () =>
+    toast().addToast({
+      message:
+        lockStatus?.reason ?? 'Placement is financially locked. Changes require endorsement.',
+      type: 'error',
+    });
+
   const handleAdd = async (newEntries: ReinsurerEntry[]) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     const existingIds = new Set(placement.participants.map((p) => p.counterpartyId));
     const reinsurersById = Object.fromEntries(reinsurers.map((r) => [r.id, r]));
     const newOnes = newEntries.filter((e) => !existingIds.has(e.id));
@@ -176,6 +207,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleShareCommit = (row: DistributionEntry, share: number) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     patch(row.id, { shareLine: share });
     // Also reset signedLinePercent so a previously-accepted (then reverted) participant
     // doesn't leave a stale signed line that exceeds the new sharePercent.
@@ -187,6 +223,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleBrokerageCommit = (row: DistributionEntry, brokerage: number) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     patch(row.id, { brokerageFee: brokerage });
     updateParticipant({ participantId: row.id, brokerageFee: brokerage }).catch((error) =>
       toast().addToast({ message: extractError(error), type: 'error' }),
@@ -194,6 +235,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleMailSent = (row: DistributionEntry) => {
+    if (isPlacementLocked) return;
     // Skip status update when already accepted — ACCEPTED → OFFER_SENT is not a valid transition
     if (row.status === 'Accepted') return;
     updateParticipantStatus({ participantId: row.id, status: 'OFFER_SENT' }).catch((error) =>
@@ -202,6 +244,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleAccept = async (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     if (acceptingIds.has(row.id)) return;
     setAcceptingIds((prev) => new Set([...prev, row.id]));
     patch(row.id, { status: 'Accepted' });
@@ -232,38 +279,19 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleClose = async (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     if (acceptingIds.has(row.id)) return;
     setAcceptingIds((prev) => new Set([...prev, row.id]));
 
     try {
-      let closingId = closingByParticipantId[row.id]?.id;
-      let closingStatus = closingByParticipantId[row.id]?.status;
-
-      if (!closingId) {
-        const createdClosing = await createClosing({
-          participantId: row.id,
-          suppressInvalidation: true,
-        });
-        closingId = createdClosing.id;
-        closingStatus = 'DRAFT';
+      const existingClosing = closingByParticipantId[row.id];
+      if (existingClosing?.status !== 'CONFIRMED') {
+        await acceptAndConfirmParticipant({ participantId: row.id });
       }
-
-      if (closingStatus === 'DRAFT') {
-        await updateClosingStatus({ closingId, status: 'ISSUED', suppressInvalidation: true });
-        await updateClosingStatus({ closingId, status: 'CONFIRMED', suppressInvalidation: true });
-      } else if (closingStatus === 'ISSUED') {
-        await updateClosingStatus({ closingId, status: 'CONFIRMED', suppressInvalidation: true });
-      }
-
-      if (['DRAFT', 'MARKETING', 'PARTIALLY_PLACED'].includes(placement.status)) {
-        await updatePlacementStatus({ status: 'PLACED' });
-      }
-      await updatePlacementStatus({ status: 'CLOSING' });
-      await updateParticipantStatus({
-        participantId: row.id,
-        status: 'CLOSED',
-        suppressInvalidation: true,
-      });
 
       patch(row.id, { status: 'Closed' });
       toast().addToast({
@@ -283,6 +311,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleRevert = (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     patch(row.id, { status: 'Pending' });
     const closing = closingByParticipantId[row.id];
     // Confirmed closings are immutable backend snapshots; do not void from frontend revert flow.
@@ -299,6 +332,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleDecline = (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     patch(row.id, { status: 'Declined', shareLine: 0 });
     updateParticipant({ participantId: row.id, sharePercent: 0 })
       .then(() => updateParticipantStatus({ participantId: row.id, status: 'DECLINED' }))
@@ -309,6 +347,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   };
 
   const handleDelete = (row: DistributionEntry) => {
+    if (isPlacementLocked) {
+      showLockedToast();
+      return;
+    }
+
     setDeletedIds((prev) => new Set([...prev, row.id]));
     deleteParticipant(row.id).catch((error) => {
       setDeletedIds((prev) => {
@@ -339,7 +382,15 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
               <span className="font-semibold text-gray-600">{facOffer}%</span>
             </p>
           </div>
-          <Button size="sm" onClick={() => setPanelOpen(true)} isLoading={isAdding}>
+          <Button
+            size="sm"
+            onClick={() => {
+              if (isPlacementLocked) showLockedToast();
+              else setPanelOpen(true);
+            }}
+            isLoading={isAdding}
+            disabled={isPlacementLocked}
+          >
             Add Reinsurers
           </Button>
         </div>

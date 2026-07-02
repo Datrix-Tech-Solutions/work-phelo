@@ -417,6 +417,74 @@ describe('PlacementEndorsementsService', () => {
     expect(result.isComplete).toBe(false);
   });
 
+  it('marks a fully validated MARKETING endorsement ready to close after notes are issued', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.MARKETING,
+      targetPercent: new Prisma.Decimal('10.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.ACCEPTED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      closings: [
+        {
+          id: 'endorsement-closing-1',
+          endorsementParticipantId: 'endorsement-participant-1',
+          status: PlacementClosingStatus.CONFIRMED,
+        },
+      ],
+      notes: [
+        {
+          id: 'endorsement-note-1',
+          type: PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: null,
+        },
+        {
+          id: 'endorsement-note-2',
+          type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+          status: PlacementNoteStatus.ISSUED,
+          endorsementClosingId: 'endorsement-closing-1',
+        },
+      ],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.isComplete).toBe(false);
+  });
+
+  it('does not leave a terms-only endorsement in market when no capacity workflow is required', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.MARKETING,
+      impactType: PlacementEndorsementImpactType.TERMS_ONLY,
+      targetPercent: null,
+      participants: [],
+      closings: [],
+      notes: [],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.pendingActions).toEqual(['CLOSE_ENDORSEMENT']);
+    expect(result.remainingPercent).toBeNull();
+  });
+
   it('does not let declined participants block completion when another participant places full capacity', async () => {
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementEndorsement.findFirst.mockResolvedValue({
@@ -798,10 +866,19 @@ describe('PlacementEndorsementsService', () => {
 
   it('allows supported lifecycle transitions and stamps closedAt', async () => {
     prisma.placement.findFirst.mockResolvedValue(placement);
-    prisma.placementEndorsement.findFirst.mockResolvedValue({
-      ...endorsement,
-      status: PlacementEndorsementStatus.CLOSING,
-    });
+    prisma.placementEndorsement.findFirst
+      .mockResolvedValueOnce({
+        ...endorsement,
+        status: PlacementEndorsementStatus.CLOSING,
+      })
+      .mockResolvedValueOnce({
+        ...endorsement,
+        status: PlacementEndorsementStatus.CLOSING,
+        targetPercent: null,
+        participants: [],
+        closings: [],
+        notes: [],
+      });
     prisma.placementEndorsement.update.mockResolvedValue({
       ...endorsement,
       status: PlacementEndorsementStatus.CLOSED,
@@ -820,6 +897,31 @@ describe('PlacementEndorsementsService', () => {
       updatedByUserId: 'user-1',
     });
     expect(updateArgs.data).toHaveProperty('closedAt');
+  });
+
+  it('rejects manual close while endorsement workflow actions remain', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementEndorsement.findFirst
+      .mockResolvedValueOnce({
+        ...endorsement,
+        status: PlacementEndorsementStatus.MARKETING,
+      })
+      .mockResolvedValueOnce({
+        ...endorsement,
+        status: PlacementEndorsementStatus.MARKETING,
+        targetPercent: new Prisma.Decimal('10.0000'),
+        participants: [],
+        closings: [],
+        notes: [],
+      });
+
+    await expect(
+      service.changeStatus(user, 'placement-1', 'endorsement-1', {
+        status: PlacementEndorsementStatus.CLOSED,
+      }),
+    ).rejects.toThrow('Pending actions: ADD_CAPACITY');
+
+    expect(prisma.placementEndorsement.update).not.toHaveBeenCalled();
   });
 
   it('rejects unsupported status transitions from terminal statuses', async () => {

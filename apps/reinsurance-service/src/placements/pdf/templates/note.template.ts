@@ -9,7 +9,14 @@ import {
   percentText,
   PlacementDocumentTemplateContext,
   text,
+  toDisplayString,
 } from './closing-slip.template';
+import {
+  brokerDocumentCss,
+  renderBrokerFooter,
+  renderBrokerHeader,
+  renderBrokerWatermark,
+} from './broker-document.template';
 
 const NOTE_DOCUMENT_TYPES = new Set<PlacementDocumentType>([
   PlacementDocumentType.DEBIT_NOTE,
@@ -46,6 +53,9 @@ export function renderNoteTemplate(
   const closingNumber =
     closing?.closingNumber ?? endorsementClosing?.closingNumber;
   const productName = branding?.productName ?? 'WorkPhelo';
+  const isDebit =
+    payload.documentType === PlacementDocumentType.DEBIT_NOTE ||
+    payload.documentType === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE;
 
   return `<!doctype html>
 <html lang="en">
@@ -114,8 +124,10 @@ export function renderNoteTemplate(
         break-inside: avoid;
       }
       .section h2 {
-        margin: 0 0 11px;
-        color: #526174;
+        margin: -14px -14px 11px;
+        padding: 7px 12px;
+        background: #173f5f;
+        color: #ffffff;
         font-size: 10px;
         letter-spacing: 0.11em;
         text-transform: uppercase;
@@ -192,20 +204,27 @@ export function renderNoteTemplate(
         font-size: 9px;
         text-align: center;
       }
+      .payment-warranty {
+        margin-top: 14px;
+        border: 1px solid #d6a84b;
+        background: #fffaf0;
+        padding: 12px 14px;
+        break-inside: avoid;
+      }
+      .payment-warranty h2 { margin: 0 0 7px; color: #173f5f; font-size: 11px; }
+      .payment-warranty p { margin: 4px 0; }
+      ${brokerDocumentCss}
     </style>
   </head>
   <body>
-    <header>
-      <div>
-        <div class="brand-mark">${text(productName)}</div>
-        <div class="brand-copy">Reinsurance Operations</div>
-      </div>
-      <div class="document-heading">
-        <h1>${escapeHtml(presentation.title)}</h1>
-        <p>${text(note?.noteNumber)}</p>
-        <p>Document: ${text(context.documentNumber)}</p>
-      </div>
-    </header>
+    <main class="document-shell">
+    ${renderBrokerWatermark(branding)}
+    ${renderBrokerHeader(
+      presentation.title,
+      toDisplayString(note?.noteNumber || context.documentNumber),
+      context,
+      branding,
+    )}
 
     <div class="business-label">
       ${escapeHtml(presentation.businessLabel)}
@@ -272,6 +291,20 @@ export function renderNoteTemplate(
       </table>
     </section>
 
+    ${
+      isDebit
+        ? `<section class="payment-warranty">
+      <h2>Payment Instructions and Premium Warranty</h2>
+      <p><strong>Bank account:</strong> ${text(branding?.bankAccount, 'To be advised separately by the broker')}</p>
+      <p><strong>Bank:</strong> ${text(branding?.bankName, 'To be advised separately by the broker')}</p>
+      <p>
+        Payment should quote note number ${text(note?.noteNumber)}. Cover and settlement remain
+        subject to the premium payment warranty and terms agreed for this placement.
+      </p>
+    </section>`
+        : ''
+    }
+
     <div class="signature-grid">
       <div class="signature-box">
         <strong>For ${text(productName)}</strong>
@@ -283,10 +316,8 @@ export function renderNoteTemplate(
       </div>
     </div>
 
-    <footer>
-      Official broker document rendered from an immutable PlacementDocument payload.
-      No live placement, closing, endorsement or note values were recalculated.
-    </footer>
+    ${renderBrokerFooter(context, branding)}
+    </main>
   </body>
 </html>`;
 }

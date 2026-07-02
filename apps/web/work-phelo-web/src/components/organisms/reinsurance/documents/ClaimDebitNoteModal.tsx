@@ -91,6 +91,7 @@ export function ClaimDebitNoteModal({
       isOpen={isOpen}
       title={`Claim Debit Note — ${reference}`}
       documentTitle="Claim Debit Note"
+      previewOnly
       onPrint={onPrint}
       onClose={onClose}
       afterContent={afterContent}

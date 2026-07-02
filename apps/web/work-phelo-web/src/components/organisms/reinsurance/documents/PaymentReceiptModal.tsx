@@ -153,7 +153,7 @@ export function PaymentReceiptModal({
       value: commissionAmt != null ? fmtAmount(commissionAmt, currency) : '—',
     },
     {
-      label: 'Net Premium Received by iRisk Re',
+      label: 'Net Premium Received by Broker',
       value: fmtAmount(payment.amount, payment.currency),
       bold: true,
     },
@@ -164,6 +164,7 @@ export function PaymentReceiptModal({
       isOpen={isOpen}
       title={`Payment Receipt — ${reference}`}
       documentTitle="Payment Receipt"
+      previewOnly
       onPrint={onPrint}
       onClose={onClose}
       afterContent={afterContent}

@@ -8,14 +8,7 @@ import { CreatableSearchSelect } from '@/components/atoms/CreatableSearchSelect'
 import { RichTextEditor } from '@/components/molecules/shared/RichTextEditor';
 import { Icons } from '@/components/atoms/icons';
 import { inputClass } from '@/lib/utils';
-import { Facultative, PlacementClaim, PlacementClaimAllocation } from '@/types/reinsurance';
-import {
-  useUpdateClaimStatus,
-  useCreateClaimCashCall,
-  useUpdateClaimCashCallStatus,
-} from '@/hooks';
-import { extractError } from '@/lib/extractError';
-import { useToastStore } from '@/store/toast.store';
+import { Facultative } from '@/types/reinsurance';
 
 interface MailPreviewModalProps {
   isOpen: boolean;
@@ -25,8 +18,10 @@ interface MailPreviewModalProps {
   onSend: () => void;
   onClose: () => void;
   onClosePlacement?: () => void;
-  claim?: PlacementClaim;
-  allocation?: PlacementClaimAllocation;
+  primaryActionLabel?: string;
+  primaryActionLoadingText?: string;
+  previewOnly?: boolean;
+  previewTitle?: string;
 }
 
 export function MailPreviewModal({
@@ -35,8 +30,10 @@ export function MailPreviewModal({
   recipients,
   onSend,
   onClose,
-  claim,
-  allocation,
+  primaryActionLabel = 'Close Preview',
+  primaryActionLoadingText = 'Updating…',
+  previewOnly = false,
+  previewTitle,
 }: MailPreviewModalProps) {
   const [localRecipients, setLocalRecipients] = useState<string[]>(recipients);
   const [addingRecipient, setAddingRecipient] = useState(false);
@@ -45,11 +42,6 @@ export function MailPreviewModal({
   const [body, setBody] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
-
-  const updateClaimStatus = useUpdateClaimStatus(placement.id, claim?.id ?? '');
-  const createCashCall = useCreateClaimCashCall(placement.id, claim?.id ?? '');
-  const updateCashCallStatus = useUpdateClaimCashCallStatus(placement.id, claim?.id ?? '');
-  const addToast = useToastStore((s) => s.addToast);
 
   const removeRecipient = (email: string) =>
     setLocalRecipients((prev) => prev.filter((e) => e !== email));
@@ -74,33 +66,23 @@ export function MailPreviewModal({
   };
 
   const handleSend = async () => {
-    if (claim) {
-      setIsSending(true);
-      try {
-        await updateClaimStatus.mutateAsync('NOTIFIED');
-        if (allocation) {
-          const cashCall = await createCashCall.mutateAsync(allocation.id);
-          await updateCashCallStatus.mutateAsync({ cashCallId: cashCall.id, status: 'ISSUED' });
-        }
-      } catch (error) {
-        addToast({ message: extractError(error), type: 'error' });
-        setIsSending(false);
-        return;
-      }
+    setIsSending(true);
+    try {
+      await onSend();
+    } finally {
       setIsSending(false);
     }
     setLocalRecipients([]);
     setSubject('');
     setBody('');
     setAttachment(null);
-    onSend();
   };
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title={`Mail — ${placement.cedant.name}`}
+      title={previewTitle ?? `Email Preview — ${placement.cedant.name}`}
       width="sm:w-[50vw] sm:max-w-[60vw]"
       height="sm:h-[80vh] sm:max-h-[90vh]"
       fullScreenMobile
@@ -116,14 +98,25 @@ export function MailPreviewModal({
             <Button variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button onClick={handleSend} isLoading={isSending} loadingText="Sending…">
-              Send
+            <Button
+              onClick={handleSend}
+              isLoading={isSending}
+              loadingText={primaryActionLoadingText}
+            >
+              {primaryActionLabel}
             </Button>
           </div>
         </div>
       }
     >
       <div className="flex flex-col gap-4">
+        {previewOnly && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Preview only. This action does not send email or change the cash-call
+            lifecycle.
+          </div>
+        )}
+
         {/* Recipients */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-bold text-gray-900">Recipient(s)</label>

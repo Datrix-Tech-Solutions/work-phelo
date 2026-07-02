@@ -29,6 +29,7 @@ type TenantWithBranding = {
   id: string;
   slug: string;
   name: string;
+  logoUrl?: string | null;
   branding?: {
     logoObjectKey: string | null;
     logoDisplayUrl: string | null;
@@ -186,7 +187,7 @@ export class TenantBrandingService {
       logoObjectKey: branding?.logoObjectKey ?? null,
       logoDisplayUrl: branding?.logoObjectKey
         ? null
-        : (branding?.logoDisplayUrl ?? null),
+        : (branding?.logoDisplayUrl ?? tenant.logoUrl ?? null),
       faviconObjectKey: branding?.faviconObjectKey ?? null,
       faviconDisplayUrl: branding?.faviconObjectKey
         ? null

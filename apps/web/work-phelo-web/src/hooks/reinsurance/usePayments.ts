@@ -7,7 +7,11 @@ import {
   PlacementPayment,
   CreatePlacementPaymentPayload,
 } from '@/types/reinsurance';
-import { useFacultatives } from './useFacultatives';
+import {
+  facultativePlacementKey,
+  placementLockStatusKey,
+  useFacultatives,
+} from './useFacultatives';
 
 const BASE = '/operations/reinsurance/placements';
 
@@ -38,6 +42,8 @@ export function useCreatePlacementPayment() {
     },
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
     },
   });
 }
@@ -51,6 +57,8 @@ export function useReversePayment() {
     },
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
     },
   });
 }

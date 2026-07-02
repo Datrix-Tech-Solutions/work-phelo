@@ -84,7 +84,7 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
         style={{ breakInside: 'avoid' }}
       >
         <p className="font-semibold text-gray-900 mb-1">Bank Account</p>
-        <p>iRisk Reinsurance Brokers Limited</p>
+        <p>WorkPhelo Reinsurance Operations</p>
         <p>Access Bank PLC, Accra Newtown Branch</p>
         <p>GHS - 1036000007232 / USD - 1036000007233 / EUR - 1036000007235 / GBP - 1036000007236</p>
       </div>
@@ -101,6 +101,7 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
       isOpen={isOpen}
       title={`Debit Note — ${reference}`}
       documentTitle="Debit Note"
+      previewOnly
       onPrint={onPrint}
       onClose={onClose}
       afterContent={debitAfterContent}
@@ -184,7 +185,7 @@ export function DebitNoteModal({ isOpen, placement, onPrint, onClose }: DebitNot
                 value: commissionAmt != null ? fmtAmount(commissionAmt, currency) : '—',
               },
               {
-                label: 'Net Premium Due iRisk Re',
+                label: 'Net Premium Due Broker',
                 value: fmtAmount(netPremium, currency),
                 bold: true,
               },

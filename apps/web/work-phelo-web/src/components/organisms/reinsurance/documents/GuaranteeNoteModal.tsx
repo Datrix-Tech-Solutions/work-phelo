@@ -85,6 +85,7 @@ export function GuaranteeNoteModal({
       isOpen={isOpen}
       title={`Guarantee Note — ${reference}`}
       documentTitle="Guarantee Note"
+      previewOnly
       afterContent={
         <div
           style={{
