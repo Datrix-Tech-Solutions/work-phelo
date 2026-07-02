@@ -9,6 +9,7 @@ const TENANT = {
   id: 'tenant-1',
   slug: 'acme-ghana',
   name: 'Acme Ghana Ltd',
+  logoUrl: null,
 };
 
 const BRANDING = {
@@ -160,5 +161,18 @@ describe('TenantBrandingService', () => {
     expect(result).not.toHaveProperty('tenantId');
     expect(result).not.toHaveProperty('logoObjectKey');
     expect(result).not.toHaveProperty('updatedByUserId');
+  });
+
+  it('uses the legacy tenant logo while canonical branding has no logo', async () => {
+    const { prisma, service } = makeService();
+    prisma.tenant.findUnique.mockResolvedValue({
+      ...TENANT,
+      logoUrl: 'https://app.workphelo.com/iriskre.png',
+      branding: { ...BRANDING, logoObjectKey: null, logoDisplayUrl: null },
+    });
+
+    const result = await service.findPublicBySlug('acme-ghana');
+
+    expect(result.logoDisplayUrl).toBe('https://app.workphelo.com/iriskre.png');
   });
 });

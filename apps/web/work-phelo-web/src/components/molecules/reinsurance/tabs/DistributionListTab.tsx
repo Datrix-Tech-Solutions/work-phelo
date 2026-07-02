@@ -22,6 +22,7 @@ import {
   usePlacementClosings,
   usePlacementLockStatus,
   useAcceptAndConfirmParticipant,
+  facultativePlacementsKey,
   facultativePlacementKey,
   placementClosingsKey,
 } from '@/hooks';
@@ -116,12 +117,26 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
   const [acceptingIds, setAcceptingIds] = useState<Set<string>>(new Set());
 
+  const confirmedParticipantIds = useMemo(
+    () =>
+      new Set(
+        closings
+          .filter((closing) => closing.status === 'CONFIRMED')
+          .map((closing) => closing.participantId),
+      ),
+    [closings],
+  );
+
   const entries = useMemo(
     () =>
       serverEntries
         .filter((e) => !deletedIds.has(e.id))
-        .map((e) => ({ ...e, ...(patches[e.id] ?? {}) })),
-    [serverEntries, patches, deletedIds],
+        .map((e) => ({
+          ...e,
+          ...(patches[e.id] ?? {}),
+          ...(confirmedParticipantIds.has(e.id) ? { status: 'Closed' as const } : {}),
+        })),
+    [serverEntries, patches, deletedIds, confirmedParticipantIds],
   );
 
   const toast = useToastStore.getState;
@@ -142,8 +157,10 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
   const refreshPlacementAfterAccept = useCallback(
     () =>
       Promise.all([
+        queryClient.invalidateQueries({ queryKey: facultativePlacementsKey }),
         queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
         queryClient.invalidateQueries({ queryKey: placementClosingsKey(placement.id) }),
+        queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] }),
       ]),
     [placement.id, queryClient],
   );
@@ -243,7 +260,11 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
         signedLinePercent: row.shareLine,
         suppressInvalidation: true,
       });
-      await acceptAndConfirmParticipant({ participantId: row.id });
+      await updateParticipantStatus({
+        participantId: row.id,
+        status: 'ACCEPTED',
+        suppressInvalidation: true,
+      });
     } catch (error) {
       patch(row.id, { status: 'Pending' });
       toast().addToast({ message: extractError(error), type: 'error' });
@@ -271,12 +292,6 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
       if (existingClosing?.status !== 'CONFIRMED') {
         await acceptAndConfirmParticipant({ participantId: row.id });
       }
-
-      await updateParticipantStatus({
-        participantId: row.id,
-        status: 'CLOSED',
-        suppressInvalidation: true,
-      });
 
       patch(row.id, { status: 'Closed' });
       toast().addToast({

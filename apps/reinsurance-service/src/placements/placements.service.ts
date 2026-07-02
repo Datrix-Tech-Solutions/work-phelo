@@ -51,6 +51,13 @@ const placementInclude = {
     },
     orderBy: [{ role: 'asc' as const }, { createdAt: 'asc' as const }],
   },
+  closings: {
+    where: { status: PlacementClosingStatus.CONFIRMED },
+    select: {
+      participantId: true,
+      signedLinePercent: true,
+    },
+  },
   statusHistory: {
     orderBy: { createdAt: 'desc' as const },
     take: 20,
@@ -130,6 +137,8 @@ type PlacementWithAggregates = PlacementRecord & {
   totalOfferedPercent: number;
   totalAcceptedPercent: number;
   remainingPercent: number;
+  confirmedClosingCount: number;
+  confirmedPlacedPercent: number;
   lockStatus?: PlacementLockStatusDto;
 };
 
@@ -191,6 +200,13 @@ export class PlacementsService {
             classOfBusiness: {
               contains: query.classOfBusiness,
               mode: 'insensitive' as const,
+            },
+          }
+        : {}),
+      ...(query.paymentEligible
+        ? {
+            closings: {
+              some: { status: PlacementClosingStatus.CONFIRMED },
             },
           }
         : {}),
@@ -1821,7 +1837,10 @@ export class PlacementsService {
   }
 
   private deriveParticipantDrivenStatus(
-    placement: PlacementWithAggregates,
+    placement: Pick<
+      PlacementWithAggregates,
+      'status' | 'facultativeOffer' | 'totalAcceptedPercent'
+    >,
   ): PlacementStatus | null {
     const participantDrivenStatuses: PlacementStatus[] = [
       PlacementStatus.MARKETING,
@@ -1906,10 +1925,19 @@ export class PlacementsService {
 
   private withAggregates(placement: PlacementRecord): PlacementWithAggregates {
     const aggregates = this.calculateAggregates(placement);
+    const closingSnapshots = placement.closings ?? [];
 
     return {
       ...placement,
       ...aggregates,
+      confirmedClosingCount: closingSnapshots.length,
+      confirmedPlacedPercent: this.roundPercent(
+        closingSnapshots.reduce(
+          (sum, closing) =>
+            sum + this.decimalToNumber(closing.signedLinePercent),
+          0,
+        ),
+      ),
     };
   }
 

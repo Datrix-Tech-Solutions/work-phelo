@@ -25,6 +25,7 @@ import { ReinsuranceDashboardController } from './reinsurance-dashboard.controll
 import { ReinsuranceDashboardService } from './reinsurance-dashboard.service';
 import { ReinsuranceMoneyHelper } from './reinsurance-money.helper';
 import { S3DocumentStorageService } from './storage/s3-document-storage.service';
+import { TenantDocumentBrandingService } from './tenant-document-branding.service';
 
 @Module({
   imports: [PrismaModule, RabbitMQModule],
@@ -50,6 +51,7 @@ import { S3DocumentStorageService } from './storage/s3-document-storage.service'
     PlacementDocumentTemplateRegistry,
     PlacementPdfRendererService,
     S3DocumentStorageService,
+    TenantDocumentBrandingService,
     PlacementFinancialActivityReader,
     PlacementFinancialLockPolicy,
     ReinsuranceMoneyHelper,

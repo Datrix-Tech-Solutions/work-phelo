@@ -225,6 +225,15 @@ export class PlacementEndorsementsService {
       (participant) =>
         participant.status === PlacementEndorsementParticipantStatus.DECLINED,
     );
+    const pendingParticipantStatuses: PlacementEndorsementParticipantStatus[] =
+      [
+        PlacementEndorsementParticipantStatus.INVITED,
+        PlacementEndorsementParticipantStatus.OFFER_SENT,
+        PlacementEndorsementParticipantStatus.QUOTED,
+      ];
+    const pendingParticipants = endorsement.participants.filter((participant) =>
+      pendingParticipantStatuses.includes(participant.status),
+    );
     const placedPercent = acceptedParticipants.reduce(
       (sum, participant) =>
         sum + (this.toOptionalNumber(participant.signedLinePercent) ?? 0),
@@ -289,10 +298,8 @@ export class PlacementEndorsementsService {
       pendingActions.add('ADD_CAPACITY');
     }
     if (
-      remainingPercent !== null &&
-      remainingPercent === 0 &&
-      acceptedParticipants.length > 0 &&
-      endorsement.status === PlacementEndorsementStatus.MARKETING
+      pendingParticipants.length > 0 &&
+      (remainingPercent === null || remainingPercent > 0)
     ) {
       pendingActions.add('ACCEPT_PARTICIPANTS');
     }
@@ -464,7 +471,27 @@ export class PlacementEndorsementsService {
       placementId,
       endorsementId,
     );
-    this.assertTransition(endorsement.status, dto.status);
+    if (endorsement.status === dto.status) return endorsement;
+
+    if (dto.status === PlacementEndorsementStatus.CLOSED) {
+      const summary = await this.getSummary(
+        user.tenantId,
+        placementId,
+        endorsementId,
+      );
+      if (
+        summary.pendingActions.length !== 1 ||
+        summary.pendingActions[0] !== 'CLOSE_ENDORSEMENT'
+      ) {
+        throw new BadRequestException(
+          `Endorsement is not ready to close. Pending actions: ${
+            summary.pendingActions.join(', ') || 'none'
+          }`,
+        );
+      }
+    } else {
+      this.assertTransition(endorsement.status, dto.status);
+    }
 
     return this.prisma.placementEndorsement.update({
       where: { id: endorsementId },

@@ -17,10 +17,13 @@ import {
   EndorsementParticipantClosing,
   PlacementLockStatus,
   AcceptPlacementParticipantResponse,
+  EffectivePlacementView,
+  PlacementEndorsementSummary,
 } from '@/types/reinsurance';
 
 const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
+export const facultativePlacementsKey = FACULTATIVES_KEY;
 const PLACEMENT_LIST_STALE_TIME_MS = 60_000;
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
 
@@ -66,6 +69,19 @@ export function useFacultatives() {
     queryKey: FACULTATIVES_KEY,
     queryFn: async () => {
       const res = await api.get(BASE);
+      return extractList(res.data);
+    },
+    staleTime: PLACEMENT_LIST_STALE_TIME_MS,
+  });
+}
+
+export function usePaymentEligibleFacultatives() {
+  return useQuery({
+    queryKey: [...FACULTATIVES_KEY, 'payment-eligible'] as const,
+    queryFn: async () => {
+      const res = await api.get(BASE, {
+        params: { paymentEligible: true, limit: 100 },
+      });
       return extractList(res.data);
     },
     staleTime: PLACEMENT_LIST_STALE_TIME_MS,
@@ -213,9 +229,11 @@ export function useAcceptAndConfirmParticipant(placementId: string) {
       return res.data as AcceptPlacementParticipantResponse;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
       queryClient.invalidateQueries({ queryKey: placementQueryKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
     },
   });
 }
@@ -291,7 +309,23 @@ export function useUpdateClosingStatus(placementId: string) {
   });
 }
 
-const endorsementKey = (placementId: string) => [...FACULTATIVES_KEY, placementId, 'endorsements'];
+export const endorsementKey = (placementId: string) => [
+  ...FACULTATIVES_KEY,
+  placementId,
+  'endorsements',
+];
+
+export const endorsementSummaryKey = (placementId: string, endorsementId: string) => [
+  ...endorsementKey(placementId),
+  endorsementId,
+  'summary',
+];
+
+export const placementEffectiveViewKey = (placementId: string) => [
+  ...FACULTATIVES_KEY,
+  placementId,
+  'effective-view',
+];
 
 export function usePlacementEndorsements(placementId: string) {
   return useQuery({
@@ -349,13 +383,66 @@ export function useUpdateEndorsementStatus(placementId: string) {
       });
       return res.data as PlacementEndorsement;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) });
+    onSuccess: async (_endorsement, variables) => {
+      const invalidations = [
+        queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) }),
+        queryClient.invalidateQueries({
+          queryKey: endorsementSummaryKey(placementId, variables.endorsementId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: placementEffectiveViewKey(placementId),
+        }),
+      ];
+      if (variables.status === 'CLOSED') {
+        invalidations.push(
+          queryClient.invalidateQueries({
+            queryKey: placementQueryKey(placementId),
+            exact: true,
+          }),
+          queryClient.invalidateQueries({
+            queryKey: endorsementClosingsKey(placementId, variables.endorsementId),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: [...endorsementKey(placementId), variables.endorsementId, 'notes'],
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ['reinsurance', 'dashboard'],
+          }),
+        );
+      }
+      await Promise.all(invalidations);
     },
   });
 }
 
-const endorsementParticipantKey = (placementId: string, endorsementId: string) => [
+export function usePlacementEndorsementSummary(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  return useQuery({
+    queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/endorsements/${endorsementId}/summary`);
+      return res.data as PlacementEndorsementSummary;
+    },
+    enabled: !!placementId && !!endorsementId,
+    staleTime: 15_000,
+  });
+}
+
+export function usePlacementEffectiveView(placementId: string) {
+  return useQuery({
+    queryKey: placementEffectiveViewKey(placementId),
+    queryFn: async () => {
+      const res = await api.get(`${BASE}/${placementId}/effective-view`);
+      return res.data as EffectivePlacementView;
+    },
+    enabled: !!placementId,
+    staleTime: 15_000,
+  });
+}
+
+export const endorsementParticipantKey = (placementId: string, endorsementId: string) => [
   ...endorsementKey(placementId),
   endorsementId,
   'participants',
@@ -399,7 +486,7 @@ export function useCreateEndorsementParticipant(
   });
 }
 
-const endorsementClosingsKey = (placementId: string, endorsementId: string) => [
+export const endorsementClosingsKey = (placementId: string, endorsementId: string) => [
   ...endorsementKey(placementId),
   endorsementId,
   'closings',

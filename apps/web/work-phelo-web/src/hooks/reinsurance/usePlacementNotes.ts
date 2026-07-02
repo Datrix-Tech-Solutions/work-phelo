@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PlacementNote, PlacementNoteListResponse, PlacementNoteStatus } from '@/types/reinsurance';
+import { endorsementSummaryKey, placementEffectiveViewKey } from './useFacultatives';
 
 const BASE = '/operations/reinsurance/placements';
 const placementNotesKey = (placementId: string) =>
@@ -14,6 +15,19 @@ const upsertNote = (current: PlacementNote[] | undefined, note: PlacementNote) =
   note,
   ...(current ?? []).filter((item) => item.id !== note.id),
 ];
+
+function invalidateEndorsementWorkflow(
+  queryClient: ReturnType<typeof useQueryClient>,
+  placementId: string,
+  endorsementId: string,
+) {
+  queryClient.invalidateQueries({
+    queryKey: endorsementSummaryKey(placementId, endorsementId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: placementEffectiveViewKey(placementId),
+  });
+}
 
 export function usePlacementNotes(placementId: string) {
   return useQuery({
@@ -136,6 +150,7 @@ export function useGenerateEndorsementDebitNote(
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId ?? '');
     },
   });
 }
@@ -161,6 +176,7 @@ export function useGenerateEndorsementCreditNote(
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId ?? '');
     },
   });
 }
@@ -186,6 +202,7 @@ export function useIssueEndorsementNote(placementId: string, endorsementId: stri
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId ?? '');
     },
   });
 }
@@ -211,6 +228,7 @@ export function useVoidEndorsementNote(placementId: string, endorsementId: strin
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
+      invalidateEndorsementWorkflow(queryClient, placementId, endorsementId ?? '');
     },
   });
 }

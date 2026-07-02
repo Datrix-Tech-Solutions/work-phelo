@@ -10,7 +10,11 @@ import {
   AddPaymentFormValues,
   ADD_PAYMENT_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/AddPaymentFormFields';
-import { useFacultatives, useCreatePlacementPayment, useFacultativePlacement } from '@/hooks';
+import {
+  usePaymentEligibleFacultatives,
+  useCreatePlacementPayment,
+  useFacultativePlacement,
+} from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 import { api } from '@/lib/api';
@@ -44,7 +48,7 @@ export default function AddPaymentForm({
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [paymentGuardError, setPaymentGuardError] = useState<string | null>(null);
 
-  const { data: facultatives = [] } = useFacultatives();
+  const { data: facultatives = [] } = usePaymentEligibleFacultatives();
   const { data: singlePlacement } = useFacultativePlacement(placementId ?? '');
   const createPayment = useCreatePlacementPayment();
   const addToast = useToastStore((s) => s.addToast);

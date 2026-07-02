@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementEndorsementImpactType,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
   Prisma,
@@ -31,6 +32,7 @@ type EndorsementForEffectiveView = {
   id: string;
   endorsementNumber: string;
   type: PlacementEndorsementType;
+  impactType: PlacementEndorsementImpactType;
   status: PlacementEndorsementStatus;
   effectiveDate: Date;
   targetPercent: Prisma.Decimal | null;
@@ -108,16 +110,34 @@ export class PlacementEffectiveViewService {
       const effectiveEndorsementSnapshots = endorsementSnapshots.filter(
         (snapshot) => appliedEndorsementClosingIds.has(snapshot.closingId),
       );
-      const snapshots = [
-        ...placementSnapshots,
-        ...effectiveEndorsementSnapshots,
-      ];
+      const snapshots = this.composeEffectiveSnapshots(
+        placementSnapshots,
+        effectiveEndorsementSnapshots,
+        appliedEndorsements,
+      );
       const counterparties = await this.findCounterparties(
         tx,
         tenantId,
         snapshots.map((snapshot) => snapshot.counterpartyId),
       );
       const warnings = this.buildWarnings(placement, snapshots);
+      if (
+        appliedEndorsements.some(
+          (endorsement) =>
+            endorsement.closings.every(
+              (closing) =>
+                closing.status !== PlacementClosingStatus.CONFIRMED,
+            ) &&
+            (endorsement.impactType ===
+              PlacementEndorsementImpactType.TERMS_ONLY ||
+              endorsement.impactType ===
+                PlacementEndorsementImpactType.ADMINISTRATIVE),
+        )
+      ) {
+        warnings.push(
+          'Closed non-capacity endorsement terms are applied to the effective placement fields; closing-derived premium amounts remain based on confirmed closing snapshots.',
+        );
+      }
       const effectiveFinancials = this.applyEndorsementFinancialSnapshots(
         baseTotals,
         appliedEndorsements,
@@ -127,10 +147,11 @@ export class PlacementEffectiveViewService {
         counterparties,
       );
       const facultativeOfferPercent = this.money.roundMoney(
-        effectiveParticipants.reduce(
-          (total, participant) => total + participant.signedLinePercent,
-          0,
-        ),
+        effectiveFinancials.facultativeOfferPercent ??
+          effectiveParticipants.reduce(
+            (total, participant) => total + participant.signedLinePercent,
+            0,
+          ),
       );
       const snapshotCurrencyCodes = new Set(
         snapshots
@@ -220,6 +241,7 @@ export class PlacementEffectiveViewService {
         id: true,
         endorsementNumber: true,
         type: true,
+        impactType: true,
         status: true,
         effectiveDate: true,
         targetPercent: true,
@@ -322,13 +344,42 @@ export class PlacementEffectiveViewService {
           facultativeOfferPercent: this.firstOptionalNumber(
             proposed.facultativeOffer,
             proposedPlacement.facultativeOffer,
-            endorsement.targetPercent,
             current.facultativeOfferPercent,
           ),
         };
       },
       baseTotals,
     );
+  }
+
+  private composeEffectiveSnapshots(
+    placementSnapshots: ClosingSnapshot[],
+    endorsementSnapshots: ClosingSnapshot[],
+    endorsements: EndorsementForEffectiveView[],
+  ): ClosingSnapshot[] {
+    let effectiveSnapshots = [...placementSnapshots];
+    const endorsementSnapshotByClosingId = new Map(
+      endorsementSnapshots.map((snapshot) => [snapshot.closingId, snapshot]),
+    );
+
+    for (const endorsement of endorsements) {
+      for (const closing of endorsement.closings) {
+        if (closing.status !== PlacementClosingStatus.CONFIRMED) continue;
+        const snapshot = endorsementSnapshotByClosingId.get(closing.id);
+        if (!snapshot) continue;
+
+        if (snapshot.originalParticipantId) {
+          effectiveSnapshots = effectiveSnapshots.filter(
+            (current) =>
+              current.participantId !== snapshot.originalParticipantId &&
+              current.originalParticipantId !== snapshot.originalParticipantId,
+          );
+        }
+        effectiveSnapshots.push(snapshot);
+      }
+    }
+
+    return effectiveSnapshots;
   }
 
   private buildEffectiveParticipants(
@@ -435,6 +486,15 @@ export class PlacementEffectiveViewService {
     ) {
       return false;
     }
+    if (
+      endorsement.status === PlacementEndorsementStatus.CLOSED &&
+      (endorsement.impactType ===
+        PlacementEndorsementImpactType.TERMS_ONLY ||
+        endorsement.impactType ===
+          PlacementEndorsementImpactType.ADMINISTRATIVE)
+    ) {
+      return true;
+    }
     return endorsement.closings.some(
       (closing) => closing.status === PlacementClosingStatus.CONFIRMED,
     );
@@ -442,17 +502,12 @@ export class PlacementEffectiveViewService {
 
   private mapPendingEndorsements(endorsements: EndorsementForEffectiveView[]) {
     return endorsements
-      .filter((endorsement) => {
-        if (
-          endorsement.status === PlacementEndorsementStatus.VOID ||
-          endorsement.status === PlacementEndorsementStatus.DECLINED
-        ) {
-          return false;
-        }
-        return !endorsement.closings.some(
-          (closing) => closing.status === PlacementClosingStatus.CONFIRMED,
-        );
-      })
+      .filter(
+        (endorsement) =>
+          endorsement.status !== PlacementEndorsementStatus.VOID &&
+          endorsement.status !== PlacementEndorsementStatus.DECLINED &&
+          !this.isEffectiveEndorsement(endorsement),
+      )
       .map((endorsement) => ({
         id: endorsement.id,
         endorsementNumber: endorsement.endorsementNumber,

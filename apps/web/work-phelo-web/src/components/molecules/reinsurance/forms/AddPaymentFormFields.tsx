@@ -6,7 +6,7 @@ import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
-import { useFacultatives, useCurrencyOptions } from '@/hooks';
+import { usePaymentEligibleFacultatives, useCurrencyOptions } from '@/hooks';
 import { cn, inputClass } from '@/lib/utils';
 
 export interface AddPaymentFormValues {
@@ -77,7 +77,7 @@ export function AddPaymentFormFields({
     formState: { errors },
   } = form;
 
-  const { data: facultatives = [] } = useFacultatives();
+  const { data: facultatives = [] } = usePaymentEligibleFacultatives();
   const { data: currencyOptions = [] } = useCurrencyOptions();
 
   const preFilledPlacement = useMemo(

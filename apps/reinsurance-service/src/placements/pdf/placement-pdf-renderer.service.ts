@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { chromium } from 'playwright-core';
+import QRCode from 'qrcode';
 import {
   PlacementDocumentStatus,
   PlacementDocumentType,
@@ -25,6 +26,13 @@ export class PlacementPdfRendererService {
   ) {}
 
   async render(document: PdfDocument): Promise<Buffer> {
+    const qrCodeDataUrl = await QRCode.toDataURL(
+      JSON.stringify({
+        documentNumber: document.documentNumber,
+        documentType: document.type,
+      }),
+      { width: 128, margin: 0, errorCorrectionLevel: 'M' },
+    );
     const html = this.templateRegistry.renderHtml(
       document.type,
       document.renderPayload,
@@ -32,6 +40,7 @@ export class PlacementPdfRendererService {
         documentNumber: document.documentNumber,
         title: document.title,
         generatedAt: document.generatedAt,
+        qrCodeDataUrl,
       },
     );
 

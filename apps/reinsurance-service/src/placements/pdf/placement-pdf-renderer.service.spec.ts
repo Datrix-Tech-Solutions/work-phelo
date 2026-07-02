@@ -65,6 +65,10 @@ describe('PlacementPdfRendererService', () => {
       expect.stringContaining('DOC-CS-001'),
       { waitUntil: 'networkidle' },
     );
+    expect(setContentMock).toHaveBeenCalledWith(
+      expect.stringContaining('data:image/png;base64,'),
+      { waitUntil: 'networkidle' },
+    );
     expect(pdfMock).toHaveBeenCalledWith(
       expect.objectContaining({
         format: 'A4',

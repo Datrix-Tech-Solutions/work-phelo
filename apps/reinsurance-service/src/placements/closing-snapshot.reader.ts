@@ -11,6 +11,7 @@ export type ClosingSnapshot = {
   closingId: string;
   participantId?: string;
   endorsementParticipantId?: string;
+  originalParticipantId?: string | null;
   counterpartyId: string;
   signedLinePercent: number;
   premium: number | null;
@@ -110,6 +111,7 @@ export class ClosingSnapshotReader {
         endorsementParticipant: {
           select: {
             counterpartyId: true,
+            originalParticipantId: true,
           },
         },
       },
@@ -119,6 +121,8 @@ export class ClosingSnapshotReader {
       sourceType: 'ENDORSEMENT_CLOSING',
       closingId: closing.id,
       endorsementParticipantId: closing.endorsementParticipantId,
+      originalParticipantId:
+        closing.endorsementParticipant.originalParticipantId,
       counterpartyId: closing.endorsementParticipant.counterpartyId,
       signedLinePercent: this.money.toNumber(closing.signedLinePercent),
       premium: this.money.toOptionalNumber(closing.premiumSnapshot),

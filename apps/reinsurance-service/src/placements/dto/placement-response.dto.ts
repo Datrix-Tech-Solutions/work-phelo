@@ -291,6 +291,20 @@ export class PlacementResponseDto {
   })
   remainingPercent!: number;
 
+  @ApiProperty({
+    example: 2,
+    description:
+      'Number of CONFIRMED placement closings. This is the validated participant count.',
+  })
+  confirmedClosingCount!: number;
+
+  @ApiProperty({
+    example: 60,
+    description:
+      'Sum of signed-line percentages captured by CONFIRMED closing snapshots.',
+  })
+  confirmedPlacedPercent!: number;
+
   @ApiProperty({ type: [PlacementStatusHistoryResponseDto] })
   statusHistory!: PlacementStatusHistoryResponseDto[];
 

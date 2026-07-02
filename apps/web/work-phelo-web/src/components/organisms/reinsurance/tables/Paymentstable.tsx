@@ -14,7 +14,7 @@ import {
   PlacementPayment,
   toStatusLabel,
 } from '@/types/reinsurance';
-import { useFacultatives, usePlacementPayments } from '@/hooks';
+import { usePaymentEligibleFacultatives, usePlacementPayments } from '@/hooks';
 
 const PAGE_SIZE = 10;
 
@@ -241,7 +241,7 @@ export function PaymentsTable() {
   const [cedantFilter, setCedantFilter] = useState('');
   const [page, setPage] = useState(1);
 
-  const { data: allRows = [], isLoading } = useFacultatives();
+  const { data: allRows = [], isLoading } = usePaymentEligibleFacultatives();
 
   const closingRows = useMemo(
     () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
