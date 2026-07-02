@@ -10,6 +10,13 @@ import {
   PlacementDocumentTemplateContext,
   text,
 } from './closing-slip.template';
+import {
+  profileAssetDataUri,
+  profileColor,
+  profileContactParts,
+  profileDefaultAccounts,
+  tenantDocumentProfile,
+} from './tenant-document-profile.template';
 
 const NOTE_DOCUMENT_TYPES = new Set<PlacementDocumentType>([
   PlacementDocumentType.DEBIT_NOTE,
@@ -22,6 +29,7 @@ interface NoteDocumentPayload {
   documentType?: string;
   note?: Record<string, unknown>;
   branding?: Record<string, unknown>;
+  documentProfile?: Record<string, unknown>;
 }
 
 type NotePresentation = {
@@ -45,7 +53,28 @@ export function renderNoteTemplate(
   const currency = note?.currency;
   const closingNumber =
     closing?.closingNumber ?? endorsementClosing?.closingNumber;
-  const productName = branding?.productName ?? 'WorkPhelo';
+  const productName = branding?.productName ?? 'Broker';
+  const profile = tenantDocumentProfile(payload.documentProfile);
+  const brokerName =
+    profile?.identity?.displayName ??
+    profile?.identity?.legalName ??
+    productName;
+  const logoDataUri = profileAssetDataUri(profile?.branding ?? null, 'logo');
+  const signatureDataUri = profileAssetDataUri(
+    profile?.branding ?? null,
+    'signature',
+  );
+  const primaryColor = profileColor(
+    profile?.branding ?? null,
+    'primaryColor',
+    '#173f5f',
+  );
+  const contactLine = profileContactParts(profile?.contact ?? null)
+    .map((part) => text(part))
+    .join(' · ');
+  const bankAccounts = profileDefaultAccounts(profile?.banking ?? null).filter(
+    (account) => account.currency === currency,
+  );
 
   return `<!doctype html>
 <html lang="en">
@@ -68,15 +97,22 @@ export function renderNoteTemplate(
         justify-content: space-between;
         align-items: flex-start;
         gap: 24px;
-        border-bottom: 3px solid #173f5f;
+        border-bottom: 3px solid ${primaryColor};
         padding-bottom: 16px;
         margin-bottom: 22px;
       }
       .brand-mark {
-        color: #173f5f;
+        color: ${primaryColor};
         font-size: 22px;
         font-weight: 800;
         letter-spacing: 0.04em;
+      }
+      .broker-logo {
+        display: block;
+        max-width: 150px;
+        max-height: 58px;
+        margin-bottom: 6px;
+        object-fit: contain;
       }
       .brand-copy {
         margin-top: 4px;
@@ -160,9 +196,9 @@ export function renderNoteTemplate(
       }
       .total th,
       .total td {
-        border-top: 2px solid #173f5f;
+        border-top: 2px solid ${primaryColor};
         border-bottom: 0;
-        color: #173f5f;
+        color: ${primaryColor};
         font-size: 14px;
       }
       .signature-grid {
@@ -184,6 +220,13 @@ export function renderNoteTemplate(
         color: #172033;
         font-size: 11px;
       }
+      .signature-image {
+        display: block;
+        max-width: 120px;
+        max-height: 42px;
+        margin-bottom: 5px;
+        object-fit: contain;
+      }
       footer {
         margin-top: 24px;
         border-top: 1px solid #dfe5ec;
@@ -197,7 +240,8 @@ export function renderNoteTemplate(
   <body>
     <header>
       <div>
-        <div class="brand-mark">${text(productName)}</div>
+        ${logoDataUri ? `<img class="broker-logo" src="${escapeHtml(logoDataUri)}" alt="${text(brokerName)} logo" />` : ''}
+        <div class="brand-mark">${text(brokerName)}</div>
         <div class="brand-copy">Reinsurance Operations</div>
       </div>
       <div class="document-heading">
@@ -272,10 +316,13 @@ export function renderNoteTemplate(
       </table>
     </section>
 
+    ${isDebitNote(payload.documentType) ? bankAccountSection(bankAccounts, currency) : ''}
+
     <div class="signature-grid">
       <div class="signature-box">
-        <strong>For ${text(productName)}</strong>
-        Authorized signature / stamp
+        ${signatureDataUri ? `<img class="signature-image" src="${escapeHtml(signatureDataUri)}" alt="Authorized signature" />` : ''}
+        <strong>For ${text(brokerName)}</strong>
+        ${profile ? `${text(profile.signatory?.name)}<br />${text(profile.signatory?.title)}` : 'Authorized signature / stamp'}
       </div>
       <div class="signature-box">
         <strong>Acknowledged by ${text(counterparty?.name, 'Recipient')}</strong>
@@ -284,11 +331,48 @@ export function renderNoteTemplate(
     </div>
 
     <footer>
-      Official broker document rendered from an immutable PlacementDocument payload.
-      No live placement, closing, endorsement or note values were recalculated.
+      ${
+        profile
+          ? `${text(profile.footer?.text, '')}${profile.footer?.text && contactLine ? '<br />' : ''}${contactLine}`
+          : 'Official broker document rendered from an immutable PlacementDocument payload. No live placement, closing, endorsement or note values were recalculated.'
+      }
     </footer>
   </body>
 </html>`;
+}
+
+function isDebitNote(documentType: unknown): boolean {
+  return (
+    documentType === PlacementDocumentType.DEBIT_NOTE ||
+    documentType === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE
+  );
+}
+
+function bankAccountSection(
+  accounts: Record<string, unknown>[],
+  currency: unknown,
+): string {
+  if (accounts.length === 0) return '';
+  const rows = accounts
+    .map(
+      (account) => `
+        <tr>
+          <th>${text(account.bankName)}${account.branchName ? ` / ${text(account.branchName)}` : ''}</th>
+          <td>
+            ${text(account.accountName)}<br />
+            ${text(account.accountNumber)}
+            ${account.swiftCode ? `<br />SWIFT: ${text(account.swiftCode)}` : ''}
+          </td>
+        </tr>
+      `,
+    )
+    .join('');
+  return `
+    <section class="section">
+      <h2>Payment Instructions (${text(currency)})</h2>
+      <table><tbody>${rows}</tbody></table>
+    </section>
+  `;
 }
 
 export function isNoteDocumentPayload(

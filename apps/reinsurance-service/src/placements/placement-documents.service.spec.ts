@@ -23,6 +23,10 @@ import { PlacementFinancialActivityReader } from './placement-financial-activity
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementsService } from './placements.service';
 import { S3DocumentStorageService } from './storage/s3-document-storage.service';
+import {
+  TenantDocumentProfileClient,
+  TenantDocumentProfileSnapshot,
+} from './tenant-document-profile.client';
 
 describe('PlacementDocumentsService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
@@ -155,6 +159,48 @@ describe('PlacementDocumentsService', () => {
     remainingPercent: 20,
   };
 
+  const documentProfile: TenantDocumentProfileSnapshot = {
+    tenantId: 'tenant-1',
+    identity: {
+      displayName: 'Acme Brokers',
+      legalName: 'Acme Brokers Limited',
+      registrationNumber: 'CS-123',
+      taxNumber: 'TIN-123',
+    },
+    contact: {
+      physicalAddress: '1 Broker Street',
+      postalAddress: 'P.O. Box 1',
+      phone: '+233200000000',
+      email: 'broker@acme.example',
+      website: 'https://acme.example',
+    },
+    footer: { text: 'Licensed insurance broker' },
+    branding: {
+      logo: null,
+      signature: null,
+      colors: null,
+      version: 3,
+    },
+    banking: {
+      defaultCurrency: 'GHS',
+      defaultAccounts: [
+        {
+          id: 'account-1',
+          bankName: 'GCB Bank',
+          branchName: 'High Street',
+          accountName: 'Acme Brokers Limited',
+          accountNumber: '1036000007232',
+          currency: 'GHS',
+          swiftCode: 'GHCBGHAC',
+          sortCode: null,
+        },
+      ],
+    },
+    signatory: { name: 'Ama Mensah', title: 'Managing Director' },
+    profileActive: true,
+    defaultsApplied: false,
+  };
+
   let prisma: {
     placement: { findFirst: PrismaMethod };
     placementDocument: {
@@ -184,6 +230,7 @@ describe('PlacementDocumentsService', () => {
     signedDownloadUrl: jest.Mock;
     readStoredObject: jest.Mock;
   };
+  let tenantDocumentProfile: { getSnapshot: jest.Mock };
   let service: PlacementDocumentsService;
   let lockPolicy: PlacementFinancialLockPolicy;
 
@@ -259,11 +306,15 @@ describe('PlacementDocumentsService', () => {
         sizeBytes: Buffer.from('%PDF stored').byteLength,
       }),
     };
+    tenantDocumentProfile = {
+      getSnapshot: jest.fn().mockResolvedValue(documentProfile),
+    };
     service = new PlacementDocumentsService(
       prisma as unknown as PrismaService,
       placementsService as unknown as PlacementsService,
       pdfRenderer as unknown as PlacementPdfRendererService,
       documentStorage as unknown as S3DocumentStorageService,
+      tenantDocumentProfile as unknown as TenantDocumentProfileClient,
     );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
@@ -328,6 +379,9 @@ describe('PlacementDocumentsService', () => {
     expect(
       jsonRecord(jsonRecord(createArgs.data.renderPayload).placement),
     ).toMatchObject({ reference: 'FAC-001' });
+    expect(jsonRecord(createArgs.data.renderPayload).documentProfile).toEqual(
+      documentProfile,
+    );
   });
 
   it('generates a participant-scoped offer slip document for one reinsurer', async () => {
@@ -391,9 +445,10 @@ describe('PlacementDocumentsService', () => {
       totalOfferedPercent: 40,
       remainingPercent: 20,
     });
-    expect(jsonRecord(sourceSnapshot.branding)).toMatchObject({
-      productName: 'WorkPhelo',
-    });
+    expect(sourceSnapshot.branding).toBeUndefined();
+    expect(jsonRecord(createArgs.data.renderPayload).documentProfile).toEqual(
+      documentProfile,
+    );
   });
 
   it('reuses an active participant offer slip instead of creating duplicates', async () => {
@@ -424,6 +479,7 @@ describe('PlacementDocumentsService', () => {
     );
     expect(findFirstArgs.where).toMatchObject(expectedWhere);
     expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+    expect(tenantDocumentProfile.getSnapshot).not.toHaveBeenCalled();
   });
 
   it('rejects participant-scoped offer slips for participant placement mismatches', async () => {
@@ -510,6 +566,9 @@ describe('PlacementDocumentsService', () => {
     expect(jsonRecord(createArgs.data.sourceSnapshot)).toMatchObject({
       grossPremium: '2500',
     });
+    expect(jsonRecord(createArgs.data.renderPayload).documentProfile).toEqual(
+      documentProfile,
+    );
   });
 
   it('generates note documents from PlacementNote values', async () => {
@@ -586,10 +645,7 @@ describe('PlacementDocumentsService', () => {
           name: 'Acme Insurance',
         },
       },
-      branding: {
-        productName: 'WorkPhelo',
-        documentFamily: 'Reinsurance Operations',
-      },
+      documentProfile,
     });
   });
 
@@ -670,7 +726,64 @@ describe('PlacementDocumentsService', () => {
         endorsementClosing: { closingNumber: 'END-CLO-001' },
         counterparty: { name: 'Avenue Re' },
       },
+      documentProfile,
     });
+  });
+
+  it('does not create a document when the tenant profile is unavailable', async () => {
+    tenantDocumentProfile.getSnapshot.mockRejectedValue(
+      new InternalServerErrorException('Auth unavailable'),
+    );
+
+    await expect(
+      service.generateOfferSlip(user, 'placement-1'),
+    ).rejects.toThrow(InternalServerErrorException);
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
+  it('requires a matching default bank account for debit note documents', async () => {
+    prisma.placementNote.findFirst.mockResolvedValue({
+      id: 'note-1',
+      placementId: 'placement-1',
+      closingId: null,
+      participantId: null,
+      endorsementId: null,
+      endorsementClosingId: null,
+      noteNumber: 'DN-001',
+      type: PlacementNoteType.DEBIT_NOTE,
+      direction: PlacementNoteDirection.CEDANT_TO_BROKER,
+      status: PlacementNoteStatus.DRAFT,
+      currency: 'USD',
+      grossAmount: new Prisma.Decimal('5000'),
+      commissionAmount: new Prisma.Decimal('500'),
+      brokerageAmount: null,
+      nicLevyAmount: new Prisma.Decimal('0'),
+      withholdingTaxAmount: new Prisma.Decimal('0'),
+      netAmount: new Prisma.Decimal('4500'),
+      noteDate: new Date('2026-06-12T00:00:00.000Z'),
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+      },
+      counterparty: {
+        id: 'cedant-1',
+        name: 'Acme Insurance',
+        registrationNumber: 'CED-001',
+      },
+      closing: null,
+      participant: null,
+      endorsement: null,
+      endorsementClosing: null,
+      endorsementParticipant: null,
+    });
+
+    await expect(
+      service.generateNoteDocument(user, 'placement-1', 'note-1'),
+    ).rejects.toThrow(
+      'Tenant document profile requires an active default USD bank account',
+    );
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
   });
 
   it('generates endorsement slip and endorsement closing slip documents', async () => {

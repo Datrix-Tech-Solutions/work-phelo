@@ -4,6 +4,52 @@ import { PlacementDocumentTemplateRegistry } from './placement-document-template
 
 describe('PlacementDocumentTemplateRegistry', () => {
   const registry = new PlacementDocumentTemplateRegistry();
+  const documentProfile = {
+    tenantId: 'tenant-1',
+    identity: {
+      displayName: 'Acme Brokers',
+      legalName: 'Acme Brokers Limited',
+      registrationNumber: 'CS-123',
+      taxNumber: 'TIN-123',
+    },
+    contact: {
+      physicalAddress: '1 Broker Street',
+      postalAddress: 'P.O. Box 1',
+      phone: '+233200000000',
+      email: 'broker@acme.example',
+      website: 'https://acme.example',
+    },
+    footer: { text: 'Licensed insurance broker' },
+    branding: {
+      logo: {
+        mimeType: 'image/png',
+        fileName: 'logo.png',
+        sizeBytes: 4,
+        dataUri: 'data:image/png;base64,bG9nbw==',
+      },
+      signature: null,
+      colors: { primaryColor: '#123456' },
+      version: 3,
+    },
+    banking: {
+      defaultCurrency: 'GHS',
+      defaultAccounts: [
+        {
+          id: 'account-1',
+          bankName: 'GCB Bank',
+          branchName: 'High Street',
+          accountName: 'Acme Brokers Limited',
+          accountNumber: '1036000007232',
+          currency: 'GHS',
+          swiftCode: 'GHCBGHAC',
+          sortCode: null,
+        },
+      ],
+    },
+    signatory: { name: 'Ama Mensah', title: 'Managing Director' },
+    profileActive: true,
+    defaultsApplied: false,
+  };
   const offerSlipPayload = {
     documentType: PlacementDocumentType.OFFER_SLIP,
     placement: {
@@ -156,6 +202,24 @@ describe('PlacementDocumentTemplateRegistry', () => {
     expect(html).toContain('Net Premium');
   });
 
+  it('renders newly generated offer slips from the tenant profile snapshot', () => {
+    const html = registry.renderHtml(
+      PlacementDocumentType.OFFER_SLIP,
+      { ...offerSlipPayload, branding: undefined, documentProfile },
+      {
+        documentNumber: 'DOC-OS-001',
+        title: 'Offer Slip FAC-001 - Avenue Re',
+        generatedAt: '2026-06-12T00:00:00.000Z',
+      },
+    );
+
+    expect(html).toContain('Acme Brokers');
+    expect(html).toContain('data:image/png;base64,bG9nbw==');
+    expect(html).toContain('Licensed insurance broker');
+    expect(html).toContain('1 Broker Street');
+    expect(html).not.toContain('For Broker / WorkPhelo');
+  });
+
   it.each([
     [PlacementDocumentType.DEBIT_NOTE, 'Debit Note', 'Acme Insurance'],
     [PlacementDocumentType.CREDIT_NOTE, 'Credit Note', 'Avenue Re'],
@@ -189,6 +253,30 @@ describe('PlacementDocumentTemplateRegistry', () => {
     expect(html).toContain(
       'rendered from an immutable PlacementDocument payload',
     );
+  });
+
+  it('renders debit-note payment and signatory details from the snapshot', () => {
+    const html = registry.renderHtml(
+      PlacementDocumentType.DEBIT_NOTE,
+      {
+        ...notePayload(PlacementDocumentType.DEBIT_NOTE),
+        branding: undefined,
+        documentProfile,
+      },
+      {
+        documentNumber: 'DOC-DN-001',
+        title: 'Debit Note',
+        generatedAt: '2026-06-12T00:00:00.000Z',
+      },
+    );
+
+    expect(html).toContain('Acme Brokers');
+    expect(html).toContain('Payment Instructions (GHS)');
+    expect(html).toContain('1036000007232');
+    expect(html).toContain('GHCBGHAC');
+    expect(html).toContain('Ama Mensah');
+    expect(html).toContain('Managing Director');
+    expect(html).toContain('Licensed insurance broker');
   });
 
   it('rejects unsupported document types', () => {

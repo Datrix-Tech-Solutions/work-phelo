@@ -9,6 +9,12 @@ import {
   PlacementDocumentTemplateContext,
   text,
 } from './closing-slip.template';
+import {
+  profileAssetDataUri,
+  profileColor,
+  profileContactParts,
+  tenantDocumentProfile,
+} from './tenant-document-profile.template';
 
 interface OfferSlipPayload {
   documentType?: string;
@@ -20,6 +26,7 @@ interface OfferSlipPayload {
   participantPreview?: Record<string, unknown>;
   offerContext?: Record<string, unknown>;
   branding?: Record<string, unknown>;
+  documentProfile?: Record<string, unknown>;
 }
 
 function numberValue(value: unknown): number | null {
@@ -110,6 +117,25 @@ export function renderOfferSlipTemplate(
   );
   const offerContext = getRecord(payload.offerContext);
   const branding = getRecord(payload.branding);
+  const profile = tenantDocumentProfile(payload.documentProfile);
+  const brokerName =
+    profile?.identity?.displayName ??
+    profile?.identity?.legalName ??
+    branding?.productName ??
+    'Broker';
+  const logoDataUri = profileAssetDataUri(profile?.branding ?? null, 'logo');
+  const signatureDataUri = profileAssetDataUri(
+    profile?.branding ?? null,
+    'signature',
+  );
+  const primaryColor = profileColor(
+    profile?.branding ?? null,
+    'primaryColor',
+    '#111827',
+  );
+  const contactLine = profileContactParts(profile?.contact ?? null)
+    .map((part) => text(part))
+    .join(' · ');
 
   const currency = placement?.currency;
   const policyNumber =
@@ -152,12 +178,19 @@ export function renderOfferSlipTemplate(
         font-size: 12px;
         line-height: 1.45;
       }
+      .broker-logo {
+        display: block;
+        max-width: 150px;
+        max-height: 58px;
+        margin-bottom: 8px;
+        object-fit: contain;
+      }
       header {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
         gap: 24px;
-        border-bottom: 2px solid #111827;
+        border-bottom: 2px solid ${primaryColor};
         padding-bottom: 16px;
         margin-bottom: 24px;
       }
@@ -167,6 +200,7 @@ export function renderOfferSlipTemplate(
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
+      .broker-name { color: ${primaryColor}; font-weight: 700; }
       .brand p,
       .meta p {
         margin: 4px 0 0;
@@ -244,6 +278,13 @@ export function renderOfferSlipTemplate(
         padding-top: 8px;
         color: #4b5563;
       }
+      .signature-image {
+        display: block;
+        max-width: 120px;
+        max-height: 42px;
+        margin: 5px 0;
+        object-fit: contain;
+      }
       footer {
         margin-top: 28px;
         padding-top: 14px;
@@ -256,11 +297,9 @@ export function renderOfferSlipTemplate(
   <body>
     <header>
       <div class="brand">
+        ${logoDataUri ? `<img class="broker-logo" src="${escapeHtml(logoDataUri)}" alt="${text(brokerName)} logo" />` : ''}
         <h1>Offer Slip</h1>
-        <p>${text(branding?.productName, 'WorkPhelo')} ${text(
-          branding?.documentFamily,
-          'Reinsurance Operations',
-        )}</p>
+        <p class="broker-name">${text(brokerName)}</p>
         <p>Participant-specific facultative offer addressed to ${text(
           reinsurer?.name,
           'the selected reinsurer',
@@ -349,13 +388,20 @@ export function renderOfferSlipTemplate(
       </p>
       <div class="signature-grid">
         <div class="signature-line">For ${text(reinsurer?.name)}</div>
-        <div class="signature-line">For Broker / ${text(branding?.productName, 'WorkPhelo')}</div>
+        <div class="signature-line">
+          ${signatureDataUri ? `<img class="signature-image" src="${escapeHtml(signatureDataUri)}" alt="Authorized signature" />` : ''}
+          For ${text(brokerName)}
+          ${profile ? `<br />${text(profile.signatory?.name, '')} ${text(profile.signatory?.title, '')}` : ''}
+        </div>
       </div>
     </section>
 
     <footer>
-      This PDF was rendered from the immutable participant-scoped PlacementDocument.renderPayload.
-      Source placement and participant records were not recalculated or mutated.
+      ${
+        profile
+          ? `${text(profile.footer?.text, '')}${profile.footer?.text && contactLine ? '<br />' : ''}${contactLine}`
+          : 'This PDF was rendered from the immutable participant-scoped PlacementDocument.renderPayload. Source placement and participant records were not recalculated or mutated.'
+      }
     </footer>
   </body>
 </html>`;
