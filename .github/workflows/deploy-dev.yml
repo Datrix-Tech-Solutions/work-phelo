@@ -3,16 +3,11 @@ name: Deploy to Dev
 on:
   push:
     branches: [dev]
-  pull_request_target:
-    branches: [dev]
-    types: [closed]
 
 # ── 1. Concurrency control ─────────────────────────────────────────────────────
-# Collapse duplicate runs for the same target SHA (for example push + PR-merge
-# events for the same merge commit) while still allowing newer SHAs to replace
-# older in-flight dev deploys.
+# Allow a newer dev push to replace an older in-flight deployment.
 concurrency:
-  group: deploy-dev-${{ github.event.pull_request.merge_commit_sha || github.sha }}
+  group: deploy-dev-${{ github.sha }}
   cancel-in-progress: true
 
 env:
@@ -23,17 +18,14 @@ env:
   DEPLOY_PATH: /var/www/apps/dev.workphelo.datrixtechsolutions.com/work-phelo
   WEB_PUBLIC_API_URL: https://dev-api.workphelo.com/api/v1
   WEB_PUBLIC_APP_BASE_URL: https://dev-app.workphelo.com
-  BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
-  BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
-  CHECKOUT_REF: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+  BUILD_SHA: ${{ github.sha }}
+  BUILD_REF: ${{ github.ref_name }}
+  CHECKOUT_REF: ${{ github.sha }}
 
 jobs:
   quality-gates:
     name: Quality Gates
     runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'push' ||
-      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
 
     steps:
       - name: Checkout code
@@ -63,9 +55,6 @@ jobs:
     name: Detect Changed Services
     runs-on: ubuntu-latest
     needs: quality-gates
-    if: |
-      github.event_name == 'push' ||
-      (github.event_name == 'pull_request_target' && github.event.pull_request.merged == true)
 
     # ── 6. Per-service boolean outputs ──────────────────────────────────────────
     # Each output is 'true'/'false' so the build matrix can skip unchanged services
@@ -271,8 +260,8 @@ jobs:
       SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
       HR_FIELD_ENCRYPTION_KEY: ${{ secrets.HR_FIELD_ENCRYPTION_KEY }}
       HR_FIELD_HMAC_KEY: ${{ secrets.HR_FIELD_HMAC_KEY }}
-      BUILD_SHA: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
-      BUILD_REF: ${{ github.event.pull_request.base.ref || github.ref_name }}
+      BUILD_SHA: ${{ github.sha }}
+      BUILD_REF: ${{ github.ref_name }}
       IMAGE_PREFIX: ghcr.io/datrix-tech-solutions/work-phelo
       CHANGED_SERVICES: ${{ needs.detect-changes.outputs.changed }}
       WEB_PUBLIC_API_URL: https://dev-api.workphelo.com/api/v1
