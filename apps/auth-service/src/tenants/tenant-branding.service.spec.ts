@@ -136,6 +136,11 @@ describe('TenantBrandingService', () => {
     prisma.tenant.findUnique.mockResolvedValue({
       ...TENANT,
       branding: BRANDING,
+      documentProfile: {
+        logoObjectKey: 'private/tenant-logo.png',
+        signatureObjectKey: 'private/signature.png',
+      },
+      bankAccounts: [{ accountNumber: '1036000007232' }],
     });
 
     const result = await service.findPublicBySlug('acme-ghana');
@@ -160,5 +165,8 @@ describe('TenantBrandingService', () => {
     expect(result).not.toHaveProperty('tenantId');
     expect(result).not.toHaveProperty('logoObjectKey');
     expect(result).not.toHaveProperty('updatedByUserId');
+    expect(result).not.toHaveProperty('documentProfile');
+    expect(result).not.toHaveProperty('bankAccounts');
+    expect(result).not.toHaveProperty('accountNumber');
   });
 });

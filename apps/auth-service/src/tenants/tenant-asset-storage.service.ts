@@ -1,6 +1,12 @@
 import { randomUUID } from 'crypto';
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { PutObjectCommand, S3Client, S3ClientConfig } from '@aws-sdk/client-s3';
+import {
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  S3ClientConfig,
+} from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export type TenantDocumentAssetType = 'logo' | 'signature';
 
@@ -17,6 +23,11 @@ export interface StoredTenantDocumentAsset {
   mimeType: string;
   fileName: string;
   sizeBytes: number;
+}
+
+export interface SignedTenantDocumentAsset {
+  readUrl: string;
+  expiresAt: string;
 }
 
 interface TenantAssetStorageConfig {
@@ -65,6 +76,30 @@ export class TenantAssetStorageService {
       mimeType: input.contentType,
       fileName,
       sizeBytes: input.body.byteLength,
+    };
+  }
+
+  async createSignedReadUrl(input: {
+    objectKey: string;
+    mimeType: string;
+    fileName: string;
+  }): Promise<SignedTenantDocumentAsset> {
+    const config = this.config();
+    const expiresIn = this.signedUrlTtlSeconds();
+    const readUrl = await getSignedUrl(
+      this.s3(config),
+      new GetObjectCommand({
+        Bucket: config.bucket,
+        Key: input.objectKey,
+        ResponseContentType: input.mimeType,
+        ResponseContentDisposition: `inline; filename="${this.safeFileName(input.fileName)}"`,
+      }),
+      { expiresIn },
+    );
+
+    return {
+      readUrl,
+      expiresAt: new Date(Date.now() + expiresIn * 1000).toISOString(),
     };
   }
 
@@ -119,6 +154,14 @@ export class TenantAssetStorageService {
 
   private cleanPrefix(prefix: string): string {
     return prefix.trim().replace(/^\/+|\/+$/g, '');
+  }
+
+  private signedUrlTtlSeconds(): number {
+    const parsed = Number(
+      this.env('AUTH_TENANT_ASSET_SIGNED_URL_TTL_SECONDS', '120'),
+    );
+    if (!Number.isSafeInteger(parsed) || parsed <= 0) return 120;
+    return Math.min(parsed, 900);
   }
 
   private env(name: string, fallback = ''): string {

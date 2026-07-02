@@ -105,7 +105,10 @@ function makePrisma() {
 
 function makeService() {
   const prisma = makePrisma();
-  const storage = { store: jest.fn() };
+  const storage = {
+    store: jest.fn(),
+    createSignedReadUrl: jest.fn(),
+  };
   const audit = { log: jest.fn().mockResolvedValue(undefined) };
   const service = new TenantDocumentProfileService(
     prisma as unknown as PrismaService,
@@ -169,6 +172,124 @@ describe('TenantDocumentProfileService', () => {
       bankAccounts: [],
     });
     expect(prisma.tenantDocumentProfile.upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns service-safe defaults without requiring asset storage', async () => {
+    const { prisma, service, storage } = makeService();
+    prisma.tenant.findUnique.mockResolvedValue(tenantResult());
+
+    const result = await service.getInternalResolved('tenant-1');
+
+    expect(result).toMatchObject({
+      tenantId: 'tenant-1',
+      displayName: TENANT.name,
+      legalName: TENANT.name,
+      version: 0,
+      defaultsApplied: true,
+      logo: null,
+      signature: null,
+      bankAccounts: [],
+    });
+    expect(result).not.toHaveProperty('logoObjectKey');
+    expect(result).not.toHaveProperty('createdByUserId');
+    expect(storage.createSignedReadUrl).not.toHaveBeenCalled();
+  });
+
+  it('returns signed asset metadata without exposing object keys', async () => {
+    const { prisma, service, storage } = makeService();
+    prisma.tenant.findUnique.mockResolvedValue(
+      tenantResult({
+        ...PROFILE,
+        logoObjectKey: 'tenant-assets/tenant-1/logo.png',
+        logoMimeType: 'image/png',
+        logoFileName: 'logo.png',
+        logoSizeBytes: 1024,
+        signatureObjectKey: 'tenant-assets/tenant-1/signature.png',
+        signatureMimeType: 'image/png',
+        signatureFileName: 'signature.png',
+        signatureSizeBytes: 512,
+      }),
+    );
+    storage.createSignedReadUrl
+      .mockResolvedValueOnce({
+        readUrl: 'https://storage.example/logo-signed',
+        expiresAt: '2026-07-02T10:02:00.000Z',
+      })
+      .mockResolvedValueOnce({
+        readUrl: 'https://storage.example/signature-signed',
+        expiresAt: '2026-07-02T10:02:00.000Z',
+      });
+
+    const result = await service.getInternalResolved('tenant-1');
+
+    expect(storage.createSignedReadUrl).toHaveBeenNthCalledWith(1, {
+      objectKey: 'tenant-assets/tenant-1/logo.png',
+      mimeType: 'image/png',
+      fileName: 'logo.png',
+    });
+    expect(result.logo).toEqual({
+      mimeType: 'image/png',
+      fileName: 'logo.png',
+      sizeBytes: 1024,
+      readUrl: 'https://storage.example/logo-signed',
+      expiresAt: '2026-07-02T10:02:00.000Z',
+    });
+    expect(result.signature?.readUrl).toBe(
+      'https://storage.example/signature-signed',
+    );
+    expect(result).not.toHaveProperty('logoObjectKey');
+    expect(result).not.toHaveProperty('signatureObjectKey');
+  });
+
+  it('returns only active default bank accounts for document rendering', async () => {
+    const { prisma, service } = makeService();
+    prisma.tenant.findUnique.mockResolvedValue(
+      tenantResult(PROFILE, [
+        ACCOUNT,
+        {
+          ...ACCOUNT,
+          id: 'inactive-default',
+          currency: 'USD',
+          isActive: false,
+        },
+        {
+          ...ACCOUNT,
+          id: 'active-non-default',
+          currency: 'EUR',
+          isDefault: false,
+        },
+        {
+          ...ACCOUNT,
+          id: 'other-tenant-default',
+          tenantId: 'tenant-2',
+          currency: 'USD',
+        },
+      ]),
+    );
+
+    const result = await service.getInternalResolved('tenant-1');
+
+    expect(result.bankAccounts).toEqual([
+      {
+        id: ACCOUNT.id,
+        bankName: ACCOUNT.bankName,
+        branchName: ACCOUNT.branchName,
+        accountName: ACCOUNT.accountName,
+        accountNumber: ACCOUNT.accountNumber,
+        currency: ACCOUNT.currency,
+        swiftCode: ACCOUNT.swiftCode,
+        sortCode: ACCOUNT.sortCode,
+      },
+    ]);
+  });
+
+  it('rejects a missing tenant through the internal contract', async () => {
+    const { prisma, service } = makeService();
+    prisma.tenant.findUnique.mockResolvedValue(null);
+
+    await expect(service.getInternalResolved('missing')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('upserts a profile and increments its version on update', async () => {

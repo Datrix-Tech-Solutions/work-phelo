@@ -13,6 +13,10 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  InternalTenantDocumentAssetDto,
+  InternalTenantDocumentProfileDto,
+} from './dto/internal-tenant-document-profile.dto';
+import {
   CreateTenantBankAccountDto,
   TenantBankAccountResponseDto,
   TenantDocumentProfileResponseDto,
@@ -66,6 +70,65 @@ export class TenantDocumentProfileService {
   async get(tenantId: string): Promise<TenantDocumentProfileResponseDto> {
     const tenant = await this.findTenant(tenantId);
     return this.toProfileResponse(tenant);
+  }
+
+  async getInternalResolved(
+    tenantId: string,
+  ): Promise<InternalTenantDocumentProfileDto> {
+    const profile = await this.get(tenantId);
+    const [logo, signature] = await Promise.all([
+      this.resolveInternalAsset(
+        profile.logoObjectKey,
+        profile.logoMimeType,
+        profile.logoFileName,
+        profile.logoSizeBytes,
+      ),
+      this.resolveInternalAsset(
+        profile.signatureObjectKey,
+        profile.signatureMimeType,
+        profile.signatureFileName,
+        profile.signatureSizeBytes,
+      ),
+    ]);
+
+    return {
+      tenantId: profile.tenantId,
+      displayName: profile.displayName,
+      legalName: profile.legalName,
+      registrationNumber: profile.registrationNumber,
+      taxNumber: profile.taxNumber,
+      physicalAddress: profile.physicalAddress,
+      postalAddress: profile.postalAddress,
+      phone: profile.phone,
+      email: profile.email,
+      website: profile.website,
+      footerText: profile.footerText,
+      defaultCurrency: profile.defaultCurrency,
+      version: profile.version,
+      isActive: profile.isActive,
+      defaultsApplied: profile.defaultsApplied,
+      authorizedSignatoryName: profile.authorizedSignatoryName,
+      authorizedSignatoryTitle: profile.authorizedSignatoryTitle,
+      logo,
+      signature,
+      bankAccounts: profile.bankAccounts
+        .filter(
+          (account) =>
+            account.tenantId === profile.tenantId &&
+            account.isActive &&
+            account.isDefault,
+        )
+        .map((account) => ({
+          id: account.id,
+          bankName: account.bankName,
+          branchName: account.branchName,
+          accountName: account.accountName,
+          accountNumber: account.accountNumber,
+          currency: account.currency,
+          swiftCode: account.swiftCode,
+          sortCode: account.sortCode,
+        })),
+    };
   }
 
   async upsert(
@@ -557,6 +620,27 @@ export class TenantDocumentProfileService {
   private optionalText(value: string | null | undefined): string | null {
     const cleaned = value?.trim();
     return cleaned || null;
+  }
+
+  private async resolveInternalAsset(
+    objectKey: string | null,
+    mimeType: string | null,
+    fileName: string | null,
+    sizeBytes: number | null,
+  ): Promise<InternalTenantDocumentAssetDto | null> {
+    if (!objectKey || !mimeType || !fileName || sizeBytes === null) return null;
+    const signed = await this.storage.createSignedReadUrl({
+      objectKey,
+      mimeType,
+      fileName,
+    });
+    return {
+      mimeType,
+      fileName,
+      sizeBytes,
+      readUrl: signed.readUrl,
+      expiresAt: signed.expiresAt,
+    };
   }
 
   private toProfileResponse(
