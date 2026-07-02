@@ -22,6 +22,10 @@ import {
 } from './storage/s3-document-storage.service';
 import { VoidPlacementDocumentDto } from './dto/void-placement-document.dto';
 import { PlacementsService } from './placements.service';
+import {
+  TenantDocumentProfileClient,
+  TenantDocumentProfileSnapshot,
+} from './tenant-document-profile.client';
 
 const documentInclude = {} satisfies Prisma.PlacementDocumentInclude;
 
@@ -56,6 +60,7 @@ export class PlacementDocumentsService {
     private readonly placementsService: PlacementsService,
     private readonly pdfRenderer: PlacementPdfRendererService,
     private readonly documentStorage: S3DocumentStorageService,
+    private readonly tenantDocumentProfile: TenantDocumentProfileClient,
   ) {}
 
   async findAll(
@@ -150,10 +155,6 @@ export class PlacementDocumentsService {
         totalOfferedPercent: preview.totalOfferedPercent,
         totalAcceptedPercent: preview.totalAcceptedPercent,
         remainingPercent: preview.remainingPercent,
-      },
-      branding: {
-        productName: 'WorkPhelo',
-        documentFamily: 'Reinsurance Operations',
       },
     };
 
@@ -276,10 +277,6 @@ export class PlacementDocumentsService {
       renderPayload: {
         documentType: type,
         note: snapshot,
-        branding: {
-          productName: 'WorkPhelo',
-          documentFamily: 'Reinsurance Operations',
-        },
       },
       sourceLinks: {
         noteId: note.id,
@@ -640,6 +637,26 @@ export class PlacementDocumentsService {
     descriptor: DocumentSourceDescriptor,
   ): Promise<PlacementDocumentRecord> {
     await this.assertPlacement(user.tenantId, placementId);
+    if (descriptor.reuseActive) {
+      const existing = await this.findReusableDocument(
+        user.tenantId,
+        placementId,
+        descriptor,
+      );
+      if (existing) return existing;
+    }
+
+    const renderPayload = this.isBrandedDocument(descriptor.type)
+      ? this.withTenantDocumentProfile(
+          descriptor.renderPayload,
+          await this.tenantDocumentProfile.getSnapshot(user.tenantId),
+        )
+      : descriptor.renderPayload;
+    this.assertRequiredDocumentProfileData(
+      descriptor.type,
+      descriptor.currency,
+      renderPayload,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       if (descriptor.reuseActive) {
@@ -682,13 +699,88 @@ export class PlacementDocumentsService {
           title: descriptor.title,
           currency: descriptor.currency,
           sourceSnapshot: this.toJsonSafe(descriptor.sourceSnapshot),
-          renderPayload: this.toJsonSafe(descriptor.renderPayload),
+          renderPayload: this.toJsonSafe(renderPayload),
           generatedAt: new Date(),
           createdByUserId: user.id,
         },
         include: documentInclude,
       });
     });
+  }
+
+  private findReusableDocument(
+    tenantId: string,
+    placementId: string,
+    descriptor: DocumentSourceDescriptor,
+  ): Promise<PlacementDocumentRecord | null> {
+    return this.prisma.placementDocument.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        type: descriptor.type,
+        status: { not: PlacementDocumentStatus.VOID },
+        ...this.versionSourceWhere(descriptor.sourceLinks),
+      },
+      include: documentInclude,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private isBrandedDocument(type: PlacementDocumentType): boolean {
+    return new Set<PlacementDocumentType>([
+      PlacementDocumentType.OFFER_SLIP,
+      PlacementDocumentType.CLOSING_SLIP,
+      PlacementDocumentType.DEBIT_NOTE,
+      PlacementDocumentType.CREDIT_NOTE,
+      PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE,
+      PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+    ]).has(type);
+  }
+
+  private withTenantDocumentProfile(
+    renderPayload: unknown,
+    profile: TenantDocumentProfileSnapshot,
+  ): Record<string, unknown> {
+    const payload =
+      renderPayload && typeof renderPayload === 'object'
+        ? (renderPayload as Record<string, unknown>)
+        : {};
+    return { ...payload, documentProfile: profile };
+  }
+
+  private assertRequiredDocumentProfileData(
+    type: PlacementDocumentType,
+    currency: string | null,
+    renderPayload: unknown,
+  ): void {
+    if (!this.isBrandedDocument(type)) return;
+    const payload = renderPayload as {
+      documentProfile?: TenantDocumentProfileSnapshot;
+    };
+    const profile = payload.documentProfile;
+    if (
+      !profile?.identity.displayName.trim() ||
+      !profile.identity.legalName.trim()
+    ) {
+      throw new BadRequestException(
+        'Tenant document profile requires a display name and legal name before generating documents.',
+      );
+    }
+
+    const requiresBankAccount =
+      type === PlacementDocumentType.DEBIT_NOTE ||
+      type === PlacementDocumentType.ENDORSEMENT_DEBIT_NOTE;
+    if (
+      requiresBankAccount &&
+      (!currency ||
+        !profile.banking.defaultAccounts.some(
+          (account) => account.currency === currency,
+        ))
+    ) {
+      throw new BadRequestException(
+        `Tenant document profile requires an active default ${currency ?? 'document currency'} bank account before generating this debit note.`,
+      );
+    }
   }
 
   private async assertPlacement(

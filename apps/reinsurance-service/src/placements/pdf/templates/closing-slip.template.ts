@@ -1,4 +1,10 @@
 import { PlacementDocumentType } from '../../../../prisma/generated/client';
+import {
+  profileAssetDataUri,
+  profileColor,
+  profileContactParts,
+  tenantDocumentProfile,
+} from './tenant-document-profile.template';
 
 export interface PlacementDocumentTemplateContext {
   documentNumber: string;
@@ -9,6 +15,7 @@ export interface PlacementDocumentTemplateContext {
 interface ClosingSlipPayload {
   documentType?: string;
   closing?: Record<string, unknown>;
+  documentProfile?: Record<string, unknown>;
 }
 
 export function toDisplayString(value: unknown): string {
@@ -122,6 +129,22 @@ export function renderClosingSlipTemplate(
   const placement = getRecord(closing?.placement);
   const cedant = getRecord(placement?.cedant);
   const currency = closing?.currency ?? placement?.currency;
+  const profile = tenantDocumentProfile(payload.documentProfile);
+  const brokerName =
+    profile?.identity?.displayName ?? profile?.identity?.legalName;
+  const logoDataUri = profileAssetDataUri(profile?.branding ?? null, 'logo');
+  const signatureDataUri = profileAssetDataUri(
+    profile?.branding ?? null,
+    'signature',
+  );
+  const primaryColor = profileColor(
+    profile?.branding ?? null,
+    'primaryColor',
+    '#111827',
+  );
+  const contactLine = profileContactParts(profile?.contact ?? null)
+    .map((part) => text(part))
+    .join(' · ');
 
   return `<!doctype html>
 <html lang="en">
@@ -144,7 +167,7 @@ export function renderClosingSlipTemplate(
         justify-content: space-between;
         align-items: flex-start;
         gap: 24px;
-        border-bottom: 2px solid #111827;
+        border-bottom: 2px solid ${primaryColor};
         padding-bottom: 16px;
         margin-bottom: 24px;
       }
@@ -154,6 +177,14 @@ export function renderClosingSlipTemplate(
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
+      .broker-logo {
+        display: block;
+        max-width: 150px;
+        max-height: 58px;
+        margin-bottom: 8px;
+        object-fit: contain;
+      }
+      .broker-name { color: ${primaryColor}; font-weight: 700; }
       .brand p,
       .meta p {
         margin: 4px 0 0;
@@ -220,6 +251,19 @@ export function renderClosingSlipTemplate(
         color: #047857;
         font-size: 14px;
       }
+      .signature-block {
+        margin-top: 30px;
+        border-top: 1px solid #111827;
+        padding-top: 8px;
+        width: 48%;
+      }
+      .signature-image {
+        display: block;
+        max-width: 120px;
+        max-height: 42px;
+        margin-bottom: 5px;
+        object-fit: contain;
+      }
       footer {
         margin-top: 28px;
         padding-top: 14px;
@@ -232,8 +276,9 @@ export function renderClosingSlipTemplate(
   <body>
     <header>
       <div class="brand">
+        ${logoDataUri ? `<img class="broker-logo" src="${escapeHtml(logoDataUri)}" alt="${text(brokerName)} logo" />` : ''}
         <h1>Closing Slip</h1>
-        <p>Generated from an immutable placement closing document payload.</p>
+        ${profile ? `<p class="broker-name">${text(brokerName)}</p>` : '<p>Generated from an immutable placement closing document payload.</p>'}
       </div>
       <div class="meta">
         <strong>${text(context.documentNumber)}</strong>
@@ -294,9 +339,23 @@ export function renderClosingSlipTemplate(
       </table>
     </section>
 
+    ${
+      profile
+        ? `<div class="signature-block">
+            ${signatureDataUri ? `<img class="signature-image" src="${escapeHtml(signatureDataUri)}" alt="Authorized signature" />` : ''}
+            <strong>${text(profile.signatory?.name)}</strong><br />
+            ${text(profile.signatory?.title)}<br />
+            For ${text(brokerName)}
+          </div>`
+        : ''
+    }
+
     <footer>
-      This PDF was rendered from PlacementDocument.renderPayload only. The source placement,
-      participant, closing and financial records were not recalculated or mutated.
+      ${
+        profile
+          ? `${text(profile.footer?.text, '')}${profile.footer?.text && contactLine ? '<br />' : ''}${contactLine}`
+          : 'This PDF was rendered from PlacementDocument.renderPayload only. The source placement, participant, closing and financial records were not recalculated or mutated.'
+      }
     </footer>
   </body>
 </html>`;
