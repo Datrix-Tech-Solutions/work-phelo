@@ -1,8 +1,20 @@
 import { NavGroup } from '@/components/organisms/shared/Sidebar';
 
-import { BookSearch, LayoutDashboard, Settings } from 'lucide-react';
+import {
+  BookSearch,
+  CarFront,
+  ClipboardClock,
+  Handshake,
+  LayoutDashboard,
+  Settings,
+} from 'lucide-react';
 
 const DashboardIcon = () => <LayoutDashboard className="w-5 h-5" />;
+
+const ProspectIcon = () => <Handshake className="w-5 h-5" />;
+const AppointmentIcon = () => <ClipboardClock className="w-5 h-5" />;
+const NavigateIcon = () => <CarFront className="w-5 h-5" />;
+
 const SettingsIcon = () => <Settings className="w-5 h-5" />;
 const ProspectingIcon = () => <BookSearch className="w-5 h-5" />;
 
@@ -15,6 +27,35 @@ export const MARKETING_NAV_GROUPS: NavGroup[] = [
         label: 'Dashboard',
         icon: <DashboardIcon />,
         href: 'dashboard',
+        enabled: true,
+        active: true,
+      },
+    ],
+  },
+  {
+    label: 'Sales',
+    items: [
+      {
+        key: 'prospects',
+        label: 'Prospects',
+        icon: <ProspectIcon />,
+        href: 'prospects',
+        enabled: true,
+        active: true,
+      },
+      {
+        key: 'appointments',
+        label: 'Appointments',
+        icon: <AppointmentIcon />,
+        href: 'appointments',
+        enabled: true,
+        active: false,
+      },
+      {
+        key: 'navigate',
+        label: 'Navigate',
+        icon: <NavigateIcon />,
+        href: 'navigate',
         enabled: true,
         active: true,
       },
