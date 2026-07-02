@@ -72,6 +72,10 @@ Use seeded local test accounts or your own tenant credentials. Avoid publishing 
     )
     .addTag('Auth', 'Login, logout, token refresh, MFA, social auth')
     .addTag('Tenants', 'Tenant registration and management')
+    .addTag(
+      'Tenant Document Profile',
+      'Private document identity, branding assets, signatories and bank accounts',
+    )
     .addTag('Users', 'User management and invitations')
     .addTag('Company Roles', 'Company role management')
     .addTag('Permissions', 'Permission grants and revokes')

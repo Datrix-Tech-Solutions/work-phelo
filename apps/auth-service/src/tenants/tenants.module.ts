@@ -4,17 +4,22 @@ import { TenantLifecycleService } from './tenant-lifecycle.service';
 import { TenantConfigService } from './tenant-config.service';
 import { TenantAdminService } from './tenant-admin.service';
 import { TenantBrandingService } from './tenant-branding.service';
+import { TenantAssetStorageService } from './tenant-asset-storage.service';
+import { TenantDocumentProfileController } from './tenant-document-profile.controller';
+import { TenantDocumentProfileService } from './tenant-document-profile.service';
 import { RabbitMQModule } from '../messaging/rabbitmq.module';
 import { AuditModule } from '../audit/audit.module';
 
 @Module({
   imports: [RabbitMQModule, AuditModule],
-  controllers: [TenantsController],
+  controllers: [TenantsController, TenantDocumentProfileController],
   providers: [
     TenantLifecycleService,
     TenantConfigService,
     TenantAdminService,
     TenantBrandingService,
+    TenantAssetStorageService,
+    TenantDocumentProfileService,
   ],
   exports: [TenantLifecycleService],
 })

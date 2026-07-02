@@ -4,6 +4,8 @@ export async function resetCurrentSchema(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "w_auth"."AuditLog",
+      "w_auth"."TenantBankAccount",
+      "w_auth"."TenantDocumentProfile",
       "w_auth"."TenantBranding",
       "w_auth"."UserPermissionSet",
       "w_auth"."PermissionSetResource",
