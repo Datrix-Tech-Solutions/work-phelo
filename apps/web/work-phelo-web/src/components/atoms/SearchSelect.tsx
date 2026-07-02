@@ -37,16 +37,40 @@ export function SearchSelect({
   size = 'md',
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  /* drives the actual grid-rows/opacity styles, one frame behind `open` on the
+     way in — mounting already-expanded gives the browser nothing to transition
+     from, so it just pops in instead of animating */
+  const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (open && dropdownRef.current) {
-      dropdownRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+    if (open) dropdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [open]);
+
+  useEffect(() => {
+    if (!showDropdown || !open) return;
+    const raf = requestAnimationFrame(() => setExpanded(true));
+    return () => cancelAnimationFrame(raf);
+  }, [showDropdown, open]);
+
+  const openDropdown = () => {
+    setOpen(true);
+    setShowDropdown(true);
+  };
+
+  const closeDropdown = () => {
+    setOpen(false);
+    setExpanded(false);
+  };
+
+  /* keep the dropdown mounted until its closing transition finishes */
+  const handleDropdownTransitionEnd = (e: React.TransitionEvent) => {
+    if (!open && e.propertyName === 'grid-template-rows') setShowDropdown(false);
+  };
 
   const selected = options.find((o) => o.value === value);
 
@@ -59,7 +83,7 @@ export function SearchSelect({
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
+        closeDropdown();
         setQuery('');
       }
     };
@@ -77,27 +101,27 @@ export function SearchSelect({
   }, [options, query]);
 
   const handleFocus = () => {
-    setOpen(true);
+    openDropdown();
     setQuery('');
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
-    if (!open) setOpen(true);
+    if (!open) openDropdown();
   };
 
   const handleSelect = (opt: SearchSelectOption) => {
     onChange?.(opt.value);
-    setOpen(false);
+    closeDropdown();
     setQuery('');
   };
 
   const handleChevronClick = () => {
     if (open) {
-      setOpen(false);
+      closeDropdown();
       setQuery('');
     } else {
-      setOpen(true);
+      openDropdown();
       setQuery('');
       inputRef.current?.focus();
     }
@@ -107,7 +131,7 @@ export function SearchSelect({
     e.stopPropagation();
     onChange?.('');
     setQuery('');
-    setOpen(false);
+    closeDropdown();
   };
 
   return (
@@ -158,36 +182,40 @@ export function SearchSelect({
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 
-      {/* Dropdown */}
-      {open && (
+      {/* Dropdown — grid-rows trick animates height to fit actual content, so it flows down/up smoothly */}
+      {showDropdown && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 mt-1.5 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+          onTransitionEnd={handleDropdownTransitionEnd}
+          style={{ gridTemplateRows: expanded ? '1fr' : '0fr', opacity: expanded ? 1 : 0 }}
+          className="absolute top-full left-0 mt-1.5 w-full z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
         >
-          <div className="max-h-52 overflow-y-auto py-1">
-            {filtered.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
-            ) : (
-              filtered.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onMouseDown={(e) => e.preventDefault()} // prevent input blur before select fires
-                  onClick={() => handleSelect(opt)}
-                  className={cn(
-                    'w-full text-left px-4 py-2.5 text-sm transition-colors flex flex-col',
-                    opt.value === value
-                      ? 'bg-brand-tint text-brand font-medium'
-                      : 'text-gray-900 hover:bg-gray-300',
-                  )}
-                >
-                  <span>{opt.label}</span>
-                  {opt.sublabel && (
-                    <span className="text-xs text-gray-400 mt-0.5">{opt.sublabel}</span>
-                  )}
-                </button>
-              ))
-            )}
+          <div className="min-h-0 overflow-hidden bg-white border border-gray-200 rounded-card shadow-xl">
+            <div className="max-h-52 overflow-y-auto py-1">
+              {filtered.length === 0 ? (
+                <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
+              ) : (
+                filtered.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()} // prevent input blur before select fires
+                    onClick={() => handleSelect(opt)}
+                    className={cn(
+                      'w-full text-left px-4 py-2.5 text-sm transition-colors flex flex-col',
+                      opt.value === value
+                        ? 'bg-brand-tint text-brand font-medium'
+                        : 'text-gray-900 hover:bg-gray-300',
+                    )}
+                  >
+                    <span>{opt.label}</span>
+                    {opt.sublabel && (
+                      <span className="text-xs text-gray-400 mt-0.5">{opt.sublabel}</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}

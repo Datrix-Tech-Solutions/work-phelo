@@ -5,25 +5,21 @@ import { CardList, CardListItem } from '@/components/organisms/shared/CardList';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
-import {
-  DecisionMakerForm,
-  DecisionMakerFields,
-} from '@/components/molecules/marketing/DecisionMakerForm';
+import { FollowUpForm, FollowUpFields } from '@/components/molecules/marketing/FollowUpForm';
+import { pageContent } from '@/lib/layout';
+import { cn } from '@/lib/utils';
 
-const EMPTY_FORM: DecisionMakerFields = { name: '', description: '' };
-
+const EMPTY_FORM: FollowUpFields = { prospectName: '', followUpDate: '', notes: '' };
 type PanelMode = 'add' | 'edit';
 
-export default function DecisionMakerPage() {
+export default function UpcomingFollowUpsPage() {
   const [items, setItems] = useState<CardListItem[]>([]);
   const [search, setSearch] = useState('');
-
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>('add');
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<DecisionMakerFields>(EMPTY_FORM);
-  const [errors, setErrors] = useState<Partial<DecisionMakerFields>>({});
-
+  const [form, setForm] = useState<FollowUpFields>(EMPTY_FORM);
+  const [errors, setErrors] = useState<Partial<FollowUpFields>>({});
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const filtered = items.filter((i) => i.label.toLowerCase().includes(search.toLowerCase()));
@@ -39,7 +35,8 @@ export default function DecisionMakerPage() {
   function openEdit(id: string) {
     const item = items.find((i) => i.id === id);
     if (!item) return;
-    setForm({ name: item.label, description: item.sublabel ?? '' });
+    const [prospectName, followUpDate] = [item.label, item.sublabel ?? ''];
+    setForm({ prospectName, followUpDate, notes: '' });
     setErrors({});
     setPanelMode('edit');
     setEditingId(id);
@@ -47,30 +44,32 @@ export default function DecisionMakerPage() {
   }
 
   function validate(): boolean {
-    const next: Partial<DecisionMakerFields> = {};
-    if (!form.name.trim()) next.name = 'Name is required.';
+    const next: Partial<FollowUpFields> = {};
+    if (!form.prospectName.trim()) next.prospectName = 'Prospect name is required.';
+    if (!form.followUpDate) next.followUpDate = 'Follow-up date is required.';
     setErrors(next);
     return Object.keys(next).length === 0;
   }
 
+  function formatDate(iso: string) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+  }
+
   function handleSave() {
     if (!validate()) return;
+    const label = form.prospectName.trim();
+    const sublabel = form.followUpDate ? `Follow-up: ${formatDate(form.followUpDate)}` : undefined;
 
     if (panelMode === 'add') {
-      setItems((prev) => [
-        ...prev,
-        { id: Date.now().toString(), label: form.name.trim(), sublabel: form.description.trim() },
-      ]);
+      setItems((prev) => [...prev, { id: Date.now().toString(), label, sublabel }]);
     } else if (editingId) {
-      setItems((prev) =>
-        prev.map((i) =>
-          i.id === editingId
-            ? { ...i, label: form.name.trim(), sublabel: form.description.trim() }
-            : i,
-        ),
-      );
+      setItems((prev) => prev.map((i) => (i.id === editingId ? { ...i, label, sublabel } : i)));
     }
-
     setPanelOpen(false);
   }
 
@@ -81,41 +80,42 @@ export default function DecisionMakerPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <CardList
-        title="Decision Makers"
-        addLabel="Add Decision Maker"
-        items={filtered}
-        onAdd={openAdd}
-        onEdit={openEdit}
-        onDelete={(id) => setDeleteId(id)}
-        searchValue={search}
-        onSearchChange={setSearch}
-      />
+    <>
+      <div className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto')}>
+        <CardList
+          addLabel="Add Follow Up"
+          items={filtered}
+          onAdd={openAdd}
+          onEdit={openEdit}
+          onDelete={(id) => setDeleteId(id)}
+          searchValue={search}
+          onSearchChange={setSearch}
+        />
+      </div>
 
       <SidePanel
         isOpen={panelOpen}
         onClose={() => setPanelOpen(false)}
-        title={panelMode === 'add' ? 'Add Decision Maker' : 'Edit Decision Maker'}
+        title={panelMode === 'add' ? 'Add Follow Up' : 'Edit Follow Up'}
         footer={
           <div className="flex items-center justify-end gap-3">
             <Button variant="outline" onClick={() => setPanelOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSave}>
-              {panelMode === 'add' ? 'Add Decision Maker' : 'Save Changes'}
+              {panelMode === 'add' ? 'Add Follow Up' : 'Save Changes'}
             </Button>
           </div>
         }
       >
-        <DecisionMakerForm values={form} onChange={setForm} errors={errors} />
+        <FollowUpForm values={form} onChange={setForm} errors={errors} />
       </SidePanel>
 
       <Modal
         isOpen={!!deleteId}
         onClose={() => setDeleteId(null)}
-        title="Delete Decision Maker"
-        description="Are you sure you want to delete this decision maker? This action cannot be undone."
+        title="Delete Follow Up"
+        description="Are you sure you want to remove this follow up? This action cannot be undone."
         width="max-w-sm"
         height="max-h-fit"
         footer={
@@ -129,6 +129,6 @@ export default function DecisionMakerPage() {
           </>
         }
       />
-    </div>
+    </>
   );
 }

@@ -152,81 +152,83 @@ export function DataTable<T extends { id: string | number }>({
 
   return (
     <div className={cn('flex flex-col gap-3', noInternalScroll ? '' : 'flex-1 min-h-0 h-full')}>
-      {/* Toolbar — outside the card */}
+      {/* Toolbar card */}
       {hasToolbar && (
-        <div className="flex items-center gap-3 flex-wrap shrink-0">
-          {onSearch && (
-            <div className="relative flex-1 min-w-52 max-w-sm">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder={searchPlaceholder}
-                value={searchValue ?? undefined}
-                onChange={(e) => onSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
-              />
-            </div>
-          )}
+        <div className="bg-white rounded-xl border border-gray-200 px-4 py-2 shrink-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            {onSearch && (
+              <div className="relative flex-1 min-w-52 max-w-sm">
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder={searchPlaceholder}
+                  value={searchValue ?? undefined}
+                  onChange={(e) => onSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                />
+              </div>
+            )}
 
-          {extraFilters}
+            {extraFilters}
 
-          {filterOptions && onFilter && (
-            <div className="relative">
-              <select
-                onChange={(e) => onFilter(e.target.value)}
-                className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white"
-              >
-                <option value="">Status</option>
-                {filterOptions.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <Icons.ListFilter className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none h-4 w-4" />
-            </div>
-          )}
+            {filterOptions && onFilter && (
+              <div className="relative">
+                <select
+                  onChange={(e) => onFilter(e.target.value)}
+                  className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white"
+                >
+                  <option value="">Status</option>
+                  {filterOptions.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <Icons.ListFilter className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none h-4 w-4" />
+              </div>
+            )}
 
-          <div className="flex-1" />
+            <div className="flex-1" />
 
-          {onExport && (
-            <Button variant="secondary" size="sm" onClick={onExport} className="group">
-              Export
-              <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
-                <Icons.Upload className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
-              </span>
-            </Button>
-          )}
-
-          {secondaryButton && (
-            <Button variant="secondary" size="sm" onClick={secondaryButton.onClick}>
-              {secondaryButton.label}
-              {(secondaryButton.badgeCount ?? 0) > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
-                  {secondaryButton.badgeCount}
+            {onExport && (
+              <Button variant="secondary" size="sm" onClick={onExport} className="group">
+                Export
+                <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
+                  <Icons.Upload className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
                 </span>
-              )}
-            </Button>
-          )}
-          {secondaryButtons?.map((btn, i) => (
-            <Button key={i} variant="secondary" size="sm" onClick={btn.onClick}>
-              {btn.label}
-              {(btn.badgeCount ?? 0) > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
-                  {btn.badgeCount}
-                </span>
-              )}
-            </Button>
-          ))}
+              </Button>
+            )}
 
-          {actionButton && (
-            <Button size="sm" onClick={actionButton.onClick} className="group">
-              {actionButton.label}
-              <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
-                <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
-              </span>
-            </Button>
-          )}
+            {secondaryButton && (
+              <Button variant="secondary" size="sm" onClick={secondaryButton.onClick}>
+                {secondaryButton.label}
+                {(secondaryButton.badgeCount ?? 0) > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
+                    {secondaryButton.badgeCount}
+                  </span>
+                )}
+              </Button>
+            )}
+            {secondaryButtons?.map((btn, i) => (
+              <Button key={i} variant="secondary" size="sm" onClick={btn.onClick}>
+                {btn.label}
+                {(btn.badgeCount ?? 0) > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">
+                    {btn.badgeCount}
+                  </span>
+                )}
+              </Button>
+            ))}
+
+            {actionButton && (
+              <Button size="sm" onClick={actionButton.onClick} className="group">
+                {actionButton.label}
+                <span className="inline-flex overflow-hidden w-0 group-hover:w-4 group-hover:ml-1.5 transition-[width,margin] duration-300 ease-out">
+                  <Icons.Plus className="w-4 h-4 shrink-0 -translate-x-4 group-hover:translate-x-0 transition-transform duration-300 ease-out" />
+                </span>
+              </Button>
+            )}
+          </div>
         </div>
       )}
 

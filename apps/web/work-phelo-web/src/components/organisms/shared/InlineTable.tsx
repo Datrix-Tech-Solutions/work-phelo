@@ -50,7 +50,7 @@ export function InlineTable({
 
       {/* Scrollable table body */}
       <div className="overflow-x-auto">
-        <div className="min-w-max">
+        <div className="min-w-max w-full">
           {/* Column headers — floating pill matching DataTable */}
           <div className="pt-3">
             <div className="relative shrink-0">

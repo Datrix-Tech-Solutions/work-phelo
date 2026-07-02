@@ -4,9 +4,10 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 
 interface Props {
   base: string;
+  className?: string;
 }
 
-export function ProspectingTabs({ base }: Props) {
+export function ProspectingTabs({ base, className }: Props) {
   const tabs = [
     { key: 'sales-pipeline', label: 'Sales Pipeline', href: `${base}/sales-pipeline` },
     { key: 'product', label: 'Product', href: `${base}/product` },
@@ -20,5 +21,5 @@ export function ProspectingTabs({ base }: Props) {
     },
   ];
 
-  return <TabBar tabs={tabs} />;
+  return <TabBar tabs={tabs} className={className} />;
 }
