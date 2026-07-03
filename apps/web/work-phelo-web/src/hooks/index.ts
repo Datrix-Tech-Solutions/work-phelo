@@ -34,4 +34,5 @@ export * from './reinsurance/usePayments';
 export * from './reinsurance/useReinsuranceDashboard';
 export * from './reinsurance/useClaims';
 export * from './reinsurance/usePlacementDocuments';
+export * from './reinsurance/usePlacementAttachments';
 export * from './reinsurance/usePlacementNotes';

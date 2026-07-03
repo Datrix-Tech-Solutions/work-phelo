@@ -790,6 +790,44 @@ export interface PlacementDocument {
   updatedAt: string;
 }
 
+export type PlacementAttachmentStatus = 'ACTIVE' | 'VOID';
+
+export interface PlacementAttachment {
+  id: string;
+  tenantId: string;
+  placementId: string;
+  participantId: string | null;
+  closingId: string | null;
+  endorsementId: string | null;
+  endorsementParticipantId: string | null;
+  endorsementClosingId: string | null;
+  claimId: string | null;
+  claimCashCallId: string | null;
+  paymentId: string | null;
+  status: PlacementAttachmentStatus;
+  title: string | null;
+  description: string | null;
+  originalFileName: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  checksum: string;
+  storageProvider: string;
+  objectKey: string;
+  voidedAt: string | null;
+  voidReason: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlacementAttachmentDownload {
+  url: string;
+  expiresAt: string;
+  mimeType: string;
+  fileName: string;
+}
+
 export type PlacementPaymentType =
   | 'PREMIUM_RECEIVED'
   | 'REINSURER_DISBURSEMENT'
