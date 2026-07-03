@@ -10,17 +10,19 @@ import { useFacultativePlacement, usePlacementLockStatus } from '@/hooks';
 import { FacultativeOverview } from '@/components/molecules/reinsurance/stats/FacultativeOverview';
 import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
 import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/PlacementClosingsTab';
+import { PlacementDocumentCentreTab } from '@/components/molecules/reinsurance/tabs/PlacementDocumentCentreTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import { EndorsementPanel } from '@/components/organisms/reinsurance/panels/EndorsementPanel';
 import { EndorsementTab } from '@/components/molecules/reinsurance/tabs/EndorsmentTab';
 
-type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
+type FacultativeTab = 'distribution' | 'closings' | 'endorsement' | 'documents';
 
 const TABS = [
   { key: 'distribution', label: 'Distribution List' },
   { key: 'closings', label: 'Placement Closings' },
   { key: 'endorsement', label: 'Endorsement' },
+  { key: 'documents', label: 'Documents' },
 ];
 
 export default function FacultativeDetailPage({
@@ -98,6 +100,14 @@ export default function FacultativeDetailPage({
                 {activeTab === 'distribution' && <DistributionListTab placement={placement} />}
                 {activeTab === 'closings' && <PlacementClosingsTab placement={placement} />}
                 {activeTab === 'endorsement' && <EndorsementTab placement={placement} />}
+                {activeTab === 'documents' && (
+                  <PlacementDocumentCentreTab
+                    placementId={placement.id}
+                    tenantSlug={tenantSlug}
+                    onOpenClosings={() => setActiveTab('closings')}
+                    onOpenEndorsements={() => setActiveTab('endorsement')}
+                  />
+                )}
               </div>
             </div>
           </div>
