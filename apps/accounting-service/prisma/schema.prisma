@@ -1,0 +1,278 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "./generated/client"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["accounting"]
+}
+
+enum FiscalPeriodStatus {
+  OPEN
+  CLOSED
+  LOCKED
+
+  @@schema("accounting")
+}
+
+enum GLAccountCategory {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+
+  @@schema("accounting")
+}
+
+enum NormalBalance {
+  DEBIT
+  CREDIT
+
+  @@schema("accounting")
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+
+  @@schema("accounting")
+}
+
+enum SubledgerType {
+  CUSTOMER
+  VENDOR
+  CEDANT
+  REINSURER
+  EMPLOYEE
+  STATUTORY
+  OTHER
+
+  @@schema("accounting")
+}
+
+enum JournalStatus {
+  DRAFT
+  POSTED
+  REVERSED
+
+  @@schema("accounting")
+}
+
+model AccountingTenantConfig {
+  tenantId             String   @id
+  baseCurrency         String
+  fiscalYearStartMonth Int      @default(1)
+  decimalPlaces        Int      @default(2)
+  createdByUserId      String
+  updatedByUserId      String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@schema("accounting")
+}
+
+model AccountingCurrency {
+  id              String   @id @default(uuid())
+  tenantId        String
+  code            String
+  name            String
+  symbol          String?
+  decimalPlaces   Int      @default(2)
+  isActive        Boolean  @default(true)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@index([tenantId, isActive, code])
+  @@schema("accounting")
+}
+
+model ExchangeRate {
+  id              String   @id @default(uuid())
+  tenantId        String
+  fromCurrency    String
+  toCurrency      String
+  rate            Decimal  @db.Decimal(18, 8)
+  effectiveAt     DateTime
+  isActive        Boolean  @default(true)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, fromCurrency, toCurrency, effectiveAt])
+  @@index([tenantId, fromCurrency, toCurrency, isActive, effectiveAt])
+  @@schema("accounting")
+}
+
+model FiscalPeriod {
+  id              String             @id @default(uuid())
+  tenantId        String
+  name            String
+  startDate       DateTime
+  endDate         DateTime
+  status          FiscalPeriodStatus @default(OPEN)
+  closedAt        DateTime?
+  closedByUserId  String?
+  lockedAt        DateTime?
+  lockedByUserId  String?
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  journals        JournalEntry[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, name])
+  @@index([tenantId, status, startDate, endDate])
+  @@schema("accounting")
+}
+
+model GLAccount {
+  id              String             @id @default(uuid())
+  tenantId        String
+  code            String
+  name            String
+  category        GLAccountCategory
+  normalBalance   NormalBalance
+  parentAccountId String?
+  allowPosting    Boolean            @default(true)
+  description     String?
+  status          RecordStatus       @default(ACTIVE)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  parentAccount   GLAccount?         @relation("GLAccountHierarchy", fields: [parentAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  childAccounts   GLAccount[]        @relation("GLAccountHierarchy")
+  journalLines    JournalLine[]
+  subledgers      SubledgerAccount[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@index([tenantId, category, status])
+  @@index([tenantId, parentAccountId])
+  @@schema("accounting")
+}
+
+model CostCentre {
+  id              String        @id @default(uuid())
+  tenantId        String
+  code            String
+  name            String
+  description     String?
+  externalRef     String?
+  status          RecordStatus  @default(ACTIVE)
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  journalLines    JournalLine[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@index([tenantId, status, name])
+  @@schema("accounting")
+}
+
+model SubledgerAccount {
+  id               String        @id @default(uuid())
+  tenantId         String
+  code             String
+  name             String
+  type             SubledgerType
+  externalRef      String?
+  controlAccountId String
+  currency         String?
+  status           RecordStatus  @default(ACTIVE)
+  createdByUserId  String
+  updatedByUserId  String
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  controlAccount   GLAccount     @relation(fields: [controlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  journalLines     JournalLine[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@unique([tenantId, type, externalRef])
+  @@index([tenantId, type, status])
+  @@index([tenantId, controlAccountId])
+  @@schema("accounting")
+}
+
+model JournalEntry {
+  id                  String        @id @default(uuid())
+  tenantId            String
+  journalNumber       String
+  status              JournalStatus @default(DRAFT)
+  transactionDate     DateTime
+  postingDate         DateTime?
+  fiscalPeriodId      String
+  transactionCurrency String
+  baseCurrency        String
+  exchangeRate        Decimal       @db.Decimal(18, 8)
+  reference           String?
+  description         String
+  idempotencyKey      String?
+  sourceModule        String?
+  sourceRecordType    String?
+  sourceRecordId      String?
+  reversalOfJournalId String?
+  createdByUserId     String
+  updatedByUserId     String
+  postedByUserId      String?
+  reversedByUserId    String?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  postedAt            DateTime?
+  reversedAt          DateTime?
+  fiscalPeriod        FiscalPeriod  @relation(fields: [fiscalPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  lines               JournalLine[]
+  reversalOfJournal   JournalEntry? @relation("JournalReversal", fields: [reversalOfJournalId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalJournal     JournalEntry? @relation("JournalReversal")
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, journalNumber])
+  @@unique([tenantId, idempotencyKey])
+  @@unique([reversalOfJournalId, tenantId])
+  @@index([tenantId, status, transactionDate])
+  @@index([tenantId, fiscalPeriodId, status])
+  @@index([tenantId, sourceModule, sourceRecordType, sourceRecordId])
+  @@schema("accounting")
+}
+
+model JournalLine {
+  id                 String            @id @default(uuid())
+  tenantId           String
+  journalEntryId     String
+  lineNumber         Int
+  glAccountId        String
+  subledgerAccountId String?
+  costCentreId       String?
+  description        String?
+  transactionDebit   Decimal           @default(0) @db.Decimal(20, 4)
+  transactionCredit  Decimal           @default(0) @db.Decimal(20, 4)
+  baseDebit          Decimal           @default(0) @db.Decimal(20, 4)
+  baseCredit         Decimal           @default(0) @db.Decimal(20, 4)
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  journalEntry       JournalEntry      @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount          GLAccount         @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  subledgerAccount   SubledgerAccount? @relation(fields: [subledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  costCentre         CostCentre?       @relation(fields: [costCentreId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, journalEntryId, lineNumber])
+  @@index([tenantId, glAccountId, journalEntryId])
+  @@index([tenantId, subledgerAccountId])
+  @@index([tenantId, costCentreId])
+  @@schema("accounting")
+}

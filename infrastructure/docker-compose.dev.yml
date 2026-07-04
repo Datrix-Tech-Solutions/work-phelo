@@ -189,6 +189,28 @@ services:
       retries: 10
       start_period: 20s
 
+  accounting-service:
+    image: ${ACCOUNTING_SERVICE_IMAGE}
+    restart: unless-stopped
+    networks:
+      - app-network
+    ports:
+      - '127.0.0.1:4008:4008'
+    env_file:
+      - ../apps/accounting-service/.env.dev
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4008/api/health').then((res)=>{if(!res.ok)process.exit(1);}).catch(()=>process.exit(1))",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   api-gateway:
     image: ${API_GATEWAY_IMAGE}
     restart: unless-stopped
@@ -210,6 +232,8 @@ services:
       marketing-service:
         condition: service_healthy
       reinsurance-service:
+        condition: service_healthy
+      accounting-service:
         condition: service_healthy
       redis:
         condition: service_healthy

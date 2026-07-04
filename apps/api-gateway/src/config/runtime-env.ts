@@ -9,6 +9,7 @@ export const gatewayOptionalServiceEnvVars = [
   'SUBSCRIPTION_SERVICE_URL',
   'MARKETING_SERVICE_URL',
   'REINSURANCE_SERVICE_URL',
+  'ACCOUNTING_SERVICE_URL',
 ] as const;
 
 const allGatewayEnvVars = [
@@ -22,7 +23,8 @@ export type GatewayServiceName =
   | 'notification'
   | 'subscription'
   | 'marketing'
-  | 'reinsurance';
+  | 'reinsurance'
+  | 'accounting';
 
 export const gatewayRequiredServices: GatewayServiceName[] = [
   'auth',
@@ -34,6 +36,7 @@ export const gatewayOptionalServices: GatewayServiceName[] = [
   'subscription',
   'marketing',
   'reinsurance',
+  'accounting',
 ];
 
 export const gatewayServiceConfig: Record<
@@ -63,6 +66,11 @@ export const gatewayServiceConfig: Record<
   },
   reinsurance: {
     envVar: 'REINSURANCE_SERVICE_URL',
+    healthPath: '/api/health',
+    downstreamPrefix: '/api',
+  },
+  accounting: {
+    envVar: 'ACCOUNTING_SERVICE_URL',
     healthPath: '/api/health',
     downstreamPrefix: '/api',
   },
