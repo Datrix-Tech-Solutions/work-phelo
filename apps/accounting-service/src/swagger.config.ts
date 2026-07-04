@@ -45,6 +45,7 @@ outside this foundation.
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
+    useGlobalPrefix: true,
     jsonDocumentUrl: 'docs-json',
     yamlDocumentUrl: 'docs-yaml',
   });
