@@ -23,7 +23,6 @@ COPY --from=builder /app/apps/accounting-service/package.json ./apps/accounting-
 COPY --from=builder /app/packages/types/dist ./packages/types/dist
 COPY --from=builder /app/packages/config/dist ./packages/config/dist
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/accounting-service/node_modules ./apps/accounting-service/node_modules
 COPY --from=builder /app/apps/accounting-service/prisma ./apps/accounting-service/prisma
 COPY --from=builder /app/apps/accounting-service/dist ./apps/accounting-service/dist
 WORKDIR /app/apps/accounting-service
