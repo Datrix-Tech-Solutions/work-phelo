@@ -114,6 +114,28 @@ export const RESOURCES = [
     description: 'Expense reports',
   },
 
+  // ── ACCOUNTING module ──────────────────────────────────────────
+  {
+    name: 'accounting.settings',
+    module: 'ACCOUNTING',
+    description: 'Accounting configuration, currencies and fiscal periods',
+  },
+  {
+    name: 'accounting.accounts',
+    module: 'ACCOUNTING',
+    description: 'Chart of accounts, cost centres and subledger accounts',
+  },
+  {
+    name: 'accounting.journals',
+    module: 'ACCOUNTING',
+    description: 'Draft, post and reverse journal entries',
+  },
+  {
+    name: 'accounting.ledger',
+    module: 'ACCOUNTING',
+    description: 'Posted general-ledger activity',
+  },
+
   // ── OPERATIONS / REINSURANCE module ───────────────────────────
   {
     name: 'operations.reinsurance.dashboard',

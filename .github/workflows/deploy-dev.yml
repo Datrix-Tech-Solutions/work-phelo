@@ -68,6 +68,7 @@ jobs:
       subscription-service: ${{ steps.filter.outputs.subscription-service }}
       marketing-service: ${{ steps.filter.outputs.marketing-service }}
       reinsurance-service: ${{ steps.filter.outputs.reinsurance-service }}
+      accounting-service: ${{ steps.filter.outputs.accounting-service }}
       nextjs-web: ${{ steps.filter.outputs.nextjs-web }}
 
     steps:
@@ -117,6 +118,11 @@ jobs:
               - 'packages/**'
               - 'package*.json'
               - 'tsconfig*.json'
+            accounting-service:
+              - 'apps/accounting-service/**'
+              - 'packages/**'
+              - 'package*.json'
+              - 'tsconfig*.json'
             nextjs-web:
               - 'apps/web/work-phelo-web/**'
           list-files: none
@@ -153,6 +159,8 @@ jobs:
             dockerfile: apps/marketing-service/Dockerfile
           - service: reinsurance-service
             dockerfile: apps/reinsurance-service/Dockerfile
+          - service: accounting-service
+            dockerfile: apps/accounting-service/Dockerfile
           - service: nextjs-web
             dockerfile: apps/web/work-phelo-web/Dockerfile
 

@@ -34,6 +34,7 @@ const PUBLIC_PATTERNS = [
   /^\/api\/v1\/auth\/users\/accept-invite$/,
   /^\/api\/v1\/auth\/mfa\/send-sms$/,
   /^\/api\/v1\/operations\/reinsurance\/health$/,
+  /^\/api\/v1\/accounting\/health$/,
 ];
 
 const SWAGGER_PUBLIC_PATTERNS = [
@@ -43,6 +44,7 @@ const SWAGGER_PUBLIC_PATTERNS = [
   /^\/api\/v1\/subscription\/docs(?:\/.*|-json|-yaml)?$/,
   /^\/api\/v1\/marketing\/docs(?:\/.*|-json|-yaml)?$/,
   /^\/api\/v1\/operations\/reinsurance\/docs(?:\/.*|-json|-yaml)?$/,
+  /^\/api\/v1\/accounting\/docs(?:\/.*|-json|-yaml)?$/,
 ];
 
 const FORWARDED_AUTH_CONTEXT_HEADERS = [

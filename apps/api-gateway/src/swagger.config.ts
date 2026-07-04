@@ -27,6 +27,7 @@ All frontend requests go through this gateway at port **4000**.
 | \`/api/v1/hr/payroll/*\` | Payroll | 4002 |
 | \`/api/v1/hr/appraisals/*\` | Appraisals | 4002 |
 | \`/api/v1/hr/projects/*\` | Projects and tasks | 4002 |
+| \`/api/v1/accounting/*\` | Accounting ledger | 4008 |
 
 ### Public Endpoints (no auth required)
 - \`POST /api/v1/auth/login\`

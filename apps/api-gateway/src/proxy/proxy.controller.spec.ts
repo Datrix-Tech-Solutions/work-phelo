@@ -9,6 +9,7 @@ describe('ProxyController Reinsurance foundation', () => {
   beforeEach(() => {
     process.env.JWT_SECRET = 'gateway-phase-one-secret';
     process.env.REINSURANCE_SERVICE_URL = 'http://reinsurance-service:4007';
+    process.env.ACCOUNTING_SERVICE_URL = 'http://accounting-service:4008';
     process.env.DEPLOY_ENV = 'dev';
     process.env.ENABLE_SWAGGER = 'true';
   });
@@ -16,6 +17,7 @@ describe('ProxyController Reinsurance foundation', () => {
   afterEach(() => {
     delete process.env.JWT_SECRET;
     delete process.env.REINSURANCE_SERVICE_URL;
+    delete process.env.ACCOUNTING_SERVICE_URL;
     if (enableSwagger === undefined) {
       delete process.env.ENABLE_SWAGGER;
     } else {
@@ -56,6 +58,22 @@ describe('ProxyController Reinsurance foundation', () => {
     });
   });
 
+  it('maps the Accounting route to the Accounting service boundary', () => {
+    const controller = new ProxyController() as unknown as {
+      resolveDownstream(pathParts: string[]): {
+        service: string | undefined;
+        consumedPathParts: number;
+      };
+    };
+
+    expect(
+      controller.resolveDownstream(['api', 'v1', 'accounting', 'journals']),
+    ).toEqual({
+      service: 'accounting',
+      consumedPathParts: 3,
+    });
+  });
+
   it('signs forwarded permissions against user and tenant context', () => {
     const controller = new ProxyController() as unknown as {
       signPermissions(
@@ -90,6 +108,8 @@ describe('ProxyController Reinsurance foundation', () => {
       '/api/v1/operations/reinsurance/docs',
       '/api/v1/operations/reinsurance/docs/swagger-ui-init.js',
       '/api/v1/operations/reinsurance/docs-json',
+      '/api/v1/accounting/docs',
+      '/api/v1/accounting/docs-json',
     ]) {
       expect(controller.isPublicPath(path)).toBe(true);
     }
