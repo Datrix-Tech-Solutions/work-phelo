@@ -62,6 +62,23 @@ enum JournalStatus {
   @@schema("accounting")
 }
 
+enum PostingDirection {
+  DR
+  CR
+
+  @@schema("accounting")
+}
+
+enum SourceEventStatus {
+  RECEIVED
+  PROCESSING
+  POSTED
+  FAILED
+  IGNORED
+
+  @@schema("accounting")
+}
+
 model AccountingTenantConfig {
   tenantId             String   @id
   baseCurrency         String
@@ -137,24 +154,25 @@ model FiscalPeriod {
 }
 
 model GLAccount {
-  id              String             @id @default(uuid())
-  tenantId        String
-  code            String
-  name            String
-  category        GLAccountCategory
-  normalBalance   NormalBalance
-  parentAccountId String?
-  allowPosting    Boolean            @default(true)
-  description     String?
-  status          RecordStatus       @default(ACTIVE)
-  createdByUserId String
-  updatedByUserId String
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
-  parentAccount   GLAccount?         @relation("GLAccountHierarchy", fields: [parentAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  childAccounts   GLAccount[]        @relation("GLAccountHierarchy")
-  journalLines    JournalLine[]
-  subledgers      SubledgerAccount[]
+  id               String             @id @default(uuid())
+  tenantId         String
+  code             String
+  name             String
+  category         GLAccountCategory
+  normalBalance    NormalBalance
+  parentAccountId  String?
+  allowPosting     Boolean            @default(true)
+  description      String?
+  status           RecordStatus       @default(ACTIVE)
+  createdByUserId  String
+  updatedByUserId  String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  parentAccount    GLAccount?         @relation("GLAccountHierarchy", fields: [parentAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  childAccounts    GLAccount[]        @relation("GLAccountHierarchy")
+  journalLines     JournalLine[]
+  postingRuleLines PostingRuleLine[]
+  subledgers       SubledgerAccount[]
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -209,16 +227,16 @@ model SubledgerAccount {
 }
 
 model JournalEntry {
-  id                  String        @id @default(uuid())
+  id                  String            @id @default(uuid())
   tenantId            String
   journalNumber       String
-  status              JournalStatus @default(DRAFT)
+  status              JournalStatus     @default(DRAFT)
   transactionDate     DateTime
   postingDate         DateTime?
   fiscalPeriodId      String
   transactionCurrency String
   baseCurrency        String
-  exchangeRate        Decimal       @db.Decimal(18, 8)
+  exchangeRate        Decimal           @db.Decimal(18, 8)
   reference           String?
   description         String
   idempotencyKey      String?
@@ -230,14 +248,15 @@ model JournalEntry {
   updatedByUserId     String
   postedByUserId      String?
   reversedByUserId    String?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
   postedAt            DateTime?
   reversedAt          DateTime?
-  fiscalPeriod        FiscalPeriod  @relation(fields: [fiscalPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  fiscalPeriod        FiscalPeriod      @relation(fields: [fiscalPeriodId, tenantId], references: [id, tenantId], onDelete: Restrict)
   lines               JournalLine[]
-  reversalOfJournal   JournalEntry? @relation("JournalReversal", fields: [reversalOfJournalId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  reversalJournal     JournalEntry? @relation("JournalReversal")
+  reversalOfJournal   JournalEntry?     @relation("JournalReversal", fields: [reversalOfJournalId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  reversalJournal     JournalEntry?     @relation("JournalReversal")
+  sourceEvent         SourceEventInbox?
 
   @@unique([id, tenantId])
   @@unique([tenantId, journalNumber])
@@ -274,5 +293,81 @@ model JournalLine {
   @@index([tenantId, glAccountId, journalEntryId])
   @@index([tenantId, subledgerAccountId])
   @@index([tenantId, costCentreId])
+  @@schema("accounting")
+}
+
+model PostingRule {
+  id              String             @id @default(uuid())
+  tenantId        String
+  name            String
+  sourceModule    String
+  sourceEventType String
+  version         Int
+  active          Boolean            @default(false)
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  createdByUserId String
+  updatedByUserId String
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  lines           PostingRuleLine[]
+  sourceEvents    SourceEventInbox[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, sourceModule, sourceEventType, version])
+  @@index([tenantId, sourceModule, sourceEventType, active, effectiveFrom, effectiveTo])
+  @@schema("accounting")
+}
+
+model PostingRuleLine {
+  id                         String           @id @default(uuid())
+  tenantId                   String
+  postingRuleId              String
+  sequence                   Int
+  direction                  PostingDirection
+  glAccountId                String
+  subledgerType              SubledgerType?
+  subledgerExternalRefSource String?
+  amountSource               String
+  currencySource             String
+  descriptionTemplate        String
+  createdAt                  DateTime         @default(now())
+  updatedAt                  DateTime         @updatedAt
+  postingRule                PostingRule      @relation(fields: [postingRuleId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  glAccount                  GLAccount        @relation(fields: [glAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, postingRuleId, sequence])
+  @@index([tenantId, glAccountId])
+  @@schema("accounting")
+}
+
+model SourceEventInbox {
+  id               String            @id @default(uuid())
+  tenantId         String
+  sourceModule     String
+  sourceEventType  String
+  sourceRecordId   String
+  sourceDocumentId String?
+  idempotencyKey   String
+  payload          Json
+  status           SourceEventStatus @default(RECEIVED)
+  failureReason    String?
+  postingRuleId    String?
+  journalEntryId   String?
+  retryCount       Int               @default(0)
+  receivedByUserId String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  processedAt      DateTime?
+  postingRule      PostingRule?      @relation(fields: [postingRuleId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  journalEntry     JournalEntry?     @relation(fields: [journalEntryId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, idempotencyKey])
+  @@unique([journalEntryId, tenantId])
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, sourceModule, sourceEventType, sourceRecordId])
+  @@index([tenantId, postingRuleId])
   @@schema("accounting")
 }

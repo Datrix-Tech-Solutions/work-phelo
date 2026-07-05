@@ -41,6 +41,8 @@ outside this foundation.
     .addTag('Accounting - Subledgers')
     .addTag('Accounting - Journals')
     .addTag('Accounting - General Ledger')
+    .addTag('Accounting - Posting Rules')
+    .addTag('Accounting - Source Events')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
