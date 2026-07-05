@@ -71,7 +71,7 @@ export class JournalsService {
       if (existing) return existing;
     }
 
-    const draft = await this.resolveDraft(user.tenantId, dto);
+    const draft = await this.resolveDraft(this.prisma, user.tenantId, dto);
     try {
       return await this.prisma.journalEntry.create({
         data: {
@@ -122,6 +122,73 @@ export class JournalsService {
     }
   }
 
+  async createPostedInTransaction(
+    tx: Prisma.TransactionClient,
+    user: RequestUser,
+    dto: CreateJournalDto,
+  ) {
+    if (dto.idempotencyKey) {
+      const existing = await tx.journalEntry.findUnique({
+        where: {
+          tenantId_idempotencyKey: {
+            tenantId: user.tenantId,
+            idempotencyKey: dto.idempotencyKey,
+          },
+        },
+        include: journalInclude,
+      });
+      if (existing?.status === JournalStatus.POSTED) return existing;
+      if (existing) {
+        throw new ConflictException(
+          'Journal idempotency key already belongs to an unposted journal',
+        );
+      }
+    }
+
+    const draft = await this.resolveDraft(tx, user.tenantId, dto);
+    await this.lockFiscalPeriod(tx, user.tenantId, draft.fiscalPeriodId);
+    await this.assertOpenPeriod(
+      tx,
+      user.tenantId,
+      draft.fiscalPeriodId,
+      draft.transactionDate,
+    );
+
+    const now = new Date();
+    return tx.journalEntry.create({
+      data: {
+        tenantId: user.tenantId,
+        journalNumber: this.journalNumber('AUTO'),
+        status: JournalStatus.POSTED,
+        transactionDate: draft.transactionDate,
+        postingDate: now,
+        fiscalPeriodId: draft.fiscalPeriodId,
+        transactionCurrency: draft.transactionCurrency,
+        baseCurrency: draft.baseCurrency,
+        exchangeRate: draft.exchangeRate,
+        reference: this.optional(dto.reference),
+        description: dto.description,
+        idempotencyKey: this.optional(dto.idempotencyKey),
+        sourceModule: this.optional(dto.sourceModule),
+        sourceRecordType: this.optional(dto.sourceRecordType),
+        sourceRecordId: this.optional(dto.sourceRecordId),
+        createdByUserId: user.id,
+        updatedByUserId: user.id,
+        postedByUserId: user.id,
+        postedAt: now,
+        lines: {
+          create: this.lineCreateData(
+            user.tenantId,
+            draft.lines,
+            draft.exchangeRate,
+            draft.decimalPlaces,
+          ),
+        },
+      },
+      include: journalInclude,
+    });
+  }
+
   list(tenantId: string, query: QueryJournalsDto) {
     return this.prisma.journalEntry.findMany({
       where: {
@@ -164,7 +231,7 @@ export class JournalsService {
       dto.exchangeRate === undefined &&
       dto.transactionDate === undefined &&
       dto.transactionCurrency === undefined;
-    const draft = await this.resolveDraft(user.tenantId, {
+    const draft = await this.resolveDraft(this.prisma, user.tenantId, {
       transactionDate:
         dto.transactionDate ?? current.transactionDate.toISOString(),
       fiscalPeriodId: dto.fiscalPeriodId ?? current.fiscalPeriodId,
@@ -448,13 +515,14 @@ export class JournalsService {
   }
 
   private async resolveDraft(
+    client: PrismaService | Prisma.TransactionClient,
     tenantId: string,
     dto: Omit<CreateJournalDto, 'idempotencyKey'> &
       Partial<Pick<CreateJournalDto, 'idempotencyKey'>>,
   ): Promise<ResolvedJournalDraft> {
     this.policy.validateBalanced(dto.lines);
     const transactionDate = new Date(dto.transactionDate);
-    const period = await this.prisma.fiscalPeriod.findFirst({
+    const period = await client.fiscalPeriod.findFirst({
       where: { id: dto.fiscalPeriodId, tenantId },
     });
     if (!period) throw new NotFoundException('Fiscal period not found');
@@ -472,10 +540,10 @@ export class JournalsService {
       );
     }
 
-    const config = await this.configOrThrow(this.prisma, tenantId);
+    const config = await this.configOrThrow(client, tenantId);
     const [transactionCurrency] = await Promise.all([
-      this.assertActiveCurrency(this.prisma, tenantId, dto.transactionCurrency),
-      this.assertActiveCurrency(this.prisma, tenantId, config.baseCurrency),
+      this.assertActiveCurrency(client, tenantId, dto.transactionCurrency),
+      this.assertActiveCurrency(client, tenantId, config.baseCurrency),
     ]);
     this.policy.validateCurrencyPrecision(
       dto.lines,
@@ -483,6 +551,7 @@ export class JournalsService {
       transactionCurrency.decimalPlaces,
     );
     const exchangeRate = await this.resolveExchangeRate(
+      client,
       tenantId,
       dto.transactionCurrency,
       config.baseCurrency,
@@ -504,7 +573,7 @@ export class JournalsService {
       })),
     );
     await this.assertLineReferences(
-      this.prisma,
+      client,
       tenantId,
       dto.lines,
       dto.transactionCurrency,
@@ -524,6 +593,7 @@ export class JournalsService {
   }
 
   private async resolveExchangeRate(
+    client: PrismaService | Prisma.TransactionClient,
     tenantId: string,
     transactionCurrency: string,
     baseCurrency: string,
@@ -540,7 +610,7 @@ export class JournalsService {
     }
     if (suppliedRate !== undefined) return new Prisma.Decimal(suppliedRate);
 
-    const rate = await this.prisma.exchangeRate.findFirst({
+    const rate = await client.exchangeRate.findFirst({
       where: {
         tenantId,
         fromCurrency: transactionCurrency,

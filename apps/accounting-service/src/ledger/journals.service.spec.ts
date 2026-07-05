@@ -354,6 +354,78 @@ describe('JournalsService', () => {
     expect(result.lines.create[0].baseDebit.toFixed(2)).toBe('100.00');
   });
 
+  it('atomically creates a posted journal for a source event', async () => {
+    const { prisma, service } = setup();
+    prisma.journalEntry.findUnique.mockResolvedValue(null);
+    prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      tenantId: actor.tenantId,
+      baseCurrency: 'GHS',
+      fiscalYearStartMonth: 1,
+      decimalPlaces: 2,
+    });
+    prisma.accountingCurrency.findUnique.mockResolvedValue({
+      code: 'GHS',
+      decimalPlaces: 2,
+      isActive: true,
+    });
+    prisma.gLAccount.findMany.mockResolvedValue([
+      account('cash'),
+      account('income'),
+    ]);
+    prisma.subledgerAccount.findMany.mockResolvedValue([]);
+    prisma.costCentre.findMany.mockResolvedValue([]);
+    prisma.journalEntry.create.mockImplementation(
+      (args: { data: unknown }) => args.data,
+    );
+
+    const result = (await service.createPostedInTransaction(
+      prisma as unknown as Prisma.TransactionClient,
+      actor,
+      {
+        transactionDate: '2026-07-10',
+        fiscalPeriodId: period.id,
+        transactionCurrency: 'GHS',
+        description: 'Automated source event journal',
+        idempotencyKey: 'source-event:event-1',
+        sourceModule: 'OPERATIONS',
+        sourceRecordType: 'RECEIPT_ISSUED',
+        sourceRecordId: 'receipt-1',
+        lines: [
+          { glAccountId: 'cash', debit: 100 },
+          { glAccountId: 'income', credit: 100 },
+        ],
+      },
+    )) as unknown as { status: JournalStatus; postedAt: Date };
+
+    expect(result.status).toBe(JournalStatus.POSTED);
+    expect(result.postedAt).toBeInstanceOf(Date);
+    expect(prisma.$queryRaw).toHaveBeenCalled();
+  });
+
+  it('never creates an automated journal when rule amounts are unbalanced', async () => {
+    const { prisma, service } = setup();
+    prisma.journalEntry.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.createPostedInTransaction(
+        prisma as unknown as Prisma.TransactionClient,
+        actor,
+        {
+          transactionDate: '2026-07-10',
+          fiscalPeriodId: period.id,
+          transactionCurrency: 'GHS',
+          description: 'Unbalanced automated journal',
+          lines: [
+            { glAccountId: 'cash', debit: 100 },
+            { glAccountId: 'income', credit: 90 },
+          ],
+        },
+      ),
+    ).rejects.toThrow('Journal is unbalanced');
+    expect(prisma.journalEntry.create).not.toHaveBeenCalled();
+  });
+
   it('rejects a journal when base-currency line rounding is unbalanced', async () => {
     const { prisma, service } = setup();
     prisma.fiscalPeriod.findFirst.mockResolvedValue(period);
