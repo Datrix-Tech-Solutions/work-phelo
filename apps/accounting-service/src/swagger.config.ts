@@ -43,6 +43,7 @@ outside this foundation.
     .addTag('Accounting - General Ledger')
     .addTag('Accounting - Posting Rules')
     .addTag('Accounting - Source Events')
+    .addTag('Internal Accounting Source Events')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

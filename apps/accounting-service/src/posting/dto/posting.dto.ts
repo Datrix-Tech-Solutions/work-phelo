@@ -10,6 +10,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Length,
   Matches,
   MaxLength,
   Min,
@@ -246,6 +247,65 @@ export class CreateSourceEventDto {
     example: {
       transactionDate: '2026-07-05T10:00:00.000Z',
       currency: 'GHS',
+      amounts: { netPremium: 12500 },
+      counterparty: { id: 'cedant-uuid' },
+      policyNumber: 'POL-2026-001',
+    },
+  })
+  @IsObject()
+  payload!: Record<string, unknown>;
+}
+
+export class InternalSourceEventDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  tenantId!: string;
+
+  @ApiProperty({ example: 'REINSURANCE' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(80)
+  sourceModule!: string;
+
+  @ApiProperty({ example: 'DEBIT_NOTE_ISSUED' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(100)
+  sourceEventType!: string;
+
+  @ApiProperty({ example: 'note-uuid' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  sourceRecordId!: string;
+
+  @ApiPropertyOptional({ example: 'document-uuid' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(100)
+  sourceDocumentId?: string;
+
+  @ApiProperty({ example: 'reinsurance:debit-note:note-uuid:issued:v1' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  idempotencyKey!: string;
+
+  @ApiProperty({ type: String, format: 'date-time' })
+  @IsDateString()
+  occurredAt!: string;
+
+  @ApiProperty({ example: 'GHS', minLength: 3, maxLength: 3 })
+  @Transform(uppercase)
+  @IsString()
+  @Length(3, 3)
+  currency!: string;
+
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: true,
+    example: {
       amounts: { netPremium: 12500 },
       counterparty: { id: 'cedant-uuid' },
       policyNumber: 'POL-2026-001',
