@@ -17,7 +17,11 @@ import {
 import { CreateJournalDto, JournalLineDto } from '../ledger/dto/accounting.dto';
 import { JournalsService } from '../ledger/journals.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateSourceEventDto, QuerySourceEventsDto } from './dto/posting.dto';
+import {
+  CreateSourceEventDto,
+  InternalSourceEventDto,
+  QuerySourceEventsDto,
+} from './dto/posting.dto';
 
 const sourceEventInclude = {
   postingRule: {
@@ -61,6 +65,58 @@ export class SourceEventsService {
     private readonly prisma: PrismaService,
     private readonly journals: JournalsService,
   ) {}
+
+  async enqueueInternal(callingService: string, dto: InternalSourceEventDto) {
+    const tenant = await this.prisma.accountingTenantConfig.findUnique({
+      where: { tenantId: dto.tenantId },
+      select: { tenantId: true },
+    });
+    if (!tenant) {
+      throw new NotFoundException(
+        'Accounting tenant is not configured for source events',
+      );
+    }
+
+    const data: Prisma.SourceEventInboxUncheckedCreateInput = {
+      tenantId: dto.tenantId,
+      sourceModule: dto.sourceModule,
+      sourceEventType: dto.sourceEventType,
+      sourceRecordId: dto.sourceRecordId,
+      sourceDocumentId: dto.sourceDocumentId?.trim() || null,
+      idempotencyKey: dto.idempotencyKey,
+      payload: {
+        ...dto.payload,
+        transactionDate: dto.occurredAt,
+        currency: dto.currency,
+      } as Prisma.InputJsonObject,
+      status: SourceEventStatus.RECEIVED,
+      receivedByUserId: `service:${callingService}`,
+    };
+
+    try {
+      return await this.prisma.sourceEventInbox.create({
+        data,
+        include: sourceEventInclude,
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existing = await this.prisma.sourceEventInbox.findUnique({
+          where: {
+            tenantId_idempotencyKey: {
+              tenantId: dto.tenantId,
+              idempotencyKey: dto.idempotencyKey,
+            },
+          },
+          include: sourceEventInclude,
+        });
+        if (existing) return existing;
+      }
+      throw error;
+    }
+  }
 
   async receive(user: RequestUser, dto: CreateSourceEventDto) {
     let event;

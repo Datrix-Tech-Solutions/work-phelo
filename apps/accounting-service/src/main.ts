@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { RequestMethod, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import { isSwaggerEnabled } from '@work-phelo/config';
@@ -17,7 +17,14 @@ async function bootstrap() {
       transform: true,
     }),
   );
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', {
+    exclude: [
+      {
+        path: 'internal/source-events',
+        method: RequestMethod.POST,
+      },
+    ],
+  });
   if (isSwaggerEnabled()) setupSwagger(app);
 
   const port = process.env.PORT || 4008;
