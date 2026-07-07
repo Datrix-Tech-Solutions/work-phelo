@@ -3,6 +3,7 @@ import './globals.css';
 import { QueryProvider } from '@/providers/query-provider';
 import { AuthProvider } from '@/providers/auth-provider';
 import { ToastContainer } from '@/components/molecules/shared/ToastContainer';
+import { ModuleSplash } from '@/components/molecules/shared/ModuleSplash';
 import { appFont } from '@/lib/fonts';
 
 export const metadata: Metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>{children}</AuthProvider>
         </QueryProvider>
         <ToastContainer />
+        <ModuleSplash />
       </body>
     </html>
   );

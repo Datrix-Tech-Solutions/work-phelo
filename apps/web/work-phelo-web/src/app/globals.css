@@ -139,3 +139,108 @@ body {
     background: white;
   }
 }
+
+/* Module splash — animated backdrop shown while a module route loads */
+.module-splash-bg {
+  background-image: linear-gradient(
+    160deg,
+    color-mix(in oklch, var(--splash-color) 92%, black) 0%,
+    var(--splash-color) 55%,
+    color-mix(in oklch, var(--splash-color) 88%, black) 100%
+  );
+  background-size: 140% 140%;
+}
+
+.module-splash-arc {
+  position: absolute;
+  border-radius: 9999px;
+}
+
+.module-splash-arc-light {
+  background-color: color-mix(in oklch, var(--splash-color) 50%, white);
+}
+
+.module-splash-arc-dark {
+  background-color: color-mix(in oklch, var(--splash-color) 78%, black);
+}
+
+@keyframes splash-gradient-drift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes splash-arc-drift-1 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(10%, 14%) scale(1.08);
+  }
+}
+
+@keyframes splash-arc-drift-2 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-12%, -10%) scale(1.1);
+  }
+}
+
+@keyframes splash-arc-drift-3 {
+  0%,
+  100% {
+    transform: translate(-14%, 8%) scale(1);
+  }
+  50% {
+    transform: translate(12%, -12%) scale(0.9);
+  }
+}
+
+@keyframes splash-arc-drift-4 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-16%, 14%) scale(1.12);
+  }
+}
+
+@keyframes splash-arc-drift-5 {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(14%, -10%) scale(0.92);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .module-splash-bg {
+    animation: splash-gradient-drift 16s ease-in-out infinite;
+  }
+  .module-splash-arc-1 {
+    animation: splash-arc-drift-1 19s ease-in-out infinite;
+  }
+  .module-splash-arc-2 {
+    animation: splash-arc-drift-2 24s ease-in-out infinite;
+  }
+  .module-splash-arc-3 {
+    animation: splash-arc-drift-3 15s ease-in-out infinite;
+  }
+  .module-splash-arc-4 {
+    animation: splash-arc-drift-4 12s ease-in-out infinite;
+  }
+  .module-splash-arc-5 {
+    animation: splash-arc-drift-5 17s ease-in-out infinite;
+  }
+}
