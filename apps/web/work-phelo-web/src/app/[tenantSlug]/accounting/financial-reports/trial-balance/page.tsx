@@ -2,15 +2,17 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
-import { PanelLeftClose, PanelRightClose } from 'lucide-react';
+import { PanelLeftClose, PanelRightClose, PanelBottomClose, PanelTopClose } from 'lucide-react';
 import { Icons } from '@/components/atoms/icons';
 import { cn } from '@/lib/utils';
 import { ReportFilterForm } from '@/components/molecules/accounting/ReportFilterForm';
+import { ReportHero } from '@/components/molecules/accounting/ReportHero';
 
 export default function TrialBalancePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const base = `/${tenantSlug}/accounting/financial-reports`;
   const [collapsed, setCollapsed] = useState(false);
+  const [years, setYears] = useState<string[]>([]);
 
   return (
     <div className="flex-1 flex flex-col min-h-0">
@@ -26,13 +28,14 @@ export default function TrialBalancePage({ params }: { params: Promise<{ tenantS
       </div>
 
       {/* Two-panel layout */}
-      <div className="flex-1 min-h-0 flex">
+      <div className="flex-1 min-h-0 flex flex-col lg:flex-row">
         {/* Form panel — floating card */}
         <div
           className={cn(
             'flex flex-col shrink-0 overflow-hidden transition-all duration-500',
-            'mt-1 mb-4 ml-4 rounded-2xl shadow-md border border-gray-200 bg-white',
-            collapsed ? 'w-10' : 'w-1/4',
+            'mx-4 mt-1 mb-4 rounded-2xl shadow-md border border-gray-200 bg-white',
+            'lg:mx-0 lg:ml-4',
+            collapsed ? 'h-14 lg:h-auto lg:w-10' : 'max-h-[45vh] lg:max-h-none lg:w-1/4',
           )}
         >
           {/* Collapse toggle */}
@@ -49,9 +52,15 @@ export default function TrialBalancePage({ params }: { params: Promise<{ tenantS
               className="w-7 h-7 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
             >
               {collapsed ? (
-                <PanelRightClose className="w-5 h-5" />
+                <>
+                  <PanelBottomClose className="w-5 h-5 lg:hidden" />
+                  <PanelRightClose className="hidden w-5 h-5 lg:block" />
+                </>
               ) : (
-                <PanelLeftClose className="w-5 h-5" />
+                <>
+                  <PanelTopClose className="w-5 h-5 lg:hidden" />
+                  <PanelLeftClose className="hidden w-5 h-5 lg:block" />
+                </>
               )}
             </button>
           </div>
@@ -63,13 +72,20 @@ export default function TrialBalancePage({ params }: { params: Promise<{ tenantS
               collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100',
             )}
           >
-            <ReportFilterForm onGenerate={(years) => console.log('generate', years)} />
+            <ReportFilterForm onGenerate={setYears} />
           </div>
         </div>
 
         {/* Report / hero panel — floating card */}
-        <div className="flex-1 min-w-0 mt-1 mb-4 mr-4 ml-3 rounded-2xl shadow-md border border-gray-200 bg-white overflow-y-auto p-6">
-          {/* hero header and report content go here */}
+        <div className="flex-1 min-w-0 min-h-0 mx-4 mb-4 lg:mx-0 lg:mt-1 lg:mr-4 lg:ml-3 rounded-2xl shadow-md border border-gray-200 bg-white overflow-y-auto p-6 flex flex-col gap-4">
+          <ReportHero title="Trial Balance" years={years} />
+          {years.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center">
+              <p className="text-sm text-gray-400">Select fiscal year to generate report</p>
+            </div>
+          ) : (
+            <div className="flex-1">{/* report content goes here */}</div>
+          )}
         </div>
       </div>
     </div>

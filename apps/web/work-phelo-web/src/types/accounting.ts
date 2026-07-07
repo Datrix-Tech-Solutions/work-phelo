@@ -12,6 +12,66 @@ export interface ChartOfAccount {
   description: string | null;
 }
 
+export type GLAccountCategory = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE';
+export type NormalBalance = 'DEBIT' | 'CREDIT';
+export type GLAccountStatus = 'ACTIVE' | 'INACTIVE';
+
+export interface GLAccount {
+  id: string;
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  normalBalance: NormalBalance;
+  parentAccountId: string | null;
+  parentAccount: { id: string; code: string; name: string } | null;
+  allowPosting: boolean;
+  description: string | null;
+  status: GLAccountStatus;
+}
+
+export interface CreateGLAccountPayload {
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  normalBalance: NormalBalance;
+  parentAccountId?: string;
+  allowPosting?: boolean;
+  description?: string;
+}
+
+export type UpdateGLAccountPayload = Partial<CreateGLAccountPayload>;
+
+export interface QueryGLAccountsParams {
+  category?: GLAccountCategory;
+  status?: GLAccountStatus;
+}
+
+export type FiscalPeriodStatus = 'OPEN' | 'CLOSED' | 'LOCKED';
+
+export interface FiscalPeriod {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: FiscalPeriodStatus;
+}
+
+export interface CreateFiscalPeriodPayload {
+  name: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface QueryFiscalPeriodsParams {
+  status?: FiscalPeriodStatus;
+}
+
+export interface AccountTypeDefinition {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
 export type JournalEntryStatus = 'Draft' | 'Posted' | 'Reversed' | 'Void';
 
 export interface JournalLine {
@@ -126,11 +186,60 @@ export interface Vendor {
 
 export interface AccountingCurrency {
   id: string;
+  code: string;
   name: string;
-  symbol: string;
-  isoCode: string;
-  exchangeRateToBase: string | null;
-  isBaseCurrency: boolean;
+  symbol: string | null;
+  decimalPlaces: number;
+  isActive: boolean;
+}
+
+export interface CreateAccountingCurrencyPayload {
+  code: string;
+  name: string;
+  symbol?: string;
+  decimalPlaces?: number;
+}
+
+export interface UpdateAccountingCurrencyPayload {
+  code?: string;
+  name?: string;
+  symbol?: string;
+  decimalPlaces?: number;
+  isActive?: boolean;
+}
+
+export interface AccountingTenantConfig {
+  baseCurrency: string | null;
+  fiscalYearStartMonth: number;
+  decimalPlaces: number;
+}
+
+export interface UpdateAccountingTenantConfigPayload {
+  baseCurrency?: string;
+  fiscalYearStartMonth?: number;
+  decimalPlaces?: number;
+}
+
+export interface ExchangeRate {
+  id: string;
+  fromCurrency: string;
+  toCurrency: string;
+  rate: string;
+  effectiveAt: string;
+  isActive: boolean;
+}
+
+export interface CreateExchangeRatePayload {
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number;
+  effectiveAt: string;
+}
+
+export interface UpdateExchangeRatePayload {
+  rate?: number;
+  effectiveAt?: string;
+  isActive?: boolean;
 }
 
 export type AccountTransactionType = 'Credit' | 'Debit';
@@ -147,7 +256,7 @@ export interface AccountTransaction {
   currency: string;
 }
 
-export interface AccountTypeRecord {
+export interface BankAccount {
   id: string;
   accountName: string;
   accountType: string;
@@ -156,6 +265,16 @@ export interface AccountTypeRecord {
   bankBranch: string;
   accountNumber: string;
   status: 'Active' | 'Inactive';
+}
+
+export interface CashBankAccount {
+  id: string;
+  accountCode: string;
+  accountName: string;
+  bankName: string;
+  currency: string;
+  bookBalance: number;
+  lastReconciled: string | null;
 }
 
 export interface BudgetForecast {

@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import QRCode from 'react-qr-code';
+import { CompanyLogo } from '@/components/atoms/CompanyLogo';
 
 const COMPANY_URL = 'https://iriskmanagement.net/reinsurance/';
 const HEADER_H = 100; // px — must match the fixed header height
@@ -73,14 +74,7 @@ export function DocumentPrintLayout({
           zIndex: 2,
         }}
       >
-        <Image
-          src="/iriskre.png"
-          alt="iRisk logo"
-          width={130}
-          height={65}
-          style={{ objectFit: 'contain' }}
-          priority
-        />
+        <CompanyLogo width={130} height={65} style={{ objectFit: 'contain' }} priority />
         <h1
           style={{
             fontSize: '14px',

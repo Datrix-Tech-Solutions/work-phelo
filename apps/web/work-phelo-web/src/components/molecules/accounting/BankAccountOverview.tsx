@@ -1,13 +1,13 @@
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
-import { AccountTypeRecord } from '@/types/accounting';
+import { BankAccount } from '@/types/accounting';
 
-interface AccountTypeOverviewProps {
-  account: AccountTypeRecord;
+interface BankAccountOverviewProps {
+  account: BankAccount;
 }
 
-export function AccountTypeOverview({ account }: AccountTypeOverviewProps) {
+export function BankAccountOverview({ account }: BankAccountOverviewProps) {
   return (
     <CollapsibleOverview>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-6 gap-y-5">

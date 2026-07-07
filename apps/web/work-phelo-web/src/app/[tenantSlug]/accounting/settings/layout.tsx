@@ -13,7 +13,9 @@ export default function AccountingSettingsLayout({ children }: { children: React
     { key: 'vendors', label: 'Vendors', href: `${base}/vendors` },
     { key: 'customers', label: 'Customers', href: `${base}/customers` },
     { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
+    { key: 'accounts', label: 'Accounts', href: `${base}/accounts` },
     { key: 'currency', label: 'Currency', href: `${base}/currency` },
+    { key: 'fiscal-year', label: 'Fiscal Year', href: `${base}/fiscal-year` },
     { key: 'budget-forecast', label: 'Budget & Forecast', href: `${base}/budget-forecast` },
   ];
 

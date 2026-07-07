@@ -48,7 +48,6 @@ export default function OperationsLayout({
         userInitials={initials}
         notificationCount={0}
         logoVariant="image"
-        logoSrc="/iriskre.png"
       />
       <div className="flex flex-1 min-h-0 relative">
         {/* Mobile backdrop */}

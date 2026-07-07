@@ -20,6 +20,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         activeTab={activeTab}
         onTabChange={setActiveTab}
         notificationCount={0}
+        logoVariant="image"
       />
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
     </div>

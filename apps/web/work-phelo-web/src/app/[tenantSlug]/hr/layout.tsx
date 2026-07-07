@@ -129,6 +129,7 @@ export default function HRLayout({
         activeTab={activeTab}
         onTabChange={setActiveTab}
         notificationCount={0}
+        logoVariant="image"
       />
       <div className="flex flex-1 min-h-0 relative">
         {/* Mobile backdrop: closes sidebar when tapping outside */}
