@@ -154,7 +154,7 @@ export function DataTable<T extends { id: string | number }>({
     <div className={cn('flex flex-col gap-3', noInternalScroll ? '' : 'flex-1 min-h-0 h-full')}>
       {/* Toolbar card */}
       {hasToolbar && (
-        <div className="bg-white rounded-xl border border-gray-200 px-4 py-2 shrink-0">
+        <div className="bg-white rounded-xl border border-(--module-border,var(--color-gray-200)) px-4 py-2 shrink-0">
           <div className="flex items-center gap-3 flex-wrap">
             {onSearch && (
               <div className="relative flex-1 min-w-52 max-w-sm">
@@ -235,7 +235,7 @@ export function DataTable<T extends { id: string | number }>({
       {/* Table card — header + rows only */}
       <div
         className={cn(
-          'bg-white rounded-xl border border-gray-200 overflow-hidden flex flex-col pt-3',
+          'bg-white rounded-xl border border-(--module-border,var(--color-gray-200)) overflow-hidden flex flex-col pt-3',
           noInternalScroll ? '' : 'flex-1 min-h-0',
         )}
       >

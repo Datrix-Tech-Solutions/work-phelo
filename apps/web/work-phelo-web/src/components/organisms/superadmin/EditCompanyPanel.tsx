@@ -9,8 +9,10 @@ import { FormSection } from '@/components/atoms/FormSection';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { LogoPicker } from '@/components/molecules/settings/LogoPicker';
-import { useUpdateTenant, useTenantBranding, useUpdateTenantBranding } from '@/hooks/useTenants';
+import { useUpdateTenant, useTenantBranding } from '@/hooks/useTenants';
+import { useUploadTenantDocumentAsset } from '@/hooks/useTenantDocumentProfile';
 import { useToast } from '@/hooks/useToast';
+import { readFileAsDataUrl, setStoredCompanyLogo } from '@/lib/companyLogoStorage';
 import {
   COMPANY_SIZE_OPTIONS,
   COUNTRY_CONFIG,
@@ -46,7 +48,10 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
   const toast = useToast();
   const { mutate: updateTenant, isPending } = useUpdateTenant(tenant.id);
   const { data: branding } = useTenantBranding(tenant.id);
-  const { mutate: updateBranding, isPending: isSavingLogo } = useUpdateTenantBranding(tenant.id);
+  const { mutate: uploadLogo, isPending: isSavingLogo } = useUploadTenantDocumentAsset(
+    tenant.id,
+    'logo',
+  );
 
   const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
 
@@ -102,10 +107,14 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
 
   const handleSaveLogo = () => {
     if (!pendingLogoFile) return;
-    // TODO: upload file to storage, then send returned URL as logoDisplayUrl
-    // updateBranding({ logoDisplayUrl: uploadedUrl });
-    void updateBranding;
-    toast.error('Logo upload requires a file storage endpoint — not yet available.');
+    uploadLogo(pendingLogoFile, {
+      onSuccess: async () => {
+        setStoredCompanyLogo(await readFileAsDataUrl(pendingLogoFile));
+        toast.success('Logo uploaded');
+        setPendingLogoFile(null);
+      },
+      onError: () => toast.error('Failed to upload logo'),
+    });
   };
 
   return (

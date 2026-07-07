@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import Image from 'next/image';
+import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { WorkPheloWordmark } from '@/components/atoms/WorkPheloWordmark';
+import { getStoredCompanyLogo } from '@/lib/companyLogoStorage';
 
 interface CompanyLogoProps {
   className?: string;
@@ -13,29 +13,25 @@ interface CompanyLogoProps {
   priority?: boolean;
 }
 
-const LOGO_SRC = '/iriskr.png';
-const LOGO_ALT = 'iRisk logo';
-
-export function CompanyLogo({
-  className,
-  style,
-  width = 80,
-  height = 60,
-  priority = false,
-}: CompanyLogoProps) {
+export function CompanyLogo({ className, style, width = 80, height = 60 }: CompanyLogoProps) {
+  const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
-  if (failed) {
+  useEffect(() => {
+    queueMicrotask(() => setLogoSrc(getStoredCompanyLogo()));
+  }, []);
+
+  if (!logoSrc || failed) {
     return <WorkPheloWordmark className={className} />;
   }
 
   return (
-    <Image
-      src={LOGO_SRC}
-      alt={LOGO_ALT}
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={logoSrc}
+      alt="Company logo"
       width={width}
       height={height}
-      priority={priority}
       className={className}
       style={style}
       onError={() => setFailed(true)}
