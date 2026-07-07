@@ -20,6 +20,7 @@ export * from './hr/useAssets';
 export * from './hr/useCompanyPolicies';
 export * from './useTenantConfig';
 export * from './hr/useProjects';
+export * from './useModuleTransition';
 
 // Reinsurance hooks
 export * from './reinsurance/useFacultatives';

@@ -3,8 +3,8 @@
 'use client';
 
 import { use } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
+import { useModuleTransition } from '@/hooks';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { getGreeting } from '@/lib/formatters';
@@ -65,7 +65,7 @@ export default function TenantDashboardPage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = use(params);
-  const router = useRouter();
+  const { navigateToModule } = useModuleTransition();
   const user = useAuthStore((s) => s.user);
 
   const firstName = user?.firstName ?? 'User';
@@ -127,7 +127,13 @@ export default function TenantDashboardPage({
                   icon={mod.icon}
                   iconBg={MODULE_COLORS[mod.key]}
                   enabled={enabled}
-                  onClick={() => router.push(`/${tenantSlug}/${mod.route}`)}
+                  onClick={() =>
+                    navigateToModule({
+                      moduleKey: mod.key,
+                      moduleName: mod.name,
+                      path: `/${tenantSlug}/${mod.route}`,
+                    })
+                  }
                 />
               );
             })}
