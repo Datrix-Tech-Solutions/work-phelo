@@ -148,6 +148,7 @@ describe('JournalsService', () => {
       },
       $transaction: jest.fn(),
       $queryRaw: jest.fn(),
+      $executeRaw: jest.fn().mockResolvedValue(1),
     };
     prisma.$transaction.mockImplementation(
       (callback: (tx: typeof prisma) => unknown) => callback(prisma),
@@ -400,7 +401,7 @@ describe('JournalsService', () => {
 
     expect(result.status).toBe(JournalStatus.POSTED);
     expect(result.postedAt).toBeInstanceOf(Date);
-    expect(prisma.$queryRaw).toHaveBeenCalled();
+    expect(prisma.$executeRaw).toHaveBeenCalled();
   });
 
   it('never creates an automated journal when rule amounts are unbalanced', async () => {

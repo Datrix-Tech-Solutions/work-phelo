@@ -48,6 +48,7 @@ describe('AccountingMasterDataService', () => {
         update: jest.fn(),
       },
       $queryRaw: jest.fn(),
+      $executeRaw: jest.fn().mockResolvedValue(1),
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation(
@@ -97,7 +98,7 @@ describe('AccountingMasterDataService', () => {
       FiscalPeriodStatus.LOCKED,
     );
 
-    expect(prisma.$queryRaw).toHaveBeenCalled();
+    expect(prisma.$executeRaw).toHaveBeenCalled();
     expect(prisma.fiscalPeriod.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {

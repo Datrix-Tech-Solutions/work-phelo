@@ -801,7 +801,7 @@ export class JournalsService {
     tenantId: string,
     periodId: string,
   ) {
-    await tx.$queryRaw`
+    await tx.$executeRaw`
       SELECT "id"
       FROM "accounting"."FiscalPeriod"
       WHERE "id" = ${periodId} AND "tenantId" = ${tenantId}

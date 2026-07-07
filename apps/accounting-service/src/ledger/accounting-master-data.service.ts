@@ -257,7 +257,7 @@ export class AccountingMasterDataService {
       );
     }
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`
+      await tx.$executeRaw`
         SELECT pg_advisory_xact_lock(
           hashtext(${'accounting-period:' + user.tenantId})
         )
@@ -773,7 +773,7 @@ export class AccountingMasterDataService {
     tenantId: string,
     periodId: string,
   ) {
-    await tx.$queryRaw`
+    await tx.$executeRaw`
       SELECT "id"
       FROM "accounting"."FiscalPeriod"
       WHERE "id" = ${periodId} AND "tenantId" = ${tenantId}
