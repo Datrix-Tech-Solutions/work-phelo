@@ -75,6 +75,7 @@
   --module-tint:         color-mix(in oklch, var(--module-hr) 12%, white);
   --module-accent:       color-mix(in oklch, var(--module-hr) 40%, white);
   --module-gradient-end: color-mix(in oklch, var(--module-hr) 88%, black);
+  --module-border:       color-mix(in oklch, var(--module-hr) 28%, white);
 }
 .layout-operations {
   --table-header-bg:     var(--app-bg-operations);
@@ -83,6 +84,7 @@
   --module-tint:         color-mix(in oklch, var(--module-operations) 12%, white);
   --module-accent:       color-mix(in oklch, var(--module-operations) 40%, white);
   --module-gradient-end: color-mix(in oklch, var(--module-operations) 88%, black);
+  --module-border:       color-mix(in oklch, var(--module-operations) 28%, white);
 }
 .layout-accounting {
   --table-header-bg:     var(--app-bg-accounting);
@@ -91,6 +93,7 @@
   --module-tint:         color-mix(in oklch, var(--module-accounting) 12%, white);
   --module-accent:       color-mix(in oklch, var(--module-accounting) 40%, white);
   --module-gradient-end: color-mix(in oklch, var(--module-accounting) 88%, black);
+  --module-border:       color-mix(in oklch, var(--module-accounting) 28%, white);
 }
 .layout-marketing {
   --table-header-bg:     var(--app-bg-marketing);
@@ -99,6 +102,7 @@
   --module-tint:         color-mix(in oklch, var(--module-marketing) 12%, white);
   --module-accent:       color-mix(in oklch, var(--module-marketing) 40%, white);
   --module-gradient-end: color-mix(in oklch, var(--module-marketing) 88%, black);
+  --module-border:       color-mix(in oklch, var(--module-marketing) 28%, white);
 }
 
 @media (prefers-color-scheme: dark) {

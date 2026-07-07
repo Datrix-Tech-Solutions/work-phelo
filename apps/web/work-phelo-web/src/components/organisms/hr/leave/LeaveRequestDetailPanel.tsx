@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { extractError } from '@/lib/extractError';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
-import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
 import { Badge } from '@/components/atoms/Badge';
 import { useToast } from '@/hooks/useToast';
@@ -62,6 +61,17 @@ export function LeaveRequestDetailPanel({
 
   const { mutate: reviewRequest, isPending } = useReviewLeaveRequest();
 
+  const handleClose = () => {
+    setConfirmAction(null);
+    setReviewNote('');
+    onClose();
+  };
+
+  const handleBack = () => {
+    setConfirmAction(null);
+    setReviewNote('');
+  };
+
   const handleConfirm = () => {
     if (!confirmAction || !request) return;
     reviewRequest(
@@ -75,9 +85,7 @@ export function LeaveRequestDetailPanel({
           toast.success(
             confirmAction === 'approve' ? 'Leave request approved' : 'Leave request rejected',
           );
-          setConfirmAction(null);
-          setReviewNote('');
-          onClose();
+          handleClose();
         },
         onError: (err) => {
           toast.error(extractError(err, 'Something went wrong'));
@@ -92,127 +100,60 @@ export function LeaveRequestDetailPanel({
   const isPending_ = request.status === 'PENDING';
 
   return (
-    <>
-      <SidePanel
-        isOpen={isOpen}
-        onClose={onClose}
-        title="Leave Request"
-        description={`Submitted by ${request.employeeName}`}
-        footer={
-          isPending_ && canReview ? (
-            <div className="flex items-center gap-3">
-              <Button
-                variant="danger"
-                onClick={() => setConfirmAction('reject')}
-                disabled={isPending}
-              >
-                Reject
-              </Button>
-              <div className="flex-1" />
-              <Button onClick={() => setConfirmAction('approve')} isLoading={isPending}>
-                Approve
-              </Button>
-            </div>
-          ) : (
-            <div className="flex justify-end">
-              <Button variant="secondary" onClick={onClose}>
-                Close
-              </Button>
-            </div>
-          )
-        }
-      >
-        {/* Status */}
-        <div className="flex items-center gap-2">
-          <Badge variant={STATUS_VARIANT[request.status]} label={request.status} />
-          {request.reviewedBy && (
-            <span className="text-xs text-gray-400">
-              by {request.reviewedBy}
-              {request.reviewedAt ? ` · ${formatDate(request.reviewedAt)}` : ''}
-            </span>
-          )}
-        </div>
-
-        {/* Request details */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
-          <DetailRow label="Employee">{request.employeeName}</DetailRow>
-          <DetailRow label="Leave Type">{request.leaveTypeName}</DetailRow>
-          <DetailRow label="Start Date">{formatDate(request.startDate)}</DetailRow>
-          <DetailRow label="End Date">{formatDate(request.endDate)}</DetailRow>
-          <DetailRow label="Working Days">
-            <span className="font-semibold text-brand">
-              {request.totalDays} day{request.totalDays !== 1 ? 's' : ''}
-            </span>
-          </DetailRow>
-          <DetailRow label="Date Submitted">{formatDate(request.createdAt)}</DetailRow>
-        </div>
-
-        {/* Employee balance for this leave type */}
-        {typeBalance && (
-          <div className="flex flex-col gap-2 p-4 rounded-2xl border border-gray-200">
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-              {request.employeeName}&apos;s {typeBalance.leaveTypeName} Balance
-            </p>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-brand rounded-full"
-                style={{
-                  width: `${typeBalance.entitled > 0 ? Math.min(100, (typeBalance.used / typeBalance.entitled) * 100) : 0}%`,
-                }}
-              />
-            </div>
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span>
-                <span className="font-semibold text-gray-900">{typeBalance.remaining}</span>{' '}
-                remaining of {typeBalance.entitled}
-              </span>
-              <span>{typeBalance.used} used</span>
-            </div>
-            {typeBalance.pending > 0 && (
-              <p className="text-xs text-orange-500">
-                {typeBalance.pending} day{typeBalance.pending !== 1 ? 's' : ''} in pending requests
-              </p>
-            )}
-            {request.totalDays > typeBalance.remaining && (
-              <p className="text-xs text-orange-600 font-medium">
-                ⚠ Request exceeds available balance by {request.totalDays - typeBalance.remaining}{' '}
-                day{request.totalDays - typeBalance.remaining !== 1 ? 's' : ''}
-              </p>
-            )}
-          </div>
-        )}
-
-        {/* Employee notes */}
-        {request.reason && (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-              Employee Notes
-            </p>
-            <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 border border-gray-100">
-              {request.reason}
-            </p>
-          </div>
-        )}
-
-        {/* Documentation */}
-        {request.documentationUrl && (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-              Documentation
-            </p>
-            <a
-              href={request.documentationUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-brand underline underline-offset-2 hover:opacity-70 transition-opacity break-all"
+    <SidePanel
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Leave Request"
+      description={`Submitted by ${request.employeeName}`}
+      footer={
+        confirmAction ? (
+          <div className="flex items-center gap-3">
+            <Button variant="secondary" onClick={handleBack} disabled={isPending}>
+              Back
+            </Button>
+            <div className="flex-1" />
+            <Button
+              variant={confirmAction === 'reject' ? 'danger' : 'primary'}
+              isLoading={isPending}
+              loadingText={confirmAction === 'approve' ? 'Approving...' : 'Rejecting...'}
+              onClick={handleConfirm}
             >
-              {request.documentationUrl}
-            </a>
+              Confirm {confirmAction === 'approve' ? 'Approval' : 'Rejection'}
+            </Button>
           </div>
-        )}
+        ) : isPending_ && canReview ? (
+          <div className="flex items-center gap-3">
+            <Button variant="danger" onClick={() => setConfirmAction('reject')}>
+              Reject
+            </Button>
+            <div className="flex-1" />
+            <Button onClick={() => setConfirmAction('approve')}>Approve</Button>
+          </div>
+        ) : (
+          <div className="flex justify-end">
+            <Button variant="secondary" onClick={handleClose}>
+              Close
+            </Button>
+          </div>
+        )
+      }
+    >
+      {confirmAction ? (
+        <>
+          {/* Condensed summary */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
+            <DetailRow label="Employee">{request.employeeName}</DetailRow>
+            <DetailRow label="Leave Type">{request.leaveTypeName}</DetailRow>
+            <DetailRow label="Start Date">{formatDate(request.startDate)}</DetailRow>
+            <DetailRow label="End Date">{formatDate(request.endDate)}</DetailRow>
+            <DetailRow label="Working Days">
+              <span className="font-semibold text-brand">
+                {request.totalDays} day{request.totalDays !== 1 ? 's' : ''}
+              </span>
+            </DetailRow>
+          </div>
 
-        {/* Reviewer note — only editable when pending, read-only when already reviewed */}
-        {isPending_ && canReview ? (
+          {/* Reviewer note */}
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
               Note for Employee{' '}
@@ -224,60 +165,116 @@ export function LeaveRequestDetailPanel({
               placeholder="Add a note visible to the employee..."
               rows={3}
               className={inputClass(undefined, 'resize-none')}
+              autoFocus
             />
           </div>
-        ) : request.reviewNote ? (
-          <div className="flex flex-col gap-1.5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-              Reviewer Note
-            </p>
-            <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 border border-gray-100">
-              {request.reviewNote}
-            </p>
+        </>
+      ) : (
+        <>
+          {/* Status */}
+          <div className="flex items-center gap-2">
+            <Badge variant={STATUS_VARIANT[request.status]} label={request.status} />
+            {request.reviewedBy && (
+              <span className="text-xs text-gray-400">
+                by {request.reviewedBy}
+                {request.reviewedAt ? ` · ${formatDate(request.reviewedAt)}` : ''}
+              </span>
+            )}
           </div>
-        ) : null}
-      </SidePanel>
 
-      {/* Approve confirmation */}
-      <Modal
-        isOpen={confirmAction === 'approve'}
-        onClose={() => setConfirmAction(null)}
-        title="Approve Leave Request"
-        description={`Approve ${request.totalDays} day${request.totalDays !== 1 ? 's' : ''} of ${request.leaveTypeName} for ${request.employeeName}?`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setConfirmAction(null)}>
-              Cancel
-            </Button>
-            <Button isLoading={isPending} loadingText="Approving..." onClick={handleConfirm}>
-              Approve
-            </Button>
+          {/* Request details */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
+            <DetailRow label="Employee">{request.employeeName}</DetailRow>
+            <DetailRow label="Leave Type">{request.leaveTypeName}</DetailRow>
+            <DetailRow label="Start Date">{formatDate(request.startDate)}</DetailRow>
+            <DetailRow label="End Date">{formatDate(request.endDate)}</DetailRow>
+            <DetailRow label="Working Days">
+              <span className="font-semibold text-brand">
+                {request.totalDays} day{request.totalDays !== 1 ? 's' : ''}
+              </span>
+            </DetailRow>
+            <DetailRow label="Date Submitted">{formatDate(request.createdAt)}</DetailRow>
           </div>
-        }
-      />
 
-      {/* Reject confirmation */}
-      <Modal
-        isOpen={confirmAction === 'reject'}
-        onClose={() => setConfirmAction(null)}
-        title="Reject Leave Request"
-        description={`Reject this leave request for ${request.employeeName}?`}
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="secondary" onClick={() => setConfirmAction(null)}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              isLoading={isPending}
-              loadingText="Rejecting..."
-              onClick={handleConfirm}
-            >
-              Reject
-            </Button>
-          </div>
-        }
-      />
-    </>
+          {/* Employee balance for this leave type — only relevant while still pending */}
+          {isPending_ && typeBalance && (
+            <div className="flex flex-col gap-2 p-4 rounded-2xl border border-gray-200">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                {request.employeeName}&apos;s {typeBalance.leaveTypeName} Balance
+              </p>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-brand rounded-full"
+                  style={{
+                    width: `${typeBalance.entitled > 0 ? Math.min(100, (typeBalance.used / typeBalance.entitled) * 100) : 0}%`,
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-gray-500">
+                <span>
+                  <span className="font-semibold text-gray-900">{typeBalance.remaining}</span>{' '}
+                  remaining of {typeBalance.entitled}
+                </span>
+                <span>{typeBalance.used} used</span>
+              </div>
+              {typeBalance.pending > 0 && (
+                <p className="text-xs text-orange-500">
+                  {typeBalance.pending} day{typeBalance.pending !== 1 ? 's' : ''} in pending
+                  requests
+                </p>
+              )}
+              {request.totalDays > typeBalance.remaining && (
+                <p className="text-xs text-orange-600 font-medium">
+                  ⚠ Request exceeds available balance by {request.totalDays - typeBalance.remaining}{' '}
+                  day
+                  {request.totalDays - typeBalance.remaining !== 1 ? 's' : ''}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Employee notes */}
+          {request.reason && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Employee Notes
+              </p>
+              <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                {request.reason}
+              </p>
+            </div>
+          )}
+
+          {/* Documentation */}
+          {request.documentationUrl && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Documentation
+              </p>
+              <a
+                href={request.documentationUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-brand underline underline-offset-2 hover:opacity-70 transition-opacity break-all"
+              >
+                {request.documentationUrl}
+              </a>
+            </div>
+          )}
+
+          {/* Reviewer note — read-only once already reviewed */}
+          {!isPending_ && request.reviewNote && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                Reviewer Note
+              </p>
+              <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3 border border-gray-100">
+                {request.reviewNote}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+    </SidePanel>
   );
 }
