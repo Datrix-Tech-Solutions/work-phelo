@@ -161,7 +161,7 @@ export function ProjectMembersTable({ projectId }: Props) {
         searchValue={search}
         onSearch={setSearch}
         actionButton={
-          canAssign ? { label: '+ Assign Members', onClick: () => setPanelOpen(true) } : undefined
+          canAssign ? { label: 'Assign Members', onClick: () => setPanelOpen(true) } : undefined
         }
         currentPage={1}
         totalPages={1}

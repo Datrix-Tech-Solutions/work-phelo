@@ -3,17 +3,10 @@
 import { Controller, UseFormReturn } from 'react-hook-form';
 import { FormSection } from '@/components/atoms/FormSection';
 import { DatePicker } from '@/components/atoms/DatePicker';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { JournalEntryFormValues } from '@/types/accounting';
-
-// TODO: populate from currencies API
-const CURRENCY_OPTIONS: SearchSelectOption[] = [
-  { value: 'GHS', label: 'Ghana Cedi (GHS)' },
-  { value: 'USD', label: 'US Dollar (USD)' },
-  { value: 'EUR', label: 'Euro (EUR)' },
-  { value: 'GBP', label: 'British Pound (GBP)' },
-];
+import { useAccountingCurrencyOptions } from '@/hooks';
 
 interface JournalEntryDetailsSectionProps {
   form: UseFormReturn<JournalEntryFormValues>;
@@ -25,6 +18,8 @@ export function JournalEntryDetailsSection({ form }: JournalEntryDetailsSectionP
     control,
     formState: { errors },
   } = form;
+
+  const { options: currencyOptions } = useAccountingCurrencyOptions();
 
   return (
     <FormSection title="Entry Details">
@@ -51,7 +46,7 @@ export function JournalEntryDetailsSection({ form }: JournalEntryDetailsSectionP
             <SearchSelect
               label="Currency"
               placeholder="Select currency…"
-              options={CURRENCY_OPTIONS}
+              options={currencyOptions}
               value={field.value}
               onChange={field.onChange}
               error={errors.currency?.message}

@@ -27,7 +27,6 @@ interface TopNavProps {
   userInitials: string;
   userColor?: string;
   logoVariant?: 'text' | 'image';
-  logoSrc?: string;
 }
 
 /* ── Profile dropdown ── */
@@ -127,7 +126,6 @@ export function TopNav({
   userInitials,
   userColor,
   logoVariant = 'text',
-  logoSrc,
 }: TopNavProps) {
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -177,7 +175,7 @@ export function TopNav({
         )}
 
         {/* Logo */}
-        <WorkPheloLogo className="text-base shrink-0" variant={logoVariant} src={logoSrc} />
+        <WorkPheloLogo className="text-base shrink-0" variant={logoVariant} />
 
         <div className="flex-1" />
 

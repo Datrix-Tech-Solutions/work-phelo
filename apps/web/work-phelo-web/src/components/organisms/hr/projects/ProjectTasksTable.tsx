@@ -180,7 +180,7 @@ export function ProjectTasksTable({ projectId }: Props) {
         filterOptions={STATUS_FILTER_OPTIONS}
         onFilter={setStatusFilter}
         actionButton={
-          canModify ? { label: '+ Create Task', onClick: () => setCreateOpen(true) } : undefined
+          canModify ? { label: 'Create Task', onClick: () => setCreateOpen(true) } : undefined
         }
         onRowClick={(task) => {
           setSelectedTask(task);

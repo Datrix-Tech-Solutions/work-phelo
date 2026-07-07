@@ -1,11 +1,13 @@
 'use client';
 
-import { useForm, Controller } from 'react-hook-form';
+import { useEffect } from 'react';
+import { useForm, Controller, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
 import { AccountType, AccountStatus } from '@/types/accounting';
+import { useAccountingCurrencyOptions } from '@/hooks';
 
 interface RegisterAccountPanelProps {
   isOpen: boolean;
@@ -45,25 +47,36 @@ const STATUS_OPTIONS: SearchSelectOption[] = [
   { value: 'Inactive', label: 'Inactive' },
 ];
 
-// TODO: populate from chart of accounts API
-const PARENT_ACCOUNT_OPTIONS: SearchSelectOption[] = [];
-
-// TODO: populate from currencies API
-const CURRENCY_OPTIONS: SearchSelectOption[] = [
-  { value: 'GHS', label: 'Ghana Cedi (GHS)' },
-  { value: 'USD', label: 'US Dollar (USD)' },
-  { value: 'EUR', label: 'Euro (EUR)' },
-  { value: 'GBP', label: 'British Pound (GBP)' },
-];
+const PARENT_ACCOUNT_OPTIONS_BY_TYPE: Partial<Record<AccountType, SearchSelectOption[]>> = {
+  Asset: [
+    { value: 'Current Asset', label: 'Current Asset' },
+    { value: 'Fixed Asset', label: 'Fixed Asset' },
+  ],
+  Liability: [
+    { value: 'Current Liability', label: 'Current Liability' },
+    { value: 'Fixed Liability', label: 'Fixed Liability' },
+  ],
+};
 
 export function RegisterAccountPanel({ isOpen, onClose }: RegisterAccountPanelProps) {
+  const { options: currencyOptions } = useAccountingCurrencyOptions();
+
   const {
     register,
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({ defaultValues: DEFAULTS });
+
+  const type = useWatch({ control, name: 'type' });
+  const parentAccountOptions = type ? (PARENT_ACCOUNT_OPTIONS_BY_TYPE[type] ?? []) : [];
+  const showParentAccount = parentAccountOptions.length > 0;
+
+  useEffect(() => {
+    setValue('parentAccount', '');
+  }, [type, setValue]);
 
   const handleClose = () => {
     reset(DEFAULTS);
@@ -121,19 +134,21 @@ export function RegisterAccountPanel({ isOpen, onClose }: RegisterAccountPanelPr
           )}
         />
 
-        <Controller
-          name="parentAccount"
-          control={control}
-          render={({ field }) => (
-            <SearchSelect
-              label="Parent Account"
-              placeholder="Select parent account…"
-              options={PARENT_ACCOUNT_OPTIONS}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
+        {showParentAccount && (
+          <Controller
+            name="parentAccount"
+            control={control}
+            render={({ field }) => (
+              <SearchSelect
+                label="Parent Account"
+                placeholder="Select parent account…"
+                options={parentAccountOptions}
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+        )}
 
         <Controller
           name="currency"
@@ -143,7 +158,7 @@ export function RegisterAccountPanel({ isOpen, onClose }: RegisterAccountPanelPr
             <SearchSelect
               label="Currency"
               placeholder="Select currency…"
-              options={CURRENCY_OPTIONS}
+              options={currencyOptions}
               value={field.value}
               onChange={field.onChange}
               error={errors.currency?.message}

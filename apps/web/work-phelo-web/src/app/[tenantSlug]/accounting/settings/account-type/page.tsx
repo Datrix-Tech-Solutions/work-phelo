@@ -1,7 +1,7 @@
 'use client';
 
-import { AccountTypeTable } from '@/components/organisms/accounting/tables/AccountTypeTable';
+import { AccountTypeDefinitionsTable } from '@/components/organisms/accounting/tables/AccountTypeDefinitionsTable';
 
 export default function AccountTypePage() {
-  return <AccountTypeTable />;
+  return <AccountTypeDefinitionsTable />;
 }

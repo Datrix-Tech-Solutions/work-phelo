@@ -4,15 +4,15 @@ import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import { AccountTypeRecord } from '@/types/accounting';
+import { BankAccount } from '@/types/accounting';
 import { AddAccountPanel } from '@/components/organisms/accounting/panels/AddAccountPanel';
 
 const PAGE_SIZE = 10;
 
-// TODO: replace with useAccountTypes() hook once API is ready
-const MOCK_DATA: AccountTypeRecord[] = [];
+// TODO: replace with useBankAccounts() hook once API is ready
+const MOCK_DATA: BankAccount[] = [];
 
-const COLUMNS: Column<AccountTypeRecord>[] = [
+const COLUMNS: Column<BankAccount>[] = [
   {
     key: 'accountName',
     label: 'Account Name',
@@ -61,7 +61,7 @@ const COLUMNS: Column<AccountTypeRecord>[] = [
   },
 ];
 
-export function AccountTypeTable() {
+export function BankAccountsTable() {
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
@@ -100,9 +100,7 @@ export function AccountTypeTable() {
           { label: 'Edit', onClick: () => {} },
           { label: 'Delete', onClick: () => {}, danger: true },
         ]}
-        onRowClick={(row) =>
-          router.push(`/${tenantSlug}/accounting/settings/account-type/${row.id}`)
-        }
+        onRowClick={(row) => router.push(`/${tenantSlug}/accounting/settings/accounts/${row.id}`)}
         emptyMessage="No accounts found"
         currentPage={page}
         totalPages={totalPages}
