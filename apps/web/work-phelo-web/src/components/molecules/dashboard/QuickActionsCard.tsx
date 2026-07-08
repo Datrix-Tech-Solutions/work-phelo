@@ -1,6 +1,7 @@
 'use client';
 
-import { ModuleIcons, moduleColor } from '@/components/atoms/icons';
+import { ModuleIcons } from '@/components/atoms/icons';
+import { cardClass } from '@/lib/utils';
 
 interface QuickActionsCardProps {
   onPayslips: () => void;
@@ -12,6 +13,15 @@ interface QuickActionsCardProps {
   projectsBadge?: number;
 }
 
+/** Per-action accent colors — distinct from each other, unlike the shared HR module color. */
+const ACTION_COLORS = {
+  payslips: '#16a34a', // green-600
+  assets: '#2563eb', // blue-600
+  leave: '#7c3aed', // violet-600
+  schedules: '#0d9488', // teal-600
+  projects: '#e11d48', // rose-600
+};
+
 interface ActionButtonProps {
   icon: React.ReactNode;
   label: string;
@@ -22,10 +32,14 @@ interface ActionButtonProps {
 
 function ActionButton({ icon, label, color, onClick, badge }: ActionButtonProps) {
   return (
-    <button onClick={onClick} className="flex flex-col items-center gap-2 group">
+    <button
+      onClick={onClick}
+      className="flex flex-col items-center gap-2 group"
+      style={{ '--card-accent': color } as React.CSSProperties}
+    >
       <div className="relative">
         <div
-          className="w-14 h-14 rounded-full flex items-center justify-center text-white transition-transform group-hover:scale-105"
+          className="module-icon-shake w-14 h-14 rounded-full flex items-center justify-center text-white transition-[transform,box-shadow] duration-200 group-hover:scale-105 group-hover:shadow-[0_10px_20px_-6px_color-mix(in_oklab,var(--card-accent)_55%,transparent)]"
           style={{ backgroundColor: color }}
         >
           {icon}
@@ -51,38 +65,38 @@ export function QuickActionsCard({
   projectsBadge,
 }: QuickActionsCardProps) {
   return (
-    <div className="bg-white border border-gray-200 rounded-card p-5 shrink-0">
+    <div className={cardClass('p-5 shrink-0')}>
       <h2 className="text-base font-bold text-gray-900 mb-4">Quick Actions</h2>
       <div className="flex flex-wrap items-start justify-around gap-y-4">
         <ActionButton
           icon={<ModuleIcons.payroll className="w-6 h-6" />}
           label="My Payslips"
-          color={moduleColor('payroll')}
+          color={ACTION_COLORS.payslips}
           onClick={onPayslips}
         />
         <ActionButton
           icon={<ModuleIcons.assets className="w-6 h-6" />}
           label="My Assets"
-          color={moduleColor('assets')}
+          color={ACTION_COLORS.assets}
           onClick={onAssets}
         />
         <ActionButton
           icon={<ModuleIcons.leave className="w-6 h-6" />}
           label="My Leave"
-          color={moduleColor('leave')}
+          color={ACTION_COLORS.leave}
           onClick={onLeave}
           badge={leaveBadge}
         />
         <ActionButton
           icon={<ModuleIcons.scheduling className="w-6 h-6" />}
           label="My Schedules"
-          color={moduleColor('scheduling')}
+          color={ACTION_COLORS.schedules}
           onClick={onSchedules}
         />
         <ActionButton
           icon={<ModuleIcons.projects className="w-6 h-6" />}
           label="My Projects"
-          color={moduleColor('projects')}
+          color={ACTION_COLORS.projects}
           onClick={onProjects}
           badge={projectsBadge}
         />

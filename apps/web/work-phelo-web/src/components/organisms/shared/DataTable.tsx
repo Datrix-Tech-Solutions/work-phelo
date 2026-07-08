@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '../../atoms/NoSearchLogo';
@@ -154,7 +154,7 @@ export function DataTable<T extends { id: string | number }>({
     <div className={cn('flex flex-col gap-3', noInternalScroll ? '' : 'flex-1 min-h-0 h-full')}>
       {/* Toolbar card */}
       {hasToolbar && (
-        <div className="bg-white rounded-xl border border-(--module-border,var(--color-gray-200)) px-4 py-2 shrink-0">
+        <div className={cardClass('px-4 py-2 shrink-0')}>
           <div className="flex items-center gap-3 flex-wrap">
             {onSearch && (
               <div className="relative flex-1 min-w-52 max-w-sm">
@@ -234,9 +234,8 @@ export function DataTable<T extends { id: string | number }>({
 
       {/* Table card — header + rows only */}
       <div
-        className={cn(
-          'bg-white rounded-xl border border-(--module-border,var(--color-gray-200)) overflow-hidden flex flex-col pt-3',
-          noInternalScroll ? '' : 'flex-1 min-h-0',
+        className={cardClass(
+          cn('overflow-hidden flex flex-col pt-3', noInternalScroll ? '' : 'flex-1 min-h-0'),
         )}
       >
         {/* Horizontal scroll wrapper — keeps header and rows in sync */}
@@ -244,7 +243,12 @@ export function DataTable<T extends { id: string | number }>({
           <div className="min-w-max flex flex-col flex-1 min-h-0">
             {/* Header */}
             <div className="relative shrink-0">
-              <div className="absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg" />
+              <div
+                className={cardClass(
+                  'absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg',
+                  'glass',
+                )}
+              />
               <div
                 className="relative grid text-xs font-semibold text-gray-900 uppercase tracking-wide px-6 py-3"
                 style={{
@@ -299,55 +303,64 @@ export function DataTable<T extends { id: string | number }>({
                     key={row.id}
                     onClick={() => onRowClick?.(row)}
                     className={cn(
-                      'grid px-6 py-4 items-center text-sm text-gray-800 border-b border-gray-100 last:border-b-0',
-                      'hover:bg-gray-50 transition-colors',
+                      'relative group/row border-b border-gray-100 last:border-b-0',
                       onRowClick && 'cursor-pointer',
                     )}
-                    style={{
-                      gridTemplateColumns: [
-                        ...columns.map((c) => c.width ?? '1fr'),
-                        ...(rowActions ? ['44px'] : []),
-                      ].join(' '),
-                    }}
                   >
-                    {columns.map((col) => (
-                      <div key={col.key} className={col.className}>
-                        {col.render
-                          ? col.render(row)
-                          : String((row as Record<string, unknown>)[col.key] ?? '')}
-                      </div>
-                    ))}
-                    {rowActions &&
-                      (() => {
-                        const actions = rowActions(row);
-                        if (actions.length === 0) return null;
-                        if (actions.length === 1) {
-                          const action = actions[0];
+                    <div
+                      className={cardClass(
+                        'absolute inset-y-0.5 left-4 right-4 rounded-lg bg-(--table-header-bg,var(--color-gray-200)) opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 pointer-events-none',
+                        'glass',
+                      )}
+                    />
+                    <div
+                      className="relative grid px-6 py-4 items-center text-sm text-gray-800"
+                      style={{
+                        gridTemplateColumns: [
+                          ...columns.map((c) => c.width ?? '1fr'),
+                          ...(rowActions ? ['44px'] : []),
+                        ].join(' '),
+                      }}
+                    >
+                      {columns.map((col) => (
+                        <div key={col.key} className={col.className}>
+                          {col.render
+                            ? col.render(row)
+                            : String((row as Record<string, unknown>)[col.key] ?? '')}
+                        </div>
+                      ))}
+                      {rowActions &&
+                        (() => {
+                          const actions = rowActions(row);
+                          if (actions.length === 0) return null;
+                          if (actions.length === 1) {
+                            const action = actions[0];
+                            return (
+                              <div className="flex justify-center">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    action.onClick();
+                                  }}
+                                  className={cn(
+                                    'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
+                                    action.danger
+                                      ? 'text-red-600 hover:bg-red-50'
+                                      : 'text-brand hover:bg-brand/5',
+                                  )}
+                                >
+                                  {action.label}
+                                </button>
+                              </div>
+                            );
+                          }
                           return (
-                            <div className="flex justify-center">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  action.onClick();
-                                }}
-                                className={cn(
-                                  'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
-                                  action.danger
-                                    ? 'text-red-600 hover:bg-red-50'
-                                    : 'text-brand hover:bg-brand/5',
-                                )}
-                              >
-                                {action.label}
-                              </button>
+                            <div className="flex justify-end w-4">
+                              <ThreeDotMenu actions={actions} />
                             </div>
                           );
-                        }
-                        return (
-                          <div className="flex justify-end w-4">
-                            <ThreeDotMenu actions={actions} />
-                          </div>
-                        );
-                      })()}
+                        })()}
+                    </div>
                   </div>
                 ))
               )}

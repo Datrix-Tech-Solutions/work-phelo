@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { pagePx, pageHeader, pageContent } from '@/lib/layout';
 import { TabBar } from '@/components/molecules/shared/TabBar';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function ReinsuranceSettingsLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ tenantSlug: string }>();
@@ -20,17 +21,20 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Sticky header + tabs */}
-      <div className="shrink-0 bg-white">
+      <div className="shrink-0">
         <div className={pageHeader}>
           <h1 className="text-xl font-semibold text-gray-900">System Settings</h1>
         </div>
-        <TabBar tabs={tabs} className={cn(pagePx, 'bg-white')} />
+        <TabBar tabs={tabs} className={pagePx} />
       </div>
 
       {/* Content */}
-      <main className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto bg-gray-50 flex flex-col')}>
+      <AppBackground
+        as="main"
+        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
+      >
         {children}
-      </main>
+      </AppBackground>
     </div>
   );
 }

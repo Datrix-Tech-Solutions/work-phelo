@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '@/components/atoms/NoSearchLogo';
@@ -70,7 +70,7 @@ export function DataCardGrid<T extends { id: string | number }>({
     <div className="flex flex-col gap-3">
       {/* Toolbar */}
       {hasToolbar && (
-        <div className="flex items-center gap-3 flex-wrap shrink-0">
+        <div className={cardClass('flex items-center gap-3 flex-wrap shrink-0 px-4 py-2')}>
           {onSearch && (
             <div className="relative flex-1 min-w-52 max-w-sm">
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />

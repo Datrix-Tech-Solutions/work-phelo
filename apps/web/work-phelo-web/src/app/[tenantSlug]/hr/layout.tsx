@@ -12,6 +12,7 @@ import { Permission } from '@/lib/permissionMap';
 import { AppraisalReminderModal } from '@/components/organisms/hr/appraisal/AppraisalReminderModal';
 import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
 import { LeaveReminderModal } from '@/components/organisms/hr/leave/LeaveReminderModal';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function HRLayout({
   children,
@@ -121,7 +122,7 @@ export default function HRLayout({
   // }));
 
   return (
-    <div className="h-screen overflow-hidden bg-app-bg-hr flex flex-col layout-hr">
+    <AppBackground className="h-screen overflow-hidden flex flex-col layout-hr">
       <TopNav
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}
@@ -153,6 +154,6 @@ export default function HRLayout({
       {canSubmitManagerReview && <AppraisalReminderModal tenantSlug={tenantSlug} />}
       {canApproveLeave && <LeaveReminderModal tenantSlug={tenantSlug} />}
       {canReadOwnProfile && <AgreementGate />}
-    </div>
+    </AppBackground>
   );
 }

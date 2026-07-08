@@ -14,6 +14,7 @@ import { AccountDetailsSection } from '@/components/molecules/hr/employees/accou
 import { EmployeeDetailSkeleton } from '@/components/molecules/hr/employees/employeeDetailSkeleton';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
+import { AppBackground } from '@/components/atoms/AppBackground';
 import type { UpdateEmployeePayload } from '@/types/hr';
 
 export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
@@ -41,7 +42,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+    <AppBackground className="h-screen overflow-hidden flex flex-col">
       <TopNav
         userInitials={initials}
         notificationCount={0}
@@ -90,6 +91,6 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
           isUpdating={isUpdating}
         />
       )}
-    </div>
+    </AppBackground>
   );
 }

@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Clock, CheckCircle2 } from 'lucide-react';
+import { Clock, CheckCircle2, LogIn, LogOut } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
+import { cardClass } from '@/lib/utils';
 
 interface AttendanceMetricCardProps {
   clockedIn: boolean;
@@ -28,7 +29,7 @@ export function AttendanceMetricCard({
   const [confirmClockOut, setConfirmClockOut] = useState(false);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-card px-5 py-5 flex flex-col shadow-sm">
+    <div className={cardClass('px-5 py-5 flex flex-col', 'glass')}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <span className="text-sm text-gray-500 font-medium">
@@ -71,6 +72,8 @@ export function AttendanceMetricCard({
               size="sm"
               onClick={() => setConfirmClockOut(true)}
               disabled={isLoading}
+              //look for a better for clock out
+              icon={<LogOut className="w-4 h-4" />}
               className="text-orange-600 border-orange-200 hover:bg-orange-50"
             >
               Clock Out
@@ -81,6 +84,8 @@ export function AttendanceMetricCard({
               size="sm"
               onClick={() => setConfirmClockIn(true)}
               disabled={isLoading}
+              //look for a better for clock in
+              icon={<LogIn className="w-4 h-4" />}
               className="bg-brand hover:bg-brand-hover"
             >
               Clock In

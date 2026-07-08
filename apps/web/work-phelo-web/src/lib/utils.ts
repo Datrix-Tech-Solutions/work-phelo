@@ -14,3 +14,11 @@ export function inputClass(error?: string, extra?: string) {
     extra,
   );
 }
+
+export function cardClass(extra?: string, border: 'module' | 'glass' = 'module') {
+  return cn(
+    'bg-white/20 backdrop-blur-md rounded-xl border shadow-lg',
+    border === 'module' ? 'border-(--module-border,var(--color-gray-200))' : 'border-white/40',
+    extra,
+  );
+}

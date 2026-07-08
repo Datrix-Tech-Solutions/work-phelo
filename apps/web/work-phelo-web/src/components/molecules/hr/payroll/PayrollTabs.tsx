@@ -12,6 +12,7 @@ interface Props {
   canViewHistory: boolean;
   country?: string;
   onTabChange: (tab: 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history') => void;
+  className?: string;
 }
 
 export function PayrollTabs({
@@ -21,6 +22,7 @@ export function PayrollTabs({
   canApprove,
   canViewHistory,
   onTabChange,
+  className,
 }: Props) {
   const { data: payrollSettings } = usePayrollSettings();
   const payrollLabels = getPayrollLabels(payrollSettings?.payrollCountry);
@@ -39,6 +41,7 @@ export function PayrollTabs({
       onTabChange={(tab) =>
         onTabChange(tab as 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history')
       }
+      className={className}
     />
   );
 }

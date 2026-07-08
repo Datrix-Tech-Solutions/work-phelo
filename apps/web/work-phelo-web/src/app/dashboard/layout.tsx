@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
@@ -14,7 +15,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [activeTab, setActiveTab] = useState('portal');
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+    <AppBackground className="h-screen overflow-hidden flex flex-col">
       <TopNav
         userInitials={initials}
         activeTab={activeTab}
@@ -23,6 +24,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         logoVariant="image"
       />
       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</div>
-    </div>
+    </AppBackground>
   );
 }

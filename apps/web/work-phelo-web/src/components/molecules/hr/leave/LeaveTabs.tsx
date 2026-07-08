@@ -6,9 +6,16 @@ interface Props {
   canReviewRequests: boolean;
   isEmployee: boolean;
   onTabChange: (tab: string) => void;
+  className?: string;
 }
 
-export function LeaveTabs({ activeTab, canReviewRequests, isEmployee, onTabChange }: Props) {
+export function LeaveTabs({
+  activeTab,
+  canReviewRequests,
+  isEmployee,
+  onTabChange,
+  className,
+}: Props) {
   const { data: pendingList = [] } = useLeaveRequests('PENDING', { enabled: canReviewRequests });
 
   const pendingCount = (pendingList as unknown[]).length;
@@ -20,5 +27,7 @@ export function LeaveTabs({ activeTab, canReviewRequests, isEmployee, onTabChang
       : []),
   ];
 
-  return <TabBar tabs={tabs} activeTab={activeTab} onTabChange={onTabChange} />;
+  return (
+    <TabBar tabs={tabs} activeTab={activeTab} onTabChange={onTabChange} className={className} />
+  );
 }

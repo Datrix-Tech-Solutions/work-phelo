@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, LogIn, LogOut } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
 import { Modal } from '@/components/organisms/shared/Modal';
 import type { TodaySession } from '@/types/timeclock';
@@ -85,6 +85,8 @@ export function ClockBanner({
               onClick={() => setConfirmClockIn(true)}
               isLoading={isClockingIn}
               loadingText="Clocking in…"
+              //look for a better for clock in
+              icon={<LogIn className="w-4 h-4" />}
               className="bg-white text-brand hover:bg-blue-50 focus:ring-white border-0"
             >
               Clock In
@@ -96,6 +98,8 @@ export function ClockBanner({
               onClick={() => setConfirmClockOut(true)}
               isLoading={isClockingOut}
               loadingText="Clocking out…"
+              //look for a better for clock out
+              icon={<LogOut className="w-4 h-4" />}
               className="bg-white text-brand hover:bg-blue-50 focus:ring-white border-0"
             >
               Clock Out

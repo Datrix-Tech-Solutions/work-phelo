@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { MARKETING_NAV_GROUPS } from '@/config/marketing-nav';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function MarketingLayout({
   children,
@@ -38,7 +39,7 @@ export default function MarketingLayout({
   }));
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-100 flex flex-col layout-marketing">
+    <AppBackground className="h-screen overflow-hidden flex flex-col layout-marketing">
       <TopNav
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}
@@ -63,6 +64,6 @@ export default function MarketingLayout({
           {children}
         </main>
       </div>
-    </div>
+    </AppBackground>
   );
 }

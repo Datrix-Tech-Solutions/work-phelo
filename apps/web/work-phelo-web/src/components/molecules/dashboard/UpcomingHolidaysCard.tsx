@@ -2,6 +2,7 @@
 
 import { Calendar } from 'lucide-react';
 import { formatHolidayDate } from '@/lib/formatters';
+import { cardClass } from '@/lib/utils';
 
 interface Holiday {
   id: string;
@@ -16,7 +17,7 @@ interface UpcomingHolidaysCardProps {
 
 export function UpcomingHolidaysCard({ holidays }: UpcomingHolidaysCardProps) {
   return (
-    <div className="bg-white border border-gray-200 rounded-card p-5 flex flex-col gap-3 min-h-60">
+    <div className={cardClass('p-5 flex flex-col gap-3 min-h-60')}>
       <h2 className="text-base font-bold text-gray-900">Upcoming Holidays</h2>
       {holidays.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">

@@ -44,11 +44,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
     <span
       className={cn(
         'shrink-0 flex items-center justify-center',
-        isDeactivated
-          ? 'text-gray-300'
-          : isCurrent
-            ? 'text-(--module-btn-bg,var(--color-brand))'
-            : 'text-gray-400',
+        isDeactivated ? 'text-gray-300' : isCurrent ? 'text-white' : 'text-gray-400',
       )}
     >
       {item.icon}
@@ -99,8 +95,8 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
           className={cn(
             baseRow,
             isCurrent
-              ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
-              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+              ? 'bg-(--module-btn-bg,var(--color-brand)) text-white font-semibold'
+              : 'text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint)) hover:text-gray-900',
           )}
         >
           {inner}
@@ -147,7 +143,7 @@ function SidebarChildItem({ item }: { item: NavItem }) {
       className={cn(
         baseRow,
         isCurrent
-          ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
+          ? 'bg-(--module-btn-bg,var(--color-brand)) text-white font-semibold'
           : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
       )}
     >
@@ -196,18 +192,14 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
           isDeactivated
             ? 'cursor-not-allowed text-gray-300'
             : isAnyChildActive
-              ? 'bg-(--module-tint,var(--color-brand-tint)) text-(--module-btn-bg,var(--color-brand)) font-semibold'
-              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+              ? 'bg-(--module-btn-bg,var(--color-brand)) text-white font-semibold'
+              : 'text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint)) hover:text-gray-900',
         )}
       >
         <span
           className={cn(
             'shrink-0 flex items-center justify-center',
-            isDeactivated
-              ? 'text-gray-300'
-              : isAnyChildActive
-                ? 'text-(--module-btn-bg,var(--color-brand))'
-                : 'text-gray-400',
+            isDeactivated ? 'text-gray-300' : isAnyChildActive ? 'text-white' : 'text-gray-400',
           )}
         >
           {item.icon}
@@ -296,7 +288,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
       onMouseEnter={() => collapsed && setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       className={cn(
-        'bg-white border-r border-gray-200 flex flex-col shrink-0 overflow-hidden',
+        'bg-white/60 backdrop-blur-md border-r border-(--module-border,var(--color-gray-200)) shadow-lg flex flex-col shrink-0 overflow-hidden',
         // Mobile: absolute drawer that slides over content (below the top nav)
         'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
         // Desktop: static in flex flow with width animation (spring curve)
@@ -313,7 +305,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
             <div key={group.label} className="mb-1">
               {/* Group label / divider */}
               {effectiveCollapsed ? (
-                <div className="mx-3 my-2 h-px bg-gray-200" />
+                <div className="mx-3 my-2 h-px bg-(--module-border,var(--color-gray-200))" />
               ) : (
                 <p className="px-5 pt-5 pb-1.5 text-[10px] font-semibold tracking-widest text-gray-400 uppercase select-none">
                   {group.label}

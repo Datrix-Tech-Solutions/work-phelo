@@ -162,7 +162,7 @@ export function TopNav({
 
   return (
     <>
-      <header className="w-full bg-[#FFFFFF] border-b px-5 h-14 flex items-center gap-4 shrink-0">
+      <header className="w-full bg-white/60 backdrop-blur-md border-b border-(--module-border,var(--color-gray-200)) shadow-md px-5 h-14 flex items-center gap-4 shrink-0">
         {/* Menu button */}
         {showMenuButton && (
           <button

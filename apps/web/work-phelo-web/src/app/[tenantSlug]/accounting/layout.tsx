@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { TopNav } from '@/components/organisms/shared/TopNav';
 import { Sidebar } from '@/components/organisms/shared/Sidebar';
 import { ACCOUNTING_NAV_GROUPS } from '@/config/accounting-nav';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function AccountingLayout({
   children,
@@ -38,7 +39,7 @@ export default function AccountingLayout({
   }));
 
   return (
-    <div className="h-screen overflow-hidden bg-app-bg-accounting flex flex-col layout-accounting">
+    <AppBackground className="h-screen overflow-hidden flex flex-col layout-accounting">
       <TopNav
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}
@@ -63,6 +64,6 @@ export default function AccountingLayout({
           {children}
         </main>
       </div>
-    </div>
+    </AppBackground>
   );
 }

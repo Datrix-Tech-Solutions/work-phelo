@@ -20,14 +20,11 @@
   /* Module identity colors — used for icon backgrounds */
   --module-hr:         #0D2244;  /* navy  — HR */
   --module-marketing:  #0466f8;  /* green — Marketing */
-  --module-accounting: #064707;  /* red — Accounting */
+  --module-accounting: #064707;  /* red — Accounting  064707*/
   --module-operations: #4906d9;  /* purple — Operations */
 
-  /* App shell background colors — change here to update all module layouts */
-  --app-bg-hr:         #f3f4f6;  /* bg-gray-100  — HR module layout */
-  --app-bg-operations: #f3f4f6;  /* bg-gray-100 — Operations module layout */
-  --app-bg-accounting: #f3f4f6;  /* bg-gray-100  — Accounting module layout */
-  --app-bg-marketing:  #f3f4f6;  /* bg-gray-100  — Marketing module layout */
+  /* App shell background — single color for the whole app; use bg-app-shell / <AppBackground> */
+  --app-shell: #f3f6f4;  /* bg-gray-100 */
 
   /* Module palette fallbacks — used outside any layout class (brand colors) */
   --module-btn-bg:       var(--brand);
@@ -60,16 +57,13 @@
   --color-module-accounting: var(--module-accounting);
   --color-module-operations: var(--module-operations);
 
-  /* App shell background tokens */
-  --color-app-bg-hr:         var(--app-bg-hr);
-  --color-app-bg-operations: var(--app-bg-operations);
-  --color-app-bg-accounting: var(--app-bg-accounting);
-  --color-app-bg-marketing:  var(--app-bg-marketing);
+  /* App shell background token */
+  --color-app-shell: var(--app-shell);
 }
 
 /* Module layout classes — each defines the full derived palette from its identity color */
 .layout-hr {
-  --table-header-bg:     var(--app-bg-hr);
+  --table-header-bg:     color-mix(in oklch, var(--module-hr) 6%, white);
   --module-btn-bg:       var(--module-hr);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-hr) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-hr) 12%, white);
@@ -78,7 +72,7 @@
   --module-border:       color-mix(in oklch, var(--module-hr) 28%, white);
 }
 .layout-operations {
-  --table-header-bg:     var(--app-bg-operations);
+  --table-header-bg:     color-mix(in oklch, var(--module-operations) 6%, white);
   --module-btn-bg:       var(--module-operations);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-operations) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-operations) 12%, white);
@@ -87,7 +81,7 @@
   --module-border:       color-mix(in oklch, var(--module-operations) 28%, white);
 }
 .layout-accounting {
-  --table-header-bg:     var(--app-bg-accounting);
+  --table-header-bg:     color-mix(in oklch, var(--module-accounting) 6%, white);
   --module-btn-bg:       var(--module-accounting);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-accounting) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-accounting) 12%, white);
@@ -96,13 +90,94 @@
   --module-border:       color-mix(in oklch, var(--module-accounting) 28%, white);
 }
 .layout-marketing {
-  --table-header-bg:     var(--app-bg-marketing);
+  --table-header-bg:     color-mix(in oklch, var(--module-marketing) 6%, white);
   --module-btn-bg:       var(--module-marketing);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-marketing) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-marketing) 12%, white);
   --module-accent:       color-mix(in oklch, var(--module-marketing) 40%, white);
   --module-gradient-end: color-mix(in oklch, var(--module-marketing) 88%, black);
   --module-border:       color-mix(in oklch, var(--module-marketing) 28%, white);
+}
+
+/* Animated blobs behind <AppBackground> content — colors pick up the active .layout-* module vars,
+   so they re-tint per module. Kept subtle/slow since pages are read for long stretches. */
+.app-blob-layer {
+  position: absolute;
+  inset: 0;
+  z-index: -10;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.app-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(90px);
+  opacity: 0.35;
+  will-change: transform;
+}
+
+.app-blob-1 {
+  top: -12%;
+  left: -10%;
+  width: 32rem;
+  height: 32rem;
+  background: var(--module-accent, var(--brand-accent));
+  animation: blob-drift-a 26s ease-in-out infinite;
+}
+
+.app-blob-2 {
+  bottom: -14%;
+  right: -18%;
+  width: 25rem;
+  height: 50rem;
+  background: var(--module-gradient-end, var(--brand-gradient-end));
+  animation: blob-drift-b 32s ease-in-out infinite;
+}
+
+.app-blob-3 {
+  top: 45%;
+  left: 60%;
+  width: 24rem;
+  height: 24rem;
+  background: var(--brand-accent);
+  animation: blob-drift-c 38s ease-in-out infinite;
+}
+
+@keyframes blob-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(30%, 34%) scale(1.15);
+  }
+}
+
+@keyframes blob-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-32%, -26%) scale(0.88);
+  }
+}
+
+@keyframes blob-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-24%, 36%) scale(1.08);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-blob {
+    animation: none;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -228,7 +303,31 @@ body {
   }
 }
 
+/* Module dashboard — icon shake on card hover */
+@keyframes module-icon-shake {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-10deg);
+  }
+  40% {
+    transform: rotate(8deg);
+  }
+  60% {
+    transform: rotate(-6deg);
+  }
+  80% {
+    transform: rotate(3deg);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
+  .group:hover .module-icon-shake {
+    animation: module-icon-shake 0.5s ease-in-out;
+  }
+
   .module-splash-bg {
     animation: splash-gradient-drift 16s ease-in-out infinite;
   }

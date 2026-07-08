@@ -13,7 +13,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { Search } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 import { SortableListRow } from '@/components/molecules/shared/SortableListRow';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
@@ -72,7 +72,7 @@ export function SortableList({
   return (
     <div className={cn('flex flex-col gap-3', className)}>
       {/* Top card — title + toolbar */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         <div className="px-4 py-2 ">
           <h3 className="text-l font-bold text-gray-500 uppercase tracking-widest">{title}</h3>
         </div>
@@ -100,7 +100,7 @@ export function SortableList({
       </div>
 
       {/* Bottom card — list content */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className={cardClass('overflow-hidden')}>
         <div className="p-3 flex flex-col gap-2">
           {items.length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">No items yet.</p>
