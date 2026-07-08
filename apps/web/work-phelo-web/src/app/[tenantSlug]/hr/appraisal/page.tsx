@@ -8,10 +8,13 @@ import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import { useTeamAppraisals } from '@/hooks';
+import { cn } from '@/lib/utils';
+import { pageHeader, pagePx, pageContent } from '@/lib/layout';
 import { AppraisalTabs } from '@/components/molecules/hr/appraisal/AppraisalTabs';
 import { MyAppraisalsTable } from '@/components/organisms/hr/appraisal/MyAppraisalTable';
 import { TeamReviewTable } from '@/components/organisms/hr/appraisal/TeamReviewTable';
 import { HRAppraisalsTable } from '@/components/organisms/hr/appraisal/HRAppraisalTable';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
@@ -48,20 +51,26 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
   const [hrPage, setHrPage] = useState(1);
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0">
       <div className="shrink-0">
-        <h1 className="text-xl font-bold text-gray-900">Appraisal Management</h1>
+        <div className={pageHeader}>
+          <h1 className="text-xl font-bold text-gray-900">Appraisal Management</h1>
+        </div>
+        <AppraisalTabs
+          activeTab={activeTab}
+          isEmployee={hasHRProfile}
+          canReviewTeam={isManager}
+          canViewAppraisals={canViewAppraisals}
+          teamUnreviewedCount={teamUnreviewedCount}
+          onTabChange={setActiveTab}
+          className={pagePx}
+        />
       </div>
-      <AppraisalTabs
-        activeTab={activeTab}
-        isEmployee={hasHRProfile}
-        canReviewTeam={isManager}
-        canViewAppraisals={canViewAppraisals}
-        teamUnreviewedCount={teamUnreviewedCount}
-        onTabChange={setActiveTab}
-      />
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <AppBackground
+        as="main"
+        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
+      >
         {activeTab === 'my' && hasHRProfile && (
           <MyAppraisalsTable
             search={mySearch}
@@ -88,7 +97,7 @@ export default function AppraisalPage({ params }: { params: Promise<{ tenantSlug
             onPageChange={setHrPage}
           />
         )}
-      </div>
+      </AppBackground>
     </div>
   );
 }

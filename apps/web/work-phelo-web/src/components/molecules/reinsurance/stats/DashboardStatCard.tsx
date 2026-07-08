@@ -2,6 +2,7 @@
 
 import { TrendBadge } from '@/components/atoms/TrendBadge';
 import { Skeleton } from '@/components/atoms/Skeleton';
+import { cardClass } from '@/lib/utils';
 
 interface DashboardStatCardProps {
   label: string;
@@ -23,7 +24,7 @@ export function DashboardStatCard({
   subtext,
 }: DashboardStatCardProps) {
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-5">
+    <div className={cardClass('flex flex-col gap-2 p-5', 'glass')}>
       <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</span>
 
       {isLoading ? (

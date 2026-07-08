@@ -10,6 +10,7 @@ import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { getGreeting } from '@/lib/formatters';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
 import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 /* ── Module definitions ── */
 interface ModuleDef {
@@ -86,7 +87,7 @@ export default function TenantDashboardPage({
   );
 
   return (
-    <div className="h-screen overflow-hidden bg-gray-50 flex flex-col">
+    <AppBackground className="h-screen overflow-hidden flex flex-col">
       {isEmployee && <AgreementGate />}
       <TopNav
         userInitials={initials}
@@ -140,6 +141,6 @@ export default function TenantDashboardPage({
           </div>
         </div>
       </main>
-    </div>
+    </AppBackground>
   );
 }

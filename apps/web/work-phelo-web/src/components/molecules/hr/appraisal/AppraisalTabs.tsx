@@ -7,6 +7,7 @@ interface Props {
   canViewAppraisals: boolean;
   teamUnreviewedCount?: number;
   onTabChange: (tab: 'my' | 'team' | 'hr') => void;
+  className?: string;
 }
 
 export function AppraisalTabs({
@@ -16,6 +17,7 @@ export function AppraisalTabs({
   canViewAppraisals,
   teamUnreviewedCount = 0,
   onTabChange,
+  className,
 }: Props) {
   const tabs = [
     ...(isEmployee ? [{ key: 'my', label: 'My Appraisal' }] : []),
@@ -28,6 +30,7 @@ export function AppraisalTabs({
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={(tab) => onTabChange(tab as 'my' | 'team' | 'hr')}
+      className={className}
     />
   );
 }

@@ -19,7 +19,7 @@ export function CollapsibleOverview({
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 p-5 flex flex-col">
+    <div className="bg-white rounded-2xl border border-(--module-border,var(--color-gray-100)) p-5 flex flex-col">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">{title}</h2>

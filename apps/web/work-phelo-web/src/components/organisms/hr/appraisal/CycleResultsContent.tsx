@@ -11,6 +11,7 @@ import { RatingBadge } from '@/components/molecules/hr/appraisal/RatingBadge';
 import { RatingDistributionChart } from '@/components/molecules/hr/appraisal/RatingDistributionChart';
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
 import { formatDate } from '@/lib/formatters';
+import { AppBackground } from '@/components/atoms/AppBackground';
 import { cn } from '@/lib/utils';
 
 const ALL_RATINGS: FinalRating[] = [
@@ -158,7 +159,10 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
   return (
     <div className="flex flex-col gap-6">
       {/* Breadcrumb */}
-      <nav className="sticky top-0 z-10 bg-app-bg-hr flex items-center gap-2 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50">
+      <AppBackground
+        as="nav"
+        className="sticky top-0 z-10 flex items-center gap-2 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50"
+      >
         <Link
           href={`/${tenantSlug}/hr/appraisal`}
           className="hover:text-gray-600 transition-colors"
@@ -167,7 +171,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
         </Link>
         <span>›</span>
         <span className="text-gray-600">{cycle.title}</span>
-      </nav>
+      </AppBackground>
 
       {/* Page body */}
       <div className="px-4 sm:px-6 lg:px-8 pb-8 flex flex-col gap-6">

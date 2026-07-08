@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
+import { cn } from '@/lib/utils';
+import { pageHeader, pagePx, pageContent } from '@/lib/layout';
 import { PayrollTabs } from '@/components/molecules/hr/payroll/PayrollTabs';
 import { MyPayslipTab } from '@/components/organisms/hr/payroll/MyPayslipTab';
 import { ManagePayrollTab } from '@/components/organisms/hr/payroll/ManagePayrollTab';
@@ -16,6 +18,7 @@ import { NSSFTab_KE } from '@/components/organisms/hr/payroll/NSSFTab_KE';
 import { ApprovePayrollTab } from '@/components/organisms/hr/payroll/ApprovePayrollTab';
 import { PayrollHistoryTab } from '@/components/organisms/hr/payroll/PayrollHistoryTab';
 import { usePayrollSettings } from '@/hooks';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 type Tab = 'payslip' | 'manage' | 'ssnit' | 'approve' | 'history';
 
@@ -61,26 +64,33 @@ export default function PayrollPage({ params }: { params: Promise<{ tenantSlug: 
   }
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0">
       <div className="shrink-0">
-        <h1 className="text-xl font-bold text-gray-900">Payroll Management</h1>
+        <div className={pageHeader}>
+          <h1 className="text-xl font-bold text-gray-900">Payroll Management</h1>
+        </div>
+        <PayrollTabs
+          activeTab={tab}
+          isEmployee={hasHRProfile}
+          canManage={canManagePayroll}
+          canApprove={canApprovePayroll}
+          canViewHistory={canViewHistory}
+          country={payrollCountry}
+          onTabChange={setTab}
+          className={pagePx}
+        />
       </div>
-      <PayrollTabs
-        activeTab={tab}
-        isEmployee={hasHRProfile}
-        canManage={canManagePayroll}
-        canApprove={canApprovePayroll}
-        canViewHistory={canViewHistory}
-        country={payrollCountry}
-        onTabChange={setTab}
-      />
-      <div className="flex-1 min-h-0 overflow-y-auto">
+
+      <AppBackground
+        as="main"
+        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
+      >
         {tab === 'payslip' && hasHRProfile && <MyPayslipTab />}
         {tab === 'manage' && canManagePayroll && <ManagePayrollTab />}
         {tab === 'ssnit' && canManagePayroll && renderContributionsTab()}
         {tab === 'approve' && canApprovePayroll && <ApprovePayrollTab />}
         {tab === 'history' && canViewHistory && <PayrollHistoryTab />}
-      </div>
+      </AppBackground>
     </div>
   );
 }

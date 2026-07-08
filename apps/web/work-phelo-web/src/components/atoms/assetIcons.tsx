@@ -9,6 +9,7 @@ import {
   Smartphone,
   Tablet,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export type AssetType =
   | 'LAPTOP'
@@ -27,9 +28,9 @@ interface AssetTypeIconProps {
   className?: string;
 }
 
-export function AssetTypeIcon({ type, size = 'md', className = '' }: AssetTypeIconProps) {
+export function AssetTypeIcon({ type, size = 'md', className }: AssetTypeIconProps) {
   const iconSize = size === 'sm' ? 'w-5 h-5' : 'w-10 h-10';
-  const baseClasses = `${iconSize} text-brand ${className}`.trim();
+  const baseClasses = cn(iconSize, 'text-brand', className);
 
   switch (type) {
     case 'LAPTOP':

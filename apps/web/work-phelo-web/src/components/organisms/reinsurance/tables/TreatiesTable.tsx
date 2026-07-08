@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { TreatyStatusBadge } from '@/components/molecules/reinsurance/TreatyStatusBadge';
 import { TreatyTypeSelectorModal } from '@/components/organisms/reinsurance/TreatyTypeSelectorModal';
@@ -21,15 +22,23 @@ function fmtMonth(iso: string) {
 const STATUS_FILTER_OPTIONS = TREATY_STATUSES.map((s) => ({ value: s, label: s }));
 
 // TODO: replace with useTreaties() hook once API is ready
-const MOCK_DATA: Treaty[] = [];
+const MOCK_DATA: Treaty[] = [
+  {
+    id: '1',
+    name: 'Quota Share Treaty 1',
+    type: 'Quota Share',
+    classofBusiness: 'Property',
+    cedant: 'Glico Insurance',
+    share: 25,
+    periodStart: '2023-01-01',
+    periodEnd: '2023-12-31',
+    year: 2026,
+    status: 'Active',
+    accountingArrangement: 'Quarterly',
+  },
+];
 
 const COLUMNS: Column<Treaty>[] = [
-  {
-    key: 'policynumber',
-    label: 'Policy Number',
-    width: '2fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.name}</span>,
-  },
   {
     key: 'name',
     label: 'Treaty Name',
@@ -44,7 +53,7 @@ const COLUMNS: Column<Treaty>[] = [
   },
   {
     key: 'classOfBusiness',
-    label: 'Class',
+    label: 'Risk Type',
     width: '1.4fr',
     render: (row) => <span className="text-gray-700">{row.classofBusiness}</span>,
   },
@@ -59,6 +68,12 @@ const COLUMNS: Column<Treaty>[] = [
     label: 'Share',
     width: '80px',
     render: (row) => <span className="text-gray-700">{row.share}%</span>,
+  },
+  {
+    key: 'accountingArrangement',
+    label: 'Accounting Arrangement',
+    width: '2fr',
+    render: (row) => <span className="text-gray-700">{row.accountingArrangement}</span>,
   },
   {
     key: 'period',
@@ -85,6 +100,8 @@ const COLUMNS: Column<Treaty>[] = [
 ];
 
 export function TreatiesTable() {
+  const router = useRouter();
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -120,6 +137,9 @@ export function TreatiesTable() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const goToTreaty = (treaty: Treaty) =>
+    router.push(`/${tenantSlug}/operations/reinsurance/treaty/${treaty.id}`);
+
   return (
     <>
       <DataTable
@@ -127,6 +147,7 @@ export function TreatiesTable() {
         data={paged}
         searchPlaceholder="Search treaties…"
         searchValue={search}
+        onRowClick={goToTreaty}
         onSearch={(q) => {
           setSearch(q);
           setPage(1);
@@ -140,12 +161,10 @@ export function TreatiesTable() {
           /* TODO: implement export */
         }}
         actionButton={{ label: 'New Treaty', onClick: () => setTypeModalOpen(true) }}
-        rowActions={() => [
+        rowActions={(row) => [
           {
             label: 'View',
-            onClick: () => {
-              /* TODO */
-            },
+            onClick: () => goToTreaty(row),
           },
           {
             label: 'Edit',

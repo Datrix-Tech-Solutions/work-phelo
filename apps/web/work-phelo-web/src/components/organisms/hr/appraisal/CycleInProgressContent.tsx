@@ -9,6 +9,7 @@ import { MetricCard } from '@/components/molecules/shared/MetricCard';
 import { CycleProgressSection } from '@/components/molecules/hr/appraisal/CycleProgressSection';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/hr/useAppraisals';
+import { AppBackground } from '@/components/atoms/AppBackground';
 import { cn } from '@/lib/utils';
 import type { AppraisalCycle } from '@/types/hr';
 
@@ -158,7 +159,10 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
   return (
     <div className="flex flex-col gap-6">
       {/* Breadcrumb */}
-      <nav className="sticky top-0 z-10 bg-app-bg-hr flex items-center gap-1.5 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50">
+      <AppBackground
+        as="nav"
+        className="sticky top-0 z-10 flex items-center gap-1.5 text-sm text-gray-400 px-4 sm:px-6 lg:px-8 py-3 border-b border-gray-50"
+      >
         <Link
           href={`/${tenantSlug}/hr/appraisal`}
           className="hover:text-gray-600 transition-colors"
@@ -167,7 +171,7 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
         </Link>
         <Icons.ChevronRight className="w-4 h-4" />
         <span className="text-gray-700 font-medium">{cycle?.title ?? 'Cycle'}</span>
-      </nav>
+      </AppBackground>
 
       {/* Page body */}
       <div className="px-4 sm:px-6 lg:px-8 pb-8 flex flex-col gap-6">

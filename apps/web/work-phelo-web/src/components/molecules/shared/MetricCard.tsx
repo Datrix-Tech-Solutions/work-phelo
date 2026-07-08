@@ -1,7 +1,7 @@
 'use client';
 
 import { LucideIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 
 interface MetricCardProps {
   title?: string;
@@ -48,13 +48,8 @@ export function MetricCard({
         : variantStyles[variant];
 
   return (
-    <div
-      className={cn(
-        'bg-white border border-gray-200 rounded-card px-5 py-5 flex flex-col shadow-sm',
-        className,
-      )}
-    >
-      <div className="relative mb-3 min-h-[1.25rem]">
+    <div className={cardClass(cn('px-5 py-5 flex flex-col', className), 'glass')}>
+      <div className="relative mb-3 min-h-5">
         <span
           className={cn(
             'text-sm text-gray-500 font-medium block leading-snug line-clamp-2',

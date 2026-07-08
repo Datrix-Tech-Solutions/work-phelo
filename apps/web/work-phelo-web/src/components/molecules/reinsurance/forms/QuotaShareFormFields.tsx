@@ -1,7 +1,6 @@
 'use client';
 
-import { Controller, UseFormReturn, type FieldValues } from 'react-hook-form';
-import type { Control, UseFormRegister } from 'react-hook-form';
+import { Controller, UseFormReturn } from 'react-hook-form';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
@@ -9,20 +8,11 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { FileUpload } from '@/components/atoms/FileUpload';
 import { inputClass } from '@/lib/utils';
 import {
-  ReinsurerPanel,
-  ReinsurerPanelErrors,
-} from '@/components/molecules/reinsurance/ReinsurerPanel';
-import {
   QuotaShareFormValues,
   TERRITORIAL_SCOPE_OPTIONS,
   ACCOUNTING_ARRANGEMENT_OPTIONS,
 } from '@/types/reinsurance';
-import {
-  useCedantOptions,
-  useBrokerOptions,
-  useReinsurerOptions,
-  useCurrencyOptions,
-} from '@/hooks';
+import { useCedantOptions, useCurrencyOptions } from '@/hooks';
 
 function ComputedField({ label, value }: { label: string; value: string }) {
   return (
@@ -56,11 +46,8 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
 
   const effectiveDate = watch('effectiveDate');
   const cedantShare = watch('cedantShare');
-  const reinsurerPanelValues = watch('reinsurerPanel');
 
   const { options: cedantOptions } = useCedantOptions();
-  const { options: brokerOptions } = useBrokerOptions();
-  const { options: reinsurerOptions } = useReinsurerOptions();
   const { data: currencyOptions = [] } = useCurrencyOptions();
 
   const reinsuranceShareNum =
@@ -181,22 +168,6 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
               />
             )}
           />
-
-          <Controller
-            name="broker"
-            control={control}
-            rules={{ required: 'Broker is required' }}
-            render={({ field }) => (
-              <SearchSelect
-                label="Broker"
-                placeholder="Select broker…"
-                value={field.value}
-                onChange={field.onChange}
-                error={errors.broker?.message}
-                options={brokerOptions}
-              />
-            )}
-          />
         </div>
       </FormSection>
 
@@ -300,10 +271,10 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
       </FormSection>
 
       {/* ── Reinsurer Panel ── */}
-      <FormSection title="Reinsurer Panel">
+      <FormSection title="Participations">
         <div className="flex flex-col gap-4">
           <FormField
-            label="Your Share (%)"
+            label="Broker Participation (%)"
             type="number"
             registration={register('yourShare', {
               required: 'Your share is required',
@@ -315,14 +286,14 @@ export function QuotaShareFormFields({ form }: QuotaShareFormFieldsProps) {
             placeholder="e.g. 25"
           />
 
-          <ReinsurerPanel
+          {/* <ReinsurerPanel
             control={control as unknown as Control<FieldValues>}
             register={register as unknown as UseFormRegister<FieldValues>}
             errors={errors as unknown as ReinsurerPanelErrors}
             reinsurerPanelValues={reinsurerPanelValues}
             maxShare={reinsuranceShareNum}
             reinsurerOptions={reinsurerOptions}
-          />
+          /> */}
         </div>
       </FormSection>
 

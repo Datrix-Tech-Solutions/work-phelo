@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { usePathname } from 'next/navigation';
 import { WorkPheloWordmark } from '@/components/atoms/WorkPheloWordmark';
 import { getStoredCompanyLogo } from '@/lib/companyLogoStorage';
 
@@ -13,15 +14,29 @@ interface CompanyLogoProps {
   priority?: boolean;
 }
 
+// Super Admin routes (/dashboard, /platform) must never show a tenant's uploaded logo.
+function isSuperAdminRoute(pathname: string): boolean {
+  return (
+    pathname === '/dashboard' ||
+    pathname.startsWith('/dashboard/') ||
+    pathname === '/platform' ||
+    pathname.startsWith('/platform/')
+  );
+}
+
 export function CompanyLogo({ className, style, width = 80, height = 60 }: CompanyLogoProps) {
+  const pathname = usePathname();
   const [logoSrc, setLogoSrc] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
 
-  useEffect(() => {
-    queueMicrotask(() => setLogoSrc(getStoredCompanyLogo()));
-  }, []);
+  const isSuperAdmin = isSuperAdminRoute(pathname ?? '');
 
-  if (!logoSrc || failed) {
+  useEffect(() => {
+    if (isSuperAdmin) return;
+    queueMicrotask(() => setLogoSrc(getStoredCompanyLogo()));
+  }, [isSuperAdmin]);
+
+  if (isSuperAdmin || !logoSrc || failed) {
     return <WorkPheloWordmark className={className} />;
   }
 
@@ -33,7 +48,7 @@ export function CompanyLogo({ className, style, width = 80, height = 60 }: Compa
       width={width}
       height={height}
       className={className}
-      style={style}
+      style={{ objectFit: 'contain', ...style, width, height }}
       onError={() => setFailed(true)}
     />
   );

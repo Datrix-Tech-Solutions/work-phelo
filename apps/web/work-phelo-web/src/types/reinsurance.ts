@@ -822,6 +822,7 @@ export interface Treaty {
   classofBusiness: string;
   cedant: string;
   share: number; // reinsurer's share 0-100
+  accountingArrangement: string;
   periodStart: string; // ISO date
   periodEnd: string; // ISO date
   year: number;

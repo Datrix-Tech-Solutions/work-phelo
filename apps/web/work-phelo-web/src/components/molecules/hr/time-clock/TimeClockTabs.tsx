@@ -7,6 +7,7 @@ interface Props {
   isEmployee: boolean;
   pendingCount: number;
   onTabChange: (tab: 'my' | 'live' | 'records' | 'corrections') => void;
+  className?: string;
 }
 
 export function TimeClockTabs({
@@ -16,6 +17,7 @@ export function TimeClockTabs({
   isEmployee,
   pendingCount,
   onTabChange,
+  className,
 }: Props) {
   const tabs = [
     ...(isEmployee ? [{ key: 'my', label: 'My Time' }] : []),
@@ -35,6 +37,7 @@ export function TimeClockTabs({
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={(tab) => onTabChange(tab as 'my' | 'live' | 'records' | 'corrections')}
+      className={className}
     />
   );
 }

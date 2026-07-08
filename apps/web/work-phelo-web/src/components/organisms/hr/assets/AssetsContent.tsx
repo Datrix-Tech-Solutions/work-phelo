@@ -1,26 +1,21 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
-import { Button } from '@/components/atoms/Button';
-import { FilterSelect } from '@/components/molecules/shared/FilterSelect';
+import { DataCardGrid } from '@/components/organisms/shared/DataCardGrid';
+import { AssetFilterBar } from '@/components/molecules/hr/assets/AssetFilterBar';
 import { AddAssetPanel } from '@/components/organisms/hr/assets/AddAssetPanel';
 import { EditAssetPanel } from '@/components/organisms/hr/assets/EditAssetPanel';
 import { AssignAssetPanel } from '@/components/organisms/hr/assets/AssignAssetPanel';
 import { TransferAssetPanel } from '@/components/organisms/hr/assets/TransferAssetPanel';
 import { RetireAssetModal } from '@/components/organisms/hr/assets/RetireAssetModal';
 import { DeleteAssetModal } from '@/components/organisms/hr/assets/DeleteAssetModal';
-import { Modal } from '@/components/organisms/shared/Modal';
+import { UnassignAssetModal } from '@/components/organisms/hr/assets/UnassignAssetModal';
 import { AssetDetailPanel } from '@/components/organisms/hr/assets/AssetDetailPanel';
 import AssetCard from '@/components/molecules/AssetCard';
+import { AssetStatsRow } from '@/components/molecules/hr/assets/AssetStatsRow';
 import { AssetType } from '@/components/atoms/assetIcons';
 import { Asset, CreateAssetPayload, UpdateAssetPayload } from '@/types/asset';
-import {
-  ASSET_TYPE_LABELS,
-  ASSET_STATUS_OPTIONS,
-  ASSET_TYPE_OPTIONS,
-  ASSET_CONDITION_OPTIONS,
-} from '@/lib/assetOptions';
+import { ASSET_TYPE_LABELS } from '@/lib/assetOptions';
 import { usePermission } from '@/hooks/hr/usePermission';
 import { Permission } from '@/lib/permissionMap';
 import {
@@ -34,8 +29,6 @@ import {
 } from '@/hooks/hr/useAssets';
 import { useEmployeeOptions } from '@/hooks/hr/useEmployees';
 import { useToast } from '@/hooks/useToast';
-import { Package, UserCheck, CheckCircle, Wrench, Archive } from 'lucide-react';
-import { StatCard } from '@/components/molecules/shared/StatCard';
 
 type PanelState =
   | { type: 'none' }
@@ -47,6 +40,8 @@ type PanelState =
   | { type: 'transfer'; asset: Asset }
   | { type: 'retire'; asset: Asset }
   | { type: 'delete'; asset: Asset };
+
+const PAGE_SIZE = 12;
 
 type AssetForm = {
   name: string;
@@ -83,7 +78,7 @@ export function AssetsContent() {
   const { mutate: createAsset } = useCreateAsset();
   const { mutate: updateAsset } = useUpdateAsset();
   const { mutate: assignAsset } = useAssignAsset();
-  const { mutate: unassignAsset } = useUnassignAsset();
+  const { mutate: unassignAsset, isPending: isUnassigningAsset } = useUnassignAsset();
   const { mutate: retireAsset, isPending: isRetiringAsset } = useRetireAsset();
   const { mutate: deleteAsset, isPending: isDeletingAsset } = useDeleteAsset();
 
@@ -91,6 +86,7 @@ export function AssetsContent() {
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [conditionFilter, setConditionFilter] = useState('');
+  const [page, setPage] = useState(1);
   const [panel, setPanel] = useState<PanelState>({ type: 'none' });
 
   const closePanel = () => setPanel({ type: 'none' });
@@ -143,129 +139,75 @@ export function AssetsContent() {
   }, [assets, search, statusFilter, typeFilter, conditionFilter]);
 
   const hasFilters = !!(search || statusFilter || typeFilter || conditionFilter);
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('');
+    setTypeFilter('');
+    setConditionFilter('');
+    setPage(1);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pagedAssets = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <>
-      <div className="flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Asset Management</h1>
-        </div>
-        {canCreateAsset && <Button onClick={() => setPanel({ type: 'add' })}>Add Asset</Button>}
-      </div>
+      <h1 className="text-xl font-bold text-gray-900 shrink-0">Asset Management</h1>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 shrink-0">
-        <StatCard
-          title="Total Assets"
-          value={summary.total}
-          icon={<Package className="w-4.5 h-4.5 text-gray-600" />}
-          iconBg="bg-gray-100"
-        />
-        <StatCard
-          title="Assigned"
-          value={summary.assigned}
-          icon={<UserCheck className="w-4.5 h-4.5 text-blue-600" />}
-          iconBg="bg-blue-50"
-        />
-        <StatCard
-          title="Available"
-          value={summary.available}
-          icon={<CheckCircle className="w-4.5 h-4.5 text-green-600" />}
-          iconBg="bg-green-50"
-        />
-        <StatCard
-          title="Under Maintenance"
-          value={summary.maintenance}
-          icon={<Wrench className="w-4.5 h-4.5 text-yellow-600" />}
-          iconBg="bg-yellow-50"
-        />
-        <StatCard
-          title="Retired"
-          value={summary.retired}
-          icon={<Archive className="w-4.5 h-4.5 text-red-500" />}
-          iconBg="bg-red-50"
-        />
-      </div>
+      <AssetStatsRow isLoading={isLoading} {...summary} />
 
-      <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <div className="relative flex-1 min-w-52 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, serial number, type..."
-            className="w-full h-9 pl-9 pr-4 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand"
-          />
-        </div>
-        <FilterSelect
-          value={statusFilter}
-          onChange={setStatusFilter}
-          placeholder="All Statuses"
-          options={ASSET_STATUS_OPTIONS}
-        />
-        <FilterSelect
-          value={typeFilter}
-          onChange={setTypeFilter}
-          placeholder="All Types"
-          options={ASSET_TYPE_OPTIONS}
-        />
-        <FilterSelect
-          value={conditionFilter}
-          onChange={setConditionFilter}
-          placeholder="All Conditions"
-          options={ASSET_CONDITION_OPTIONS}
-        />
-        {hasFilters && (
-          <button
-            onClick={() => {
-              setSearch('');
-              setStatusFilter('');
-              setTypeFilter('');
-              setConditionFilter('');
+      <DataCardGrid
+        data={pagedAssets}
+        isLoading={isLoading}
+        skeletonCount={8}
+        renderSkeleton={() => <div className="w-80 h-64 rounded-card bg-gray-100 animate-pulse" />}
+        searchPlaceholder="Search by name, serial number, type..."
+        searchValue={search}
+        onSearch={(q) => {
+          setSearch(q);
+          setPage(1);
+        }}
+        actionButton={
+          canCreateAsset
+            ? { label: 'Add Asset', onClick: () => setPanel({ type: 'add' }) }
+            : undefined
+        }
+        extraFilters={
+          <AssetFilterBar
+            statusFilter={statusFilter}
+            onStatusChange={(v) => {
+              setStatusFilter(v);
+              setPage(1);
             }}
-            className="text-sm text-gray-400 hover:text-gray-700 transition-colors"
-          >
-            Clear filters
-          </button>
+            typeFilter={typeFilter}
+            onTypeChange={(v) => {
+              setTypeFilter(v);
+              setPage(1);
+            }}
+            conditionFilter={conditionFilter}
+            onConditionChange={(v) => {
+              setConditionFilter(v);
+              setPage(1);
+            }}
+            showClear={hasFilters}
+            onClear={clearFilters}
+          />
+        }
+        emptyMessage="No assets found"
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
+        renderCard={(asset) => (
+          <AssetCard
+            asset={asset}
+            onView={() => setPanel({ type: 'detail', asset })}
+            onEdit={canUpdateAsset ? () => setPanel({ type: 'edit', asset }) : undefined}
+            onAssign={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
+            onUnassign={canAssignAsset ? () => setPanel({ type: 'unassign', asset }) : undefined}
+            onTransfer={canAssignAsset ? () => setPanel({ type: 'transfer', asset }) : undefined}
+          />
         )}
-      </div>
-
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center flex-1 gap-4">
-          <div className="relative w-8 h-8">
-            <div className="absolute inset-0 rounded-full border-3 border-transparent border-t-brand animate-spin" />
-            <div className="absolute inset-1.5 rounded-full border-3 border-transparent border-b-brand-accent animate-[spin_.6s_linear_infinite_reverse]" />
-          </div>
-          <p className="text-sm text-gray-500 font-medium">Loading...</p>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center flex-1 gap-3 text-center">
-          <p className="text-sm font-medium text-gray-900">No assets found</p>
-          <p className="text-xs text-gray-400">
-            {hasFilters ? 'Try adjusting your filters' : 'Add your first asset to get started'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
-          {filtered.map((asset) => (
-            <div key={asset.id}>
-              <AssetCard
-                asset={asset}
-                onView={() => setPanel({ type: 'detail', asset })}
-                onEdit={canUpdateAsset ? () => setPanel({ type: 'edit', asset }) : undefined}
-                onAssign={canAssignAsset ? () => setPanel({ type: 'assign', asset }) : undefined}
-                onUnassign={
-                  canAssignAsset ? () => setPanel({ type: 'unassign', asset }) : undefined
-                }
-                onTransfer={
-                  canAssignAsset ? () => setPanel({ type: 'transfer', asset }) : undefined
-                }
-              />
-            </div>
-          ))}
-        </div>
-      )}
+      />
 
       <AssetDetailPanel
         isOpen={panel.type === 'detail'}
@@ -419,39 +361,22 @@ export function AssetsContent() {
         }}
       />
 
-      <Modal
+      <UnassignAssetModal
         isOpen={panel.type === 'unassign'}
         onClose={closePanel}
-        title="Unassign Asset"
-        description={
-          panel.type === 'unassign'
-            ? `Are you sure you want to unassign "${panel.asset.name}" from ${panel.asset.assignedEmployeeName ?? 'the current employee'}?`
-            : ''
-        }
-        footer={
-          <div className="flex justify-end gap-3">
-            <Button variant="outline" onClick={closePanel}>
-              Cancel
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => {
-                if (panel.type !== 'unassign') return;
-                unassignAsset(panel.asset.id, {
-                  onSuccess: () => {
-                    toast.success('Asset unassigned successfully');
-                    closePanel();
-                  },
-                  onError: () => {
-                    toast.error('Failed to unassign asset');
-                  },
-                });
-              }}
-            >
-              Unassign
-            </Button>
-          </div>
-        }
+        asset={panel.type === 'unassign' ? panel.asset : null}
+        isLoading={isUnassigningAsset}
+        onConfirm={(assetId) => {
+          unassignAsset(assetId, {
+            onSuccess: () => {
+              toast.success('Asset unassigned successfully');
+              closePanel();
+            },
+            onError: () => {
+              toast.error('Failed to unassign asset');
+            },
+          });
+        }}
       />
     </>
   );

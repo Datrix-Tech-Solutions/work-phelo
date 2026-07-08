@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
@@ -46,9 +47,23 @@ export function SearchSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+
+  const updateDropdownPos = () => {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    setDropdownPos({ top: rect.bottom + 6, left: rect.left, width: rect.width });
+  };
 
   useEffect(() => {
-    if (open) dropdownRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (!open) return;
+    updateDropdownPos();
+    window.addEventListener('scroll', updateDropdownPos, true);
+    window.addEventListener('resize', updateDropdownPos);
+    return () => {
+      window.removeEventListener('scroll', updateDropdownPos, true);
+      window.removeEventListener('resize', updateDropdownPos);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -58,6 +73,7 @@ export function SearchSelect({
   }, [showDropdown, open]);
 
   const openDropdown = () => {
+    updateDropdownPos();
     setOpen(true);
     setShowDropdown(true);
   };
@@ -79,13 +95,14 @@ export function SearchSelect({
      - when closed: the selected label or empty */
   const inputDisplay = open ? query : (selected?.label ?? '');
 
-  /* close on outside click */
+  /* close on outside click — dropdown is portaled to <body>, so it must be checked separately from containerRef */
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        closeDropdown();
-        setQuery('');
-      }
+      const target = e.target as Node;
+      if (containerRef.current?.contains(target)) return;
+      if (dropdownRef.current?.contains(target)) return;
+      closeDropdown();
+      setQuery('');
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -182,43 +199,54 @@ export function SearchSelect({
 
       {error && <p className="text-xs text-red-500">{error}</p>}
 
-      {/* Dropdown — grid-rows trick animates height to fit actual content, so it flows down/up smoothly */}
-      {showDropdown && (
-        <div
-          ref={dropdownRef}
-          onTransitionEnd={handleDropdownTransitionEnd}
-          style={{ gridTemplateRows: expanded ? '1fr' : '0fr', opacity: expanded ? 1 : 0 }}
-          className="absolute top-full left-0 mt-1.5 w-full z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
-        >
-          <div className="min-h-0 overflow-hidden bg-white border border-gray-200 rounded-card shadow-xl">
-            <div className="max-h-52 overflow-y-auto py-1">
-              {filtered.length === 0 ? (
-                <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
-              ) : (
-                filtered.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()} // prevent input blur before select fires
-                    onClick={() => handleSelect(opt)}
-                    className={cn(
-                      'w-full text-left px-4 py-2.5 text-sm transition-colors flex flex-col',
-                      opt.value === value
-                        ? 'bg-brand-tint text-brand font-medium'
-                        : 'text-gray-900 hover:bg-gray-300',
-                    )}
-                  >
-                    <span>{opt.label}</span>
-                    {opt.sublabel && (
-                      <span className="text-xs text-gray-400 mt-0.5">{opt.sublabel}</span>
-                    )}
-                  </button>
-                ))
-              )}
+      {/* Dropdown — grid-rows trick animates height to fit actual content, so it flows down/up smoothly.
+          Portaled to <body> so it isn't trapped inside a blurred/glass ancestor's stacking context. */}
+      {showDropdown &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={dropdownRef}
+            onTransitionEnd={handleDropdownTransitionEnd}
+            style={{
+              position: 'fixed',
+              top: dropdownPos.top,
+              left: dropdownPos.left,
+              width: dropdownPos.width,
+              gridTemplateRows: expanded ? '1fr' : '0fr',
+              opacity: expanded ? 1 : 0,
+            }}
+            className="z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
+          >
+            <div className="min-h-0 overflow-hidden bg-white border border-gray-200 rounded-card shadow-xl">
+              <div className="max-h-52 overflow-y-auto py-1">
+                {filtered.length === 0 ? (
+                  <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>
+                ) : (
+                  filtered.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()} // prevent input blur before select fires
+                      onClick={() => handleSelect(opt)}
+                      className={cn(
+                        'w-full text-left px-4 py-2.5 text-sm transition-colors flex flex-col',
+                        opt.value === value
+                          ? 'bg-brand-tint text-brand font-medium'
+                          : 'text-gray-900 hover:bg-gray-300',
+                      )}
+                    >
+                      <span>{opt.label}</span>
+                      {opt.sublabel && (
+                        <span className="text-xs text-gray-400 mt-0.5">{opt.sublabel}</span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

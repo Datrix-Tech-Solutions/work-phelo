@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
+import { cardClass } from '@/lib/utils';
 
 export interface InlineTableColumn {
   key: string;
@@ -33,7 +34,7 @@ export function InlineTable({
   const hasFooter = columns.some((c) => c.renderFooter);
 
   return (
-    <div className="bg-white rounded-xl border border-(--module-border,var(--color-gray-200)) overflow-hidden">
+    <div className={cardClass('overflow-hidden')}>
       {/* Card header */}
       <div className="flex items-center justify-between px-6 py-2">
         <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest">{title}</h3>

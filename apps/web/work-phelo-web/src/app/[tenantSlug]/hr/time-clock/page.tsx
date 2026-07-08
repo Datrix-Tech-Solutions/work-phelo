@@ -8,11 +8,14 @@ import { Permission } from '@/lib/permissionMap';
 import { useToast } from '@/hooks/useToast';
 import { extractError } from '@/lib/extractError';
 import { formatDate } from '@/lib/formatters';
+import { cn } from '@/lib/utils';
+import { pageHeader, pagePx, pageContent } from '@/lib/layout';
 import { useDepartmentOptions } from '@/hooks/hr/useDepartments';
 
 import { CorrectionRequestPanel } from '@/components/organisms/hr/time-clock/CorrectionRequestPanel';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { Button } from '@/components/atoms/Button';
+import { AppBackground } from '@/components/atoms/AppBackground';
 
 import {
   useMyTodaySession,
@@ -114,20 +117,26 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 flex flex-col gap-6 flex-1 min-h-0">
+    <div className="flex flex-col flex-1 min-h-0">
       <div className="shrink-0">
-        <h1 className="text-xl font-bold text-gray-900">Time Management</h1>
+        <div className={pageHeader}>
+          <h1 className="text-xl font-bold text-gray-900">Time Management</h1>
+        </div>
+        <TimeClockTabs
+          activeTab={activeTab}
+          canManageRecords={canManageRecords}
+          canApproveCorrections={canApproveCorrections}
+          isEmployee={!isAdmin}
+          pendingCount={pendingCount}
+          onTabChange={setActiveTab}
+          className={pagePx}
+        />
       </div>
-      <TimeClockTabs
-        activeTab={activeTab}
-        canManageRecords={canManageRecords}
-        canApproveCorrections={canApproveCorrections}
-        isEmployee={!isAdmin}
-        pendingCount={pendingCount}
-        onTabChange={setActiveTab}
-      />
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <AppBackground
+        as="main"
+        className={cn(pageContent, 'flex-1 min-h-0 overflow-y-auto flex flex-col')}
+      >
         {activeTab === 'my' && !isAdmin && (
           <MyTimeSection
             session={session}
@@ -186,7 +195,7 @@ export default function TimeClockPage({ params }: { params: Promise<{ tenantSlug
             onReview={(req, action) => setReviewTarget({ req, action })}
           />
         )}
-      </div>
+      </AppBackground>
 
       {/* Global Panels */}
       <CorrectionRequestPanel isOpen={correctionOpen} onClose={() => setCorrectionOpen(false)} />
