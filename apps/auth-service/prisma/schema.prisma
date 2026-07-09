@@ -109,16 +109,33 @@ model Tenant {
 model TenantBranding {
   id                  String   @id @default(uuid())
   tenantId            String   @unique
+  appName             String?
+  appLogoObjectKey    String?
+  appLogoMimeType     String?
+  appLogoFileName     String?
+  appLogoSizeBytes    Int?
+  sidebarLogoObjectKey String?
+  sidebarLogoMimeType  String?
+  sidebarLogoFileName  String?
+  sidebarLogoSizeBytes Int?
+  loginLogoObjectKey   String?
+  loginLogoMimeType    String?
+  loginLogoFileName    String?
+  loginLogoSizeBytes   Int?
   logoObjectKey       String?
   logoDisplayUrl      String?
   faviconObjectKey    String?
   faviconDisplayUrl   String?
+  faviconMimeType     String?
+  faviconFileName     String?
+  faviconSizeBytes    Int?
   primaryColor        String?
   secondaryColor      String?
   accentColor         String?
   sidebarColor        String?
   emailHeaderColor    String?
   documentHeaderColor String?
+  themeMode           String   @default("LIGHT")
   updatedByUserId     String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt

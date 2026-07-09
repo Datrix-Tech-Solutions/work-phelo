@@ -9,6 +9,11 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export type TenantDocumentAssetType = 'logo' | 'signature';
+export type TenantBrandingAssetType =
+  | 'app-logo'
+  | 'sidebar-logo'
+  | 'login-logo'
+  | 'favicon';
 
 export interface StoreTenantDocumentAssetInput {
   tenantId: string;
@@ -17,6 +22,13 @@ export interface StoreTenantDocumentAssetInput {
   contentType: string;
   originalFileName: string;
 }
+
+type StoreTenantBrandingAssetInput = Omit<
+  StoreTenantDocumentAssetInput,
+  'assetType'
+> & {
+  assetType: TenantBrandingAssetType;
+};
 
 export interface StoredTenantDocumentAsset {
   objectKey: string;
@@ -45,13 +57,26 @@ export class TenantAssetStorageService {
   async store(
     input: StoreTenantDocumentAssetInput,
   ): Promise<StoredTenantDocumentAsset> {
+    return this.storeInNamespace(input, 'document-profile');
+  }
+
+  async storeBrandingAsset(
+    input: StoreTenantBrandingAssetInput,
+  ): Promise<StoredTenantDocumentAsset> {
+    return this.storeInNamespace(input, 'branding');
+  }
+
+  private async storeInNamespace(
+    input: StoreTenantDocumentAssetInput | StoreTenantBrandingAssetInput,
+    namespace: 'document-profile' | 'branding',
+  ): Promise<StoredTenantDocumentAsset> {
     const config = this.config();
     const fileName = this.safeFileName(input.originalFileName);
     const objectKey = [
       this.cleanPrefix(config.prefix),
       'tenants',
       input.tenantId,
-      'document-profile',
+      namespace,
       input.assetType,
       `${randomUUID()}-${fileName}`,
     ]
