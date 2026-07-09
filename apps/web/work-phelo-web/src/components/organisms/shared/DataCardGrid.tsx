@@ -1,6 +1,6 @@
 'use client';
 
-import { cn, cardClass } from '@/lib/utils';
+import { cn, cardClass, inputClass } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '@/components/atoms/NoSearchLogo';
@@ -73,13 +73,13 @@ export function DataCardGrid<T extends { id: string | number }>({
         <div className={cardClass('flex items-center gap-3 flex-wrap shrink-0 px-4 py-2')}>
           {onSearch && (
             <div className="relative flex-1 min-w-52 max-w-sm">
-              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 w-5 h-5" />
               <input
                 type="text"
                 placeholder={searchPlaceholder}
                 value={searchValue ?? undefined}
                 onChange={(e) => onSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                className={inputClass(undefined, 'pl-9 pr-4 py-2')}
               />
             </div>
           )}

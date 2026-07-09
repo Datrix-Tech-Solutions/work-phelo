@@ -43,12 +43,7 @@ export default function MyProfilePage({ params }: { params: Promise<{ tenantSlug
 
   return (
     <AppBackground className="h-screen overflow-hidden flex flex-col">
-      <TopNav
-        userInitials={initials}
-        notificationCount={0}
-        activeTab="portal"
-        onTabChange={() => {}}
-      />
+      <TopNav userInitials={initials} notificationCount={0} />
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         {isLoading || !employee ? (

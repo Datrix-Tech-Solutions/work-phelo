@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { usePathname } from 'next/navigation';
 import { WorkPheloWordmark } from '@/components/atoms/WorkPheloWordmark';
-import { getStoredCompanyLogo } from '@/lib/companyLogoStorage';
+import { usePublicTenantBranding } from '@/hooks/useTenants';
+import { useAuthStore } from '@/store/auth.store';
 
 interface CompanyLogoProps {
   className?: string;
@@ -26,15 +27,12 @@ function isSuperAdminRoute(pathname: string): boolean {
 
 export function CompanyLogo({ className, style, width = 80, height = 60 }: CompanyLogoProps) {
   const pathname = usePathname();
-  const [logoSrc, setLogoSrc] = useState<string | null>(null);
+  const isSuperAdmin = isSuperAdminRoute(pathname ?? '');
+  const { user } = useAuthStore();
+  const { data: branding } = usePublicTenantBranding(isSuperAdmin ? undefined : user?.tenantSlug);
   const [failed, setFailed] = useState(false);
 
-  const isSuperAdmin = isSuperAdminRoute(pathname ?? '');
-
-  useEffect(() => {
-    if (isSuperAdmin) return;
-    queueMicrotask(() => setLogoSrc(getStoredCompanyLogo()));
-  }, [isSuperAdmin]);
+  const logoSrc = branding?.appLogoUrl;
 
   if (isSuperAdmin || !logoSrc || failed) {
     return <WorkPheloWordmark className={className} />;

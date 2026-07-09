@@ -10,7 +10,7 @@ import { CycleProgressSection } from '@/components/molecules/hr/appraisal/CycleP
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { useAppraisalCycles, useCycleAppraisals } from '@/hooks/hr/useAppraisals';
 import { AppBackground } from '@/components/atoms/AppBackground';
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 import type { AppraisalCycle } from '@/types/hr';
 
 type Tab = 'overview' | 'results';
@@ -178,7 +178,7 @@ export function CycleInProgressContent({ tenantSlug, cycleId }: Props) {
         <h1 className="text-2xl font-bold text-gray-900">Appraisals</h1>
 
         {/* Cycle header card */}
-        <div className="bg-white border border-gray-100 rounded-card px-6 py-5 shadow-sm">
+        <div className={cardClass('px-6 py-5')}>
           <div className="flex items-center gap-3">
             <p className="text-xl font-bold text-gray-900">{cycle?.title ?? '—'}</p>
             <StatusPill status={cycleStatus} />

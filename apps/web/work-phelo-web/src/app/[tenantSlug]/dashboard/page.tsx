@@ -5,7 +5,7 @@
 import { use } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { useModuleTransition } from '@/hooks';
-import { TopNav } from '@/components/organisms/shared/TopNav';
+import { TopNav, NavTab } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { getGreeting } from '@/lib/formatters';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
@@ -86,16 +86,17 @@ export default function TenantDashboardPage({
       .map(([key]) => key),
   );
 
+  const tabs: NavTab[] = [
+    { key: 'dashboard', label: 'Dashboard', href: `/${tenantSlug}/dashboard` },
+  ];
+  if (isTenantAdmin) {
+    tabs.push({ key: 'executive', label: 'Executive Dashboard', href: `/${tenantSlug}/executive` });
+  }
+
   return (
     <AppBackground className="h-screen overflow-hidden flex flex-col">
       {isEmployee && <AgreementGate />}
-      <TopNav
-        userInitials={initials}
-        notificationCount={0}
-        activeTab="portal"
-        onTabChange={() => {}}
-        logoVariant="image"
-      />
+      <TopNav userInitials={initials} notificationCount={0} logoVariant="image" tabs={tabs} />
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         {/* Welcome banner */}

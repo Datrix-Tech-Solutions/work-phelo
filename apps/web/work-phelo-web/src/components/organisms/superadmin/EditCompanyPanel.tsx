@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -8,11 +8,8 @@ import { FormField } from '@/components/molecules/shared/FormField';
 import { FormSection } from '@/components/atoms/FormSection';
 import { PhoneInput } from '@/components/atoms/PhoneInput';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { LogoPicker } from '@/components/molecules/settings/LogoPicker';
-import { useUpdateTenant, useTenantBranding } from '@/hooks/useTenants';
-import { useUploadTenantDocumentAsset } from '@/hooks/useTenantDocumentProfile';
+import { useUpdateTenant } from '@/hooks/useTenants';
 import { useToast } from '@/hooks/useToast';
-import { readFileAsDataUrl, setStoredCompanyLogo } from '@/lib/companyLogoStorage';
 import {
   COMPANY_SIZE_OPTIONS,
   COUNTRY_CONFIG,
@@ -47,13 +44,6 @@ interface FormValues {
 export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelProps) {
   const toast = useToast();
   const { mutate: updateTenant, isPending } = useUpdateTenant(tenant.id);
-  const { data: branding } = useTenantBranding(tenant.id);
-  const { mutate: uploadLogo, isPending: isSavingLogo } = useUploadTenantDocumentAsset(
-    tenant.id,
-    'logo',
-  );
-
-  const [pendingLogoFile, setPendingLogoFile] = useState<File | null>(null);
 
   const {
     register,
@@ -77,11 +67,6 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
     }
   }, [isOpen, tenant, reset]);
 
-  const handleClose = () => {
-    setPendingLogoFile(null);
-    onClose();
-  };
-
   const size = useWatch({ control, name: 'size' }) ?? '';
   const industry = useWatch({ control, name: 'industry' }) ?? '';
   const country = useWatch({ control, name: 'country' }) ?? '';
@@ -99,33 +84,21 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
     updateTenant(data, {
       onSuccess: () => {
         toast.success('Company updated successfully');
-        handleClose();
+        onClose();
       },
       onError: () => toast.error('Failed to update company'),
-    });
-  };
-
-  const handleSaveLogo = () => {
-    if (!pendingLogoFile) return;
-    uploadLogo(pendingLogoFile, {
-      onSuccess: async () => {
-        setStoredCompanyLogo(await readFileAsDataUrl(pendingLogoFile));
-        toast.success('Logo uploaded');
-        setPendingLogoFile(null);
-      },
-      onError: () => toast.error('Failed to upload logo'),
     });
   };
 
   return (
     <SidePanel
       isOpen={isOpen}
-      onClose={handleClose}
+      onClose={onClose}
       title="Edit Company"
       description={`Editing ${tenant.name}`}
       footer={
         <div className="flex justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
           <Button isLoading={isPending} loadingText="Saving..." onClick={handleSubmit(onSubmit)}>
@@ -134,21 +107,6 @@ export function EditCompanyPanel({ isOpen, onClose, tenant }: EditCompanyPanelPr
         </div>
       }
     >
-      <FormSection title="Branding">
-        <LogoPicker currentUrl={branding?.logoDisplayUrl} onFileChange={setPendingLogoFile} />
-        {pendingLogoFile && (
-          <Button
-            variant="outline"
-            isLoading={isSavingLogo}
-            loadingText="Saving..."
-            onClick={handleSaveLogo}
-            className="w-fit"
-          >
-            Save Logo
-          </Button>
-        )}
-      </FormSection>
-
       <FormSection title="Company Information">
         <FormField
           label="Company Name"

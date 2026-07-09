@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -7,18 +8,42 @@ export function cn(...inputs: ClassValue[]) {
 
 export function inputClass(error?: string, extra?: string) {
   return cn(
-    'w-full px-4 py-3 border rounded-input text-sm bg-white text-gray-800',
+    'w-full px-4 py-3 border rounded-input text-sm bg-white/90 backdrop-blur-sm text-gray-800',
     'placeholder:text-gray-400 transition-colors',
-    'focus:outline-none focus:ring-1 focus:ring-gray-400 focus:border-gray-400',
-    error ? 'border-red-500' : 'border-gray-300',
+    'focus:outline-none focus:bg-white',
+    error
+      ? 'border-red-500 focus:ring-2 focus:ring-red-500/30 focus:border-red-500'
+      : 'border-(--module-border,var(--color-gray-300)) focus:ring-2 focus:ring-(--module-btn-bg,var(--color-brand))/30 focus:border-(--module-btn-bg,var(--color-brand))',
     extra,
   );
 }
 
 export function cardClass(extra?: string, border: 'module' | 'glass' = 'module') {
   return cn(
-    'bg-white/20 backdrop-blur-md rounded-xl border shadow-lg',
+    'bg-(--glass-subtle,rgba(255,255,255,0.3)) backdrop-blur-md rounded-xl border shadow-lg',
     border === 'module' ? 'border-(--module-border,var(--color-gray-200))' : 'border-white/40',
     extra,
   );
+}
+
+/** Frosted color-tint finish, same recipe as the quick-action icon circles — softer/quieter than waterAvatarStyle. */
+export function frostedAvatarStyle(color: string): CSSProperties {
+  return {
+    backgroundColor: `color-mix(in oklab, ${color} 78%, white 22%)`,
+    boxShadow: `0 6px 14px -4px color-mix(in srgb, ${color} 45%, transparent)`,
+  };
+}
+
+/** 3D glass/water-drop finish for an avatar circle, tinted by the given color. */
+export function waterAvatarStyle(color: string): CSSProperties {
+  return {
+    background: `radial-gradient(circle at 32% 26%, rgba(255,255,255,0.92) 0%, color-mix(in oklab, ${color} 30%, white) 30%, color-mix(in oklab, ${color} 65%, white) 60%, color-mix(in oklab, ${color} 90%, white) 100%)`,
+    boxShadow: [
+      `0 0 0 3px color-mix(in srgb, ${color} 22%, transparent)`,
+      `inset -2px -2px 4px color-mix(in srgb, color-mix(in oklab, ${color} 60%, black) 35%, transparent)`,
+      'inset 1.5px 1.5px 3px rgba(255,255,255,0.85)',
+      `0 4px 8px -2px color-mix(in srgb, ${color} 55%, transparent)`,
+    ].join(', '),
+    textShadow: '0 1px 2px rgba(0,0,0,0.35)',
+  };
 }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useModuleTransitionStore } from '@/store/moduleTransition.store';
 import { ModuleIcons, MODULE_COLORS, type ModuleKey } from '@/components/atoms/icons';
+import { LoadingMark } from '@/components/atoms/LoadingMark';
 import { cn } from '@/lib/utils';
 
 // Deliberate branding pause — keeps the splash from flashing on fast navigations.
@@ -146,11 +147,10 @@ export function ModuleSplash() {
         />
       ))}
 
-      <div className="relative z-10 flex items-center justify-center w-40 h-40">
-        <div className="relative w-28 h-28 rounded-full flex items-center justify-center">
-          {Icon && <Icon className="w-20 h-20 text-white drop-shadow-lg" />}
-        </div>
-      </div>
+      <LoadingMark
+        className="z-10"
+        icon={Icon && <Icon className="w-20 h-20 text-white drop-shadow-lg" />}
+      />
 
       {moduleName && (
         <p className="relative z-10 text-sm font-medium text-white/90">

@@ -2,6 +2,7 @@ import { CalendarDays } from 'lucide-react';
 import { Project } from '@/types/hr';
 import { ProgressBar } from '@/components/atoms/ProgressBar';
 import { ProjectStatusBadge } from '@/components/molecules/hr/projects/ProjectStatusBadge';
+import { cardClass } from '@/lib/utils';
 
 function formatDate(iso?: string) {
   if (!iso) return '—';
@@ -18,7 +19,7 @@ interface Props {
 
 export function ProjectBanner({ project }: Props) {
   return (
-    <div className="bg-white border border-gray-200 rounded-card p-6 flex items-center gap-6">
+    <div className={cardClass('p-6 flex items-center gap-6')}>
       {/* Left: name + meta */}
       <div className="flex-1 min-w-0 flex flex-col gap-2">
         <h1 className="text-xl font-bold text-gray-900 truncate">{project.name}</h1>

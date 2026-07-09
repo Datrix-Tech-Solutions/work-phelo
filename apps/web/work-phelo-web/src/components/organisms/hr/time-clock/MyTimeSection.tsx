@@ -1,3 +1,4 @@
+import { ClockAlert } from 'lucide-react';
 import { ClockInWidget } from '@/components/organisms/hr/time-clock/ClockInWidget';
 import { Badge } from '@/components/atoms/Badge';
 import { formatDate, formatTime, formatMinutes } from '@/lib/formatters';
@@ -79,19 +80,25 @@ export function MyTimeSection({
           isLoading={isLoading}
           onClockIn={onClockIn}
           onClockOut={onClockOut}
-          onReportMissed={onReportMissed}
           isClockingIn={isClockingIn}
           isClockingOut={isClockingOut}
         />
       </div>
 
       <div className="flex flex-col">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3 shrink-0">Attendance History</h2>
         <DataTable
           columns={historyColumns}
           data={historyEntries}
           isLoading={historyLoading}
           emptyMessage="No attendance records yet"
+          extraFilters={
+            <h2 className="text-sm font-semibold text-gray-700 shrink-0">Attendance History</h2>
+          }
+          secondaryButton={{
+            label: 'Report Missed Entry',
+            onClick: onReportMissed,
+            icon: <ClockAlert className="w-4 h-4" />,
+          }}
           currentPage={historyPage}
           totalPages={historyTotalPages}
           onPageChange={onHistoryPageChange}

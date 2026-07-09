@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { cardClass } from '@/lib/utils';
 
 /* ── Shared week helpers ── */
 
@@ -55,7 +56,7 @@ interface WeekSelectorProps {
 
 export function WeekSelector({ weekStart, onPrev, onNext, endOffset = 4 }: WeekSelectorProps) {
   return (
-    <div className="flex items-center gap-2 border border-gray-200 rounded-card bg-white px-4 py-2.5 shadow-sm shrink-0">
+    <div className={cardClass('flex items-center gap-2 px-4 py-2.5 shrink-0')}>
       <button
         onClick={onPrev}
         className="text-gray-400 hover:text-gray-700 transition-colors p-0.5"

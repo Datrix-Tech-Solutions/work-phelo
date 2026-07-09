@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { cn, cardClass } from '@/lib/utils';
+import { createPortal } from 'react-dom';
+import { cn, cardClass, inputClass } from '@/lib/utils';
 import { Pagination } from '@/components/molecules/shared/Pagination';
 import { SearchIcon } from 'lucide-react';
 import { NoSearchLogo } from '../../atoms/NoSearchLogo';
@@ -35,7 +36,12 @@ interface DataTableProps<T extends { id: string | number }> {
   onFilter?: (value: string) => void;
   onExport?: () => void;
   extraFilters?: React.ReactNode;
-  secondaryButton?: { label: string; onClick: () => void; badgeCount?: number };
+  secondaryButton?: {
+    label: string;
+    onClick: () => void;
+    badgeCount?: number;
+    icon?: React.ReactNode;
+  };
   secondaryButtons?: { label: string; onClick: () => void; badgeCount?: number }[];
   actionButton?: { label: string; onClick: () => void };
   rowActions?: (row: T) => RowAction[];
@@ -71,48 +77,51 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-600)) hover:bg-(--surface-hover,var(--color-gray-100)) transition-colors"
       >
         <Icons.EllipsisVertical />
       </button>
 
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(false);
-            }}
-          />
-          <div
-            style={{
-              position: 'fixed',
-              right: menuPos.right,
-              ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
-              minWidth: 140,
-            }}
-            className="z-50 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden"
-          >
-            {actions.map((action) => (
-              <button
-                key={action.label}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  action.onClick();
-                  setOpen(false);
-                }}
-                className={cn(
-                  'w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors',
-                  action.danger ? 'text-red-600' : 'text-gray-700',
-                )}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {open &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+              }}
+            />
+            <div
+              style={{
+                position: 'fixed',
+                right: menuPos.right,
+                ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
+                minWidth: 140,
+              }}
+              className="z-50 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden"
+            >
+              {actions.map((action) => (
+                <button
+                  key={action.label}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    action.onClick();
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    'w-full text-left px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
+                    action.danger ? 'text-red-600' : 'text-gray-700',
+                  )}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -158,13 +167,13 @@ export function DataTable<T extends { id: string | number }>({
           <div className="flex items-center gap-3 flex-wrap">
             {onSearch && (
               <div className="relative flex-1 min-w-52 max-w-sm">
-                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 w-5 h-5" />
                 <input
                   type="text"
                   placeholder={searchPlaceholder}
                   value={searchValue ?? undefined}
                   onChange={(e) => onSearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+                  className={inputClass(undefined, 'pl-9 pr-4 py-2')}
                 />
               </div>
             )}
@@ -175,7 +184,7 @@ export function DataTable<T extends { id: string | number }>({
               <div className="relative">
                 <select
                   onChange={(e) => onFilter(e.target.value)}
-                  className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white"
+                  className="appearance-none pl-8 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-(--focus-ring,var(--color-gray-400)) bg-white"
                 >
                   <option value="">Status</option>
                   {filterOptions.map((o) => (
@@ -200,7 +209,12 @@ export function DataTable<T extends { id: string | number }>({
             )}
 
             {secondaryButton && (
-              <Button variant="secondary" size="sm" onClick={secondaryButton.onClick}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={secondaryButton.onClick}
+                icon={secondaryButton.icon}
+              >
                 {secondaryButton.label}
                 {(secondaryButton.badgeCount ?? 0) > 0 && (
                   <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white leading-none">

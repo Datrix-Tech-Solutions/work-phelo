@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { cn } from '@/lib/utils';
+import { createPortal } from 'react-dom';
+import { cn, cardClass } from '@/lib/utils';
 import { NoSearchLogo } from '@/components/atoms/NoSearchLogo';
 import { Icons } from '@/components/atoms/icons';
 import type { Column, RowAction } from './DataTable';
@@ -33,48 +34,51 @@ function ThreeDotMenu({ actions }: { actions: RowAction[] }) {
       <button
         ref={buttonRef}
         onClick={handleToggle}
-        className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+        className="p-1.5 rounded-lg text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-600)) hover:bg-(--surface-hover,var(--color-gray-100)) transition-colors"
       >
         <Icons.EllipsisVertical />
       </button>
 
-      {open && (
-        <>
-          <div
-            className="fixed inset-0 z-40"
-            onClick={(e) => {
-              e.stopPropagation();
-              setOpen(false);
-            }}
-          />
-          <div
-            style={{
-              position: 'fixed',
-              right: menuPos.right,
-              ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
-              minWidth: 140,
-            }}
-            className="z-50 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden"
-          >
-            {actions.map((action) => (
-              <button
-                key={action.label}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  action.onClick();
-                  setOpen(false);
-                }}
-                className={cn(
-                  'w-full text-left px-4 py-2 text-sm hover:bg-gray-50 transition-colors',
-                  action.danger ? 'text-red-600' : 'text-gray-700',
-                )}
-              >
-                {action.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {open &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+              }}
+            />
+            <div
+              style={{
+                position: 'fixed',
+                right: menuPos.right,
+                ...(openUpward ? { bottom: menuPos.bottom } : { top: menuPos.top }),
+                minWidth: 140,
+              }}
+              className="z-50 bg-white border border-gray-100 rounded-input shadow-lg py-1 overflow-hidden"
+            >
+              {actions.map((action) => (
+                <button
+                  key={action.label}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    action.onClick();
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    'w-full text-left px-4 py-2 text-sm hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
+                    action.danger ? 'text-red-600' : 'text-gray-700',
+                  )}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -101,7 +105,7 @@ export function DataList<T extends { id: string | number }>({
   );
 
   return (
-    <div className="bg-white rounded-xl overflow-hidden">
+    <div className={cardClass('overflow-hidden')}>
       <div className="overflow-x-auto">
         <div className="min-w-max">
           {isLoading ? (
@@ -126,7 +130,7 @@ export function DataList<T extends { id: string | number }>({
                 onClick={() => onRowClick?.(row)}
                 className={cn(
                   'grid px-6 py-4 items-center text-sm text-gray-800 border-b border-gray-100 last:border-b-0',
-                  'hover:bg-gray-50 transition-colors',
+                  'hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
                   onRowClick && 'cursor-pointer',
                 )}
                 style={{ gridTemplateColumns: gridCols }}

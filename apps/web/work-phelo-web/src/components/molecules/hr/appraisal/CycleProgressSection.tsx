@@ -1,6 +1,7 @@
 'use client';
 
 import { CheckCircle } from 'lucide-react';
+import { cardClass } from '@/lib/utils';
 
 interface CycleProgressSectionProps {
   title: string;
@@ -18,7 +19,7 @@ export function CycleProgressSection({
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   return (
-    <div className="bg-white border border-gray-100 rounded-card p-5 flex flex-col gap-3 shadow-sm">
+    <div className={cardClass('p-5 flex flex-col gap-3')}>
       <div className="flex items-center gap-2">
         <CheckCircle className="w-5 h-5 text-amber-500 shrink-0" />
         <p className="text-base font-bold text-gray-900">{title}</p>

@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronLeft, ChevronRight, PartyPopper } from 'lucide-react';
-import { cardClass } from '@/lib/utils';
+import { cardClass, waterAvatarStyle } from '@/lib/utils';
 
 interface Birthday {
   id: string;
@@ -25,7 +25,7 @@ export function BirthdaysCard({
   onScrollRight,
 }: BirthdaysCardProps) {
   return (
-    <div className={cardClass('p-5 flex flex-col shrink-0')}>
+    <div className={cardClass('p-5 flex flex-col shrink-0 border-gray-200')}>
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <h2 className="text-base font-bold text-gray-900">Upcoming Birthdays</h2>
@@ -67,13 +67,11 @@ export function BirthdaysCard({
           {birthdays.map((person) => (
             <div key={person.id} className="flex flex-col items-center gap-3 shrink-0 w-24">
               <div
-                className="w-16 h-16 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0 ring-2 ring-offset-2"
-                style={{
-                  backgroundColor: person.color,
-                  boxShadow: `0 0 0 3px ${person.color}25`,
-                }}
+                className="relative w-16 h-16 rounded-full flex items-center justify-center text-white text-lg font-bold shrink-0 overflow-hidden"
+                style={waterAvatarStyle(person.color)}
               >
-                {person.initials}
+                <span className="absolute top-2.5 left-3.5 w-3 h-2 rounded-full bg-white/80 blur-[1.5px]" />
+                <span className="relative">{person.initials}</span>
               </div>
               <div className="text-center w-full">
                 <p className="text-sm font-semibold text-gray-900 leading-tight line-clamp-2 wrap-break-word">

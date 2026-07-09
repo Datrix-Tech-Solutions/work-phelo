@@ -26,6 +26,7 @@ import {
 import { Permission } from '@/lib/permissionMap';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
+import { cardClass, cn } from '@/lib/utils';
 
 const COLUMNS: { key: TaskStatus; label: string; color: string }[] = [
   { key: 'TODO', label: 'TO DO', color: 'bg-gray-400' },
@@ -72,9 +73,13 @@ function TaskCard({
       style={style}
       {...(canMove ? listeners : {})}
       {...(canMove ? attributes : {})}
-      className={`bg-white border border-gray-200 rounded-lg p-3 flex flex-col gap-3 shadow-sm transition-opacity touch-none ${
-        canMove ? 'cursor-grab active:cursor-grabbing' : ''
-      } ${isDragging ? 'opacity-40' : 'opacity-100'}`}
+      className={cardClass(
+        cn(
+          'p-3 flex flex-col gap-3 transition-opacity touch-none',
+          canMove && 'cursor-grab active:cursor-grabbing',
+          isDragging ? 'opacity-40' : 'opacity-100',
+        ),
+      )}
     >
       <div className="flex items-start gap-2">
         <p className="text-sm font-semibold text-gray-900 leading-snug flex-1">{task.name}</p>
@@ -107,7 +112,9 @@ function TaskCard({
 
 function TaskCardOverlay({ task }: { task: ProjectTask }) {
   return (
-    <div className="bg-white border border-brand/40 rounded-lg p-3 flex flex-col gap-3 shadow-xl rotate-2 opacity-95">
+    <div
+      className={cardClass('p-3 flex flex-col gap-3 shadow-xl rotate-2 opacity-95 border-brand/40')}
+    >
       <div className="flex items-start gap-2">
         <p className="text-sm font-semibold text-gray-900 leading-snug flex-1">{task.name}</p>
       </div>
@@ -160,7 +167,7 @@ function KanbanColumn({
       <div className="flex items-center gap-2 px-1">
         <span className={`w-2 h-2 rounded-full ${col.color}`} />
         <span className="text-xs font-bold tracking-wide text-gray-600">{col.label}</span>
-        <span className="ml-auto text-xs font-medium text-gray-400 bg-white border border-gray-200 rounded-full px-2 py-0.5">
+        <span className="ml-auto text-xs font-medium text-gray-400 bg-gray-50 border border-gray-200 rounded-full px-2 py-0.5">
           {tasks.length}
         </span>
       </div>

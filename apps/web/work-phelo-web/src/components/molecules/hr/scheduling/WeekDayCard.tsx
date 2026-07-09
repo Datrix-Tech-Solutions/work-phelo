@@ -77,7 +77,7 @@ function SingleShift({
             e.stopPropagation();
             onSwapShift?.(shift);
           }}
-          className="mt-3 flex items-center justify-center gap-2 w-full bg-white rounded-xl py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          className="mt-3 flex items-center justify-center gap-2 w-full bg-gray-50 rounded-xl py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-100 transition-colors"
         >
           <ArrowLeftRight className="w-3.5 h-3.5" />
           Swap Shift
@@ -95,7 +95,7 @@ function MultiShift({
   onSwapShift?: (shift: DayShift) => void;
 }) {
   return (
-    <div className="flex flex-col flex-1 p-3 gap-2 min-h-36 bg-white">
+    <div className="flex flex-col flex-1 p-3 gap-2 min-h-36 bg-gray-50">
       {shifts.map((shift, i) => {
         const isLeave = shift.type === 'on-leave';
         const styles = SHIFT_STYLES[shift.type];
@@ -196,7 +196,7 @@ export function WeekDayCard({
 
       {/* Body */}
       {isEmpty ? (
-        <div className="flex flex-col flex-1 p-4 min-h-36 bg-white items-center justify-center">
+        <div className="flex flex-col flex-1 p-4 min-h-36 bg-gray-50 items-center justify-center">
           <p className="text-sm text-gray-300 font-medium">OFF</p>
         </div>
       ) : isSingle ? (

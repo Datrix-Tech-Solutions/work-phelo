@@ -2,6 +2,7 @@
 
 import { ArrowLeftRight } from 'lucide-react';
 import { Button } from '@/components/atoms/Button';
+import { cardClass } from '@/lib/utils';
 import Image from 'next/image';
 
 export interface SwapRequestShift {
@@ -84,7 +85,7 @@ function ShiftBox({ person, shift }: { person: SwapRequestPerson; shift: SwapReq
   const workMode = formatWorkMode(shift.workMode);
 
   return (
-    <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 flex items-center gap-4">
+    <div className="flex-1 bg-gray-50 border border-gray-200 rounded-xl p-4 flex items-center gap-4">
       <Avatar name={person.name} avatarUrl={person.avatarUrl} />
       <div className="min-w-0">
         <p className="text-sm font-semibold text-gray-900 truncate">{person.name}</p>
@@ -110,12 +111,12 @@ export function SwapRequestCard({
   const isPending = request.status === 'PENDING';
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-5 flex flex-col gap-4 shadow-sm">
+    <div className={cardClass('p-5 flex flex-col gap-4')}>
       {/* Shift boxes */}
       <div className="flex items-center gap-3">
         <ShiftBox person={request.requester} shift={request.requesterShift} />
 
-        <div className="w-9 h-9 rounded-full bg-white border border-gray-200 flex items-center justify-center shrink-0">
+        <div className="w-9 h-9 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center shrink-0">
           <ArrowLeftRight className="w-4 h-4 text-gray-400" />
         </div>
 

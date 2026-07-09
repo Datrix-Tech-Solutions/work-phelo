@@ -109,7 +109,7 @@ export function ManagerReviewForm({ appraisalId, kpis, backHref }: Props) {
                   className={cn(
                     'w-12 h-12 rounded-lg text-sm font-semibold transition-colors border',
                     state?.score === n
-                      ? 'bg-gray-900 text-white border-gray-900'
+                      ? 'bg-(--chip-dark,#111827) text-white border-(--chip-dark,#111827)'
                       : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100',
                   )}
                 >

@@ -2,17 +2,19 @@
 
 import Image from 'next/image';
 import { MapPin, UserPlus, Trash2, Mail, Phone } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, frostedAvatarStyle } from '@/lib/utils';
 
-const AVATAR_PALETTES = [
-  { bg: 'bg-violet-100', text: 'text-violet-700' },
-  { bg: 'bg-blue-100', text: 'text-blue-700' },
-  { bg: 'bg-emerald-100', text: 'text-emerald-700' },
-  { bg: 'bg-orange-100', text: 'text-orange-700' },
-  { bg: 'bg-pink-100', text: 'text-pink-700' },
-  { bg: 'bg-teal-100', text: 'text-teal-700' },
-  { bg: 'bg-amber-100', text: 'text-amber-700' },
-  { bg: 'bg-red-100', text: 'text-red-700' },
+// Same color identities as before (violet, blue, emerald, orange, pink, teal, amber, red),
+// now as vivid hex values so they can drive the frosted-glass tint.
+const AVATAR_COLORS = [
+  '#8b5cf6', // violet-500
+  '#3b82f6', // blue-500
+  '#10b981', // emerald-500
+  '#f97316', // orange-500
+  '#ec4899', // pink-500
+  '#14b8a6', // teal-500
+  '#f59e0b', // amber-500
+  '#ef4444', // red-500
 ];
 
 const PILL_COLORS = {
@@ -34,9 +36,9 @@ function getInitials(name: string): string {
     .toUpperCase();
 }
 
-function pickPalette(name: string) {
+function pickColor(name: string) {
   const hash = [...name].reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  return AVATAR_PALETTES[hash % AVATAR_PALETTES.length];
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
 function Pill({
@@ -63,7 +65,7 @@ function Pill({
 
 function Avatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
   const initials = getInitials(name);
-  const palette = pickPalette(name);
+  const color = pickColor(name);
 
   if (avatarUrl) {
     return (
@@ -81,9 +83,10 @@ function Avatar({ name, avatarUrl }: { name: string; avatarUrl?: string }) {
 
   return (
     <div
-      className={cn('w-14 h-14 rounded-full flex items-center justify-center shrink-0', palette.bg)}
+      className="w-14 h-14 rounded-full flex items-center justify-center shrink-0 text-white backdrop-blur-sm border border-white/30"
+      style={frostedAvatarStyle(color)}
     >
-      <span className={cn('text-sm font-semibold', palette.text)}>{initials}</span>
+      <span className="text-sm font-semibold">{initials}</span>
     </div>
   );
 }
@@ -135,8 +138,8 @@ export function ContactCard({
   return (
     <div
       className={cn(
-        'group relative bg-white rounded-xl p-4 w-95 h-full flex flex-col gap-4',
-        'border border-gray-100 transition-all duration-200',
+        'group relative bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md rounded-xl p-4 w-95 h-full flex flex-col gap-4',
+        'border border-gray-100 shadow-lg transition-all duration-200',
         'hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-1.5',
         onClick && 'cursor-pointer',
         className,

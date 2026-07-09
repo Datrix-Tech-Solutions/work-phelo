@@ -109,10 +109,10 @@ export function TableButton({
           }}
           className="pointer-events-none"
         >
-          <span className="block bg-gray-900 text-white text-xs rounded-lg px-1 py-1.5 whitespace-nowrap shadow-lg text-center">
+          <span className="block bg-(--chip-dark,#111827) text-white text-xs rounded-lg px-1 py-1.5 whitespace-nowrap shadow-lg text-center">
             {tooltip}
           </span>
-          <span className="block w-2 h-2 bg-gray-900 rotate-45 rounded-sm mx-auto -mt-1" />
+          <span className="block w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm mx-auto -mt-1" />
         </span>
       )}
     </span>

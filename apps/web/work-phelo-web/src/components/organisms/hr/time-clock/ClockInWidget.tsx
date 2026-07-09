@@ -10,7 +10,6 @@ interface Props {
   isLoading: boolean;
   onClockIn: () => void;
   onClockOut: () => void;
-  onReportMissed: () => void;
   isClockingIn: boolean;
   isClockingOut: boolean;
 }
@@ -20,7 +19,6 @@ export function ClockInWidget({
   isLoading,
   onClockIn,
   onClockOut,
-  onReportMissed,
   isClockingIn,
   isClockingOut,
 }: Props) {
@@ -44,31 +42,20 @@ export function ClockInWidget({
     : 0;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="rounded-card overflow-hidden border border-gray-200 shadow-sm">
-        <ClockBanner
-          now={now}
-          session={session}
-          isLoading={isLoading}
-          isClockedIn={isClockedIn}
-          isOnBreak={isOnBreak}
-          isDone={isDone}
-          onClockIn={onClockIn}
-          onClockOut={onClockOut}
-          isClockingIn={isClockingIn}
-          isClockingOut={isClockingOut}
-        />
-        <ClockStatStrip session={session} isLoading={isLoading} netMinutes={netMinutes} />
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          onClick={onReportMissed}
-          className="text-xs text-gray-400 hover:text-gray-600 transition-colors underline underline-offset-2"
-        >
-          Report a missed clock entry
-        </button>
-      </div>
+    <div className="rounded-card overflow-hidden border border-gray-200 shadow-sm">
+      <ClockBanner
+        now={now}
+        session={session}
+        isLoading={isLoading}
+        isClockedIn={isClockedIn}
+        isOnBreak={isOnBreak}
+        isDone={isDone}
+        onClockIn={onClockIn}
+        onClockOut={onClockOut}
+        isClockingIn={isClockingIn}
+        isClockingOut={isClockingOut}
+      />
+      <ClockStatStrip session={session} isLoading={isLoading} netMinutes={netMinutes} />
     </div>
   );
 }

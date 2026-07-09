@@ -1,4 +1,5 @@
 import { SearchIcon, ChevronRight } from 'lucide-react';
+import { cardClass, inputClass } from '@/lib/utils';
 import { WeekSelector } from './WeekSelector';
 
 interface Props {
@@ -23,17 +24,17 @@ export function SchedulingToolbar({
   onNextWeek,
 }: Props) {
   return (
-    <div className="flex items-center justify-between shrink-0 mb-6 gap-4">
+    <div className={cardClass('flex items-center justify-between shrink-0 mb-6 gap-4 px-4 py-2')}>
       <div className="flex items-center gap-3 flex-1 min-w-0">
         {/* Search */}
         <div className="relative flex-1 min-w-52 max-w-sm">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-gray-400 w-4 h-4" />
           <input
             type="text"
             placeholder="Search employee..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-input text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400"
+            className={inputClass(undefined, 'pl-9 pr-4 py-2')}
           />
         </div>
 
@@ -42,7 +43,7 @@ export function SchedulingToolbar({
           <select
             value={departmentId}
             onChange={(e) => onDepartmentChange(e.target.value)}
-            className="appearance-none pl-4 pr-8 py-2 border border-gray-200 rounded-input text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-gray-400 bg-white font-medium"
+            className={inputClass(undefined, 'appearance-none pl-4 pr-8 py-2 font-medium')}
           >
             <option value="">All Departments</option>
             {departments.map((d) => (

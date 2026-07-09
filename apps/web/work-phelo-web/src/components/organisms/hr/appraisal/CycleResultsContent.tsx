@@ -12,7 +12,7 @@ import { RatingDistributionChart } from '@/components/molecules/hr/appraisal/Rat
 import { Column, DataTable } from '@/components/organisms/shared/DataTable';
 import { formatDate } from '@/lib/formatters';
 import { AppBackground } from '@/components/atoms/AppBackground';
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 
 const ALL_RATINGS: FinalRating[] = [
   'Outstanding',
@@ -233,7 +233,7 @@ export function CycleResultsContent({ tenantSlug, cycleId }: Props) {
             </div>
 
             {/* Rating distribution */}
-            <div className="bg-white border border-gray-100 rounded-card shadow-sm shrink-0">
+            <div className={cardClass('shrink-0')}>
               <div className="px-5 py-4 border-b border-gray-100">
                 <h2 className="text-sm font-semibold text-gray-900">Rating Distribution</h2>
               </div>

@@ -39,8 +39,8 @@ function ActionButton({ icon, label, color, onClick, badge }: ActionButtonProps)
     >
       <div className="relative">
         <div
-          className="module-icon-shake w-14 h-14 rounded-full flex items-center justify-center text-white transition-[transform,box-shadow] duration-200 group-hover:scale-105 group-hover:shadow-[0_10px_20px_-6px_color-mix(in_oklab,var(--card-accent)_55%,transparent)]"
-          style={{ backgroundColor: color }}
+          className="module-icon-shake w-14 h-14 rounded-full flex items-center justify-center text-white backdrop-blur-sm border border-white/30 -translate-y-0.5 shadow-[0_12px_22px_-6px_color-mix(in_oklab,var(--card-accent)_55%,transparent)] transition-[transform,box-shadow] duration-200 group-hover:scale-105 group-hover:-translate-y-1 group-hover:shadow-[0_18px_30px_-6px_color-mix(in_oklab,var(--card-accent)_65%,transparent)]"
+          style={{ backgroundColor: `color-mix(in oklab, ${color} 78%, white 22%)` }}
         >
           {icon}
         </div>
@@ -65,7 +65,7 @@ export function QuickActionsCard({
   projectsBadge,
 }: QuickActionsCardProps) {
   return (
-    <div className={cardClass('p-5 shrink-0')}>
+    <div className={cardClass('p-5 shrink-0 border-gray-200')}>
       <h2 className="text-base font-bold text-gray-900 mb-4">Quick Actions</h2>
       <div className="flex flex-wrap items-start justify-around gap-y-4">
         <ActionButton

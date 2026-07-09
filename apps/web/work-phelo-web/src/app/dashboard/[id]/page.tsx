@@ -149,7 +149,7 @@ export default function CompanyDetailPage({ params }: { params: Promise<{ id: st
             location={tenant.country}
             address={tenant.address}
             contact={tenant.phone}
-            logoUrl={branding?.logoDisplayUrl ?? undefined}
+            logoUrl={branding?.appLogo.readUrl ?? undefined}
             admin={
               admin
                 ? {
