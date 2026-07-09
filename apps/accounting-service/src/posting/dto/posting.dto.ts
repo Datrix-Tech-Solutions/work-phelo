@@ -12,6 +12,7 @@ import {
   IsUUID,
   Length,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateIf,
@@ -341,4 +342,33 @@ export class QuerySourceEventsDto {
   @IsString()
   @MaxLength(100)
   sourceRecordId?: string;
+}
+
+export class ProcessPendingSourceEventsDto {
+  @ApiPropertyOptional({
+    example: 25,
+    minimum: 1,
+    maximum: 100,
+    default: 25,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({ example: 'REINSURANCE' })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(80)
+  sourceModule?: string;
+
+  @ApiPropertyOptional({ example: 'DEBIT_NOTE_ISSUED' })
+  @IsOptional()
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(100)
+  sourceEventType?: string;
 }

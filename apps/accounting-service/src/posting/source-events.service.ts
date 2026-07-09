@@ -20,6 +20,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateSourceEventDto,
   InternalSourceEventDto,
+  ProcessPendingSourceEventsDto,
   QuerySourceEventsDto,
 } from './dto/posting.dto';
 
@@ -56,6 +57,8 @@ type SourcePayload = Record<string, unknown>;
 type EngineRule = Prisma.PostingRuleGetPayload<{
   include: typeof postingRuleForEngineInclude;
 }>;
+
+const PROCESSING_STALE_AFTER_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class SourceEventsService {
@@ -191,6 +194,81 @@ export class SourceEventsService {
     return this.process(user, eventId, SourceEventStatus.FAILED, true);
   }
 
+  async processOne(user: RequestUser, eventId: string) {
+    const event = await this.findOne(user.tenantId, eventId);
+
+    if (event.status === SourceEventStatus.POSTED) return event;
+    if (event.status === SourceEventStatus.RECEIVED) {
+      return this.process(user, event.id, SourceEventStatus.RECEIVED, false);
+    }
+    if (event.status === SourceEventStatus.FAILED) {
+      return this.process(user, event.id, SourceEventStatus.FAILED, true);
+    }
+    if (event.status === SourceEventStatus.PROCESSING) {
+      await this.releaseStaleProcessingClaim(user.tenantId, event);
+      return this.process(user, event.id, SourceEventStatus.FAILED, true);
+    }
+
+    return event;
+  }
+
+  async processPending(
+    user: RequestUser,
+    query: ProcessPendingSourceEventsDto,
+  ) {
+    const limit = Math.min(query.limit ?? 25, 100);
+    const events = await this.prisma.sourceEventInbox.findMany({
+      where: {
+        tenantId: user.tenantId,
+        status: SourceEventStatus.RECEIVED,
+        ...(query.sourceModule ? { sourceModule: query.sourceModule } : {}),
+        ...(query.sourceEventType
+          ? { sourceEventType: query.sourceEventType }
+          : {}),
+      },
+      select: { id: true },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
+
+    const results: Array<{
+      eventId: string;
+      status: SourceEventStatus | 'SKIPPED';
+      message?: string;
+    }> = [];
+    let posted = 0;
+    let failed = 0;
+    let skipped = 0;
+
+    for (const event of events) {
+      try {
+        const processed = await this.processOne(user, event.id);
+        results.push({ eventId: event.id, status: processed.status });
+        if (processed.status === SourceEventStatus.POSTED) posted += 1;
+        else if (processed.status === SourceEventStatus.FAILED) failed += 1;
+        else skipped += 1;
+      } catch (error) {
+        skipped += 1;
+        results.push({
+          eventId: event.id,
+          status: 'SKIPPED',
+          message:
+            error instanceof HttpException
+              ? error.message
+              : 'Source event could not be processed',
+        });
+      }
+    }
+
+    return {
+      processedCount: results.length,
+      postedCount: posted,
+      failedCount: failed,
+      skippedCount: skipped,
+      events: results,
+    };
+  }
+
   private async process(
     user: RequestUser,
     eventId: string,
@@ -314,6 +392,34 @@ export class SourceEventsService {
         },
       });
       return this.findOne(user.tenantId, eventId);
+    }
+  }
+
+  private async releaseStaleProcessingClaim(
+    tenantId: string,
+    event: Awaited<ReturnType<SourceEventsService['findOne']>>,
+  ) {
+    const updatedAt = new Date(event.updatedAt).getTime();
+    const stale = updatedAt <= Date.now() - PROCESSING_STALE_AFTER_MS;
+    if (!stale) {
+      throw new ConflictException('Source event is already processing');
+    }
+
+    const released = await this.prisma.sourceEventInbox.updateMany({
+      where: {
+        id: event.id,
+        tenantId,
+        status: SourceEventStatus.PROCESSING,
+        updatedAt: { lte: new Date(Date.now() - PROCESSING_STALE_AFTER_MS) },
+      },
+      data: {
+        status: SourceEventStatus.FAILED,
+        failureReason: 'Processing claim expired before completion',
+        processedAt: new Date(),
+      },
+    });
+    if (released.count !== 1) {
+      throw new ConflictException('Source event is already processing');
     }
   }
 

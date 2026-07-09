@@ -24,7 +24,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ModuleGuard } from '../auth/guards/module.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingPermission } from '../ledger/accounting.permissions';
-import { CreateSourceEventDto, QuerySourceEventsDto } from './dto/posting.dto';
+import {
+  CreateSourceEventDto,
+  ProcessPendingSourceEventsDto,
+  QuerySourceEventsDto,
+} from './dto/posting.dto';
 import { SourceEventsService } from './source-events.service';
 
 @Controller('source-events')
@@ -53,6 +57,20 @@ export class SourceEventsController {
     return this.service.receive(request.user, dto);
   }
 
+  @Post('process-pending')
+  @ApiOperation({
+    summary: 'Process pending internal source events',
+    description:
+      'Claims RECEIVED events safely, reuses the Accounting posting engine, and returns a demo-friendly batch summary without reprocessing already posted events.',
+  })
+  @RequirePermissions(AccountingPermission.JOURNALS_POST)
+  processPending(
+    @Query() query: ProcessPendingSourceEventsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.processPending(request.user, query);
+  }
+
   @Get()
   @ApiOperation({ summary: 'List the tenant source event inbox' })
   @RequirePermissions(AccountingPermission.JOURNALS_VIEW)
@@ -73,6 +91,23 @@ export class SourceEventsController {
     @Req() request: Request & { user: RequestUser },
   ) {
     return this.service.findOne(request.user.tenantId, eventId);
+  }
+
+  @Post(':eventId/process')
+  @ApiOperation({
+    summary: 'Process one source event',
+    description:
+      'Processes RECEIVED or FAILED events, returns POSTED events unchanged, and safely rejects non-stale PROCESSING events.',
+  })
+  @ApiConflictResponse({
+    description: 'The source event is currently processing and is not stale.',
+  })
+  @RequirePermissions(AccountingPermission.JOURNALS_POST)
+  processOne(
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.service.processOne(request.user, eventId);
   }
 
   @Post(':eventId/retry')

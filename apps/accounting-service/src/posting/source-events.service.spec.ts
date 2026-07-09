@@ -395,4 +395,94 @@ describe('SourceEventsService', () => {
       ConflictException,
     );
   });
+
+  it('processes a pending internal event into a posted journal', async () => {
+    const { event, service } = setup(SourceEventStatus.RECEIVED);
+
+    const result = await service.processOne(actor, event.id);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(event.journalEntryId).toBe('journal-1');
+  });
+
+  it('does not double-post an already posted event', async () => {
+    const { event, journals, service } = setup(SourceEventStatus.POSTED);
+    event.journalEntryId = 'journal-1';
+
+    const result = await service.processOne(actor, event.id);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(journals.createPostedInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('processes failed events through the single-event process endpoint', async () => {
+    const { event, service } = setup(SourceEventStatus.FAILED);
+
+    const result = await service.processOne(actor, event.id);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(event.retryCount).toBe(1);
+  });
+
+  it('stores a failure reason when single-event processing fails', async () => {
+    const { event, journals, service } = setup(SourceEventStatus.RECEIVED);
+    journals.createPostedInTransaction.mockRejectedValue(
+      new BadRequestException('Missing premium clearing account'),
+    );
+
+    const result = await service.processOne(actor, event.id);
+
+    expect(result.status).toBe(SourceEventStatus.FAILED);
+    expect(event.failureReason).toBe('Missing premium clearing account');
+  });
+
+  it('processes pending events with filters and limit', async () => {
+    const { event, prisma, service } = setup(SourceEventStatus.RECEIVED);
+    prisma.sourceEventInbox.findMany.mockResolvedValue([{ id: event.id }]);
+
+    const result = await service.processPending(actor, {
+      limit: 2,
+      sourceModule: dto.sourceModule,
+      sourceEventType: dto.sourceEventType,
+    });
+
+    expect(prisma.sourceEventInbox.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          tenantId: actor.tenantId,
+          status: SourceEventStatus.RECEIVED,
+          sourceModule: dto.sourceModule,
+          sourceEventType: dto.sourceEventType,
+        },
+        take: 2,
+      }),
+    );
+    expect(result).toMatchObject({
+      processedCount: 1,
+      postedCount: 1,
+      failedCount: 0,
+      skippedCount: 0,
+    });
+  });
+
+  it('caps pending processing batches at 100 events', async () => {
+    const { prisma, service } = setup(SourceEventStatus.RECEIVED);
+    prisma.sourceEventInbox.findMany.mockResolvedValue([]);
+
+    await service.processPending(actor, { limit: 500 });
+
+    expect(prisma.sourceEventInbox.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 100 }),
+    );
+  });
+
+  it('safely retries a stale processing claim', async () => {
+    const { event, service } = setup(SourceEventStatus.PROCESSING);
+    event.updatedAt = new Date(Date.now() - 20 * 60 * 1000);
+
+    const result = await service.processOne(actor, event.id);
+
+    expect(result.status).toBe(SourceEventStatus.POSTED);
+    expect(event.retryCount).toBe(1);
+  });
 });
