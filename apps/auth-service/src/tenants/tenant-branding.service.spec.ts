@@ -1,9 +1,11 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 import {
   TenantBrandingService,
   WORKPHELO_BRANDING_DEFAULTS,
 } from './tenant-branding.service';
+import { TenantAssetStorageService } from './tenant-asset-storage.service';
 
 const TENANT = {
   id: 'tenant-1',
@@ -12,16 +14,34 @@ const TENANT = {
 };
 
 const BRANDING = {
-  logoObjectKey: 'tenant-branding/tenant-1/logo/v1/logo.png',
+  appName: 'Acme Portal',
+  appLogoObjectKey: 'tenant-assets/tenants/tenant-1/branding/app-logo/logo.png',
+  appLogoMimeType: 'image/png',
+  appLogoFileName: 'logo.png',
+  appLogoSizeBytes: 128,
+  sidebarLogoObjectKey: null,
+  sidebarLogoMimeType: null,
+  sidebarLogoFileName: null,
+  sidebarLogoSizeBytes: null,
+  loginLogoObjectKey: null,
+  loginLogoMimeType: null,
+  loginLogoFileName: null,
+  loginLogoSizeBytes: null,
+  logoObjectKey: null,
   logoDisplayUrl: 'https://cdn.example.com/legacy-logo.png',
-  faviconObjectKey: null,
+  faviconObjectKey:
+    'tenant-assets/tenants/tenant-1/branding/favicon/favicon.ico',
   faviconDisplayUrl: 'https://cdn.example.com/favicon.ico',
+  faviconMimeType: 'image/x-icon',
+  faviconFileName: 'favicon.ico',
+  faviconSizeBytes: 64,
   primaryColor: '#111111',
   secondaryColor: '#222222',
   accentColor: '#333333',
   sidebarColor: '#444444',
   emailHeaderColor: '#555555',
   documentHeaderColor: '#666666',
+  themeMode: 'DARK',
   updatedByUserId: 'user-1',
   createdAt: new Date('2026-06-01T00:00:00.000Z'),
   updatedAt: new Date('2026-06-02T00:00:00.000Z'),
@@ -38,16 +58,47 @@ function makePrisma() {
   };
 }
 
-function makeService(prisma = makePrisma()) {
+function makeStorage() {
+  return {
+    storeBrandingAsset: jest.fn().mockResolvedValue({
+      objectKey: 'tenant-assets/tenants/tenant-1/branding/app-logo/logo.png',
+      mimeType: 'image/png',
+      fileName: 'logo.png',
+      sizeBytes: 128,
+    }),
+    createSignedReadUrl: jest.fn().mockResolvedValue({
+      readUrl: 'https://signed.example.com/asset',
+      expiresAt: '2026-07-09T12:00:00.000Z',
+    }),
+  };
+}
+
+function makeAudit() {
+  return {
+    log: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+function makeService(
+  prisma = makePrisma(),
+  storage = makeStorage(),
+  audit = makeAudit(),
+) {
   return {
     prisma,
-    service: new TenantBrandingService(prisma as unknown as PrismaService),
+    storage,
+    audit,
+    service: new TenantBrandingService(
+      prisma as unknown as PrismaService,
+      storage as unknown as TenantAssetStorageService,
+      audit as unknown as AuditService,
+    ),
   };
 }
 
 describe('TenantBrandingService', () => {
   it('returns WorkPhelo defaults when no branding exists', async () => {
-    const { prisma, service } = makeService();
+    const { prisma, service, storage } = makeService();
     prisma.tenant.findUnique.mockResolvedValue({ ...TENANT, branding: null });
 
     const result = await service.findByTenantId('tenant-1');
@@ -56,6 +107,7 @@ describe('TenantBrandingService', () => {
       where: { id: 'tenant-1' },
       include: { branding: true },
     });
+    expect(storage.createSignedReadUrl).not.toHaveBeenCalled();
     expect(result).toMatchObject({
       tenantId: 'tenant-1',
       tenantSlug: 'acme-ghana',
@@ -63,18 +115,24 @@ describe('TenantBrandingService', () => {
       logoObjectKey: null,
       logoDisplayUrl: null,
       ...WORKPHELO_BRANDING_DEFAULTS,
+      appName: 'Acme Ghana Ltd',
       defaultsApplied: true,
     });
   });
 
-  it('updates branding and clears display URLs when object keys are present', async () => {
-    const { prisma, service } = makeService();
+  it('updates branding metadata and clears display URLs when object keys are present', async () => {
+    const { prisma, service, audit } = makeService();
     prisma.tenant.findUnique
       .mockResolvedValueOnce({ ...TENANT, branding: null })
       .mockResolvedValueOnce({
         ...TENANT,
         branding: {
           ...BRANDING,
+          appLogoObjectKey: null,
+          appLogoMimeType: null,
+          appLogoFileName: null,
+          appLogoSizeBytes: null,
+          logoObjectKey: 'tenant-branding/tenant-1/logo/v1/logo.png',
           logoDisplayUrl: null,
           faviconDisplayUrl: null,
         },
@@ -83,10 +141,12 @@ describe('TenantBrandingService', () => {
     const result = await service.update(
       'tenant-1',
       {
-        logoObjectKey: BRANDING.logoObjectKey,
+        appName: 'Acme Portal',
+        logoObjectKey: 'tenant-branding/tenant-1/logo/v1/logo.png',
         faviconObjectKey: 'tenant-branding/tenant-1/favicon/v1/favicon.ico',
         logoDisplayUrl: 'https://cdn.example.com/should-not-be-source.png',
         primaryColor: '#123456',
+        themeMode: 'SYSTEM',
       },
       'user-1',
     );
@@ -95,30 +155,124 @@ describe('TenantBrandingService', () => {
       where: { tenantId: 'tenant-1' },
       create: expect.objectContaining({
         tenantId: 'tenant-1',
-        logoObjectKey: BRANDING.logoObjectKey,
+        appName: 'Acme Portal',
+        logoObjectKey: 'tenant-branding/tenant-1/logo/v1/logo.png',
         logoDisplayUrl: null,
         faviconObjectKey: 'tenant-branding/tenant-1/favicon/v1/favicon.ico',
         faviconDisplayUrl: null,
         primaryColor: '#123456',
+        themeMode: 'SYSTEM',
         updatedByUserId: 'user-1',
       }),
       update: expect.objectContaining({
-        logoObjectKey: BRANDING.logoObjectKey,
+        appName: 'Acme Portal',
+        logoObjectKey: 'tenant-branding/tenant-1/logo/v1/logo.png',
         logoDisplayUrl: null,
         faviconObjectKey: 'tenant-branding/tenant-1/favicon/v1/favicon.ico',
         faviconDisplayUrl: null,
         primaryColor: '#123456',
+        themeMode: 'SYSTEM',
         updatedByUserId: 'user-1',
       }),
     });
+    expect(audit.log).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      action: 'CREATE',
+      resource: 'tenant-branding',
+      resourceId: 'tenant-1',
+      changes: {
+        after: {
+          fields: expect.arrayContaining([
+            'appName',
+            'logoObjectKey',
+            'faviconObjectKey',
+            'primaryColor',
+            'themeMode',
+          ]) as unknown as string[],
+        },
+      },
+    });
+    expect(result.logoObjectKey).toBeNull();
     expect(result.logoDisplayUrl).toBeNull();
   });
 
-  it('rejects invalid hex colors', async () => {
-    const { service } = makeService();
+  it('uploads app branding assets into the branding namespace', async () => {
+    const { prisma, service, storage, audit } = makeService();
+    prisma.tenant.findUnique
+      .mockResolvedValueOnce({ ...TENANT, branding: null })
+      .mockResolvedValueOnce({ ...TENANT, branding: BRANDING });
+
+    const result = await service.uploadAsset('tenant-1', 'user-1', 'app-logo', {
+      buffer: Buffer.from('logo'),
+      mimetype: 'image/png',
+      originalname: 'logo.png',
+    } as Express.Multer.File);
+
+    expect(storage.storeBrandingAsset).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      assetType: 'app-logo',
+      body: Buffer.from('logo'),
+      contentType: 'image/png',
+      originalFileName: 'logo.png',
+    });
+    expect(prisma.tenantBranding.upsert).toHaveBeenCalledWith({
+      where: { tenantId: 'tenant-1' },
+      create: expect.objectContaining({
+        tenantId: 'tenant-1',
+        appLogoObjectKey:
+          'tenant-assets/tenants/tenant-1/branding/app-logo/logo.png',
+        appLogoMimeType: 'image/png',
+        appLogoFileName: 'logo.png',
+        appLogoSizeBytes: 128,
+        logoObjectKey: null,
+        logoDisplayUrl: null,
+        updatedByUserId: 'user-1',
+      }),
+      update: expect.objectContaining({
+        appLogoObjectKey:
+          'tenant-assets/tenants/tenant-1/branding/app-logo/logo.png',
+        appLogoMimeType: 'image/png',
+        appLogoFileName: 'logo.png',
+        appLogoSizeBytes: 128,
+        logoObjectKey: null,
+        logoDisplayUrl: null,
+        updatedByUserId: 'user-1',
+      }),
+    });
+    expect(audit.log).toHaveBeenCalledWith({
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      action: 'CREATE',
+      resource: 'tenant-branding',
+      resourceId: 'tenant-1',
+      changes: {
+        after: {
+          assetType: 'app-logo',
+          mimeType: 'image/png',
+          fileName: 'logo.png',
+          sizeBytes: 128,
+        },
+      },
+    });
+    expect(result.appLogo.objectKey).toBeNull();
+    expect(result.appLogo.readUrl).toBe('https://signed.example.com/asset');
+  });
+
+  it('rejects invalid hex colors and unsupported assets', async () => {
+    const { prisma, service } = makeService();
 
     await expect(
       service.update('tenant-1', { primaryColor: 'blue' }, 'user-1'),
+    ).rejects.toThrow(BadRequestException);
+
+    prisma.tenant.findUnique.mockResolvedValue({ ...TENANT, branding: null });
+    await expect(
+      service.uploadAsset('tenant-1', 'user-1', 'app-logo', {
+        buffer: Buffer.from('svg'),
+        mimetype: 'image/svg+xml',
+        originalname: 'logo.svg',
+      } as Express.Multer.File),
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -152,8 +306,14 @@ describe('TenantBrandingService', () => {
     expect(result).toEqual({
       tenantSlug: 'acme-ghana',
       tenantName: 'Acme Ghana Ltd',
-      logoDisplayUrl: null,
-      faviconDisplayUrl: 'https://cdn.example.com/favicon.ico',
+      appName: 'Acme Portal',
+      themeMode: 'DARK',
+      appLogoUrl: 'https://signed.example.com/asset',
+      sidebarLogoUrl: null,
+      loginLogoUrl: null,
+      faviconUrl: 'https://signed.example.com/asset',
+      logoDisplayUrl: 'https://signed.example.com/asset',
+      faviconDisplayUrl: 'https://signed.example.com/asset',
       primaryColor: '#111111',
       secondaryColor: '#222222',
       accentColor: '#333333',

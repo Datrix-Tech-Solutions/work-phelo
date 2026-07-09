@@ -75,6 +75,47 @@ describe('TenantAssetStorageService', () => {
     expect(result).not.toHaveProperty('url');
   });
 
+  it('uploads branding assets to the branding namespace', async () => {
+    process.env.AUTH_TENANT_ASSET_STORAGE_PROVIDER = 's3';
+    process.env.AUTH_TENANT_ASSET_S3_BUCKET = 'private-workphelo-assets';
+    process.env.AUTH_TENANT_ASSET_S3_REGION = 'eu-west-1';
+    process.env.AUTH_TENANT_ASSET_S3_PREFIX = 'tenant-assets';
+
+    const service = new TenantAssetStorageService();
+    const send = jest
+      .fn<Promise<Record<string, never>>, [PutObjectCommand]>()
+      .mockResolvedValue({});
+    (
+      service as unknown as {
+        client: { send: typeof send };
+      }
+    ).client = { send };
+
+    const result = await service.storeBrandingAsset({
+      tenantId: 'tenant-1',
+      assetType: 'app-logo',
+      body: Buffer.from('logo'),
+      contentType: 'image/png',
+      originalFileName: 'company logo.png',
+    });
+
+    const command = send.mock.calls[0][0];
+    expect(command.input).toMatchObject({
+      Bucket: 'private-workphelo-assets',
+      Key: expect.stringMatching(
+        /^tenant-assets\/tenants\/tenant-1\/branding\/app-logo\/.+-company-logo\.png$/,
+      ) as string,
+      ContentType: 'image/png',
+      Metadata: {
+        tenantId: 'tenant-1',
+        assetType: 'app-logo',
+      },
+    });
+    expect(result.objectKey).toContain(
+      'tenant-assets/tenants/tenant-1/branding/app-logo/',
+    );
+  });
+
   it('fails clearly when private storage is not configured', async () => {
     delete process.env.AUTH_TENANT_ASSET_S3_BUCKET;
     delete process.env.AUTH_TENANT_ASSET_S3_REGION;

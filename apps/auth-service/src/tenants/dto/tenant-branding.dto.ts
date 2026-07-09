@@ -1,10 +1,41 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
 const HEX_COLOR_MESSAGE = 'Color must be a hex value such as #0D2244 or #fff';
 
+export const TENANT_BRANDING_THEME_MODES = ['LIGHT', 'DARK', 'SYSTEM'] as const;
+export type TenantBrandingThemeMode =
+  (typeof TENANT_BRANDING_THEME_MODES)[number];
+
+export const TENANT_BRANDING_ASSET_TYPES = [
+  'app-logo',
+  'sidebar-logo',
+  'login-logo',
+  'favicon',
+] as const;
+export type TenantBrandingUploadAssetType =
+  (typeof TENANT_BRANDING_ASSET_TYPES)[number];
+
 export class UpdateTenantBrandingDto {
+  @ApiPropertyOptional({
+    description: 'Tenant-facing application name shown in the WorkPhelo UI.',
+    example: 'Acme Portal',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  appName?: string | null;
+
   @ApiPropertyOptional({
     description:
       'Private object-storage key for the tenant logo. This is the future S3 source of truth.',
@@ -77,6 +108,43 @@ export class UpdateTenantBrandingDto {
   @IsOptional()
   @Matches(HEX_COLOR_PATTERN, { message: HEX_COLOR_MESSAGE })
   documentHeaderColor?: string | null;
+
+  @ApiPropertyOptional({
+    enum: TENANT_BRANDING_THEME_MODES,
+    example: 'LIGHT',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsIn(TENANT_BRANDING_THEME_MODES)
+  themeMode?: TenantBrandingThemeMode | null;
+}
+
+export class TenantBrandingAssetResponseDto {
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Always null in API responses. Private object keys are stored server-side only.',
+  })
+  objectKey!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  mimeType!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  fileName!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  sizeBytes!: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Short-lived signed read URL for authenticated admin responses or safe public bootstrap responses.',
+  })
+  readUrl!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, format: 'date-time' })
+  readUrlExpiresAt!: string | null;
 }
 
 export class TenantBrandingResponseDto {
@@ -89,13 +157,39 @@ export class TenantBrandingResponseDto {
   @ApiProperty({ example: 'Acme Ghana Ltd' })
   tenantName!: string;
 
-  @ApiPropertyOptional({ nullable: true })
+  @ApiProperty({ example: 'Acme Portal' })
+  appName!: string;
+
+  @ApiProperty({ enum: TENANT_BRANDING_THEME_MODES, example: 'LIGHT' })
+  themeMode!: TenantBrandingThemeMode;
+
+  @ApiProperty({ type: TenantBrandingAssetResponseDto })
+  appLogo!: TenantBrandingAssetResponseDto;
+
+  @ApiProperty({ type: TenantBrandingAssetResponseDto })
+  sidebarLogo!: TenantBrandingAssetResponseDto;
+
+  @ApiProperty({ type: TenantBrandingAssetResponseDto })
+  loginLogo!: TenantBrandingAssetResponseDto;
+
+  @ApiProperty({ type: TenantBrandingAssetResponseDto })
+  favicon!: TenantBrandingAssetResponseDto;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Legacy compatibility field. Private object keys are not exposed in responses.',
+  })
   logoObjectKey!: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   logoDisplayUrl!: string | null;
 
-  @ApiPropertyOptional({ nullable: true })
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Legacy compatibility field. Private object keys are not exposed in responses.',
+  })
   faviconObjectKey!: string | null;
 
   @ApiPropertyOptional({ nullable: true })
@@ -142,6 +236,24 @@ export class PublicTenantBrandingResponseDto {
 
   @ApiProperty({ example: 'Acme Ghana Ltd' })
   tenantName!: string;
+
+  @ApiProperty({ example: 'Acme Portal' })
+  appName!: string;
+
+  @ApiProperty({ enum: TENANT_BRANDING_THEME_MODES, example: 'LIGHT' })
+  themeMode!: TenantBrandingThemeMode;
+
+  @ApiPropertyOptional({ nullable: true })
+  appLogoUrl!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  sidebarLogoUrl!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  loginLogoUrl!: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  faviconUrl!: string | null;
 
   @ApiPropertyOptional({ nullable: true })
   logoDisplayUrl!: string | null;
