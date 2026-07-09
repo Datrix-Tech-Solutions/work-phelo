@@ -37,7 +37,7 @@ export function SortableListRow({ id, index, label, sublabel, onEdit, onDelete }
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        'flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 select-none',
+        'flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 select-none',
         isDragging ? 'opacity-50 shadow-lg z-50' : 'shadow-sm',
       )}
     >
@@ -73,7 +73,7 @@ export function SortableListRow({ id, index, label, sublabel, onEdit, onDelete }
         <button
           type="button"
           onClick={onEdit}
-          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-(--text-hover-strong,var(--color-gray-900)) transition-colors"
         >
           <Pencil className="w-4 h-4" />
           Edit

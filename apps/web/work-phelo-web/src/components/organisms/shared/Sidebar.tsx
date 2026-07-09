@@ -96,7 +96,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
             baseRow,
             isCurrent
               ? 'bg-(--module-btn-bg,var(--color-brand)) text-white font-semibold'
-              : 'text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint)) hover:text-gray-900',
+              : 'text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint)) hover:text-(--text-hover-strong,var(--color-gray-900))',
           )}
         >
           {inner}
@@ -108,12 +108,12 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
         <div
           className={cn(
             'pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50',
-            'px-2.5 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap',
+            'px-2.5 py-1.5 bg-(--chip-dark,#111827) text-white text-xs rounded-lg whitespace-nowrap',
             'opacity-0 group-hover/tip:opacity-100 transition-opacity duration-150',
           )}
         >
           {item.label}
-          {isDeactivated && <span className="ml-1.5 text-gray-400 text-[10px]">(inactive)</span>}
+          {isDeactivated && <span className="ml-1.5 text-[#9ca3af] text-[10px]">(inactive)</span>}
         </div>
       )}
     </div>
@@ -144,7 +144,7 @@ function SidebarChildItem({ item }: { item: NavItem }) {
         baseRow,
         isCurrent
           ? 'bg-(--module-btn-bg,var(--color-brand)) text-white font-semibold'
-          : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900',
+          : 'text-gray-500 hover:bg-(--surface-hover-subtle,var(--color-gray-50)) hover:text-(--text-hover-strong,var(--color-gray-900))',
       )}
     >
       <span className="truncate">{item.label}</span>
@@ -193,7 +193,7 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
             ? 'cursor-not-allowed text-gray-300'
             : isAnyChildActive
               ? 'bg-(--module-btn-bg,var(--color-brand)) text-white font-semibold'
-              : 'text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint)) hover:text-gray-900',
+              : 'text-gray-600 hover:bg-(--module-tint,var(--color-brand-tint)) hover:text-(--text-hover-strong,var(--color-gray-900))',
         )}
       >
         <span
@@ -288,7 +288,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
       onMouseEnter={() => collapsed && setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
       className={cn(
-        'bg-white/60 backdrop-blur-md border-r border-(--module-border,var(--color-gray-200)) shadow-lg flex flex-col shrink-0 overflow-hidden',
+        'bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md border-r border-(--module-border,var(--color-gray-200)) shadow-lg flex flex-col shrink-0 overflow-hidden',
         // Mobile: absolute drawer that slides over content (below the top nav)
         'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
         // Desktop: static in flex flow with width animation (spring curve)

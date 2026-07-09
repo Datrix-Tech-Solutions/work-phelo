@@ -136,34 +136,34 @@ export function RiskClassPieChart({ period }: RiskClassPieChartProps) {
         {/* Tooltip */}
         {activeSlice && (
           <div className="absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full z-10 pointer-events-none">
-            <div className="bg-gray-900 text-white rounded-xl shadow-xl px-4 py-3 text-xs whitespace-nowrap flex flex-col gap-1.5">
+            <div className="bg-(--chip-dark,#111827) text-white rounded-xl shadow-xl px-4 py-3 text-xs whitespace-nowrap flex flex-col gap-1.5">
               <div className="flex items-center gap-2 font-semibold text-sm">
                 <span
                   className="w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ background: activeSlice.color }}
                 />
                 {activeSlice.label}
-                <span className="ml-auto pl-4 text-gray-300">
+                <span className="ml-auto pl-4 text-[#d1d5db]">
                   {((activeSlice.value / total) * 100).toFixed(1)}%
                 </span>
               </div>
-              <div className="border-t border-gray-700 pt-1.5 flex flex-col gap-1">
+              <div className="border-t border-[#374151] pt-1.5 flex flex-col gap-1">
                 <div className="flex justify-between gap-6">
-                  <span className="text-gray-400">Offers</span>
+                  <span className="text-[#9ca3af]">Offers</span>
                   <span className="font-medium">{activeSlice.value}</span>
                 </div>
                 <div className="flex justify-between gap-6">
-                  <span className="text-gray-400">Premium</span>
+                  <span className="text-[#9ca3af]">Premium</span>
                   <span className="font-medium">{fmt(activeSlice.totalPremium)}</span>
                 </div>
                 <div className="flex justify-between gap-6">
-                  <span className="text-gray-400">Sum Insured</span>
+                  <span className="text-[#9ca3af]">Sum Insured</span>
                   <span className="font-medium">{fmt(activeSlice.totalSumInsured)}</span>
                 </div>
               </div>
             </div>
             {/* Arrow pointing down */}
-            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-gray-900 rotate-45 rounded-sm" />
+            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-(--chip-dark,#111827) rotate-45 rounded-sm" />
           </div>
         )}
       </div>

@@ -11,7 +11,7 @@ interface Props {
 
 export function CardListRow({ label, sublabel, onEdit, onDelete }: Props) {
   return (
-    <div className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
+    <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 shadow-sm">
       {/* Text */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-900 truncate">{label}</p>
@@ -23,7 +23,7 @@ export function CardListRow({ label, sublabel, onEdit, onDelete }: Props) {
         <button
           type="button"
           onClick={onEdit}
-          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 transition-colors"
+          className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-(--text-hover-strong,var(--color-gray-900)) transition-colors"
         >
           <Pencil className="w-4 h-4" />
           Edit

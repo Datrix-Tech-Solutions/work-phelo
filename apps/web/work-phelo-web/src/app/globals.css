@@ -18,7 +18,7 @@
   --shift-night: #0d1b3e;   /* night-shift blocks — use bg-shift-night / border-shift-night */
 
   /* Module identity colors — used for icon backgrounds */
-  --module-hr:         #0D2244;  /* navy  — HR */
+  --module-hr:         #032480;  /* navy  — HR */
   --module-marketing:  #0466f8;  /* green — Marketing */
   --module-accounting: #064707;  /* red — Accounting  064707*/
   --module-operations: #4906d9;  /* purple — Operations */
@@ -32,6 +32,62 @@
   --module-tint:         var(--brand-tint);
   --module-accent:       var(--brand-accent);
   --module-gradient-end: var(--brand-gradient-end);
+
+  /* Neutral hover/focus tokens — dark-mode override lives in [data-theme="dark"] below.
+     Light-mode values match the plain grays this replaced, so light mode is unchanged. */
+  --surface-hover-subtle: var(--color-gray-50);
+  --surface-hover:        var(--color-gray-100);
+  --text-hover-strong:    var(--color-gray-900);
+  --text-hover-muted:     var(--color-gray-600);
+  --focus-ring:           var(--color-gray-400);
+
+  /* "Strong" glass surfaces (Sidebar, TopNav, ContactCard, DataCard, ModuleButton) —
+     kept more opaque than cardClass's own glass for legibility. Dark mode needs a much
+     lower opacity here, or a 60%-white wash over a dark backdrop just reads as flat gray. */
+  --glass-strong: rgba(255, 255, 255, 0.6);
+
+  /* cardClass()'s own glass — used by nearly every card/toolbar/table in the app.
+     Same problem as --glass-strong above, just needed its own token/value. */
+  --glass-subtle: rgba(255, 255, 255, 0.3);
+
+  /* Deliberately-dark chip color (tooltips, selected-score buttons) — intentionally NOT
+     overridden below, so these stay dark regardless of theme instead of inverting along
+     with --color-gray-900 and ending up as a pale chip with unreadable white text. */
+  --chip-dark: #111827;
+}
+
+/* Dark mode — toggled via data-theme="dark" on <html> (see src/store/theme.store.ts) */
+:root[data-theme='dark'] {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  --app-shell: #14161a;
+
+  --surface-hover-subtle: rgba(255, 255, 255, 0.05);
+  --surface-hover:        rgba(255, 255, 255, 0.08);
+  --text-hover-strong:    #f5f5f5;
+  --text-hover-muted:     #cbd5e1;
+  --focus-ring:           rgba(255, 255, 255, 0.35);
+  --glass-strong:         rgba(255, 255, 255, 0.08);
+  --glass-subtle:         rgba(255, 255, 255, 0.05);
+
+  /* Invert the neutral gray scale itself — every text-gray, bg-gray, and border-gray
+     utility across the app reads this variable, so this is what actually makes body
+     text, muted labels, and plain gray borders adapt without touching components.
+     Low steps (50-300) become dark surfaces; high steps (700-900) become light text —
+     the same relative contrast as light mode, just flipped. --chip-dark above opts a
+     few deliberately-dark chips (tooltips, selected states) out of this. */
+  --color-gray-50:  #18191b;
+  --color-gray-100: #202124;
+  --color-gray-200: #2c2d31;
+  --color-gray-300: #3f4046;
+  --color-gray-400: #6b6d76;
+  --color-gray-500: #8b8d96;
+  --color-gray-600: #a8aab3;
+  --color-gray-700: #c3c5cc;
+  --color-gray-800: #e2e3e7;
+  --color-gray-900: #f5f5f6;
+
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -99,6 +155,37 @@
   --module-border:       color-mix(in oklch, var(--module-marketing) 28%, white);
 }
 
+/* Dark-mode module overrides — only the tokens previously mixed toward *white*
+   (table-header-bg, tint, border) need a dark-appropriate replacement.
+   --module-accent is deliberately left alone: the app-blob backgrounds read it
+   too, and blobs must look identical in both themes. --module-btn-bg-hover and
+   --module-gradient-end already mix toward black, so they stay as-is.
+
+   table-header-bg doubles as the row-hover highlight in DataTable (same token,
+   see the hover overlay in DataTable.tsx), so it needs to read as a *lighter*
+   raised strip against the card — mixing toward black made it read as a punched-
+   out void instead, which is what showed up as a jarring near-black header/hover. */
+:root[data-theme='dark'] .layout-hr {
+  --table-header-bg: color-mix(in oklch, var(--module-hr) 22%, #3f4046);
+  --module-tint:      color-mix(in oklch, var(--module-hr) 24%, black);
+  --module-border:    color-mix(in oklch, var(--module-hr) 32%, black);
+}
+:root[data-theme='dark'] .layout-operations {
+  --table-header-bg: color-mix(in oklch, var(--module-operations) 22%, #3f4046);
+  --module-tint:      color-mix(in oklch, var(--module-operations) 24%, black);
+  --module-border:    color-mix(in oklch, var(--module-operations) 32%, black);
+}
+:root[data-theme='dark'] .layout-accounting {
+  --table-header-bg: color-mix(in oklch, var(--module-accounting) 22%, #3f4046);
+  --module-tint:      color-mix(in oklch, var(--module-accounting) 24%, black);
+  --module-border:    color-mix(in oklch, var(--module-accounting) 32%, black);
+}
+:root[data-theme='dark'] .layout-marketing {
+  --table-header-bg: color-mix(in oklch, var(--module-marketing) 22%, #3f4046);
+  --module-tint:      color-mix(in oklch, var(--module-marketing) 24%, black);
+  --module-border:    color-mix(in oklch, var(--module-marketing) 32%, black);
+}
+
 /* Animated blobs behind <AppBackground> content — colors pick up the active .layout-* module vars,
    so they re-tint per module. Kept subtle/slow since pages are read for long stretches. */
 .app-blob-layer {
@@ -113,7 +200,7 @@
   position: absolute;
   border-radius: 9999px;
   filter: blur(90px);
-  opacity: 0.35;
+  opacity: 0.25;
   will-change: transform;
 }
 
@@ -123,7 +210,7 @@
   width: 32rem;
   height: 32rem;
   background: var(--module-accent, var(--brand-accent));
-  animation: blob-drift-a 26s ease-in-out infinite;
+  animation: blob-drift-a 9s ease-in-out infinite;
 }
 
 .app-blob-2 {
@@ -131,8 +218,8 @@
   right: -18%;
   width: 25rem;
   height: 50rem;
-  background: var(--module-gradient-end, var(--brand-gradient-end));
-  animation: blob-drift-b 32s ease-in-out infinite;
+  background: var(--module-accent, var(--brand-accent));
+  animation: blob-drift-b 10s ease-in-out infinite;
 }
 
 .app-blob-3 {
@@ -140,8 +227,8 @@
   left: 60%;
   width: 24rem;
   height: 24rem;
-  background: var(--brand-accent);
-  animation: blob-drift-c 38s ease-in-out infinite;
+  background: var(--module-accent, var(--brand-accent));
+  animation: blob-drift-c 13s ease-in-out infinite;
 }
 
 @keyframes blob-drift-a {
@@ -177,13 +264,6 @@
 @media (prefers-reduced-motion: reduce) {
   .app-blob {
     animation: none;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
   }
 }
 
@@ -300,6 +380,49 @@ body {
   }
   50% {
     transform: translate(14%, -10%) scale(0.92);
+  }
+}
+
+/* Loading mark — sonar rings + breathing icon behind a centered logo/icon */
+.loading-mark-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  opacity: 0;
+}
+
+@keyframes loading-mark-pulse {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@keyframes loading-mark-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .loading-mark-ring-1 {
+    animation: loading-mark-pulse 1.8s ease-out infinite;
+  }
+  .loading-mark-ring-2 {
+    animation: loading-mark-pulse 1.8s ease-out infinite;
+    animation-delay: 0.9s;
+  }
+  .loading-mark-icon-wrap {
+    animation: loading-mark-breathe 1.8s ease-in-out infinite;
   }
 }
 

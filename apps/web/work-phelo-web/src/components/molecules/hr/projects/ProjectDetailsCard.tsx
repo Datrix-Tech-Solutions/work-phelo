@@ -1,4 +1,5 @@
 import { Project } from '@/types/hr';
+import { cardClass } from '@/lib/utils';
 
 function formatDate(iso?: string) {
   if (!iso) return '—';
@@ -34,7 +35,7 @@ interface Props {
 
 export function ProjectDetailsCard({ project }: Props) {
   return (
-    <div className="bg-white border border-gray-200 rounded-card p-6 grid grid-cols-4 gap-6">
+    <div className={cardClass('p-6 grid grid-cols-4 gap-6')}>
       <DetailField label="Project Owner" value={project.managerName ?? '—'} />
       <DetailField label="Start Date" value={formatDate(project.startDate)} />
       <DetailField label="End Date" value={formatDate(project.endDate)} />

@@ -158,8 +158,12 @@ export function SearchSelect({
       {/* Combobox input */}
       <div
         className={cn(
-          'flex items-center border rounded-input bg-white px-4 transition-colors',
-          open ? 'border-brand ring-1 ring-brand/20' : error ? 'border-red-500' : 'border-gray-300',
+          'flex items-center border rounded-input px-4 transition-colors',
+          open
+            ? 'bg-white border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
+            : error
+              ? 'bg-white/90 backdrop-blur-sm border-red-500'
+              : 'bg-white/90 backdrop-blur-sm border-(--module-border,var(--color-gray-300))',
         )}
       >
         <input

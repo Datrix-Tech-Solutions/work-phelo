@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 
 const TAB_ACTIVE =
   'relative text-(--module-btn-bg,var(--color-brand)) font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-(--module-btn-bg,var(--color-brand)) after:rounded-t-full';
-const TAB_IDLE = 'text-gray-500 hover:text-gray-800';
+const TAB_IDLE = 'text-gray-500 hover:text-(--text-hover-strong,var(--color-gray-900))';
 
 export interface TabItem {
   key: string;

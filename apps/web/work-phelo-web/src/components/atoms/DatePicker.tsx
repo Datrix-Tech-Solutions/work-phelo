@@ -143,8 +143,12 @@ export function DatePicker({
           setView('days');
         }}
         className={cn(
-          'w-full flex items-center justify-between px-4 py-3 border rounded-input bg-white text-sm transition-colors',
-          error ? 'border-red-500' : 'border-gray-300',
+          'w-full flex items-center justify-between px-4 py-3 border rounded-input text-sm transition-colors',
+          open
+            ? 'bg-white border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
+            : error
+              ? 'bg-white/90 backdrop-blur-sm border-red-500'
+              : 'bg-white/90 backdrop-blur-sm border-(--module-border,var(--color-gray-300))',
           displayValue ? 'text-gray-900' : 'text-gray-400',
         )}
       >

@@ -20,9 +20,6 @@ export function AppBackground<T extends ElementType = 'div'>({
         <span className="app-blob app-blob-1" />
         <span className="app-blob app-blob-2" />
         <span className="app-blob app-blob-3" />
-        {/* <span className="app-blob app-blob-3" />
-        <span className="app-blob app-blob-3" />
-        <span className="app-blob app-blob-3" /> */}
       </div>
       {children}
     </Component>

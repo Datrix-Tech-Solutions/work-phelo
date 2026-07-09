@@ -42,7 +42,7 @@ export function SchedulingGridCell({
           className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/cell:opacity-100 transition-opacity"
           aria-label="Add shift"
         >
-          <span className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center shadow-md">
+          <span className="w-8 h-8 rounded-full bg-(--chip-dark,#111827) flex items-center justify-center shadow-md">
             <Plus className="w-4 h-4 text-white" />
           </span>
         </button>

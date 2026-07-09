@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, cardClass } from '@/lib/utils';
 import { Employee } from '@/types/hr';
 import { ShiftSchedule } from '@/types/scheduling';
 import { WEEKDAYS, addDays, toISODate } from '@/components/molecules/hr/scheduling/WeekSelector';
@@ -43,10 +43,7 @@ export function SchedulingGrid({
   const today = toISODate(new Date());
 
   return (
-    <div
-      className="border border-gray-200 rounded-card bg-white shadow-sm overflow-hidden"
-      style={{ minWidth: 1000 }}
-    >
+    <div className={cardClass('overflow-hidden')} style={{ minWidth: 1000 }}>
       {/* Header row */}
       <div
         className="grid bg-gray-50 border-b border-gray-200"
@@ -94,7 +91,7 @@ export function SchedulingGrid({
               className={cn('grid border-t border-gray-100', isOnLeave && 'opacity-60')}
               style={{ gridTemplateColumns: '180px repeat(7, 1fr)' }}
             >
-              <div className="px-5 py-4 flex items-center gap-2 sticky left-0 bg-white z-10 border-r border-gray-100">
+              <div className="px-5 py-4 flex items-center gap-2 sticky left-0 bg-gray-50 z-10 border-r border-gray-100">
                 <span
                   className={cn(
                     'text-sm font-medium leading-snug',

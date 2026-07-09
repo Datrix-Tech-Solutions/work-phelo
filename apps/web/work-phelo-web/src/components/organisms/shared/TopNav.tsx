@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import Link from 'next/link';
 import { Bell, Home, LayoutGrid, LogOutIcon, Menu, Settings, UserIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
@@ -13,20 +15,46 @@ import { useLogout } from '@/hooks/useAuth';
 import { useRouter, usePathname } from 'next/navigation';
 
 export interface NavTab {
+  key: string;
   label: string;
-  value: string;
+  href: string;
 }
 
 interface TopNavProps {
   showMenuButton?: boolean;
   onMenuClick?: () => void;
   tabs?: NavTab[];
-  activeTab?: string;
-  onTabChange?: (tab: string) => void;
   notificationCount?: number;
   userInitials: string;
   userColor?: string;
   logoVariant?: 'text' | 'image';
+}
+
+/* ── Nav tabs — routed links rendered flush with the header's bottom edge ── */
+function NavTabs({ tabs }: { tabs: NavTab[] }) {
+  const pathname = usePathname();
+
+  return (
+    <div className="self-stretch flex items-end gap-1">
+      {tabs.map((tab) => {
+        const isActive = pathname === tab.href || pathname.startsWith(tab.href + '/');
+        return (
+          <Link
+            key={tab.key}
+            href={tab.href}
+            className={cn(
+              'relative px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap',
+              isActive
+                ? 'text-(--module-btn-bg,var(--color-brand)) font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-(--module-btn-bg,var(--color-brand)) after:rounded-t-full'
+                : 'text-gray-500 hover:text-(--text-hover-strong,var(--color-gray-900))',
+            )}
+          >
+            {tab.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
 }
 
 /* ── Profile dropdown ── */
@@ -46,6 +74,24 @@ function ProfileDropdown({
   isSuperAdmin?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ top: 0, right: 0 });
+  const anchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const updatePos = () => {
+      if (!anchorRef.current) return;
+      const rect = anchorRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    };
+    updatePos();
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [open]);
 
   const items = [
     ...(!isSuperAdmin
@@ -82,7 +128,7 @@ function ProfileDropdown({
   ];
 
   return (
-    <div className="relative">
+    <div className="relative" ref={anchorRef}>
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
@@ -93,26 +139,34 @@ function ProfileDropdown({
         {userInitials}
       </button>
 
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-11 z-20 min-w-40 bg-white border border-gray-100 rounded-input shadow-lg py-1.5 overflow-hidden">
-            {items.map((item) => (
-              <button
-                key={item.label}
-                onClick={item.onClick}
-                className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                  item.danger ? 'text-red-500 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-50',
-                )}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      {open &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+            <div
+              style={{ position: 'fixed', top: pos.top, right: pos.right, minWidth: 160 }}
+              className="z-20 bg-white border border-gray-100 rounded-input shadow-lg py-1.5 overflow-hidden"
+            >
+              {items.map((item) => (
+                <button
+                  key={item.label}
+                  onClick={item.onClick}
+                  className={cn(
+                    'w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+                    item.danger
+                      ? 'text-red-500 hover:bg-red-50'
+                      : 'text-gray-700 hover:bg-(--surface-hover-subtle,var(--color-gray-50))',
+                  )}
+                >
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -121,7 +175,7 @@ function ProfileDropdown({
 export function TopNav({
   showMenuButton = false,
   onMenuClick,
-
+  tabs,
   notificationCount,
   userInitials,
   userColor,
@@ -162,7 +216,7 @@ export function TopNav({
 
   return (
     <>
-      <header className="w-full bg-white/60 backdrop-blur-md border-b border-(--module-border,var(--color-gray-200)) shadow-md px-5 h-14 flex items-center gap-4 shrink-0">
+      <header className="relative w-full bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md border-b border-(--module-border,var(--color-gray-200)) shadow-md px-5 h-14 flex items-center gap-4 shrink-0">
         {/* Menu button */}
         {showMenuButton && (
           <button
@@ -176,6 +230,13 @@ export function TopNav({
 
         {/* Logo */}
         <WorkPheloLogo className="text-base shrink-0" variant={logoVariant} />
+
+        {/* Tabs — centered relative to the full header width */}
+        {tabs && tabs.length > 1 && (
+          <div className="absolute left-1/2 -translate-x-1/2 top-0 h-full flex items-end">
+            <NavTabs tabs={tabs} />
+          </div>
+        )}
 
         <div className="flex-1" />
 

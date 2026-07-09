@@ -1,9 +1,11 @@
 'use client';
 
-import Image from 'next/image';
+import { useRef } from 'react';
 import { Pencil } from 'lucide-react';
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { Button } from '@/components/atoms/Button';
+import { useUploadTenantBrandingAsset } from '@/hooks/useTenants';
+import { useToast } from '@/hooks/useToast';
 
 /* ── Types ── */
 
@@ -45,7 +47,8 @@ function CompanyAvatar({ name, logoUrl }: { name: string; logoUrl?: string }) {
   if (logoUrl) {
     return (
       <div className="w-14 h-14 rounded-full overflow-hidden border-2 border-white shadow-sm shrink-0">
-        <Image
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={logoUrl}
           alt={name}
           width={56}
@@ -71,6 +74,7 @@ function CompanyAvatar({ name, logoUrl }: { name: string; logoUrl?: string }) {
 /* ── Main component ── */
 
 export function CompanyInfoCard({
+  id,
   name,
   slug,
   size,
@@ -83,6 +87,22 @@ export function CompanyInfoCard({
   onEditCompany,
   onEditAdmin,
 }: CompanyInfoCardProps) {
+  const toast = useToast();
+  const logoInputRef = useRef<HTMLInputElement>(null);
+  const { mutate: uploadLogo, isPending: isUploadingLogo } = useUploadTenantBrandingAsset(
+    id,
+    'app-logo',
+  );
+
+  const handleLogoFile = (file: File | undefined) => {
+    if (!file) return;
+    uploadLogo(file, {
+      onSuccess: () => toast.success('Logo uploaded'),
+      onError: () => toast.error('Failed to upload logo'),
+    });
+    if (logoInputRef.current) logoInputRef.current.value = '';
+  };
+
   return (
     <div className="border border-gray-200 rounded-card bg-white flex flex-col overflow-hidden">
       {/* ── Top: avatar + name + company info ── */}
@@ -113,12 +133,35 @@ export function CompanyInfoCard({
 
       {/* ── Middle: company logo ── */}
       <div className="px-5 py-4 border-b border-gray-100">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-          Company Logo
-        </p>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+            Company Logo
+          </h3>
+          <Button
+            variant="outline"
+            size="sm"
+            isLoading={isUploadingLogo}
+            loadingText="Uploading..."
+            onClick={() => logoInputRef.current?.click()}
+          >
+            {logoUrl ? 'Change Logo' : 'Upload Logo'}
+          </Button>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="sr-only"
+            onChange={(e) => handleLogoFile(e.target.files?.[0])}
+          />
+        </div>
         {logoUrl ? (
           <div className="relative w-full max-w-55 h-16 rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
-            <Image src={logoUrl} alt={`${name} logo`} fill className="object-contain p-2" />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoUrl}
+              alt={`${name} logo`}
+              className="absolute inset-0 w-full h-full object-contain p-2"
+            />
           </div>
         ) : (
           <div className="w-full max-w-55 h-16 rounded-lg border border-dashed border-gray-200 bg-gray-50 flex items-center justify-center">

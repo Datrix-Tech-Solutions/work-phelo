@@ -3,6 +3,7 @@ import { BadgeCheck } from 'lucide-react';
 import { DetailField } from '../../shared/DetailField';
 import { EmploymentStatusBadge } from './EmploymentStatusBadge';
 import type { Employee } from '@/types/hr';
+import { cardClass } from '@/lib/utils';
 
 interface EmployeeProfileCardProps {
   employee: Employee;
@@ -14,7 +15,7 @@ export function EmployeeProfileCard({ employee }: EmployeeProfileCardProps) {
   const isPendingInvite = employee.userStatus === 'PENDING_VERIFICATION';
 
   return (
-    <div className="w-72 shrink-0 bg-white border border-gray-200 rounded-card p-6 flex flex-col items-start gap-4">
+    <div className={cardClass('w-72 shrink-0 p-6 flex flex-col items-start gap-4')}>
       {/* Avatar */}
       {employee.avatarUrl ? (
         <Image

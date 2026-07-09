@@ -6,6 +6,7 @@ import { useApproveTenant, useDeactivateTenant, useDeleteTenant } from '@/hooks/
 import { StatusBadge } from '@/components/molecules/shared/StatusBadge';
 import { Button } from '@/components/atoms/Button';
 import { Icons } from '@/components/atoms/icons';
+import { cardClass } from '@/lib/utils';
 
 interface CompanyHeaderProps {
   id: string;
@@ -37,7 +38,7 @@ export function CompanyHeader({
   const workspaceUrl = `workphelo.com/${slug}/`;
 
   return (
-    <div className="flex items-center justify-between px-5 py-4 bg-white border border-gray-200 rounded-card">
+    <div className={cardClass('flex items-center justify-between px-5 py-4')}>
       {/* Left — name, status, url */}
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-3">

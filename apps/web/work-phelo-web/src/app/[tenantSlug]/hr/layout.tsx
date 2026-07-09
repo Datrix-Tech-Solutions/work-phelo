@@ -29,8 +29,6 @@ export default function HRLayout({
   const [collapsed, setCollapsed] = useState(
     () => typeof window !== 'undefined' && window.innerWidth < 768,
   );
-  const [activeTab, setActiveTab] = useState('portal');
-
   const canReadEmployees = usePermission(Permission.READ_EMPLOYEES);
   const canReadOwnProfile = usePermission(Permission.READ_OWN_PROFILE);
   const canReadOwnLeave = usePermission(Permission.READ_OWN_LEAVE);
@@ -127,8 +125,6 @@ export default function HRLayout({
         showMenuButton
         onMenuClick={() => setCollapsed((v) => !v)}
         userInitials={initials}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
         notificationCount={0}
         logoVariant="image"
       />

@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MessageCircleQuestion,
   ChevronRight,
@@ -227,7 +228,7 @@ function StepsModal({
     <Modal isOpen onClose={onClose} title={workflow.title} width="max-w-xl">
       <button
         onClick={onBack}
-        className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors mt-1 mb-4"
+        className="flex items-center gap-1 text-xs text-gray-400 hover:text-(--text-hover-muted,var(--color-gray-600)) transition-colors mt-1 mb-4"
       >
         ← Back to guides
       </button>
@@ -268,9 +269,27 @@ export function HelpCenter() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [showBeacon, setShowBeacon] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+  const anchorRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const router = useRouter();
   const { user } = useAuthStore();
+
+  useEffect(() => {
+    if (!dropdownOpen) return;
+    const updatePos = () => {
+      if (!anchorRef.current) return;
+      const rect = anchorRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    };
+    updatePos();
+    window.addEventListener('scroll', updatePos, true);
+    window.addEventListener('resize', updatePos);
+    return () => {
+      window.removeEventListener('scroll', updatePos, true);
+      window.removeEventListener('resize', updatePos);
+    };
+  }, [dropdownOpen]);
 
   const tenantSlug = user?.tenantSlug || pathname.split('/')[1];
   const isEmployee = user?.role === 'EMPLOYEE';
@@ -319,7 +338,7 @@ export function HelpCenter() {
 
   return (
     <>
-      <div className="relative inline-flex items-center">
+      <div className="relative inline-flex items-center" ref={anchorRef}>
         <button
           onClick={() => setDropdownOpen((v) => !v)}
           className={cn(
@@ -337,62 +356,73 @@ export function HelpCenter() {
           )}
         </button>
 
-        {dropdownOpen && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)} />
-            <div className="absolute right-0 top-11 z-20 w-72 bg-white border border-gray-100 rounded-input shadow-lg overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-gray-100">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                  Guides
-                </p>
-              </div>
-              {isEmployee ? (
-                <button
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    if (user?.id) {
-                      const record = getRecord(user.id);
-                      if (record && !record.seen) {
-                        saveRecord(user.id, { ...record, seen: true });
-                        setShowBeacon(false);
-                      }
-                    }
-                    router.push(`/${tenantSlug}/hr/profile`);
-                  }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
-                >
-                  <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
-                    <Users className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800">Complete Your Profile</p>
-                    <p className="text-xs text-gray-400 truncate">
-                      Update your personal details and profile photo.
-                    </p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
-                </button>
-              ) : (
-                WORKFLOWS.map((workflow) => (
+        {dropdownOpen &&
+          typeof document !== 'undefined' &&
+          createPortal(
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setDropdownOpen(false)} />
+              <div
+                style={{
+                  position: 'fixed',
+                  top: dropdownPos.top,
+                  right: dropdownPos.right,
+                  width: 288,
+                }}
+                className="z-20 bg-white border border-gray-100 rounded-input shadow-lg overflow-hidden"
+              >
+                <div className="px-4 py-2.5 border-b border-gray-100">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                    Guides
+                  </p>
+                </div>
+                {isEmployee ? (
                   <button
-                    key={workflow.id}
-                    onClick={() => handleSelectWorkflow(workflow)}
-                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors"
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      if (user?.id) {
+                        const record = getRecord(user.id);
+                        if (record && !record.seen) {
+                          saveRecord(user.id, { ...record, seen: true });
+                          setShowBeacon(false);
+                        }
+                      }
+                      router.push(`/${tenantSlug}/hr/profile`);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors"
                   >
                     <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
-                      {workflow.icon}
+                      <Users className="w-4 h-4" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-800">{workflow.title}</p>
-                      <p className="text-xs text-gray-400 truncate">{workflow.tagline}</p>
+                      <p className="text-sm font-medium text-gray-800">Complete Your Profile</p>
+                      <p className="text-xs text-gray-400 truncate">
+                        Update your personal details and profile photo.
+                      </p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
                   </button>
-                ))
-              )}
-            </div>
-          </>
-        )}
+                ) : (
+                  WORKFLOWS.map((workflow) => (
+                    <button
+                      key={workflow.id}
+                      onClick={() => handleSelectWorkflow(workflow)}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-orange-500 shrink-0">
+                        {workflow.icon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800">{workflow.title}</p>
+                        <p className="text-xs text-gray-400 truncate">{workflow.tagline}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                    </button>
+                  ))
+                )}
+              </div>
+            </>,
+            document.body,
+          )}
       </div>
 
       {selectedWorkflow && (
