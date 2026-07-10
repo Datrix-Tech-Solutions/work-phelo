@@ -2,7 +2,7 @@
 
 import { Calendar } from 'lucide-react';
 import { formatHolidayDate } from '@/lib/formatters';
-import { cardClass } from '@/lib/utils';
+import { cardClass, waterIconStyle } from '@/lib/utils';
 
 interface Holiday {
   id: string;
@@ -29,12 +29,7 @@ export function UpcomingHolidaysCard({ holidays }: UpcomingHolidaysCardProps) {
             <div key={h.id} className="flex items-center gap-3">
               <div
                 className="relative w-9 h-9 shrink-0 rounded-full flex items-center justify-center overflow-hidden"
-                style={{
-                  background:
-                    'radial-gradient(circle at 32% 26%, rgba(255,255,255,0.95) 0%, rgba(219,234,254,0.85) 30%, rgba(147,197,253,0.65) 60%, rgba(59,130,246,0.55) 100%)',
-                  boxShadow:
-                    'inset -2px -2px 4px rgba(30,64,175,0.25), inset 1.5px 1.5px 3px rgba(255,255,255,0.9), 0 3px 6px -1px rgba(59,130,246,0.45)',
-                }}
+                style={waterIconStyle('#3b82f6')}
               >
                 <span className="absolute top-1 left-1.5 w-2 h-1.5 rounded-full bg-white/85 blur-[1px]" />
                 <Calendar className="w-4 h-4 text-blue-700/80 relative" />

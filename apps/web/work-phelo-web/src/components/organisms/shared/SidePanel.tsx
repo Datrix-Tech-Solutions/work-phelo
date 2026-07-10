@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, popupClass } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
 interface SidePanelProps {
@@ -54,13 +54,16 @@ export function SidePanel({
       {/* Floating Side Panel */}
       <div
         className={cn(
-          'fixed z-50 flex flex-col bg-white shadow-2xl',
-          'overflow-hidden border border-gray-100',
-          'transition-all duration-300 ease-out',
-          // Mobile: full screen, no rounding
-          'inset-0 rounded-none',
-          // sm+: floating panel
-          'sm:inset-auto sm:top-6 sm:bottom-6 sm:right-6 sm:rounded-3xl',
+          popupClass(
+            cn(
+              'fixed z-50 flex flex-col shadow-2xl overflow-hidden border border-gray-100',
+              'transition-all duration-300 ease-out',
+              // Mobile: full screen, no rounding
+              'inset-0 rounded-none',
+              // sm+: floating panel
+              'sm:inset-auto sm:top-6 sm:bottom-6 sm:right-6 sm:rounded-3xl',
+            ),
+          ),
           width,
           // Animation: slide in from right with slight scale
           isOpen
@@ -95,7 +98,11 @@ export function SidePanel({
 
         {/* Footer */}
         {footer && (
-          <div className="shrink-0 px-5 sm:px-8 py-4 sm:py-5 border-t border-gray-100 bg-white">
+          <div
+            className={popupClass(
+              'shrink-0 px-5 sm:px-8 py-4 sm:py-5 border-t border-gray-100 rounded-none shadow-none',
+            )}
+          >
             {footer}
           </div>
         )}

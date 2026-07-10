@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { cn } from '@/lib/utils';
+import { cn, popupClass } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
 export interface SearchSelectOption {
@@ -221,7 +221,7 @@ export function SearchSelect({
             }}
             className="z-50 grid transition-[grid-template-rows,opacity] duration-700 ease-in-out"
           >
-            <div className="min-h-0 overflow-hidden bg-white border border-gray-200 rounded-card shadow-xl">
+            <div className={popupClass('min-h-0 overflow-hidden')}>
               <div className="max-h-52 overflow-y-auto py-1">
                 {filtered.length === 0 ? (
                   <p className="px-4 py-3 text-sm text-gray-400 text-center">No results found</p>

@@ -18,9 +18,9 @@
   --shift-night: #0d1b3e;   /* night-shift blocks — use bg-shift-night / border-shift-night */
 
   /* Module identity colors — used for icon backgrounds */
-  --module-hr:         #032480;  /* navy  — HR */
-  --module-marketing:  #0466f8;  /* green — Marketing */
-  --module-accounting: #064707;  /* red — Accounting  064707*/
+  --module-hr:         #032480;  /* deep-blue  — HR */
+  --module-marketing:  #0466f8;  /* blue — Marketing */
+  --module-accounting: #064707;  /* green — Accounting  064707*/
   --module-operations: #4906d9;  /* purple — Operations */
 
   /* App shell background — single color for the whole app; use bg-app-shell / <AppBackground> */
@@ -50,6 +50,12 @@
      Same problem as --glass-strong above, just needed its own token/value. */
   --glass-subtle: rgba(255, 255, 255, 0.3);
 
+  /* Popup/panel surfaces (SidePanel, DatePicker dropdown, SearchSelect dropdown) —
+     these need to read as close to solid for legibility (dense content, extended
+     reading/interaction), so they get a much higher opacity than the ambient glass
+     surfaces above. Still gets a touch of blur so it doesn't look totally flat. */
+  --glass-solid: rgba(255, 255, 255, 0.9);
+
   /* Deliberately-dark chip color (tooltips, selected-score buttons) — intentionally NOT
      overridden below, so these stay dark regardless of theme instead of inverting along
      with --color-gray-900 and ending up as a pale chip with unreadable white text. */
@@ -69,6 +75,9 @@
   --focus-ring:           rgba(255, 255, 255, 0.35);
   --glass-strong:         rgba(255, 255, 255, 0.08);
   --glass-subtle:         rgba(255, 255, 255, 0.05);
+  /* Near-solid dark, not a white tint — a light popup floating over a dark app would
+     clash, so "close to solid" in dark mode means a solid dark surface instead. */
+  --glass-solid:          rgba(20, 22, 26, 0.95);
 
   /* Invert the neutral gray scale itself — every text-gray, bg-gray, and border-gray
      utility across the app reads this variable, so this is what actually makes body
@@ -207,8 +216,8 @@
 .app-blob-1 {
   top: -12%;
   left: -10%;
-  width: 32rem;
-  height: 32rem;
+  width: 50rem;
+  height: 50rem;
   background: var(--module-accent, var(--brand-accent));
   animation: blob-drift-a 9s ease-in-out infinite;
 }
@@ -217,18 +226,18 @@
   bottom: -14%;
   right: -18%;
   width: 25rem;
-  height: 50rem;
+  height: 100rem;
   background: var(--module-accent, var(--brand-accent));
-  animation: blob-drift-b 10s ease-in-out infinite;
+  animation: blob-drift-b 7s ease-in-out infinite;
 }
 
 .app-blob-3 {
   top: 45%;
-  left: 60%;
-  width: 24rem;
-  height: 24rem;
+  left: 50%;
+  width: 14rem;
+  height: 14rem;
   background: var(--module-accent, var(--brand-accent));
-  animation: blob-drift-c 13s ease-in-out infinite;
+  animation: blob-drift-c 10s ease-in-out infinite;
 }
 
 @keyframes blob-drift-a {

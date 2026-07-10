@@ -22,25 +22,25 @@ export function EmployeeStatsRow({
         title="Total Employees"
         value={isLoading ? null : total}
         icon={<Users className="w-4.5 h-4.5 text-gray-600" />}
-        iconBg="bg-gray-100"
+        iconColor="#6b7280"
       />
       <StatCard
         title="Permanent Staff"
         value={isLoading ? null : permanent}
         icon={<UserCheck className="w-4.5 h-4.5 text-green-600" />}
-        iconBg="bg-green-50"
+        iconColor="#22c55e"
       />
       <StatCard
         title="On Probation"
         value={isLoading ? null : probation}
         icon={<Clock className="w-4.5 h-4.5 text-yellow-600" />}
-        iconBg="bg-yellow-50"
+        iconColor="#eab308"
       />
       <StatCard
         title="On Leave"
         value={isLoading ? null : onLeave}
         icon={<CalendarOff className="w-4.5 h-4.5 text-blue-600" />}
-        iconBg="bg-blue-50"
+        iconColor="#3b82f6"
       />
     </div>
   );

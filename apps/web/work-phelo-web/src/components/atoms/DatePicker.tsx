@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, popupClass } from '@/lib/utils';
 import { Calendar, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -161,7 +161,7 @@ export function DatePicker({
       {open && (
         <div
           ref={dropdownRef}
-          className="absolute top-full left-0 mt-2 w-full bg-white border border-gray-200 rounded-card shadow-xl z-50 overflow-hidden"
+          className={popupClass('absolute top-full left-0 mt-2 w-full z-50 overflow-hidden')}
         >
           {/* ── Days view ── */}
           {view === 'days' && (

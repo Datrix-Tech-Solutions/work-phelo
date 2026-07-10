@@ -41,6 +41,7 @@ outside this foundation.
     .addTag('Accounting - Subledgers')
     .addTag('Accounting - Journals')
     .addTag('Accounting - General Ledger')
+    .addTag('Accounting - Financial Reports')
     .addTag('Accounting - Posting Rules')
     .addTag('Accounting - Source Events')
     .addTag('Internal Accounting Source Events')

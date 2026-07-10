@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, glassStrongClass } from '@/lib/utils';
 
 /* ─────────────────────────── Types ─────────────────────────── */
 
@@ -287,13 +287,16 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
     <aside
       onMouseEnter={() => collapsed && setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
-      className={cn(
-        'bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md border-r border-(--module-border,var(--color-gray-200)) shadow-lg flex flex-col shrink-0 overflow-hidden',
-        // Mobile: absolute drawer that slides over content (below the top nav)
-        'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
-        // Desktop: static in flex flow with width animation (spring curve)
-        'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-350 md:ease-[cubic-bezier(0.34,1.8,0.64,1)]',
-        effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-56',
+      className={glassStrongClass(
+        cn(
+          'border-r border-(--module-border,var(--color-gray-200)) shadow-lg flex flex-col shrink-0 overflow-hidden',
+          // Mobile: absolute drawer that slides over content (below the top nav)
+          'absolute inset-y-0 left-0 z-40 w-64 transition-transform duration-200',
+          // Desktop: static in flex flow with width animation (spring curve)
+          'md:relative md:z-auto md:translate-x-0 md:transition-[width] md:duration-350 md:ease-[cubic-bezier(0.34,1.8,0.64,1)]',
+          effectiveCollapsed ? '-translate-x-full md:w-14' : 'translate-x-0 md:w-56',
+        ),
+        'none',
       )}
     >
       <nav className="flex-1 overflow-y-auto py-3 flex flex-col">

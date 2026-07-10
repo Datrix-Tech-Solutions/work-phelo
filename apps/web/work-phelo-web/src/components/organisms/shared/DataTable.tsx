@@ -37,6 +37,7 @@ interface DataTableProps<T extends { id: string | number }> {
   onExport?: () => void;
   extraFilters?: React.ReactNode;
   secondaryButton?: {
+    color?: string;
     label: string;
     onClick: () => void;
     badgeCount?: number;
