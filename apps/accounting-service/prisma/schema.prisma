@@ -80,14 +80,18 @@ enum SourceEventStatus {
 }
 
 model AccountingTenantConfig {
-  tenantId             String   @id
-  baseCurrency         String
-  fiscalYearStartMonth Int      @default(1)
-  decimalPlaces        Int      @default(2)
-  createdByUserId      String
-  updatedByUserId      String
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  tenantId                           String     @id
+  baseCurrency                       String
+  fiscalYearStartMonth               Int        @default(1)
+  decimalPlaces                      Int        @default(2)
+  accountsReceivableControlAccountId String?
+  accountsPayableControlAccountId    String?
+  createdByUserId                    String
+  updatedByUserId                    String
+  createdAt                          DateTime   @default(now())
+  updatedAt                          DateTime   @updatedAt
+  accountsReceivableControlAccount   GLAccount? @relation("AccountingConfigARControl", fields: [accountsReceivableControlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  accountsPayableControlAccount      GLAccount? @relation("AccountingConfigAPControl", fields: [accountsPayableControlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
 
   @@schema("accounting")
 }
@@ -173,6 +177,9 @@ model GLAccount {
   journalLines     JournalLine[]
   postingRuleLines PostingRuleLine[]
   subledgers       SubledgerAccount[]
+  arTenantConfigs  AccountingTenantConfig[] @relation("AccountingConfigARControl")
+  apTenantConfigs  AccountingTenantConfig[] @relation("AccountingConfigAPControl")
+  vendorDefaults   AccountingVendor[]       @relation("VendorDefaultExpenseAccount")
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
@@ -217,12 +224,88 @@ model SubledgerAccount {
   updatedAt        DateTime      @updatedAt
   controlAccount   GLAccount     @relation(fields: [controlAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   journalLines     JournalLine[]
+  customer         AccountingCustomer?
+  vendor           AccountingVendor?
 
   @@unique([id, tenantId])
   @@unique([tenantId, code])
   @@unique([tenantId, type, externalRef])
   @@index([tenantId, type, status])
   @@index([tenantId, controlAccountId])
+  @@schema("accounting")
+}
+
+model AccountingCustomer {
+  id                 String           @id @default(uuid())
+  tenantId           String
+  code               String
+  legalName          String
+  tradingName        String?
+  primaryContactName String?
+  email              String?
+  phone              String?
+  billingAddress     String?
+  countryCode        String?
+  currency           String
+  paymentTermsDays   Int              @default(30)
+  creditLimit        Decimal?         @db.Decimal(20, 4)
+  taxNumber          String?
+  externalRef        String?
+  sourceModule       String?
+  subledgerAccountId String
+  notes              String?
+  isActive           Boolean          @default(true)
+  createdByUserId    String
+  updatedByUserId    String
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  subledgerAccount   SubledgerAccount @relation(fields: [subledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@unique([tenantId, sourceModule, externalRef])
+  @@unique([subledgerAccountId, tenantId])
+  @@index([tenantId, isActive, legalName])
+  @@index([tenantId, currency])
+  @@index([tenantId, sourceModule, externalRef])
+  @@schema("accounting")
+}
+
+model AccountingVendor {
+  id                      String           @id @default(uuid())
+  tenantId                String
+  code                    String
+  legalName               String
+  tradingName             String?
+  primaryContactName      String?
+  email                   String?
+  phone                   String?
+  billingAddress          String?
+  countryCode             String?
+  currency                String
+  paymentTermsDays        Int              @default(30)
+  taxNumber               String?
+  externalRef             String?
+  sourceModule            String?
+  subledgerAccountId      String
+  defaultExpenseAccountId String?
+  notes                   String?
+  isActive                Boolean          @default(true)
+  createdByUserId         String
+  updatedByUserId         String
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+  subledgerAccount        SubledgerAccount @relation(fields: [subledgerAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  defaultExpenseAccount   GLAccount?       @relation("VendorDefaultExpenseAccount", fields: [defaultExpenseAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@unique([tenantId, sourceModule, externalRef])
+  @@unique([subledgerAccountId, tenantId])
+  @@index([tenantId, isActive, legalName])
+  @@index([tenantId, currency])
+  @@index([tenantId, sourceModule, externalRef])
+  @@index([tenantId, defaultExpenseAccountId])
   @@schema("accounting")
 }
 

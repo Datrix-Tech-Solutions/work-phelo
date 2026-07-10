@@ -126,6 +126,16 @@ export const RESOURCES = [
     description: 'Chart of accounts, cost centres and subledger accounts',
   },
   {
+    name: 'accounting.customers',
+    module: 'ACCOUNTING',
+    description: 'Accounting customer master records and AR subledgers',
+  },
+  {
+    name: 'accounting.vendors',
+    module: 'ACCOUNTING',
+    description: 'Accounting vendor master records and AP subledgers',
+  },
+  {
     name: 'accounting.journals',
     module: 'ACCOUNTING',
     description: 'Draft, post and reverse journal entries',
