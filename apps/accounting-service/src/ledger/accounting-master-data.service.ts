@@ -16,6 +16,8 @@ import {
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  CreateAccountClassificationDto,
+  CreateAccountGroupDto,
   CreateAccountingCustomerDto,
   CreateAccountingCurrencyDto,
   CreateAccountingVendorDto,
@@ -25,8 +27,12 @@ import {
   CreateGLAccountDto,
   CreateSubledgerAccountDto,
   QueryAccountingPartiesDto,
+  QueryAccountGroupsDto,
+  QueryAccountHierarchyDto,
   QueryFiscalPeriodsDto,
   QueryGLAccountsDto,
+  UpdateAccountClassificationDto,
+  UpdateAccountGroupDto,
   UpdateAccountingCustomerDto,
   UpdateAccountingCurrencyDto,
   UpdateAccountingTenantConfigDto,
@@ -37,9 +43,211 @@ import {
   UpdateSubledgerAccountDto,
 } from './dto/accounting.dto';
 
+export enum FinancialStatement {
+  BALANCE_SHEET = 'BALANCE_SHEET',
+  INCOME_STATEMENT = 'INCOME_STATEMENT',
+}
+
+const ACCOUNT_CATEGORIES = [
+  {
+    code: GLAccountCategory.ASSET,
+    name: 'Assets',
+    normalBalance: NormalBalance.DEBIT,
+    financialStatement: FinancialStatement.BALANCE_SHEET,
+    displayOrder: 10,
+  },
+  {
+    code: GLAccountCategory.LIABILITY,
+    name: 'Liabilities',
+    normalBalance: NormalBalance.CREDIT,
+    financialStatement: FinancialStatement.BALANCE_SHEET,
+    displayOrder: 20,
+  },
+  {
+    code: GLAccountCategory.EQUITY,
+    name: 'Equity',
+    normalBalance: NormalBalance.CREDIT,
+    financialStatement: FinancialStatement.BALANCE_SHEET,
+    displayOrder: 30,
+  },
+  {
+    code: GLAccountCategory.REVENUE,
+    name: 'Revenue',
+    normalBalance: NormalBalance.CREDIT,
+    financialStatement: FinancialStatement.INCOME_STATEMENT,
+    displayOrder: 40,
+  },
+  {
+    code: GLAccountCategory.EXPENSE,
+    name: 'Expenses',
+    normalBalance: NormalBalance.DEBIT,
+    financialStatement: FinancialStatement.INCOME_STATEMENT,
+    displayOrder: 50,
+  },
+] as const;
+
+const NORMAL_BALANCE_BY_CATEGORY: Record<GLAccountCategory, NormalBalance> = {
+  [GLAccountCategory.ASSET]: NormalBalance.DEBIT,
+  [GLAccountCategory.LIABILITY]: NormalBalance.CREDIT,
+  [GLAccountCategory.EQUITY]: NormalBalance.CREDIT,
+  [GLAccountCategory.REVENUE]: NormalBalance.CREDIT,
+  [GLAccountCategory.EXPENSE]: NormalBalance.DEBIT,
+};
+
+const STANDARD_ACCOUNT_HIERARCHY = [
+  {
+    code: 'CURRENT_ASSETS',
+    name: 'Current Assets',
+    category: GLAccountCategory.ASSET,
+    displayOrder: 10,
+    groups: [
+      { code: 'CASH_AND_BANK', name: 'Cash and Bank', displayOrder: 10 },
+      { code: 'RECEIVABLES', name: 'Receivables', displayOrder: 20 },
+      {
+        code: 'ACCOUNTS_RECEIVABLE',
+        name: 'Accounts Receivable',
+        displayOrder: 25,
+      },
+      {
+        code: 'OTHER_CURRENT_ASSETS',
+        name: 'Other Current Assets',
+        displayOrder: 30,
+      },
+    ],
+  },
+  {
+    code: 'NON_CURRENT_ASSETS',
+    name: 'Non-current Assets',
+    category: GLAccountCategory.ASSET,
+    displayOrder: 20,
+    groups: [
+      {
+        code: 'PROPERTY_AND_EQUIPMENT',
+        name: 'Property and Equipment',
+        displayOrder: 10,
+      },
+      {
+        code: 'OTHER_NON_CURRENT_ASSETS',
+        name: 'Other Non-current Assets',
+        displayOrder: 20,
+      },
+    ],
+  },
+  {
+    code: 'CURRENT_LIABILITIES',
+    name: 'Current Liabilities',
+    category: GLAccountCategory.LIABILITY,
+    displayOrder: 30,
+    groups: [
+      { code: 'PAYABLES', name: 'Payables', displayOrder: 10 },
+      {
+        code: 'ACCOUNTS_PAYABLE',
+        name: 'Accounts Payable',
+        displayOrder: 15,
+      },
+      {
+        code: 'TAX_AND_STATUTORY',
+        name: 'Tax and Statutory Liabilities',
+        displayOrder: 20,
+      },
+      {
+        code: 'OTHER_CURRENT_LIABILITIES',
+        name: 'Other Current Liabilities',
+        displayOrder: 30,
+      },
+    ],
+  },
+  {
+    code: 'NON_CURRENT_LIABILITIES',
+    name: 'Non-current Liabilities',
+    category: GLAccountCategory.LIABILITY,
+    displayOrder: 35,
+    groups: [
+      {
+        code: 'LONG_TERM_BORROWINGS',
+        name: 'Long-term Borrowings',
+        displayOrder: 10,
+      },
+      {
+        code: 'OTHER_NON_CURRENT_LIABILITIES',
+        name: 'Other Non-current Liabilities',
+        displayOrder: 20,
+      },
+    ],
+  },
+  {
+    code: 'EQUITY_CAPITAL',
+    name: 'Equity and Capital',
+    category: GLAccountCategory.EQUITY,
+    displayOrder: 40,
+    groups: [
+      { code: 'CAPITAL_ACCOUNTS', name: 'Capital Accounts', displayOrder: 10 },
+      {
+        code: 'RETAINED_EARNINGS',
+        name: 'Retained Earnings',
+        displayOrder: 20,
+      },
+    ],
+  },
+  {
+    code: 'OPERATING_REVENUE',
+    name: 'Operating Revenue',
+    category: GLAccountCategory.REVENUE,
+    displayOrder: 50,
+    groups: [
+      { code: 'SERVICE_REVENUE', name: 'Service Revenue', displayOrder: 10 },
+      { code: 'OTHER_INCOME', name: 'Other Income', displayOrder: 20 },
+    ],
+  },
+  {
+    code: 'NON_OPERATING_REVENUE',
+    name: 'Non-operating Revenue',
+    category: GLAccountCategory.REVENUE,
+    displayOrder: 55,
+    groups: [
+      {
+        code: 'INVESTMENT_INCOME',
+        name: 'Investment Income',
+        displayOrder: 10,
+      },
+      {
+        code: 'OTHER_NON_OPERATING_INCOME',
+        name: 'Other Non-operating Income',
+        displayOrder: 20,
+      },
+    ],
+  },
+  {
+    code: 'OPERATING_EXPENSES',
+    name: 'Operating Expenses',
+    category: GLAccountCategory.EXPENSE,
+    displayOrder: 60,
+    groups: [
+      { code: 'COST_OF_SALES', name: 'Cost of Sales', displayOrder: 5 },
+      { code: 'PAYROLL_EXPENSES', name: 'Payroll Expenses', displayOrder: 10 },
+      {
+        code: 'ADMIN_EXPENSES',
+        name: 'Administrative Expenses',
+        displayOrder: 20,
+      },
+      { code: 'FINANCE_COSTS', name: 'Finance Costs', displayOrder: 30 },
+      { code: 'TAX_EXPENSE', name: 'Tax Expense', displayOrder: 40 },
+      {
+        code: 'NON_OPERATING_EXPENSES',
+        name: 'Non-operating Expenses',
+        displayOrder: 50,
+      },
+    ],
+  },
+] as const;
+
 @Injectable()
 export class AccountingMasterDataService {
   constructor(private readonly prisma: PrismaService) {}
+
+  listAccountCategories() {
+    return ACCOUNT_CATEGORIES;
+  }
 
   async getConfig(tenantId: string) {
     const config = await this.prisma.accountingTenantConfig.findUnique({
@@ -416,41 +624,79 @@ export class AccountingMasterDataService {
   }
 
   listGLAccounts(tenantId: string, query: QueryGLAccountsDto) {
-    return this.prisma.gLAccount.findMany({
-      where: {
-        tenantId,
-        ...(query.category ? { category: query.category } : {}),
-        ...(query.status ? { status: query.status } : {}),
-      },
-      include: {
-        parentAccount: { select: { id: true, code: true, name: true } },
-      },
-      orderBy: { code: 'asc' },
-    });
+    return this.prisma.gLAccount
+      .findMany({
+        where: {
+          tenantId,
+          ...(query.category ? { category: query.category } : {}),
+          ...(query.status ? { status: query.status } : {}),
+          ...(query.accountGroupId
+            ? { accountGroupId: query.accountGroupId }
+            : {}),
+          ...(query.classificationId
+            ? { accountGroup: { classificationId: query.classificationId } }
+            : {}),
+        },
+        include: {
+          parentAccount: { select: { id: true, code: true, name: true } },
+          accountGroup: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              classification: {
+                select: { id: true, code: true, name: true, category: true },
+              },
+            },
+          },
+        },
+        orderBy: { code: 'asc' },
+      })
+      .then((accounts) =>
+        accounts.map((account) => this.withAccountHierarchy(account)),
+      );
   }
 
   async createGLAccount(user: RequestUser, dto: CreateGLAccountDto) {
+    const hierarchy = await this.resolveAccountHierarchyForCreate(
+      user.tenantId,
+      dto,
+    );
     await this.assertParentAccount(
       user.tenantId,
       undefined,
       dto.parentAccountId,
-      dto.category,
+      hierarchy.category,
+      dto.accountGroupId ?? null,
     );
     try {
-      return await this.prisma.gLAccount.create({
+      const account = await this.prisma.gLAccount.create({
         data: {
           tenantId: user.tenantId,
           code: dto.code,
           name: dto.name,
-          category: dto.category,
-          normalBalance: dto.normalBalance,
+          category: hierarchy.category,
+          normalBalance: hierarchy.normalBalance,
+          accountGroupId: dto.accountGroupId,
           parentAccountId: dto.parentAccountId,
           allowPosting: dto.allowPosting ?? true,
           description: this.optional(dto.description),
           createdByUserId: user.id,
           updatedByUserId: user.id,
         },
+        include: this.glAccountHierarchyInclude(),
       });
+      await this.recordAudit(
+        user,
+        'GL_ACCOUNT_CREATE',
+        'GLAccount',
+        account.id,
+        {
+          code: account.code,
+          accountGroupId: account.accountGroupId,
+        },
+      );
+      return this.withAccountHierarchy(account);
     } catch (error) {
       this.rethrowUnique(error, 'GL account code already exists');
     }
@@ -462,12 +708,22 @@ export class AccountingMasterDataService {
     dto: UpdateGLAccountDto,
   ) {
     const account = await this.findGLAccount(user.tenantId, accountId);
-    const nextCategory = dto.category ?? account.category;
+    const hierarchy = await this.resolveAccountHierarchyForUpdate(
+      user.tenantId,
+      account,
+      dto,
+    );
+    const nextCategory = hierarchy.category;
+    const nextAccountGroupId =
+      dto.accountGroupId !== undefined
+        ? dto.accountGroupId || null
+        : account.accountGroupId;
     await this.assertParentAccount(
       user.tenantId,
       account.id,
       dto.parentAccountId ?? account.parentAccountId ?? undefined,
       nextCategory,
+      nextAccountGroupId,
     );
     if (dto.allowPosting === true) {
       const childCount = await this.prisma.gLAccount.count({
@@ -485,6 +741,8 @@ export class AccountingMasterDataService {
       (dto.category !== undefined && dto.category !== account.category) ||
       (dto.normalBalance !== undefined &&
         dto.normalBalance !== account.normalBalance) ||
+      (dto.accountGroupId !== undefined &&
+        dto.accountGroupId !== account.accountGroupId) ||
       (dto.parentAccountId !== undefined &&
         dto.parentAccountId !== account.parentAccountId);
     if (changesStructure) {
@@ -497,21 +755,24 @@ export class AccountingMasterDataService {
       });
       if (postedUse > 0) {
         throw new ConflictException(
-          'Posted GL accounts cannot change code, category, normal balance or parent',
+          'Posted GL accounts cannot change code, category, normal balance, account group or parent',
         );
       }
     }
 
     try {
-      return await this.prisma.gLAccount.update({
+      const updated = await this.prisma.gLAccount.update({
         where: {
           id_tenantId: { id: account.id, tenantId: user.tenantId },
         },
         data: {
           ...(dto.code ? { code: dto.code } : {}),
           ...(dto.name ? { name: dto.name } : {}),
-          ...(dto.category ? { category: dto.category } : {}),
-          ...(dto.normalBalance ? { normalBalance: dto.normalBalance } : {}),
+          category: hierarchy.category,
+          normalBalance: hierarchy.normalBalance,
+          ...(dto.accountGroupId !== undefined
+            ? { accountGroupId: dto.accountGroupId || null }
+            : {}),
           ...(dto.parentAccountId !== undefined
             ? { parentAccountId: dto.parentAccountId || null }
             : {}),
@@ -523,9 +784,513 @@ export class AccountingMasterDataService {
             : {}),
           updatedByUserId: user.id,
         },
+        include: this.glAccountHierarchyInclude(),
       });
+      if (changesStructure) {
+        await this.recordAudit(
+          user,
+          'GL_ACCOUNT_HIERARCHY_UPDATE',
+          'GLAccount',
+          updated.id,
+          {
+            accountGroupId: updated.accountGroupId,
+            parentAccountId: updated.parentAccountId,
+            category: updated.category,
+            normalBalance: updated.normalBalance,
+          },
+        );
+      }
+      return this.withAccountHierarchy(updated);
     } catch (error) {
       this.rethrowUnique(error, 'GL account code already exists');
+    }
+  }
+
+  async listAccountClassifications(
+    tenantId: string,
+    query: QueryAccountHierarchyDto,
+  ) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
+    const where: Prisma.AccountClassificationWhereInput = {
+      tenantId,
+      ...(query.category ? { category: query.category } : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { code: { contains: query.search, mode: 'insensitive' } },
+              { name: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const orderBy = {
+      [query.sortBy ?? 'displayOrder']: query.sortOrder ?? 'asc',
+    } as Prisma.AccountClassificationOrderByWithRelationInput;
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.accountClassification.findMany({
+        where,
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.accountClassification.count({ where }),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async createAccountClassification(
+    user: RequestUser,
+    dto: CreateAccountClassificationDto,
+  ) {
+    try {
+      const classification = await this.prisma.accountClassification.create({
+        data: {
+          tenantId: user.tenantId,
+          code: dto.code,
+          name: dto.name,
+          category: dto.category,
+          displayOrder: dto.displayOrder ?? 0,
+          isSystemTemplate: dto.isSystemTemplate ?? false,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
+      await this.recordAudit(
+        user,
+        'ACCOUNT_CLASSIFICATION_CREATE',
+        'AccountClassification',
+        classification.id,
+        { code: classification.code, category: classification.category },
+      );
+      return classification;
+    } catch (error) {
+      this.rethrowUnique(error, 'Account classification code already exists');
+    }
+  }
+
+  async getAccountClassification(user: RequestUser, classificationId: string) {
+    return this.findAccountClassification(user.tenantId, classificationId);
+  }
+
+  async updateAccountClassification(
+    user: RequestUser,
+    classificationId: string,
+    dto: UpdateAccountClassificationDto,
+  ) {
+    const classification = await this.findAccountClassification(
+      user.tenantId,
+      classificationId,
+    );
+    if (dto.category && dto.category !== classification.category) {
+      const dependentCount = await this.prisma.accountGroup.count({
+        where: { tenantId: user.tenantId, classificationId },
+      });
+      if (dependentCount > 0) {
+        throw new ConflictException(
+          'Classification category cannot change after groups or accounts are linked',
+        );
+      }
+    }
+    try {
+      const updated = await this.prisma.accountClassification.update({
+        where: {
+          id_tenantId: { id: classification.id, tenantId: user.tenantId },
+        },
+        data: {
+          ...(dto.code ? { code: dto.code } : {}),
+          ...(dto.name ? { name: dto.name } : {}),
+          ...(dto.category ? { category: dto.category } : {}),
+          ...(dto.displayOrder !== undefined
+            ? { displayOrder: dto.displayOrder }
+            : {}),
+          ...(dto.isSystemTemplate !== undefined
+            ? { isSystemTemplate: dto.isSystemTemplate }
+            : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          updatedByUserId: user.id,
+        },
+      });
+      await this.recordAudit(
+        user,
+        'ACCOUNT_CLASSIFICATION_UPDATE',
+        'AccountClassification',
+        updated.id,
+        dto,
+      );
+      return updated;
+    } catch (error) {
+      this.rethrowUnique(error, 'Account classification code already exists');
+    }
+  }
+
+  async activateAccountClassification(
+    user: RequestUser,
+    classificationId: string,
+  ) {
+    return this.setAccountClassificationActive(
+      user,
+      classificationId,
+      true,
+      'ACCOUNT_CLASSIFICATION_ACTIVATE',
+    );
+  }
+
+  async deactivateAccountClassification(
+    user: RequestUser,
+    classificationId: string,
+  ) {
+    return this.setAccountClassificationActive(
+      user,
+      classificationId,
+      false,
+      'ACCOUNT_CLASSIFICATION_DEACTIVATE',
+    );
+  }
+
+  async listAccountGroups(tenantId: string, query: QueryAccountGroupsDto) {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 50;
+    const where: Prisma.AccountGroupWhereInput = {
+      tenantId,
+      ...(query.classificationId
+        ? { classificationId: query.classificationId }
+        : {}),
+      ...(query.category
+        ? { classification: { category: query.category } }
+        : {}),
+      ...(query.isActive !== undefined ? { isActive: query.isActive } : {}),
+      ...(query.search
+        ? {
+            OR: [
+              { code: { contains: query.search, mode: 'insensitive' } },
+              { name: { contains: query.search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
+    const orderBy = {
+      [query.sortBy ?? 'displayOrder']: query.sortOrder ?? 'asc',
+    } as Prisma.AccountGroupOrderByWithRelationInput;
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.accountGroup.findMany({
+        where,
+        include: {
+          classification: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+        },
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.accountGroup.count({ where }),
+    ]);
+    return { items, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async createAccountGroup(user: RequestUser, dto: CreateAccountGroupDto) {
+    await this.assertActiveClassification(user.tenantId, dto.classificationId);
+    try {
+      const group = await this.prisma.accountGroup.create({
+        data: {
+          tenantId: user.tenantId,
+          classificationId: dto.classificationId,
+          code: dto.code,
+          name: dto.name,
+          displayOrder: dto.displayOrder ?? 0,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+        include: {
+          classification: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+        },
+      });
+      await this.recordAudit(
+        user,
+        'ACCOUNT_GROUP_CREATE',
+        'AccountGroup',
+        group.id,
+        {
+          code: group.code,
+          classificationId: group.classificationId,
+        },
+      );
+      return group;
+    } catch (error) {
+      this.rethrowUnique(error, 'Account group code already exists');
+    }
+  }
+
+  async getAccountGroup(user: RequestUser, groupId: string) {
+    return this.findAccountGroup(user.tenantId, groupId);
+  }
+
+  async updateAccountGroup(
+    user: RequestUser,
+    groupId: string,
+    dto: UpdateAccountGroupDto,
+  ) {
+    const group = await this.findAccountGroup(user.tenantId, groupId);
+    if (
+      dto.classificationId &&
+      dto.classificationId !== group.classificationId
+    ) {
+      await this.assertActiveClassification(
+        user.tenantId,
+        dto.classificationId,
+      );
+      const linkedAccounts = await this.prisma.gLAccount.count({
+        where: { tenantId: user.tenantId, accountGroupId: group.id },
+      });
+      if (linkedAccounts > 0) {
+        throw new ConflictException(
+          'Account group classification cannot change after accounts are linked',
+        );
+      }
+    }
+    try {
+      const updated = await this.prisma.accountGroup.update({
+        where: { id_tenantId: { id: group.id, tenantId: user.tenantId } },
+        data: {
+          ...(dto.classificationId
+            ? { classificationId: dto.classificationId }
+            : {}),
+          ...(dto.code ? { code: dto.code } : {}),
+          ...(dto.name ? { name: dto.name } : {}),
+          ...(dto.displayOrder !== undefined
+            ? { displayOrder: dto.displayOrder }
+            : {}),
+          ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
+          updatedByUserId: user.id,
+        },
+        include: {
+          classification: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+        },
+      });
+      await this.recordAudit(
+        user,
+        'ACCOUNT_GROUP_UPDATE',
+        'AccountGroup',
+        updated.id,
+        dto,
+      );
+      return updated;
+    } catch (error) {
+      this.rethrowUnique(error, 'Account group code already exists');
+    }
+  }
+
+  async activateAccountGroup(user: RequestUser, groupId: string) {
+    return this.setAccountGroupActive(
+      user,
+      groupId,
+      true,
+      'ACCOUNT_GROUP_ACTIVATE',
+    );
+  }
+
+  async deactivateAccountGroup(user: RequestUser, groupId: string) {
+    return this.setAccountGroupActive(
+      user,
+      groupId,
+      false,
+      'ACCOUNT_GROUP_DEACTIVATE',
+    );
+  }
+
+  async seedStandardAccountHierarchy(user: RequestUser) {
+    let classificationsCreated = 0;
+    let classificationsSkipped = 0;
+    let groupsCreated = 0;
+    let groupsSkipped = 0;
+
+    for (const template of STANDARD_ACCOUNT_HIERARCHY) {
+      const classificationResult = await this.findOrCreateSeedClassification(
+        user,
+        template,
+      );
+      const classification = classificationResult.classification;
+      if (classificationResult.created) {
+        classificationsCreated += 1;
+        await this.recordAudit(
+          user,
+          'ACCOUNT_CLASSIFICATION_SEED',
+          'AccountClassification',
+          classification.id,
+          { code: classification.code, category: classification.category },
+        );
+      } else {
+        classificationsSkipped += 1;
+      }
+
+      for (const groupTemplate of template.groups) {
+        const groupResult = await this.findOrCreateSeedGroup(
+          user,
+          classification.id,
+          groupTemplate,
+        );
+        if (groupResult.created) {
+          groupsCreated += 1;
+          await this.recordAudit(
+            user,
+            'ACCOUNT_GROUP_SEED',
+            'AccountGroup',
+            groupResult.group.id,
+            {
+              code: groupResult.group.code,
+              classificationId: groupResult.group.classificationId,
+            },
+          );
+        } else {
+          groupsSkipped += 1;
+        }
+      }
+    }
+
+    return {
+      classificationsCreated,
+      classificationsSkipped,
+      groupsCreated,
+      groupsSkipped,
+    };
+  }
+
+  private async setAccountClassificationActive(
+    user: RequestUser,
+    classificationId: string,
+    isActive: boolean,
+    action: string,
+  ) {
+    const classification = await this.findAccountClassification(
+      user.tenantId,
+      classificationId,
+    );
+    const updated = await this.prisma.accountClassification.update({
+      where: {
+        id_tenantId: { id: classification.id, tenantId: user.tenantId },
+      },
+      data: { isActive, updatedByUserId: user.id },
+    });
+    await this.recordAudit(user, action, 'AccountClassification', updated.id, {
+      isActive,
+    });
+    return updated;
+  }
+
+  private async setAccountGroupActive(
+    user: RequestUser,
+    groupId: string,
+    isActive: boolean,
+    action: string,
+  ) {
+    const group = await this.findAccountGroup(user.tenantId, groupId);
+    const updated = await this.prisma.accountGroup.update({
+      where: { id_tenantId: { id: group.id, tenantId: user.tenantId } },
+      data: { isActive, updatedByUserId: user.id },
+      include: {
+        classification: {
+          select: { id: true, code: true, name: true, category: true },
+        },
+      },
+    });
+    await this.recordAudit(user, action, 'AccountGroup', updated.id, {
+      isActive,
+    });
+    return updated;
+  }
+
+  private async findOrCreateSeedClassification(
+    user: RequestUser,
+    template: (typeof STANDARD_ACCOUNT_HIERARCHY)[number],
+  ) {
+    const existing = await this.prisma.accountClassification.findUnique({
+      where: {
+        tenantId_code: { tenantId: user.tenantId, code: template.code },
+      },
+    });
+    if (existing) return { classification: existing, created: false };
+
+    try {
+      const classification = await this.prisma.accountClassification.create({
+        data: {
+          tenantId: user.tenantId,
+          code: template.code,
+          name: template.name,
+          category: template.category,
+          displayOrder: template.displayOrder,
+          isSystemTemplate: true,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
+      return { classification, created: true };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const classification =
+          await this.prisma.accountClassification.findUniqueOrThrow({
+            where: {
+              tenantId_code: {
+                tenantId: user.tenantId,
+                code: template.code,
+              },
+            },
+          });
+        return { classification, created: false };
+      }
+      throw error;
+    }
+  }
+
+  private async findOrCreateSeedGroup(
+    user: RequestUser,
+    classificationId: string,
+    groupTemplate: (typeof STANDARD_ACCOUNT_HIERARCHY)[number]['groups'][number],
+  ) {
+    const existing = await this.prisma.accountGroup.findUnique({
+      where: {
+        tenantId_code: { tenantId: user.tenantId, code: groupTemplate.code },
+      },
+    });
+    if (existing) return { group: existing, created: false };
+
+    try {
+      const group = await this.prisma.accountGroup.create({
+        data: {
+          tenantId: user.tenantId,
+          classificationId,
+          code: groupTemplate.code,
+          name: groupTemplate.name,
+          displayOrder: groupTemplate.displayOrder,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
+      return { group, created: true };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const group = await this.prisma.accountGroup.findUniqueOrThrow({
+          where: {
+            tenantId_code: {
+              tenantId: user.tenantId,
+              code: groupTemplate.code,
+            },
+          },
+        });
+        return { group, created: false };
+      }
+      throw error;
     }
   }
 
@@ -543,7 +1308,7 @@ export class AccountingMasterDataService {
         'Deactivate child accounts before deactivating this account',
       );
     }
-    return this.prisma.gLAccount.update({
+    const updated = await this.prisma.gLAccount.update({
       where: {
         id_tenantId: { id: account.id, tenantId: user.tenantId },
       },
@@ -553,6 +1318,14 @@ export class AccountingMasterDataService {
         updatedByUserId: user.id,
       },
     });
+    await this.recordAudit(
+      user,
+      'GL_ACCOUNT_DEACTIVATE',
+      'GLAccount',
+      updated.id,
+      { status: updated.status, allowPosting: updated.allowPosting },
+    );
+    return updated;
   }
 
   listCostCentres(tenantId: string) {
@@ -1109,6 +1882,239 @@ export class AccountingMasterDataService {
     return account;
   }
 
+  private glAccountHierarchyInclude() {
+    return {
+      parentAccount: { select: { id: true, code: true, name: true } },
+      accountGroup: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          classification: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+        },
+      },
+    } as const;
+  }
+
+  private withAccountHierarchy<
+    T extends {
+      category: GLAccountCategory;
+      accountGroup?: {
+        id: string;
+        code: string;
+        name: string;
+        classification: {
+          id: string;
+          code: string;
+          name: string;
+          category: GLAccountCategory;
+        };
+      } | null;
+    },
+  >(account: T) {
+    const classification = account.accountGroup?.classification ?? null;
+    const accountGroup = account.accountGroup
+      ? {
+          id: account.accountGroup.id,
+          code: account.accountGroup.code,
+          name: account.accountGroup.name,
+        }
+      : null;
+    const unclassified = {
+      id: null,
+      code: 'UNCLASSIFIED',
+      name: 'Unclassified',
+      category: account.category,
+    };
+    return {
+      ...account,
+      classification: classification ?? unclassified,
+      accountGroup,
+      hierarchyPath: [
+        account.category,
+        classification?.name ?? 'Unclassified',
+        accountGroup?.name ?? 'Unclassified',
+        'name' in account ? account.name : undefined,
+      ].filter(Boolean),
+      isLegacyUnclassified: !account.accountGroup,
+    };
+  }
+
+  private async findAccountClassification(tenantId: string, id: string) {
+    const classification = await this.prisma.accountClassification.findFirst({
+      where: { id, tenantId },
+    });
+    if (!classification) {
+      throw new NotFoundException('Account classification not found');
+    }
+    return classification;
+  }
+
+  private async findAccountGroup(tenantId: string, id: string) {
+    const group = await this.prisma.accountGroup.findFirst({
+      where: { id, tenantId },
+      include: {
+        classification: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            category: true,
+            isActive: true,
+          },
+        },
+      },
+    });
+    if (!group) throw new NotFoundException('Account group not found');
+    return group;
+  }
+
+  private async assertActiveClassification(
+    tenantId: string,
+    classificationId: string,
+  ) {
+    const classification = await this.findAccountClassification(
+      tenantId,
+      classificationId,
+    );
+    if (!classification.isActive) {
+      throw new BadRequestException('Account classification must be active');
+    }
+    return classification;
+  }
+
+  private async assertActiveAccountGroup(tenantId: string, groupId: string) {
+    const group = await this.findAccountGroup(tenantId, groupId);
+    if (!group.isActive) {
+      throw new BadRequestException('Account group must be active');
+    }
+    if (!group.classification.isActive) {
+      throw new BadRequestException(
+        'Account group classification must be active',
+      );
+    }
+    return group;
+  }
+
+  private async resolveAccountHierarchyForCreate(
+    tenantId: string,
+    dto: CreateGLAccountDto,
+  ) {
+    if (dto.accountGroupId) {
+      const group = await this.assertActiveAccountGroup(
+        tenantId,
+        dto.accountGroupId,
+      );
+      const category = group.classification.category;
+      const normalBalance = NORMAL_BALANCE_BY_CATEGORY[category];
+      if (dto.category && dto.category !== category) {
+        throw new BadRequestException(
+          'GL account category must match the selected account group classification',
+        );
+      }
+      if (dto.normalBalance && dto.normalBalance !== normalBalance) {
+        throw new BadRequestException(
+          'GL account normal balance must match the selected account group category',
+        );
+      }
+      return { category, normalBalance };
+    }
+
+    if (!dto.category) {
+      throw new BadRequestException(
+        'GL account category is required when accountGroupId is not provided',
+      );
+    }
+    const normalBalance = NORMAL_BALANCE_BY_CATEGORY[dto.category];
+    if (dto.normalBalance && dto.normalBalance !== normalBalance) {
+      throw new BadRequestException(
+        'GL account normal balance must match the account category',
+      );
+    }
+    return { category: dto.category, normalBalance };
+  }
+
+  private async resolveAccountHierarchyForUpdate(
+    tenantId: string,
+    account: {
+      category: GLAccountCategory;
+      normalBalance: NormalBalance;
+      accountGroupId: string | null;
+    },
+    dto: UpdateGLAccountDto,
+  ) {
+    if (dto.accountGroupId !== undefined && dto.accountGroupId) {
+      const group = await this.assertActiveAccountGroup(
+        tenantId,
+        dto.accountGroupId,
+      );
+      const category = group.classification.category;
+      const normalBalance = NORMAL_BALANCE_BY_CATEGORY[category];
+      if (dto.category && dto.category !== category) {
+        throw new BadRequestException(
+          'GL account category must match the selected account group classification',
+        );
+      }
+      if (dto.normalBalance && dto.normalBalance !== normalBalance) {
+        throw new BadRequestException(
+          'GL account normal balance must match the selected account group category',
+        );
+      }
+      return { category, normalBalance };
+    }
+
+    if (account.accountGroupId && dto.accountGroupId === undefined) {
+      if (dto.category && dto.category !== account.category) {
+        throw new BadRequestException(
+          'Clear accountGroupId before overriding a grouped GL account category',
+        );
+      }
+      if (dto.normalBalance && dto.normalBalance !== account.normalBalance) {
+        throw new BadRequestException(
+          'Clear accountGroupId before overriding a grouped GL account normal balance',
+        );
+      }
+      return {
+        category: account.category,
+        normalBalance: account.normalBalance,
+      };
+    }
+
+    const category = dto.category ?? account.category;
+    const normalBalance = NORMAL_BALANCE_BY_CATEGORY[category];
+    if (dto.normalBalance && dto.normalBalance !== normalBalance) {
+      throw new BadRequestException(
+        'GL account normal balance must match the account category',
+      );
+    }
+    return { category, normalBalance };
+  }
+
+  private async recordAudit(
+    user: RequestUser,
+    action: string,
+    entityType: string,
+    entityId: string,
+    changedFields?: unknown,
+  ) {
+    await this.prisma.accountingAuditLog.create({
+      data: {
+        tenantId: user.tenantId,
+        actorUserId: user.id,
+        action,
+        entityType,
+        entityId,
+        changedFields: this.jsonSafe(changedFields),
+      },
+    });
+  }
+
+  private jsonSafe(value: unknown): Prisma.InputJsonValue {
+    return JSON.parse(JSON.stringify(value ?? {})) as Prisma.InputJsonValue;
+  }
+
   private async findCurrency(tenantId: string, id: string) {
     const currency = await this.prisma.accountingCurrency.findFirst({
       where: { id, tenantId },
@@ -1185,6 +2191,7 @@ export class AccountingMasterDataService {
     accountId: string | undefined,
     parentAccountId: string | undefined,
     category: GLAccountCategory,
+    accountGroupId: string | null,
   ) {
     if (!parentAccountId) return;
     if (accountId === parentAccountId) {
@@ -1200,6 +2207,11 @@ export class AccountingMasterDataService {
     if (parent.category !== category) {
       throw new BadRequestException(
         'Parent and child GL accounts must use the same category',
+      );
+    }
+    if ((parent.accountGroupId ?? null) !== accountGroupId) {
+      throw new BadRequestException(
+        'Parent and child GL accounts must use the same account group',
       );
     }
     let ancestorId = parent.parentAccountId;

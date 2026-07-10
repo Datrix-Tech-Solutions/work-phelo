@@ -126,6 +126,16 @@ export const RESOURCES = [
     description: 'Chart of accounts, cost centres and subledger accounts',
   },
   {
+    name: 'accounting.account-classifications',
+    module: 'ACCOUNTING',
+    description: 'Accounting account hierarchy classifications',
+  },
+  {
+    name: 'accounting.account-groups',
+    module: 'ACCOUNTING',
+    description: 'Accounting account hierarchy groups',
+  },
+  {
     name: 'accounting.customers',
     module: 'ACCOUNTING',
     description: 'Accounting customer master records and AR subledgers',

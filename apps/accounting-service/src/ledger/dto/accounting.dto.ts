@@ -200,13 +200,32 @@ export class CreateGLAccountDto {
   @MaxLength(160)
   name!: string;
 
-  @ApiProperty({ enum: GLAccountCategory })
+  @ApiPropertyOptional({
+    enum: GLAccountCategory,
+    description:
+      'Legacy/unclassified account category. Derived from accountGroupId when provided.',
+  })
+  @IsOptional()
   @IsEnum(GLAccountCategory)
-  category!: GLAccountCategory;
+  category?: GLAccountCategory;
 
-  @ApiProperty({ enum: NormalBalance })
+  @ApiPropertyOptional({
+    enum: NormalBalance,
+    description:
+      'Optional override. Defaults from the derived category and must match it.',
+  })
+  @IsOptional()
   @IsEnum(NormalBalance)
-  normalBalance!: NormalBalance;
+  normalBalance?: NormalBalance;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'Official reporting hierarchy group. New posting accounts should provide this.',
+  })
+  @IsOptional()
+  @IsUUID()
+  accountGroupId?: string;
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
@@ -238,6 +257,141 @@ export class QueryGLAccountsDto {
   @IsOptional()
   @IsEnum(RecordStatus)
   status?: RecordStatus;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  accountGroupId?: string;
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  classificationId?: string;
+}
+
+export class QueryAccountHierarchyDto {
+  @ApiPropertyOptional({ enum: GLAccountCategory })
+  @IsOptional()
+  @IsEnum(GLAccountCategory)
+  category?: GLAccountCategory;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @Transform(optionalBoolean)
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ example: 'Current' })
+  @IsOptional()
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(120)
+  search?: string;
+
+  @ApiPropertyOptional({ example: 1, minimum: 1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @ApiPropertyOptional({ example: 50, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @ApiPropertyOptional({
+    enum: ['code', 'name', 'displayOrder', 'createdAt', 'updatedAt'],
+  })
+  @IsOptional()
+  @IsIn(['code', 'name', 'displayOrder', 'createdAt', 'updatedAt'])
+  sortBy?: 'code' | 'name' | 'displayOrder' | 'createdAt' | 'updatedAt';
+
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  sortOrder?: 'asc' | 'desc';
+}
+
+export class QueryAccountGroupsDto extends QueryAccountHierarchyDto {
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  classificationId?: string;
+}
+
+export class CreateAccountClassificationDto {
+  @ApiProperty({ example: 'CURRENT_ASSET' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  code!: string;
+
+  @ApiProperty({ example: 'Current Assets' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiProperty({ enum: GLAccountCategory })
+  @IsEnum(GLAccountCategory)
+  category!: GLAccountCategory;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  displayOrder?: number;
+
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  isSystemTemplate?: boolean;
+}
+
+export class UpdateAccountClassificationDto extends PartialType(
+  CreateAccountClassificationDto,
+) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class CreateAccountGroupDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID()
+  classificationId!: string;
+
+  @ApiProperty({ example: 'BANK_ACCOUNTS' })
+  @Transform(uppercase)
+  @IsString()
+  @MaxLength(50)
+  code!: string;
+
+  @ApiProperty({ example: 'Bank Accounts' })
+  @Transform(trimmed)
+  @IsString()
+  @MaxLength(160)
+  name!: string;
+
+  @ApiPropertyOptional({ example: 10 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  displayOrder?: number;
+}
+
+export class UpdateAccountGroupDto extends PartialType(CreateAccountGroupDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class CreateCostCentreDto {

@@ -39,6 +39,16 @@ const reportLineInclude = {
       name: true,
       category: true,
       normalBalance: true,
+      accountGroup: {
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          classification: {
+            select: { id: true, code: true, name: true, category: true },
+          },
+        },
+      },
     },
   },
   subledgerAccount: { select: { id: true, code: true, name: true } },
@@ -58,6 +68,19 @@ type AccountSummary = {
   name: string;
   category: GLAccountCategory;
   normalBalance?: NormalBalance;
+  classification: {
+    id: string | null;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+  };
+  accountGroup: {
+    id: string | null;
+    code: string;
+    name: string;
+  };
+  hierarchyPath: string[];
+  isLegacyUnclassified: boolean;
 };
 
 type AccountGroupRow = {
@@ -118,7 +141,7 @@ export class ReportsService {
           journalNumber: line.journalEntry.journalNumber,
           journalStatus: line.journalEntry.status,
           description: line.description ?? line.journalEntry.description,
-          account: line.glAccount,
+          account: this.accountSummary(line.glAccount),
           subledger: line.subledgerAccount,
           costCentre: line.costCentre,
           debit: this.money(line.baseDebit),
@@ -137,6 +160,18 @@ export class ReportsService {
     const [accounts, lines] = await Promise.all([
       this.prisma.gLAccount.findMany({
         where: { tenantId },
+        include: {
+          accountGroup: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              classification: {
+                select: { id: true, code: true, name: true, category: true },
+              },
+            },
+          },
+        },
         orderBy: { code: 'asc' },
       }),
       this.findReportLines(tenantId, { toDate: asOfDate }),
@@ -162,6 +197,7 @@ export class ReportsService {
     return {
       asOfDate,
       accounts: grouped,
+      hierarchy: this.groupRowsByHierarchy(Object.values(grouped).flat()),
       totalDebit: this.money(totalDebit),
       totalCredit: this.money(totalCredit),
       imbalanceAmount: this.money(totalDebit.minus(totalCredit)),
@@ -217,6 +253,10 @@ export class ReportsService {
       toDate,
       revenueAccounts,
       expenseAccounts,
+      hierarchy: this.groupRowsByHierarchy([
+        ...revenueAccounts,
+        ...expenseAccounts,
+      ]),
       totalRevenue: this.money(totalRevenue),
       totalExpenses: this.money(totalExpenses),
       netProfitOrLoss: this.money(totalRevenue.minus(totalExpenses)),
@@ -268,6 +308,11 @@ export class ReportsService {
       assets,
       liabilities,
       equity,
+      hierarchy: this.groupRowsByHierarchy([
+        ...assets,
+        ...liabilities,
+        ...equity,
+      ]),
       totalAssets: this.money(totalAssets),
       totalLiabilities: this.money(totalLiabilities),
       totalEquity: this.money(totalEquity),
@@ -371,6 +416,17 @@ export class ReportsService {
         name: string;
         category: GLAccountCategory;
         normalBalance: NormalBalance;
+        accountGroup?: {
+          id: string;
+          code: string;
+          name: string;
+          classification: {
+            id: string;
+            code: string;
+            name: string;
+            category: GLAccountCategory;
+          };
+        } | null;
         debit: Prisma.Decimal;
         credit: Prisma.Decimal;
       }
@@ -441,7 +497,31 @@ export class ReportsService {
     name: string;
     category: GLAccountCategory;
     normalBalance?: NormalBalance;
+    accountGroup?: {
+      id: string;
+      code: string;
+      name: string;
+      classification: {
+        id: string;
+        code: string;
+        name: string;
+        category: GLAccountCategory;
+      };
+    } | null;
   }) {
+    const classification = account.accountGroup?.classification ?? {
+      id: null,
+      code: 'UNCLASSIFIED',
+      name: 'Unclassified',
+      category: account.category,
+    };
+    const accountGroup = account.accountGroup
+      ? {
+          id: account.accountGroup.id,
+          code: account.accountGroup.code,
+          name: account.accountGroup.name,
+        }
+      : { id: null, code: 'UNCLASSIFIED', name: 'Unclassified' };
     return {
       id: account.id,
       code: account.code,
@@ -450,7 +530,83 @@ export class ReportsService {
       ...(account.normalBalance
         ? { normalBalance: account.normalBalance }
         : {}),
+      classification,
+      accountGroup,
+      hierarchyPath: [
+        account.category,
+        classification.name,
+        accountGroup.name,
+        account.name,
+      ],
+      isLegacyUnclassified: !account.accountGroup,
     };
+  }
+
+  private groupRowsByHierarchy<T extends { account: AccountSummary }>(
+    rows: T[],
+  ) {
+    const categories = new Map<
+      GLAccountCategory,
+      Map<
+        string,
+        {
+          classification: AccountSummary['classification'];
+          groups: Map<
+            string,
+            { accountGroup: AccountSummary['accountGroup']; accounts: T[] }
+          >;
+        }
+      >
+    >();
+
+    for (const row of rows) {
+      const categoryMap =
+        categories.get(row.account.category) ??
+        new Map<
+          string,
+          {
+            classification: AccountSummary['classification'];
+            groups: Map<
+              string,
+              { accountGroup: AccountSummary['accountGroup']; accounts: T[] }
+            >;
+          }
+        >();
+      const classificationKey =
+        row.account.classification.id ?? row.account.classification.code;
+      const classificationEntry = categoryMap.get(classificationKey) ?? {
+        classification: row.account.classification,
+        groups: new Map<
+          string,
+          { accountGroup: AccountSummary['accountGroup']; accounts: T[] }
+        >(),
+      };
+      const groupKey =
+        row.account.accountGroup.id ?? row.account.accountGroup.code;
+      const groupEntry = classificationEntry.groups.get(groupKey) ?? {
+        accountGroup: row.account.accountGroup,
+        accounts: [],
+      };
+      groupEntry.accounts.push(row);
+      classificationEntry.groups.set(groupKey, groupEntry);
+      categoryMap.set(classificationKey, classificationEntry);
+      categories.set(row.account.category, categoryMap);
+    }
+
+    return Object.values(GLAccountCategory).map((category) => ({
+      category,
+      classifications: Array.from(categories.get(category)?.values() ?? []).map(
+        (classificationEntry) => ({
+          ...classificationEntry.classification,
+          groups: Array.from(classificationEntry.groups.values()).map(
+            (groupEntry) => ({
+              ...groupEntry.accountGroup,
+              accounts: groupEntry.accounts,
+            }),
+          ),
+        }),
+      ),
+    }));
   }
 
   private startOfDay(value: string | Date | undefined) {
