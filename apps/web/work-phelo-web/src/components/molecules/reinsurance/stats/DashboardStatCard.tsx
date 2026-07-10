@@ -1,8 +1,9 @@
 'use client';
 
+import { LucideIcon } from 'lucide-react';
 import { TrendBadge } from '@/components/atoms/TrendBadge';
 import { Skeleton } from '@/components/atoms/Skeleton';
-import { cardClass } from '@/lib/utils';
+import { cardClass, waterIconStyle } from '@/lib/utils';
 
 interface DashboardStatCardProps {
   label: string;
@@ -12,6 +13,9 @@ interface DashboardStatCardProps {
   isLoading?: boolean;
   periodLabel: string;
   subtext?: string;
+  icon?: LucideIcon;
+  /** Hex color seed for the icon's water-glass circle. Defaults to the module color. */
+  iconColor?: string;
 }
 
 export function DashboardStatCard({
@@ -22,10 +26,25 @@ export function DashboardStatCard({
   isLoading,
   periodLabel,
   subtext,
+  icon: Icon,
+  iconColor = 'var(--module-btn-bg, var(--brand))',
 }: DashboardStatCardProps) {
   return (
     <div className={cardClass('flex flex-col gap-2 p-5', 'glass')}>
-      <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</span>
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</span>
+        {Icon && (
+          <div
+            className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+            style={waterIconStyle(iconColor)}
+          >
+            <Icon
+              className="w-4.5 h-4.5"
+              style={{ color: `color-mix(in oklab, ${iconColor} 65%, black)` }}
+            />
+          </div>
+        )}
+      </div>
 
       {isLoading ? (
         <>

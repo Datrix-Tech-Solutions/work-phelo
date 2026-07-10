@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Bell, Home, LayoutGrid, LogOutIcon, Menu, Settings, UserIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, glassStrongClass } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -216,7 +216,12 @@ export function TopNav({
 
   return (
     <>
-      <header className="relative w-full bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md border-b border-(--module-border,var(--color-gray-200)) shadow-md px-5 h-14 flex items-center gap-4 shrink-0">
+      <header
+        className={glassStrongClass(
+          'relative w-full border-b border-(--module-border,var(--color-gray-200)) shadow-md px-5 h-14 flex items-center gap-4 shrink-0',
+          'none',
+        )}
+      >
         {/* Menu button */}
         {showMenuButton && (
           <button
@@ -259,7 +264,7 @@ export function TopNav({
           {/* Help */}
           {user?.role !== 'SUPER_ADMIN' && <HelpCenter />}
 
-          {/* Apps grid — back to module dashboard */}
+          {/* Apps grid — back to module launcher */}
           <button
             className="text-black/70 hover:text-black transition-colors"
             aria-label="Apps"
@@ -268,7 +273,7 @@ export function TopNav({
                 router.push('/dashboard');
               } else {
                 const slug = user?.tenantSlug || pathname.split('/')[1];
-                router.push(`/${slug}/dashboard`);
+                router.push(`/${slug}/modules`);
               }
             }}
           >

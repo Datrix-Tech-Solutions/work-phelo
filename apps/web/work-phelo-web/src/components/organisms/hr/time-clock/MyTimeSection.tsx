@@ -36,20 +36,28 @@ export function MyTimeSection({
   const historyTotalPages = historyData?.totalPages ?? 1;
 
   const historyColumns: Column<TimeEntry>[] = [
-    { key: 'date', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
-    { key: 'clockIn', label: 'CLOCK IN', render: (r) => <span>{formatTime(r.clockIn)}</span> },
+    { key: 'date', width: '1fr', label: 'Date', render: (r) => <span>{formatDate(r.date)}</span> },
+    {
+      key: 'clockIn',
+      width: '200px',
+      label: 'CLOCK IN',
+      render: (r) => <span>{formatTime(r.clockIn)}</span>,
+    },
     {
       key: 'clockOut',
+      width: '200px',
       label: 'Clock out',
       render: (r) => <span>{r.clockOut ? formatTime(r.clockOut) : '—'}</span>,
     },
     {
       key: 'totalMinutes',
+      width: '200px',
       label: 'Hours',
       render: (r) => <span>{r.totalMinutes > 0 ? formatMinutes(r.totalMinutes) : '—'}</span>,
     },
     {
       key: 'status',
+      width: '200px',
       label: 'Status',
       render: (r) => (
         <div className="flex items-center gap-2">
@@ -95,6 +103,7 @@ export function MyTimeSection({
             <h2 className="text-sm font-semibold text-gray-700 shrink-0">Attendance History</h2>
           }
           secondaryButton={{
+            color: '#85B7EB',
             label: 'Report Missed Entry',
             onClick: onReportMissed,
             icon: <ClockAlert className="w-4 h-4" />,

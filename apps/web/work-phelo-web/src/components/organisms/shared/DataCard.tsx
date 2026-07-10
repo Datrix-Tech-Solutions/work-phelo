@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn, glassStrongClass } from '@/lib/utils';
 
 export interface DataCardDetail {
   label: React.ReactNode;
@@ -44,11 +44,14 @@ export function DataCard({
   return (
     <div
       onClick={onClick}
-      className={cn(
-        'bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md border border-gray-200 shadow-lg rounded-card flex flex-col h-full w-80 transition-all duration-200',
-        onClick &&
-          'cursor-pointer hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-0.5',
-        className,
+      className={glassStrongClass(
+        cn(
+          'shadow-lg rounded-card flex flex-col h-full w-80 transition-all duration-200',
+          onClick &&
+            'cursor-pointer hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-0.5',
+          className,
+        ),
+        'plain',
       )}
     >
       {/* Header: icon + title/subtitle — badge on the right */}

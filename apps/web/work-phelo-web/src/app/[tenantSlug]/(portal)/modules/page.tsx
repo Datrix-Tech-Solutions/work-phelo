@@ -1,16 +1,14 @@
-// TENANT DASHBOARD
+// MODULES
 
 'use client';
 
 import { use } from 'react';
 import { useAuthStore } from '@/store/auth.store';
 import { useModuleTransition } from '@/hooks';
-import { TopNav, NavTab } from '@/components/organisms/shared/TopNav';
 import { ModuleButton } from '@/components/molecules/ModuleButton';
 import { getGreeting } from '@/lib/formatters';
 import { ModuleIcons, MODULE_COLORS } from '@/components/atoms/icons';
 import { AgreementGate } from '@/components/organisms/hr/companyPolicies/AgreementGate';
-import { AppBackground } from '@/components/atoms/AppBackground';
 
 /* ── Module definitions ── */
 interface ModuleDef {
@@ -60,11 +58,7 @@ const MODULE_DEFS: ModuleDef[] = [
 ];
 
 /* ── Page ── */
-export default function TenantDashboardPage({
-  params,
-}: {
-  params: Promise<{ tenantSlug: string }>;
-}) {
+export default function ModulesPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
   const { navigateToModule } = useModuleTransition();
   const user = useAuthStore((s) => s.user);
@@ -72,10 +66,6 @@ export default function TenantDashboardPage({
   const firstName = user?.firstName ?? 'User';
   const tenantName = user?.tenantName ?? '';
   const isTenantAdmin = user?.role === 'TENANT_ADMIN';
-  const initials = `${firstName[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase();
-
-  /* ── Fetch users for employee count ── */
-
   const isEmployee = user?.role === 'EMPLOYEE';
 
   /* ── Enabled modules from tenant config ── */
@@ -86,17 +76,9 @@ export default function TenantDashboardPage({
       .map(([key]) => key),
   );
 
-  const tabs: NavTab[] = [
-    { key: 'dashboard', label: 'Dashboard', href: `/${tenantSlug}/dashboard` },
-  ];
-  if (isTenantAdmin) {
-    tabs.push({ key: 'executive', label: 'Executive Dashboard', href: `/${tenantSlug}/executive` });
-  }
-
   return (
-    <AppBackground className="h-screen overflow-hidden flex flex-col">
+    <>
       {isEmployee && <AgreementGate />}
-      <TopNav userInitials={initials} notificationCount={0} logoVariant="image" tabs={tabs} />
 
       <main className="flex-1 min-h-0 overflow-y-auto">
         {/* Welcome banner */}
@@ -142,6 +124,6 @@ export default function TenantDashboardPage({
           </div>
         </div>
       </main>
-    </AppBackground>
+    </>
   );
 }

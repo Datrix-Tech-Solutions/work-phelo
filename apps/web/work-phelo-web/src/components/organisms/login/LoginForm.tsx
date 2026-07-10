@@ -43,7 +43,7 @@ export function LoginForm({
 
   const onSubmit = (data: LoginPayload) => {
     const onSuccess = () => {
-      const destination = isTenantLogin ? `/${tenantSlug}/dashboard` : (redirectTo ?? '/dashboard');
+      const destination = isTenantLogin ? `/${tenantSlug}/modules` : (redirectTo ?? '/dashboard');
       router.push(destination);
     };
     const onError = (err: unknown) => {

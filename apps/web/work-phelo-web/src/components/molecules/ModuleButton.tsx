@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, glassStrongClass } from '@/lib/utils';
 
 interface ModuleButtonProps {
   name: string;
@@ -45,7 +45,9 @@ export function ModuleButton({
       className={cn(
         'group relative w-full flex flex-col items-center text-center gap-4 p-6 rounded-card border transition-all duration-200',
         enabled
-          ? 'bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md border-(--module-border,var(--color-gray-200)) shadow-lg cursor-pointer hover:-translate-y-1.5 hover:border-(--card-accent,var(--color-gray-300)) hover:shadow-[0_16px_32px_-12px_color-mix(in_oklab,var(--card-accent)_45%,transparent)]'
+          ? glassStrongClass(
+              'shadow-lg cursor-pointer hover:-translate-y-1.5 hover:border-(--card-accent,var(--color-gray-300)) hover:shadow-[0_16px_32px_-12px_color-mix(in_oklab,var(--card-accent)_45%,transparent)]',
+            )
           : 'bg-gray-50 border-gray-200 cursor-not-allowed',
       )}
     >

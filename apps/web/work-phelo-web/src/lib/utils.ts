@@ -26,6 +26,25 @@ export function cardClass(extra?: string, border: 'module' | 'glass' = 'module')
   );
 }
 
+/** Popup/panel surfaces (SidePanel, DatePicker/SearchSelect dropdowns) — near-solid for
+ * legibility, unlike the more translucent cardClass()/glass-strong ambient surfaces. */
+export function popupClass(extra?: string) {
+  return cn(
+    'bg-(--glass-solid,rgba(255,255,255,0.9)) backdrop-blur-md rounded-card border border-gray-200 shadow-xl',
+    extra,
+  );
+}
+
+/** Same "strong" glass surface as TopNav/Sidebar/DataCard/ModuleButton/ContactCard — more opaque than cardClass(). */
+export function glassStrongClass(extra?: string, border: 'module' | 'plain' | 'none' = 'module') {
+  return cn(
+    'bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md',
+    border === 'module' && 'border border-(--module-border,var(--color-gray-200))',
+    border === 'plain' && 'border border-gray-200',
+    extra,
+  );
+}
+
 /** Frosted color-tint finish, same recipe as the quick-action icon circles — softer/quieter than waterAvatarStyle. */
 export function frostedAvatarStyle(color: string): CSSProperties {
   return {
@@ -45,5 +64,18 @@ export function waterAvatarStyle(color: string): CSSProperties {
       `0 4px 8px -2px color-mix(in srgb, ${color} 55%, transparent)`,
     ].join(', '),
     textShadow: '0 1px 2px rgba(0,0,0,0.35)',
+  };
+}
+
+/** Lighter, more translucent water-glass finish for a small icon circle (e.g. UpcomingHolidaysCard),
+ * tinted by the given color. Lets more of the card behind it show through than waterAvatarStyle. */
+export function waterIconStyle(color: string): CSSProperties {
+  return {
+    background: `radial-gradient(circle at 32% 26%, rgba(255,255,255,0.95) 0%, color-mix(in srgb, color-mix(in oklab, ${color} 25%, white) 85%, transparent) 30%, color-mix(in srgb, color-mix(in oklab, ${color} 60%, white) 65%, transparent) 60%, color-mix(in srgb, ${color} 55%, transparent) 100%)`,
+    boxShadow: [
+      `inset -2px -2px 4px color-mix(in srgb, color-mix(in oklab, ${color} 70%, black) 25%, transparent)`,
+      'inset 1.5px 1.5px 3px rgba(255,255,255,0.9)',
+      `0 3px 6px -1px color-mix(in srgb, ${color} 45%, transparent)`,
+    ].join(', '),
   };
 }

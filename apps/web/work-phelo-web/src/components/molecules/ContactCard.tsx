@@ -2,7 +2,7 @@
 
 import Image from 'next/image';
 import { MapPin, UserPlus, Trash2, Mail, Phone } from 'lucide-react';
-import { cn, frostedAvatarStyle } from '@/lib/utils';
+import { cn, glassStrongClass, frostedAvatarStyle } from '@/lib/utils';
 
 // Same color identities as before (violet, blue, emerald, orange, pink, teal, amber, red),
 // now as vivid hex values so they can drive the frosted-glass tint.
@@ -137,12 +137,15 @@ export function ContactCard({
 
   return (
     <div
-      className={cn(
-        'group relative bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md rounded-xl p-4 w-95 h-full flex flex-col gap-4',
-        'border border-gray-100 shadow-lg transition-all duration-200',
-        'hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-1.5',
-        onClick && 'cursor-pointer',
-        className,
+      className={glassStrongClass(
+        cn(
+          'group relative rounded-xl p-4 w-95 h-full flex flex-col gap-4',
+          'border border-gray-100 shadow-lg transition-all duration-200',
+          'hover:border-(--module-border,var(--color-purple-100)) hover:shadow-xl hover:-translate-y-1.5',
+          onClick && 'cursor-pointer',
+          className,
+        ),
+        'none',
       )}
       onClick={onClick}
     >

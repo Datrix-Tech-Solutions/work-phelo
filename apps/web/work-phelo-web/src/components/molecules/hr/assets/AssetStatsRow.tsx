@@ -24,31 +24,31 @@ export function AssetStatsRow({
         title="Total Assets"
         value={isLoading ? null : total}
         icon={<Package className="w-4.5 h-4.5 text-gray-600" />}
-        iconBg="bg-gray-100"
+        iconColor="#6b7280"
       />
       <StatCard
         title="Assigned"
         value={isLoading ? null : assigned}
         icon={<UserCheck className="w-4.5 h-4.5 text-blue-600" />}
-        iconBg="bg-blue-50"
+        iconColor="#3b82f6"
       />
       <StatCard
         title="Available"
         value={isLoading ? null : available}
         icon={<CheckCircle className="w-4.5 h-4.5 text-green-600" />}
-        iconBg="bg-green-50"
+        iconColor="#22c55e"
       />
       <StatCard
         title="Under Maintenance"
         value={isLoading ? null : maintenance}
         icon={<Wrench className="w-4.5 h-4.5 text-yellow-600" />}
-        iconBg="bg-yellow-50"
+        iconColor="#eab308"
       />
       <StatCard
         title="Retired"
         value={isLoading ? null : retired}
         icon={<Archive className="w-4.5 h-4.5 text-red-500" />}
-        iconBg="bg-red-50"
+        iconColor="#ef4444"
       />
     </div>
   );

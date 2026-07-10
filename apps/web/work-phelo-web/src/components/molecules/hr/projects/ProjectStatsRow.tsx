@@ -22,25 +22,25 @@ export function ProjectStatsRow({
         title="Total Projects"
         value={isLoading ? null : total}
         icon={<Layers className="w-4.5 h-4.5 text-green-600" />}
-        iconBg="bg-green-50"
+        iconColor="#22c55e"
       />
       <StatCard
         title="Active Projects"
         value={isLoading ? null : active}
         icon={<ClipboardList className="w-4.5 h-4.5 text-blue-600" />}
-        iconBg="bg-blue-50"
+        iconColor="#3b82f6"
       />
       <StatCard
         title="Completed"
         value={isLoading ? null : completed}
         icon={<CheckCircle className="w-4.5 h-4.5 text-purple-600" />}
-        iconBg="bg-purple-50"
+        iconColor="#a855f7"
       />
       <StatCard
         title="In Planning"
         value={isLoading ? null : planning}
         icon={<ClipboardList className="w-4.5 h-4.5 text-yellow-600" />}
-        iconBg="bg-yellow-50"
+        iconColor="#eab308"
       />
     </div>
   );
