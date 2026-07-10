@@ -26,13 +26,19 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingPermission } from './accounting.permissions';
 import {
+  CreateAccountClassificationDto,
+  CreateAccountGroupDto,
   CreateAccountingCustomerDto,
   CreateAccountingVendorDto,
   CreateCostCentreDto,
   CreateGLAccountDto,
   CreateSubledgerAccountDto,
   QueryAccountingPartiesDto,
+  QueryAccountGroupsDto,
+  QueryAccountHierarchyDto,
   QueryGLAccountsDto,
+  UpdateAccountClassificationDto,
+  UpdateAccountGroupDto,
   UpdateAccountingCustomerDto,
   UpdateAccountingVendorDto,
   UpdateCostCentreDto,
@@ -51,6 +57,180 @@ export class AccountsController {
     private readonly masterData: AccountingMasterDataService,
     private readonly journals: JournalsService,
   ) {}
+
+  @Get('account-categories')
+  @ApiTags('Accounting - Chart of Accounts')
+  @ApiOperation({ summary: 'List system-controlled account categories' })
+  @RequirePermissions(AccountingPermission.ACCOUNTS_VIEW)
+  listAccountCategories() {
+    return this.masterData.listAccountCategories();
+  }
+
+  @Get('account-classifications')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'List tenant account classifications' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_CLASSIFICATIONS_VIEW)
+  listAccountClassifications(
+    @Query() query: QueryAccountHierarchyDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.listAccountClassifications(
+      request.user.tenantId,
+      query,
+    );
+  }
+
+  @Post('account-classifications')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Create an account classification' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_CLASSIFICATIONS_CREATE)
+  createAccountClassification(
+    @Body() dto: CreateAccountClassificationDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.createAccountClassification(request.user, dto);
+  }
+
+  @Get('account-classifications/:classificationId')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Get an account classification' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_CLASSIFICATIONS_VIEW)
+  getAccountClassification(
+    @Param('classificationId', ParseUUIDPipe) classificationId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.getAccountClassification(
+      request.user,
+      classificationId,
+    );
+  }
+
+  @Patch('account-classifications/:classificationId')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Update an account classification' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_CLASSIFICATIONS_EDIT)
+  updateAccountClassification(
+    @Param('classificationId', ParseUUIDPipe) classificationId: string,
+    @Body() dto: UpdateAccountClassificationDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.updateAccountClassification(
+      request.user,
+      classificationId,
+      dto,
+    );
+  }
+
+  @Post('account-classifications/:classificationId/activate')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Reactivate an account classification' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_CLASSIFICATIONS_EDIT)
+  activateAccountClassification(
+    @Param('classificationId', ParseUUIDPipe) classificationId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.activateAccountClassification(
+      request.user,
+      classificationId,
+    );
+  }
+
+  @Post('account-classifications/:classificationId/deactivate')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Deactivate an account classification' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_CLASSIFICATIONS_DEACTIVATE)
+  deactivateAccountClassification(
+    @Param('classificationId', ParseUUIDPipe) classificationId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.deactivateAccountClassification(
+      request.user,
+      classificationId,
+    );
+  }
+
+  @Get('account-groups')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'List tenant account groups' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_GROUPS_VIEW)
+  listAccountGroups(
+    @Query() query: QueryAccountGroupsDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.listAccountGroups(request.user.tenantId, query);
+  }
+
+  @Post('account-groups')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Create an account group' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_GROUPS_CREATE)
+  createAccountGroup(
+    @Body() dto: CreateAccountGroupDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.createAccountGroup(request.user, dto);
+  }
+
+  @Get('account-groups/:groupId')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Get an account group' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_GROUPS_VIEW)
+  getAccountGroup(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.getAccountGroup(request.user, groupId);
+  }
+
+  @Patch('account-groups/:groupId')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Update an account group' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_GROUPS_EDIT)
+  updateAccountGroup(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Body() dto: UpdateAccountGroupDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.updateAccountGroup(request.user, groupId, dto);
+  }
+
+  @Post('account-groups/:groupId/activate')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Reactivate an account group' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_GROUPS_EDIT)
+  activateAccountGroup(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.activateAccountGroup(request.user, groupId);
+  }
+
+  @Post('account-groups/:groupId/deactivate')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({ summary: 'Deactivate an account group' })
+  @RequirePermissions(AccountingPermission.ACCOUNT_GROUPS_DEACTIVATE)
+  deactivateAccountGroup(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.deactivateAccountGroup(request.user, groupId);
+  }
+
+  @Post('account-hierarchy/seed-standard')
+  @ApiTags('Accounting - Account Hierarchy')
+  @ApiOperation({
+    summary:
+      'Seed a safe standard account classification and group hierarchy for a tenant',
+  })
+  @RequirePermissions(
+    AccountingPermission.ACCOUNT_CLASSIFICATIONS_CREATE,
+    AccountingPermission.ACCOUNT_GROUPS_CREATE,
+  )
+  seedStandardAccountHierarchy(
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.seedStandardAccountHierarchy(request.user);
+  }
 
   @Get('accounts')
   @ApiTags('Accounting - Chart of Accounts')

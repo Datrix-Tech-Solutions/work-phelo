@@ -164,6 +164,7 @@ model GLAccount {
   name             String
   category         GLAccountCategory
   normalBalance    NormalBalance
+  accountGroupId   String?
   parentAccountId  String?
   allowPosting     Boolean            @default(true)
   description      String?
@@ -172,6 +173,7 @@ model GLAccount {
   updatedByUserId  String
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+  accountGroup     AccountGroup?      @relation(fields: [accountGroupId, tenantId], references: [id, tenantId], onDelete: Restrict)
   parentAccount    GLAccount?         @relation("GLAccountHierarchy", fields: [parentAccountId, tenantId], references: [id, tenantId], onDelete: Restrict)
   childAccounts    GLAccount[]        @relation("GLAccountHierarchy")
   journalLines     JournalLine[]
@@ -184,7 +186,65 @@ model GLAccount {
   @@unique([id, tenantId])
   @@unique([tenantId, code])
   @@index([tenantId, category, status])
+  @@index([tenantId, accountGroupId])
   @@index([tenantId, parentAccountId])
+  @@schema("accounting")
+}
+
+model AccountClassification {
+  id               String            @id @default(uuid())
+  tenantId         String
+  code             String
+  name             String
+  category         GLAccountCategory
+  displayOrder     Int               @default(0)
+  isSystemTemplate Boolean           @default(false)
+  isActive         Boolean           @default(true)
+  createdByUserId  String
+  updatedByUserId  String
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  accountGroups    AccountGroup[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@index([tenantId, category, isActive, displayOrder])
+  @@schema("accounting")
+}
+
+model AccountGroup {
+  id               String                @id @default(uuid())
+  tenantId         String
+  classificationId String
+  code             String
+  name             String
+  displayOrder     Int                   @default(0)
+  isActive         Boolean               @default(true)
+  createdByUserId  String
+  updatedByUserId  String
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  classification   AccountClassification @relation(fields: [classificationId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  glAccounts       GLAccount[]
+
+  @@unique([id, tenantId])
+  @@unique([tenantId, code])
+  @@index([tenantId, classificationId, isActive, displayOrder])
+  @@schema("accounting")
+}
+
+model AccountingAuditLog {
+  id            String   @id @default(uuid())
+  tenantId      String
+  actorUserId   String
+  action        String
+  entityType    String
+  entityId      String
+  changedFields Json?
+  createdAt     DateTime @default(now())
+
+  @@index([tenantId, entityType, entityId, createdAt])
+  @@index([tenantId, actorUserId, createdAt])
   @@schema("accounting")
 }
 
