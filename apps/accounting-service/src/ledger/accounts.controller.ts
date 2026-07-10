@@ -26,10 +26,15 @@ import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { AccountingMasterDataService } from './accounting-master-data.service';
 import { AccountingPermission } from './accounting.permissions';
 import {
+  CreateAccountingCustomerDto,
+  CreateAccountingVendorDto,
   CreateCostCentreDto,
   CreateGLAccountDto,
   CreateSubledgerAccountDto,
+  QueryAccountingPartiesDto,
   QueryGLAccountsDto,
+  UpdateAccountingCustomerDto,
+  UpdateAccountingVendorDto,
   UpdateCostCentreDto,
   UpdateGLAccountDto,
   UpdateSubledgerAccountDto,
@@ -192,5 +197,143 @@ export class AccountsController {
       request.user,
       subledgerId,
     );
+  }
+
+  @Get('customers')
+  @ApiTags('Accounting - Customers')
+  @ApiOperation({ summary: 'List tenant accounting customers' })
+  @RequirePermissions(AccountingPermission.CUSTOMERS_VIEW)
+  listCustomers(
+    @Query() query: QueryAccountingPartiesDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.listCustomers(request.user.tenantId, query);
+  }
+
+  @Post('customers')
+  @ApiTags('Accounting - Customers')
+  @ApiOperation({
+    summary: 'Create an accounting customer and linked subledger account',
+  })
+  @RequirePermissions(AccountingPermission.CUSTOMERS_CREATE)
+  createCustomer(
+    @Body() dto: CreateAccountingCustomerDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.createCustomer(request.user, dto);
+  }
+
+  @Get('customers/:customerId')
+  @ApiTags('Accounting - Customers')
+  @ApiOperation({ summary: 'Get accounting customer detail with balance' })
+  @RequirePermissions(AccountingPermission.CUSTOMERS_VIEW)
+  getCustomer(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.getCustomer(request.user, customerId);
+  }
+
+  @Patch('customers/:customerId')
+  @ApiTags('Accounting - Customers')
+  @ApiOperation({ summary: 'Update an accounting customer master record' })
+  @RequirePermissions(AccountingPermission.CUSTOMERS_EDIT)
+  updateCustomer(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Body() dto: UpdateAccountingCustomerDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.updateCustomer(request.user, customerId, dto);
+  }
+
+  @Post('customers/:customerId/deactivate')
+  @ApiTags('Accounting - Customers')
+  @ApiOperation({ summary: 'Deactivate a customer without deleting history' })
+  @RequirePermissions(AccountingPermission.CUSTOMERS_DEACTIVATE)
+  deactivateCustomer(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.deactivateCustomer(request.user, customerId);
+  }
+
+  @Post('customers/:customerId/activate')
+  @ApiTags('Accounting - Customers')
+  @ApiOperation({ summary: 'Reactivate a customer and linked subledger' })
+  @RequirePermissions(AccountingPermission.CUSTOMERS_EDIT)
+  activateCustomer(
+    @Param('customerId', ParseUUIDPipe) customerId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.activateCustomer(request.user, customerId);
+  }
+
+  @Get('vendors')
+  @ApiTags('Accounting - Vendors')
+  @ApiOperation({ summary: 'List tenant accounting vendors' })
+  @RequirePermissions(AccountingPermission.VENDORS_VIEW)
+  listVendors(
+    @Query() query: QueryAccountingPartiesDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.listVendors(request.user.tenantId, query);
+  }
+
+  @Post('vendors')
+  @ApiTags('Accounting - Vendors')
+  @ApiOperation({
+    summary: 'Create an accounting vendor and linked subledger account',
+  })
+  @RequirePermissions(AccountingPermission.VENDORS_CREATE)
+  createVendor(
+    @Body() dto: CreateAccountingVendorDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.createVendor(request.user, dto);
+  }
+
+  @Get('vendors/:vendorId')
+  @ApiTags('Accounting - Vendors')
+  @ApiOperation({ summary: 'Get accounting vendor detail with balance' })
+  @RequirePermissions(AccountingPermission.VENDORS_VIEW)
+  getVendor(
+    @Param('vendorId', ParseUUIDPipe) vendorId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.getVendor(request.user, vendorId);
+  }
+
+  @Patch('vendors/:vendorId')
+  @ApiTags('Accounting - Vendors')
+  @ApiOperation({ summary: 'Update an accounting vendor master record' })
+  @RequirePermissions(AccountingPermission.VENDORS_EDIT)
+  updateVendor(
+    @Param('vendorId', ParseUUIDPipe) vendorId: string,
+    @Body() dto: UpdateAccountingVendorDto,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.updateVendor(request.user, vendorId, dto);
+  }
+
+  @Post('vendors/:vendorId/deactivate')
+  @ApiTags('Accounting - Vendors')
+  @ApiOperation({ summary: 'Deactivate a vendor without deleting history' })
+  @RequirePermissions(AccountingPermission.VENDORS_DEACTIVATE)
+  deactivateVendor(
+    @Param('vendorId', ParseUUIDPipe) vendorId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.deactivateVendor(request.user, vendorId);
+  }
+
+  @Post('vendors/:vendorId/activate')
+  @ApiTags('Accounting - Vendors')
+  @ApiOperation({ summary: 'Reactivate a vendor and linked subledger' })
+  @RequirePermissions(AccountingPermission.VENDORS_EDIT)
+  activateVendor(
+    @Param('vendorId', ParseUUIDPipe) vendorId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.masterData.activateVendor(request.user, vendorId);
   }
 }

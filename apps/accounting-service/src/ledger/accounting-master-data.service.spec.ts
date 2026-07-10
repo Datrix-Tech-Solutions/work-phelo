@@ -5,6 +5,7 @@ import {
   GLAccountCategory,
   NormalBalance,
   RecordStatus,
+  SubledgerType,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountingMasterDataService } from './accounting-master-data.service';
@@ -47,12 +48,36 @@ describe('AccountingMasterDataService', () => {
         count: jest.fn(),
         update: jest.fn(),
       },
+      subledgerAccount: {
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      accountingCustomer: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn(),
+      },
+      accountingVendor: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        findMany: jest.fn(),
+        count: jest.fn(),
+      },
+      journalLine: {
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       $queryRaw: jest.fn(),
       $executeRaw: jest.fn().mockResolvedValue(1),
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation(
-      (callback: (tx: typeof prisma) => unknown) => callback(prisma),
+      (input: ((tx: typeof prisma) => unknown) | Array<Promise<unknown>>) => {
+        if (Array.isArray(input)) return Promise.all(input);
+        return input(prisma);
+      },
     );
     const service = new AccountingMasterDataService(
       prisma as unknown as PrismaService,
@@ -176,5 +201,288 @@ describe('AccountingMasterDataService', () => {
         },
       }),
     );
+  });
+
+  it('creates a customer with a linked customer subledger account', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingCurrency.findUnique.mockResolvedValue({
+      code: 'GHS',
+      isActive: true,
+    });
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      tenantId: actor.tenantId,
+      baseCurrency: 'GHS',
+      accountsReceivableControlAccountId: 'ar-control',
+      accountsPayableControlAccountId: 'ap-control',
+    });
+    prisma.subledgerAccount.create.mockResolvedValue({
+      id: 'subledger-1',
+      code: 'CUS-0001',
+      type: SubledgerType.CUSTOMER,
+    });
+    prisma.accountingCustomer.create.mockResolvedValue({
+      id: 'customer-1',
+      tenantId: actor.tenantId,
+      code: 'CUS-0001',
+      legalName: 'Acme Insurance',
+      currency: 'GHS',
+      subledgerAccountId: 'subledger-1',
+      subledgerAccount: {
+        id: 'subledger-1',
+        code: 'CUS-0001',
+        name: 'Acme Insurance',
+        status: RecordStatus.ACTIVE,
+      },
+    });
+
+    const result = (await service.createCustomer(actor, {
+      code: 'CUS-0001',
+      legalName: 'Acme Insurance',
+      currency: 'GHS',
+    })) as {
+      id: string;
+      balance: { baseBalance: number };
+    };
+
+    const subledgerCreateMock = prisma.subledgerAccount
+      .create as jest.MockedFunction<
+      (args: {
+        data: {
+          tenantId: string;
+          code: string;
+          name: string;
+          type: SubledgerType;
+          controlAccountId: string;
+        };
+      }) => Promise<unknown>
+    >;
+    const subledgerCreateCall = subledgerCreateMock.mock.calls[0][0];
+    expect(subledgerCreateCall.data).toEqual(
+      expect.objectContaining({
+        tenantId: actor.tenantId,
+        code: 'CUS-0001',
+        name: 'Acme Insurance',
+        type: SubledgerType.CUSTOMER,
+        controlAccountId: 'ar-control',
+      }),
+    );
+
+    const customerCreateMock = prisma.accountingCustomer
+      .create as jest.MockedFunction<
+      (args: { data: { subledgerAccountId: string } }) => Promise<unknown>
+    >;
+    const customerCreateCall = customerCreateMock.mock.calls[0][0];
+    expect(customerCreateCall.data.subledgerAccountId).toBe('subledger-1');
+    expect(result.id).toBe('customer-1');
+    expect(result.balance.baseBalance).toBe(0);
+  });
+
+  it('requires an AR control account before creating customers', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingCurrency.findUnique.mockResolvedValue({
+      code: 'GHS',
+      isActive: true,
+    });
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      tenantId: actor.tenantId,
+      baseCurrency: 'GHS',
+      accountsReceivableControlAccountId: null,
+    });
+
+    await expect(
+      service.createCustomer(actor, {
+        code: 'CUS-0001',
+        legalName: 'Acme Insurance',
+        currency: 'GHS',
+      }),
+    ).rejects.toThrow('accounts receivable control account');
+    expect(prisma.subledgerAccount.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects AP control accounts that are not liability accounts', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingCurrency.findUnique.mockResolvedValue({
+      code: 'GHS',
+      isActive: true,
+    });
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      tenantId: actor.tenantId,
+      baseCurrency: 'GHS',
+    });
+    prisma.gLAccount.findFirst.mockResolvedValue({
+      id: 'asset-control',
+      tenantId: actor.tenantId,
+      category: GLAccountCategory.ASSET,
+      status: RecordStatus.ACTIVE,
+      allowPosting: true,
+    });
+    prisma.gLAccount.count.mockResolvedValue(0);
+
+    await expect(
+      service.updateConfig(actor, {
+        baseCurrency: 'GHS',
+        accountsPayableControlAccountId: 'asset-control',
+      }),
+    ).rejects.toThrow('Accounts payable control account must be a LIABILITY');
+    expect(prisma.accountingTenantConfig.upsert).not.toHaveBeenCalled();
+  });
+
+  it('rejects a vendor default expense account outside EXPENSE category', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingCurrency.findUnique.mockResolvedValue({
+      code: 'GHS',
+      isActive: true,
+    });
+    prisma.accountingTenantConfig.findUnique.mockResolvedValue({
+      tenantId: actor.tenantId,
+      baseCurrency: 'GHS',
+      accountsPayableControlAccountId: 'ap-control',
+    });
+    prisma.gLAccount.findFirst.mockResolvedValue({
+      id: 'asset-account',
+      tenantId: actor.tenantId,
+      category: GLAccountCategory.ASSET,
+      status: RecordStatus.ACTIVE,
+      allowPosting: true,
+    });
+
+    await expect(
+      service.createVendor(actor, {
+        code: 'VEN-0001',
+        legalName: 'Office Supplies Ltd',
+        currency: 'GHS',
+        defaultExpenseAccountId: 'asset-account',
+      }),
+    ).rejects.toThrow('Default expense account must be a EXPENSE account');
+    expect(prisma.subledgerAccount.create).not.toHaveBeenCalled();
+  });
+
+  it('deactivates a customer and its linked subledger without deleting history', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingCustomer.findFirst.mockResolvedValue({
+      id: 'customer-1',
+      tenantId: actor.tenantId,
+      code: 'CUS-0001',
+      legalName: 'Acme Insurance',
+      currency: 'GHS',
+      subledgerAccountId: 'subledger-1',
+      subledgerAccount: {
+        id: 'subledger-1',
+        code: 'CUS-0001',
+        name: 'Acme Insurance',
+        status: RecordStatus.ACTIVE,
+      },
+    });
+    prisma.accountingCustomer.update.mockResolvedValue({
+      id: 'customer-1',
+      tenantId: actor.tenantId,
+      code: 'CUS-0001',
+      legalName: 'Acme Insurance',
+      currency: 'GHS',
+      isActive: false,
+      subledgerAccountId: 'subledger-1',
+      subledgerAccount: {
+        id: 'subledger-1',
+        code: 'CUS-0001',
+        name: 'Acme Insurance',
+        status: RecordStatus.INACTIVE,
+      },
+    });
+
+    await service.deactivateCustomer(actor, 'customer-1');
+
+    const subledgerUpdateMock = prisma.subledgerAccount
+      .update as jest.MockedFunction<
+      (args: {
+        where: { id_tenantId: { id: string; tenantId: string } };
+        data: { status: RecordStatus; updatedByUserId: string };
+      }) => Promise<unknown>
+    >;
+    const subledgerUpdateCall = subledgerUpdateMock.mock.calls[0][0];
+    expect(subledgerUpdateCall.where.id_tenantId).toEqual({
+      id: 'subledger-1',
+      tenantId: actor.tenantId,
+    });
+    expect(subledgerUpdateCall.data.status).toBe(RecordStatus.INACTIVE);
+    expect(subledgerUpdateCall.data.updatedByUserId).toBe(actor.id);
+
+    const customerUpdateMock = prisma.accountingCustomer
+      .update as jest.MockedFunction<
+      (args: { data: { isActive: boolean } }) => Promise<unknown>
+    >;
+    const customerUpdateCall = customerUpdateMock.mock.calls[0][0];
+    expect(customerUpdateCall.data.isActive).toBe(false);
+  });
+
+  it('lists customers with one bulk posted-line balance query', async () => {
+    const { prisma, service } = setup();
+    prisma.accountingCustomer.findMany.mockResolvedValue([
+      {
+        id: 'customer-1',
+        tenantId: actor.tenantId,
+        code: 'CUS-0001',
+        legalName: 'Acme Insurance',
+        currency: 'GHS',
+        subledgerAccountId: 'subledger-1',
+        subledgerAccount: {
+          id: 'subledger-1',
+          code: 'CUS-0001',
+          name: 'Acme Insurance',
+          status: RecordStatus.ACTIVE,
+        },
+      },
+      {
+        id: 'customer-2',
+        tenantId: actor.tenantId,
+        code: 'CUS-0002',
+        legalName: 'Best Insurance',
+        currency: 'GHS',
+        subledgerAccountId: 'subledger-2',
+        subledgerAccount: {
+          id: 'subledger-2',
+          code: 'CUS-0002',
+          name: 'Best Insurance',
+          status: RecordStatus.ACTIVE,
+        },
+      },
+    ]);
+    prisma.accountingCustomer.count.mockResolvedValue(2);
+    prisma.journalLine.findMany.mockResolvedValue([
+      {
+        subledgerAccountId: 'subledger-1',
+        baseDebit: 100,
+        baseCredit: 25,
+        transactionDebit: 100,
+        transactionCredit: 25,
+        journalEntry: {
+          transactionCurrency: 'GHS',
+          baseCurrency: 'GHS',
+        },
+      },
+    ]);
+
+    const result = await service.listCustomers(actor.tenantId, {});
+
+    expect(prisma.journalLine.findMany).toHaveBeenCalledTimes(1);
+    const journalLineFindManyMock = prisma.journalLine
+      .findMany as jest.MockedFunction<
+      (args: {
+        where: {
+          tenantId: string;
+          subledgerAccountId: { in: string[] };
+          journalEntry: { status: { in: string[] } };
+        };
+      }) => Promise<unknown>
+    >;
+    const journalLineFindManyCall = journalLineFindManyMock.mock.calls[0][0];
+    expect(journalLineFindManyCall.where).toEqual({
+      tenantId: actor.tenantId,
+      subledgerAccountId: { in: ['subledger-1', 'subledger-2'] },
+      journalEntry: {
+        status: { in: ['POSTED', 'REVERSED'] },
+      },
+    });
+    expect(result.items[0].balance.baseBalance).toBe(75);
+    expect(result.items[1].balance.baseBalance).toBe(0);
   });
 });
