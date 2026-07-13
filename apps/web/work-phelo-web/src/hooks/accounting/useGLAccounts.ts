@@ -7,7 +7,7 @@ import {
   UpdateGLAccountPayload,
 } from '@/types/accounting';
 
-const BASE = '/accounts';
+const BASE = '/accounting/accounts';
 const GL_ACCOUNTS_KEY = ['accounting', 'gl-accounts'] as const;
 
 export function useGLAccounts(params: QueryGLAccountsParams = {}) {
@@ -65,7 +65,7 @@ export function useGLAccountOptions(params: QueryGLAccountsParams = {}) {
   const { data = [], isLoading } = useGLAccounts(params);
   return {
     options: data
-      .filter((a) => a.status === 'ACTIVE')
+      .filter((a) => a.status === 'ACTIVE' && a.allowPosting)
       .map((a) => ({ value: a.id, label: `${a.code} – ${a.name}` })),
     isLoading,
   };

@@ -1,0 +1,318 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { ChevronRight, ChevronDown, File, Folder, FolderOpen, FileText } from 'lucide-react';
+import { cardClass, cn } from '@/lib/utils';
+import { useAccountClassifications, useAccountGroups, useGLAccounts } from '@/hooks';
+import {
+  AccountClassification,
+  AccountGroup,
+  GLAccount,
+  GLAccountCategory,
+} from '@/types/accounting';
+
+const CATEGORIES: { value: GLAccountCategory; label: string; code: string; color: string }[] = [
+  { value: 'ASSET', label: 'Asset', code: '1000', color: 'text-blue-500' },
+  { value: 'LIABILITY', label: 'Liability', code: '2000', color: 'text-red-500' },
+  { value: 'EQUITY', label: 'Equity', code: '3000', color: 'text-purple-500' },
+  { value: 'REVENUE', label: 'Revenue', code: '4000', color: 'text-green-500' },
+  { value: 'EXPENSE', label: 'Expense', code: '5000', color: 'text-orange-500' },
+];
+
+/** Same glass fade-in used for DataTable row hovers, scaled down to tree rows. */
+function RowHoverOverlay() {
+  return (
+    <div
+      className={cardClass(
+        'absolute inset-0.5 rounded-lg bg-(--table-header-bg,var(--color-gray-200)) opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 pointer-events-none',
+        'glass',
+      )}
+    />
+  );
+}
+
+interface GroupNodeProps {
+  color: string;
+  group: AccountGroup;
+  glAccounts: GLAccount[];
+}
+
+function GroupNode({ color, group, glAccounts }: GroupNodeProps) {
+  const [open, setOpen] = useState(false);
+  const hasAccounts = glAccounts.length > 0;
+
+  if (!hasAccounts) {
+    return (
+      <div className="relative group/row rounded-lg">
+        <RowHoverOverlay />
+        <div className="relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600">
+          <File className={cn('w-4 h-4 shrink-0', color)} />
+          <span className="text-xs font-semibold text-gray-400 shrink-0">{group.code}</span>
+          <span className="truncate">{group.name}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="relative group/row rounded-lg">
+        <RowHoverOverlay />
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600"
+        >
+          {open ? (
+            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+          )}
+          {open ? (
+            <FolderOpen className={cn('w-4 h-4 shrink-0', color)} />
+          ) : (
+            <Folder className={cn('w-4 h-4 shrink-0', color)} />
+          )}
+          <span className="text-xs font-semibold text-gray-400 shrink-0">{group.code}</span>
+          <span className="truncate">{group.name}</span>
+          <span className="ml-auto text-xs text-gray-400">{glAccounts.length}</span>
+        </button>
+      </div>
+
+      {open && (
+        <div className="ml-6 border-l border-gray-100 pl-3 flex flex-col">
+          {glAccounts.map((account) => (
+            <div key={account.id} className="relative group/row rounded-lg">
+              <RowHoverOverlay />
+              <div className="relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600">
+                <FileText className={cn('w-4 h-4 shrink-0', color)} />
+                <span className="text-xs font-semibold text-gray-400 shrink-0">{account.code}</span>
+                <span className="truncate">{account.name}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ClassificationNodeProps {
+  color: string;
+  classification: AccountClassification;
+  groups: AccountGroup[];
+  glAccounts: GLAccount[];
+}
+
+function ClassificationNode({
+  color,
+  classification,
+  groups,
+  glAccounts,
+}: ClassificationNodeProps) {
+  const [open, setOpen] = useState(false);
+  const hasGroups = groups.length > 0;
+
+  if (!hasGroups) {
+    return (
+      <div className="relative group/row rounded-lg">
+        <RowHoverOverlay />
+        <div className="relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600">
+          <span className="w-4 h-4 shrink-0" />
+          <File className={cn('w-4 h-4 shrink-0', color)} />
+          <span className="text-xs font-semibold text-gray-400 shrink-0">
+            {classification.code}
+          </span>
+          <span className="truncate">{classification.name}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="relative group/row rounded-lg">
+        <RowHoverOverlay />
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600"
+        >
+          {open ? (
+            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+          )}
+          {open ? (
+            <FolderOpen className={cn('w-4 h-4 shrink-0', color)} />
+          ) : (
+            <Folder className={cn('w-4 h-4 shrink-0', color)} />
+          )}
+          <span className="text-xs font-semibold text-gray-400 shrink-0">
+            {classification.code}
+          </span>
+          <span className="truncate">{classification.name}</span>
+          <span className="ml-auto text-xs text-gray-400">{groups.length}</span>
+        </button>
+      </div>
+
+      {open && (
+        <div className="ml-6 border-l border-gray-100 pl-3 flex flex-col">
+          {groups.map((group) => (
+            <GroupNode
+              key={group.id}
+              color={color}
+              group={group}
+              glAccounts={glAccounts.filter((a) => a.accountGroupId === group.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface TypeNodeProps {
+  label: string;
+  code: string;
+  color: string;
+  open: boolean;
+  onToggle: () => void;
+  classifications: AccountClassification[];
+  groups: AccountGroup[];
+  glAccounts: GLAccount[];
+}
+
+function TypeNode({
+  label,
+  code,
+  color,
+  open,
+  onToggle,
+  classifications,
+  groups,
+  glAccounts,
+}: TypeNodeProps) {
+  return (
+    <div>
+      <div className="relative group/row rounded-lg">
+        <RowHoverOverlay />
+        <button
+          type="button"
+          onClick={onToggle}
+          className="relative w-full flex items-center gap-2 px-3 py-3 rounded-lg text-sm text-gray-700"
+        >
+          {open ? (
+            <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+          )}
+          {open ? (
+            <FolderOpen className={cn('w-5 h-5 shrink-0', color)} />
+          ) : (
+            <Folder className={cn('w-5 h-5 shrink-0', color)} />
+          )}
+          <span className="text-xs font-semibold text-gray-400 shrink-0">{code}</span>
+          <span className="font-medium">{label}</span>
+          <span className="ml-auto text-xs text-gray-400">{classifications.length}</span>
+        </button>
+      </div>
+
+      {open && (
+        <div className="ml-6 border-l border-gray-100 pl-3 flex flex-col">
+          {classifications.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-gray-400">No classifications</p>
+          ) : (
+            classifications.map((classification) => (
+              <ClassificationNode
+                key={classification.id}
+                color={color}
+                classification={classification}
+                groups={groups.filter((g) => g.classificationId === classification.id)}
+                glAccounts={glAccounts}
+              />
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface ChartOfAccountsTreeProps {
+  /** When true, render a narrow icon-only rail instead of the full tree. */
+  collapsed?: boolean;
+  /** Called when a rail icon is clicked, so the host panel can expand back to full width. */
+  onExpand?: () => void;
+}
+
+export function ChartOfAccountsTree({ collapsed = false, onExpand }: ChartOfAccountsTreeProps) {
+  const { data: classificationsData, isLoading: isLoadingClassifications } =
+    useAccountClassifications();
+  const { data: groupsData, isLoading: isLoadingGroups } = useAccountGroups();
+  const { data: glAccountsData, isLoading: isLoadingGLAccounts } = useGLAccounts();
+
+  const classifications = useMemo(() => classificationsData?.items ?? [], [classificationsData]);
+  const groups = useMemo(() => groupsData?.items ?? [], [groupsData]);
+  const glAccounts = useMemo(() => glAccountsData ?? [], [glAccountsData]);
+
+  const isLoading = isLoadingClassifications || isLoadingGroups || isLoadingGLAccounts;
+
+  // Lifted so a rail click can force a specific type open once expanded.
+  const [openTypes, setOpenTypes] = useState<Set<GLAccountCategory>>(new Set());
+
+  const toggleType = (value: GLAccountCategory) => {
+    setOpenTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value);
+      else next.add(value);
+      return next;
+    });
+  };
+
+  const jumpToType = (value: GLAccountCategory) => {
+    setOpenTypes((prev) => new Set(prev).add(value));
+    onExpand?.();
+  };
+
+  if (collapsed) {
+    return (
+      <>
+        {CATEGORIES.map((cat) => (
+          <button
+            key={cat.value}
+            type="button"
+            onClick={() => jumpToType(cat.value)}
+            title={cat.label}
+            aria-label={cat.label}
+            className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <Folder className={cn('w-4 h-4', cat.color)} />
+          </button>
+        ))}
+      </>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {isLoading ? (
+        <p className="px-3 py-2 text-xs text-gray-400">Loading…</p>
+      ) : (
+        CATEGORIES.map((cat) => (
+          <TypeNode
+            key={cat.value}
+            label={cat.label}
+            code={cat.code}
+            color={cat.color}
+            open={openTypes.has(cat.value)}
+            onToggle={() => toggleType(cat.value)}
+            classifications={classifications.filter((c) => c.category === cat.value)}
+            groups={groups}
+            glAccounts={glAccounts}
+          />
+        ))
+      )}
+    </div>
+  );
+}

@@ -54,7 +54,8 @@ export function AddCustomerPanel({ isOpen, onClose }: AddCustomerPanelProps) {
   };
 
   const onSubmit = () => {
-    // TODO: call create vendor mutation
+    // Not wired to useCreateCustomer yet: the backend requires `currency` (not on this
+    // form) and has no "category"/multi-contact fields to send customerCategory/contacts to.
     handleClose();
   };
 

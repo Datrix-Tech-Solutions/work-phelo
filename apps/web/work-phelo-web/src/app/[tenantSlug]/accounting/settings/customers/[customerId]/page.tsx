@@ -7,40 +7,8 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { CustomerOverview } from '@/components/molecules/accounting/CustomerOverview';
 import { AccountingContactsTab } from '@/components/molecules/accounting/AccountingContactsTab';
 import { AccountTransactionsTable } from '@/components/organisms/accounting/tables/AccountTransactionsTable';
-import { Customer } from '@/types/accounting';
-
-// TODO: replace with useCustomer(customerId) hook once API is ready
-const MOCK_CUSTOMERS: Customer[] = [
-  {
-    id: '1',
-    customerCode: 'CUS-001',
-    customerName: 'Bright Future Co.',
-    contactPerson: 'Kwame Asante',
-    email: 'kwame.asante@brightfuture.com',
-    phone: '+233 20 000 0001',
-    outstandingBalance: 8750.0,
-    currency: 'GHS',
-    status: 'Active',
-    contacts: [
-      {
-        id: 'c1',
-        fullName: 'Kwame Asante',
-        jobTitle: 'CEO',
-        email: 'kwame.asante@brightfuture.com',
-        phone: '+233 20 000 0001',
-        isPrimary: true,
-      },
-      {
-        id: 'c2',
-        fullName: 'Efua Boateng',
-        jobTitle: 'Finance Officer',
-        email: 'efua.boateng@brightfuture.com',
-        phone: '+233 20 000 0002',
-        isPrimary: false,
-      },
-    ],
-  },
-];
+import { AccountingContact } from '@/types/accounting';
+import { useAccountingConfig, useCustomer } from '@/hooks';
 
 type CustomerTab = 'transactions' | 'contacts';
 
@@ -57,8 +25,23 @@ export default function CustomerDetailPage({
   const { tenantSlug, customerId } = use(params);
   const [activeTab, setActiveTab] = useState<CustomerTab>('transactions');
 
-  const customer = MOCK_CUSTOMERS.find((c) => c.id === customerId) ?? null;
+  const { data: customer, isLoading } = useCustomer(customerId);
+  const { data: config } = useAccountingConfig();
   const base = `/${tenantSlug}/accounting/settings/customers`;
+
+  const contacts: AccountingContact[] =
+    customer && customer.primaryContactName
+      ? [
+          {
+            id: customer.id,
+            fullName: customer.primaryContactName,
+            jobTitle: null,
+            email: customer.email,
+            phone: customer.phone,
+            isPrimary: true,
+          },
+        ]
+      : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,16 +50,18 @@ export default function CustomerDetailPage({
           Customers
         </Link>
         <Icons.ChevronRight className="w-5 h-5" />
-        <span className="text-gray-700 font-medium">{customer?.customerName ?? '—'}</span>
+        <span className="text-gray-700 font-medium">{customer?.legalName ?? '—'}</span>
       </nav>
 
-      {!customer ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading…</div>
+      ) : !customer ? (
         <div className="flex items-center justify-center h-40 text-sm text-gray-400">
           Customer not found.
         </div>
       ) : (
         <>
-          <CustomerOverview customer={customer} />
+          <CustomerOverview customer={customer} baseCurrency={config?.baseCurrency ?? undefined} />
 
           <div className="flex flex-col">
             <TabBar
@@ -86,7 +71,7 @@ export default function CustomerDetailPage({
             />
             <div className="pt-5">
               {activeTab === 'transactions' && <AccountTransactionsTable />}
-              {activeTab === 'contacts' && <AccountingContactsTab contacts={customer.contacts} />}
+              {activeTab === 'contacts' && <AccountingContactsTab contacts={contacts} />}
             </div>
           </div>
         </>

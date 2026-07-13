@@ -7,40 +7,8 @@ import { TabBar } from '@/components/molecules/shared/TabBar';
 import { VendorOverview } from '@/components/molecules/accounting/VendorOverview';
 import { AccountingContactsTab } from '@/components/molecules/accounting/AccountingContactsTab';
 import { AccountTransactionsTable } from '@/components/organisms/accounting/tables/AccountTransactionsTable';
-import { Vendor } from '@/types/accounting';
-
-// TODO: replace with useVendor(vendorId) hook once API is ready
-const MOCK_VENDORS: Vendor[] = [
-  {
-    id: '1',
-    vendorCode: 'VND-001',
-    vendorName: 'Acme Supplies Ltd',
-    contactPerson: 'John Mensah',
-    email: 'john.mensah@acmesupplies.com',
-    phone: '+233 24 000 0001',
-    outstandingBalance: 12500.0,
-    currency: 'GHS',
-    status: 'Active',
-    contacts: [
-      {
-        id: 'c1',
-        fullName: 'John Mensah',
-        jobTitle: 'Sales Manager',
-        email: 'john.mensah@acmesupplies.com',
-        phone: '+233 24 000 0001',
-        isPrimary: true,
-      },
-      {
-        id: 'c2',
-        fullName: 'Abena Owusu',
-        jobTitle: 'Accounts Receivable',
-        email: 'abena.owusu@acmesupplies.com',
-        phone: '+233 24 000 0002',
-        isPrimary: false,
-      },
-    ],
-  },
-];
+import { AccountingContact } from '@/types/accounting';
+import { useAccountingConfig, useVendor } from '@/hooks';
 
 type VendorTab = 'transactions' | 'contacts';
 
@@ -57,8 +25,23 @@ export default function VendorDetailPage({
   const { tenantSlug, vendorId } = use(params);
   const [activeTab, setActiveTab] = useState<VendorTab>('transactions');
 
-  const vendor = MOCK_VENDORS.find((v) => v.id === vendorId) ?? null;
+  const { data: vendor, isLoading } = useVendor(vendorId);
+  const { data: config } = useAccountingConfig();
   const base = `/${tenantSlug}/accounting/settings/vendors`;
+
+  const contacts: AccountingContact[] =
+    vendor && vendor.primaryContactName
+      ? [
+          {
+            id: vendor.id,
+            fullName: vendor.primaryContactName,
+            jobTitle: null,
+            email: vendor.email,
+            phone: vendor.phone,
+            isPrimary: true,
+          },
+        ]
+      : [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,16 +50,18 @@ export default function VendorDetailPage({
           Vendors
         </Link>
         <Icons.ChevronRight className="w-5 h-5" />
-        <span className="text-gray-700 font-medium">{vendor?.vendorName ?? '—'}</span>
+        <span className="text-gray-700 font-medium">{vendor?.legalName ?? '—'}</span>
       </nav>
 
-      {!vendor ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center h-40 text-sm text-gray-400">Loading…</div>
+      ) : !vendor ? (
         <div className="flex items-center justify-center h-40 text-sm text-gray-400">
           Vendor not found.
         </div>
       ) : (
         <>
-          <VendorOverview vendor={vendor} />
+          <VendorOverview vendor={vendor} baseCurrency={config?.baseCurrency ?? undefined} />
 
           <div className="flex flex-col">
             <TabBar
@@ -86,7 +71,7 @@ export default function VendorDetailPage({
             />
             <div className="pt-5">
               {activeTab === 'transactions' && <AccountTransactionsTable />}
-              {activeTab === 'contacts' && <AccountingContactsTab contacts={vendor.contacts} />}
+              {activeTab === 'contacts' && <AccountingContactsTab contacts={contacts} />}
             </div>
           </div>
         </>

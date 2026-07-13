@@ -4,72 +4,22 @@ import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
-import { Customer } from '@/types/accounting';
+import { AccountingCustomer } from '@/types/accounting';
+import {
+  useAccountingConfig,
+  useActivateCustomer,
+  useCustomers,
+  useDeactivateCustomer,
+} from '@/hooks';
+import { extractError } from '@/lib/extractError';
+import { useToastStore } from '@/store/toast.store';
 import { AddCustomerPanel } from '../panels/AddCustomerPanel';
 
 const PAGE_SIZE = 10;
 
-// TODO: replace with useCustomers() hook once API is ready
-const MOCK_DATA: Customer[] = [];
-
 function fmtBalance(amount: number, currency: string) {
   return `${currency} ${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-
-const COLUMNS: Column<Customer>[] = [
-  {
-    key: 'customerCode',
-    label: 'Customer Code',
-    width: '130px',
-    render: (row) => (
-      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
-        {row.customerCode}
-      </span>
-    ),
-  },
-  {
-    key: 'customerName',
-    label: 'Customer Name',
-    width: '1fr',
-    render: (row) => <span className="font-medium text-gray-900">{row.customerName}</span>,
-  },
-  {
-    key: 'contactPerson',
-    label: 'Contact Person',
-    width: '1fr',
-    render: (row) => <span className="text-gray-700 text-sm">{row.contactPerson ?? '—'}</span>,
-  },
-  {
-    key: 'email',
-    label: 'Email',
-    width: '1fr',
-    render: (row) => <span className="text-gray-600 text-sm">{row.email ?? '—'}</span>,
-  },
-  {
-    key: 'phone',
-    label: 'Phone',
-    width: '130px',
-    render: (row) => <span className="text-gray-600 text-sm">{row.phone ?? '—'}</span>,
-  },
-  {
-    key: 'outstandingBalance',
-    label: 'Outstanding Balance',
-    width: '1fr',
-    render: (row) => (
-      <span className="text-sm text-gray-700">
-        {fmtBalance(row.outstandingBalance, row.currency)}
-      </span>
-    ),
-  },
-  {
-    key: 'status',
-    label: 'Status',
-    width: '100px',
-    render: (row) => (
-      <Badge label={row.status} variant={row.status === 'Active' ? 'success' : 'neutral'} />
-    ),
-  },
-];
 
 export function CustomersTable() {
   const router = useRouter();
@@ -77,28 +27,107 @@ export function CustomersTable() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
+  const addToast = useToastStore((s) => s.addToast);
+
+  const { data, isLoading } = useCustomers();
+  const { data: config } = useAccountingConfig();
+  const deactivateCustomer = useDeactivateCustomer();
+  const activateCustomer = useActivateCustomer();
+
+  const customers = useMemo(() => data?.items ?? [], [data]);
+  const baseCurrency = config?.baseCurrency;
+
+  const columns = useMemo<Column<AccountingCustomer>[]>(
+    () => [
+      {
+        key: 'code',
+        label: 'Customer Code',
+        width: '130px',
+        render: (row) => (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 text-xs font-semibold text-gray-600 tracking-wide">
+            {row.code}
+          </span>
+        ),
+      },
+      {
+        key: 'legalName',
+        label: 'Customer Name',
+        width: '1fr',
+        render: (row) => <span className="font-medium text-gray-900">{row.legalName}</span>,
+      },
+      {
+        key: 'primaryContactName',
+        label: 'Contact Person',
+        width: '1fr',
+        render: (row) => (
+          <span className="text-gray-700 text-sm">{row.primaryContactName ?? '—'}</span>
+        ),
+      },
+      {
+        key: 'email',
+        label: 'Email',
+        width: '1fr',
+        render: (row) => <span className="text-gray-600 text-sm">{row.email ?? '—'}</span>,
+      },
+      {
+        key: 'phone',
+        label: 'Phone',
+        width: '130px',
+        render: (row) => <span className="text-gray-600 text-sm">{row.phone ?? '—'}</span>,
+      },
+      {
+        key: 'balance',
+        label: 'Outstanding Balance',
+        width: '1fr',
+        render: (row) => (
+          <span className="text-sm text-gray-700">
+            {fmtBalance(row.balance.baseBalance, baseCurrency ?? row.currency)}
+          </span>
+        ),
+      },
+      {
+        key: 'isActive',
+        label: 'Status',
+        width: '100px',
+        render: (row) => (
+          <Badge
+            label={row.isActive ? 'Active' : 'Inactive'}
+            variant={row.isActive ? 'success' : 'neutral'}
+          />
+        ),
+      },
+    ],
+    [baseCurrency],
+  );
 
   const filtered = useMemo(() => {
-    if (!search) return MOCK_DATA;
+    if (!search) return customers;
     const q = search.toLowerCase();
-    return MOCK_DATA.filter(
+    return customers.filter(
       (r) =>
-        r.customerCode.toLowerCase().includes(q) ||
-        r.customerName.toLowerCase().includes(q) ||
-        (r.contactPerson ?? '').toLowerCase().includes(q) ||
+        r.code.toLowerCase().includes(q) ||
+        r.legalName.toLowerCase().includes(q) ||
+        (r.primaryContactName ?? '').toLowerCase().includes(q) ||
         (r.email ?? '').toLowerCase().includes(q),
     );
-  }, [search]);
+  }, [customers, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  function toggleActive(customer: AccountingCustomer) {
+    const mutation = customer.isActive ? deactivateCustomer : activateCustomer;
+    mutation.mutate(customer.id, {
+      onError: (error) => addToast({ message: extractError(error), type: 'error' }),
+    });
+  }
+
   return (
     <>
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={paged}
-        isLoading={false}
+        isLoading={isLoading}
         searchPlaceholder="Search customers…"
         searchValue={search}
         onSearch={(q) => {
@@ -107,9 +136,12 @@ export function CustomersTable() {
         }}
         onRowClick={(row) => router.push(`/${tenantSlug}/accounting/settings/customers/${row.id}`)}
         actionButton={{ label: 'Add Customer', onClick: () => setPanelOpen(true) }}
-        rowActions={() => [
-          { label: 'Edit', onClick: () => {} },
-          { label: 'Delete', onClick: () => {}, danger: true },
+        rowActions={(row) => [
+          {
+            label: row.isActive ? 'Deactivate' : 'Activate',
+            onClick: () => toggleActive(row),
+            danger: row.isActive,
+          },
         ]}
         emptyMessage="No customers found"
         currentPage={page}

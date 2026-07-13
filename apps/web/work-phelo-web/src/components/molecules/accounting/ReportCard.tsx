@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { cn, glassStrongClass } from '@/lib/utils';
 
 interface ReportStat {
   label: string;
@@ -32,11 +32,14 @@ export function ReportCard({
     <button
       type="button"
       onClick={onClick}
-      className={cn(
-        'group w-full text-left bg-white rounded-2xl border border-blue-100 p-7 flex flex-col gap-5',
-        'transition-all duration-200 ease-out',
-        'hover:-translate-y-1 hover:shadow-lg hover:shadow-white-200/80',
-        className,
+      className={glassStrongClass(
+        cn(
+          'group w-full text-left rounded-2xl border border-gray-100 p-7 flex flex-col gap-5',
+          'transition-all duration-200 ease-out',
+          'hover:-translate-y-1 hover:shadow-lg hover:shadow-white-200/80',
+          className,
+        ),
+        'none',
       )}
     >
       {/* Icon + Title */}

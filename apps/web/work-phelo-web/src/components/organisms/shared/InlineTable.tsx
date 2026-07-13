@@ -55,9 +55,14 @@ export function InlineTable({
           {/* Column headers — floating pill matching DataTable */}
           <div className="pt-3">
             <div className="relative shrink-0">
-              <div className="absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg" />
               <div
-                className="relative grid text-xs font-semibold text-gray-500 uppercase tracking-wide px-6 py-3"
+                className={cardClass(
+                  'absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg',
+                  'glass',
+                )}
+              />
+              <div
+                className="relative grid text-xs font-semibold text-gray-900 uppercase tracking-wide px-6 py-3"
                 style={{ gridTemplateColumns: colTemplate }}
               >
                 {columns.map((col) => (
@@ -100,7 +105,12 @@ export function InlineTable({
           {hasFooter && (
             <div className="pb-3">
               <div className="relative">
-                <div className="absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg" />
+                <div
+                  className={cardClass(
+                    'absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg',
+                    'glass',
+                  )}
+                />
                 <div
                   className="relative grid px-6 py-3"
                   style={{ gridTemplateColumns: colTemplate }}
