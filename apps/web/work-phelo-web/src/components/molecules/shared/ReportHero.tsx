@@ -12,12 +12,17 @@ export function ReportHero({ title, years }: ReportHeroProps) {
       ? null
       : sortedYears.length === 1
         ? `Year-To-Date (FY${startYear})`
-        : `Comparative Year-To-Date (FY${startYear}-FY${endYear})`;
+        : `Comparative Year-To-Date (FY${startYear} - FY${endYear})`;
 
   return (
-    <div className="flex flex-col items-center gap-1 pb-4 border-b border-gray-100 shrink-0 text-center">
+    <div className="flex items-baseline gap-2 pb-2 border-b border-gray-100 shrink-0">
       <h2 className="text-lg font-bold text-gray-900">{title}</h2>
-      {subtitle && <p className="text-sm text-gray-500">{subtitle}</p>}
+      {subtitle && (
+        <>
+          <span className="text-gray-300">·</span>
+          <p className="text-sm text-gray-500">{subtitle}</p>
+        </>
+      )}
     </div>
   );
 }

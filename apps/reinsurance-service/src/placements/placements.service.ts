@@ -1146,6 +1146,16 @@ export class PlacementsService {
     };
   }
 
+  /** Non-resident cedant premiums remitted to reinsurers attract NIC Levy + Withholding Tax. */
+  private isForeignCedant(
+    cedant: SlipPreviewPlacementRecord['cedant'],
+  ): boolean {
+    const primary =
+      cedant.addresses.find((address) => address.isPrimary) ??
+      cedant.addresses[0];
+    return !!primary && primary.country.toUpperCase() !== 'GH';
+  }
+
   private calculateCreditNoteFinancials(
     placement: SlipPreviewPlacementRecord,
     participant: SlipPreviewPlacementRecord['participants'][number],
@@ -1164,8 +1174,9 @@ export class PlacementsService {
     const totalCommissionPct = commission + brokerageFee;
     const commissionAmount =
       yourPremium !== null ? (totalCommissionPct / 100) * yourPremium : null;
-    const nicLevyPct = 0;
-    const withholdingTaxPct = 0;
+    const foreignCedant = this.isForeignCedant(placement.cedant);
+    const nicLevyPct = foreignCedant ? 1 : 0;
+    const withholdingTaxPct = foreignCedant ? 5 : 0;
     const nicLevyAmount =
       yourPremium !== null ? (nicLevyPct / 100) * yourPremium : 0;
     const withholdingTaxAmount =

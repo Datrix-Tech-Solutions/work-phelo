@@ -66,12 +66,14 @@ export interface PaginatedCounterparties {
 export interface AddressFormValues {
   country: string; // 'Ghana' | 'Africa' | 'Europe' | 'Asia' | 'Rest of the World'
   state: string; // Ghana region — only relevant when country === 'Ghana'
+  streetName: string; // Ghana only
   city: string; // only relevant when country === 'Ghana'
 }
 
 export const ADDRESS_FORM_DEFAULTS: AddressFormValues = {
   country: '',
   state: '',
+  streetName: '',
   city: '',
 };
 

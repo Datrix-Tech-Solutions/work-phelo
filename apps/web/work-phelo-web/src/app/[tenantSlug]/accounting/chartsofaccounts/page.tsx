@@ -10,6 +10,7 @@ import { ChartOfAccountsTree } from '@/components/organisms/accounting/ChartOfAc
 import { AddClassificationPanel } from '@/components/organisms/accounting/panels/AddClassificationPanel';
 import { AddParentAccountPanel } from '@/components/organisms/accounting/panels/AddParentAccountPanel';
 import { AddLeafAccountPanel } from '@/components/organisms/accounting/panels/AddLeafAccountPanel';
+import { GLAccount } from '@/types/accounting';
 
 const STATUS_OPTIONS: SearchSelectOption[] = [
   { value: 'Active', label: 'Active' },
@@ -22,6 +23,7 @@ export default function ChartOfAccountsPage() {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
+  const [selectedAccount, setSelectedAccount] = useState<GLAccount | null>(null);
 
   return (
     <>
@@ -80,8 +82,20 @@ export default function ChartOfAccountsPage() {
           </div>
         }
         leftPanel={({ collapsed, expand }) => (
-          <ChartOfAccountsTree collapsed={collapsed} onExpand={expand} />
+          <ChartOfAccountsTree
+            collapsed={collapsed}
+            onExpand={expand}
+            selectedAccountId={selectedAccount?.id}
+            onSelectAccount={setSelectedAccount}
+          />
         )}
+        rightPanel={
+          selectedAccount ? (
+            <h3 className="text-base font-semibold text-gray-900">{selectedAccount.name}</h3>
+          ) : (
+            <p className="text-sm text-gray-400">Select a leaf account to view its details</p>
+          )
+        }
       />
 
       <AddClassificationPanel

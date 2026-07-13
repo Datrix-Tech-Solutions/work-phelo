@@ -154,10 +154,10 @@ export function ReinsurerFormFields({
               <button
                 type="button"
                 onClick={() => removeContact(index)}
-                className="absolute top-3 right-3 p-1 rounded text-gray-300 hover:text-red-400 hover:bg-red-50 transition-colors"
+                className="absolute top-3 right-3 p-1 rounded-xl text-red-500 hover:text-red-700 hover:bg-red-200 transition-colors"
                 aria-label="Remove contact"
               >
-                <Icons.X className="w-3.5 h-3.5" />
+                <Icons.Trash2 className="w-4 h-4" />
               </button>
 
               <FormField

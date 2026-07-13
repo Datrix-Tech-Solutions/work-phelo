@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/atoms/Button';
+import { cardClass } from '@/lib/utils';
 
 export interface ShareBreakdownEntry {
   id: string;
@@ -30,7 +31,7 @@ export function PlacementShareBreakdown({
   const availablePct = Math.max(0, +(total - placedPct).toFixed(4));
 
   return (
-    <div className="bg-white rounded-xl border border-(--module-border,var(--color-gray-200)) p-5 flex flex-col gap-4">
+    <div className={cardClass('p-5 flex flex-col gap-4')}>
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-sm font-semibold text-gray-900">Placement Share Breakdown</h3>

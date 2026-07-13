@@ -3,6 +3,8 @@
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
+import { useCedants } from '@/hooks';
+import { isForeignCedant, NIC_LEVY_RATE, WITHHOLDING_TAX_RATE } from '@/lib/reinsuranceTax';
 
 function toLabel(key: string) {
   return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
@@ -72,6 +74,9 @@ export function SlipPreviewModal({
     offerDetails,
   } = placement;
 
+  const { data: cedants = [] } = useCedants();
+  const foreignCedant = isForeignCedant(cedants.find((c) => c.id === placement.cedant.id));
+
   const businessEntries = Object.entries(businessDetails ?? {});
   const offerEntries = Object.entries(offerDetails ?? {});
 
@@ -84,6 +89,11 @@ export function SlipPreviewModal({
       : null;
   const netPremium =
     reinsurancePremium != null && commissions != null ? reinsurancePremium - commissions : null;
+  const nicLevy = foreignCedant && netPremium != null ? netPremium * NIC_LEVY_RATE : null;
+  const withholdingTax =
+    foreignCedant && netPremium != null ? netPremium * WITHHOLDING_TAX_RATE : null;
+  const netPremiumPayable =
+    netPremium != null ? netPremium - (nicLevy ?? 0) - (withholdingTax ?? 0) : null;
 
   return (
     <DocumentPreviewModal
@@ -169,6 +179,19 @@ export function SlipPreviewModal({
           <>
             <hr className="border-gray-100 my-1" />
             <Field label="Net Premium" value={fmtAmount(netPremium, currency)} />
+            {nicLevy != null && withholdingTax != null && (
+              <>
+                <Field
+                  label={`NIC Levy (${NIC_LEVY_RATE * 100}%)`}
+                  value={fmtAmount(nicLevy, currency)}
+                />
+                <Field
+                  label={`Withholding Tax (${WITHHOLDING_TAX_RATE * 100}%)`}
+                  value={fmtAmount(withholdingTax, currency)}
+                />
+                <Field label="Net Premium Payable" value={fmtAmount(netPremiumPayable, currency)} />
+              </>
+            )}
           </>
         )}
       </div>

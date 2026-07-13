@@ -14,7 +14,8 @@ import { Icons } from '@/components/atoms/icons';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
-import { useReinsurers, useClaimAllocations } from '@/hooks';
+import { useReinsurers, useCedants, useClaimAllocations } from '@/hooks';
+import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 
 const CLAIM_STATUS_VARIANT: Record<
   PlacementClaimStatus,
@@ -66,7 +67,8 @@ interface ClaimOverviewSectionProps {
 function ClaimDetailsPanel({
   placement,
   claim,
-}: Pick<ClaimOverviewSectionProps, 'placement' | 'claim'>) {
+  deductionRate,
+}: Pick<ClaimOverviewSectionProps, 'placement' | 'claim'> & { deductionRate: number }) {
   const { facultativeOffer, sumInsured, premium, commission, currency, createdAt } = placement;
 
   const facSumInsured =
@@ -76,7 +78,9 @@ function ClaimDetailsPanel({
     premium != null && facultativeOffer != null ? (facultativeOffer / 100) * premium : null;
 
   const netPremium =
-    facPremium != null && commission != null ? facPremium * (1 - commission / 100) : facPremium;
+    facPremium != null && commission != null
+      ? facPremium * (1 - commission / 100) * (1 - deductionRate)
+      : facPremium;
 
   return (
     <div className="bg-white rounded-xl p-5 flex flex-col gap-3">
@@ -170,6 +174,7 @@ function ClaimReinsurersTable({
   currency,
   grossPremium,
   commission,
+  deductionRate,
   onMail,
   onPreview,
 }: {
@@ -179,11 +184,15 @@ function ClaimReinsurersTable({
   currency?: string | null;
   grossPremium: number;
   commission: number;
+  deductionRate: number;
   onMail: (participant: PlacementParticipant) => void;
   onPreview: (participant: PlacementParticipant) => void;
 }) {
   const reinsurers = useMemo(
-    () => participants.filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED'),
+    () =>
+      participants.filter(
+        (p) => p.role !== 'BROKER' && (p.status === 'ACCEPTED' || p.status === 'CLOSED'),
+      ),
     [participants],
   );
 
@@ -202,7 +211,8 @@ function ClaimReinsurersTable({
         render: (row) => {
           const share = row.sharePercent != null ? parseFloat(row.sharePercent) / 100 : 0;
           const brokerage = row.brokerageFee != null ? parseFloat(row.brokerageFee) : 0;
-          const premiumShare = share * grossPremium * (1 - (commission + brokerage) / 100);
+          const premiumShare =
+            share * grossPremium * (1 - (commission + brokerage) / 100) * (1 - deductionRate);
           return (
             <span className="text-gray-700 block text-right">{fmt(premiumShare, currency)}</span>
           );
@@ -273,7 +283,16 @@ function ClaimReinsurersTable({
         ),
       },
     ],
-    [allocations, claimAmount, currency, grossPremium, commission, onMail, onPreview],
+    [
+      allocations,
+      claimAmount,
+      currency,
+      grossPremium,
+      commission,
+      deductionRate,
+      onMail,
+      onPreview,
+    ],
   );
 
   return (
@@ -298,7 +317,12 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
   const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
   const [debitNoteTarget, setDebitNoteTarget] = useState<PlacementParticipant | null>(null);
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: cedants = [] } = useCedants();
   const { data: allocations = [] } = useClaimAllocations(placement.id, claim?.id ?? '');
+
+  const deductionRate = isForeignCedant(cedants.find((c) => c.id === placement.cedant.id))
+    ? FOREIGN_CEDANT_DEDUCTION_RATE
+    : 0;
 
   const claimAmount = claim ? parseFloat(claim.estimatedLossAmount) : null;
   const mailAllocation = mailTarget
@@ -325,7 +349,7 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
   const totalActualClaim = useMemo(() => {
     if (claimAmount == null) return null;
     return (placement.participants ?? [])
-      .filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED')
+      .filter((p) => p.role !== 'BROKER' && (p.status === 'ACCEPTED' || p.status === 'CLOSED'))
       .reduce((sum, p) => {
         const share = p.sharePercent != null ? parseFloat(p.sharePercent) / 100 : 0;
         return sum + share * claimAmount;
@@ -336,7 +360,7 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
     <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-4">
       <div className="flex flex-col md:flex-row gap-4 items-start">
         <div className="w-full md:flex-1 min-w-0">
-          <ClaimDetailsPanel placement={placement} claim={claim} />
+          <ClaimDetailsPanel placement={placement} claim={claim} deductionRate={deductionRate} />
         </div>
         <div className="w-full md:flex-2 min-w-0">
           <ClaimReinsurersTable
@@ -346,6 +370,7 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
             currency={claim?.currency ?? placement.currency}
             grossPremium={placement.premium ?? 0}
             commission={placement.commission ?? 0}
+            deductionRate={deductionRate}
             onMail={setMailTarget}
             onPreview={setDebitNoteTarget}
           />

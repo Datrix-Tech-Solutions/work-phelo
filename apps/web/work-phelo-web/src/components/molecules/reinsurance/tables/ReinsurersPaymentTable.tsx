@@ -3,12 +3,15 @@
 import { useEffect, useMemo } from 'react';
 import { PlacementParticipant } from '@/types/reinsurance';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { useCedants } from '@/hooks';
+import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 
 interface ReinsurersPaymentTableProps {
   participants: PlacementParticipant[];
   grossPremium: number;
   commission: number;
   currency: string | null;
+  cedantId: string;
   paidAmount?: number;
   onTotalChange?: (total: number) => void;
 }
@@ -18,11 +21,17 @@ function fmt(val: number, currency: string | null) {
   return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function participantNetPremium(p: PlacementParticipant, grossPremium: number, commission: number) {
+function participantNetPremium(
+  p: PlacementParticipant,
+  grossPremium: number,
+  commission: number,
+  deductionRate: number,
+) {
   const share = parseFloat(p.sharePercent ?? '0') / 100;
   const brokerage = parseFloat(p.brokerageFee ?? '0');
   const yourPremium = share * grossPremium;
-  return yourPremium * (1 - (commission + brokerage) / 100);
+  const netPremium = yourPremium * (1 - (commission + brokerage) / 100);
+  return netPremium * (1 - deductionRate);
 }
 
 export function ReinsurersPaymentTable({
@@ -30,19 +39,31 @@ export function ReinsurersPaymentTable({
   grossPremium,
   commission,
   currency,
+  cedantId,
   // paidAmount = 0,
 
   onTotalChange,
 }: ReinsurersPaymentTableProps) {
+  const { data: cedants = [] } = useCedants();
+  const deductionRate = isForeignCedant(cedants.find((c) => c.id === cedantId))
+    ? FOREIGN_CEDANT_DEDUCTION_RATE
+    : 0;
+
   const participants_ = useMemo(
-    () => participants.filter((p) => p.role !== 'BROKER' && p.status === 'ACCEPTED'),
+    () =>
+      participants.filter(
+        (p) => p.role !== 'BROKER' && (p.status === 'ACCEPTED' || p.status === 'CLOSED'),
+      ),
     [participants],
   );
 
   const total = useMemo(
     () =>
-      participants_.reduce((sum, p) => sum + participantNetPremium(p, grossPremium, commission), 0),
-    [participants_, grossPremium, commission],
+      participants_.reduce(
+        (sum, p) => sum + participantNetPremium(p, grossPremium, commission, deductionRate),
+        0,
+      ),
+    [participants_, grossPremium, commission, deductionRate],
   );
 
   useEffect(() => {
@@ -74,7 +95,7 @@ export function ReinsurersPaymentTable({
         className: 'text-right',
         render: (row) => (
           <span className="text-gray-900 block text-right">
-            {fmt(participantNetPremium(row, grossPremium, commission), currency)}
+            {fmt(participantNetPremium(row, grossPremium, commission, deductionRate), currency)}
           </span>
         ),
       },
@@ -93,7 +114,7 @@ export function ReinsurersPaymentTable({
       //   },
       // },
     ],
-    [grossPremium, commission, currency], //proRataFactor],
+    [grossPremium, commission, currency, deductionRate], //proRataFactor],
   );
 
   return (

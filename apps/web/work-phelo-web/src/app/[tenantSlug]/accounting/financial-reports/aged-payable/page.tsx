@@ -4,8 +4,8 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { Icons } from '@/components/atoms/icons';
 import { TwoPanelShell } from '@/components/organisms/shared/TwoPanelShell';
-import { ReportFilterForm } from '@/components/molecules/accounting/ReportFilterForm';
-import { ReportHero } from '@/components/molecules/accounting/ReportHero';
+import { ReportFilterForm } from '@/components/molecules/shared/ReportFilterForm';
+import { ReportHero } from '@/components/molecules/shared/ReportHero';
 
 export default function AgedPayablePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = use(params);
