@@ -40,6 +40,7 @@ export default function NewJournalEntryPage({
       <div className={`${pageContent} flex-1 overflow-y-auto`}>
         <NewJournalEntryForm
           onCancel={() => router.push(`/${tenantSlug}/accounting/journalentry`)}
+          onSaved={() => router.push(`/${tenantSlug}/accounting/journalentry`)}
         />
       </div>
     </div>

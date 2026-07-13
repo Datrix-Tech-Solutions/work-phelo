@@ -8,6 +8,7 @@ import { InvoiceDetailsSection } from '@/components/molecules/accounting/Invoice
 import { InvoiceLineDetailsSection } from '@/components/molecules/accounting/InvoiceLineDetailsSection';
 import { InvoiceFormValues, INVOICE_DEFAULTS } from '@/types/accounting';
 import { Icons } from '@/components/atoms/icons';
+import { cardClass } from '@/lib/utils';
 
 interface NewInvoiceFormProps {
   onCancel: () => void;
@@ -25,7 +26,7 @@ export function NewInvoiceForm({ onCancel, vendorLabel }: NewInvoiceFormProps) {
   return (
     <>
       <div className="flex flex-col gap-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className={cardClass('p-6')}>
           <InvoiceDetailsSection form={form} vendorLabel={vendorLabel} />
         </div>
 

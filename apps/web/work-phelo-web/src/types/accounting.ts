@@ -22,6 +22,8 @@ export interface GLAccount {
   name: string;
   category: GLAccountCategory;
   normalBalance: NormalBalance;
+  accountGroupId: string | null;
+  accountGroup: { id: string; code: string; name: string } | null;
   parentAccountId: string | null;
   parentAccount: { id: string; code: string; name: string } | null;
   allowPosting: boolean;
@@ -32,8 +34,9 @@ export interface GLAccount {
 export interface CreateGLAccountPayload {
   code: string;
   name: string;
-  category: GLAccountCategory;
-  normalBalance: NormalBalance;
+  category?: GLAccountCategory;
+  normalBalance?: NormalBalance;
+  accountGroupId?: string;
   parentAccountId?: string;
   allowPosting?: boolean;
   description?: string;
@@ -83,7 +86,9 @@ export interface JournalLine {
 
 export interface JournalEntryFormValues {
   transactionDate: string;
+  fiscalPeriodId: string;
   currency: string;
+  exchangeRate: number | '';
   reference: string;
   description: string;
   lines: JournalLine[];
@@ -91,7 +96,9 @@ export interface JournalEntryFormValues {
 
 export const JOURNAL_ENTRY_DEFAULTS: JournalEntryFormValues = {
   transactionDate: '',
+  fiscalPeriodId: '',
   currency: '',
+  exchangeRate: '',
   reference: '',
   description: '',
   lines: [{ targetAccount: '', description: '', debit: '', credit: '' }],
@@ -106,6 +113,81 @@ export interface JournalEntry {
   creditTotal: number;
   createdBy: string;
   status: JournalEntryStatus;
+}
+
+export type JournalRecordStatus = 'DRAFT' | 'POSTED' | 'REVERSED';
+
+export interface JournalLineRecord {
+  id: string;
+  glAccountId: string;
+  subledgerAccountId: string | null;
+  costCentreId: string | null;
+  description: string | null;
+  transactionDebit: number;
+  transactionCredit: number;
+  baseDebit: number;
+  baseCredit: number;
+  glAccount: { id: string; code: string; name: string };
+  subledgerAccount: { id: string; code: string; name: string } | null;
+  costCentre: { id: string; code: string; name: string } | null;
+}
+
+export interface JournalEntryRecord {
+  id: string;
+  journalNumber: string;
+  status: JournalRecordStatus;
+  transactionDate: string;
+  postingDate: string | null;
+  fiscalPeriodId: string;
+  transactionCurrency: string;
+  baseCurrency: string;
+  exchangeRate: string;
+  reference: string | null;
+  description: string;
+  reversalOfJournalId: string | null;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+  postedAt: string | null;
+  reversedAt: string | null;
+  lines: JournalLineRecord[];
+}
+
+export interface CreateJournalLinePayload {
+  glAccountId: string;
+  subledgerAccountId?: string;
+  costCentreId?: string;
+  description?: string;
+  debit?: number;
+  credit?: number;
+}
+
+export interface CreateJournalPayload {
+  transactionDate: string;
+  fiscalPeriodId: string;
+  transactionCurrency: string;
+  exchangeRate?: number;
+  reference?: string;
+  description: string;
+  sourceModule?: string;
+  sourceRecordType?: string;
+  sourceRecordId?: string;
+  lines: CreateJournalLinePayload[];
+}
+
+export type UpdateDraftJournalPayload = Partial<Omit<CreateJournalPayload, 'lines'>> & {
+  lines?: CreateJournalLinePayload[];
+};
+
+export interface ReverseJournalPayload {
+  reversalDate: string;
+  reason: string;
+}
+
+export interface QueryJournalsParams {
+  status?: JournalRecordStatus;
+  from?: string;
+  to?: string;
 }
 
 export type InvoiceStatus = 'Draft' | 'Pending Approval' | 'Approved' | 'Paid' | 'Overdue' | 'Void';
@@ -169,20 +251,89 @@ export interface AccountingContact {
   isPrimary: boolean;
 }
 
-export type VendorStatus = 'Active' | 'Inactive';
+export interface AccountingSubledgerBalance {
+  baseDebit: number;
+  baseCredit: number;
+  baseBalance: number;
+  transactionDebit: number;
+  transactionCredit: number;
+  transactionBalance: number;
+  transactionCurrencies: string[];
+}
 
-export interface Vendor {
+export interface AccountingSubledgerRef {
   id: string;
-  vendorCode: string;
-  vendorName: string;
-  contactPerson: string | null;
+  code: string;
+  name: string;
+  status: string;
+}
+
+export interface QueryAccountingPartiesParams {
+  search?: string;
+  isActive?: boolean;
+  currency?: string;
+  sourceModule?: string;
+  externalRef?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: 'code' | 'legalName' | 'createdAt' | 'updatedAt';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export interface AccountingVendor {
+  id: string;
+  code: string;
+  legalName: string;
+  tradingName: string | null;
+  primaryContactName: string | null;
   email: string | null;
   phone: string | null;
-  outstandingBalance: number;
+  billingAddress: string | null;
+  countryCode: string | null;
   currency: string;
-  status: VendorStatus;
-  contacts: AccountingContact[];
+  paymentTermsDays: number;
+  taxNumber: string | null;
+  externalRef: string | null;
+  sourceModule: string | null;
+  defaultExpenseAccountId: string | null;
+  notes: string | null;
+  isActive: boolean;
+  subledgerAccountId: string;
+  subledgerAccount: AccountingSubledgerRef;
+  balance: AccountingSubledgerBalance;
+  createdAt: string;
+  updatedAt: string;
 }
+
+export interface CreateAccountingVendorPayload {
+  code: string;
+  legalName: string;
+  tradingName?: string;
+  primaryContactName?: string;
+  email?: string;
+  phone?: string;
+  billingAddress?: string;
+  countryCode?: string;
+  currency: string;
+  paymentTermsDays?: number;
+  taxNumber?: string;
+  externalRef?: string;
+  sourceModule?: string;
+  defaultExpenseAccountId?: string;
+  notes?: string;
+}
+
+export type UpdateAccountingVendorPayload = Partial<CreateAccountingVendorPayload> & {
+  isActive?: boolean;
+};
 
 export interface AccountingCurrency {
   id: string;
@@ -256,15 +407,70 @@ export interface AccountTransaction {
   currency: string;
 }
 
-export interface BankAccount {
+export interface AccountClassification {
   id: string;
-  accountName: string;
-  accountType: string;
-  bankName: string;
-  bankCode: string;
-  bankBranch: string;
-  accountNumber: string;
-  status: 'Active' | 'Inactive';
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  displayOrder: number;
+  isSystemTemplate: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAccountClassificationPayload {
+  code: string;
+  name: string;
+  category: GLAccountCategory;
+  displayOrder?: number;
+  isSystemTemplate?: boolean;
+}
+
+export type UpdateAccountClassificationPayload = Partial<CreateAccountClassificationPayload> & {
+  isActive?: boolean;
+};
+
+export interface QueryAccountHierarchyParams {
+  category?: GLAccountCategory;
+  isActive?: boolean;
+  search?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: 'code' | 'name' | 'displayOrder' | 'createdAt' | 'updatedAt';
+  sortOrder?: 'asc' | 'desc';
+}
+
+export interface AccountGroup {
+  id: string;
+  code: string;
+  name: string;
+  classificationId: string;
+  classification: {
+    id: string;
+    code: string;
+    name: string;
+    category: GLAccountCategory;
+  };
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAccountGroupPayload {
+  classificationId: string;
+  code: string;
+  name: string;
+  displayOrder?: number;
+}
+
+export type UpdateAccountGroupPayload = Partial<CreateAccountGroupPayload> & {
+  isActive?: boolean;
+};
+
+export interface QueryAccountGroupsParams extends QueryAccountHierarchyParams {
+  classificationId?: string;
 }
 
 export interface CashBankAccount {
@@ -288,17 +494,49 @@ export interface BudgetForecast {
   currency: string;
 }
 
-export type CustomerStatus = 'Active' | 'Inactive';
-
-export interface Customer {
+export interface AccountingCustomer {
   id: string;
-  customerCode: string;
-  customerName: string;
-  contactPerson: string | null;
+  code: string;
+  legalName: string;
+  tradingName: string | null;
+  primaryContactName: string | null;
   email: string | null;
   phone: string | null;
-  outstandingBalance: number;
+  billingAddress: string | null;
+  countryCode: string | null;
   currency: string;
-  status: CustomerStatus;
-  contacts: AccountingContact[];
+  paymentTermsDays: number;
+  creditLimit: number | null;
+  taxNumber: string | null;
+  externalRef: string | null;
+  sourceModule: string | null;
+  notes: string | null;
+  isActive: boolean;
+  subledgerAccountId: string;
+  subledgerAccount: AccountingSubledgerRef;
+  balance: AccountingSubledgerBalance;
+  createdAt: string;
+  updatedAt: string;
 }
+
+export interface CreateAccountingCustomerPayload {
+  code: string;
+  legalName: string;
+  tradingName?: string;
+  primaryContactName?: string;
+  email?: string;
+  phone?: string;
+  billingAddress?: string;
+  countryCode?: string;
+  currency: string;
+  paymentTermsDays?: number;
+  creditLimit?: number;
+  taxNumber?: string;
+  externalRef?: string;
+  sourceModule?: string;
+  notes?: string;
+}
+
+export type UpdateAccountingCustomerPayload = Partial<CreateAccountingCustomerPayload> & {
+  isActive?: boolean;
+};

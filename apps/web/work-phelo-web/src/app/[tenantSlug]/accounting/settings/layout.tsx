@@ -20,7 +20,7 @@ export default function AccountingSettingsLayout({ children }: { children: React
     {
       tabs: [
         { key: 'account-type', label: 'Account Type', href: `${base}/account-type` },
-        { key: 'accounts', label: 'Accounts', href: `${base}/accounts` },
+        { key: 'classifications', label: 'Classifications', href: `${base}/classifications` },
         { key: 'currency', label: 'Currency', href: `${base}/currency` },
       ],
     },

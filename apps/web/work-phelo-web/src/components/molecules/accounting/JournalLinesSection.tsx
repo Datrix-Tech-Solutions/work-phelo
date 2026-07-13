@@ -1,13 +1,11 @@
 'use client';
 
 import { useFieldArray, useWatch, Controller, UseFormReturn } from 'react-hook-form';
-import { SearchSelect, SearchSelectOption } from '@/components/atoms/SearchSelect';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { inputClass } from '@/lib/utils';
 import { InlineTable, InlineTableColumn } from '@/components/organisms/shared/InlineTable';
 import { JournalEntryFormValues, JournalLine } from '@/types/accounting';
-
-// TODO: populate from chart of accounts API
-const ACCOUNT_OPTIONS: SearchSelectOption[] = [];
+import { useGLAccountOptions } from '@/hooks';
 
 const EMPTY_LINE: JournalLine = { targetAccount: '', description: '', debit: '', credit: '' };
 
@@ -30,6 +28,7 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
 
   const lines = useWatch({ control, name: 'lines' });
   const currency = useWatch({ control, name: 'currency' });
+  const { options: accountOptions, isLoading: isLoadingAccounts } = useGLAccountOptions();
 
   const debitTotal = (lines ?? []).reduce((sum, l) => sum + (Number(l?.debit) || 0), 0);
   const creditTotal = (lines ?? []).reduce((sum, l) => sum + (Number(l?.credit) || 0), 0);
@@ -45,14 +44,14 @@ export function JournalLinesSection({ form }: JournalLinesSectionProps) {
           <Controller
             name={`lines.${index}.targetAccount`}
             control={control}
-            rules={{ required: true }}
+            rules={{ required: 'Account is required' }}
             render={({ field }) => (
               <SearchSelect
-                placeholder="Select account…"
-                options={ACCOUNT_OPTIONS}
+                placeholder={isLoadingAccounts ? 'Loading…' : 'Select account…'}
+                options={accountOptions}
                 value={field.value}
                 onChange={field.onChange}
-                error={err ? '' : undefined}
+                error={err?.message}
                 size="sm"
               />
             )}
