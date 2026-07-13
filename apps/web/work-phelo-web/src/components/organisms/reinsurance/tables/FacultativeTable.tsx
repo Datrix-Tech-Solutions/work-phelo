@@ -15,7 +15,8 @@ import {
   PlacementPayment,
   toStatusLabel,
 } from '@/types/reinsurance';
-import { useFacultatives, usePlacementPayments } from '@/hooks';
+import { useCedants, useFacultatives, usePlacementPayments } from '@/hooks';
+import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 
 const PAGE_SIZE = 10;
 
@@ -56,17 +57,26 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Paid: 'text-xs text-green-600 font-medium',
 };
 
-function netPremiumFor(row: Facultative): number {
+function netPremiumFor(row: Facultative, deductionRate: number): number {
   const facPremium =
     row.premium != null && row.facultativeOffer != null
       ? (row.facultativeOffer / 100) * row.premium
       : 0;
-  return row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
+  const netPremium = row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
+  return netPremium * (1 - deductionRate);
+}
+
+function useDeductionRateFor(cedantId: string): number {
+  const { data: cedants = [] } = useCedants();
+  return isForeignCedant(cedants.find((c) => c.id === cedantId))
+    ? FOREIGN_CEDANT_DEDUCTION_RATE
+    : 0;
 }
 
 function PaymentStatusCell({ placement }: { placement: Facultative }) {
   const { data: payments = [] } = usePlacementPayments(placement.id);
-  const netPremium = netPremiumFor(placement);
+  const deductionRate = useDeductionRateFor(placement.cedant.id);
+  const netPremium = netPremiumFor(placement, deductionRate);
   const paid = payments
     .filter((p) => p.status === 'RECORDED')
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
@@ -96,7 +106,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'title',
     label: 'Insured / Risk Type',
-    width: '1.6fr',
+    width: '1fr',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
@@ -107,7 +117,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'cedant',
     label: 'Cedant',
-    width: '1.3fr',
+    width: '1fr',
     render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
   },
   {
@@ -125,7 +135,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'premium',
     label: 'Fac Premium',
-    width: '1.2fr',
+    width: '0.5fr',
     render: (row) => (
       <span className="font-semibold text-gray-900 whitespace-nowrap">
         {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
@@ -211,6 +221,7 @@ export function FacultativeTable({
   const [editTarget, setEditTarget] = useState<Facultative | null>(null);
 
   const { data: allRows = [], isLoading } = useFacultatives();
+  const { data: cedants = [] } = useCedants();
 
   const closingRows = useMemo(
     () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
@@ -234,7 +245,10 @@ export function FacultativeTable({
     const map = new Map<string, PaymentStatus>();
     closingRows.forEach((row, i) => {
       const payments = paymentQueries[i]?.data ?? [];
-      const netPremium = netPremiumFor(row);
+      const deductionRate = isForeignCedant(cedants.find((c) => c.id === row.cedant.id))
+        ? FOREIGN_CEDANT_DEDUCTION_RATE
+        : 0;
+      const netPremium = netPremiumFor(row, deductionRate);
       const paid = payments
         .filter((p) => p.status === 'RECORDED')
         .reduce((sum, p) => sum + parseFloat(p.amount), 0);
@@ -244,7 +258,7 @@ export function FacultativeTable({
       map.set(row.id, status);
     });
     return map;
-  }, [closingRows, paymentQueries]);
+  }, [closingRows, paymentQueries, cedants]);
 
   const filtered = useMemo(() => {
     if (tab === 'deleted') return [];

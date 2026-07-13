@@ -9,8 +9,9 @@ import { Badge } from '@/components/atoms/Badge';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Facultative, FacultativeStatus, PlacementClaim } from '@/types/reinsurance';
-import { useFacultatives } from '@/hooks';
+import { useCedants, useFacultatives } from '@/hooks';
 import { MakeClaimPanel } from '@/components/organisms/reinsurance/panels/MakeClaimPanel';
+import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 
 const PAGE_SIZE = 10;
 
@@ -35,12 +36,21 @@ function fmtAmount(val: number | string | null | undefined, currency?: string | 
   return `${prefix}${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function netPremiumFor(row: Facultative): number {
+function netPremiumFor(row: Facultative, deductionRate: number): number {
   const facPremium =
     row.premium != null && row.facultativeOffer != null
       ? (row.facultativeOffer / 100) * row.premium
       : 0;
-  return row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
+  const netPremium = row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
+  return netPremium * (1 - deductionRate);
+}
+
+function NetPremiumCell({ row }: { row: Facultative }) {
+  const { data: cedants = [] } = useCedants();
+  const deductionRate = isForeignCedant(cedants.find((c) => c.id === row.cedant.id))
+    ? FOREIGN_CEDANT_DEDUCTION_RATE
+    : 0;
+  return <>{fmtAmount(netPremiumFor(row, deductionRate), row.currency)}</>;
 }
 
 const COLUMNS: Column<PlacementWithClaim>[] = [
@@ -89,7 +99,7 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
     width: '1.1fr',
     render: (row) => (
       <span className="font-medium text-gray-900 whitespace-nowrap">
-        {fmtAmount(netPremiumFor(row), row.currency)}
+        <NetPremiumCell row={row} />
       </span>
     ),
   },
@@ -99,7 +109,9 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
     width: '110px',
     render: (row) => {
       const total = row.participants?.length ?? 0;
-      const accepted = row.participants?.filter((p) => p.status === 'ACCEPTED').length ?? 0;
+      const accepted =
+        row.participants?.filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED').length ??
+        0;
       return (
         <div className="flex flex-col gap-0.5">
           <span className="font-semibold text-gray-900">

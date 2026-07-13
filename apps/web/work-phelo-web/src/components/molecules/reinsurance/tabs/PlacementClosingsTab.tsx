@@ -9,6 +9,7 @@ import { DebitNoteModal } from '@/components/organisms/reinsurance/documents/Deb
 import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
 import { useCedants, useReinsurers } from '@/hooks';
 import { Facultative, PlacementParticipant } from '@/types/reinsurance';
+import { isForeignCedant, NIC_LEVY_RATE, WITHHOLDING_TAX_RATE } from '@/lib/reinsuranceTax';
 
 interface ClosingRow {
   id: string;
@@ -54,6 +55,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
   const { data: reinsurers = [] } = useReinsurers();
 
   const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
+  const foreignCedant = isForeignCedant(fullCedant);
 
   const reinsurerEmails: Record<string, string[]> = Object.fromEntries(
     reinsurers.map((r) => {
@@ -151,6 +153,8 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           brokerageFee={creditNoteRow.brokerageFee}
           counterpartyId={creditNoteRow.counterpartyId}
           reinsurerCompany={creditNoteRow.reinsurerCompany}
+          nicLevyPct={foreignCedant ? NIC_LEVY_RATE * 100 : 0}
+          withholdingTaxPct={foreignCedant ? WITHHOLDING_TAX_RATE * 100 : 0}
           onPrint={() => setCreditNoteRow(null)}
           onClose={() => setCreditNoteRow(null)}
         />

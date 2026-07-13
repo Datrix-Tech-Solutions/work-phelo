@@ -2,7 +2,7 @@
 
 import { useRouter, useParams } from 'next/navigation';
 import { TrendingUp, Scale, BookOpen, Clock, ClockAlert } from 'lucide-react';
-import { ReportCard } from '@/components/molecules/accounting/ReportCard';
+import { ReportCard } from '@/components/molecules/shared/ReportCard';
 
 export default function FinancialReportsPage() {
   const router = useRouter();
@@ -27,7 +27,6 @@ export default function FinancialReportsPage() {
             { label: 'Expenses', value: 'GHS 0.00' },
             { label: 'Net Profit', value: 'GHS 0.00' },
           ]}
-          generatedAt="—"
           onClick={() => router.push(`${base}/profit-and-loss`)}
         />
 
@@ -41,7 +40,6 @@ export default function FinancialReportsPage() {
             { label: 'Liabilities', value: 'GHS 0.00' },
             { label: 'Equity', value: 'GHS 0.00' },
           ]}
-          generatedAt="—"
           onClick={() => router.push(`${base}/balance-sheet`)}
         />
 
@@ -55,7 +53,6 @@ export default function FinancialReportsPage() {
             { label: 'Investing Cash Flow', value: 'GHS 0.00' },
             { label: 'Financing Cash Flow', value: 'GHS 0.00' },
           ]}
-          generatedAt="—"
           onClick={() => router.push(`${base}/cash-flow-statement`)}
         />
 
@@ -68,7 +65,6 @@ export default function FinancialReportsPage() {
             { label: 'Total Debit', value: 'GHS 0.00' },
             { label: 'Total Credit', value: 'GHS 0.00' },
           ]}
-          generatedAt="—"
           onClick={() => router.push(`${base}/trial-balance`)}
         />
 
@@ -82,7 +78,6 @@ export default function FinancialReportsPage() {
             { label: '30–60 Days', value: 'GHS 0.00' },
             { label: '60+ Days', value: 'GHS 0.00' },
           ]}
-          generatedAt="—"
           onClick={() => router.push(`${base}/aged-receivable`)}
         />
 
@@ -96,7 +91,6 @@ export default function FinancialReportsPage() {
             { label: '30–60 Days', value: 'GHS 0.00' },
             { label: '60+ Days', value: 'GHS 0.00' },
           ]}
-          generatedAt="—"
           onClick={() => router.push(`${base}/aged-payable`)}
         />
       </div>

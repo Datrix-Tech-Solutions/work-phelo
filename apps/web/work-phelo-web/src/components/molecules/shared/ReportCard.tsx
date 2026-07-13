@@ -13,7 +13,6 @@ interface ReportCardProps {
   title: string;
   description: string;
   stats: ReportStat[];
-  generatedAt: string;
   onClick: () => void;
   className?: string;
 }
@@ -24,7 +23,6 @@ export function ReportCard({
   title,
   description,
   stats,
-  generatedAt,
   onClick,
   className,
 }: ReportCardProps) {
@@ -69,12 +67,6 @@ export function ReportCard({
             <span className="text-sm font-semibold text-gray-900">{stat.value}</span>
           </div>
         ))}
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
-        <span>Generated {generatedAt}</span>
       </div>
     </button>
   );

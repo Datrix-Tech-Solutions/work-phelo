@@ -19,6 +19,15 @@ const CATEGORIES: { value: GLAccountCategory; label: string; code: string; color
   { value: 'EXPENSE', label: 'Expense', code: '5000', color: 'text-orange-500' },
 ];
 
+/** Selected-row tint, matching the color of the type folder a row lives under. */
+const SELECTED_TINTS: Record<string, string> = {
+  'text-blue-500': 'bg-blue-200',
+  'text-red-500': 'bg-red-200',
+  'text-purple-500': 'bg-purple-200',
+  'text-green-500': 'bg-green-200',
+  'text-orange-500': 'bg-orange-200',
+};
+
 /** Same glass fade-in used for DataTable row hovers, scaled down to tree rows. */
 function RowHoverOverlay() {
   return (
@@ -35,9 +44,17 @@ interface GroupNodeProps {
   color: string;
   group: AccountGroup;
   glAccounts: GLAccount[];
+  selectedAccountId?: string;
+  onSelectAccount?: (account: GLAccount) => void;
 }
 
-function GroupNode({ color, group, glAccounts }: GroupNodeProps) {
+function GroupNode({
+  color,
+  group,
+  glAccounts,
+  selectedAccountId,
+  onSelectAccount,
+}: GroupNodeProps) {
   const [open, setOpen] = useState(false);
   const hasAccounts = glAccounts.length > 0;
 
@@ -81,16 +98,28 @@ function GroupNode({ color, group, glAccounts }: GroupNodeProps) {
 
       {open && (
         <div className="ml-6 border-l border-gray-100 pl-3 flex flex-col">
-          {glAccounts.map((account) => (
-            <div key={account.id} className="relative group/row rounded-lg">
-              <RowHoverOverlay />
-              <div className="relative flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600">
-                <FileText className={cn('w-4 h-4 shrink-0', color)} />
-                <span className="text-xs font-semibold text-gray-400 shrink-0">{account.code}</span>
-                <span className="truncate">{account.name}</span>
+          {glAccounts.map((account) => {
+            const isSelected = account.id === selectedAccountId;
+            return (
+              <div key={account.id} className="relative group/row rounded-lg">
+                <RowHoverOverlay />
+                <button
+                  type="button"
+                  onClick={() => onSelectAccount?.(account)}
+                  className={cn(
+                    'relative w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-600',
+                    isSelected && (SELECTED_TINTS[color] ?? 'bg-gray-100'),
+                  )}
+                >
+                  <FileText className={cn('w-4 h-4 shrink-0', color)} />
+                  <span className="text-xs font-semibold text-gray-400 shrink-0">
+                    {account.code}
+                  </span>
+                  <span className="truncate">{account.name}</span>
+                </button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -102,6 +131,8 @@ interface ClassificationNodeProps {
   classification: AccountClassification;
   groups: AccountGroup[];
   glAccounts: GLAccount[];
+  selectedAccountId?: string;
+  onSelectAccount?: (account: GLAccount) => void;
 }
 
 function ClassificationNode({
@@ -109,6 +140,8 @@ function ClassificationNode({
   classification,
   groups,
   glAccounts,
+  selectedAccountId,
+  onSelectAccount,
 }: ClassificationNodeProps) {
   const [open, setOpen] = useState(false);
   const hasGroups = groups.length > 0;
@@ -164,6 +197,8 @@ function ClassificationNode({
               color={color}
               group={group}
               glAccounts={glAccounts.filter((a) => a.accountGroupId === group.id)}
+              selectedAccountId={selectedAccountId}
+              onSelectAccount={onSelectAccount}
             />
           ))}
         </div>
@@ -181,6 +216,8 @@ interface TypeNodeProps {
   classifications: AccountClassification[];
   groups: AccountGroup[];
   glAccounts: GLAccount[];
+  selectedAccountId?: string;
+  onSelectAccount?: (account: GLAccount) => void;
 }
 
 function TypeNode({
@@ -192,6 +229,8 @@ function TypeNode({
   classifications,
   groups,
   glAccounts,
+  selectedAccountId,
+  onSelectAccount,
 }: TypeNodeProps) {
   return (
     <div>
@@ -230,6 +269,8 @@ function TypeNode({
                 classification={classification}
                 groups={groups.filter((g) => g.classificationId === classification.id)}
                 glAccounts={glAccounts}
+                selectedAccountId={selectedAccountId}
+                onSelectAccount={onSelectAccount}
               />
             ))
           )}
@@ -244,9 +285,16 @@ interface ChartOfAccountsTreeProps {
   collapsed?: boolean;
   /** Called when a rail icon is clicked, so the host panel can expand back to full width. */
   onExpand?: () => void;
+  selectedAccountId?: string;
+  onSelectAccount?: (account: GLAccount) => void;
 }
 
-export function ChartOfAccountsTree({ collapsed = false, onExpand }: ChartOfAccountsTreeProps) {
+export function ChartOfAccountsTree({
+  collapsed = false,
+  onExpand,
+  selectedAccountId,
+  onSelectAccount,
+}: ChartOfAccountsTreeProps) {
   const { data: classificationsData, isLoading: isLoadingClassifications } =
     useAccountClassifications();
   const { data: groupsData, isLoading: isLoadingGroups } = useAccountGroups();
@@ -310,6 +358,8 @@ export function ChartOfAccountsTree({ collapsed = false, onExpand }: ChartOfAcco
             classifications={classifications.filter((c) => c.category === cat.value)}
             groups={groups}
             glAccounts={glAccounts}
+            selectedAccountId={selectedAccountId}
+            onSelectAccount={onSelectAccount}
           />
         ))
       )}

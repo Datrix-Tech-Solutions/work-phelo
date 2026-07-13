@@ -7,7 +7,7 @@ import { Modal } from '@/components/organisms/shared/Modal';
 import { JournalEntryDetailsSection } from '@/components/molecules/accounting/JournalEntryDetailsSection';
 import { JournalLinesSection } from '@/components/molecules/accounting/JournalLinesSection';
 import { JournalEntryFormValues, JOURNAL_ENTRY_DEFAULTS } from '@/types/accounting';
-import { Icons } from '@/components/atoms/icons';
+// import { Icons } from '@/components/atoms/icons';
 import { cardClass } from '@/lib/utils';
 import { useCreateJournal } from '@/hooks';
 import { useToast } from '@/hooks/useToast';
@@ -80,7 +80,7 @@ export function NewJournalEntryForm({ onCancel, onSaved }: NewJournalEntryFormPr
           <Button variant="outline" onClick={() => setShowCancelModal(true)} disabled={isPending}>
             Cancel
           </Button>
-          <Button
+          {/* <Button
             variant="secondary"
             icon={<Icons.Save className="w-4 h-4" />}
             isLoading={isPending}
@@ -88,7 +88,7 @@ export function NewJournalEntryForm({ onCancel, onSaved }: NewJournalEntryFormPr
             onClick={form.handleSubmit(onSubmit)}
           >
             Save as Draft
-          </Button>
+          </Button> */}
           {/* No backend workflow status for "review" yet (JournalStatus is only
               DRAFT/POSTED/REVERSED) — this creates the same draft as "Save as Draft". */}
           <Button

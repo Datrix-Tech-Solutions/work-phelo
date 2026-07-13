@@ -57,6 +57,28 @@ function calculateNetPremium(
   return premium - commission - brokerage;
 }
 
+/** Non-resident cedant premiums attract NIC Levy + Withholding Tax. */
+const NIC_LEVY_RATE = 0.01;
+const WITHHOLDING_TAX_RATE = 0.05;
+
+function cedantPrimaryAddressCountry(
+  cedant: Record<string, unknown> | null,
+): string | null {
+  const addresses = Array.isArray(cedant?.addresses)
+    ? (cedant?.addresses as unknown[])
+    : [];
+  const records = addresses.map((entry) => getRecord(entry));
+  const primary =
+    records.find((entry) => entry?.isPrimary === true) ?? records[0] ?? null;
+  const country = primary?.country;
+  return typeof country === 'string' ? country.toUpperCase() : null;
+}
+
+function isForeignCedant(cedant: Record<string, unknown> | null): boolean {
+  const country = cedantPrimaryAddressCountry(cedant);
+  return country !== null && country !== 'GH';
+}
+
 function entryValue(entries: unknown[] | undefined, keys: string[]): unknown {
   for (const entry of entries ?? []) {
     const record = getRecord(entry);
@@ -161,6 +183,20 @@ export function renderOfferSlipTemplate(
   const netPremium =
     snapshotNetPremium ??
     calculateNetPremium(premiumShare, commissionAmount, brokerageAmount);
+  const foreignCedant = isForeignCedant(cedant);
+  const netPremiumValue = numberValue(netPremium);
+  const nicLevyAmount =
+    foreignCedant && netPremiumValue !== null
+      ? netPremiumValue * NIC_LEVY_RATE
+      : null;
+  const withholdingTaxAmount =
+    foreignCedant && netPremiumValue !== null
+      ? netPremiumValue * WITHHOLDING_TAX_RATE
+      : null;
+  const netPremiumAfterDeductions =
+    netPremiumValue !== null
+      ? netPremiumValue - (nicLevyAmount ?? 0) - (withholdingTaxAmount ?? 0)
+      : null;
 
   return `<!doctype html>
 <html lang="en">
@@ -369,10 +405,28 @@ export function renderOfferSlipTemplate(
             <th>Brokerage (${percentText(distributionFinancials?.brokerageFee ?? distributionFinancials?.brokerageFeePct ?? participant?.brokerageFee)})</th>
             <td>${moneyText(brokerageAmount, currency)}</td>
           </tr>
-          <tr class="total">
+          <tr${nicLevyAmount !== null ? '' : ' class="total"'}>
             <th>Net Premium</th>
             <td>${moneyText(netPremium, currency)}</td>
           </tr>
+          ${
+            nicLevyAmount !== null && withholdingTaxAmount !== null
+              ? `
+          <tr>
+            <th>NIC Levy (${percentText(NIC_LEVY_RATE * 100)})</th>
+            <td>${moneyText(nicLevyAmount, currency)}</td>
+          </tr>
+          <tr>
+            <th>Withholding Tax (${percentText(WITHHOLDING_TAX_RATE * 100)})</th>
+            <td>${moneyText(withholdingTaxAmount, currency)}</td>
+          </tr>
+          <tr class="total">
+            <th>Net Premium Payable</th>
+            <td>${moneyText(netPremiumAfterDeductions, currency)}</td>
+          </tr>
+          `
+              : ''
+          }
         </tbody>
       </table>
     </section>
