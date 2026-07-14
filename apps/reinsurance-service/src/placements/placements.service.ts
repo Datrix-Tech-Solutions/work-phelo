@@ -27,6 +27,7 @@ import { UpdatePlacementParticipantStatusDto } from './dto/update-placement-part
 import { UpdatePlacementParticipantDto } from './dto/update-placement-participant.dto';
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
+import { ArchivePlacementDto } from './dto/archive-placement.dto';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 
 const placementInclude = {
@@ -181,7 +182,7 @@ export class PlacementsService {
     const limit = query.limit ?? 20;
     const where: Prisma.PlacementWhereInput = {
       tenantId,
-      archivedAt: null,
+      archivedAt: query.archived ? { not: null } : null,
       ...(query.status ? { status: query.status } : {}),
       ...(query.placementType ? { placementType: query.placementType } : {}),
       ...(query.cedantId ? { cedantId: query.cedantId } : {}),
@@ -679,9 +680,21 @@ export class PlacementsService {
   async archive(
     user: RequestUser,
     id: string,
+    dto: ArchivePlacementDto = {},
   ): Promise<PlacementWithAggregates> {
-    const existing = await this.findOne(user.tenantId, id);
-    await this.assertArchivable(existing);
+    const existing = await this.prisma.placement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: placementInclude,
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Placement not found');
+    }
+    if (existing.archivedAt) {
+      throw new ConflictException('Placement is already archived');
+    }
+
+    await this.assertArchivable(this.withAggregates(existing));
     const placement = await this.prisma.placement.update({
       where: {
         id_tenantId: { id, tenantId: user.tenantId },
@@ -690,14 +703,80 @@ export class PlacementsService {
       data: {
         archivedAt: new Date(),
         archivedByUserId: user.id,
+        archiveReason: this.cleanOptional(dto.archiveReason),
         updatedByUserId: user.id,
       },
       include: placementInclude,
     });
 
-    this.publish('deleted', placement, user, {
-      before: this.auditSnapshot(existing),
-      after: this.auditSnapshot(placement),
+    this.publish('updated', placement, user, {
+      before: {
+        ...this.auditSnapshot(existing),
+        lifecycleEvent: 'PLACEMENT_ARCHIVED',
+      },
+      after: {
+        ...this.auditSnapshot(placement),
+        lifecycleEvent: 'PLACEMENT_ARCHIVED',
+        reason: this.cleanOptional(dto.archiveReason),
+      },
+    });
+    return this.withAggregates(placement);
+  }
+
+  async restore(
+    user: RequestUser,
+    id: string,
+  ): Promise<PlacementWithAggregates> {
+    const existing = await this.prisma.placement.findFirst({
+      where: { id, tenantId: user.tenantId },
+      include: placementInclude,
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Placement not found');
+    }
+    if (!existing.archivedAt) {
+      throw new ConflictException('Placement is already active');
+    }
+
+    const activeReferenceConflict = await this.prisma.placement.findFirst({
+      where: {
+        tenantId: user.tenantId,
+        id: { not: id },
+        normalizedReference: existing.normalizedReference,
+        archivedAt: null,
+      },
+      select: { id: true, reference: true },
+    });
+    if (activeReferenceConflict) {
+      throw new ConflictException(
+        `Cannot restore placement because active placement ${activeReferenceConflict.reference} already uses reference ${existing.reference}`,
+      );
+    }
+
+    const placement = await this.prisma.placement.update({
+      where: {
+        id_tenantId: { id, tenantId: user.tenantId },
+      },
+      data: {
+        archivedAt: null,
+        archivedByUserId: null,
+        archiveReason: null,
+        updatedByUserId: user.id,
+      },
+      include: placementInclude,
+    });
+
+    this.publish('updated', placement, user, {
+      before: {
+        ...this.auditSnapshot(existing),
+        lifecycleEvent: 'PLACEMENT_RESTORED',
+        reason: existing.archiveReason,
+      },
+      after: {
+        ...this.auditSnapshot(placement),
+        lifecycleEvent: 'PLACEMENT_RESTORED',
+      },
     });
     return this.withAggregates(placement);
   }
@@ -2123,6 +2202,7 @@ export class PlacementsService {
       status: placement.status,
       cedantId: placement.cedantId,
       placementType: placement.placementType,
+      archiveReason: placement.archiveReason,
       archivedAt: placement.archivedAt?.toISOString() ?? null,
     };
   }

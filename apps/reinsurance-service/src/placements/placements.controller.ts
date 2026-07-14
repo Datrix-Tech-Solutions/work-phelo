@@ -15,6 +15,7 @@ import {
 import {
   ApiBadRequestResponse,
   ApiBearerAuth,
+  ApiBody,
   ApiConflictResponse,
   ApiCookieAuth,
   ApiCreatedResponse,
@@ -116,6 +117,7 @@ import {
   OfferSlipPreviewResponseDto,
 } from './dto/slip-preview-response.dto';
 import { AcceptPlacementParticipantResponseDto } from './dto/accept-placement-participant-response.dto';
+import { ArchivePlacementDto } from './dto/archive-placement.dto';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { QueryPlacementsDto } from './dto/query-placements.dto';
@@ -185,11 +187,18 @@ export class PlacementsController {
   @ApiTags('Reinsurance - Placements')
   @RequirePermissions(PlacementPermission.VIEW)
   @ApiOperation({
-    summary: 'List active facultative placements',
+    summary: 'List facultative placements',
     description:
-      'Returns only non-archived placements in the authenticated tenant.',
+      'Returns active placements by default. Pass archived=true to return archived placements only. ' +
+      'Both modes are tenant-scoped and support the same filters and pagination.',
   })
   @ApiQuery({ name: 'search', required: false, example: 'FAC-2026' })
+  @ApiQuery({
+    name: 'archived',
+    required: false,
+    schema: { type: 'boolean', default: false },
+    description: 'When true, returns archived placements only.',
+  })
   @ApiQuery({
     name: 'status',
     required: false,
@@ -2635,9 +2644,11 @@ export class PlacementsController {
     summary: 'Archive a placement',
     description:
       'Soft-archives the active record. Archived records are excluded from standard list and detail requests. ' +
-      'Financially locked placements return 409 and cannot be archived directly.',
+      'Financially locked placements return 409 and cannot be archived directly. ' +
+      'Optional archiveReason is stored for the recycle-bin workflow.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiBody({ type: ArchivePlacementDto, required: false })
   @ApiOkResponse({ type: PlacementResponseDto })
   @ApiNotFoundResponse({
     type: ApiErrorResponseDto,
@@ -2650,8 +2661,34 @@ export class PlacementsController {
   })
   archive(
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ArchivePlacementDto,
     @Req() request: Request & { user: RequestUser },
   ) {
-    return this.placementsService.archive(request.user, id);
+    return this.placementsService.archive(request.user, id, dto);
+  }
+
+  @Post(':id/restore')
+  @ApiTags('Reinsurance - Placements')
+  @RequirePermissions(PlacementPermission.DELETE)
+  @ApiOperation({
+    summary: 'Restore an archived placement',
+    description:
+      'Restores a tenant-owned archived placement to the active list. Child records and audit history are preserved.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiOkResponse({ type: PlacementResponseDto })
+  @ApiNotFoundResponse({
+    type: ApiErrorResponseDto,
+    description: 'The placement is missing or belongs to another tenant.',
+  })
+  @ApiConflictResponse({
+    type: ApiErrorResponseDto,
+    description: 'The placement is already active.',
+  })
+  restore(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.placementsService.restore(request.user, id);
   }
 }

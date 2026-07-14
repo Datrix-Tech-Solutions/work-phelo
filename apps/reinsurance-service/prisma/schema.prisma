@@ -367,6 +367,7 @@ model Placement {
   createdByUserId         String
   updatedByUserId         String
   archivedByUserId        String?
+  archiveReason           String?
   archivedAt              DateTime?
   createdAt               DateTime                          @default(now())
   updatedAt               DateTime                          @updatedAt
