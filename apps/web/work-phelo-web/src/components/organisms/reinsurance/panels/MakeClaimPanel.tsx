@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import {
   MakeClaimFormFields,
   MakeClaimFormValues,
   MAKE_CLAIM_DEFAULTS,
 } from '@/components/molecules/reinsurance/forms/MakeClaimFormFields';
-import { useCreatePlacementClaim, useUpdatePlacementClaim } from '@/hooks';
+import { useCreatePlacementClaim, useUpdatePlacementClaim, useFacultatives } from '@/hooks';
 import { api } from '@/lib/api';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
@@ -21,6 +22,8 @@ interface MakeClaimPanelProps {
   placement?: Facultative;
   claim?: PlacementClaim;
   onSuccess?: () => void;
+  /** Fires as the user narrows down a placement in the built-in picker (only used when `placement` isn't passed in). */
+  onPlacementChange?: (placementId: string) => void;
 }
 
 export function MakeClaimPanel({
@@ -29,8 +32,42 @@ export function MakeClaimPanel({
   placement,
   claim,
   onSuccess,
+  onPlacementChange,
 }: MakeClaimPanelProps) {
   const isEditing = !!claim;
+  const showPicker = !placement;
+
+  const { data: facultatives = [] } = useFacultatives();
+  const [cedantId, setCedantId] = useState('');
+  const [businessId, setBusinessId] = useState('');
+
+  const pickedPlacement = useMemo(
+    () => facultatives.find((f) => f.id === businessId),
+    [facultatives, businessId],
+  );
+  const effectivePlacement = placement ?? pickedPlacement;
+
+  const cedantOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const f of facultatives) {
+      if (f.status !== 'CANCELLED') seen.set(f.cedant.id, f.cedant.name);
+    }
+    return Array.from(seen.entries())
+      .map(([id, name]) => ({ value: id, label: name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [facultatives]);
+
+  const businessOptions = useMemo(
+    () =>
+      facultatives
+        .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
+        .map((f) => ({
+          value: f.id,
+          label: f.policyNumber ?? f.reference,
+          sublabel: [f.classOfBusiness, f.title].filter(Boolean).join(' · '),
+        })),
+    [facultatives, cedantId],
+  );
 
   const form = useForm<MakeClaimFormValues>({ defaultValues: MAKE_CLAIM_DEFAULTS });
   const {
@@ -40,7 +77,7 @@ export function MakeClaimPanel({
   } = form;
 
   const createClaim = useCreatePlacementClaim();
-  const updateClaim = useUpdatePlacementClaim(placement?.id ?? '', claim?.id ?? '');
+  const updateClaim = useUpdatePlacementClaim(effectivePlacement?.id ?? '', claim?.id ?? '');
   const addToast = useToastStore((s) => s.addToast);
 
   useEffect(() => {
@@ -55,12 +92,17 @@ export function MakeClaimPanel({
           currency: claim.currency,
         });
       } else {
-        reset({ ...MAKE_CLAIM_DEFAULTS, currency: placement?.currency ?? '' });
+        reset({ ...MAKE_CLAIM_DEFAULTS, currency: effectivePlacement?.currency ?? '' });
       }
     } else {
       reset(MAKE_CLAIM_DEFAULTS);
+      if (showPicker) {
+        setCedantId('');
+        setBusinessId('');
+      }
     }
-  }, [isOpen, claim, placement, reset]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, claim, reset]);
 
   const handleClose = () => {
     reset(MAKE_CLAIM_DEFAULTS);
@@ -68,7 +110,7 @@ export function MakeClaimPanel({
   };
 
   const onSubmit = async (values: MakeClaimFormValues) => {
-    if (!placement) return;
+    if (!effectivePlacement) return;
 
     const payload = {
       occurrenceDate: new Date(values.occurrenceDate).toISOString(),
@@ -82,9 +124,12 @@ export function MakeClaimPanel({
       if (isEditing) {
         await updateClaim.mutateAsync(payload);
       } else {
-        const newClaim = await createClaim.mutateAsync({ placementId: placement.id, ...payload });
+        const newClaim = await createClaim.mutateAsync({
+          placementId: effectivePlacement.id,
+          ...payload,
+        });
         await api.post(
-          `/operations/reinsurance/placements/${placement.id}/claims/${newClaim.id}/allocations/generate`,
+          `/operations/reinsurance/placements/${effectivePlacement.id}/claims/${newClaim.id}/allocations/generate`,
         );
       }
       addToast({
@@ -103,9 +148,11 @@ export function MakeClaimPanel({
       isOpen={isOpen}
       onClose={handleClose}
       title={isEditing ? 'Edit Claim' : 'Make Claim'}
-      description={placement ? `Claim for ${placement.reference}` : 'Submit a claim'}
+      description={
+        effectivePlacement ? `Claim for ${effectivePlacement.reference}` : 'Submit a claim'
+      }
       footer={
-        placement ? (
+        effectivePlacement ? (
           <div className="flex justify-end gap-3">
             <Button variant="outline" onClick={handleClose} disabled={isSubmitting}>
               Cancel
@@ -121,12 +168,41 @@ export function MakeClaimPanel({
         ) : undefined
       }
     >
-      {placement ? (
-        <MakeClaimFormFields form={form} placement={placement} />
-      ) : (
-        <div className="flex items-center justify-center h-40 text-sm text-gray-400">
-          Select a placement to make a claim
+      {showPicker && (
+        <div className="flex flex-col gap-5 mb-5">
+          <SearchSelect
+            label="Cedant"
+            placeholder="Select cedant…"
+            options={cedantOptions}
+            value={cedantId}
+            onChange={(val) => {
+              setCedantId(val);
+              setBusinessId('');
+              onPlacementChange?.('');
+            }}
+          />
+          {cedantId && (
+            <SearchSelect
+              label="Business"
+              placeholder="Select business…"
+              options={businessOptions}
+              value={businessId}
+              onChange={(val) => {
+                setBusinessId(val);
+                onPlacementChange?.(val);
+              }}
+            />
+          )}
+          {effectivePlacement && <hr className="border-gray-100" />}
         </div>
+      )}
+
+      {effectivePlacement && (
+        <MakeClaimFormFields
+          form={form}
+          placement={effectivePlacement}
+          hidePlacementInfo={showPicker}
+        />
       )}
     </SidePanel>
   );

@@ -73,6 +73,8 @@ import {
   RotateCcw,
   UserPlus,
   Save,
+  FileCheck2,
+  FileWarning,
 } from 'lucide-react';
 
 /** General-purpose icon map used throughout the app */
@@ -142,6 +144,8 @@ export const Icons = {
   Activity,
   DollarSign,
   Handshake,
+  FileCheck2,
+  FileWarning,
 } as const;
 
 export type IconName = keyof typeof Icons;

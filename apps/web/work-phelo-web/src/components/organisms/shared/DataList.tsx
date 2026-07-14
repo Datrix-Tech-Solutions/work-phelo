@@ -90,6 +90,8 @@ interface DataListProps<T extends { id: string | number }> {
   emptyMessage?: string;
   rowActions?: (row: T) => RowAction[];
   onRowClick?: (row: T) => void;
+  /** Skip the outer card background/border/shadow — use when already nested inside another card. */
+  bare?: boolean;
 }
 
 export function DataList<T extends { id: string | number }>({
@@ -99,13 +101,14 @@ export function DataList<T extends { id: string | number }>({
   emptyMessage = 'No items found',
   rowActions,
   onRowClick,
+  bare,
 }: DataListProps<T>) {
   const gridCols = [...columns.map((c) => c.width ?? '1fr'), ...(rowActions ? ['44px'] : [])].join(
     ' ',
   );
 
   return (
-    <div className={cardClass('overflow-hidden')}>
+    <div className={bare ? 'overflow-hidden' : cardClass('overflow-hidden')}>
       <div className="overflow-x-auto">
         <div className="min-w-max">
           {isLoading ? (
@@ -129,51 +132,60 @@ export function DataList<T extends { id: string | number }>({
                 key={row.id}
                 onClick={() => onRowClick?.(row)}
                 className={cn(
-                  'grid px-6 py-4 items-center text-sm text-gray-800 border-b border-gray-100 last:border-b-0',
-                  'hover:bg-(--surface-hover-subtle,var(--color-gray-50)) transition-colors',
+                  'relative group/row border-b border-gray-100 last:border-b-0',
                   onRowClick && 'cursor-pointer',
                 )}
-                style={{ gridTemplateColumns: gridCols }}
               >
-                {columns.map((col) => (
-                  <div key={col.key} className={col.className}>
-                    {col.render
-                      ? col.render(row)
-                      : String((row as Record<string, unknown>)[col.key] ?? '')}
-                  </div>
-                ))}
+                <div
+                  className={cardClass(
+                    'absolute inset-y-0.5 left-4 right-4 rounded-lg bg-(--table-header-bg,var(--color-gray-200)) opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 pointer-events-none',
+                    'glass',
+                  )}
+                />
+                <div
+                  className="relative grid px-6 py-4 items-center text-sm text-gray-800"
+                  style={{ gridTemplateColumns: gridCols }}
+                >
+                  {columns.map((col) => (
+                    <div key={col.key} className={col.className}>
+                      {col.render
+                        ? col.render(row)
+                        : String((row as Record<string, unknown>)[col.key] ?? '')}
+                    </div>
+                  ))}
 
-                {rowActions &&
-                  (() => {
-                    const actions = rowActions(row);
-                    if (actions.length === 0) return null;
-                    if (actions.length === 1) {
-                      const action = actions[0];
+                  {rowActions &&
+                    (() => {
+                      const actions = rowActions(row);
+                      if (actions.length === 0) return null;
+                      if (actions.length === 1) {
+                        const action = actions[0];
+                        return (
+                          <div className="flex justify-center">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                action.onClick();
+                              }}
+                              className={cn(
+                                'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
+                                action.danger
+                                  ? 'text-red-600 hover:bg-red-50'
+                                  : 'text-brand hover:bg-brand/5',
+                              )}
+                            >
+                              {action.label}
+                            </button>
+                          </div>
+                        );
+                      }
                       return (
-                        <div className="flex justify-center">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              action.onClick();
-                            }}
-                            className={cn(
-                              'text-sm font-medium px-2 py-1 rounded-lg transition-colors',
-                              action.danger
-                                ? 'text-red-600 hover:bg-red-50'
-                                : 'text-brand hover:bg-brand/5',
-                            )}
-                          >
-                            {action.label}
-                          </button>
+                        <div className="flex justify-end w-4">
+                          <ThreeDotMenu actions={actions} />
                         </div>
                       );
-                    }
-                    return (
-                      <div className="flex justify-end w-4">
-                        <ThreeDotMenu actions={actions} />
-                      </div>
-                    );
-                  })()}
+                    })()}
+                </div>
               </div>
             ))
           )}

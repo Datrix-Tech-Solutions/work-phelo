@@ -5,7 +5,6 @@ import { useRouter, useParams } from 'next/navigation';
 import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
-import { Badge } from '@/components/atoms/Badge';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Facultative, FacultativeStatus, PlacementClaim } from '@/types/reinsurance';
@@ -103,25 +102,7 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
       </span>
     ),
   },
-  {
-    key: 'participants',
-    label: 'Participants',
-    width: '110px',
-    render: (row) => {
-      const total = row.participants?.length ?? 0;
-      const accepted =
-        row.participants?.filter((p) => p.status === 'ACCEPTED' || p.status === 'CLOSED').length ??
-        0;
-      return (
-        <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-gray-900">
-            {accepted} / {total}
-          </span>
-          <span className="text-xs text-gray-400">accepted</span>
-        </div>
-      );
-    },
-  },
+
   {
     key: 'createdAt',
     label: 'Offer Date',
@@ -135,18 +116,6 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
         })}
       </span>
     ),
-  },
-  {
-    key: 'claimStatus',
-    label: 'Claim Status',
-    width: '140px',
-    className: 'pr-6',
-    render: (row) =>
-      row.latestClaim ? (
-        <Badge label="Claimed" variant="success" />
-      ) : (
-        <Badge label="Unclaimed" variant="neutral" />
-      ),
   },
 ];
 
@@ -184,16 +153,18 @@ export function ClaimsTable() {
     [closingRows, claimQueries],
   );
 
+  const claimedRows = useMemo(() => tableRows.filter((r) => !!r.latestClaim), [tableRows]);
+
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of tableRows) seen.set(r.cedant.id, r.cedant.name);
+    for (const r of claimedRows) seen.set(r.cedant.id, r.cedant.name);
     return Array.from(seen.entries())
       .map(([id, name]) => ({ value: id, label: name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [tableRows]);
+  }, [claimedRows]);
 
   const filtered = useMemo(() => {
-    let rows = tableRows;
+    let rows = claimedRows;
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -208,7 +179,7 @@ export function ClaimsTable() {
       rows = rows.filter((r) => r.cedant.id === cedantFilter);
     }
     return rows;
-  }, [tableRows, search, cedantFilter]);
+  }, [claimedRows, search, cedantFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -240,6 +211,10 @@ export function ClaimsTable() {
             />
           </div>
         }
+        actionButton={{
+          label: 'Make Claim',
+          onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/claims/new`),
+        }}
         rowActions={(row) => [
           {
             label: 'View',

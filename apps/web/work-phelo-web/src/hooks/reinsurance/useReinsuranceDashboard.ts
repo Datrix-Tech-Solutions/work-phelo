@@ -265,6 +265,51 @@ export function useReinsurancePremiumPaidPct({
   return { pct, isLoading };
 }
 
+export interface PremiumTrendPoint {
+  month: string;
+  amount: number;
+}
+
+export function useReinsurancePremiumTrend({ currency }: { currency: string }): {
+  data: PremiumTrendPoint[];
+  currencySymbol: string;
+  isLoading: boolean;
+} {
+  const { data: all = [], isLoading: loadingFac } = useFacultatives();
+  const { data: currencies = [], isLoading: loadingCur } = useCurrencies();
+
+  const result = useMemo(() => {
+    const now = new Date();
+    const baseCurrency = currencies.find((c) => c.isBaseCurrency);
+    const targetIso = currency || baseCurrency?.isoCode || '';
+    const targetRate = getRate(currencies, targetIso);
+    const targetCurrency = currencies.find((c) => c.isoCode === targetIso);
+    const currencySymbol = targetCurrency?.symbol ?? targetIso;
+
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const offset = 11 - i;
+      const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
+      return { start, end };
+    });
+
+    const data = months.map(({ start, end }) => ({
+      month: start.toISOString(),
+      amount: all.reduce((sum, f) => {
+        const t = new Date(f.createdAt);
+        if (t >= start && t < end) {
+          return sum + convertToTarget(f.premium, f.currency, currencies, targetRate);
+        }
+        return sum;
+      }, 0),
+    }));
+
+    return { data, currencySymbol };
+  }, [all, currencies, currency]);
+
+  return { ...result, isLoading: loadingFac || loadingCur };
+}
+
 export function useReinsuranceDashboard({ period }: { period: Period }) {
   const { data: all = [], isLoading } = useFacultatives();
 
@@ -405,6 +450,78 @@ export function useReinsuranceClaimStats({
       paidPct: totalAmount > 0 ? Math.min((paidAmount / totalAmount) * 100, 100) : 0,
     };
   }, [claimQueries, currencies, currency, period]);
+
+  const isLoading = loadingFac || loadingCur || claimQueries.some((q) => q.isLoading);
+
+  return { ...result, isLoading };
+}
+
+export interface ClaimsTrendPoint {
+  month: string;
+  claimsIncurred: number;
+}
+
+export function useReinsuranceClaimsTrend({ currency }: { currency: string }): {
+  data: ClaimsTrendPoint[];
+  currencySymbol: string;
+  isLoading: boolean;
+} {
+  const { data: all = [], isLoading: loadingFac } = useFacultatives();
+  const { data: currencies = [], isLoading: loadingCur } = useCurrencies();
+
+  const eligiblePlacements = useMemo(
+    () => all.filter((f) => CLOSING_STATUSES.includes(f.status)),
+    [all],
+  );
+
+  const claimQueries = useQueries({
+    queries: eligiblePlacements.map((p) => ({
+      queryKey: ['reinsurance', 'placements', p.id, 'claims'] as const,
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/claims`);
+        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
+      },
+    })),
+  });
+
+  const result = useMemo(() => {
+    const now = new Date();
+    const baseCurrency = currencies.find((c) => c.isBaseCurrency);
+    const targetIso = currency || baseCurrency?.isoCode || '';
+    const targetRate = getRate(currencies, targetIso);
+    const targetCurrency = currencies.find((c) => c.isoCode === targetIso);
+    const currencySymbol = targetCurrency?.symbol ?? targetIso;
+
+    const months = Array.from({ length: 12 }, (_, i) => {
+      const offset = 11 - i;
+      const start = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const end = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1);
+      return { start, end };
+    });
+
+    const data = months.map(({ start }) => ({ month: start.toISOString(), claimsIncurred: 0 }));
+
+    claimQueries.forEach((query) => {
+      const claims = (query.data ?? []) as PlacementClaim[];
+      for (const claim of claims) {
+        if (!ACTIVE_CLAIM_STATUSES.includes(claim.status as (typeof ACTIVE_CLAIM_STATUSES)[number]))
+          continue;
+
+        const t = new Date(claim.createdAt);
+        const idx = months.findIndex(({ start, end }) => t >= start && t < end);
+        if (idx === -1) continue;
+
+        data[idx].claimsIncurred += convertToTarget(
+          parseFloat(claim.estimatedLossAmount),
+          claim.currency,
+          currencies,
+          targetRate,
+        );
+      }
+    });
+
+    return { data, currencySymbol };
+  }, [claimQueries, currencies, currency]);
 
   const isLoading = loadingFac || loadingCur || claimQueries.some((q) => q.isLoading);
 

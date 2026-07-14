@@ -1,0 +1,59 @@
+'use client';
+
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import {
+  ScrollText,
+  ShieldCheck,
+  BanknoteArrowUp,
+  BanknoteArrowDown,
+  LucideIcon,
+} from 'lucide-react';
+import { cardClass, waterIconStyle } from '@/lib/utils';
+
+interface QuickAction {
+  label: string;
+  icon: LucideIcon;
+  href: string;
+  color: string;
+}
+
+/** Icons mirror the reinsurance sidebar (src/config/reinsurance-nav.tsx) for the matching page.
+ * Colors are distinct per action so the row reads as separate shortcuts, not one repeated tile. */
+const ACTIONS: QuickAction[] = [
+  { label: 'New Fac Offer', icon: ShieldCheck, href: 'facultative', color: '#2a78d6' },
+  { label: 'New Treaty', icon: ScrollText, href: 'treaty', color: '#1baf7a' },
+  { label: 'Make Claim', icon: BanknoteArrowUp, href: 'claims/new', color: '#e34948' },
+  { label: 'Make Payment', icon: BanknoteArrowDown, href: 'payments/new', color: '#eb6834' },
+];
+
+export function QuickActionsCard() {
+  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+
+  return (
+    <div className={cardClass('flex flex-col gap-3 p-5 h-80', 'glass')}>
+      <h3 className="text-sm font-semibold text-gray-900">Quick Actions</h3>
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5">
+        {ACTIONS.map(({ label, icon: Icon, href, color }) => (
+          <Link
+            key={label}
+            href={`/${tenantSlug}/operations/reinsurance/${href}`}
+            className="group flex items-center gap-3 rounded-2xl border border-(--module-border,var(--color-gray-200)) bg-white/60 px-3 py-2.5 shadow-sm transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-1 hover:bg-(--tint) hover:shadow-lg"
+            style={{ '--tint': `color-mix(in oklab, ${color} 14%, white)` } as React.CSSProperties}
+          >
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
+              style={waterIconStyle(color)}
+            >
+              <Icon
+                className="w-5 h-5"
+                style={{ color: `color-mix(in oklab, ${color} 65%, black)` }}
+              />
+            </div>
+            <span className="text-sm font-medium text-gray-700">{label}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}

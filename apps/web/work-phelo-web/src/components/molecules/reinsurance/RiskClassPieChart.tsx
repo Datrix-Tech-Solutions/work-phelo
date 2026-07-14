@@ -108,16 +108,16 @@ export function RiskClassPieChart({ period }: RiskClassPieChartProps) {
   const total = pieData.reduce((s, x) => s + x.value, 0);
 
   return (
-    <div className="flex items-center gap-4 flex-wrap">
+    <div className="flex items-center gap-3 w-full min-w-0 h-full">
       <div className="relative shrink-0">
         <PieChart
           series={[
             {
               data: pieData,
               highlightScope: { fade: 'global', highlight: 'item' },
-              faded: { innerRadius: 30, additionalRadius: -30, color: 'gray' },
+              faded: { innerRadius: 26, additionalRadius: -26, color: 'gray' },
               valueFormatter: (item) => `${item.value} offers`,
-              outerRadius: 80,
+              outerRadius: 90,
             },
           ]}
           width={200}
@@ -135,57 +135,56 @@ export function RiskClassPieChart({ period }: RiskClassPieChartProps) {
 
         {/* Tooltip */}
         {activeSlice && (
-          <div className="absolute left-1/2 -translate-x-1/2 -top-2 -translate-y-full z-10 pointer-events-none">
-            <div className="bg-(--chip-dark,#111827) text-white rounded-xl shadow-xl px-4 py-3 text-xs whitespace-nowrap flex flex-col gap-1.5">
-              <div className="flex items-center gap-2 font-semibold text-sm">
+          <div className="absolute left-1/2 -translate-x-1/2 -top-1 -translate-y-full z-10 pointer-events-none">
+            <div className="bg-(--chip-dark,#111827) text-white rounded-lg shadow-xl px-2.5 py-1.5 text-[10px] whitespace-nowrap flex flex-col gap-1">
+              <div className="flex items-center gap-1.5 font-semibold text-[11px]">
                 <span
-                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  className="w-1.5 h-1.5 rounded-full shrink-0"
                   style={{ background: activeSlice.color }}
                 />
                 {activeSlice.label}
-                <span className="ml-auto pl-4 text-[#d1d5db]">
+                <span className="ml-auto pl-3 text-[#d1d5db]">
                   {((activeSlice.value / total) * 100).toFixed(1)}%
                 </span>
               </div>
-              <div className="border-t border-[#374151] pt-1.5 flex flex-col gap-1">
-                <div className="flex justify-between gap-6">
+              <div className="border-t border-[#374151] pt-1 flex flex-col gap-0.5">
+                <div className="flex justify-between gap-4">
                   <span className="text-[#9ca3af]">Offers</span>
                   <span className="font-medium">{activeSlice.value}</span>
                 </div>
-                <div className="flex justify-between gap-6">
+                <div className="flex justify-between gap-4">
                   <span className="text-[#9ca3af]">Premium</span>
                   <span className="font-medium">{fmt(activeSlice.totalPremium)}</span>
                 </div>
-                <div className="flex justify-between gap-6">
+                <div className="flex justify-between gap-4">
                   <span className="text-[#9ca3af]">Sum Insured</span>
                   <span className="font-medium">{fmt(activeSlice.totalSumInsured)}</span>
                 </div>
               </div>
             </div>
             {/* Arrow pointing down */}
-            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-(--chip-dark,#111827) rotate-45 rounded-sm" />
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-(--chip-dark,#111827) rotate-45 rounded-sm" />
           </div>
         )}
       </div>
 
       {/* Legend */}
-      <div className="flex flex-col gap-2 min-w-0 flex-1 pt-1">
+      <div className="flex flex-col gap-3 min-w-0">
         {pieData.map((s, i) => (
-          <div key={s.id} className="flex items-center gap-2 text-sm">
-            <span
-              className="w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-200"
-              style={{ background: hovered !== null && hovered !== i ? '#d1d5db' : s.color }}
-            />
-            <span
-              className="truncate flex-1 transition-colors duration-200"
-              style={{ color: hovered !== null && hovered !== i ? '#9ca3af' : '#374151' }}
-            >
-              {s.label}
+          <div key={s.id} className="flex items-center justify-between gap-6 text-sm w-full">
+            <span className="flex items-center gap-2 min-w-0">
+              <span
+                className="w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-200"
+                style={{ background: hovered !== null && hovered !== i ? '#d1d5db' : s.color }}
+              />
+              <span
+                className="truncate transition-colors duration-200"
+                style={{ color: hovered !== null && hovered !== i ? '#9ca3af' : '#374151' }}
+              >
+                {s.label}
+              </span>
             </span>
-            <span className="font-semibold text-gray-900 shrink-0">{s.value}</span>
-            <span className="text-gray-400 text-xs shrink-0 w-12 text-right">
-              {((s.value / total) * 100).toFixed(1)}%
-            </span>
+            <span className="text-gray-400 shrink-0">{((s.value / total) * 100).toFixed(0)}%</span>
           </div>
         ))}
       </div>
