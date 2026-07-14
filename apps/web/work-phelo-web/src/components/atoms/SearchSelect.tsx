@@ -35,7 +35,7 @@ export function SearchSelect({
   value,
   onChange,
   error,
-  size = 'md',
+  size = 'sm',
 }: SearchSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);

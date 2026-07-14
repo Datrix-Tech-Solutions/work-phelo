@@ -20,7 +20,7 @@ export function CollapsibleOverview({
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
-    <div className={cardClass('p-5 flex flex-col')}>
+    <div className={cardClass('p-3 flex flex-col')}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
@@ -43,7 +43,7 @@ export function CollapsibleOverview({
         style={{ gridTemplateRows: collapsed ? '0fr' : '1fr' }}
       >
         <div className="overflow-hidden">
-          <div className="pt-6">{children}</div>
+          <div className="p-2">{children}</div>
         </div>
       </div>
     </div>

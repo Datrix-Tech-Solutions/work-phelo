@@ -43,7 +43,7 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
 
       {/* ── Primary contact ── */}
       <FormSection title="Primary Contact">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <FormField
             label="Primary Email"
             type="email"
@@ -71,7 +71,7 @@ export function CedantFormFields({ control, register, setValue, errors }: Cedant
 
       {/* ── Additional contacts ── */}
       <FormSection title="Additional Contacts">
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           {contactFields.map((field, index) => (
             <div
               key={field.id}

@@ -72,7 +72,7 @@ export function SidePanel({
         )}
       >
         {/* Header */}
-        <div className="shrink-0 px-5 sm:px-8 pt-5 sm:pt-7 pb-4 sm:pb-0 border-b border-gray-100">
+        <div className="shrink-0 px-3 sm:px-6 py-2 sm:py-3 border-b border-gray-100">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-xl sm:text-xl font-semibold text-gray-900 tracking-tight">
@@ -92,7 +92,7 @@ export function SidePanel({
         </div>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto px-5 sm:px-8 py-5 sm:py-7">
+        <div className="flex-1 overflow-y-auto px-2 sm:px-6 py-3 sm:py-5">
           <div className="flex flex-col gap-6 h-full">{children}</div>
         </div>
 
@@ -100,7 +100,7 @@ export function SidePanel({
         {footer && (
           <div
             className={popupClass(
-              'shrink-0 px-5 sm:px-8 py-4 sm:py-5 border-t border-gray-100 rounded-none shadow-none',
+              'shrink-0 px-3 sm:px-6 py-2 sm:py-2 border-t border-gray-100 rounded-none shadow-none',
             )}
           >
             {footer}

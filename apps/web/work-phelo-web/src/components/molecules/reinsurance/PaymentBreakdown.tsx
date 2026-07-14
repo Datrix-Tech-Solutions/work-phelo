@@ -2,8 +2,6 @@
 
 import { Facultative } from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
-import { useCedants } from '@/hooks';
-import { isForeignCedant, NIC_LEVY_RATE, WITHHOLDING_TAX_RATE } from '@/lib/reinsuranceTax';
 
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';
@@ -38,8 +36,6 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
     classOfBusiness: null,
   };
 
-  const { data: cedants = [] } = useCedants();
-
   const grossPremium = premium ?? 0;
   const facOffer = facultativeOffer ?? 0;
   const commissionRate = commission ?? 0;
@@ -50,14 +46,7 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
   const premiumToBePaid = Math.min(paidAmount ?? 0, netPremium);
   const premiumBalance = netPremium - premiumToBePaid;
 
-  const cedantRecord = cedants.find((c) => c.id === cedant?.id);
-  const foreignCedant = isForeignCedant(cedantRecord);
-
-  const nicRate = foreignCedant ? NIC_LEVY_RATE : 0;
-  const whtRate = foreignCedant ? WITHHOLDING_TAX_RATE : 0;
-  const nic = premiumToBePaid * nicRate;
-  const wht = premiumToBePaid * whtRate;
-  const bankBalance = premiumToBePaid - nic - wht;
+  const bankBalance = premiumToBePaid;
   const reinsurers = bankBalance;
 
   return (
@@ -101,20 +90,6 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
 
       <hr className="border-gray-100" />
 
-      {foreignCedant && (
-        <>
-          <DetailField
-            horizontal
-            label={`NIC Levy (${NIC_LEVY_RATE * 100}%)`}
-            value={fmt(nic, currency)}
-          />
-          <DetailField
-            horizontal
-            label={`Withholding Tax (${WITHHOLDING_TAX_RATE * 100}%)`}
-            value={fmt(wht, currency)}
-          />
-        </>
-      )}
       <DetailField
         horizontal
         label="Bank Balance"

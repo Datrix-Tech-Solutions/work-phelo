@@ -1,7 +1,8 @@
 'use client';
 
 import { Period } from '@/components/atoms/PeriodToggle';
-import { DashboardStatCard } from '@/components/molecules/reinsurance/stats/DashboardStatCard';
+import { KpiCard } from '@/components/molecules/reinsurance/stats/KpiCard';
+import { Icons } from '@/components/atoms/icons';
 import { useReinsuranceDashboard, useReinsuranceClaimRatio } from '@/hooks';
 
 const PERIOD_LABELS: Record<Period, string> = {
@@ -35,36 +36,42 @@ export function DashboardStatsRow({ period, currency }: DashboardStatsRowProps) 
   const prevLabel = PERIOD_PREV_LABELS[period];
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-      <DashboardStatCard
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <KpiCard
         label="Total Offers"
         value={data.totalOffers}
+        icon={Icons.FileCheck2}
+        iconColor="#2a78d6"
         trend={data.trends.totalOffers}
         trendTooltip={`${prevLabel}: ${data.previous.totalOffers}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
-        subtext={`${data.pendingOffers} pending`}
       />
-      {/* <DashboardStatCard
-        label="Pending Offers"
+      <KpiCard
+        label="Total Pending"
         value={data.pendingOffers}
+        icon={Icons.Clock}
+        iconColor="#eda100"
         trend={data.trends.pendingOffers}
         trendTooltip={`${prevLabel}: ${data.previous.pendingOffers}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
-      /> */}
-      <DashboardStatCard
-        label="Closed Offers"
+      />
+      <KpiCard
+        label="Total Closed"
         value={data.closedOffers}
+        icon={Icons.CircleCheck}
+        iconColor="#008300"
         trend={data.trends.closedOffers}
         trendTooltip={`${prevLabel}: ${data.previous.closedOffers}`}
         isLoading={isLoading}
         periodLabel={periodLabel}
-        subtext={`${data.acceptanceRate.toFixed(1)}% Closing Rate`}
       />
-      <DashboardStatCard
+      <KpiCard
         label="Claim Ratio"
         value={`${claimRatio.toFixed(1)}%`}
+        icon={Icons.Activity}
+        iconColor="#4a3aa7"
         trend={claimRatioTrend}
         trendTooltip={`${prevLabel}: ${prevRatio.toFixed(1)}%`}
         isLoading={loadingRatio}

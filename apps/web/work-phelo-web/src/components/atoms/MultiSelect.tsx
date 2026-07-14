@@ -31,7 +31,7 @@ export function MultiSelect({
   onChange,
   error,
   hideChips = false,
-  size = 'md',
+  size = 'sm',
 }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);

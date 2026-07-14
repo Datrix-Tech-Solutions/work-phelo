@@ -83,7 +83,7 @@ function netPremiumFor(row: Facultative, deductionRate: number): number {
       ? (row.facultativeOffer / 100) * row.premium
       : 0;
   const netPremium = row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
-  return netPremium * (1 - deductionRate);
+  return netPremium - facPremium * deductionRate;
 }
 
 function useDeductionRateFor(cedantId: string): number {
@@ -126,7 +126,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'title',
     label: 'Insured / Risk Type',
-    width: '1fr',
+    width: 'minmax(120px, 1fr)',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
@@ -137,13 +137,13 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'cedant',
     label: 'Cedant',
-    width: '1fr',
+    width: 'minmax(120px, 1fr)',
     render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
   },
   {
     key: 'facultativeOffer',
     label: 'Fac Offer',
-    width: '100px',
+    width: '90px',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900">
@@ -155,9 +155,9 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'premium',
     label: 'Fac Premium',
-    width: '0.5fr',
+    width: '130px',
     render: (row) => (
-      <span className="font-semibold text-gray-900 whitespace-nowrap">
+      <span className="font-semibold text-gray-900">
         {row.premium != null ? `${row.currency ?? ''} ${fmtAmount(row.premium)}` : '—'}
       </span>
     ),
@@ -165,7 +165,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'totalAcceptedPercent',
     label: 'Signing Progress',
-    width: '160px',
+    width: '150px',
     className: 'pr-6',
     render: (row) => {
       const facOffer = row.facultativeOffer ?? 0;
@@ -195,7 +195,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'participants' as keyof Facultative,
     label: 'Participants',
-    width: '110px',
+    width: '100px',
     render: (row) => {
       const total = row.participants?.length ?? 0;
       const closed = row.participants?.filter((p) => p.status === 'CLOSED').length ?? 0;
@@ -204,7 +204,7 @@ const COLUMNS: Column<Facultative>[] = [
           <span className="font-semibold text-gray-900">
             {closed} / {total}
           </span>
-          <span className="text-xs text-gray-400">closed</span>
+          <span className="text-xs text-gray-400">Accepted</span>
         </div>
       );
     },
@@ -212,7 +212,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'status',
     label: 'Status',
-    width: '120px',
+    width: '100px',
     render: (row) => <PaymentStatusCell placement={row} />,
   },
 ];

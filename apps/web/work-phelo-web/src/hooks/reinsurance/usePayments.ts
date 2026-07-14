@@ -176,6 +176,60 @@ export function useReinsurerPaymentSummary(
 }
 
 /**
+ * Returns recorded claim recovery payments (CLAIM_SETTLEMENT / INBOUND) from a specific
+ * reinsurer, keyed by placement ID. Uses the same query keys as usePlacementPayments so
+ * results share the cache.
+ */
+export function useReinsurerClaimPayments(
+  placements: Facultative[],
+  reinsurerId: string,
+): { paidByPlacementId: Map<string, number>; isLoading: boolean } {
+  const reinsuredPlacements = useMemo(
+    () =>
+      placements.filter((p) =>
+        p.participants.some(
+          (pt) =>
+            pt.counterpartyId === reinsurerId &&
+            (pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
+        ),
+      ),
+    [placements, reinsurerId],
+  );
+
+  const paymentQueries = useQueries({
+    queries: reinsuredPlacements.map((p) => ({
+      queryKey: paymentsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
+  const isLoading = paymentQueries.some((q) => q.isLoading);
+
+  const paidByPlacementId = useMemo(() => {
+    const map = new Map<string, number>();
+    reinsuredPlacements.forEach((p, i) => {
+      const payments = paymentQueries[i]?.data ?? [];
+      const paid = payments
+        .filter(
+          (pmt) =>
+            pmt.type === 'CLAIM_SETTLEMENT' &&
+            pmt.direction === 'INBOUND' &&
+            pmt.counterpartyId === reinsurerId &&
+            pmt.status === 'RECORDED',
+        )
+        .reduce((sum, pmt) => sum + parseFloat(pmt.amount), 0);
+      map.set(p.id, paid);
+    });
+    return map;
+  }, [reinsuredPlacements, paymentQueries, reinsurerId]);
+
+  return { paidByPlacementId, isLoading };
+}
+
+/**
  * Returns paid premium receipts (by currency ISO code) across a set of placements (already
  * filtered to one cedant). Uses the same query keys as usePlacementPayments so results share cache.
  */

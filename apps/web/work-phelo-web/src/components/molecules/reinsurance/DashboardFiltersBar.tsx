@@ -9,6 +9,7 @@ interface DashboardFiltersBarProps {
   onCurrencyChange: (value: string) => void;
   period: Period;
   onPeriodChange: (value: Period) => void;
+  showCurrency?: boolean;
 }
 
 export function DashboardFiltersBar({
@@ -16,20 +17,23 @@ export function DashboardFiltersBar({
   onCurrencyChange,
   period,
   onPeriodChange,
+  showCurrency = true,
 }: DashboardFiltersBarProps) {
   const { data: currencyOptions = [] } = useCurrencyOptions();
 
   return (
     <div className="flex items-center gap-3 flex-wrap">
-      <div className="w-64">
-        <SearchSelect
-          placeholder="Select currency…"
-          options={currencyOptions}
-          value={currency}
-          onChange={onCurrencyChange}
-          size="sm"
-        />
-      </div>
+      {showCurrency && (
+        <div className="w-64">
+          <SearchSelect
+            placeholder="Select currency…"
+            options={currencyOptions}
+            value={currency}
+            onChange={onCurrencyChange}
+            size="sm"
+          />
+        </div>
+      )}
 
       <PeriodToggle value={period} onChange={onPeriodChange} />
     </div>

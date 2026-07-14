@@ -11,6 +11,8 @@ import { ReinsurerOverview } from '@/components/molecules/reinsurance/stats/Rein
 import { CedantContactsTab } from '@/components/molecules/reinsurance/tabs/CedantContactsTab';
 import { ReinsurerPlacementsTab } from '@/components/molecules/reinsurance/ReinsurerPlacementsTab';
 import { ReinsurerRevenueTab } from '@/components/molecules/reinsurance/tabs/ReinsurerRevenueTab';
+import { ReinsurerPremiumsTab } from '@/components/molecules/reinsurance/tabs/ReinsurerPremiumsTab';
+import { ReinsurerRecoveriesTab } from '@/components/molecules/reinsurance/tabs/ReinsurerRecoveriesTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 import { FacultativeOverview } from '@/components/molecules/reinsurance/stats/FacultativeOverview';
 import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
@@ -18,7 +20,7 @@ import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/Pl
 import { EndorsementTab } from '@/components/molecules/reinsurance/tabs/EndorsmentTab';
 import { type ReinsurerParticipation } from '@/components/molecules/reinsurance/tables/ReinsurerPoliciesTable';
 
-type ReinsurerTab = 'placements' | 'revenue' | 'contacts';
+type ReinsurerTab = 'placements' | 'revenue' | 'premiums' | 'recoveries' | 'contacts';
 type FacultativeTab = 'distribution' | 'closings' | 'endorsement';
 
 type ActiveView = { placementId: string; reference: string } | null;
@@ -26,6 +28,8 @@ type ActiveView = { placementId: string; reference: string } | null;
 const TABS = [
   { key: 'placements', label: 'Placements' },
   { key: 'revenue', label: 'Revenue' },
+  { key: 'premiums', label: 'Premiums' },
+  { key: 'recoveries', label: 'Recoveries' },
   { key: 'contacts', label: 'Contacts' },
 ];
 
@@ -205,6 +209,12 @@ export default function ReinsurerDetailPage({
                     reinsurerDefaultBrokerageFee={reinsurer.brokerageFee}
                     currencies={currencies}
                   />
+                )}
+
+                {activeTab === 'premiums' && <ReinsurerPremiumsTab />}
+
+                {activeTab === 'recoveries' && (
+                  <ReinsurerRecoveriesTab placements={placements} reinsurerId={reinsurerId} />
                 )}
               </div>
             </div>

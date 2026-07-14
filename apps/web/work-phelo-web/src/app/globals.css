@@ -21,7 +21,7 @@
   --module-hr:         #032480;  /* deep-blue  — HR */
   --module-marketing:  #0466f8;  /* blue — Marketing */
   --module-accounting: #064707;  /* green — Accounting  064707*/
-  --module-operations: #4906d9;  /* purple — Operations */
+  --module-operations: #1E3A8A;  /* purple — Operations */
 
   /* App shell background — single color for the whole app; use bg-app-shell / <AppBackground> */
   --app-shell: #f3f6f4;  /* bg-gray-100 */
@@ -105,6 +105,10 @@
   --font-sans: var(--font-app);
   --radius-card: var(--radius-card);
   --radius-input: var(--radius-input);
+
+  /* Base/normal body text — text-sm is what the app actually uses for body copy */
+  --text-sm: 12px;
+  --text-sm--line-height: 20px;
 
   /* Brand tokens — use as bg-brand, text-brand, border-brand, etc. */
   --color-brand:              var(--brand);
@@ -216,26 +220,26 @@
 .app-blob-1 {
   top: -12%;
   left: -10%;
-  width: 50rem;
-  height: 50rem;
+  width: 500rem;
+  height: 500rem;
   background: var(--module-accent, var(--brand-accent));
-  animation: blob-drift-a 9s ease-in-out infinite;
+  animation: blob-drift-a 150s ease-in-out infinite;
 }
 
 .app-blob-2 {
   bottom: -14%;
   right: -18%;
-  width: 25rem;
-  height: 100rem;
+  width: 250rem;
+  height: 300rem;
   background: var(--module-accent, var(--brand-accent));
-  animation: blob-drift-b 7s ease-in-out infinite;
+  animation: blob-drift-b 10s ease-in-out infinite;
 }
 
 .app-blob-3 {
   top: 45%;
   left: 50%;
-  width: 14rem;
-  height: 14rem;
+  width: 140rem;
+  height: 400rem;
   background: var(--module-accent, var(--brand-accent));
   animation: blob-drift-c 10s ease-in-out infinite;
 }

@@ -606,3 +606,90 @@ export function useReinsuranceClaimRatio({
 
   return { ...result, isLoading };
 }
+
+export interface FinancialsByCurrency {
+  totalRisk: Map<string, number>;
+  sumInsured: Map<string, number>;
+  premium: Map<string, number>;
+  brokerage: Map<string, number>;
+  claimsIncurred: Map<string, number>;
+}
+
+/** Native-currency financial breakdown — no conversion, each amount stays in its own placement's currency. */
+export function useReinsuranceFinancialsByCurrency({ period }: { period: Period }): {
+  data: FinancialsByCurrency;
+  isLoading: boolean;
+} {
+  const { data: all = [], isLoading: loadingFac } = useFacultatives();
+
+  const eligiblePlacements = useMemo(
+    () => all.filter((f) => CLOSING_STATUSES.includes(f.status)),
+    [all],
+  );
+
+  const claimQueries = useQueries({
+    queries: eligiblePlacements.map((p) => ({
+      queryKey: ['reinsurance', 'placements', p.id, 'claims'] as const,
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/claims`);
+        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
+      },
+    })),
+  });
+
+  const data = useMemo(() => {
+    const { start } = periodBounds(period, new Date());
+
+    const totalRisk = new Map<string, number>();
+    const sumInsured = new Map<string, number>();
+    const premium = new Map<string, number>();
+    const brokerage = new Map<string, number>();
+    const claimsIncurred = new Map<string, number>();
+
+    for (const f of all) {
+      if (f.currency == null) continue;
+      if (new Date(f.createdAt) < start) continue;
+
+      if (f.sumInsured != null) {
+        sumInsured.set(f.currency, (sumInsured.get(f.currency) ?? 0) + f.sumInsured);
+        if (f.facultativeOffer != null) {
+          const facRisk = f.sumInsured * (f.facultativeOffer / 100);
+          totalRisk.set(f.currency, (totalRisk.get(f.currency) ?? 0) + facRisk);
+        }
+      }
+
+      if (f.premium != null) {
+        premium.set(f.currency, (premium.get(f.currency) ?? 0) + f.premium);
+
+        for (const p of f.participants) {
+          if (p.status !== 'ACCEPTED' && p.status !== 'CLOSED') continue;
+          const share = p.sharePercent != null ? parseFloat(p.sharePercent) : null;
+          const fee = p.brokerageFee != null ? parseFloat(p.brokerageFee) : null;
+          if (share == null || fee == null) continue;
+          brokerage.set(
+            f.currency,
+            (brokerage.get(f.currency) ?? 0) + f.premium * (share / 100) * (fee / 100),
+          );
+        }
+      }
+    }
+
+    claimQueries.forEach((query) => {
+      const claims = (query.data ?? []) as PlacementClaim[];
+      for (const claim of claims) {
+        if (!ACTIVE_CLAIM_STATUSES.includes(claim.status as (typeof ACTIVE_CLAIM_STATUSES)[number]))
+          continue;
+        if (new Date(claim.createdAt) < start) continue;
+
+        const amount = parseFloat(claim.estimatedLossAmount);
+        claimsIncurred.set(claim.currency, (claimsIncurred.get(claim.currency) ?? 0) + amount);
+      }
+    });
+
+    return { totalRisk, sumInsured, premium, brokerage, claimsIncurred };
+  }, [all, claimQueries, period]);
+
+  const isLoading = loadingFac || claimQueries.some((q) => q.isLoading);
+
+  return { data, isLoading };
+}

@@ -79,7 +79,7 @@ function ClaimDetailsPanel({
 
   const netPremium =
     facPremium != null && commission != null
-      ? facPremium * (1 - commission / 100) * (1 - deductionRate)
+      ? facPremium * (1 - commission / 100) - facPremium * deductionRate
       : facPremium;
 
   return (
@@ -211,8 +211,9 @@ function ClaimReinsurersTable({
         render: (row) => {
           const share = row.sharePercent != null ? parseFloat(row.sharePercent) / 100 : 0;
           const brokerage = row.brokerageFee != null ? parseFloat(row.brokerageFee) : 0;
+          const yourPremium = share * grossPremium;
           const premiumShare =
-            share * grossPremium * (1 - (commission + brokerage) / 100) * (1 - deductionRate);
+            yourPremium * (1 - (commission + brokerage) / 100) - yourPremium * deductionRate;
           return (
             <span className="text-gray-700 block text-right">{fmt(premiumShare, currency)}</span>
           );

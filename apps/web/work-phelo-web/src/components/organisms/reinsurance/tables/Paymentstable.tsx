@@ -73,7 +73,7 @@ function netPremiumFor(row: Facultative, deductionRate: number): number {
       ? (row.facultativeOffer / 100) * row.premium
       : 0;
   const netPremium = row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
-  return netPremium * (1 - deductionRate);
+  return netPremium - facPremium * deductionRate;
 }
 
 function totalPaidFor(payments: { amount: string; status: string }[]): number {
@@ -139,7 +139,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'title',
     label: 'Insured / Risk Type',
-    width: '1.5fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
@@ -150,7 +150,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'sumInsured',
     label: 'Sum Insured',
-    width: '1fr',
+    width: '150px',
     render: (row) => (
       <span className="font-small text-gray-900 whitespace-nowrap">
         {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
@@ -160,7 +160,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
-    width: '1fr',
+    width: '150px',
     render: (row) => {
       const facSumInsured =
         row.sumInsured != null && row.facultativeOffer != null
@@ -173,26 +173,6 @@ const COLUMNS: Column<Facultative>[] = [
       );
     },
   },
-  // {
-  //   key: 'premium',
-  //   label: 'Net Premium',
-  //   width: '1fr',
-  //   render: (row) => {
-  //     const facPremium =
-  //       row.premium != null && row.facultativeOffer != null
-  //         ? (row.facultativeOffer / 100) * row.premium
-  //         : null;
-  //     const netPremium =
-  //       facPremium != null && row.commission != null
-  //         ? facPremium * (1 - row.commission / 100)
-  //         : facPremium;
-  //     return (
-  //       <span className="font-medium text-gray-900 whitespace-nowrap">
-  //         {netPremium != null ? `${row.currency ?? ''} ${fmtAmount(netPremium)}` : '—'}
-  //       </span>
-  //     );
-  //   },
-  // },
   {
     key: 'participants' as keyof Facultative,
     label: 'Participants',
@@ -215,7 +195,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'collectedToDate' as keyof Facultative,
     label: 'Paid / Outstanding',
-    width: '1.2fr',
+    width: '150px',
     render: (row) => <PaymentSummaryCell placement={row} />,
   },
   {
@@ -229,7 +209,7 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'createdAt',
     label: 'Offer Date',
-    width: '1fr',
+    width: '100px',
     render: (row) => <span className="text-gray-600">{fmtDate(row.createdAt)}</span>,
   },
   {
