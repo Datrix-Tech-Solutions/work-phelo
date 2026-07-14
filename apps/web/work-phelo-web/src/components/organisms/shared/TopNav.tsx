@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { Bell, Home, LayoutGrid, LogOutIcon, Menu, Settings, UserIcon } from 'lucide-react';
-import { cn, glassStrongClass } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 import { WorkPheloLogo } from '@/components/atoms/WorkPheloLogo';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
@@ -45,8 +45,8 @@ function NavTabs({ tabs }: { tabs: NavTab[] }) {
             className={cn(
               'relative px-3 py-2.5 text-sm font-medium transition-colors whitespace-nowrap',
               isActive
-                ? 'text-(--module-btn-bg,var(--color-brand)) font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-(--module-btn-bg,var(--color-brand)) after:rounded-t-full'
-                : 'text-gray-500 hover:text-(--text-hover-strong,var(--color-gray-900))',
+                ? 'text-white font-semibold after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-white after:rounded-t-full'
+                : 'text-white/70 hover:text-white',
             )}
           >
             {tab.label}
@@ -132,7 +132,7 @@ function ProfileDropdown({
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold transition-opacity hover:opacity-80',
+          'w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold transition-opacity hover:opacity-80 ring-2 ring-white/40',
           userColor ?? 'bg-brand',
         )}
       >
@@ -217,16 +217,15 @@ export function TopNav({
   return (
     <>
       <header
-        className={glassStrongClass(
-          'relative w-full border-b border-(--module-border,var(--color-gray-200)) shadow-md px-5 h-14 flex items-center gap-4 shrink-0',
-          'none',
+        className={cn(
+          'bg-(--module-btn-bg,var(--color-brand)) relative w-full border-b border-white/10 shadow-md px-5 h-14 flex items-center gap-4 shrink-0',
         )}
       >
         {/* Menu button */}
         {showMenuButton && (
           <button
             onClick={onMenuClick}
-            className="text-blue-950 hover:text-black transition-colors"
+            className="text-white/80 hover:text-white transition-colors"
             aria-label="Toggle menu"
           >
             <Menu />
@@ -250,7 +249,7 @@ export function TopNav({
           {/* Bell */}
           <button
             onClick={() => setNotificationsOpen(true)}
-            className="relative text-black/70 hover:text-black transition-colors"
+            className="relative text-white/80 hover:text-white transition-colors"
             aria-label="Notifications"
           >
             <Bell className="w-5 h-5" />
@@ -266,7 +265,7 @@ export function TopNav({
 
           {/* Apps grid — back to module launcher */}
           <button
-            className="text-black/70 hover:text-black transition-colors"
+            className="text-white/80 hover:text-white transition-colors"
             aria-label="Apps"
             onClick={() => {
               if (user?.role === 'SUPER_ADMIN') {

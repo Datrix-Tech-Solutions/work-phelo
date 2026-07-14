@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 export function inputClass(error?: string, extra?: string) {
   return cn(
-    'w-full px-4 py-3 border rounded-input text-sm bg-white/90 backdrop-blur-sm text-gray-800',
+    'w-full px-2 py-2 border rounded-input text-sm bg-white/90 backdrop-blur-sm text-gray-800',
     'placeholder:text-gray-400 transition-colors',
     'focus:outline-none focus:bg-white',
     error

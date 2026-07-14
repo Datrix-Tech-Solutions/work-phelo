@@ -127,13 +127,13 @@ export function DistributionTable({
     {
       key: 'reinsurerCompany',
       label: 'Reinsurer Company',
-      width: '1.8fr',
+      width: 'minmax(200px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.reinsurerCompany}</span>,
     },
     {
       key: 'shareLine',
       label: 'Participant Share (%)',
-      width: '1fr',
+      width: 'minmax(150px, 1fr)',
       render: (row) => {
         const isPaid = isPlacementLocked || row.status === 'Closed';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.shareLine}%</span>;
@@ -164,7 +164,7 @@ export function DistributionTable({
     {
       key: 'brokerageFee',
       label: 'Brokerage Fee (%)',
-      width: '1fr',
+      width: 'minmax(150px, 1fr)',
       render: (row) => {
         const isPaid = isPlacementLocked || row.status === 'Closed';
         if (isPaid) return <span className="text-gray-700 text-sm">{row.brokerageFee}%</span>;
@@ -195,7 +195,7 @@ export function DistributionTable({
     {
       key: 'premiumShare',
       label: 'Premium Share',
-      width: '1.2fr',
+      width: '150px',
       render: (row) => (
         <span className="text-gray-700">{fmtAmount((row.shareLine / 100) * premium)}</span>
       ),
@@ -203,7 +203,7 @@ export function DistributionTable({
     {
       key: 'brokerageAmount',
       label: 'Brokerage Amount',
-      width: '1.2fr',
+      width: '150px',
       render: (row) => {
         const premiumShare = (row.shareLine / 100) * premium;
         return (
@@ -349,6 +349,7 @@ export function DistributionTable({
         isOpen={!!slipPreviewId}
         placement={placement}
         brokerageFee={slipPreviewEntry?.brokerageFee ?? 0}
+        counterpartyId={slipPreviewEntry?.counterpartyId}
         onPrint={() => setSlipPreviewId(null)}
         onClose={() => setSlipPreviewId(null)}
       />

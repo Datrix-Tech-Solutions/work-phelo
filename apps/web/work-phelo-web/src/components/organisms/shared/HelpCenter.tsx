@@ -342,8 +342,8 @@ export function HelpCenter() {
         <button
           onClick={() => setDropdownOpen((v) => !v)}
           className={cn(
-            'text-black/70 hover:text-black transition-colors',
-            dropdownOpen && 'text-black',
+            'text-white/80 hover:text-white transition-colors',
+            dropdownOpen && 'text-white',
           )}
           aria-label="Help"
         >

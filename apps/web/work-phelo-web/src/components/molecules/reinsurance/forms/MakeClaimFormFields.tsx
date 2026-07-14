@@ -79,6 +79,13 @@ export function MakeClaimFormFields({
         label="Estimated Loss Amount"
         registration={register('estimatedLossAmount', {
           required: 'Estimated loss amount is required',
+          validate: (value) => {
+            const amount = parseFloat(value);
+            if (placement.sumInsured != null && amount > placement.sumInsured) {
+              return `Estimated loss amount cannot exceed the sum insured (${placement.sumInsured.toLocaleString()})`;
+            }
+            return true;
+          },
         })}
         placeholder="0.00"
         type="number"

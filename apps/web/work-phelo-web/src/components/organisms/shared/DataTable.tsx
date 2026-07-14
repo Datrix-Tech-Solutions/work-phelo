@@ -255,7 +255,7 @@ export function DataTable<T extends { id: string | number }>({
       >
         {/* Horizontal scroll wrapper — keeps header and rows in sync */}
         <div className="overflow-x-auto flex-1 min-h-0 flex flex-col">
-          <div className="min-w-max flex flex-col flex-1 min-h-0">
+          <div className="min-w-full flex flex-col flex-1 min-h-0">
             {/* Header */}
             <div className="relative shrink-0">
               <div
@@ -274,7 +274,7 @@ export function DataTable<T extends { id: string | number }>({
                 }}
               >
                 {columns.map((col) => (
-                  <div key={col.key} className={col.className}>
+                  <div key={col.key} className={cn('min-w-0', col.className)}>
                     {col.label}
                   </div>
                 ))}
@@ -329,7 +329,7 @@ export function DataTable<T extends { id: string | number }>({
                       )}
                     />
                     <div
-                      className="relative grid px-6 py-4 items-center text-sm text-gray-800"
+                      className="relative grid px-6 py-3 items-center text-sm text-gray-800"
                       style={{
                         gridTemplateColumns: [
                           ...columns.map((c) => c.width ?? '1fr'),
@@ -338,7 +338,7 @@ export function DataTable<T extends { id: string | number }>({
                       }}
                     >
                       {columns.map((col) => (
-                        <div key={col.key} className={col.className}>
+                        <div key={col.key} className={cn('min-w-0', col.className)}>
                           {col.render
                             ? col.render(row)
                             : String((row as Record<string, unknown>)[col.key] ?? '')}

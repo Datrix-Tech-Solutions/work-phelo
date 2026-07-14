@@ -41,7 +41,7 @@ function netPremiumFor(row: Facultative, deductionRate: number): number {
       ? (row.facultativeOffer / 100) * row.premium
       : 0;
   const netPremium = row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
-  return netPremium * (1 - deductionRate);
+  return netPremium - facPremium * deductionRate;
 }
 
 function NetPremiumCell({ row }: { row: Facultative }) {
@@ -56,13 +56,13 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
   {
     key: 'reference',
     label: 'Policy Number',
-    width: '190px',
+    width: 'minmax(190px, 1fr)',
     render: (row) => <EndorsedReferencePill id={row.id} reference={row.reference} />,
   },
   {
     key: 'title',
     label: 'Insured / Risk Type',
-    width: '1.5fr',
+    width: 'minmax(150px, 1fr)',
     render: (row) => (
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold text-gray-900 leading-tight">{row.title}</span>
@@ -73,13 +73,13 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
   {
     key: 'cedant',
     label: 'Cedant',
-    width: '1fr',
+    width: 'minmax(100px, 1fr)',
     render: (row) => <span className="text-gray-700">{row.cedant.name}</span>,
   },
   {
     key: 'facultativeOffer',
     label: 'Fac. Sum Insured',
-    width: '1.1fr',
+    width: '150px',
     render: (row) => {
       const facSumInsured =
         row.sumInsured != null && row.facultativeOffer != null
@@ -95,7 +95,7 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
   {
     key: 'premium',
     label: 'Net Premium',
-    width: '1.1fr',
+    width: '150px',
     render: (row) => (
       <span className="font-medium text-gray-900 whitespace-nowrap">
         <NetPremiumCell row={row} />
@@ -106,7 +106,7 @@ const COLUMNS: Column<PlacementWithClaim>[] = [
   {
     key: 'createdAt',
     label: 'Offer Date',
-    width: '1fr',
+    width: '150px',
     render: (row) => (
       <span className="text-gray-600">
         {new Date(row.createdAt).toLocaleDateString('en-GB', {

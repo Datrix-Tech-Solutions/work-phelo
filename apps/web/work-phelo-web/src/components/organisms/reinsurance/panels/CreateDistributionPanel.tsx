@@ -13,6 +13,7 @@ interface CreateDistributionPanelProps {
   onClose: () => void;
   onAdd: (entries: ReinsurerEntry[]) => void;
   existingIds?: string[];
+  title?: string;
 }
 
 export function CreateDistributionPanel({
@@ -20,6 +21,7 @@ export function CreateDistributionPanel({
   onClose,
   onAdd,
   existingIds = [],
+  title = 'Add to Distribution List',
 }: CreateDistributionPanelProps) {
   const [entries, setEntries] = useState<ReinsurerEntry[]>([]);
 
@@ -37,7 +39,7 @@ export function CreateDistributionPanel({
     <SidePanel
       isOpen={isOpen}
       onClose={handleClose}
-      title="Add to Distribution List"
+      title={title}
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="outline" onClick={handleClose}>

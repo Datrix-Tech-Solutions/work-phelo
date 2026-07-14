@@ -42,11 +42,11 @@ export function QuickActionsCard() {
             style={{ '--tint': `color-mix(in oklab, ${color} 14%, white)` } as React.CSSProperties}
           >
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
+              className="w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105"
               style={waterIconStyle(color)}
             >
               <Icon
-                className="w-5 h-5"
+                className="w-4 h-4"
                 style={{ color: `color-mix(in oklab, ${color} 65%, black)` }}
               />
             </div>

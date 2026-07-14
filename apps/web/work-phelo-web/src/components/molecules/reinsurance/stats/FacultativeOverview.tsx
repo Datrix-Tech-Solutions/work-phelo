@@ -117,7 +117,7 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
         ))}
         <DetailField label="Rate (%)" value={placement.rate != null ? `${placement.rate}%` : '—'} />
         <DetailField
-          label="Commission (%)"
+          label="Cedant Commission (%)"
           value={placement.commission != null ? `${placement.commission}%` : '—'}
         />
         <DetailField label="Fac. Offer (%)" value={`${facOffer}%`} />

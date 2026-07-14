@@ -3,7 +3,7 @@
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
-import { useCedants } from '@/hooks';
+import { useReinsurers } from '@/hooks';
 import { isForeignCedant, NIC_LEVY_RATE, WITHHOLDING_TAX_RATE } from '@/lib/reinsuranceTax';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 
@@ -44,6 +44,10 @@ interface SlipPreviewModalProps {
   isOpen: boolean;
   placement: Facultative;
   brokerageFee: number;
+  counterpartyId?: string;
+  /** Overrides placement.facultativeOffer — e.g. the capacity left over after
+   *  other participants have already taken their share. */
+  facultativeOfferOverride?: number;
   onPrint: () => void;
   onClose: () => void;
 }
@@ -52,6 +56,8 @@ export function SlipPreviewModal({
   isOpen,
   placement,
   brokerageFee,
+  counterpartyId,
+  facultativeOfferOverride,
   onPrint,
   onClose,
 }: SlipPreviewModalProps) {
@@ -71,13 +77,13 @@ export function SlipPreviewModal({
     offerDetails,
   } = placement;
 
-  const { data: cedants = [] } = useCedants();
-  const foreignCedant = isForeignCedant(cedants.find((c) => c.id === placement.cedant.id));
+  const { data: reinsurers = [] } = useReinsurers();
+  const foreignReinsurer = isForeignCedant(reinsurers.find((r) => r.id === counterpartyId));
 
   const businessEntries = placementDetailEntries(businessDetails);
   const offerEntries = placementDetailEntries(offerDetails);
 
-  const facOffer = facultativeOffer ?? 0;
+  const facOffer = facultativeOfferOverride ?? facultativeOffer ?? 0;
   const facSumInsured = sumInsured != null ? (facOffer / 100) * sumInsured : null;
   const reinsurancePremium = premium != null ? (facOffer / 100) * premium : null;
   const commissions =
@@ -86,9 +92,12 @@ export function SlipPreviewModal({
       : null;
   const netPremium =
     reinsurancePremium != null && commissions != null ? reinsurancePremium - commissions : null;
-  const nicLevy = foreignCedant && netPremium != null ? netPremium * NIC_LEVY_RATE : null;
+  const nicLevy =
+    foreignReinsurer && reinsurancePremium != null ? reinsurancePremium * NIC_LEVY_RATE : null;
   const withholdingTax =
-    foreignCedant && netPremium != null ? netPremium * WITHHOLDING_TAX_RATE : null;
+    foreignReinsurer && reinsurancePremium != null
+      ? reinsurancePremium * WITHHOLDING_TAX_RATE
+      : null;
   const netPremiumPayable =
     netPremium != null ? netPremium - (nicLevy ?? 0) - (withholdingTax ?? 0) : null;
 
@@ -169,13 +178,6 @@ export function SlipPreviewModal({
                   : null
               }
             />
-          </>
-        )}
-
-        {netPremium != null && (
-          <>
-            <hr className="border-gray-100 my-1" />
-            <Field label="Net Premium" value={fmtAmount(netPremium, currency)} />
             {nicLevy != null && withholdingTax != null && (
               <>
                 <Field
@@ -186,9 +188,16 @@ export function SlipPreviewModal({
                   label={`Withholding Tax (${WITHHOLDING_TAX_RATE * 100}%)`}
                   value={fmtAmount(withholdingTax, currency)}
                 />
-                <Field label="Net Premium Payable" value={fmtAmount(netPremiumPayable, currency)} />
               </>
             )}
+          </>
+        )}
+
+        {netPremiumPayable != null && (
+          <>
+            <hr className="border-gray-100 my-1" />
+
+            <Field label="Net Premium" value={fmtAmount(netPremiumPayable, currency)} />
           </>
         )}
       </div>

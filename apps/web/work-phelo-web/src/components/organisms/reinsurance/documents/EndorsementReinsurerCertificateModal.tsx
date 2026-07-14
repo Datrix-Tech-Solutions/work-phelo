@@ -129,6 +129,7 @@ interface EndorsementReinsurerCertificateModalProps {
   reinsurerName: string;
   sharePercent: number;
   brokerageFee: number;
+  isAccepted: boolean;
   onPrint: () => void;
   onClose: () => void;
 }
@@ -141,6 +142,7 @@ export function EndorsementReinsurerCertificateModal({
   reinsurerName,
   sharePercent,
   brokerageFee,
+  isAccepted,
   onPrint,
   onClose,
 }: EndorsementReinsurerCertificateModalProps) {
@@ -244,108 +246,112 @@ export function EndorsementReinsurerCertificateModal({
         )}
       </div>
 
-      {/* REINSURER PARTICIPATION */}
-      <SectionHeading>Reinsurer Participation</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
-        <thead>
-          <tr className="border-b border-gray-200">
-            <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/3" />
-            <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
-              Original
-            </th>
-            <th className="py-1.5 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
-              Revised
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {[
-            {
-              label: 'Your Participation %',
-              previous: prevShare ? `${prevShare}%` : 'no change',
-              revised: `${sharePercent}%`,
-              bold: false,
-            },
-            {
-              label: 'Your Share SI',
-              previous: fmtAmount(prevYourSumInsured || null, prevCurrency),
-              revised: fmtAmount(yourSumInsured, currency),
-              bold: false,
-            },
-            {
-              label: 'Your Gross Premium',
-              previous: fmtAmount(prevYourPremium || null, prevCurrency),
-              revised: fmtAmount(yourPremium, currency),
-              bold: false,
-            },
-            {
-              label: 'Your Commission',
-              previous: fmtAmount(prevCommissionAmt || null, prevCurrency),
-              revised: fmtAmount(commissionAmt, currency),
-              bold: false,
-            },
-            {
-              label: 'Your Net Premium',
-              previous: fmtAmount(prevNetPremium || null, prevCurrency),
-              revised: fmtAmount(netPremium, currency),
-              bold: true,
-            },
-          ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
-              <td
-                className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
-              >
-                {row.label}
-              </td>
-              <td
-                className={`py-1.5 px-4 ${row.bold ? 'font-semibold text-gray-600' : 'text-gray-700'}`}
-              >
-                {row.previous}
-              </td>
-              <td
-                className={`py-1.5 pl-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
-              >
-                {row.revised}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {isAccepted && (
+        <>
+          {/* REINSURER PARTICIPATION */}
+          <SectionHeading>Reinsurer Participation</SectionHeading>
+          <table className="w-full text-sm border-collapse mb-2">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="py-1.5 pr-4 text-left text-xs font-semibold text-gray-500 w-1/3" />
+                <th className="py-1.5 px-4 text-left text-xs font-semibold text-gray-500 w-1/3">
+                  Original
+                </th>
+                <th className="py-1.5 pl-4 text-left text-xs font-semibold text-gray-500 w-1/3">
+                  Revised
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                {
+                  label: 'Your Participation %',
+                  previous: prevShare ? `${prevShare}%` : 'no change',
+                  revised: `${sharePercent}%`,
+                  bold: false,
+                },
+                {
+                  label: 'Your Share SI',
+                  previous: fmtAmount(prevYourSumInsured || null, prevCurrency),
+                  revised: fmtAmount(yourSumInsured, currency),
+                  bold: false,
+                },
+                {
+                  label: 'Your Gross Premium',
+                  previous: fmtAmount(prevYourPremium || null, prevCurrency),
+                  revised: fmtAmount(yourPremium, currency),
+                  bold: false,
+                },
+                {
+                  label: 'Your Commission',
+                  previous: fmtAmount(prevCommissionAmt || null, prevCurrency),
+                  revised: fmtAmount(commissionAmt, currency),
+                  bold: false,
+                },
+                {
+                  label: 'Your Net Premium',
+                  previous: fmtAmount(prevNetPremium || null, prevCurrency),
+                  revised: fmtAmount(netPremium, currency),
+                  bold: true,
+                },
+              ].map((row) => (
+                <tr key={row.label} className="border-b border-gray-50 last:border-0">
+                  <td
+                    className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
+                  >
+                    {row.label}
+                  </td>
+                  <td
+                    className={`py-1.5 px-4 ${row.bold ? 'font-semibold text-gray-600' : 'text-gray-700'}`}
+                  >
+                    {row.previous}
+                  </td>
+                  <td
+                    className={`py-1.5 pl-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
+                  >
+                    {row.revised}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-      {/* FINANCIAL IMPACT */}
-      <SectionHeading>Financial Impact</SectionHeading>
-      <table className="w-full text-sm border-collapse mb-2">
-        <tbody>
-          {[
-            {
-              label: additionalPremium >= 0 ? 'Additional Premium Due' : 'Return Premium',
-              value: fmtAmount(Math.abs(additionalPremium), currency),
-            },
-            {
-              label: additionalCommission >= 0 ? 'Additional Commission' : 'Return Commission',
-              value: fmtAmount(Math.abs(additionalCommission), currency),
-            },
-            {
-              label: netAmountPayable >= 0 ? 'Net Amount Payable' : 'Net Amount Returnable',
-              value: fmtAmount(Math.abs(netAmountPayable), currency),
-              bold: true,
-            },
-          ].map((row) => (
-            <tr key={row.label} className="border-b border-gray-50 last:border-0">
-              <td
-                className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
-              >
-                {row.label}
-              </td>
-              <td
-                className={`py-1.5 pl-4 text-right ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
-              >
-                {row.value}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          {/* FINANCIAL IMPACT */}
+          <SectionHeading>Financial Impact</SectionHeading>
+          <table className="w-full text-sm border-collapse mb-2">
+            <tbody>
+              {[
+                {
+                  label: additionalPremium >= 0 ? 'Additional Premium Due' : 'Return Premium',
+                  value: fmtAmount(Math.abs(additionalPremium), currency),
+                },
+                {
+                  label: additionalCommission >= 0 ? 'Additional Commission' : 'Return Commission',
+                  value: fmtAmount(Math.abs(additionalCommission), currency),
+                },
+                {
+                  label: netAmountPayable >= 0 ? 'Net Amount Payable' : 'Net Amount Returnable',
+                  value: fmtAmount(Math.abs(netAmountPayable), currency),
+                  bold: true,
+                },
+              ].map((row) => (
+                <tr key={row.label} className="border-b border-gray-50 last:border-0">
+                  <td
+                    className={`py-1.5 pr-4 ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-500'}`}
+                  >
+                    {row.label}
+                  </td>
+                  <td
+                    className={`py-1.5 pl-4 text-right ${row.bold ? 'font-semibold text-gray-900' : 'text-gray-900'}`}
+                  >
+                    {row.value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
 
       {/* SPECIAL CONDITIONS */}
       <SectionHeading>Special Conditions</SectionHeading>

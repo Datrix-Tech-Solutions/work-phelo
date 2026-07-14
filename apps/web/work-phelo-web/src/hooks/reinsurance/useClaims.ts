@@ -1,7 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import {
   CreatePlacementClaimPayload,
+  Facultative,
   PlacementClaim,
   PlacementClaimAllocation,
   PlacementClaimCashCall,
@@ -180,4 +182,83 @@ export function useVoidClaimCashCall(placementId: string, claimId: string) {
       queryClient.invalidateQueries({ queryKey: cashCallsKey(placementId, claimId) });
     },
   });
+}
+
+export interface ReinsurerClaimRow {
+  id: string;
+  claimId: string;
+  claimNumber: string;
+  status: PlacementClaimStatus;
+  placementId: string;
+  placementReference: string;
+  policyNumber: string | null;
+  cedantName: string;
+  currency: string;
+  sharePercent: number;
+  recoveryAmount: number;
+  occurrenceDate: string;
+}
+
+/**
+ * Claims for every offer this reinsurer participates in — one row per claim, with the
+ * claim's actual (final if finalized, else estimated) loss amount as the recovery figure.
+ * Uses the same query keys as usePlacementClaims so results share the cache.
+ */
+export function useReinsurerClaims(
+  placements: Facultative[],
+  reinsurerId: string,
+): { rows: ReinsurerClaimRow[]; isLoading: boolean } {
+  const reinsuredPlacements = useMemo(
+    () =>
+      placements.filter((p) =>
+        p.participants.some(
+          (pt) =>
+            pt.counterpartyId === reinsurerId &&
+            (pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
+        ),
+      ),
+    [placements, reinsurerId],
+  );
+
+  const claimQueries = useQueries({
+    queries: reinsuredPlacements.map((p) => ({
+      queryKey: claimsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/claims`);
+        return (res.data?.items ?? res.data ?? []) as PlacementClaim[];
+      },
+    })),
+  });
+
+  const isLoading = claimQueries.some((q) => q.isLoading);
+
+  const rows = useMemo(() => {
+    const list: ReinsurerClaimRow[] = [];
+    reinsuredPlacements.forEach((p, i) => {
+      const claims = claimQueries[i]?.data ?? [];
+      const participant = p.participants.find((pt) => pt.counterpartyId === reinsurerId);
+      const sharePercent = parseFloat(
+        participant?.signedLinePercent ?? participant?.sharePercent ?? '0',
+      );
+      claims.forEach((claim) => {
+        list.push({
+          id: claim.id,
+          claimId: claim.id,
+          claimNumber: claim.claimNumber,
+          status: claim.status,
+          placementId: p.id,
+          placementReference: p.policyNumber ?? p.reference,
+          policyNumber: p.policyNumber,
+          cedantName: p.cedant.name,
+          currency: claim.currency,
+          sharePercent,
+          recoveryAmount: parseFloat(claim.finalLossAmount ?? claim.estimatedLossAmount),
+          occurrenceDate: claim.occurrenceDate,
+        });
+      });
+    });
+    return list;
+  }, [reinsuredPlacements, claimQueries, reinsurerId]);
+
+  return { rows, isLoading };
 }
