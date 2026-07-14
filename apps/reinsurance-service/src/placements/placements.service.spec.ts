@@ -12,6 +12,7 @@ import {
   PlacementParticipantStatus,
   PlacementStatus,
   PlacementType,
+  Prisma,
   RiskTypeFieldSection,
   RiskTypeFieldType,
 } from '../../prisma/generated/client';
@@ -176,6 +177,9 @@ describe('PlacementsService', () => {
     placementDocument: {
       count: PrismaMethod;
     };
+    placementAttachment: {
+      count: PrismaMethod;
+    };
     placementEndorsementParticipant: {
       count: PrismaMethod;
     };
@@ -235,6 +239,9 @@ describe('PlacementsService', () => {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
       },
       placementDocument: {
+        count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+      },
+      placementAttachment: {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
       },
       placementEndorsementParticipant: {
@@ -2091,6 +2098,85 @@ describe('PlacementsService', () => {
       'claim allocations, placement documents, endorsement participants',
     );
     expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('rejects participant deletion when attachments reference the participant', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementAttachment.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow('placement attachments');
+    expect(prisma.placementAttachment.count).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        participantId: 'participant-1',
+      },
+    });
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not block participant deletion for placement-level or other-participant attachments', async () => {
+    const existingPlacement = placementWithParticipant();
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(existingPlacement)
+      .mockResolvedValueOnce(placement);
+    prisma.placementParticipant.delete.mockResolvedValue({
+      id: 'participant-1',
+    });
+
+    await service.deleteParticipant(user, 'placement-1', 'participant-1');
+
+    expect(prisma.placementAttachment.count).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        participantId: 'participant-1',
+      },
+    });
+    expect(prisma.placementParticipant.delete).toHaveBeenCalledWith({
+      where: { id: 'participant-1' },
+    });
+  });
+
+  it('blocks participant deletion when a voided attachment still preserves participant history', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementAttachment.count.mockResolvedValueOnce(1);
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow(ConflictException);
+    const countArgs = prisma.placementAttachment.count.mock.calls[0]?.[0] as {
+      where?: Record<string, unknown>;
+    };
+    expect(countArgs.where).not.toHaveProperty('status');
+    expect(prisma.placementParticipant.delete).not.toHaveBeenCalled();
+  });
+
+  it('converts late participant FK delete failures into business conflicts', async () => {
+    prisma.placement.findFirst.mockResolvedValueOnce(
+      placementWithParticipant(),
+    );
+    prisma.placementParticipant.delete.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError(
+        'Foreign key constraint failed',
+        {
+          code: 'P2003',
+          clientVersion: '5.22.0',
+        },
+      ),
+    );
+
+    await expect(
+      service.deleteParticipant(user, 'placement-1', 'participant-1'),
+    ).rejects.toThrow(
+      'This participant cannot be deleted because it is referenced by one or more related records.',
+    );
   });
 
   it('does not fail a completed write when audit event delivery fails', async () => {
