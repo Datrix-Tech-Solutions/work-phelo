@@ -12,8 +12,15 @@ import {
   PlacementNoteStatus,
   PlacementNoteType,
   Prisma,
+  ReinsuranceChargeCode,
+  ReinsuranceChargeRateType,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  AppliedChargeSnapshot,
+  ChargeCalculationResult,
+  ReinsuranceChargeSettingsService,
+} from '../settings/reinsurance-charge-settings.service';
 import { UpdatePlacementNoteStatusDto } from './dto/update-placement-note-status.dto';
 import { VoidPlacementNoteDto } from './dto/void-placement-note.dto';
 
@@ -70,7 +77,10 @@ type EndorsementDebitClosingSnapshot = {
 
 @Injectable()
 export class PlacementNotesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly chargeSettings: ReinsuranceChargeSettingsService,
+  ) {}
 
   async findAll(
     tenantId: string,
@@ -160,7 +170,14 @@ export class PlacementNotesService {
         placementId,
         PlacementNoteType.DEBIT_NOTE,
       );
-      const snapshot = this.debitSnapshot(placement.currency, closings);
+      const noteDate = new Date();
+      const snapshot = await this.debitSnapshot(
+        tx,
+        user.tenantId,
+        placement.currency,
+        closings,
+        noteDate,
+      );
 
       return tx.placementNote.create({
         data: {
@@ -172,7 +189,7 @@ export class PlacementNotesService {
           noteNumber,
           status: PlacementNoteStatus.DRAFT,
           ...snapshot,
-          noteDate: new Date(),
+          noteDate,
           createdByUserId: user.id,
         },
         include: noteInclude,
@@ -234,7 +251,13 @@ export class PlacementNotesService {
         placementId,
         PlacementNoteType.CREDIT_NOTE,
       );
-      const snapshot = this.creditSnapshot(closing);
+      const noteDate = new Date();
+      const snapshot = await this.creditSnapshot(
+        tx,
+        user.tenantId,
+        closing,
+        noteDate,
+      );
 
       return tx.placementNote.create({
         data: {
@@ -248,7 +271,7 @@ export class PlacementNotesService {
           noteNumber,
           status: PlacementNoteStatus.DRAFT,
           ...snapshot,
-          noteDate: new Date(),
+          noteDate,
           createdByUserId: user.id,
         },
         include: noteInclude,
@@ -297,9 +320,13 @@ export class PlacementNotesService {
         placementId,
         PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
       );
-      const snapshot = this.endorsementDebitSnapshot(
+      const noteDate = new Date();
+      const snapshot = await this.endorsementDebitSnapshot(
+        tx,
+        user.tenantId,
         placement.currency,
         closings,
+        noteDate,
       );
 
       return tx.placementNote.create({
@@ -313,7 +340,7 @@ export class PlacementNotesService {
           noteNumber,
           status: PlacementNoteStatus.DRAFT,
           ...snapshot,
-          noteDate: new Date(),
+          noteDate,
           createdByUserId: user.id,
         },
         include: noteInclude,
@@ -379,7 +406,13 @@ export class PlacementNotesService {
         placementId,
         PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
       );
-      const snapshot = this.endorsementCreditSnapshot(closing);
+      const noteDate = new Date();
+      const snapshot = await this.endorsementCreditSnapshot(
+        tx,
+        user.tenantId,
+        closing,
+        noteDate,
+      );
 
       return tx.placementNote.create({
         data: {
@@ -394,7 +427,7 @@ export class PlacementNotesService {
           noteNumber,
           status: PlacementNoteStatus.DRAFT,
           ...snapshot,
-          noteDate: new Date(),
+          noteDate,
           createdByUserId: user.id,
         },
         include: noteInclude,
@@ -673,9 +706,12 @@ export class PlacementNotesService {
     return `${prefix}-${String(count + 1).padStart(3, '0')}`;
   }
 
-  private debitSnapshot(
+  private async debitSnapshot(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
     placementCurrency: string | null,
     closings: DebitClosingSnapshot[],
+    effectiveAt: Date,
   ) {
     const currency = placementCurrency ?? closings[0]?.currency;
     if (!currency) {
@@ -692,8 +728,18 @@ export class PlacementNotesService {
       (total, closing) => total + this.toNumber(closing.commissionAmount),
       0,
     );
-    const nicLevyAmount = 0;
-    const withholdingTaxAmount = 0;
+    const chargeResult = await this.chargeSettings.calculateCharges(
+      tenantId,
+      {
+        currency,
+        grossAmount,
+        commissionAmount,
+        brokerageAmount: 0,
+        effectiveAt,
+      },
+      tx,
+    );
+    const legacyCharges = this.legacyChargeFields(chargeResult);
 
     return {
       currency,
@@ -702,48 +748,70 @@ export class PlacementNotesService {
       commissionAmount,
       brokeragePercent: null,
       brokerageAmount: null,
-      nicLevyPercent: 0,
-      nicLevyAmount,
-      withholdingTaxPercent: 0,
-      withholdingTaxAmount,
-      netAmount:
-        grossAmount - commissionAmount - nicLevyAmount - withholdingTaxAmount,
+      ...legacyCharges,
+      netAmount: chargeResult.netAmount,
+      appliedCharges: this.appliedChargesSnapshot(chargeResult),
     };
   }
 
-  private creditSnapshot(closing: {
-    currency: string | null;
-    grossPremium: Prisma.Decimal | null;
-    commissionPercent: Prisma.Decimal | null;
-    commissionAmount: Prisma.Decimal | null;
-    brokeragePercent: Prisma.Decimal | null;
-    brokerageAmount: Prisma.Decimal | null;
-    netPremium: Prisma.Decimal | null;
-  }) {
+  private async creditSnapshot(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    closing: {
+      currency: string | null;
+      grossPremium: Prisma.Decimal | null;
+      commissionPercent: Prisma.Decimal | null;
+      commissionAmount: Prisma.Decimal | null;
+      brokeragePercent: Prisma.Decimal | null;
+      brokerageAmount: Prisma.Decimal | null;
+      netPremium: Prisma.Decimal | null;
+    },
+    effectiveAt: Date,
+  ) {
     if (!closing.currency) {
       throw new BadRequestException(
         'Closing currency is required before creating a credit note',
       );
     }
 
+    const grossAmount = this.toNumber(closing.grossPremium);
+    const commissionAmount = this.toOptionalNumber(closing.commissionAmount);
+    const brokerageAmount = this.toOptionalNumber(closing.brokerageAmount);
+    const chargeResult = await this.chargeSettings.calculateCharges(
+      tenantId,
+      {
+        currency: closing.currency,
+        grossAmount,
+        commissionAmount: commissionAmount ?? 0,
+        brokerageAmount: brokerageAmount ?? 0,
+        effectiveAt,
+      },
+      tx,
+    );
+    const legacyCharges = this.legacyChargeFields(chargeResult);
+
     return {
       currency: closing.currency,
-      grossAmount: this.toNumber(closing.grossPremium),
+      grossAmount,
       commissionPercent: this.toOptionalNumber(closing.commissionPercent),
-      commissionAmount: this.toOptionalNumber(closing.commissionAmount),
+      commissionAmount,
       brokeragePercent: this.toOptionalNumber(closing.brokeragePercent),
-      brokerageAmount: this.toOptionalNumber(closing.brokerageAmount),
-      nicLevyPercent: 0,
-      nicLevyAmount: 0,
-      withholdingTaxPercent: 0,
-      withholdingTaxAmount: 0,
-      netAmount: this.toNumber(closing.netPremium),
+      brokerageAmount,
+      ...legacyCharges,
+      netAmount:
+        chargeResult.charges.length === 0
+          ? this.toNumber(closing.netPremium)
+          : chargeResult.netAmount,
+      appliedCharges: this.appliedChargesSnapshot(chargeResult),
     };
   }
 
-  private endorsementDebitSnapshot(
+  private async endorsementDebitSnapshot(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
     placementCurrency: string | null,
     closings: EndorsementDebitClosingSnapshot[],
+    effectiveAt: Date,
   ) {
     const currency = placementCurrency ?? closings[0]?.currency;
     if (!currency) {
@@ -760,8 +828,18 @@ export class PlacementNotesService {
       (total, closing) => total + this.toNumber(closing.commissionAmount),
       0,
     );
-    const nicLevyAmount = 0;
-    const withholdingTaxAmount = 0;
+    const chargeResult = await this.chargeSettings.calculateCharges(
+      tenantId,
+      {
+        currency,
+        grossAmount,
+        commissionAmount,
+        brokerageAmount: 0,
+        effectiveAt,
+      },
+      tx,
+    );
+    const legacyCharges = this.legacyChargeFields(chargeResult);
 
     return {
       currency,
@@ -770,42 +848,111 @@ export class PlacementNotesService {
       commissionAmount,
       brokeragePercent: null,
       brokerageAmount: null,
-      nicLevyPercent: 0,
-      nicLevyAmount,
-      withholdingTaxPercent: 0,
-      withholdingTaxAmount,
-      netAmount:
-        grossAmount - commissionAmount - nicLevyAmount - withholdingTaxAmount,
+      ...legacyCharges,
+      netAmount: chargeResult.netAmount,
+      appliedCharges: this.appliedChargesSnapshot(chargeResult),
     };
   }
 
-  private endorsementCreditSnapshot(closing: {
-    currency: string | null;
-    premiumSnapshot: Prisma.Decimal;
-    commissionPercent: Prisma.Decimal | null;
-    commissionAmount: Prisma.Decimal | null;
-    brokeragePercent: Prisma.Decimal | null;
-    brokerageAmount: Prisma.Decimal | null;
-    netPremium: Prisma.Decimal | null;
-  }) {
+  private async endorsementCreditSnapshot(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    closing: {
+      currency: string | null;
+      premiumSnapshot: Prisma.Decimal;
+      commissionPercent: Prisma.Decimal | null;
+      commissionAmount: Prisma.Decimal | null;
+      brokeragePercent: Prisma.Decimal | null;
+      brokerageAmount: Prisma.Decimal | null;
+      netPremium: Prisma.Decimal | null;
+    },
+    effectiveAt: Date,
+  ) {
     if (!closing.currency) {
       throw new BadRequestException(
         'Endorsement closing currency is required before creating a credit note',
       );
     }
 
+    const grossAmount = this.toNumber(closing.premiumSnapshot);
+    const commissionAmount = this.toOptionalNumber(closing.commissionAmount);
+    const brokerageAmount = this.toOptionalNumber(closing.brokerageAmount);
+    const chargeResult = await this.chargeSettings.calculateCharges(
+      tenantId,
+      {
+        currency: closing.currency,
+        grossAmount,
+        commissionAmount: commissionAmount ?? 0,
+        brokerageAmount: brokerageAmount ?? 0,
+        effectiveAt,
+      },
+      tx,
+    );
+    const legacyCharges = this.legacyChargeFields(chargeResult);
+
     return {
       currency: closing.currency,
-      grossAmount: this.toNumber(closing.premiumSnapshot),
+      grossAmount,
       commissionPercent: this.toOptionalNumber(closing.commissionPercent),
-      commissionAmount: this.toOptionalNumber(closing.commissionAmount),
+      commissionAmount,
       brokeragePercent: this.toOptionalNumber(closing.brokeragePercent),
-      brokerageAmount: this.toOptionalNumber(closing.brokerageAmount),
-      nicLevyPercent: 0,
-      nicLevyAmount: 0,
-      withholdingTaxPercent: 0,
-      withholdingTaxAmount: 0,
-      netAmount: this.toNumber(closing.netPremium),
+      brokerageAmount,
+      ...legacyCharges,
+      netAmount:
+        chargeResult.charges.length === 0
+          ? this.toNumber(closing.netPremium)
+          : chargeResult.netAmount,
+      appliedCharges: this.appliedChargesSnapshot(chargeResult),
+    };
+  }
+
+  private legacyChargeFields(result: ChargeCalculationResult) {
+    const nicLevy = this.findCharge(
+      result.charges,
+      ReinsuranceChargeCode.NIC_LEVY,
+    );
+    const withholdingTax = this.findCharge(
+      result.charges,
+      ReinsuranceChargeCode.WITHHOLDING_TAX,
+    );
+    return {
+      nicLevyPercent: this.legacyPercent(nicLevy),
+      nicLevyAmount: nicLevy?.amount ?? 0,
+      withholdingTaxPercent: this.legacyPercent(withholdingTax),
+      withholdingTaxAmount: withholdingTax?.amount ?? 0,
+    };
+  }
+
+  private findCharge(
+    charges: AppliedChargeSnapshot[],
+    code: ReinsuranceChargeCode,
+  ): AppliedChargeSnapshot | undefined {
+    return charges.find((charge) => charge.code === code);
+  }
+
+  private legacyPercent(charge: AppliedChargeSnapshot | undefined): number {
+    if (!charge || charge.rateType !== ReinsuranceChargeRateType.PERCENTAGE) {
+      return 0;
+    }
+    const rate = Number(charge.rate);
+    return Number.isFinite(rate) ? rate : 0;
+  }
+
+  private appliedChargesSnapshot(
+    result: ChargeCalculationResult,
+  ): Prisma.InputJsonObject {
+    return {
+      version: 1,
+      currency: result.currency,
+      effectiveAt: result.effectiveAt,
+      grossAmount: result.grossAmount,
+      commissionAmount: result.commissionAmount,
+      brokerageAmount: result.brokerageAmount,
+      netBeforeCharges: result.netBeforeCharges,
+      additions: result.additions,
+      deductions: result.deductions,
+      netAmount: result.netAmount,
+      charges: result.charges as unknown as Prisma.InputJsonArray,
     };
   }
 

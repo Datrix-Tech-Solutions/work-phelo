@@ -197,6 +197,11 @@ export const RESOURCES = [
     module: 'OPERATIONS',
     description: 'Reinsurance module configuration',
   },
+  {
+    name: 'operations.reinsurance.taxes-levies',
+    module: 'OPERATIONS',
+    description: 'Reinsurance taxes, levies and charge configuration',
+  },
 
   // ── PLATFORM module ────────────────────────────────────────────
   {

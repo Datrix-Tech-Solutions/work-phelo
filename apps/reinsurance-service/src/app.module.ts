@@ -8,6 +8,7 @@ import { PlacementsModule } from './placements/placements.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { BusinessClassSettingsModule } from './settings/business-class-settings.module';
 import { CurrencySettingsModule } from './settings/currency-settings.module';
+import { ReinsuranceChargeSettingsModule } from './settings/reinsurance-charge-settings.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { CurrencySettingsModule } from './settings/currency-settings.module';
     PlacementsModule,
     BusinessClassSettingsModule,
     CurrencySettingsModule,
+    ReinsuranceChargeSettingsModule,
     EmailModule,
   ],
 })

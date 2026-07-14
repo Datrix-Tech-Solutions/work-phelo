@@ -1077,14 +1077,122 @@ export interface BankFormValues {
 }
 
 /* ── Levy & Tax ── */
+export type ReinsuranceChargeCode = 'NIC_LEVY' | 'WITHHOLDING_TAX';
+export type ReinsuranceChargeType = 'TAX' | 'LEVY' | 'FEE' | 'DUTY' | 'OTHER';
+export type ReinsuranceChargeRateType = 'PERCENTAGE' | 'FIXED_AMOUNT';
+export type ReinsuranceChargeCalculationBasis =
+  | 'GROSS_AMOUNT'
+  | 'COMMISSION_AMOUNT'
+  | 'BROKERAGE_AMOUNT'
+  | 'NET_BEFORE_CHARGES';
+export type ReinsuranceChargeDirection = 'ADDITION' | 'DEDUCTION';
+export type ReinsuranceChargeRoundingMode = 'HALF_UP' | 'UP' | 'DOWN';
+
+export interface ReinsuranceChargeConfiguration {
+  id: string;
+  tenantId: string;
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  rate: string;
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  currency: string | null;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  roundingMode: ReinsuranceChargeRoundingMode;
+  decimalPlaces: number;
+  isEnabled: boolean;
+  displayOrder: number;
+}
+
+export interface ReinsuranceChargeTemplate {
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  description: string;
+}
+
+export interface ReinsuranceChargePayload {
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  rate: number;
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  currency?: string | null;
+  effectiveFrom: string;
+  effectiveTo?: string | null;
+  roundingMode?: ReinsuranceChargeRoundingMode;
+  decimalPlaces?: number;
+  isEnabled?: boolean;
+  displayOrder?: number;
+}
+
+export interface ReinsuranceChargePreviewLine {
+  configurationId: string;
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  rate: string;
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  currency: string | null;
+  basisAmount: number;
+  amount: number;
+}
+
+export interface ReinsuranceChargePreviewResult {
+  currency: string;
+  grossAmount: number;
+  commissionAmount: number;
+  brokerageAmount: number;
+  netBeforeCharges: number;
+  additions: number;
+  deductions: number;
+  netAmount: number;
+  charges: ReinsuranceChargePreviewLine[];
+}
+
 export interface LevyTaxFormValues {
-  nicLevy: number | '';
-  withholdingTax: number | '';
+  id?: string;
+  code: ReinsuranceChargeCode;
+  name: string;
+  chargeType: ReinsuranceChargeType;
+  rateType: ReinsuranceChargeRateType;
+  rate: number | '';
+  calculationBasis: ReinsuranceChargeCalculationBasis;
+  direction: ReinsuranceChargeDirection;
+  currency: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  roundingMode: ReinsuranceChargeRoundingMode;
+  decimalPlaces: number;
+  isEnabled: boolean;
+  displayOrder: number;
 }
 
 export const LEVY_TAX_FORM_DEFAULTS: LevyTaxFormValues = {
-  nicLevy: '',
-  withholdingTax: '',
+  code: 'NIC_LEVY',
+  name: 'NIC Levy',
+  chargeType: 'LEVY',
+  rateType: 'PERCENTAGE',
+  rate: '',
+  calculationBasis: 'NET_BEFORE_CHARGES',
+  direction: 'DEDUCTION',
+  currency: '',
+  effectiveFrom: new Date().toISOString().slice(0, 10),
+  effectiveTo: '',
+  roundingMode: 'HALF_UP',
+  decimalPlaces: 2,
+  isEnabled: true,
+  displayOrder: 0,
 };
 
 export const BANK_FORM_DEFAULTS: BankFormValues = {
