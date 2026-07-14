@@ -35,6 +35,10 @@ export class PlacementFinancialLockPolicy {
         reason: 'Placement is financially locked. Changes require endorsement.',
         lockSource: activity.source,
         lockedAt: activity.lockedAt?.toISOString(),
+        canEdit: false,
+        editBlockedReason:
+          'Placement is financially locked. Changes require endorsement.',
+        editRequiresEndorsement: true,
       };
     }
 
@@ -45,6 +49,9 @@ export class PlacementFinancialLockPolicy {
         endorsementRequired: false,
         reason: `Cannot edit a ${placement.status} placement.`,
         lockSource: 'STATUS_TERMINAL',
+        canEdit: false,
+        editBlockedReason: `Cannot edit a ${placement.status} placement.`,
+        editRequiresEndorsement: false,
       };
     }
 
@@ -54,6 +61,8 @@ export class PlacementFinancialLockPolicy {
       endorsementRequired: false,
       reason: 'Placement has no financial activity and can be edited.',
       lockSource: 'NONE',
+      canEdit: true,
+      editRequiresEndorsement: false,
     };
   }
 

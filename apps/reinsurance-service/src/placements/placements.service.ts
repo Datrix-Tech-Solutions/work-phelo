@@ -9,6 +9,11 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementDocumentStatus,
+  PlacementDocumentType,
+  PlacementEndorsementStatus,
+  PlacementNoteStatus,
+  PlacementNoteType,
   PlacementParticipantRole,
   PlacementParticipantStatus,
   PlacementStatus,
@@ -57,6 +62,9 @@ const placementInclude = {
     take: 20,
   },
 } satisfies Prisma.PlacementInclude;
+
+const DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE =
+  'This placement has progressed beyond negotiation and cannot be edited directly. Create an endorsement instead.';
 
 const participantAcceptanceInclude = {
   counterparty: {
@@ -253,21 +261,21 @@ export class PlacementsService {
 
     return this.withLockStatus(
       this.withAggregates(placement),
-      await this.financialLockPolicy.evaluate(placement),
+      await this.evaluateDirectEditability(placement),
     );
   }
 
   async getLockStatus(tenantId: string, id: string) {
     const placement = await this.prisma.placement.findFirst({
       where: { id, tenantId, archivedAt: null },
-      select: { id: true, tenantId: true, status: true },
+      select: { id: true, tenantId: true, status: true, archivedAt: true },
     });
 
     if (!placement) {
       throw new NotFoundException('Placement not found');
     }
 
-    return this.financialLockPolicy.evaluate(placement);
+    return this.evaluateDirectEditability(placement);
   }
 
   async getOfferSlipPreview(tenantId: string, id: string) {
@@ -451,23 +459,28 @@ export class PlacementsService {
     }
 
     const existing = await this.findOne(user.tenantId, id);
+    if (existing.lockStatus && !existing.lockStatus.canEdit) {
+      throw new ConflictException(
+        existing.lockStatus.editRequiresEndorsement
+          ? DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE
+          : existing.lockStatus.reason,
+      );
+    }
+
     this.validateDates(
       dto.inceptionDate ?? existing.inceptionDate?.toISOString(),
       dto.expiryDate ?? existing.expiryDate?.toISOString(),
     );
 
+    if (dto.participants !== undefined) {
+      throw new BadRequestException(
+        'Placement participants must be changed through participant endpoints.',
+      );
+    }
+
     if (dto.cedantId) {
       await this.assertCedant(user.tenantId, dto.cedantId);
     }
-    if (dto.participants) {
-      await this.assertParticipants(user.tenantId, dto.participants);
-      const effectiveCap =
-        dto.facultativeOffer !== undefined
-          ? dto.facultativeOffer
-          : existing.facultativeOffer;
-      this.assertAcceptedCap(dto.participants, effectiveCap);
-    }
-    await this.assertEditable(existing);
 
     // Resolve riskTypeId update
     let riskTypePatch:
@@ -587,33 +600,58 @@ export class PlacementsService {
         ? { preliminaryBrokerage: dto.preliminaryBrokerage }
         : {}),
       updatedByUserId: user.id,
-      ...(dto.participants !== undefined
-        ? {
-            participants: {
-              deleteMany: {},
-              ...this.participantsCreateInput(dto.participants),
-            },
-          }
-        : {}),
     };
 
+    const nextStatus = this.deriveReopenedStatus(existing);
+
     try {
-      const placement = await this.prisma.placement.update({
-        where: {
-          id_tenantId: { id, tenantId: user.tenantId },
-          archivedAt: null,
-        },
-        data,
-        include: placementInclude,
+      const placement = await this.prisma.$transaction(async (tx) => {
+        if (nextStatus !== existing.status) {
+          await tx.placementStatusHistory.create({
+            data: {
+              tenantId: user.tenantId,
+              placementId: id,
+              fromStatus: existing.status,
+              toStatus: nextStatus,
+              changedByUserId: user.id,
+              note: 'Placement edited and returned to Open Offers',
+            },
+          });
+        }
+
+        const staleOfferSlipIds = await this.findCurrentOfferSlipDocumentIds(
+          tx,
+          user.tenantId,
+          id,
+        );
+        if (staleOfferSlipIds.length > 0) {
+          await tx.placementDocument.updateMany({
+            where: {
+              tenantId: user.tenantId,
+              placementId: id,
+              id: { in: staleOfferSlipIds },
+            },
+            data: {
+              status: PlacementDocumentStatus.VOID,
+              voidedAt: new Date(),
+              voidReason: 'Placement edited; offer slip superseded',
+            },
+          });
+        }
+
+        return tx.placement.update({
+          where: {
+            id_tenantId: { id, tenantId: user.tenantId },
+            archivedAt: null,
+          },
+          data: {
+            ...data,
+            status: nextStatus,
+          },
+          include: placementInclude,
+        });
       });
-      const finalPlacement =
-        dto.participants !== undefined
-          ? await this.syncParticipantDrivenStatus(
-              user,
-              existing,
-              this.withAggregates(placement),
-            )
-          : this.withAggregates(placement);
+      const finalPlacement = this.withAggregates(placement);
       this.publish('updated', finalPlacement, user, {
         before: this.auditSnapshot(existing),
         after: this.auditSnapshot(finalPlacement),
@@ -1846,6 +1884,210 @@ export class PlacementsService {
 
   private async assertEditable(placement: PlacementRecord): Promise<void> {
     await this.financialLockPolicy.assertEditable(placement);
+  }
+
+  private async evaluateDirectEditability(placement: {
+    id: string;
+    tenantId: string;
+    status: PlacementStatus;
+    archivedAt?: Date | null;
+  }): Promise<PlacementLockStatusDto> {
+    if (placement.archivedAt) {
+      return {
+        editable: false,
+        locked: false,
+        endorsementRequired: false,
+        reason: 'Cannot edit an archived placement.',
+        lockSource: 'ARCHIVED',
+        canEdit: false,
+        editBlockedReason: 'Placement is archived.',
+        editRequiresEndorsement: false,
+      };
+    }
+
+    if (
+      placement.status === PlacementStatus.CLOSED ||
+      placement.status === PlacementStatus.CANCELLED
+    ) {
+      return {
+        editable: false,
+        locked: false,
+        endorsementRequired: true,
+        reason: DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE,
+        lockSource: 'STATUS_TERMINAL',
+        canEdit: false,
+        editBlockedReason: `Cannot edit a ${placement.status} placement.`,
+        editRequiresEndorsement: true,
+      };
+    }
+
+    const financialStatus = await this.financialLockPolicy.evaluate(placement);
+    if (!financialStatus.editable) {
+      return {
+        ...financialStatus,
+        canEdit: false,
+        editBlockedReason:
+          financialStatus.editBlockedReason ?? financialStatus.reason,
+        editRequiresEndorsement: financialStatus.endorsementRequired,
+      };
+    }
+
+    const blocker = await this.findDirectEditBlocker(
+      placement.tenantId,
+      placement.id,
+    );
+    if (blocker) {
+      return {
+        editable: false,
+        locked: false,
+        endorsementRequired: true,
+        reason: DIRECT_EDIT_REQUIRES_ENDORSEMENT_MESSAGE,
+        lockSource: 'DOWNSTREAM_ACTIVITY',
+        canEdit: false,
+        editBlockedReason: blocker,
+        editRequiresEndorsement: true,
+      };
+    }
+
+    return {
+      ...financialStatus,
+      canEdit: true,
+      editRequiresEndorsement: false,
+    };
+  }
+
+  private async findDirectEditBlocker(
+    tenantId: string,
+    placementId: string,
+  ): Promise<string | null> {
+    const confirmedClosing = await this.prisma.placementClosing.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        status: PlacementClosingStatus.CONFIRMED,
+      },
+      select: { id: true },
+    });
+    if (confirmedClosing) return 'Confirmed closing exists.';
+
+    const issuedNote = await this.prisma.placementNote.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        type: {
+          in: [PlacementNoteType.DEBIT_NOTE, PlacementNoteType.CREDIT_NOTE],
+        },
+        status: PlacementNoteStatus.ISSUED,
+      },
+      select: { id: true },
+    });
+    if (issuedNote) return 'Issued debit or credit note exists.';
+
+    const payment = await this.prisma.placementPayment.findFirst({
+      where: { tenantId, placementId },
+      select: { id: true },
+    });
+    if (payment) return 'Payment history exists.';
+
+    const claim = await this.prisma.placementClaim.findFirst({
+      where: { tenantId, placementId },
+      select: { id: true },
+    });
+    if (claim) return 'Claim exists.';
+
+    const claimAllocation =
+      await this.prisma.placementClaimAllocation.findFirst({
+        where: { tenantId, placementId },
+        select: { id: true },
+      });
+    if (claimAllocation) return 'Claim allocation exists.';
+
+    const cashCall = await this.prisma.placementClaimCashCall.findFirst({
+      where: { tenantId, placementId },
+      select: { id: true },
+    });
+    if (cashCall) return 'Claim cash call exists.';
+
+    const endorsement = await this.prisma.placementEndorsement.findFirst({
+      where: {
+        tenantId,
+        placementId,
+        status: {
+          notIn: [
+            PlacementEndorsementStatus.DRAFT,
+            PlacementEndorsementStatus.VOID,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    if (endorsement) return 'Active endorsement workflow exists.';
+
+    return null;
+  }
+
+  private deriveReopenedStatus(placement: {
+    participants: Array<{ status: PlacementParticipantStatus }>;
+  }): PlacementStatus {
+    const hasActiveParticipants = placement.participants.some(
+      (participant) =>
+        participant.status !== PlacementParticipantStatus.DECLINED,
+    );
+    return hasActiveParticipants
+      ? PlacementStatus.MARKETING
+      : PlacementStatus.DRAFT;
+  }
+
+  private async findCurrentOfferSlipDocumentIds(
+    tx: Prisma.TransactionClient,
+    tenantId: string,
+    placementId: string,
+  ): Promise<string[]> {
+    const activeOfferSlips = await tx.placementDocument.findMany({
+      where: {
+        tenantId,
+        placementId,
+        type: PlacementDocumentType.OFFER_SLIP,
+        status: {
+          in: [
+            PlacementDocumentStatus.DRAFT,
+            PlacementDocumentStatus.GENERATED,
+          ],
+        },
+      },
+      select: {
+        id: true,
+        participantId: true,
+        closingId: true,
+        noteId: true,
+        endorsementId: true,
+        endorsementClosingId: true,
+        claimId: true,
+        claimCashCallId: true,
+        version: true,
+        createdAt: true,
+      },
+      orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
+    });
+
+    const currentByScope = new Map<string, string>();
+    for (const document of activeOfferSlips) {
+      const scopeKey = [
+        document.participantId ?? 'placement',
+        document.closingId ?? 'no-closing',
+        document.noteId ?? 'no-note',
+        document.endorsementId ?? 'no-endorsement',
+        document.endorsementClosingId ?? 'no-endorsement-closing',
+        document.claimId ?? 'no-claim',
+        document.claimCashCallId ?? 'no-cash-call',
+      ].join(':');
+
+      if (!currentByScope.has(scopeKey)) {
+        currentByScope.set(scopeKey, document.id);
+      }
+    }
+
+    return [...currentByScope.values()];
   }
 
   private async assertArchivable(placement: PlacementRecord): Promise<void> {

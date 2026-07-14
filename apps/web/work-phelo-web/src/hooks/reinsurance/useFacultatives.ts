@@ -21,6 +21,11 @@ const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
 const ARCHIVED_FACULTATIVES_KEY = ['reinsurance', 'placements', 'archived'] as const;
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
+const placementDocumentsKey = (placementId: string) =>
+  [...placementQueryKey(placementId), 'documents'] as const;
+const placementLockStatusKey = (placementId: string) =>
+  [...placementQueryKey(placementId), 'lock-status'] as const;
+const paymentEligibleFacultativesKey = [...FACULTATIVES_KEY, 'payment-eligible'] as const;
 
 export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
 export const placementClosingsKey = (placementId: string) =>
@@ -112,6 +117,10 @@ export function useUpdateFacultative() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, id] });
+      queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(id) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(id) });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
     },
   });
 }
