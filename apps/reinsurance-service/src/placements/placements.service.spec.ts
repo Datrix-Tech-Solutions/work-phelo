@@ -953,11 +953,10 @@ describe('PlacementsService', () => {
         },
       }),
     );
-    expect(prisma.placement.update.mock.calls[0]?.[0]).toEqual(
-      expect.objectContaining({
-        data: expect.not.objectContaining({ description: expect.anything() }),
-      }),
-    );
+    const updateArgs = prisma.placement.update.mock.calls[0]?.[0] as {
+      data?: Record<string, unknown>;
+    };
+    expect(updateArgs.data).not.toHaveProperty('description');
     expect(publisher.updated).toHaveBeenCalled();
   });
 

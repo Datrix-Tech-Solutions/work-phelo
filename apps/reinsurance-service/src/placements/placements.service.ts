@@ -2076,15 +2076,18 @@ export class PlacementsService {
 
   private trimCustomFieldsJsonValue(value: unknown): Prisma.InputJsonValue {
     this.validateCustomFields(value);
-    return (value as Array<Record<string, unknown>>).map((field) => ({
-      id: String(field.id).trim(),
-      label: String(field.label).trim(),
-      value: String(field.value),
-      type: field.type === undefined ? 'TEXT' : String(field.type).trim(),
-      ...(field.displayOrder !== undefined
-        ? { displayOrder: field.displayOrder as number }
-        : {}),
-    })) as Prisma.InputJsonValue;
+    return (value as Array<Record<string, unknown>>).map((field) => {
+      const type = typeof field.type === 'string' ? field.type.trim() : 'TEXT';
+      return {
+        id: String(field.id).trim(),
+        label: String(field.label).trim(),
+        value: String(field.value),
+        type,
+        ...(typeof field.displayOrder === 'number'
+          ? { displayOrder: field.displayOrder }
+          : {}),
+      };
+    }) as Prisma.InputJsonValue;
   }
 
   private trimJsonValue(
