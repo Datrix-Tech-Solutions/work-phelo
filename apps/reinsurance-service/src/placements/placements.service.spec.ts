@@ -12,6 +12,8 @@ import {
   PlacementParticipantStatus,
   PlacementStatus,
   PlacementType,
+  RiskTypeFieldSection,
+  RiskTypeFieldType,
 } from '../../prisma/generated/client';
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
@@ -400,6 +402,7 @@ describe('PlacementsService', () => {
       reference: ' FAC-2026-0001 ',
       title: ' Acme Energy Placement ',
       cedantId: 'cedant-1',
+      description: ' Subject to survey and signed proposal. ',
       participants: [
         {
           counterpartyId: 'reinsurer-1',
@@ -424,6 +427,7 @@ describe('PlacementsService', () => {
         tenantId: 'tenant-1',
         reference: 'FAC-2026-0001',
         normalizedReference: 'fac-2026-0001',
+        description: 'Subject to survey and signed proposal.',
         status: PlacementStatus.DRAFT,
         participants: {
           create: [
@@ -442,6 +446,99 @@ describe('PlacementsService', () => {
         actorUserId: 'user-1',
       }),
     );
+  });
+
+  it('accepts structured custom placement fields alongside configured risk fields', async () => {
+    prisma.counterparty.findFirst.mockResolvedValue({ id: 'cedant-1' });
+    prisma.counterparty.findMany.mockResolvedValue([]);
+    prisma.riskType.findFirst
+      .mockResolvedValueOnce({ id: 'risk-type-1', name: 'Marine Cargo' })
+      .mockResolvedValueOnce({
+        fields: [
+          {
+            section: RiskTypeFieldSection.BUSINESS_DETAILS,
+            fieldKey: 'vessel_name',
+            fieldType: RiskTypeFieldType.TEXT,
+            required: true,
+            options: null,
+          },
+          {
+            section: RiskTypeFieldSection.BUSINESS_DETAILS,
+            fieldKey: 'estimated_value',
+            fieldType: RiskTypeFieldType.NUMBER,
+            required: false,
+            options: null,
+          },
+          {
+            section: RiskTypeFieldSection.BUSINESS_DETAILS,
+            fieldKey: 'war_cover',
+            fieldType: RiskTypeFieldType.CHECKBOX,
+            required: false,
+            options: null,
+          },
+        ],
+      });
+    prisma.placement.create.mockResolvedValue({
+      ...placement,
+      riskTypeId: 'risk-type-1',
+      classOfBusiness: 'Marine Cargo',
+      businessDetails: {
+        vessel_name: 'MV Ocean Pioneer',
+        estimated_value: 125000,
+        war_cover: true,
+        customFields: [
+          {
+            id: 'custom-special-condition',
+            label: 'Special Condition',
+            value: 'Subject to survey',
+            type: 'TEXT',
+            displayOrder: 1,
+          },
+        ],
+      },
+    });
+
+    await service.create(user, {
+      reference: 'FAC-2026-0002',
+      title: 'Marine Cargo Placement',
+      cedantId: 'cedant-1',
+      riskTypeId: 'risk-type-1',
+      businessDetails: {
+        vessel_name: 'MV Ocean Pioneer',
+        estimated_value: 125000,
+        war_cover: true,
+        customFields: [
+          {
+            id: 'custom-special-condition',
+            label: 'Special Condition',
+            value: 'Subject to survey',
+            type: 'TEXT',
+            displayOrder: 1,
+          },
+        ],
+      },
+    });
+
+    expect(prisma.placement.create.mock.calls[0]?.[0]).toMatchObject({
+      data: {
+        riskTypeId: 'risk-type-1',
+        classOfBusiness: 'Marine Cargo',
+        businessDetails: {
+          vessel_name: 'MV Ocean Pioneer',
+          estimated_value: 125000,
+          war_cover: true,
+          customFields: [
+            {
+              id: 'custom-special-condition',
+              label: 'Special Condition',
+              value: 'Subject to survey',
+              type: 'TEXT',
+              displayOrder: 1,
+            },
+          ],
+        },
+      },
+    });
   });
 
   it('rejects participant roles that do not match counterparty type', async () => {
@@ -856,7 +953,44 @@ describe('PlacementsService', () => {
         },
       }),
     );
+    const updateArgs = prisma.placement.update.mock.calls[0]?.[0] as {
+      data?: Record<string, unknown>;
+    };
+    expect(updateArgs.data).not.toHaveProperty('description');
     expect(publisher.updated).toHaveBeenCalled();
+  });
+
+  it('updates placement description when explicitly supplied', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placement.update.mockResolvedValue({
+      ...placement,
+      description: 'Revised placement comment',
+    });
+
+    await service.update(user, 'placement-1', {
+      description: ' Revised placement comment ',
+    });
+
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      data: { description: 'Revised placement comment' },
+    });
+  });
+
+  it('clears placement description when an empty description is supplied', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      description: 'Existing placement comment',
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placement,
+      description: null,
+    });
+
+    await service.update(user, 'placement-1', { description: '   ' });
+
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      data: { description: null },
+    });
   });
 
   it('blocks placement updates when financial activity has locked the placement', async () => {

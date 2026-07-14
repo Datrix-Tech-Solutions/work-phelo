@@ -33,6 +33,7 @@ export default function FacultativeFormFields({
   } = useFieldArray({
     control,
     name: 'extraRiskFields',
+    keyName: 'fieldArrayId',
   });
 
   const periodFrom = watch('periodFrom');
@@ -185,7 +186,7 @@ export default function FacultativeFormFields({
             {extraFields.length > 0 && (
               <div className="flex flex-col gap-2">
                 {extraFields.map((ef, index) => (
-                  <div key={ef.id} className="grid grid-cols-2 gap-2 items-end">
+                  <div key={ef.fieldArrayId} className="grid grid-cols-2 gap-2 items-end">
                     <div className="flex flex-col gap-1.5">
                       <label className="text-sm font-bold text-gray-900">Field Name</label>
                       <input
@@ -219,7 +220,18 @@ export default function FacultativeFormFields({
 
             <button
               type="button"
-              onClick={() => appendExtra({ label: '', value: '' })}
+              onClick={() =>
+                appendExtra({
+                  id:
+                    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+                      ? crypto.randomUUID()
+                      : `custom-${Date.now()}`,
+                  label: '',
+                  value: '',
+                  type: 'TEXT',
+                  displayOrder: extraFields.length + 1,
+                })
+              }
               className="self-start text-sm font-medium flex items-center gap-1 transition-colors text-(--module-btn-bg,var(--color-brand)) hover:text-(--module-btn-bg-hover,var(--color-brand-hover))"
             >
               <span className="text-base leading-none">+</span> Add Extra Field

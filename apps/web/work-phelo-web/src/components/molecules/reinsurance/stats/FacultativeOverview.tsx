@@ -6,6 +6,7 @@ import { Badge } from '@/components/atoms/Badge';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
 import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsurance';
 import { usePlacementEndorsements, usePlacementPayments } from '@/hooks';
+import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 
 type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
@@ -14,10 +15,6 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   'Part Payment': 'text-xs text-yellow-600 font-medium',
   Paid: 'text-xs text-green-600 font-medium',
 };
-
-function toLabel(key: string) {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 function fmtFieldValue(val: unknown): string {
   if (val == null) return '—';
@@ -81,8 +78,8 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
   const facPremium = placement.premium != null ? placement.premium * (facOffer / 100) : null;
 
   const riskEntries = [
-    ...Object.entries(placement.businessDetails ?? {}),
-    ...Object.entries(placement.offerDetails ?? {}),
+    ...placementDetailEntries(placement.businessDetails),
+    ...placementDetailEntries(placement.offerDetails),
   ];
 
   return (
@@ -115,8 +112,8 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
           label="Period of Insurance"
           value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
         />
-        {riskEntries.map(([key, val]) => (
-          <DetailField key={key} label={toLabel(key)} value={fmtFieldValue(val)} />
+        {riskEntries.map((entry) => (
+          <DetailField key={entry.key} label={entry.label} value={fmtFieldValue(entry.value)} />
         ))}
         <DetailField label="Rate (%)" value={placement.rate != null ? `${placement.rate}%` : '—'} />
         <DetailField

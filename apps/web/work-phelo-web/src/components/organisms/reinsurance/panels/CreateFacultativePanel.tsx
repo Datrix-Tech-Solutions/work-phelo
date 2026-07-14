@@ -4,51 +4,15 @@ import { useForm } from 'react-hook-form';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
-import {
-  FacultativeFormValues,
-  FACULTATIVE_FORM_DEFAULTS,
-  RiskTypeField,
-} from '@/types/reinsurance';
+import { FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@/types/reinsurance';
 import { useCreateFacultative, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import { normalizeComment, splitPlacementDetails } from '@/lib/reinsurance/placementFormDetails';
 import { useToastStore } from '@/store/toast.store';
 
 interface CreateFacultativePanelProps {
   isOpen: boolean;
   onClose: () => void;
-}
-
-function splitRiskDetails(
-  riskDetails: Record<string, string>,
-  fields: RiskTypeField[],
-  extraRiskFields: { label: string; value: string }[],
-): {
-  businessDetails: Record<string, unknown> | undefined;
-  offerDetails: Record<string, unknown> | undefined;
-} {
-  const businessDetails: Record<string, unknown> = {};
-  const offerDetails: Record<string, unknown> = {};
-
-  for (const field of fields.filter((f) => f.isActive)) {
-    const val = riskDetails[field.fieldKey];
-    if (val === undefined || val === '') continue;
-    if (field.section === 'BUSINESS_DETAILS') {
-      businessDetails[field.fieldKey] = val;
-    } else if (field.section === 'OFFER_DETAILS') {
-      offerDetails[field.fieldKey] = val;
-    }
-  }
-
-  for (const { label, value } of extraRiskFields) {
-    if (label.trim() && value.trim()) {
-      businessDetails[label.trim()] = value.trim();
-    }
-  }
-
-  return {
-    businessDetails: Object.keys(businessDetails).length ? businessDetails : undefined,
-    offerDetails: Object.keys(offerDetails).length ? offerDetails : undefined,
-  };
 }
 
 export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePanelProps) {
@@ -73,7 +37,7 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
   const onSubmit = async (values: FacultativeFormValues) => {
     try {
       const selectedRiskType = allRiskTypes.find((rt) => rt.id === values.riskType);
-      const { businessDetails, offerDetails } = splitRiskDetails(
+      const { businessDetails, offerDetails } = splitPlacementDetails(
         values.riskDetails,
         selectedRiskType?.fields ?? [],
         values.extraRiskFields ?? [],
@@ -84,6 +48,7 @@ export function CreateFacultativePanel({ isOpen, onClose }: CreateFacultativePan
         riskTypeId: values.riskType,
         reference: values.reference,
         title: values.title,
+        description: normalizeComment(values.comment),
         sumInsured: values.sumInsured as number,
         rate: values.rate as number,
         premium: values.premium as number,

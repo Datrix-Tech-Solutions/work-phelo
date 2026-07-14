@@ -7,14 +7,13 @@ import { Button } from '@/components/atoms/Button';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormSection } from '@/components/atoms/FormSection';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
-import {
-  Facultative,
-  FacultativeFormValues,
-  FACULTATIVE_FORM_DEFAULTS,
-  RiskTypeField,
-} from '@/types/reinsurance';
+import { Facultative, FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@/types/reinsurance';
 import { useCreateEndorsement, useUpdateFacultative, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import {
+  mergePlacementRiskDetails,
+  splitPlacementDetails,
+} from '@/lib/reinsurance/placementFormDetails';
 import { useToastStore } from '@/store/toast.store';
 
 type EndorsementFormValues = FacultativeFormValues & { effectiveDate: string };
@@ -23,37 +22,6 @@ interface EndorsementPanelProps {
   isOpen: boolean;
   placement: Facultative;
   onClose: () => void;
-}
-
-function mergeRiskDetails(
-  businessDetails: Record<string, unknown> | null,
-  offerDetails: Record<string, unknown> | null,
-): Record<string, string> {
-  const merged: Record<string, string> = {};
-  for (const [k, v] of Object.entries(businessDetails ?? {})) merged[k] = String(v ?? '');
-  for (const [k, v] of Object.entries(offerDetails ?? {})) merged[k] = String(v ?? '');
-  return merged;
-}
-
-function splitRiskDetails(
-  riskDetails: Record<string, string>,
-  fields: RiskTypeField[],
-): {
-  businessDetails: Record<string, unknown> | undefined;
-  offerDetails: Record<string, unknown> | undefined;
-} {
-  const businessDetails: Record<string, unknown> = {};
-  const offerDetails: Record<string, unknown> = {};
-  for (const field of fields.filter((f) => f.isActive)) {
-    const val = riskDetails[field.fieldKey];
-    if (val === undefined || val === '') continue;
-    if (field.section === 'BUSINESS_DETAILS') businessDetails[field.fieldKey] = val;
-    else if (field.section === 'OFFER_DETAILS') offerDetails[field.fieldKey] = val;
-  }
-  return {
-    businessDetails: Object.keys(businessDetails).length ? businessDetails : undefined,
-    offerDetails: Object.keys(offerDetails).length ? offerDetails : undefined,
-  };
 }
 
 function placementToFormValues(placement: Facultative): EndorsementFormValues {
@@ -71,7 +39,7 @@ function placementToFormValues(placement: Facultative): EndorsementFormValues {
     currency: placement.currency ?? '',
     periodFrom: placement.inceptionDate ?? '',
     periodTo: placement.expiryDate ?? '',
-    riskDetails: mergeRiskDetails(placement.businessDetails, placement.offerDetails),
+    riskDetails: mergePlacementRiskDetails(placement.businessDetails, placement.offerDetails),
     comment: '',
     effectiveDate: new Date().toISOString().split('T')[0],
   };
@@ -106,9 +74,10 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
   const onSubmit = async (values: EndorsementFormValues) => {
     try {
       const selectedRiskType = allRiskTypes.find((rt) => rt.id === values.riskType);
-      const { businessDetails, offerDetails } = splitRiskDetails(
+      const { businessDetails, offerDetails } = splitPlacementDetails(
         values.riskDetails,
         selectedRiskType?.fields ?? [],
+        values.extraRiskFields ?? [],
       );
 
       const placementUpdate = {
