@@ -12,11 +12,21 @@ import {
   PlacementPaymentType,
   PlacementStatus,
   Prisma,
+  ReinsuranceChargeCalculationBasis,
+  ReinsuranceChargeCode,
+  ReinsuranceChargeDirection,
+  ReinsuranceChargeRateType,
+  ReinsuranceChargeRoundingMode,
+  ReinsuranceChargeType,
 } from '../../prisma/generated/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlacementFinancialActivityReader } from './placement-financial-activity.reader';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 import { PlacementNotesService } from './placement-notes.service';
+import {
+  ChargeCalculationInput,
+  ReinsuranceChargeSettingsService,
+} from '../settings/reinsurance-charge-settings.service';
 
 describe('PlacementNotesService', () => {
   type PrismaMethod = jest.MockedFunction<(args: unknown) => Promise<unknown>>;
@@ -90,6 +100,7 @@ describe('PlacementNotesService', () => {
     endorsementParticipantId: null,
     endorsementParticipant: null,
     endorsementClosing: null,
+    appliedCharges: null,
   };
 
   const confirmedClosing = {
@@ -179,6 +190,9 @@ describe('PlacementNotesService', () => {
   };
   let service: PlacementNotesService;
   let lockPolicy: PlacementFinancialLockPolicy;
+  let chargeSettings: {
+    calculateCharges: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = {
@@ -208,7 +222,33 @@ describe('PlacementNotesService', () => {
         callback(prisma),
       ),
     };
-    service = new PlacementNotesService(prisma as unknown as PrismaService);
+    chargeSettings = {
+      calculateCharges: jest.fn(
+        (_tenantId: string, input: ChargeCalculationInput) => {
+          const grossAmount = input.grossAmount;
+          const commissionAmount = input.commissionAmount ?? 0;
+          const brokerageAmount = input.brokerageAmount ?? 0;
+          const netBeforeCharges =
+            grossAmount - commissionAmount - brokerageAmount;
+          return Promise.resolve({
+            currency: input.currency,
+            effectiveAt: (input.effectiveAt ?? new Date()).toISOString(),
+            grossAmount,
+            commissionAmount,
+            brokerageAmount,
+            netBeforeCharges,
+            additions: 0,
+            deductions: 0,
+            netAmount: netBeforeCharges,
+            charges: [],
+          });
+        },
+      ),
+    };
+    service = new PlacementNotesService(
+      prisma as unknown as PrismaService,
+      chargeSettings as unknown as ReinsuranceChargeSettingsService,
+    );
     lockPolicy = new PlacementFinancialLockPolicy(
       new PlacementFinancialActivityReader(prisma as unknown as PrismaService),
     );
@@ -273,6 +313,90 @@ describe('PlacementNotesService', () => {
       netAmount: 6750,
     });
     expect(result.noteNumber).toBe('DN-001');
+  });
+
+  it('snapshots configured charge calculations onto debit notes', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementClosing.findMany.mockResolvedValue([
+      {
+        grossPremium: new Prisma.Decimal('10000.00'),
+        commissionAmount: new Prisma.Decimal('1000.00'),
+        currency: 'USD',
+      },
+    ]);
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue(note);
+    chargeSettings.calculateCharges.mockResolvedValueOnce({
+      currency: 'USD',
+      effectiveAt: '2026-06-04T12:00:00.000Z',
+      grossAmount: 10000,
+      commissionAmount: 1000,
+      brokerageAmount: 0,
+      netBeforeCharges: 9000,
+      additions: 0,
+      deductions: 540,
+      netAmount: 8460,
+      charges: [
+        {
+          configurationId: 'charge-nic',
+          code: ReinsuranceChargeCode.NIC_LEVY,
+          name: 'NIC Levy',
+          chargeType: ReinsuranceChargeType.LEVY,
+          rateType: ReinsuranceChargeRateType.PERCENTAGE,
+          rate: '1',
+          calculationBasis:
+            ReinsuranceChargeCalculationBasis.NET_BEFORE_CHARGES,
+          direction: ReinsuranceChargeDirection.DEDUCTION,
+          currency: null,
+          effectiveFrom: '2026-01-01T00:00:00.000Z',
+          effectiveTo: null,
+          roundingMode: ReinsuranceChargeRoundingMode.HALF_UP,
+          decimalPlaces: 2,
+          basisAmount: 9000,
+          amount: 90,
+        },
+        {
+          configurationId: 'charge-wht',
+          code: ReinsuranceChargeCode.WITHHOLDING_TAX,
+          name: 'Withholding Tax',
+          chargeType: ReinsuranceChargeType.TAX,
+          rateType: ReinsuranceChargeRateType.PERCENTAGE,
+          rate: '5',
+          calculationBasis:
+            ReinsuranceChargeCalculationBasis.NET_BEFORE_CHARGES,
+          direction: ReinsuranceChargeDirection.DEDUCTION,
+          currency: null,
+          effectiveFrom: '2026-01-01T00:00:00.000Z',
+          effectiveTo: null,
+          roundingMode: ReinsuranceChargeRoundingMode.HALF_UP,
+          decimalPlaces: 2,
+          basisAmount: 9000,
+          amount: 450,
+        },
+      ],
+    });
+
+    await service.createDebitNote(user, 'placement-1');
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      grossAmount: 10000,
+      commissionAmount: 1000,
+      nicLevyPercent: 1,
+      nicLevyAmount: 90,
+      withholdingTaxPercent: 5,
+      withholdingTaxAmount: 450,
+      netAmount: 8460,
+    });
+    expect(createArgs.data.appliedCharges).toMatchObject({
+      version: 1,
+      netBeforeCharges: 9000,
+      deductions: 540,
+      netAmount: 8460,
+    });
   });
 
   it('allows locked placements to generate notes from confirmed closings without unlocking them', async () => {

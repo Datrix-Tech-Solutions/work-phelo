@@ -266,6 +266,7 @@ export const RESOURCE_ACTIONS: Record<string, string[]> = {
   'operations.reinsurance.email-settings': ['VIEW', 'EDIT'],
   'operations.reinsurance.reports': ['VIEW', 'EXPORT'],
   'operations.reinsurance.settings': ['VIEW', 'EDIT'],
+  'operations.reinsurance.taxes-levies': ['VIEW', 'CREATE', 'EDIT', 'DELETE'],
 };
 
 // All seeded resource actions stay in RESOURCE_ACTIONS so hidden or future

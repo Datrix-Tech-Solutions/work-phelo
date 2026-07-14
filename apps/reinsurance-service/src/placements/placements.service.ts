@@ -1330,9 +1330,10 @@ export class PlacementsService {
     const totalCommissionPct = commission + brokerageFee;
     const commissionAmount =
       yourPremium !== null ? (totalCommissionPct / 100) * yourPremium : null;
-    const foreignCedant = this.isForeignCedant(placement.cedant);
-    const nicLevyPct = foreignCedant ? 1 : 0;
-    const withholdingTaxPct = foreignCedant ? 5 : 0;
+    // Official tax/levy amounts now come from tenant charge configuration when
+    // financial notes are generated. Slip previews must not assume statutory rates.
+    const nicLevyPct = 0;
+    const withholdingTaxPct = 0;
     const nicLevyAmount =
       yourPremium !== null ? (nicLevyPct / 100) * yourPremium : 0;
     const withholdingTaxAmount =

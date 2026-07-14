@@ -141,6 +141,14 @@ export class PlacementNoteResponseDto {
   @ApiProperty({ type: String, example: '3712.50' })
   netAmount!: string;
 
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    description:
+      'Immutable snapshot of charge configurations and calculated charge lines applied when the note was generated.',
+  })
+  appliedCharges!: Record<string, unknown> | null;
+
   @ApiProperty({ type: String, format: 'date-time' })
   noteDate!: string;
 
