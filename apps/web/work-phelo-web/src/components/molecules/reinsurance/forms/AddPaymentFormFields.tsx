@@ -1,13 +1,17 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { Controller, UseFormReturn, useWatch } from 'react-hook-form';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { MultiSelect } from '@/components/atoms/MultiSelect';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { usePaymentEligibleFacultatives, useCurrencyOptions } from '@/hooks';
+import { api } from '@/lib/api';
+import { summarizePlacementPaymentFinancials } from '@/lib/reinsurance/payment-calculations';
 import { cn, inputClass } from '@/lib/utils';
+import type { PlacementParticipantClosing, PlacementPayment } from '@/types/reinsurance';
 
 export interface AddPaymentFormValues {
   cedantId: string;
@@ -87,6 +91,49 @@ export function AddPaymentFormFields({
 
   const cedantId = watch('cedantId');
   const businessIds = watch('businessIds');
+  const paymentType = watch('paymentType');
+  const paymentCurrency = watch('currency');
+  const amountValue = watch('amount');
+  const allocations = useWatch({ control, name: 'allocations' });
+
+  const parsedAmount = parseFloat(amountValue) || 0;
+
+  const selectedFacultatives = useMemo(
+    () => facultatives.filter((f) => businessIds.includes(f.id)),
+    [facultatives, businessIds],
+  );
+
+  const financialQueries = useQueries({
+    queries: selectedFacultatives.map((placement) => ({
+      queryKey: ['reinsurance', 'placements', placement.id, 'payment-financial-summary'],
+      queryFn: async () => {
+        const [closingsRes, paymentsRes] = await Promise.all([
+          api.get(`/operations/reinsurance/placements/${placement.id}/closings`),
+          api.get(`/operations/reinsurance/placements/${placement.id}/payments`),
+        ]);
+        const closings = (closingsRes.data?.items ??
+          closingsRes.data ??
+          []) as PlacementParticipantClosing[];
+        const payments = (paymentsRes.data?.items ?? paymentsRes.data ?? []) as PlacementPayment[];
+        return summarizePlacementPaymentFinancials({
+          placementId: placement.id,
+          closings,
+          payments,
+        });
+      },
+      enabled: selectedFacultatives.length > 0,
+      staleTime: 15_000,
+    })),
+  });
+
+  const financialSummaryByPlacementId = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof summarizePlacementPaymentFinancials>>();
+    selectedFacultatives.forEach((placement, index) => {
+      const summary = financialQueries[index]?.data;
+      if (summary) map.set(placement.id, summary);
+    });
+    return map;
+  }, [financialQueries, selectedFacultatives]);
 
   useEffect(() => {
     if (preFilledPlacement) {
@@ -110,13 +157,14 @@ export function AddPaymentFormFields({
       facultatives
         .filter((f) => f.cedant.id === cedantId && f.status !== 'CANCELLED')
         .map((f) => {
-          const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-          const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+          const summary = financialSummaryByPlacementId.get(f.id);
+          const outstanding = summary?.outstanding;
+          const currency = summary?.currency ?? f.currency;
           const parts = [
             f.classOfBusiness,
             f.title,
-            f.premium != null
-              ? `${f.currency ? f.currency + ' ' : ''}${netPremium.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+            outstanding != null
+              ? `${currency ? currency + ' ' : ''}${outstanding.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} outstanding`
               : null,
           ].filter(Boolean);
           return {
@@ -125,41 +173,39 @@ export function AddPaymentFormFields({
             sublabel: parts.join(' · '),
           };
         }),
-    [facultatives, cedantId],
+    [facultatives, cedantId, financialSummaryByPlacementId],
   );
 
   const totalExpected = useMemo(() => {
     const selected = facultatives.filter((f) => businessIds.includes(f.id));
     return selected.reduce((sum, f) => {
-      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-      return sum + facPremium * (1 - (f.commission ?? 0) / 100);
+      return sum + (financialSummaryByPlacementId.get(f.id)?.outstanding ?? 0);
     }, 0);
-  }, [facultatives, businessIds]);
+  }, [facultatives, businessIds, financialSummaryByPlacementId]);
 
-  const expectedCurrency = useMemo(
-    () => facultatives.find((f) => businessIds.includes(f.id))?.currency ?? null,
-    [facultatives, businessIds],
-  );
-
-  const paymentType = watch('paymentType');
-  const paymentCurrency = watch('currency');
-  const amountValue = watch('amount');
-  const allocations = useWatch({ control, name: 'allocations' });
-
-  const parsedAmount = parseFloat(amountValue) || 0;
-
-  const selectedFacultatives = useMemo(
-    () => facultatives.filter((f) => businessIds.includes(f.id)),
-    [facultatives, businessIds],
-  );
+  const expectedCurrency = useMemo(() => {
+    const selected = facultatives.find((f) => businessIds.includes(f.id));
+    return selected
+      ? (financialSummaryByPlacementId.get(selected.id)?.currency ?? selected.currency)
+      : null;
+  }, [facultatives, businessIds, financialSummaryByPlacementId]);
 
   const allSameCurrency = useMemo(() => {
     if (selectedFacultatives.length <= 1) return true;
-    const first = selectedFacultatives[0].currency;
-    return selectedFacultatives.every((f) => f.currency === first);
-  }, [selectedFacultatives]);
+    const first =
+      financialSummaryByPlacementId.get(selectedFacultatives[0].id)?.currency ??
+      selectedFacultatives[0].currency;
+    return selectedFacultatives.every(
+      (f) => (financialSummaryByPlacementId.get(f.id)?.currency ?? f.currency) === first,
+    );
+  }, [financialSummaryByPlacementId, selectedFacultatives]);
 
-  const businessCurrency = preFilledPlacement?.currency ?? expectedCurrency;
+  const businessCurrency =
+    (preFilledPlacement
+      ? financialSummaryByPlacementId.get(preFilledPlacement.id)?.currency
+      : undefined) ??
+    preFilledPlacement?.currency ??
+    expectedCurrency;
   const showRate =
     !!paymentCurrency &&
     !!businessCurrency &&
@@ -177,15 +223,14 @@ export function AddPaymentFormFields({
     if (!showAllocation) return;
     const newAllocations: Record<string, string> = {};
     selectedFacultatives.forEach((f) => {
-      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-      const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+      const outstanding = financialSummaryByPlacementId.get(f.id)?.outstanding ?? 0;
       const proportion =
-        totalExpected > 0 ? netPremium / totalExpected : 1 / selectedFacultatives.length;
+        totalExpected > 0 ? outstanding / totalExpected : 1 / selectedFacultatives.length;
       newAllocations[f.id] = (proportion * parsedAmount).toFixed(2);
     });
     setValue('allocations', newAllocations);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAllocation, parsedAmount, totalExpected]);
+  }, [showAllocation, parsedAmount, totalExpected, financialSummaryByPlacementId]);
 
   const allocatedTotal = Object.values(allocations ?? {}).reduce(
     (sum, v) => sum + (parseFloat(v) || 0),
@@ -214,10 +259,14 @@ export function AddPaymentFormFields({
     <div className="flex flex-col gap-2 p-3 bg-gray-50 rounded-xl border border-gray-200">
       <p className="text-xs font-semibold text-gray-700">Allocate Payment</p>
       {selectedFacultatives.map((f) => {
-        const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-        const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
+        const summary = financialSummaryByPlacementId.get(f.id);
+        const outstanding = summary?.outstanding ?? 0;
+        const placementCurrency = summary?.currency ?? f.currency;
         const rowNeedsRate =
-          !allSameCurrency && !!paymentCurrency && !!f.currency && paymentCurrency !== f.currency;
+          !allSameCurrency &&
+          !!paymentCurrency &&
+          !!placementCurrency &&
+          paymentCurrency !== placementCurrency;
         return (
           <div key={f.id} className="flex items-center gap-2">
             <div className="flex-1 min-w-0">
@@ -225,8 +274,8 @@ export function AddPaymentFormFields({
                 {f.policyNumber ?? f.reference}
               </p>
               <p className="text-xs text-gray-400">
-                {f.currency ? `${f.currency} ` : ''}
-                {fmtNum(netPremium)} due
+                {placementCurrency ? `${placementCurrency} ` : ''}
+                {fmtNum(outstanding)} outstanding from confirmed closings
               </p>
             </div>
             {rowNeedsRate && (

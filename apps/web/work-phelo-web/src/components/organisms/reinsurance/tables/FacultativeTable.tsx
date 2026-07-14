@@ -58,8 +58,8 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
 
 function netPremiumFor(row: Facultative): number {
   const facPremium =
-    row.premium != null && row.facultativeOffer != null
-      ? (row.facultativeOffer / 100) * row.premium
+    row.premium != null && row.confirmedPlacedPercent != null
+      ? (row.confirmedPlacedPercent / 100) * row.premium
       : 0;
   return row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
 }
@@ -68,7 +68,7 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const netPremium = netPremiumFor(placement);
   const paid = payments
-    .filter((p) => p.status === 'RECORDED')
+    .filter((p) => p.status === 'RECORDED' && !p.reversalOfPaymentId)
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 
   let paymentStatus: PaymentStatus = 'Outstanding';
@@ -233,7 +233,7 @@ export function FacultativeTable({
       const payments = paymentQueries[i]?.data ?? [];
       const netPremium = netPremiumFor(row);
       const paid = payments
-        .filter((p) => p.status === 'RECORDED')
+        .filter((p) => p.status === 'RECORDED' && !p.reversalOfPaymentId)
         .reduce((sum, p) => sum + parseFloat(p.amount), 0);
       let status: PaymentStatus = 'Outstanding';
       if (netPremium > 0 && paid >= netPremium) status = 'Paid';

@@ -16,6 +16,7 @@ import {
   useFacultativePlacement,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import { summarizePlacementPaymentFinancials } from '@/lib/reinsurance/payment-calculations';
 import { useToastStore } from '@/store/toast.store';
 import { api } from '@/lib/api';
 import { Facultative, PlacementParticipantClosing, PlacementPayment } from '@/types/reinsurance';
@@ -67,15 +68,6 @@ export default function AddPaymentForm({
     const parsedAmount = parseFloat(values.amount) || 0;
     const hasAllocations = Object.keys(values.allocations).length > 0;
 
-    const totalNetPremium = selectedFacs.reduce((sum, f) => {
-      const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-      return sum + facPremium * (1 - (f.commission ?? 0) / 100);
-    }, 0);
-
-    const allSameCurrency =
-      selectedFacs.length <= 1 ||
-      selectedFacs.every((f) => f.currency === selectedFacs[0].currency);
-
     const resolvedDate =
       values.paymentType === 'cheque'
         ? values.valueDate
@@ -89,17 +81,31 @@ export default function AddPaymentForm({
     const notesStr = values.paymentType === 'cheque' ? 'Cheque payment' : 'Bank transfer';
 
     try {
-      const closingChecks = await Promise.all(
+      const financialChecks = await Promise.all(
         selectedFacs.map(async (f) => {
-          const res = await api.get(`/operations/reinsurance/placements/${f.id}/closings`);
-          const closings = (res.data?.items ?? res.data ?? []) as PlacementParticipantClosing[];
+          const [closingsRes, paymentsRes] = await Promise.all([
+            api.get(`/operations/reinsurance/placements/${f.id}/closings`),
+            api.get(`/operations/reinsurance/placements/${f.id}/payments`),
+          ]);
+          const closings = (closingsRes.data?.items ??
+            closingsRes.data ??
+            []) as PlacementParticipantClosing[];
+          const payments = (paymentsRes.data?.items ??
+            paymentsRes.data ??
+            []) as PlacementPayment[];
           return {
             placement: f,
-            hasConfirmedClosing: closings.some((closing) => closing.status === 'CONFIRMED'),
+            summary: summarizePlacementPaymentFinancials({
+              placementId: f.id,
+              closings,
+              payments,
+            }),
           };
         }),
       );
-      const missingConfirmedClosing = closingChecks.find((check) => !check.hasConfirmedClosing);
+      const missingConfirmedClosing = financialChecks.find(
+        (check) => check.summary.confirmedClosingCount === 0,
+      );
       if (missingConfirmedClosing) {
         const message = `At least one confirmed closing is required before recording payment for ${missingConfirmedClosing.placement.reference}.`;
         setPaymentGuardError(message);
@@ -107,22 +113,51 @@ export default function AddPaymentForm({
         return;
       }
 
+      const unsafeCurrency = financialChecks.find((check) => check.summary.warnings.length > 0);
+      if (unsafeCurrency) {
+        const message = `${unsafeCurrency.placement.reference} has mixed confirmed closing currencies. Record payments separately by currency.`;
+        setPaymentGuardError(message);
+        addToast({ message, type: 'error' });
+        return;
+      }
+
+      const noOutstanding = financialChecks.find((check) => check.summary.outstanding <= 0);
+      if (noOutstanding) {
+        const message = `${noOutstanding.placement.reference} has no outstanding confirmed closing premium.`;
+        setPaymentGuardError(message);
+        addToast({ message, type: 'error' });
+        return;
+      }
+
+      const totalOutstanding = financialChecks.reduce(
+        (sum, check) => sum + check.summary.outstanding,
+        0,
+      );
+      const allSameCurrency =
+        financialChecks.length <= 1 ||
+        financialChecks.every(
+          (check) => check.summary.currency === financialChecks[0].summary.currency,
+        );
+
       const calls = selectedFacs.map(async (f) => {
+        const financial = financialChecks.find((check) => check.placement.id === f.id);
+        if (!financial) throw new Error(`Missing confirmed closing totals for ${f.reference}`);
+
         let rawAmount: number;
         if (selectedFacs.length === 1) {
           rawAmount = parsedAmount;
         } else if (hasAllocations && values.allocations[f.id]) {
           rawAmount = parseFloat(values.allocations[f.id]) || 0;
         } else {
-          const facPremium = ((f.facultativeOffer ?? 0) / 100) * (f.premium ?? 0);
-          const netPremium = facPremium * (1 - (f.commission ?? 0) / 100);
           const proportion =
-            totalNetPremium > 0 ? netPremium / totalNetPremium : 1 / selectedFacs.length;
+            totalOutstanding > 0
+              ? financial.summary.outstanding / totalOutstanding
+              : 1 / selectedFacs.length;
           rawAmount = proportion * parsedAmount;
         }
 
         const paymentCurrency = values.currency;
-        const placementCurrency = f.currency ?? values.currency;
+        const placementCurrency = financial.summary.currency ?? f.currency ?? values.currency;
         let submittedAmount = rawAmount;
 
         if (paymentCurrency !== placementCurrency) {
@@ -134,6 +169,17 @@ export default function AddPaymentForm({
         }
 
         submittedAmount = Math.round(submittedAmount * 100) / 100;
+        if (submittedAmount > financial.summary.outstanding + 0.01) {
+          throw new Error(
+            `Payment for ${f.reference} exceeds outstanding confirmed closing premium of ${placementCurrency} ${financial.summary.outstanding.toLocaleString(
+              undefined,
+              {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              },
+            )}.`,
+          );
+        }
 
         return createPayment.mutateAsync({
           placementId: f.id,

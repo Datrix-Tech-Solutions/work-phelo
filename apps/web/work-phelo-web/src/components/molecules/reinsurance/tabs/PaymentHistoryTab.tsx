@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { usePlacementPayments, useReversePayment } from '@/hooks';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
@@ -48,11 +50,13 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
   const reversePayment = useReversePayment();
   const addToast = useToastStore((s) => s.addToast);
   const [receiptTarget, setReceiptTarget] = useState<PlacementPayment | null>(null);
+  const [reversalTarget, setReversalTarget] = useState<PlacementPayment | null>(null);
 
   const handleReverse = async (payment: PlacementPayment) => {
     try {
       await reversePayment.mutateAsync({ placementId, paymentId: payment.id });
       addToast({ message: 'Payment reversed successfully', type: 'success' });
+      setReversalTarget(null);
     } catch (error) {
       addToast({ message: extractError(error), type: 'error' });
     }
@@ -73,9 +77,16 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
     },
     {
       key: 'counterparty',
-      label: 'Cedant',
+      label: 'Counterparty',
       width: '1.5fr',
-      render: (row) => <span className="text-gray-700">{row.counterparty.name}</span>,
+      render: (row) => (
+        <div className="flex flex-col">
+          <span className="text-gray-700">{row.counterparty.name}</span>
+          <span className="text-xs text-gray-400">
+            {row.closing?.closingNumber ?? 'Placement-level receipt'}
+          </span>
+        </div>
+      ),
     },
     {
       key: 'notes',
@@ -123,9 +134,29 @@ export function PaymentHistoryTab({ placementId, placement }: PaymentHistoryTabP
         rowActions={(row: PlacementPayment) => [
           { label: 'Preview Receipt', onClick: () => setReceiptTarget(row) },
           ...(row.status === 'RECORDED' && !row.reversalOfPaymentId
-            ? [{ label: 'Reverse', onClick: () => handleReverse(row) }]
+            ? [{ label: 'Reverse', onClick: () => setReversalTarget(row) }]
             : []),
         ]}
+      />
+
+      <Modal
+        isOpen={!!reversalTarget}
+        onClose={() => setReversalTarget(null)}
+        title="Reverse Payment?"
+        description="This will keep the original payment history and create an auditable reversal record."
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setReversalTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => reversalTarget && handleReverse(reversalTarget)}
+              disabled={reversePayment.isPending}
+            >
+              {reversePayment.isPending ? 'Reversing…' : 'Reverse Payment'}
+            </Button>
+          </>
+        }
       />
 
       {receiptTarget && (

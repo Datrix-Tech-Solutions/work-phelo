@@ -64,15 +64,15 @@ const STATUS_FILTER_OPTIONS = [
 
 function netPremiumFor(row: Facultative): number {
   const facPremium =
-    row.premium != null && row.facultativeOffer != null
-      ? (row.facultativeOffer / 100) * row.premium
+    row.premium != null && row.confirmedPlacedPercent != null
+      ? (row.confirmedPlacedPercent / 100) * row.premium
       : 0;
   return row.commission != null ? facPremium * (1 - row.commission / 100) : facPremium;
 }
 
-function totalPaidFor(payments: { amount: string; status: string }[]): number {
+function totalPaidFor(payments: PlacementPayment[]): number {
   return payments
-    .filter((p) => p.status === 'RECORDED')
+    .filter((p) => p.status === 'RECORDED' && !p.reversalOfPaymentId)
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
 
@@ -160,17 +160,11 @@ const COLUMNS: Column<Facultative>[] = [
   },
   {
     key: 'premium',
-    label: 'Net Premium',
+    label: 'Est. Net Premium',
     width: '1.1fr',
     render: (row) => {
-      const facPremium =
-        row.premium != null && row.facultativeOffer != null
-          ? (row.facultativeOffer / 100) * row.premium
-          : null;
       const netPremium =
-        facPremium != null && row.commission != null
-          ? facPremium * (1 - row.commission / 100)
-          : facPremium;
+        row.confirmedPlacedPercent != null && row.premium != null ? netPremiumFor(row) : null;
       return (
         <span className="font-medium text-gray-900 whitespace-nowrap">
           {netPremium != null ? `${row.currency ?? ''} ${fmtAmount(netPremium)}` : '—'}
@@ -197,7 +191,7 @@ const COLUMNS: Column<Facultative>[] = [
   },
   {
     key: 'collectedToDate' as keyof Facultative,
-    label: 'Paid / Outstanding',
+    label: 'Est. Paid / Outstanding',
     width: '1.2fr',
     render: (row) => <PaymentSummaryCell placement={row} />,
   },

@@ -24,6 +24,7 @@ import {
   useAcceptAndConfirmParticipant,
   facultativePlacementsKey,
   facultativePlacementKey,
+  paymentEligibleFacultativesKey,
   placementClosingsKey,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
@@ -158,6 +159,7 @@ export function DistributionListTab({ placement }: DistributionListTabProps) {
     () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: facultativePlacementsKey }),
+        queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey }),
         queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placement.id) }),
         queryClient.invalidateQueries({ queryKey: placementClosingsKey(placement.id) }),
         queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] }),

@@ -24,12 +24,12 @@ import {
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { openPdfBlob } from '@/lib/openPdfBlob';
+import { parseDecimalAmount } from '@/lib/reinsurance/payment-calculations';
 import { useToastStore } from '@/store/toast.store';
 import {
   Facultative,
   PlacementDocument,
   PlacementNote,
-  PlacementParticipant,
   PlacementParticipantClosing,
 } from '@/types/reinsurance';
 
@@ -39,10 +39,16 @@ interface ClosingRow {
   counterpartyId: string;
   reinsurerCompany: string;
   signedShare: number;
-  signedGrossPremium: number;
+  grossPremium: number | null;
+  commissionAmount: number | null;
+  brokerageAmount: number | null;
+  netPremium: number | null;
+  currency: string | null;
   brokerageFee: number;
   status: PlacementParticipantClosing['status'];
   closingNumber: string;
+  issuedAt: string | null;
+  confirmedAt: string | null;
   closing: PlacementParticipantClosing;
 }
 
@@ -50,34 +56,41 @@ function fmtPct(val: number) {
   return `${val.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 4 })}%`;
 }
 
-function fmtAmount(val: number, currency: string | null) {
+function fmtAmount(val: number | null, currency: string | null) {
+  if (val == null) return '—';
   return `${currency ?? ''} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`.trim();
 }
 
-function parseAmount(val: string | number | null | undefined) {
-  if (val == null) return 0;
-  const amount = typeof val === 'number' ? val : parseFloat(val);
-  return Number.isFinite(amount) ? amount : 0;
+function fmtDate(iso: string | null) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
-function toClosingRow(
-  closing: PlacementParticipantClosing,
-  participant: PlacementParticipant | undefined,
-  premium: number,
-): ClosingRow {
-  const fallbackCounterpartyId = participant?.counterpartyId ?? '';
-  const fallbackName = participant?.counterparty?.name ?? 'Unknown reinsurer';
-  const signedShare = parseAmount(participant?.signedLinePercent ?? participant?.sharePercent);
+function toClosingRow(closing: PlacementParticipantClosing): ClosingRow {
+  const counterparty = closing.participant?.counterparty;
+  const signedShare = parseDecimalAmount(closing.signedLinePercent);
+  const snapshotAmount = (value: string | null) =>
+    value == null ? null : parseDecimalAmount(value);
   return {
     id: closing.id,
     participantId: closing.participantId,
-    counterpartyId: fallbackCounterpartyId,
-    reinsurerCompany: fallbackName,
+    counterpartyId: closing.participant?.counterpartyId ?? counterparty?.id ?? '',
+    reinsurerCompany: counterparty?.name ?? 'Unknown reinsurer',
     signedShare,
-    signedGrossPremium: (signedShare / 100) * premium,
-    brokerageFee: parseAmount(participant?.brokerageFee),
+    grossPremium: snapshotAmount(closing.grossPremium),
+    commissionAmount: snapshotAmount(closing.commissionAmount),
+    brokerageAmount: snapshotAmount(closing.brokerageAmount),
+    netPremium: snapshotAmount(closing.netPremium),
+    currency: closing.currency,
+    brokerageFee: parseDecimalAmount(closing.brokeragePercent),
     status: closing.status,
     closingNumber: closing.closingNumber,
+    issuedAt: closing.issuedAt,
+    confirmedAt: closing.confirmedAt,
     closing,
   };
 }
@@ -128,17 +141,9 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
     }),
   );
 
-  const premium = placement.premium ?? 0;
-
   const rows: ClosingRow[] = closings
     .filter((closing) => closing.status !== 'VOID')
-    .map((closing) =>
-      toClosingRow(
-        closing,
-        placement.participants.find((p) => p.id === closing.participantId),
-        premium,
-      ),
-    );
+    .map((closing) => toClosingRow(closing));
 
   const placementNotes = notes.filter(
     (note) => note.type === 'DEBIT_NOTE' || note.type === 'CREDIT_NOTE',
@@ -290,7 +295,12 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       key: 'closingNumber',
       label: 'Closing No.',
       width: '1fr',
-      render: (row) => <span className="font-medium text-gray-900">{row.closingNumber}</span>,
+      render: (row) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-gray-900">{row.closingNumber}</span>
+          <span className="text-[11px] text-gray-400">{row.id.slice(0, 8)}</span>
+        </div>
+      ),
     },
     {
       key: 'reinsurerCompany',
@@ -305,20 +315,41 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
       render: (row) => <span className="text-gray-700">{fmtPct(row.signedShare)}</span>,
     },
     {
-      key: 'signedGrossPremium',
-      label: 'Signed Gross Premium',
+      key: 'grossPremium',
+      label: 'Gross Premium',
       width: '1.5fr',
       render: (row) => (
-        <span className="text-gray-700">
-          {fmtAmount(row.signedGrossPremium, placement.currency)}
-        </span>
+        <span className="text-gray-700">{fmtAmount(row.grossPremium, row.currency)}</span>
+      ),
+    },
+    {
+      key: 'netPremium',
+      label: 'Net Premium',
+      width: '1.5fr',
+      render: (row) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-medium text-gray-900">
+            {fmtAmount(row.netPremium, row.currency)}
+          </span>
+          <span className="text-[11px] text-gray-400">
+            Comm {fmtAmount(row.commissionAmount, row.currency)} · Brok{' '}
+            {fmtAmount(row.brokerageAmount, row.currency)}
+          </span>
+        </div>
       ),
     },
     {
       key: 'status',
       label: 'Status',
       width: '1fr',
-      render: (row) => <span className="text-gray-700">{row.status}</span>,
+      render: (row) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="text-gray-700">{row.status}</span>
+          <span className="text-[11px] text-gray-400">
+            Issued {fmtDate(row.issuedAt)} · Confirmed {fmtDate(row.confirmedAt)}
+          </span>
+        </div>
+      ),
     },
     {
       key: 'actions',

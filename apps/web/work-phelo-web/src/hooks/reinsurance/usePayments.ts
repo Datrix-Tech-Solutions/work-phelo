@@ -9,6 +9,9 @@ import {
 } from '@/types/reinsurance';
 import {
   facultativePlacementKey,
+  facultativePlacementsKey,
+  paymentEligibleFacultativesKey,
+  placementClosingsKey,
   placementLockStatusKey,
   useFacultatives,
 } from './useFacultatives';
@@ -17,6 +20,8 @@ const BASE = '/operations/reinsurance/placements';
 
 const paymentsKey = (placementId: string) =>
   ['reinsurance', 'placements', placementId, 'payments'] as const;
+const paymentFinancialSummaryKey = (placementId: string) =>
+  ['reinsurance', 'placements', placementId, 'payment-financial-summary'] as const;
 
 export function usePlacementPayments(placementId: string) {
   return useQuery({
@@ -42,8 +47,13 @@ export function useCreatePlacementPayment() {
     },
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentFinancialSummaryKey(placementId) });
       queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: facultativePlacementsKey });
+      queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey });
+      queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
     },
   });
 }
@@ -57,8 +67,13 @@ export function useReversePayment() {
     },
     onSuccess: (_, { placementId }) => {
       queryClient.invalidateQueries({ queryKey: paymentsKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: paymentFinancialSummaryKey(placementId) });
       queryClient.invalidateQueries({ queryKey: facultativePlacementKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: facultativePlacementsKey });
+      queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey });
+      queryClient.invalidateQueries({ queryKey: placementClosingsKey(placementId) });
       queryClient.invalidateQueries({ queryKey: placementLockStatusKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
     },
   });
 }
@@ -74,13 +89,15 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
 
 function netPremiumFor(p: Facultative): number {
   const fac =
-    p.premium != null && p.facultativeOffer != null ? (p.facultativeOffer / 100) * p.premium : 0;
+    p.premium != null && p.confirmedPlacedPercent != null
+      ? (p.confirmedPlacedPercent / 100) * p.premium
+      : 0;
   return p.commission != null ? fac * (1 - p.commission / 100) : fac;
 }
 
 function totalPaidFor(payments: PlacementPayment[]): number {
   return payments
-    .filter((p) => p.status === 'RECORDED')
+    .filter((p) => p.status === 'RECORDED' && !p.reversalOfPaymentId)
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 }
 
@@ -171,7 +188,8 @@ export function useReinsurerPaymentSummary(
           (pmt) =>
             pmt.type === 'REINSURER_DISBURSEMENT' &&
             pmt.counterpartyId === reinsurerId &&
-            pmt.status === 'RECORDED',
+            pmt.status === 'RECORDED' &&
+            !pmt.reversalOfPaymentId,
         )
         .forEach((pmt) => {
           map.set(pmt.currency, (map.get(pmt.currency) ?? 0) + parseFloat(pmt.amount));
@@ -208,7 +226,12 @@ export function useCedantPaymentSummary(placements: Facultative[]): {
     paymentQueries.forEach((q) => {
       const payments = q.data ?? [];
       payments
-        .filter((pmt) => pmt.type === 'PREMIUM_RECEIVED' && pmt.status === 'RECORDED')
+        .filter(
+          (pmt) =>
+            pmt.type === 'PREMIUM_RECEIVED' &&
+            pmt.status === 'RECORDED' &&
+            !pmt.reversalOfPaymentId,
+        )
         .forEach((pmt) => {
           map.set(pmt.currency, (map.get(pmt.currency) ?? 0) + parseFloat(pmt.amount));
         });

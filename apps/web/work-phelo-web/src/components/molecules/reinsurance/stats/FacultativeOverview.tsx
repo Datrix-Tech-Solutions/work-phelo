@@ -62,18 +62,18 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
 
   const paymentStatus = useMemo<PaymentStatus>(() => {
     const facPrem =
-      placement.premium != null && placement.facultativeOffer != null
-        ? (placement.facultativeOffer / 100) * placement.premium
+      placement.premium != null && placement.confirmedPlacedPercent != null
+        ? (placement.confirmedPlacedPercent / 100) * placement.premium
         : 0;
     const netPremium =
       placement.commission != null ? facPrem * (1 - placement.commission / 100) : facPrem;
     const paid = payments
-      .filter((p) => p.status === 'RECORDED')
+      .filter((p) => p.status === 'RECORDED' && !p.reversalOfPaymentId)
       .reduce((sum, p) => sum + parseFloat(p.amount), 0);
     if (netPremium > 0 && paid >= netPremium) return 'Paid';
     if (paid > 0) return 'Part Payment';
     return 'Outstanding';
-  }, [payments, placement.premium, placement.facultativeOffer, placement.commission]);
+  }, [payments, placement.premium, placement.confirmedPlacedPercent, placement.commission]);
 
   const facOffer = placement.facultativeOffer ?? 0;
   const facSumInsured =

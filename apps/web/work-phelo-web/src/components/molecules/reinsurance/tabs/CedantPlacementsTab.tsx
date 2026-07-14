@@ -47,7 +47,9 @@ function fmtDate(iso: string | null): string {
 
 function netPremiumFor(p: Facultative): number {
   const facPremium =
-    p.premium != null && p.facultativeOffer != null ? (p.facultativeOffer / 100) * p.premium : 0;
+    p.premium != null && p.confirmedPlacedPercent != null
+      ? (p.confirmedPlacedPercent / 100) * p.premium
+      : 0;
   return p.commission != null ? facPremium * (1 - p.commission / 100) : facPremium;
 }
 
@@ -55,7 +57,7 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const netPremium = netPremiumFor(placement);
   const paid = payments
-    .filter((p) => p.status === 'RECORDED')
+    .filter((p) => p.status === 'RECORDED' && !p.reversalOfPaymentId)
     .reduce((sum, p) => sum + parseFloat(p.amount), 0);
 
   let paymentStatus: PaymentStatus = 'Outstanding';
@@ -113,12 +115,12 @@ const PLACEMENT_COLUMNS: Column<Facultative>[] = [
   },
   {
     key: 'commission',
-    label: 'Net Premium',
+    label: 'Est. Net Premium',
     width: '1.2fr',
     render: (row) => {
       const net =
-        row.premium != null && row.facultativeOffer != null && row.commission != null
-          ? (row.facultativeOffer / 100) * row.premium * (1 - row.commission / 100)
+        row.premium != null && row.confirmedPlacedPercent != null && row.commission != null
+          ? (row.confirmedPlacedPercent / 100) * row.premium * (1 - row.commission / 100)
           : null;
       return (
         <span className="font-medium text-gray-700 whitespace-nowrap">
@@ -281,7 +283,7 @@ export function CedantPlacementsTab({
           onClick={() => setFilter('pending')}
         />
         <FilterChip
-          label="Closed"
+          label="Placed / Closed"
           count={counts.closed}
           active={filter === 'closed'}
           onClick={() => setFilter('closed')}

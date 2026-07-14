@@ -84,7 +84,7 @@ export function ReinsurerPlacementsTab({
           onClick={() => setFilter('pending')}
         />
         <FilterChip
-          label="Closed"
+          label="Placed / Closed"
           count={counts.closed}
           active={filter === 'closed'}
           onClick={() => setFilter('closed')}
