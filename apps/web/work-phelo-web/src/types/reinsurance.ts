@@ -426,6 +426,9 @@ export interface Facultative {
   inceptionDate: string | null;
   expiryDate: string | null;
   createdAt: string;
+  archivedByUserId: string | null;
+  archiveReason: string | null;
+  archivedAt: string | null;
   status: FacultativeStatus;
   participants: PlacementParticipant[];
   totalOfferedPercent: number;

@@ -19,6 +19,7 @@ import {
 
 const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
+const ARCHIVED_FACULTATIVES_KEY = ['reinsurance', 'placements', 'archived'] as const;
 const placementQueryKey = (placementId: string) => [...FACULTATIVES_KEY, placementId] as const;
 
 export const facultativePlacementKey = (placementId: string) => placementQueryKey(placementId);
@@ -63,6 +64,17 @@ export function useFacultatives() {
       const res = await api.get(BASE);
       return extractList(res.data);
     },
+  });
+}
+
+export function useArchivedFacultatives(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: ARCHIVED_FACULTATIVES_KEY,
+    queryFn: async () => {
+      const res = await api.get(BASE, { params: { archived: true } });
+      return extractList(res.data);
+    },
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -121,11 +133,29 @@ export function useUpdateFacultativeStatus(placementId: string) {
 export function useDeleteFacultative() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      await api.delete(`${BASE}/${id}`);
+    mutationFn: async ({ id, archiveReason }: { id: string; archiveReason?: string }) => {
+      await api.delete(`${BASE}/${id}`, {
+        data: archiveReason ? { archiveReason } : undefined,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: ARCHIVED_FACULTATIVES_KEY });
+    },
+  });
+}
+
+export function useRestoreFacultative() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await api.post<Facultative>(`${BASE}/${id}/restore`);
+      return transformPlacement(res.data);
+    },
+    onSuccess: (_, id) => {
+      queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: ARCHIVED_FACULTATIVES_KEY });
+      queryClient.invalidateQueries({ queryKey: placementQueryKey(id) });
     },
   });
 }

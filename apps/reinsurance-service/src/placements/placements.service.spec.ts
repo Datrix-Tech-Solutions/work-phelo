@@ -53,6 +53,7 @@ describe('PlacementsService', () => {
     createdByUserId: 'user-1',
     updatedByUserId: 'user-1',
     archivedByUserId: null,
+    archiveReason: null,
     archivedAt: null,
     createdAt: new Date('2026-05-28T10:00:00.000Z'),
     updatedAt: new Date('2026-05-28T10:00:00.000Z'),
@@ -321,6 +322,49 @@ describe('PlacementsService', () => {
       totalOfferedPercent: 0,
       totalAcceptedPercent: 0,
       remainingPercent: 0,
+    });
+  });
+
+  it('lists archived records with the same filters, search and pagination', async () => {
+    const archivedPlacement = {
+      ...placement,
+      archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      archivedByUserId: 'user-1',
+      archiveReason: 'Duplicate placement',
+    };
+    prisma.placement.findMany.mockResolvedValue([archivedPlacement]);
+    prisma.placement.count.mockResolvedValue(1);
+
+    const result = await service.findAll('tenant-1', {
+      archived: true,
+      search: 'Acme',
+      status: PlacementStatus.DRAFT,
+      placementType: PlacementType.FACULTATIVE,
+      page: 3,
+      limit: 5,
+    });
+
+    const findManyArgs = prisma.placement.findMany.mock.calls[0]?.[0] as {
+      where?: { OR?: unknown };
+      orderBy?: unknown;
+      skip?: number;
+      take?: number;
+    };
+    expect(findManyArgs).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        archivedAt: { not: null },
+        status: PlacementStatus.DRAFT,
+        placementType: PlacementType.FACULTATIVE,
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: 10,
+      take: 5,
+    });
+    expect(Array.isArray(findManyArgs.where?.OR)).toBe(true);
+    expect(result.items[0]).toMatchObject({
+      archivedByUserId: 'user-1',
+      archiveReason: 'Duplicate placement',
     });
   });
 
@@ -1182,11 +1226,15 @@ describe('PlacementsService', () => {
     const archived = {
       ...placement,
       archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      archivedByUserId: 'user-1',
+      archiveReason: 'Duplicate placement',
     };
     prisma.placement.findFirst.mockResolvedValue(placement);
     prisma.placement.update.mockResolvedValue(archived);
 
-    await service.archive(user, 'placement-1');
+    await service.archive(user, 'placement-1', {
+      archiveReason: 'Duplicate placement',
+    });
 
     expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
       where: {
@@ -1195,9 +1243,31 @@ describe('PlacementsService', () => {
       },
       data: {
         archivedByUserId: 'user-1',
+        archiveReason: 'Duplicate placement',
       },
     });
-    expect(publisher.deleted).toHaveBeenCalled();
+    const updatedMock = publisher.updated as jest.MockedFunction<
+      (event: unknown) => Promise<void>
+    >;
+    const archiveEvent = updatedMock.mock.calls[0]?.[0] as {
+      changes?: { after?: Record<string, unknown> };
+    };
+    expect(archiveEvent.changes?.after).toMatchObject({
+      lifecycleEvent: 'PLACEMENT_ARCHIVED',
+      reason: 'Duplicate placement',
+    });
+  });
+
+  it('rejects archiving a placement that is already archived', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placement,
+      archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+    });
+
+    await expect(service.archive(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.placement.update).not.toHaveBeenCalled();
   });
 
   it('blocks archive when financial activity has locked the placement', async () => {
@@ -1212,6 +1282,108 @@ describe('PlacementsService', () => {
       ConflictException,
     );
     expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('restores an archived placement and clears archive metadata', async () => {
+    const archived = {
+      ...placement,
+      archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      archivedByUserId: 'user-1',
+      archiveReason: 'Duplicate placement',
+    };
+    const restored = {
+      ...placement,
+      archivedAt: null,
+      archivedByUserId: null,
+      archiveReason: null,
+    };
+    prisma.placement.findFirst
+      .mockResolvedValueOnce(archived)
+      .mockResolvedValueOnce(null);
+    prisma.placement.update.mockResolvedValue(restored);
+
+    await service.restore(user, 'placement-1');
+
+    expect(prisma.placement.findFirst.mock.calls[1]?.[0]).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        id: { not: 'placement-1' },
+        normalizedReference: 'fac-2026-0001',
+        archivedAt: null,
+      },
+      select: { id: true, reference: true },
+    });
+
+    expect(prisma.placement.update.mock.calls[0]?.[0]).toMatchObject({
+      where: {
+        id_tenantId: { id: 'placement-1', tenantId: 'tenant-1' },
+      },
+      data: {
+        archivedAt: null,
+        archivedByUserId: null,
+        archiveReason: null,
+        updatedByUserId: 'user-1',
+      },
+    });
+    const updatedMock = publisher.updated as jest.MockedFunction<
+      (event: unknown) => Promise<void>
+    >;
+    const restoreEvent = updatedMock.mock.calls[0]?.[0] as {
+      changes?: {
+        before?: Record<string, unknown>;
+        after?: Record<string, unknown>;
+      };
+    };
+    expect(restoreEvent.changes?.before).toMatchObject({
+      lifecycleEvent: 'PLACEMENT_RESTORED',
+      reason: 'Duplicate placement',
+    });
+    expect(restoreEvent.changes?.after).toMatchObject({
+      lifecycleEvent: 'PLACEMENT_RESTORED',
+    });
+  });
+
+  it('rejects restoring when another active placement already uses the reference', async () => {
+    prisma.placement.findFirst
+      .mockResolvedValueOnce({
+        ...placement,
+        archivedAt: new Date('2026-05-28T11:00:00.000Z'),
+      })
+      .mockResolvedValueOnce({
+        id: 'placement-2',
+        reference: 'FAC-2026-0001',
+      });
+
+    await expect(service.restore(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects restoring an active placement', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+
+    await expect(service.restore(user, 'placement-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('does not restore placements from another tenant', async () => {
+    prisma.placement.findFirst.mockResolvedValue(null);
+
+    await expect(service.restore(user, 'placement-1')).rejects.toThrow(
+      NotFoundException,
+    );
+    const findFirstArgs = prisma.placement.findFirst.mock.calls[0]?.[0] as {
+      where?: Record<string, unknown>;
+      include?: unknown;
+    };
+    expect(findFirstArgs.where).toEqual({
+      id: 'placement-1',
+      tenantId: 'tenant-1',
+    });
+    expect(findFirstArgs.include).toBeDefined();
   });
 
   it('adds one participant without replacing the full participant collection', async () => {

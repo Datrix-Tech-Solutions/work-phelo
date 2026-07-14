@@ -310,6 +310,13 @@ export class PlacementResponseDto {
   @ApiPropertyOptional({ type: String, nullable: true, format: 'uuid' })
   archivedByUserId!: string | null;
 
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    example: 'Duplicate placement created in error.',
+  })
+  archiveReason!: string | null;
+
   @ApiPropertyOptional({ type: String, nullable: true, format: 'date-time' })
   archivedAt!: string | null;
 

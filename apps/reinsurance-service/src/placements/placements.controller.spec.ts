@@ -44,6 +44,7 @@ describe('PlacementsController', () => {
     acceptParticipantAndConfirm: jest.fn(),
     deleteParticipant: jest.fn(),
     archive: jest.fn(),
+    restore: jest.fn(),
   };
   const closingsService = {
     findAll: jest.fn(),
@@ -238,6 +239,7 @@ describe('PlacementsController', () => {
     ['voidNote', PlacementPermission.EDIT],
     ['reversePayment', PlacementPermission.EDIT],
     ['archive', PlacementPermission.DELETE],
+    ['restore', PlacementPermission.DELETE],
   ])('requires %s permission on %s', (method, permission) => {
     expect(
       Reflect.getMetadata(
@@ -646,6 +648,22 @@ describe('PlacementsController', () => {
       'endorsement-closing-1',
       expect.objectContaining({ status: PlacementClosingStatus.ISSUED }),
     );
+  });
+
+  it('delegates archive and restore placement lifecycle actions', async () => {
+    const controller = createController();
+
+    await controller.archive(
+      'placement-1',
+      { archiveReason: 'Duplicate placement' },
+      { user } as never,
+    );
+    await controller.restore('placement-1', { user } as never);
+
+    expect(service.archive).toHaveBeenCalledWith(user, 'placement-1', {
+      archiveReason: 'Duplicate placement',
+    });
+    expect(service.restore).toHaveBeenCalledWith(user, 'placement-1');
   });
 
   it('delegates document registry reads and generation with authenticated context', async () => {

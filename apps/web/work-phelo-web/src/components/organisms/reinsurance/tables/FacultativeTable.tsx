@@ -6,7 +6,9 @@ import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
+import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
+import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panels/CreateFacultativePanel';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
 import {
@@ -15,13 +17,31 @@ import {
   PlacementPayment,
   toStatusLabel,
 } from '@/types/reinsurance';
-import { useCedants, useFacultatives, usePlacementPayments } from '@/hooks';
+import {
+  useArchivedFacultatives,
+  useCedants,
+  useDeleteFacultative,
+  useFacultatives,
+  usePlacementPayments,
+  useRestoreFacultative,
+} from '@/hooks';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
+import { useToast } from '@/hooks/useToast';
+import { extractError } from '@/lib/extractError';
 
 const PAGE_SIZE = 10;
 
 function fmtAmount(val: number) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtDateTime(value: string | null) {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 const RAW_STATUS_VARIANT_MAP: Record<
@@ -212,6 +232,7 @@ export function FacultativeTable({
 }: {
   tab?: 'placements' | 'closing' | 'deleted';
 }) {
+  const toast = useToast();
   const router = useRouter();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const [search, setSearch] = useState('');
@@ -219,9 +240,20 @@ export function FacultativeTable({
   const [page, setPage] = useState(1);
   const [panelOpen, setPanelOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Facultative | null>(null);
+  const [archiveTarget, setArchiveTarget] = useState<Facultative | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<Facultative | null>(null);
+  const [archiveReason, setArchiveReason] = useState('');
 
-  const { data: allRows = [], isLoading } = useFacultatives();
+  const { data: activeRows = [], isLoading: loadingActive } = useFacultatives();
+  const { data: archivedRows = [], isLoading: loadingArchived } = useArchivedFacultatives({
+    enabled: tab === 'deleted',
+  });
   const { data: cedants = [] } = useCedants();
+  const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
+  const { mutate: restorePlacement, isPending: isRestoring } = useRestoreFacultative();
+
+  const allRows = tab === 'deleted' ? archivedRows : activeRows;
+  const isLoading = tab === 'deleted' ? loadingArchived : loadingActive;
 
   const closingRows = useMemo(
     () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
@@ -261,10 +293,11 @@ export function FacultativeTable({
   }, [closingRows, paymentQueries, cedants]);
 
   const filtered = useMemo(() => {
-    if (tab === 'deleted') return [];
     let rows = allRows;
-    const allowed = tab === 'placements' ? PLACEMENT_STATUSES : CLOSING_STATUSES;
-    rows = rows.filter((r) => allowed.includes(r.status));
+    if (tab !== 'deleted') {
+      const allowed = tab === 'placements' ? PLACEMENT_STATUSES : CLOSING_STATUSES;
+      rows = rows.filter((r) => allowed.includes(r.status));
+    }
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -275,7 +308,7 @@ export function FacultativeTable({
           (r.classOfBusiness?.toLowerCase().includes(q) ?? false),
       );
     }
-    if (statusFilter) {
+    if (statusFilter && tab !== 'deleted') {
       if (tab === 'placements') {
         if (statusFilter === 'Open') rows = rows.filter((r) => r.status === 'MARKETING');
         else if (statusFilter === 'Draft') rows = rows.filter((r) => r.status === 'DRAFT');
@@ -299,18 +332,79 @@ export function FacultativeTable({
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const columns = useMemo<Column<Facultative>[]>(() => {
+    if (tab !== 'deleted') return COLUMNS;
+
+    return [
+      ...COLUMNS,
+      {
+        key: 'archivedAt',
+        label: 'Archive Details',
+        width: '220px',
+        render: (row) => (
+          <div className="flex flex-col gap-1">
+            <Badge label="Archived" variant="neutral" />
+            <span className="text-xs text-gray-500">{fmtDateTime(row.archivedAt)}</span>
+            {row.archivedByUserId && (
+              <span className="text-xs text-gray-400">User ID: {row.archivedByUserId}</span>
+            )}
+            {row.archiveReason && (
+              <span className="text-xs text-gray-500 line-clamp-2">{row.archiveReason}</span>
+            )}
+          </div>
+        ),
+      },
+    ];
+  }, [tab]);
+
+  const closeArchiveModal = () => {
+    setArchiveTarget(null);
+    setArchiveReason('');
+  };
+
+  const handleArchive = () => {
+    if (!archiveTarget) return;
+    archivePlacement(
+      {
+        id: archiveTarget.id,
+        archiveReason: archiveReason.trim() || undefined,
+      },
+      {
+        onSuccess: () => {
+          toast.success('Placement archived successfully');
+          closeArchiveModal();
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to archive placement')),
+      },
+    );
+  };
+
+  const handleRestore = () => {
+    if (!restoreTarget) return;
+    restorePlacement(restoreTarget.id, {
+      onSuccess: () => {
+        toast.success('Placement restored successfully');
+        setRestoreTarget(null);
+      },
+      onError: (err) => toast.error(extractError(err, 'Failed to restore placement')),
+    });
+  };
+
   return (
     <>
       <DataTable
-        columns={COLUMNS}
+        columns={columns}
         data={paged}
         isLoading={isLoading}
         searchPlaceholder="Search facultative…"
         searchValue={search}
-        onRowClick={(row) =>
-          router.push(
-            `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${tab === 'closing' ? '?from=closing' : ''}`,
-          )
+        onRowClick={
+          tab === 'deleted'
+            ? undefined
+            : (row) =>
+                router.push(
+                  `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${tab === 'closing' ? '?from=closing' : ''}`,
+                )
         }
         onSearch={(q) => {
           setSearch(q);
@@ -321,37 +415,49 @@ export function FacultativeTable({
             ? PLACEMENTS_FILTER_OPTIONS
             : tab === 'closing'
               ? CLOSING_FILTER_OPTIONS
-              : []
+              : undefined
         }
         onFilter={(v) => {
           setStatusFilter(v);
           setPage(1);
         }}
-        onExport={() => {
-          /* TODO: implement export */
-        }}
-        actionButton={{ label: 'New Offer', onClick: () => setPanelOpen(true) }}
-        rowActions={(row) => [
-          {
-            label: 'View',
-            onClick: () =>
-              router.push(
-                `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${tab === 'closing' ? '?from=closing' : ''}`,
-              ),
-          },
-          {
-            label: 'Edit Slip',
-            onClick: () => setEditTarget(row),
-          },
-          {
-            label: 'Delete',
-            onClick: () => {
-              /* TODO */
-            },
-            danger: true,
-          },
-        ]}
-        emptyMessage="No facultative placements found"
+        actionButton={
+          tab === 'placements'
+            ? { label: 'New Offer', onClick: () => setPanelOpen(true) }
+            : undefined
+        }
+        rowActions={(row) =>
+          tab === 'deleted'
+            ? [
+                {
+                  label: 'Restore',
+                  onClick: () => setRestoreTarget(row),
+                },
+              ]
+            : [
+                {
+                  label: 'View',
+                  onClick: () =>
+                    router.push(
+                      `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${tab === 'closing' ? '?from=closing' : ''}`,
+                    ),
+                },
+                {
+                  label: 'Edit Slip',
+                  onClick: () => setEditTarget(row),
+                },
+                {
+                  label: 'Archive',
+                  onClick: () => setArchiveTarget(row),
+                  danger: true,
+                },
+              ]
+        }
+        emptyMessage={
+          tab === 'deleted'
+            ? 'No archived facultative placements found'
+            : 'No facultative placements found'
+        }
         currentPage={page}
         totalPages={totalPages}
         onPageChange={setPage}
@@ -367,6 +473,57 @@ export function FacultativeTable({
           onClose={() => setEditTarget(null)}
         />
       )}
+
+      <Modal
+        isOpen={!!archiveTarget}
+        onClose={closeArchiveModal}
+        title="Archive Placement?"
+        description="This placement will be removed from the active list. It can be restored later."
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={closeArchiveModal} disabled={isArchiving}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              isLoading={isArchiving}
+              loadingText="Archiving…"
+              onClick={handleArchive}
+            >
+              Archive
+            </Button>
+          </div>
+        }
+      >
+        <label className="mt-4 block text-sm font-medium text-gray-700">
+          Reason <span className="text-gray-400 font-normal">(optional)</span>
+        </label>
+        <textarea
+          value={archiveReason}
+          onChange={(event) => setArchiveReason(event.target.value)}
+          maxLength={500}
+          rows={3}
+          className="mt-2 w-full rounded-input border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-(--focus-ring,var(--color-gray-400))"
+          placeholder="Why is this placement being archived?"
+        />
+      </Modal>
+
+      <Modal
+        isOpen={!!restoreTarget}
+        onClose={() => setRestoreTarget(null)}
+        title="Restore Placement?"
+        description={`Restore "${restoreTarget?.reference}" to the active facultative list?`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setRestoreTarget(null)} disabled={isRestoring}>
+              Cancel
+            </Button>
+            <Button isLoading={isRestoring} loadingText="Restoring…" onClick={handleRestore}>
+              Restore
+            </Button>
+          </div>
+        }
+      />
     </>
   );
 }
