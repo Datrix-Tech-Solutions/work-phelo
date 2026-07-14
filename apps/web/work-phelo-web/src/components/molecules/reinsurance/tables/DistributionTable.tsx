@@ -245,7 +245,7 @@ export function DistributionTable({
             </button>
             <button
               type="button"
-              title="Send mail"
+              title="Send email"
               onClick={() => setMailPreviewId(row.id)}
               className="text-green-500 hover:text-green-700 transition-colors"
             >

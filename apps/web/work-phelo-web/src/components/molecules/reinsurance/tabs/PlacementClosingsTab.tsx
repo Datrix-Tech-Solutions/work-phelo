@@ -126,7 +126,7 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           { label: 'View Guarantee Note', onClick: () => setGuaranteeNoteOpen(true) },
           { label: 'View Debit Note', onClick: () => setDebitNoteOpen(true) },
         ]}
-        actionButton={{ label: 'Mail to cedant', onClick: () => setMailToCedantOpen(true) }}
+        actionButton={{ label: 'Mail to Cedant', onClick: () => setMailToCedantOpen(true) }}
       />
 
       <GuaranteeNoteModal
