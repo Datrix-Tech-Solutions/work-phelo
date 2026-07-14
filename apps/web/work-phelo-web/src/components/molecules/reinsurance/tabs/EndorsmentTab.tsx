@@ -21,6 +21,7 @@ import {
   endorsementClosingsKey,
   endorsementKey,
   endorsementNotesKey,
+  endorsementParticipantKey,
   endorsementSummaryKey,
   facultativePlacementKey,
   placementEffectiveViewKey,
@@ -39,6 +40,7 @@ import {
   usePlacementEndorsementParticipants,
   useCreateEndorsementParticipant,
   useUpdateEndorsementParticipant,
+  useUpdateEndorsementParticipantStatus,
   useReinsurers,
   useRenderPlacementDocumentPdf,
   useUpdateEndorsementStatus,
@@ -346,6 +348,10 @@ function EndorsementCard({
     placement.id,
     endorsement.id,
   );
+  const updateEndorsementParticipantStatus = useUpdateEndorsementParticipantStatus(
+    placement.id,
+    endorsement.id,
+  );
   const generateEndorsementDebitNote = useGenerateEndorsementDebitNote(
     placement.id,
     endorsement.id,
@@ -502,6 +508,11 @@ function EndorsementCard({
           suppressInvalidation: true,
         });
       }
+      await updateEndorsementParticipantStatus.mutateAsync({
+        participantId: participant.id,
+        status: 'CLOSED',
+        suppressInvalidation: true,
+      });
       useToastStore.getState().addToast({
         message: 'Endorsement participant validated and closing confirmed',
         type: 'success',
@@ -513,6 +524,9 @@ function EndorsementCard({
       });
     } finally {
       await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: endorsementParticipantKey(placement.id, endorsement.id),
+        }),
         queryClient.invalidateQueries({
           queryKey: endorsementClosingsKey(placement.id, endorsement.id),
         }),

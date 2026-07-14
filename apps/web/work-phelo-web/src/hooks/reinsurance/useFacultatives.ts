@@ -499,23 +499,72 @@ export function useUpdateEndorsementParticipant(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ participantId, ...payload }: UpdateEndorsementParticipantPayload) => {
+    mutationFn: async ({
+      participantId,
+      suppressInvalidation,
+      ...payload
+    }: UpdateEndorsementParticipantPayload & SuppressInvalidationOption) => {
       const res = await api.patch(
         `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}`,
         payload,
       );
-      return res.data as PlacementEndorsementParticipant;
+      return {
+        participant: res.data as PlacementEndorsementParticipant,
+        suppressInvalidation,
+      };
     },
-    onSuccess: () => {
-      void Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
-        }),
-        queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) }),
-      ]);
+    onSuccess: ({ suppressInvalidation }) => {
+      if (!suppressInvalidation) {
+        void Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+          }),
+          queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) }),
+        ]);
+      }
+    },
+  });
+}
+
+export function useUpdateEndorsementParticipantStatus(
+  placementId: string,
+  endorsementId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      participantId,
+      status,
+      suppressInvalidation,
+    }: {
+      participantId: string;
+      status: PlacementEndorsementParticipant['status'];
+      suppressInvalidation?: boolean;
+    }) => {
+      const res = await api.patch(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/participants/${participantId}/status`,
+        { status },
+      );
+      return {
+        participant: res.data as PlacementEndorsementParticipant,
+        suppressInvalidation,
+      };
+    },
+    onSuccess: ({ suppressInvalidation }) => {
+      if (!suppressInvalidation) {
+        void Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: endorsementParticipantKey(placementId, endorsementId ?? ''),
+          }),
+          queryClient.invalidateQueries({
+            queryKey: endorsementSummaryKey(placementId, endorsementId ?? ''),
+          }),
+          queryClient.invalidateQueries({ queryKey: endorsementKey(placementId) }),
+        ]);
+      }
     },
   });
 }
