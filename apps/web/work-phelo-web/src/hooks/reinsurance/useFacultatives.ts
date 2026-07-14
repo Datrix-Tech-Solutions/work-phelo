@@ -21,6 +21,7 @@ import {
   EffectivePlacementView,
   PlacementEndorsementSummary,
 } from '@/types/reinsurance';
+import { placementDocumentsKey } from './usePlacementDocuments';
 
 const BASE = '/operations/reinsurance/placements';
 const FACULTATIVES_KEY = ['reinsurance', 'placements'] as const;
@@ -124,6 +125,10 @@ export function useUpdateFacultative() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: FACULTATIVES_KEY });
       queryClient.invalidateQueries({ queryKey: [...FACULTATIVES_KEY, id] });
+      queryClient.invalidateQueries({ queryKey: paymentEligibleFacultativesKey });
+      queryClient.invalidateQueries({ queryKey: placementLockStatusKey(id) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(id) });
+      queryClient.invalidateQueries({ queryKey: ['reinsurance', 'dashboard'] });
     },
   });
 }

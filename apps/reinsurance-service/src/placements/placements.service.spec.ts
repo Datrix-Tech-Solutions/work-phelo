@@ -163,15 +163,29 @@ describe('PlacementsService', () => {
     };
     placementNote: {
       count: PrismaMethod;
+      findFirst: PrismaMethod;
     };
     placementPayment: {
       count: PrismaMethod;
+      findFirst: PrismaMethod;
+    };
+    placementClaim: {
+      findFirst: PrismaMethod;
     };
     placementClaimAllocation: {
       count: PrismaMethod;
+      findFirst: PrismaMethod;
+    };
+    placementClaimCashCall: {
+      findFirst: PrismaMethod;
     };
     placementDocument: {
       count: PrismaMethod;
+      findMany: PrismaMethod;
+      updateMany: PrismaMethod;
+    };
+    placementEndorsement: {
+      findFirst: PrismaMethod;
     };
     placementEndorsementParticipant: {
       count: PrismaMethod;
@@ -224,15 +238,43 @@ describe('PlacementsService', () => {
       },
       placementNote: {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
       },
       placementPayment: {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
+      },
+      placementClaim: {
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
       },
       placementClaimAllocation: {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
+      },
+      placementClaimCashCall: {
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
       },
       placementDocument: {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
+        findMany: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue([]),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
+      },
+      placementEndorsement: {
+        findFirst: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue(null),
       },
       placementEndorsementParticipant: {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
@@ -257,6 +299,8 @@ describe('PlacementsService', () => {
         endorsementRequired: false,
         reason: 'Placement has no financial activity and can be edited.',
         lockSource: 'NONE',
+        canEdit: true,
+        editRequiresEndorsement: false,
       }),
       assertEditable: jest.fn((item: { status: PlacementStatus }) => {
         if (
@@ -411,6 +455,7 @@ describe('PlacementsService', () => {
       id: 'placement-1',
       tenantId: 'tenant-1',
       status: PlacementStatus.MARKETING,
+      archivedAt: null,
     });
 
     const result = await service.getLockStatus('tenant-1', 'placement-1');
@@ -421,7 +466,7 @@ describe('PlacementsService', () => {
         tenantId: 'tenant-1',
         archivedAt: null,
       },
-      select: { id: true, tenantId: true, status: true },
+      select: { id: true, tenantId: true, status: true, archivedAt: true },
     });
     expect(result).toMatchObject({
       editable: true,
@@ -908,12 +953,149 @@ describe('PlacementsService', () => {
     expect(publisher.updated).toHaveBeenCalled();
   });
 
-  it('blocks placement updates when financial activity has locked the placement', async () => {
-    financialLockPolicy.assertEditable.mockRejectedValueOnce(
-      new ConflictException(
-        'Placement is financially locked. Changes require endorsement.',
-      ),
+  it('reopens a safely editable placement with active participants to marketing and voids stale offer slips', async () => {
+    const placedWithoutImmutableActivity = {
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.PARTIALLY_PLACED,
+    };
+    const reopened = {
+      ...placedWithoutImmutableActivity,
+      title: 'Reopened Placement',
+      status: PlacementStatus.MARKETING,
+    };
+    prisma.placement.findFirst.mockResolvedValue(
+      placedWithoutImmutableActivity,
     );
+    prisma.placement.update.mockResolvedValue(reopened);
+    prisma.placementDocument.findMany.mockResolvedValue([
+      {
+        id: 'offer-slip-current',
+        participantId: 'participant-1',
+        closingId: null,
+        noteId: null,
+        endorsementId: null,
+        endorsementClosingId: null,
+        claimId: null,
+        claimCashCallId: null,
+        version: 2,
+        createdAt: new Date('2026-05-28T10:05:00.000Z'),
+      },
+      {
+        id: 'offer-slip-historical',
+        participantId: 'participant-1',
+        closingId: null,
+        noteId: null,
+        endorsementId: null,
+        endorsementClosingId: null,
+        claimId: null,
+        claimCashCallId: null,
+        version: 1,
+        createdAt: new Date('2026-05-28T10:00:00.000Z'),
+      },
+    ]);
+
+    const result = await service.update(user, 'placement-1', {
+      title: 'Reopened Placement',
+    });
+
+    expect(result.status).toBe(PlacementStatus.MARKETING);
+    const historyArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as
+      | {
+          data: Record<string, unknown>;
+        }
+      | undefined;
+    expect(historyArgs?.data).toMatchObject({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      fromStatus: PlacementStatus.PARTIALLY_PLACED,
+      toStatus: PlacementStatus.MARKETING,
+      note: 'Placement edited and returned to Open Offers',
+    });
+
+    const documentArgs = prisma.placementDocument.updateMany.mock
+      .calls[0]?.[0] as
+      | {
+          where: Record<string, unknown>;
+          data: Record<string, unknown>;
+        }
+      | undefined;
+    expect(documentArgs?.where).toMatchObject({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      id: { in: ['offer-slip-current'] },
+    });
+    expect(documentArgs?.data).toMatchObject({
+      status: 'VOID',
+      voidReason: 'Placement edited; offer slip superseded',
+    });
+  });
+
+  it('keeps a safely editable placement with no active participants in draft without duplicate status history', async () => {
+    prisma.placement.findFirst.mockResolvedValue(placement);
+    prisma.placement.update.mockResolvedValue({
+      ...placement,
+      title: 'Draft Edit',
+      status: PlacementStatus.DRAFT,
+    });
+
+    const result = await service.update(user, 'placement-1', {
+      title: 'Draft Edit',
+    });
+
+    expect(result.status).toBe(PlacementStatus.DRAFT);
+    expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects direct placement edits when a confirmed closing exists', async () => {
+    prisma.placement.findFirst.mockResolvedValue(
+      placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+    );
+    prisma.placementClosing.findFirst.mockResolvedValueOnce({
+      id: 'closing-1',
+    });
+
+    await expect(
+      service.update(user, 'placement-1', { title: 'Unsafe Update' }),
+    ).rejects.toThrow(
+      'This placement has progressed beyond negotiation and cannot be edited directly. Create an endorsement instead.',
+    );
+    expect(prisma.placement.update).not.toHaveBeenCalled();
+  });
+
+  it('exposes direct edit blocking reason through lock status', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      id: 'placement-1',
+      tenantId: 'tenant-1',
+      status: PlacementStatus.MARKETING,
+      archivedAt: null,
+    });
+    prisma.placementNote.findFirst.mockResolvedValueOnce({ id: 'note-1' });
+
+    const status = await service.getLockStatus('tenant-1', 'placement-1');
+
+    expect(status).toMatchObject({
+      editable: false,
+      canEdit: false,
+      endorsementRequired: true,
+      editRequiresEndorsement: true,
+      lockSource: 'DOWNSTREAM_ACTIVITY',
+      editBlockedReason: 'Issued debit or credit note exists.',
+    });
+  });
+
+  it('blocks placement updates when financial activity has locked the placement', async () => {
+    financialLockPolicy.evaluate.mockResolvedValueOnce({
+      editable: false,
+      locked: true,
+      endorsementRequired: true,
+      reason: 'Placement is financially locked. Changes require endorsement.',
+      lockSource: 'PREMIUM_PAYMENT',
+      canEdit: false,
+      editBlockedReason:
+        'Placement is financially locked. Changes require endorsement.',
+      editRequiresEndorsement: true,
+    });
     prisma.placement.findFirst.mockResolvedValue(placement);
 
     await expect(
@@ -930,7 +1112,7 @@ describe('PlacementsService', () => {
 
     await expect(
       service.update(user, 'placement-1', { title: 'Unsafe Update' }),
-    ).rejects.toThrow(BadRequestException);
+    ).rejects.toThrow(ConflictException);
     expect(prisma.placement.update).not.toHaveBeenCalled();
   });
 

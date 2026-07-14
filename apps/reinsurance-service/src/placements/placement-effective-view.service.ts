@@ -125,8 +125,7 @@ export class PlacementEffectiveViewService {
         appliedEndorsements.some(
           (endorsement) =>
             endorsement.closings.every(
-              (closing) =>
-                closing.status !== PlacementClosingStatus.CONFIRMED,
+              (closing) => closing.status !== PlacementClosingStatus.CONFIRMED,
             ) &&
             (endorsement.impactType ===
               PlacementEndorsementImpactType.TERMS_ONLY ||
@@ -488,8 +487,7 @@ export class PlacementEffectiveViewService {
     }
     if (
       endorsement.status === PlacementEndorsementStatus.CLOSED &&
-      (endorsement.impactType ===
-        PlacementEndorsementImpactType.TERMS_ONLY ||
+      (endorsement.impactType === PlacementEndorsementImpactType.TERMS_ONLY ||
         endorsement.impactType ===
           PlacementEndorsementImpactType.ADMINISTRATIVE)
     ) {
