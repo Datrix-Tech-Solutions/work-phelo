@@ -15,7 +15,12 @@ import {
 import { extractError } from '@/lib/extractError';
 import { openPdfBlob } from '@/lib/openPdfBlob';
 import { useToastStore } from '@/store/toast.store';
-import { PlacementAttachment, PlacementDocument, PlacementDocumentType } from '@/types/reinsurance';
+import {
+  PlacementAttachment,
+  PlacementDocument,
+  PlacementDocumentStatus,
+  PlacementDocumentType,
+} from '@/types/reinsurance';
 
 interface PlacementDocumentCentreTabProps {
   placementId: string;
@@ -30,8 +35,14 @@ interface DocumentSectionProps {
   documents: PlacementDocument[];
   isLoading: boolean;
   renderingDocumentId: string | null;
+  getDocumentState: (document: PlacementDocument) => DocumentLifecycleState;
   onViewPdf: (document: PlacementDocument) => void;
 }
+
+type DocumentLifecycleState = 'CURRENT' | 'SUPERSEDED' | 'VOID' | 'FAILED';
+type DocumentTypeFilter = PlacementDocumentType | 'ALL';
+type DocumentStatusFilter = PlacementDocumentStatus | 'ALL';
+type DocumentStateFilter = DocumentLifecycleState | 'ALL';
 
 const PDF_TYPES = new Set<PlacementDocumentType>([
   'OFFER_SLIP',
@@ -41,6 +52,32 @@ const PDF_TYPES = new Set<PlacementDocumentType>([
   'ENDORSEMENT_DEBIT_NOTE',
   'ENDORSEMENT_CREDIT_NOTE',
 ]);
+
+const DOCUMENT_TYPE_FILTER_OPTIONS: { value: DocumentTypeFilter; label: string }[] = [
+  { value: 'ALL', label: 'All document types' },
+  { value: 'OFFER_SLIP', label: 'Offer Slip' },
+  { value: 'CLOSING_SLIP', label: 'Closing Slip' },
+  { value: 'DEBIT_NOTE', label: 'Debit Note' },
+  { value: 'CREDIT_NOTE', label: 'Credit Note' },
+  { value: 'ENDORSEMENT_DEBIT_NOTE', label: 'Endorsement Debit Note' },
+  { value: 'ENDORSEMENT_CREDIT_NOTE', label: 'Endorsement Credit Note' },
+];
+
+const DOCUMENT_STATUS_FILTER_OPTIONS: { value: DocumentStatusFilter; label: string }[] = [
+  { value: 'ALL', label: 'All statuses' },
+  { value: 'GENERATED', label: 'Generated' },
+  { value: 'DRAFT', label: 'Draft' },
+  { value: 'FAILED', label: 'Failed' },
+  { value: 'VOID', label: 'Void' },
+];
+
+const DOCUMENT_STATE_FILTER_OPTIONS: { value: DocumentStateFilter; label: string }[] = [
+  { value: 'ALL', label: 'All states' },
+  { value: 'CURRENT', label: 'Current' },
+  { value: 'SUPERSEDED', label: 'Superseded' },
+  { value: 'VOID', label: 'Void' },
+  { value: 'FAILED', label: 'Failed' },
+];
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -115,6 +152,39 @@ function documentStatus(document: PlacementDocument) {
   return toTitleCase(document.status);
 }
 
+function documentScopeKey(document: PlacementDocument) {
+  return [
+    document.type,
+    document.participantId ?? 'placement',
+    document.closingId ?? 'no-closing',
+    document.noteId ?? 'no-note',
+    document.endorsementId ?? 'no-endorsement',
+    document.endorsementClosingId ?? 'no-endorsement-closing',
+    document.claimId ?? 'no-claim',
+    document.claimCashCallId ?? 'no-cash-call',
+  ].join(':');
+}
+
+function isVoidLikeDocument(document: PlacementDocument) {
+  return (
+    document.status === 'VOID' ||
+    nestedString(document.renderPayload, ['note', 'status']) === 'VOID'
+  );
+}
+
+function stateLabel(state: DocumentLifecycleState) {
+  switch (state) {
+    case 'CURRENT':
+      return 'Current';
+    case 'SUPERSEDED':
+      return 'Superseded';
+    case 'FAILED':
+      return 'Failed';
+    case 'VOID':
+      return 'Void';
+  }
+}
+
 function toTitleCase(value: string) {
   return value
     .toLowerCase()
@@ -155,12 +225,25 @@ function statusClass(status: string) {
   return 'border-amber-200 bg-amber-50 text-amber-700';
 }
 
+function stateClass(state: DocumentLifecycleState) {
+  switch (state) {
+    case 'CURRENT':
+      return 'border-blue-200 bg-blue-50 text-blue-700';
+    case 'SUPERSEDED':
+      return 'border-gray-200 bg-gray-50 text-gray-600';
+    case 'FAILED':
+    case 'VOID':
+      return 'border-red-200 bg-red-50 text-red-700';
+  }
+}
+
 function DocumentSection({
   title,
   description,
   documents,
   isLoading,
   renderingDocumentId,
+  getDocumentState,
   onViewPdf,
 }: DocumentSectionProps) {
   return (
@@ -185,6 +268,7 @@ function DocumentSection({
               <th className="px-4 py-3">Counterparty</th>
               <th className="px-4 py-3">Version</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">State</th>
               <th className="px-4 py-3">Created</th>
               <th className="px-4 py-3">Created By</th>
               <th className="px-5 py-3 text-right">Action</th>
@@ -193,19 +277,20 @@ function DocumentSection({
           <tbody className="divide-y divide-gray-100">
             {isLoading ? (
               <tr>
-                <td colSpan={9} className="px-5 py-10 text-center text-gray-400">
+                <td colSpan={10} className="px-5 py-10 text-center text-gray-400">
                   Loading documents...
                 </td>
               </tr>
             ) : documents.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-5 py-10 text-center text-gray-400">
+                <td colSpan={10} className="px-5 py-10 text-center text-gray-400">
                   No documents in this section yet.
                 </td>
               </tr>
             ) : (
               documents.map((document) => {
                 const status = documentStatus(document);
+                const state = getDocumentState(document);
                 const canRender = PDF_TYPES.has(document.type);
                 return (
                   <tr key={document.id} className="text-gray-700">
@@ -223,6 +308,15 @@ function DocumentSection({
                         )}`}
                       >
                         {status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${stateClass(
+                          state,
+                        )}`}
+                      >
+                        {stateLabel(state)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
@@ -269,6 +363,9 @@ export function PlacementDocumentCentreTab({
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadDescription, setUploadDescription] = useState('');
+  const [documentTypeFilter, setDocumentTypeFilter] = useState<DocumentTypeFilter>('ALL');
+  const [documentStatusFilter, setDocumentStatusFilter] = useState<DocumentStatusFilter>('ALL');
+  const [documentStateFilter, setDocumentStateFilter] = useState<DocumentStateFilter>('ALL');
 
   const {
     data: documents = [],
@@ -285,20 +382,55 @@ export function PlacementDocumentCentreTab({
   const uploadAttachment = useUploadPlacementAttachment(placementId);
   const addToast = useToastStore((state) => state.addToast);
 
+  const latestCurrentDocumentIds = new Set<string>();
+  const latestByScope = new Map<string, PlacementDocument>();
+
+  documents.forEach((document) => {
+    if (document.status === 'FAILED' || isVoidLikeDocument(document)) return;
+    const key = documentScopeKey(document);
+    const current = latestByScope.get(key);
+    if (
+      !current ||
+      document.version > current.version ||
+      (document.version === current.version &&
+        Date.parse(document.createdAt) > Date.parse(current.createdAt))
+    ) {
+      latestByScope.set(key, document);
+    }
+  });
+
+  latestByScope.forEach((document) => latestCurrentDocumentIds.add(document.id));
+
+  const getDocumentState = (document: PlacementDocument): DocumentLifecycleState => {
+    if (document.status === 'FAILED') return 'FAILED';
+    if (isVoidLikeDocument(document)) return 'VOID';
+    return latestCurrentDocumentIds.has(document.id) ? 'CURRENT' : 'SUPERSEDED';
+  };
+
   const sortedDocuments = [...documents].sort(
     (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
   );
-  const offerSlips = sortedDocuments.filter((document) => document.type === 'OFFER_SLIP');
-  const closingSlips = sortedDocuments.filter(
+
+  const filteredDocuments = sortedDocuments.filter((document) => {
+    if (documentTypeFilter !== 'ALL' && document.type !== documentTypeFilter) return false;
+    if (documentStatusFilter !== 'ALL' && document.status !== documentStatusFilter) return false;
+    if (documentStateFilter !== 'ALL' && getDocumentState(document) !== documentStateFilter) {
+      return false;
+    }
+    return true;
+  });
+
+  const offerSlips = filteredDocuments.filter((document) => document.type === 'OFFER_SLIP');
+  const closingSlips = filteredDocuments.filter(
     (document) =>
       document.type === 'CLOSING_SLIP' && !document.endorsementId && !document.endorsementClosingId,
   );
-  const placementNotes = sortedDocuments.filter(
+  const placementNotes = filteredDocuments.filter(
     (document) =>
       (document.type === 'DEBIT_NOTE' || document.type === 'CREDIT_NOTE') &&
       !document.endorsementId,
   );
-  const endorsementDocuments = sortedDocuments.filter(
+  const endorsementDocuments = filteredDocuments.filter(
     (document) =>
       (document.endorsementId || document.endorsementClosingId) &&
       (document.type === 'CLOSING_SLIP' ||
@@ -310,7 +442,7 @@ export function PlacementDocumentCentreTab({
       (document) => document.id,
     ),
   );
-  const otherRegisteredDocuments = sortedDocuments.filter(
+  const otherRegisteredDocuments = filteredDocuments.filter(
     (document) => !shownDocumentIds.has(document.id),
   );
 
@@ -407,12 +539,62 @@ export function PlacementDocumentCentreTab({
           </div>
         )}
 
+        <div className="grid gap-3 rounded-card border border-gray-200 bg-white p-4 sm:grid-cols-3">
+          <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Type
+            <select
+              value={documentTypeFilter}
+              onChange={(event) => setDocumentTypeFilter(event.target.value as DocumentTypeFilter)}
+              className="rounded-input border border-gray-200 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900 outline-none focus:ring-1 focus:ring-gray-400"
+            >
+              {DOCUMENT_TYPE_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Status
+            <select
+              value={documentStatusFilter}
+              onChange={(event) =>
+                setDocumentStatusFilter(event.target.value as DocumentStatusFilter)
+              }
+              className="rounded-input border border-gray-200 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900 outline-none focus:ring-1 focus:ring-gray-400"
+            >
+              {DOCUMENT_STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500">
+            Current State
+            <select
+              value={documentStateFilter}
+              onChange={(event) =>
+                setDocumentStateFilter(event.target.value as DocumentStateFilter)
+              }
+              className="rounded-input border border-gray-200 bg-white px-3 py-2 text-sm font-normal normal-case tracking-normal text-gray-900 outline-none focus:ring-1 focus:ring-gray-400"
+            >
+              {DOCUMENT_STATE_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
         <DocumentSection
           title="Offer Slips"
           description="Participant-specific offers addressed to each reinsurer."
           documents={offerSlips}
           isLoading={documentsLoading}
           renderingDocumentId={renderingDocumentId}
+          getDocumentState={getDocumentState}
           onViewPdf={handleViewPdf}
         />
         <DocumentSection
@@ -421,6 +603,7 @@ export function PlacementDocumentCentreTab({
           documents={closingSlips}
           isLoading={documentsLoading}
           renderingDocumentId={renderingDocumentId}
+          getDocumentState={getDocumentState}
           onViewPdf={handleViewPdf}
         />
         <DocumentSection
@@ -429,6 +612,7 @@ export function PlacementDocumentCentreTab({
           documents={placementNotes}
           isLoading={documentsLoading}
           renderingDocumentId={renderingDocumentId}
+          getDocumentState={getDocumentState}
           onViewPdf={handleViewPdf}
         />
         <DocumentSection
@@ -437,6 +621,7 @@ export function PlacementDocumentCentreTab({
           documents={endorsementDocuments}
           isLoading={documentsLoading}
           renderingDocumentId={renderingDocumentId}
+          getDocumentState={getDocumentState}
           onViewPdf={handleViewPdf}
         />
 
@@ -447,6 +632,7 @@ export function PlacementDocumentCentreTab({
             documents={otherRegisteredDocuments}
             isLoading={documentsLoading}
             renderingDocumentId={renderingDocumentId}
+            getDocumentState={getDocumentState}
             onViewPdf={handleViewPdf}
           />
         )}

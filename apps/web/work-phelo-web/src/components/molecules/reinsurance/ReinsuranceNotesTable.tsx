@@ -20,6 +20,7 @@ interface ReinsuranceNotesTableProps {
   emptyMessage?: string;
   onIssue: (noteId: string) => void;
   onVoid: (input: { noteId: string; voidReason: string }) => void;
+  onViewPdf?: (note: PlacementNote) => void;
   isVoidPending?: boolean;
 }
 
@@ -75,6 +76,7 @@ export function ReinsuranceNotesTable({
   emptyMessage = 'No notes yet',
   onIssue,
   onVoid,
+  onViewPdf,
   isVoidPending,
 }: ReinsuranceNotesTableProps) {
   const [voidTarget, setVoidTarget] = useState<PlacementNote | null>(null);
@@ -157,8 +159,14 @@ export function ReinsuranceNotesTable({
         rowActions={(row) => {
           const actions: RowAction[] = [
             {
-              label: 'Preview',
-              onClick: () => setPreviewTarget(row.note),
+              label: onViewPdf ? 'View PDF' : 'Preview Only',
+              onClick: () => {
+                if (onViewPdf) {
+                  onViewPdf(row.note);
+                  return;
+                }
+                setPreviewTarget(row.note);
+              },
             },
           ];
           if (row.note.status === 'DRAFT') {

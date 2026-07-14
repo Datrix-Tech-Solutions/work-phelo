@@ -13,6 +13,7 @@ import {
   useRenderPlacementDocumentPdf,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import { openPdfBlob } from '@/lib/openPdfBlob';
 import { useToastStore } from '@/store/toast.store';
 
 export type DistributionStatus = 'Pending' | 'Accepted' | 'Closed' | 'Declined';
@@ -36,19 +37,6 @@ const STATUS_VARIANT: Record<DistributionStatus, 'warning' | 'success' | 'neutra
 
 function fmtAmount(val: number) {
   return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function openPdfBlob(blob: Blob, fileName: string) {
-  const pdfBlob = blob.type === 'application/pdf' ? blob : new Blob([blob], { type: 'application/pdf' });
-  const url = URL.createObjectURL(pdfBlob);
-  const opened = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!opened) {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-    link.click();
-  }
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 interface DistributionTableProps {
@@ -93,8 +81,7 @@ export function DistributionTable({
     usePlacementDocuments(placement.id);
   const { mutateAsync: generateParticipantOfferSlipDocument } =
     useGenerateParticipantOfferSlipDocument(placement.id);
-  const { mutateAsync: renderPlacementDocumentPdf } =
-    useRenderPlacementDocumentPdf(placement.id);
+  const { mutateAsync: renderPlacementDocumentPdf } = useRenderPlacementDocumentPdf(placement.id);
   const toast = useToastStore.getState;
 
   const startEdit = (row: DistributionEntry) => {
@@ -149,10 +136,7 @@ export function DistributionTable({
     });
   };
 
-  const findActiveOfferSlip = (
-    participantId: string,
-    documents = placementDocuments,
-  ) =>
+  const findActiveOfferSlip = (participantId: string, documents = placementDocuments) =>
     documents.find(
       (document) =>
         document.type === 'OFFER_SLIP' &&
@@ -420,7 +404,6 @@ export function DistributionTable({
         onSend={handleSend}
         onClose={() => setMailPreviewId(null)}
       />
-
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { PlacementNote, PlacementNoteListResponse, PlacementNoteStatus } from '@/types/reinsurance';
 import { endorsementSummaryKey, placementEffectiveViewKey } from './useFacultatives';
+import { placementDocumentsKey } from './usePlacementDocuments';
 
 const BASE = '/operations/reinsurance/placements';
 const placementNotesKey = (placementId: string) =>
@@ -54,6 +55,7 @@ export function useGeneratePlacementDebitNote(placementId: string) {
         upsertNote(current, note),
       );
       queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
     },
   });
 }
@@ -73,6 +75,7 @@ export function useGeneratePlacementCreditNote(placementId: string) {
         upsertNote(current, note),
       );
       queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
     },
   });
 }
@@ -92,6 +95,7 @@ export function useIssuePlacementNote(placementId: string) {
         upsertNote(current, note),
       );
       queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
     },
   });
 }
@@ -111,6 +115,7 @@ export function useVoidPlacementNote(placementId: string) {
         upsertNote(current, note),
       );
       queryClient.invalidateQueries({ queryKey: placementNotesKey(placementId) });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
     },
   });
 }
@@ -150,6 +155,7 @@ export function useGenerateEndorsementDebitNote(
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
       invalidateEndorsementWorkflow(queryClient, placementId, endorsementId ?? '');
     },
   });
@@ -176,6 +182,7 @@ export function useGenerateEndorsementCreditNote(
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
       invalidateEndorsementWorkflow(queryClient, placementId, endorsementId ?? '');
     },
   });
@@ -202,6 +209,7 @@ export function useIssueEndorsementNote(placementId: string, endorsementId: stri
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
       invalidateEndorsementWorkflow(queryClient, placementId, endorsementId ?? '');
     },
   });
@@ -228,6 +236,7 @@ export function useVoidEndorsementNote(placementId: string, endorsementId: strin
       queryClient.invalidateQueries({
         queryKey: endorsementNotesKey(placementId, endorsementId ?? ''),
       });
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
       invalidateEndorsementWorkflow(queryClient, placementId, endorsementId ?? '');
     },
   });

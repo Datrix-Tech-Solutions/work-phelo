@@ -1308,6 +1308,14 @@ function EndorsementCard({
               isLoading={endorsementNotesLoading}
               isError={endorsementNotesError}
               emptyMessage="No endorsement notes yet"
+              onViewPdf={(note) => {
+                void openOfficialNotePdf(note).catch((error) => {
+                  useToastStore.getState().addToast({
+                    message: extractError(error, 'Failed to open endorsement note PDF'),
+                    type: 'error',
+                  });
+                });
+              }}
               onIssue={handleIssueEndorsementNote}
               onVoid={handleVoidEndorsementNote}
               isVoidPending={voidEndorsementNote.isPending}

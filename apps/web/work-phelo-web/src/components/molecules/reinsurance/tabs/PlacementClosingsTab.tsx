@@ -424,6 +424,14 @@ export function PlacementClosingsTab({ placement }: PlacementClosingsTabProps) {
           isLoading={notesLoading}
           isError={notesError}
           emptyMessage="No placement notes yet"
+          onViewPdf={(note) => {
+            void openOfficialNotePdf(note).catch((error) => {
+              addToast({
+                message: extractError(error, 'Failed to open note PDF'),
+                type: 'error',
+              });
+            });
+          }}
           onIssue={handleIssueNote}
           onVoid={handleVoidNote}
           isVoidPending={voidNote.isPending}
