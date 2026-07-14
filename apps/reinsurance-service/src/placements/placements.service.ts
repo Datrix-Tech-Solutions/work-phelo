@@ -19,6 +19,7 @@ import {
 } from '../../prisma/generated/client';
 import { PlacementEventPublisher } from '../messaging/placement-event.publisher';
 import { PrismaService } from '../prisma/prisma.service';
+import { ArchivePlacementDto } from './dto/archive-placement.dto';
 import { CreatePlacementParticipantDto } from './dto/create-placement-participant.dto';
 import { CreatePlacementDto } from './dto/create-placement.dto';
 import { PlacementLockStatusDto } from './dto/placement-lock-status.dto';
@@ -27,7 +28,6 @@ import { UpdatePlacementParticipantStatusDto } from './dto/update-placement-part
 import { UpdatePlacementParticipantDto } from './dto/update-placement-participant.dto';
 import { UpdatePlacementStatusDto } from './dto/update-placement-status.dto';
 import { UpdatePlacementDto } from './dto/update-placement.dto';
-import { ArchivePlacementDto } from './dto/archive-placement.dto';
 import { PlacementFinancialLockPolicy } from './placement-financial-lock.policy';
 
 const placementInclude = {
@@ -908,9 +908,18 @@ export class PlacementsService {
       participant.id,
     );
 
-    await this.prisma.placementParticipant.delete({
-      where: { id: participant.id },
-    });
+    try {
+      await this.prisma.placementParticipant.delete({
+        where: { id: participant.id },
+      });
+    } catch (error) {
+      if (this.isForeignKeyDependencyError(error)) {
+        throw new ConflictException(
+          'This participant cannot be deleted because it is referenced by one or more related records.',
+        );
+      }
+      throw error;
+    }
 
     const placement = await this.syncParticipantDrivenStatus(
       user,
@@ -1396,6 +1405,7 @@ export class PlacementsService {
       paymentCount,
       claimAllocationCount,
       documentCount,
+      attachmentCount,
       endorsementParticipantCount,
     ] = await Promise.all([
       this.prisma.placementClosing.count({
@@ -1411,6 +1421,9 @@ export class PlacementsService {
         where: { tenantId, placementId, participantId },
       }),
       this.prisma.placementDocument.count({
+        where: { tenantId, placementId, participantId },
+      }),
+      this.prisma.placementAttachment.count({
         where: { tenantId, placementId, participantId },
       }),
       this.prisma.placementEndorsementParticipant.count({
@@ -1437,6 +1450,9 @@ export class PlacementsService {
     }
     if (documentCount > 0) {
       dependencies.push('placement documents');
+    }
+    if (attachmentCount > 0) {
+      dependencies.push('placement attachments');
     }
     if (endorsementParticipantCount > 0) {
       dependencies.push('endorsement participants');
@@ -2482,6 +2498,13 @@ export class PlacementsService {
     return (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2034'
+    );
+  }
+
+  private isForeignKeyDependencyError(error: unknown): boolean {
+    return (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      ['P2003', 'P2014'].includes(error.code)
     );
   }
 }

@@ -2606,7 +2606,8 @@ export class PlacementsController {
     summary: 'Remove one placement participant',
     description:
       'Deletes a participant from an editable placement without archiving the placement itself. ' +
-      'Financially locked placements return 409 and require endorsement.',
+      'Deletion is allowed only when the participant has no history-bearing dependencies such as closings, notes, payments, claim allocations, documents, attachments or endorsement revisions. ' +
+      'Financially locked placements or dependency conflicts return 409 and require the related workflow instead.',
   })
   @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
   @ApiParam({
@@ -2623,7 +2624,7 @@ export class PlacementsController {
   @ApiConflictResponse({
     type: ApiErrorResponseDto,
     description:
-      'The placement is financially locked and participant changes require endorsement.',
+      'The placement is financially locked, or the participant is referenced by financial/workflow records that must be voided, reversed or preserved instead of hard-deleted.',
   })
   deleteParticipant(
     @Param('id', ParseUUIDPipe) id: string,
