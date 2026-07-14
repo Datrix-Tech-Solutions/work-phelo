@@ -7,7 +7,10 @@ import { useFacultatives, useCurrencies } from '@/hooks';
 import { Currency } from '@/types/reinsurance';
 import { cardClass } from '@/lib/utils';
 
-interface CedantRow {
+const REINSURER_ROLES = new Set(['REINSURER', 'LEAD_REINSURER', 'CO_REINSURER']);
+const QUALIFYING_STATUSES = new Set(['ACCEPTED', 'CLOSED']);
+
+interface ReinsurerRow {
   id: string;
   name: string;
   offerCount: number;
@@ -45,16 +48,16 @@ function periodStart(period: Period, now: Date): Date {
   }
 }
 
-function buildColumns(symbol: string): Column<CedantRow>[] {
+function buildColumns(symbol: string): Column<ReinsurerRow>[] {
   return [
     {
       key: 'name',
-      label: 'Cedant',
+      label: 'Reinsurer',
       width: '0.5fr',
       render: (row) => (
         <div className="flex flex-col gap-0.5">
           <span className="text-xs font-medium text-gray-900">{row.name}</span>
-          <span className="text-xs text-gray-400">
+          <span className="text-s text-gray-400">
             {row.offerCount} {row.offerCount === 1 ? 'offer' : 'offers'}
           </span>
         </div>
@@ -72,12 +75,12 @@ function buildColumns(symbol: string): Column<CedantRow>[] {
   ];
 }
 
-interface TopCedantsListProps {
+interface TopReinsurersCardProps {
   period: Period;
   currency: string;
 }
 
-export function TopCedantsList({ period, currency }: TopCedantsListProps) {
+export function TopReinsurersCard({ period, currency }: TopReinsurersCardProps) {
   const { data: all = [], isLoading: loadingFac } = useFacultatives();
   const { data: currencies = [], isLoading: loadingCur } = useCurrencies();
 
@@ -93,21 +96,31 @@ export function TopCedantsList({ period, currency }: TopCedantsListProps) {
     const map = new Map<string, { name: string; count: number; premium: number }>();
 
     for (const f of all) {
+      if (f.premium == null) continue;
       if (new Date(f.createdAt) < start) continue;
 
-      const { id, name } = f.cedant;
-      const prev = map.get(id) ?? { name, count: 0, premium: 0 };
       const sourceRate = getRate(currencies, f.currency);
-      const premiumInTarget = f.premium != null ? (f.premium * sourceRate) / targetRate : 0;
+      const premiumInTarget = (f.premium * sourceRate) / targetRate;
 
-      map.set(id, {
-        name,
-        count: prev.count + 1,
-        premium: prev.premium + premiumInTarget,
-      });
+      for (const p of f.participants) {
+        if (!REINSURER_ROLES.has(p.role) || !QUALIFYING_STATUSES.has(p.status)) continue;
+        if (p.sharePercent == null) continue;
+        const share = parseFloat(p.sharePercent) / 100;
+
+        const prev = map.get(p.counterpartyId) ?? {
+          name: p.counterparty.name,
+          count: 0,
+          premium: 0,
+        };
+        map.set(p.counterpartyId, {
+          name: prev.name,
+          count: prev.count + 1,
+          premium: prev.premium + premiumInTarget * share,
+        });
+      }
     }
 
-    const rows: CedantRow[] = Array.from(map.entries())
+    const rows: ReinsurerRow[] = Array.from(map.entries())
       .map(([id, d]) => ({ id, name: d.name, offerCount: d.count, totalPremium: d.premium }))
       .sort((a, b) => b.totalPremium - a.totalPremium)
       .slice(0, 5);
@@ -117,13 +130,13 @@ export function TopCedantsList({ period, currency }: TopCedantsListProps) {
 
   return (
     <div className={cardClass('flex flex-col gap-3 p-5 h-80', 'glass')}>
-      <h3 className="text-sm font-semibold text-gray-900">Top 5 Cedants</h3>
+      <h3 className="text-sm font-semibold text-gray-900">Top 5 Reinsurers</h3>
       <div className="flex-1 min-h-0 overflow-y-auto">
         <DataList
           columns={buildColumns(symbol)}
           data={rows}
           isLoading={loadingFac || loadingCur}
-          emptyMessage="No cedant data for this period"
+          emptyMessage="No reinsurer data for this period"
           bare
         />
       </div>

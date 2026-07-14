@@ -230,7 +230,7 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
 export function FacultativeTable({
   tab = 'placements',
 }: {
-  tab?: 'placements' | 'closing' | 'deleted';
+  tab?: 'placements' | 'closing' | 'archived';
 }) {
   const toast = useToast();
   const router = useRouter();
@@ -246,14 +246,14 @@ export function FacultativeTable({
 
   const { data: activeRows = [], isLoading: loadingActive } = useFacultatives();
   const { data: archivedRows = [], isLoading: loadingArchived } = useArchivedFacultatives({
-    enabled: tab === 'deleted',
+    enabled: tab === 'archived',
   });
   const { data: cedants = [] } = useCedants();
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
   const { mutate: restorePlacement, isPending: isRestoring } = useRestoreFacultative();
 
-  const allRows = tab === 'deleted' ? archivedRows : activeRows;
-  const isLoading = tab === 'deleted' ? loadingArchived : loadingActive;
+  const allRows = tab === 'archived' ? archivedRows : activeRows;
+  const isLoading = tab === 'archived' ? loadingArchived : loadingActive;
 
   const closingRows = useMemo(
     () => allRows.filter((r) => CLOSING_STATUSES.includes(r.status)),
@@ -294,7 +294,7 @@ export function FacultativeTable({
 
   const filtered = useMemo(() => {
     let rows = allRows;
-    if (tab !== 'deleted') {
+    if (tab !== 'archived') {
       const allowed = tab === 'placements' ? PLACEMENT_STATUSES : CLOSING_STATUSES;
       rows = rows.filter((r) => allowed.includes(r.status));
     }
@@ -308,7 +308,7 @@ export function FacultativeTable({
           (r.classOfBusiness?.toLowerCase().includes(q) ?? false),
       );
     }
-    if (statusFilter && tab !== 'deleted') {
+    if (statusFilter && tab !== 'archived') {
       if (tab === 'placements') {
         if (statusFilter === 'Open') rows = rows.filter((r) => r.status === 'MARKETING');
         else if (statusFilter === 'Draft') rows = rows.filter((r) => r.status === 'DRAFT');
@@ -333,10 +333,12 @@ export function FacultativeTable({
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const columns = useMemo<Column<Facultative>[]>(() => {
-    if (tab !== 'deleted') return COLUMNS;
+    if (tab !== 'archived') return COLUMNS;
+
+    const ARCHIVED_HIDDEN_KEYS = new Set(['totalAcceptedPercent', 'participants', 'status']);
 
     return [
-      ...COLUMNS,
+      ...COLUMNS.filter((col) => !ARCHIVED_HIDDEN_KEYS.has(col.key as string)),
       {
         key: 'archivedAt',
         label: 'Archive Details',
@@ -399,7 +401,7 @@ export function FacultativeTable({
         searchPlaceholder="Search facultative…"
         searchValue={search}
         onRowClick={
-          tab === 'deleted'
+          tab === 'archived'
             ? undefined
             : (row) =>
                 router.push(
@@ -427,7 +429,7 @@ export function FacultativeTable({
             : undefined
         }
         rowActions={(row) =>
-          tab === 'deleted'
+          tab === 'archived'
             ? [
                 {
                   label: 'Restore',
@@ -454,7 +456,7 @@ export function FacultativeTable({
               ]
         }
         emptyMessage={
-          tab === 'deleted'
+          tab === 'archived'
             ? 'No archived facultative placements found'
             : 'No facultative placements found'
         }

@@ -63,7 +63,6 @@ const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
 const STATUS_FILTER_OPTIONS = [
   { value: 'Placed', label: 'Placed' },
   { value: 'Closed', label: 'Closed' },
-  { value: 'Outstanding', label: 'Outstanding' },
   { value: 'Part Payment', label: 'Part Payment' },
   { value: 'Paid', label: 'Paid' },
 ];
@@ -294,16 +293,21 @@ export function PaymentsTable() {
     return map;
   }, [closingRows, paymentQueries, cedants]);
 
+  const payableRows = useMemo(
+    () => closingRows.filter((r) => paymentStatusMap.get(r.id) !== 'Outstanding'),
+    [closingRows, paymentStatusMap],
+  );
+
   const cedantOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    for (const r of allRows) seen.set(r.cedant.id, r.cedant.name);
+    for (const r of payableRows) seen.set(r.cedant.id, r.cedant.name);
     return Array.from(seen.entries())
       .map(([id, name]) => ({ value: id, label: name }))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [allRows]);
+  }, [payableRows]);
 
   const filtered = useMemo(() => {
-    let rows = closingRows;
+    let rows = payableRows;
     if (search) {
       const q = search.toLowerCase();
       rows = rows.filter(
@@ -330,24 +334,38 @@ export function PaymentsTable() {
       rows = rows.filter((r) => r.cedant.id === cedantFilter);
     }
     return rows;
-  }, [closingRows, search, statusFilter, cedantFilter, paymentStatusMap]);
+  }, [payableRows, search, statusFilter, cedantFilter, paymentStatusMap]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const cedantDropdown = (
-    <div>
-      <SearchSelect
-        size="sm"
-        placeholder="Cedants"
-        options={cedantOptions}
-        value={cedantFilter}
-        onChange={(v) => {
-          setCedantFilter(v);
-          setPage(1);
-        }}
-      />
-    </div>
+  const extraFilters = (
+    <>
+      <div>
+        <SearchSelect
+          size="sm"
+          placeholder="Status"
+          options={STATUS_FILTER_OPTIONS}
+          value={statusFilter}
+          onChange={(v) => {
+            setStatusFilter(v);
+            setPage(1);
+          }}
+        />
+      </div>
+      <div>
+        <SearchSelect
+          size="sm"
+          placeholder="Cedants"
+          options={cedantOptions}
+          value={cedantFilter}
+          onChange={(v) => {
+            setCedantFilter(v);
+            setPage(1);
+          }}
+        />
+      </div>
+    </>
   );
 
   return (
@@ -362,12 +380,7 @@ export function PaymentsTable() {
         setSearch(q);
         setPage(1);
       }}
-      extraFilters={cedantDropdown}
-      filterOptions={STATUS_FILTER_OPTIONS}
-      onFilter={(v) => {
-        setStatusFilter(v);
-        setPage(1);
-      }}
+      extraFilters={extraFilters}
       actionButton={{
         label: 'Make Payment',
         onClick: () => router.push(`/${tenantSlug}/operations/reinsurance/payments/new`),

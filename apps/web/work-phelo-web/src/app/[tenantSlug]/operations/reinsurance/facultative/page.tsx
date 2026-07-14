@@ -8,12 +8,12 @@ import { AppBackground } from '@/components/atoms/AppBackground';
 import { FacultativeTable } from '@/components/organisms/reinsurance/tables/FacultativeTable';
 import { TabBar } from '@/components/molecules/shared/TabBar';
 
-type FacultativePageTab = 'placements' | 'closing' | 'deleted';
+type FacultativePageTab = 'placements' | 'closing' | 'archived';
 
 const TABS = [
   { key: 'placements', label: 'Offers' },
   { key: 'closing', label: 'Closings' },
-  { key: 'deleted', label: 'Deleted' },
+  { key: 'archived', label: 'Archived' },
 ];
 
 export default function FacultativePage() {

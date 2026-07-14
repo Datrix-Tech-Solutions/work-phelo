@@ -3,10 +3,14 @@
 import { useState } from 'react';
 import { Period } from '@/components/atoms/PeriodToggle';
 import { DashboardFiltersBar } from '@/components/molecules/reinsurance/DashboardFiltersBar';
-import { DashboardStatsRow } from '@/components/molecules/reinsurance/stats/DashboardStatsRow';
-import { FinancialStatsRow } from '@/components/molecules/reinsurance/stats/FinancialStatsRow';
-import { CurrencyBreakdownCards } from '@/components/molecules/reinsurance/CurrencyBreakdownCards';
+import { KpiStatsRow } from '@/components/molecules/reinsurance/stats/KpiStatsRow';
+import { PremiumTrendCard } from '@/components/molecules/reinsurance/PremiumTrendCard';
+import { RiskClassBreakdownCard } from '@/components/molecules/reinsurance/RiskClassBreakdownCard';
+import { BrokerageByCurrencyCard } from '@/components/molecules/reinsurance/BrokerageByCurrencyCard';
 import { TopCedantsList } from '@/components/molecules/reinsurance/TopCedantsList';
+import { TopReinsurersCard } from '@/components/molecules/reinsurance/TopReinsurersCard';
+import { ClaimsOverviewCard } from '@/components/molecules/reinsurance/ClaimsOverviewCard';
+import { QuickActionsCard } from '@/components/molecules/reinsurance/QuickActionsCard';
 
 export default function ReinsuranceFoundation() {
   const [currency, setCurrency] = useState('');
@@ -20,10 +24,32 @@ export default function ReinsuranceFoundation() {
         period={period}
         onPeriodChange={setPeriod}
       />
-      <DashboardStatsRow period={period} currency={currency} />
-      <FinancialStatsRow period={period} currency={currency} />
-      <CurrencyBreakdownCards period={period} />
-      <TopCedantsList period={period} currency={currency} />
+      <KpiStatsRow period={period} currency={currency} />
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-5">
+          <PremiumTrendCard currency={currency} />
+        </div>
+        <div className="lg:col-span-4">
+          <RiskClassBreakdownCard period={period} />
+        </div>
+        <div className="lg:col-span-3">
+          <BrokerageByCurrencyCard period={period} />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-3">
+          <TopCedantsList period={period} currency={currency} />
+        </div>
+        <div className="lg:col-span-3">
+          <TopReinsurersCard period={period} currency={currency} />
+        </div>
+        <div className="lg:col-span-4">
+          <ClaimsOverviewCard period={period} currency={currency} />
+        </div>
+        <div className="lg:col-span-2">
+          <QuickActionsCard />
+        </div>
+      </div>
     </div>
   );
 }

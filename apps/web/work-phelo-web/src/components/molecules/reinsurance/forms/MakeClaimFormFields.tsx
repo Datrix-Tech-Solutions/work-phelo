@@ -40,9 +40,16 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 interface MakeClaimFormFieldsProps {
   form: UseFormReturn<MakeClaimFormValues>;
   placement: Facultative;
+  /** Skip the read-only Policy Number/Cedant/Class of Business rows — use when
+   * that info is already shown by the caller's own placement picker. */
+  hidePlacementInfo?: boolean;
 }
 
-export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProps) {
+export function MakeClaimFormFields({
+  form,
+  placement,
+  hidePlacementInfo,
+}: MakeClaimFormFieldsProps) {
   const {
     register,
     control,
@@ -53,13 +60,20 @@ export function MakeClaimFormFields({ form, placement }: MakeClaimFormFieldsProp
 
   return (
     <div className="flex flex-col gap-5">
-      <ReadOnlyField label="Policy Number" value={placement.policyNumber ?? placement.reference} />
-      <ReadOnlyField label="Cedant" value={placement.cedant.name} />
-      {placement.classOfBusiness && (
-        <ReadOnlyField label="Class of Business" value={placement.classOfBusiness} />
-      )}
+      {!hidePlacementInfo && (
+        <>
+          <ReadOnlyField
+            label="Policy Number"
+            value={placement.policyNumber ?? placement.reference}
+          />
+          <ReadOnlyField label="Cedant" value={placement.cedant.name} />
+          {placement.classOfBusiness && (
+            <ReadOnlyField label="Class of Business" value={placement.classOfBusiness} />
+          )}
 
-      <hr className="border-gray-100" />
+          <hr className="border-gray-100" />
+        </>
+      )}
 
       <FormField
         label="Estimated Loss Amount"
