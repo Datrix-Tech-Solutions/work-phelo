@@ -10,59 +10,20 @@ import {
   FacultativeFormValues,
   FACULTATIVE_FORM_DEFAULTS,
   RiskType,
-  RiskTypeField,
 } from '@/types/reinsurance';
 import { useUpdateFacultative, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import {
+  extractPlacementCustomFields,
+  mergePlacementRiskDetails,
+  splitPlacementDetails,
+} from '@/lib/reinsurance/placementFormDetails';
 import { useToastStore } from '@/store/toast.store';
 
 interface EditFacultativePanelProps {
   isOpen: boolean;
   placement: Facultative;
   onClose: () => void;
-}
-
-function mergeRiskDetails(
-  businessDetails: Record<string, unknown> | null,
-  offerDetails: Record<string, unknown> | null,
-): Record<string, string> {
-  const merged: Record<string, string> = {};
-  for (const [k, v] of Object.entries(businessDetails ?? {})) merged[k] = String(v ?? '');
-  for (const [k, v] of Object.entries(offerDetails ?? {})) merged[k] = String(v ?? '');
-  return merged;
-}
-
-function splitRiskDetails(
-  riskDetails: Record<string, string>,
-  fields: RiskTypeField[],
-  extraRiskFields: { label: string; value: string }[],
-): {
-  businessDetails: Record<string, unknown> | undefined;
-  offerDetails: Record<string, unknown> | undefined;
-} {
-  const businessDetails: Record<string, unknown> = {};
-  const offerDetails: Record<string, unknown> = {};
-
-  for (const field of fields.filter((f) => f.isActive)) {
-    const val = riskDetails[field.fieldKey];
-    if (val === undefined || val === '') continue;
-    if (field.section === 'BUSINESS_DETAILS') {
-      businessDetails[field.fieldKey] = val;
-    } else if (field.section === 'OFFER_DETAILS') {
-      offerDetails[field.fieldKey] = val;
-    }
-  }
-
-  for (const { label, value } of extraRiskFields) {
-    if (label.trim() && value.trim()) {
-      businessDetails[label.trim()] = value.trim();
-    }
-  }
-
-  return {
-    businessDetails: Object.keys(businessDetails).length ? businessDetails : undefined,
-    offerDetails: Object.keys(offerDetails).length ? offerDetails : undefined,
-  };
 }
 
 function placementToFormValues(
@@ -74,13 +35,11 @@ function placementToFormValues(
     (selectedRiskType?.fields ?? []).filter((f) => f.isActive).map((f) => f.fieldKey),
   );
 
-  const allDetails: Record<string, unknown> = {
-    ...(placement.businessDetails ?? {}),
-    ...(placement.offerDetails ?? {}),
-  };
-  const extraRiskFields = Object.entries(allDetails)
-    .filter(([k]) => !schemaKeys.has(k))
-    .map(([k, v]) => ({ label: k, value: String(v ?? '') }));
+  const extraRiskFields = extractPlacementCustomFields(
+    placement.businessDetails,
+    placement.offerDetails,
+    schemaKeys,
+  );
 
   return {
     ...FACULTATIVE_FORM_DEFAULTS,
@@ -96,7 +55,8 @@ function placementToFormValues(
     currency: placement.currency ?? '',
     periodFrom: placement.inceptionDate ?? '',
     periodTo: placement.expiryDate ?? '',
-    riskDetails: mergeRiskDetails(placement.businessDetails, placement.offerDetails),
+    comment: placement.description ?? '',
+    riskDetails: mergePlacementRiskDetails(placement.businessDetails, placement.offerDetails),
     extraRiskFields,
   };
 }
@@ -130,7 +90,7 @@ export function EditFacultativePanel({ isOpen, placement, onClose }: EditFaculta
   const onSubmit = async (values: FacultativeFormValues) => {
     try {
       const selectedRiskType = allRiskTypes.find((rt) => rt.id === values.riskType);
-      const { businessDetails, offerDetails } = splitRiskDetails(
+      const { businessDetails, offerDetails } = splitPlacementDetails(
         values.riskDetails,
         selectedRiskType?.fields ?? [],
         values.extraRiskFields ?? [],
@@ -141,6 +101,7 @@ export function EditFacultativePanel({ isOpen, placement, onClose }: EditFaculta
         riskTypeId: values.riskType || undefined,
         reference: values.reference,
         title: values.title,
+        description: values.comment,
         sumInsured: values.sumInsured as number,
         rate: values.rate as number,
         premium: values.premium as number,

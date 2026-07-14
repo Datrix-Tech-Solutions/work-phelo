@@ -12,10 +12,13 @@ import {
   FacultativeFormValues,
   FACULTATIVE_FORM_DEFAULTS,
   PlacementEndorsement,
-  RiskTypeField,
 } from '@/types/reinsurance';
 import { useUpdateEndorsement, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
+import {
+  mergePlacementRiskDetails,
+  splitPlacementDetails,
+} from '@/lib/reinsurance/placementFormDetails';
 import { useToastStore } from '@/store/toast.store';
 
 type EditEndorsementFormValues = FacultativeFormValues & { effectiveDate: string };
@@ -25,37 +28,6 @@ interface EditEndorsementPanelProps {
   placement: Facultative;
   endorsement: PlacementEndorsement;
   onClose: () => void;
-}
-
-function mergeRiskDetails(
-  businessDetails: Record<string, unknown> | null,
-  offerDetails: Record<string, unknown> | null,
-): Record<string, string> {
-  const merged: Record<string, string> = {};
-  for (const [k, v] of Object.entries(businessDetails ?? {})) merged[k] = String(v ?? '');
-  for (const [k, v] of Object.entries(offerDetails ?? {})) merged[k] = String(v ?? '');
-  return merged;
-}
-
-function splitRiskDetails(
-  riskDetails: Record<string, string>,
-  fields: RiskTypeField[],
-): {
-  businessDetails: Record<string, unknown> | undefined;
-  offerDetails: Record<string, unknown> | undefined;
-} {
-  const businessDetails: Record<string, unknown> = {};
-  const offerDetails: Record<string, unknown> = {};
-  for (const field of fields.filter((f) => f.isActive)) {
-    const val = riskDetails[field.fieldKey];
-    if (val === undefined || val === '') continue;
-    if (field.section === 'BUSINESS_DETAILS') businessDetails[field.fieldKey] = val;
-    else if (field.section === 'OFFER_DETAILS') offerDetails[field.fieldKey] = val;
-  }
-  return {
-    businessDetails: Object.keys(businessDetails).length ? businessDetails : undefined,
-    offerDetails: Object.keys(offerDetails).length ? offerDetails : undefined,
-  };
 }
 
 function endorsementToFormValues(
@@ -77,7 +49,7 @@ function endorsementToFormValues(
     currency: String(snap.currency ?? placement.currency ?? ''),
     periodFrom: String(snap.inceptionDate ?? placement.inceptionDate ?? ''),
     periodTo: String(snap.expiryDate ?? placement.expiryDate ?? ''),
-    riskDetails: mergeRiskDetails(
+    riskDetails: mergePlacementRiskDetails(
       (snap.businessDetails as Record<string, unknown> | null) ?? placement.businessDetails,
       (snap.offerDetails as Record<string, unknown> | null) ?? placement.offerDetails,
     ),
@@ -121,9 +93,10 @@ export function EditEndorsementPanel({
   const onSubmit = async (values: EditEndorsementFormValues) => {
     try {
       const selectedRiskType = allRiskTypes.find((rt) => rt.id === values.riskType);
-      const { businessDetails, offerDetails } = splitRiskDetails(
+      const { businessDetails, offerDetails } = splitPlacementDetails(
         values.riskDetails,
         selectedRiskType?.fields ?? [],
+        values.extraRiskFields ?? [],
       );
 
       await updateEndorsement({

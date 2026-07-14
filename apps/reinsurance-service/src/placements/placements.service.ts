@@ -1038,13 +1038,43 @@ export class PlacementsService {
       return [];
     }
 
-    return Object.entries(value as Record<string, unknown>).map(
-      ([key, entryValue]) => ({
-        key,
-        label: this.toFrontendLabel(key),
-        value: entryValue,
-      }),
-    );
+    const entries: Array<{ key: string; label: string; value: unknown }> = [];
+
+    for (const [key, entryValue] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      if (key !== 'customFields') {
+        entries.push({
+          key,
+          label: this.toFrontendLabel(key),
+          value: entryValue,
+        });
+        continue;
+      }
+
+      if (!Array.isArray(entryValue)) continue;
+
+      entryValue.forEach((field, index) => {
+        if (!field || typeof field !== 'object' || Array.isArray(field)) {
+          return;
+        }
+        const record = field as Record<string, unknown>;
+        const label =
+          typeof record.label === 'string' ? record.label.trim() : '';
+        if (!label) return;
+
+        entries.push({
+          key:
+            typeof record.id === 'string' && record.id.trim()
+              ? record.id
+              : `custom-${index + 1}`,
+          label,
+          value: record.value ?? '',
+        });
+      });
+    }
+
+    return entries;
   }
 
   private toFrontendLabel(key: string): string {
@@ -2034,10 +2064,27 @@ export class PlacementsService {
     const result: Record<string, Prisma.InputJsonValue> = {};
 
     for (const [key, entry] of Object.entries(value)) {
+      if (fieldName === 'businessDetails' && key === 'customFields') {
+        result[key] = this.trimCustomFieldsJsonValue(entry);
+        continue;
+      }
       result[key] = this.trimJsonValue(entry, fieldName);
     }
 
     return result;
+  }
+
+  private trimCustomFieldsJsonValue(value: unknown): Prisma.InputJsonValue {
+    this.validateCustomFields(value);
+    return (value as Array<Record<string, unknown>>).map((field) => ({
+      id: String(field.id).trim(),
+      label: String(field.label).trim(),
+      value: String(field.value),
+      type: field.type === undefined ? 'TEXT' : String(field.type).trim(),
+      ...(field.displayOrder !== undefined
+        ? { displayOrder: field.displayOrder as number }
+        : {}),
+    })) as Prisma.InputJsonValue;
   }
 
   private trimJsonValue(
@@ -2203,6 +2250,10 @@ export class PlacementsService {
     const definedKeys = new Set(fields.map((f) => f.fieldKey));
 
     for (const key of Object.keys(provided)) {
+      if (sectionName === 'businessDetails' && key === 'customFields') {
+        this.validateCustomFields(provided[key]);
+        continue;
+      }
       if (!definedKeys.has(key)) {
         throw new BadRequestException(
           `Unknown field key '${key}' in ${sectionName}`,
@@ -2267,6 +2318,52 @@ export class PlacementsService {
         }
       }
     }
+  }
+
+  private validateCustomFields(value: unknown): void {
+    if (value === undefined || value === null) return;
+    if (!Array.isArray(value)) {
+      throw new BadRequestException(
+        "Field 'customFields' in businessDetails must be an array",
+      );
+    }
+
+    value.forEach((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw new BadRequestException(
+          `Custom field at index ${index} must be an object`,
+        );
+      }
+      const field = item as Record<string, unknown>;
+      if (typeof field.id !== 'string' || field.id.trim().length === 0) {
+        throw new BadRequestException(
+          `Custom field at index ${index} requires an id`,
+        );
+      }
+      if (typeof field.label !== 'string' || field.label.trim().length === 0) {
+        throw new BadRequestException(
+          `Custom field at index ${index} requires a label`,
+        );
+      }
+      if (typeof field.value !== 'string') {
+        throw new BadRequestException(
+          `Custom field at index ${index} requires a string value`,
+        );
+      }
+      if (field.type !== undefined && field.type !== 'TEXT') {
+        throw new BadRequestException(
+          `Custom field at index ${index} has unsupported type`,
+        );
+      }
+      if (
+        field.displayOrder !== undefined &&
+        typeof field.displayOrder !== 'number'
+      ) {
+        throw new BadRequestException(
+          `Custom field at index ${index} displayOrder must be a number`,
+        );
+      }
+    });
   }
 
   private async resolveExchangeRate(

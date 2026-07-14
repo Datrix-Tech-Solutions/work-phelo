@@ -5,10 +5,7 @@ import { Facultative } from '@/types/reinsurance';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { useCedants } from '@/hooks';
 import { isForeignCedant, NIC_LEVY_RATE, WITHHOLDING_TAX_RATE } from '@/lib/reinsuranceTax';
-
-function toLabel(key: string) {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
+import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 
 function fmtFieldValue(val: unknown): string {
   if (val == null) return '—';
@@ -77,8 +74,8 @@ export function SlipPreviewModal({
   const { data: cedants = [] } = useCedants();
   const foreignCedant = isForeignCedant(cedants.find((c) => c.id === placement.cedant.id));
 
-  const businessEntries = Object.entries(businessDetails ?? {});
-  const offerEntries = Object.entries(offerDetails ?? {});
+  const businessEntries = placementDetailEntries(businessDetails);
+  const offerEntries = placementDetailEntries(offerDetails);
 
   const facOffer = facultativeOffer ?? 0;
   const facSumInsured = sumInsured != null ? (facOffer / 100) * sumInsured : null;
@@ -121,16 +118,16 @@ export function SlipPreviewModal({
         {(businessEntries.length > 0 || offerEntries.length > 0) && (
           <>
             <hr className="border-gray-100 my-1" />
-            {businessEntries.map(([key, val]) => {
-              const formatted = fmtFieldValue(val);
+            {businessEntries.map((entry) => {
+              const formatted = fmtFieldValue(entry.value);
               return formatted === '—' ? null : (
-                <DetailField key={key} inline label={toLabel(key)} value={formatted} />
+                <DetailField key={entry.key} inline label={entry.label} value={formatted} />
               );
             })}
-            {offerEntries.map(([key, val]) => {
-              const formatted = fmtFieldValue(val);
+            {offerEntries.map((entry) => {
+              const formatted = fmtFieldValue(entry.value);
               return formatted === '—' ? null : (
-                <DetailField key={key} inline label={toLabel(key)} value={formatted} />
+                <DetailField key={entry.key} inline label={entry.label} value={formatted} />
               );
             })}
           </>

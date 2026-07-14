@@ -4,10 +4,7 @@ import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative } from '@/types/reinsurance';
 import { useReinsurers } from '@/hooks';
-
-function toLabel(key: string) {
-  return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-}
+import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 
 function fmtFieldValue(val: unknown): string {
   if (val == null) return '—';
@@ -83,9 +80,9 @@ export function CreditNoteModal({
   } = placement;
 
   const riskDetailRows: CreditNoteRow[] = [
-    ...Object.entries(businessDetails ?? {}),
-    ...Object.entries(offerDetails ?? {}),
-  ].map(([key, val]) => ({ label: toLabel(key), value: fmtFieldValue(val) }));
+    ...placementDetailEntries(businessDetails),
+    ...placementDetailEntries(offerDetails),
+  ].map((entry) => ({ label: entry.label, value: fmtFieldValue(entry.value) }));
 
   const yourSumInsured = sumInsured != null ? (sharePercent / 100) * sumInsured : null;
   const yourPremium = premium != null ? (sharePercent / 100) * premium : null;

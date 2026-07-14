@@ -416,6 +416,7 @@ export interface Facultative {
   cedant: { id: string; name: string };
   businessDetails: Record<string, unknown> | null;
   offerDetails: Record<string, unknown> | null;
+  description: string | null;
   sumInsured: number | null;
   rate: number | null;
   commission: number | null;
@@ -438,6 +439,7 @@ export interface CreateFacultativePayload {
   riskTypeId: string;
   reference: string;
   title: string;
+  description?: string;
   sumInsured: number;
   rate: number;
   premium: number;
@@ -780,8 +782,14 @@ export interface FacultativeFormValues {
   periodFrom: string;
   periodTo: string;
   comment: string;
-  riskDetails: Record<string, string>;
-  extraRiskFields: { label: string; value: string }[];
+  riskDetails: Record<string, unknown>;
+  extraRiskFields: {
+    id?: string;
+    label: string;
+    value: string;
+    type?: 'TEXT';
+    displayOrder?: number;
+  }[];
 }
 
 export const FACULTATIVE_FORM_DEFAULTS: FacultativeFormValues = {
