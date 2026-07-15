@@ -159,6 +159,18 @@ type PlacementParticipantAcceptanceResult = {
   closing: PlacementParticipantAcceptanceClosingRecord;
 };
 
+type PlacementEditClassification = 'ADMINISTRATIVE' | 'MATERIAL';
+
+type PlacementReopeningAudit = {
+  reopened: boolean;
+  editClassification: PlacementEditClassification;
+  changedMaterialFields: string[];
+  participantsRequiringReoffer: number;
+  participantsPreservedAsAccepted: number;
+  fromStatus: PlacementStatus;
+  toStatus: PlacementStatus;
+};
+
 type ParticipantCapacityInput = {
   counterpartyId: string;
   role: PlacementParticipantRole;
@@ -602,7 +614,14 @@ export class PlacementsService {
       updatedByUserId: user.id,
     };
 
+    const changedMaterialFields = this.getChangedMaterialFields(existing, dto);
+    const editClassification: PlacementEditClassification =
+      changedMaterialFields.length > 0 ? 'MATERIAL' : 'ADMINISTRATIVE';
     const nextStatus = this.deriveReopenedStatus(existing);
+    let participantResetSummary = {
+      participantsRequiringReoffer: 0,
+      participantsPreservedAsAccepted: 0,
+    };
 
     try {
       const placement = await this.prisma.$transaction(async (tx) => {
@@ -614,30 +633,20 @@ export class PlacementsService {
               fromStatus: existing.status,
               toStatus: nextStatus,
               changedByUserId: user.id,
-              note: 'Placement edited and returned to Open Offers',
+              note: this.buildReopeningHistoryNote(
+                editClassification,
+                changedMaterialFields,
+              ),
             },
           });
         }
 
-        const staleOfferSlipIds = await this.findCurrentOfferSlipDocumentIds(
+        participantResetSummary = await this.supersedePlacementMarketArtifacts(
           tx,
           user.tenantId,
           id,
+          editClassification,
         );
-        if (staleOfferSlipIds.length > 0) {
-          await tx.placementDocument.updateMany({
-            where: {
-              tenantId: user.tenantId,
-              placementId: id,
-              id: { in: staleOfferSlipIds },
-            },
-            data: {
-              status: PlacementDocumentStatus.VOID,
-              voidedAt: new Date(),
-              voidReason: 'Placement edited; offer slip superseded',
-            },
-          });
-        }
 
         return tx.placement.update({
           where: {
@@ -652,9 +661,23 @@ export class PlacementsService {
         });
       });
       const finalPlacement = this.withAggregates(placement);
+      const reopeningAudit: PlacementReopeningAudit = {
+        reopened: nextStatus !== existing.status,
+        editClassification,
+        changedMaterialFields,
+        participantsRequiringReoffer:
+          participantResetSummary.participantsRequiringReoffer,
+        participantsPreservedAsAccepted:
+          participantResetSummary.participantsPreservedAsAccepted,
+        fromStatus: existing.status,
+        toStatus: nextStatus,
+      };
       this.publish('updated', finalPlacement, user, {
         before: this.auditSnapshot(existing),
-        after: this.auditSnapshot(finalPlacement),
+        after: {
+          ...this.auditSnapshot(finalPlacement),
+          reopening: reopeningAudit,
+        },
       });
       return finalPlacement;
     } catch (error) {
@@ -1961,29 +1984,6 @@ export class PlacementsService {
     tenantId: string,
     placementId: string,
   ): Promise<string | null> {
-    const confirmedClosing = await this.prisma.placementClosing.findFirst({
-      where: {
-        tenantId,
-        placementId,
-        status: PlacementClosingStatus.CONFIRMED,
-      },
-      select: { id: true },
-    });
-    if (confirmedClosing) return 'Confirmed closing exists.';
-
-    const issuedNote = await this.prisma.placementNote.findFirst({
-      where: {
-        tenantId,
-        placementId,
-        type: {
-          in: [PlacementNoteType.DEBIT_NOTE, PlacementNoteType.CREDIT_NOTE],
-        },
-        status: PlacementNoteStatus.ISSUED,
-      },
-      select: { id: true },
-    });
-    if (issuedNote) return 'Issued debit or credit note exists.';
-
     const payment = await this.prisma.placementPayment.findFirst({
       where: { tenantId, placementId },
       select: { id: true },
@@ -2039,56 +2039,227 @@ export class PlacementsService {
       : PlacementStatus.DRAFT;
   }
 
-  private async findCurrentOfferSlipDocumentIds(
+  private getChangedMaterialFields(
+    placement: PlacementRecord,
+    dto: UpdatePlacementDto,
+  ): string[] {
+    const changed: string[] = [];
+
+    const textFields: Array<
+      keyof Pick<
+        UpdatePlacementDto,
+        | 'reference'
+        | 'title'
+        | 'placementType'
+        | 'cedantId'
+        | 'riskTypeId'
+        | 'classOfBusiness'
+        | 'currency'
+      >
+    > = [
+      'reference',
+      'title',
+      'placementType',
+      'cedantId',
+      'riskTypeId',
+      'classOfBusiness',
+      'currency',
+    ];
+
+    for (const field of textFields) {
+      if (
+        dto[field] !== undefined &&
+        this.normalizeTextForCompare(placement[field]) !==
+          this.normalizeTextForCompare(
+            field === 'currency'
+              ? this.cleanOptional(dto[field])?.toUpperCase()
+              : dto[field],
+          )
+      ) {
+        changed.push(field);
+      }
+    }
+
+    const decimalFields: Array<{
+      field: keyof Pick<
+        UpdatePlacementDto,
+        | 'sumInsured'
+        | 'rate'
+        | 'premium'
+        | 'commission'
+        | 'facultativeOffer'
+        | 'preliminaryBrokerage'
+      >;
+      decimalPlaces: number;
+    }> = [
+      { field: 'sumInsured', decimalPlaces: 2 },
+      { field: 'rate', decimalPlaces: 4 },
+      { field: 'premium', decimalPlaces: 2 },
+      { field: 'commission', decimalPlaces: 4 },
+      { field: 'facultativeOffer', decimalPlaces: 4 },
+      { field: 'preliminaryBrokerage', decimalPlaces: 4 },
+    ];
+
+    for (const { field, decimalPlaces } of decimalFields) {
+      if (
+        dto[field] !== undefined &&
+        this.normalizeDecimalForCompare(placement[field], decimalPlaces) !==
+          this.normalizeDecimalForCompare(dto[field], decimalPlaces)
+      ) {
+        changed.push(field);
+      }
+    }
+
+    const dateFields: Array<
+      keyof Pick<UpdatePlacementDto, 'inceptionDate' | 'expiryDate'>
+    > = ['inceptionDate', 'expiryDate'];
+    for (const field of dateFields) {
+      if (
+        dto[field] !== undefined &&
+        this.normalizeDateForCompare(placement[field]) !==
+          this.normalizeDateForCompare(dto[field])
+      ) {
+        changed.push(field);
+      }
+    }
+
+    const jsonFields: Array<
+      keyof Pick<UpdatePlacementDto, 'businessDetails' | 'offerDetails'>
+    > = ['businessDetails', 'offerDetails'];
+    for (const field of jsonFields) {
+      if (dto[field] === undefined) continue;
+      const normalizedIncoming = this.normalizeJsonObject(dto[field], field);
+      if (
+        this.stableStringifyForCompare(placement[field] ?? null) !==
+        this.stableStringifyForCompare(normalizedIncoming ?? null)
+      ) {
+        changed.push(field);
+      }
+    }
+
+    return changed;
+  }
+
+  private buildReopeningHistoryNote(
+    editClassification: PlacementEditClassification,
+    changedMaterialFields: string[],
+  ): string {
+    if (editClassification === 'ADMINISTRATIVE') {
+      return 'Placement edited and returned to Open Offers (administrative edit)';
+    }
+
+    return `Placement edited and returned to Open Offers (material edit: ${changedMaterialFields.join(
+      ', ',
+    )})`;
+  }
+
+  private async supersedePlacementMarketArtifacts(
     tx: Prisma.TransactionClient,
     tenantId: string,
     placementId: string,
-  ): Promise<string[]> {
-    const activeOfferSlips = await tx.placementDocument.findMany({
+    editClassification: PlacementEditClassification,
+  ): Promise<{
+    participantsRequiringReoffer: number;
+    participantsPreservedAsAccepted: number;
+  }> {
+    const now = new Date();
+
+    await tx.placementClosing.updateMany({
       where: {
         tenantId,
         placementId,
-        type: PlacementDocumentType.OFFER_SLIP,
+        status: {
+          in: [
+            PlacementClosingStatus.DRAFT,
+            PlacementClosingStatus.ISSUED,
+            PlacementClosingStatus.CONFIRMED,
+          ],
+        },
+      },
+      data: { status: PlacementClosingStatus.VOID },
+    });
+
+    await tx.placementNote.updateMany({
+      where: {
+        tenantId,
+        placementId,
+        endorsementId: null,
+        type: {
+          in: [PlacementNoteType.DEBIT_NOTE, PlacementNoteType.CREDIT_NOTE],
+        },
+        status: {
+          in: [PlacementNoteStatus.DRAFT, PlacementNoteStatus.ISSUED],
+        },
+      },
+      data: {
+        status: PlacementNoteStatus.VOID,
+        voidedAt: now,
+        voidReason: 'Placement edited; note superseded',
+      },
+    });
+
+    await tx.placementDocument.updateMany({
+      where: {
+        tenantId,
+        placementId,
+        endorsementId: null,
+        type: {
+          in: [
+            PlacementDocumentType.OFFER_SLIP,
+            PlacementDocumentType.CLOSING_SLIP,
+            PlacementDocumentType.DEBIT_NOTE,
+            PlacementDocumentType.CREDIT_NOTE,
+          ],
+        },
         status: {
           in: [
             PlacementDocumentStatus.DRAFT,
             PlacementDocumentStatus.GENERATED,
+            PlacementDocumentStatus.FAILED,
           ],
         },
       },
-      select: {
-        id: true,
-        participantId: true,
-        closingId: true,
-        noteId: true,
-        endorsementId: true,
-        endorsementClosingId: true,
-        claimId: true,
-        claimCashCallId: true,
-        version: true,
-        createdAt: true,
+      data: {
+        status: PlacementDocumentStatus.VOID,
+        voidedAt: now,
+        voidReason: 'Placement edited; document superseded',
       },
-      orderBy: [{ version: 'desc' }, { createdAt: 'desc' }],
     });
 
-    const currentByScope = new Map<string, string>();
-    for (const document of activeOfferSlips) {
-      const scopeKey = [
-        document.participantId ?? 'placement',
-        document.closingId ?? 'no-closing',
-        document.noteId ?? 'no-note',
-        document.endorsementId ?? 'no-endorsement',
-        document.endorsementClosingId ?? 'no-endorsement-closing',
-        document.claimId ?? 'no-claim',
-        document.claimCashCallId ?? 'no-cash-call',
-      ].join(':');
-
-      if (!currentByScope.has(scopeKey)) {
-        currentByScope.set(scopeKey, document.id);
-      }
+    if (editClassification === 'MATERIAL') {
+      const reset = await tx.placementParticipant.updateMany({
+        where: {
+          tenantId,
+          placementId,
+          status: {
+            in: [
+              PlacementParticipantStatus.CLOSED,
+              PlacementParticipantStatus.ACCEPTED,
+              PlacementParticipantStatus.QUOTED,
+            ],
+          },
+        },
+        data: { status: PlacementParticipantStatus.OFFER_SENT },
+      });
+      return {
+        participantsRequiringReoffer: reset.count,
+        participantsPreservedAsAccepted: 0,
+      };
     }
 
-    return [...currentByScope.values()];
+    const preserved = await tx.placementParticipant.updateMany({
+      where: {
+        tenantId,
+        placementId,
+        status: PlacementParticipantStatus.CLOSED,
+      },
+      data: { status: PlacementParticipantStatus.ACCEPTED },
+    });
+
+    return {
+      participantsRequiringReoffer: 0,
+      participantsPreservedAsAccepted: preserved.count,
+    };
   }
 
   private async assertArchivable(placement: PlacementRecord): Promise<void> {
@@ -2352,6 +2523,59 @@ export class PlacementsService {
   ): number | null {
     if (value === null || value === undefined) return null;
     return this.decimalToNumber(value);
+  }
+
+  private normalizeTextForCompare(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    const normalized =
+      value instanceof Date
+        ? value.toISOString()
+        : typeof value === 'string' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean'
+          ? String(value)
+          : JSON.stringify(value);
+    const trimmed = normalized.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private normalizeDecimalForCompare(
+    value: number | Prisma.Decimal | string | null | undefined,
+    decimalPlaces: number,
+  ): string | null {
+    if (value === null || value === undefined) return null;
+    const numeric = this.decimalToNumber(value);
+    return numeric.toFixed(decimalPlaces);
+  }
+
+  private normalizeDateForCompare(
+    value: Date | string | null | undefined,
+  ): number | null {
+    if (value === null || value === undefined) return null;
+    const date = value instanceof Date ? value : new Date(value);
+    const timestamp = date.getTime();
+    return Number.isFinite(timestamp) ? timestamp : null;
+  }
+
+  private stableStringifyForCompare(value: unknown): string {
+    return JSON.stringify(this.normalizeJsonForCompare(value));
+  }
+
+  private normalizeJsonForCompare(value: unknown): unknown {
+    if (value === null || value === undefined) return null;
+    if (Array.isArray(value)) {
+      return value.map((entry) => this.normalizeJsonForCompare(entry));
+    }
+    if (typeof value === 'object') {
+      const normalized: Record<string, unknown> = {};
+      for (const key of Object.keys(value).sort()) {
+        normalized[key] = this.normalizeJsonForCompare(
+          (value as Record<string, unknown>)[key],
+        );
+      }
+      return normalized;
+    }
+    return value;
   }
 
   private roundPercent(value: number): number {
