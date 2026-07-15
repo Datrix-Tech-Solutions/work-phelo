@@ -4,7 +4,8 @@ import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
-import { useReinsurers, useCedants } from '@/hooks';
+import { useReinsurers, useCedants, useRiskTypes } from '@/hooks';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 
 function fmtDate(iso: string | null) {
   if (!iso) return '—';
@@ -39,6 +40,7 @@ export function GuaranteeNoteModal({
 }: GuaranteeNoteModalProps) {
   const { data: reinsurers = [] } = useReinsurers();
   const { data: cedants = [] } = useCedants();
+  const { data: riskTypes = [] } = useRiskTypes();
 
   const reinsurer = reinsurers.find((r) => r.id === counterpartyId);
   const reinsurerAddr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
@@ -61,11 +63,15 @@ export function GuaranteeNoteModal({
     classOfBusiness,
     title,
     reference,
+    policyNumber,
     inceptionDate,
     expiryDate,
     cedant,
     participants,
+    riskTypeId,
   } = placement;
+
+  const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
   const facOffer = facultativeOffer ?? 0;
   const facSumInsured = sumInsured != null ? (facOffer / 100) * sumInsured : null;
@@ -85,6 +91,12 @@ export function GuaranteeNoteModal({
       isOpen={isOpen}
       title={`Guarantee Note — ${reference}`}
       documentTitle="Guarantee Note"
+      fileName={buildDocumentFileName(
+        'Guarantee Note',
+        policyNumber ?? reference,
+        riskTypeName,
+        title,
+      )}
       afterContent={
         <div
           style={{

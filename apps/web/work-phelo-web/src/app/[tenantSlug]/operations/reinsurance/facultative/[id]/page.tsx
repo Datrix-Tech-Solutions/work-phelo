@@ -7,7 +7,10 @@ import { Icons } from '@/components/atoms/icons';
 import { Button } from '@/components/atoms/Button';
 import { pageBreadcrumb, pageContent } from '@/lib/layout';
 import { useFacultativePlacement } from '@/hooks';
-import { FacultativeOverview } from '@/components/molecules/reinsurance/stats/FacultativeOverview';
+import {
+  FacultativeOverview,
+  PaymentStatus,
+} from '@/components/molecules/reinsurance/stats/FacultativeOverview';
 import { DistributionListTab } from '@/components/molecules/reinsurance/tabs/DistributionListTab';
 import { PlacementClosingsTab } from '@/components/molecules/reinsurance/tabs/PlacementClosingsTab';
 import { TabBar } from '@/components/molecules/shared/TabBar';
@@ -35,6 +38,7 @@ export default function FacultativeDetailPage({
   const [activeTab, setActiveTab] = useState<FacultativeTab>('distribution');
   const [editOpen, setEditOpen] = useState(false);
   const [endorsementOpen, setEndorsementOpen] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Outstanding');
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -59,9 +63,11 @@ export default function FacultativeDetailPage({
                 Endorse Policy
               </Button>
             )}
-            <Button size="sm" onClick={() => setEditOpen(true)}>
-              Edit
-            </Button>
+            {paymentStatus === 'Outstanding' && (
+              <Button size="sm" onClick={() => setEditOpen(true)}>
+                Edit
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -79,7 +85,7 @@ export default function FacultativeDetailPage({
         ) : (
           <div className="flex flex-col gap-6">
             {/* Overview */}
-            <FacultativeOverview placement={placement} />
+            <FacultativeOverview placement={placement} onPaymentStatusChange={setPaymentStatus} />
 
             {/* Tabs */}
             <div className="flex flex-col">

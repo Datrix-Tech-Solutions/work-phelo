@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Facultative } from '@/types/reinsurance';
 import { PaymentBreakdown } from '@/components/molecules/reinsurance/PaymentBreakdown';
 import { ReinsurersPaymentTable } from '@/components/molecules/reinsurance/tables/ReinsurersPaymentTable';
+import { cardClass } from '@/lib/utils';
 
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';
@@ -19,13 +20,14 @@ export function BusinessPaymentSection({ placement, paidAmount }: BusinessPaymen
   const [total, setTotal] = useState(0);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-4">
+    <div className={cardClass('flex flex-col gap-4 p-4')}>
       <div className="flex flex-col md:flex-row gap-4 items-start">
         <div className="w-full md:flex-1 min-w-0">
           <PaymentBreakdown placement={placement} paidAmount={paidAmount} />
         </div>
         <div className="w-full md:flex-2 min-w-0">
           <ReinsurersPaymentTable
+            placement={placement}
             participants={placement.participants}
             grossPremium={placement.premium ?? 0}
             commission={placement.commission ?? 0}

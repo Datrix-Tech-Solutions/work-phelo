@@ -18,27 +18,47 @@ export function inputClass(error?: string, extra?: string) {
   );
 }
 
-export function cardClass(extra?: string, border: 'module' | 'glass' = 'module') {
+/** Ambient card surface — iOS-style frosted "Liquid Glass" card: blurred translucent
+ * background with a saturation boost (so content behind it stays vivid instead of
+ * washing out), a soft diffused outer shadow, and a thin specular highlight along the
+ * top inner edge (the light-catching rim). Used by nearly every card/toolbar/table in
+ * the app. Border is unified to --glass-border everywhere now — the same edge the
+ * DataTable outer card uses — so every cardClass() surface reads as one consistent
+ * border regardless of context. The old 'module'/'glass' distinction no longer changes
+ * anything; the param is kept (unused) purely so the ~50 existing call sites that still
+ * pass it don't need touching. */
+export function cardClass(extra?: string, border?: 'module' | 'glass') {
+  void border;
   return cn(
-    'bg-(--glass-subtle,rgba(255,255,255,0.3)) backdrop-blur-md rounded-xl border shadow-lg',
-    border === 'module' ? 'border-(--module-border,var(--color-gray-200))' : 'border-white/40',
+    'bg-(--glass-subtle,rgba(255,255,255,0.3)) backdrop-blur-xl backdrop-saturate-150 rounded-xl',
+    'border border-(--glass-border,rgba(255,255,255,0.55))',
+    'shadow-[0_20px_40px_-16px_rgba(0,0,0,0.22),0_2px_8px_-2px_rgba(0,0,0,0.12),inset_0_1px_0_0_var(--glass-highlight,rgba(255,255,255,0.65))]',
     extra,
   );
 }
 
-/** Popup/panel surfaces (SidePanel, DatePicker/SearchSelect dropdowns) — near-solid for
- * legibility, unlike the more translucent cardClass()/glass-strong ambient surfaces. */
+/** Popup/panel surfaces (SidePanel, DatePicker/SearchSelect/MultiSelect dropdowns) — near-solid for
+ * legibility, unlike the more translucent cardClass()/glassStrongClass() ambient surfaces. Same iOS
+ * "Liquid Glass" blur + saturation + specular-highlight treatment as those two. The highlight is a
+ * ring rather than a raw box-shadow so it composes with a caller's own shadow (e.g. SidePanel's
+ * shadow-2xl) instead of being overwritten by it. */
 export function popupClass(extra?: string) {
   return cn(
-    'bg-(--glass-solid,rgba(255,255,255,0.9)) backdrop-blur-md rounded-card border border-gray-200 shadow-xl',
+    'bg-(--glass-solid,rgba(255,255,255,0.9)) backdrop-blur-xl backdrop-saturate-150 rounded-card',
+    'border border-(--glass-border,rgba(255,255,255,0.55)) shadow-xl ring-1 ring-inset ring-(--glass-highlight,rgba(255,255,255,0.65))',
     extra,
   );
 }
 
-/** Same "strong" glass surface as TopNav/Sidebar/DataCard/ModuleButton/ContactCard — more opaque than cardClass(). */
+/** Same "strong" glass surface as ContactCard/DataCard/ModuleButton/ReportCard/ModuleOverviewCard —
+ * more opaque than cardClass(), for chrome/hover surfaces that need to stay legible. Picks up the
+ * same iOS "Liquid Glass" blur + saturation + specular-highlight treatment as cardClass(), but
+ * leaves the outer elevation shadow to the caller — every current consumer already supplies its own
+ * shadow-lg/shadow-xl. The highlight is applied as an inset ring rather than a raw box-shadow so it
+ * composes with the caller's shadow instead of overwriting it. */
 export function glassStrongClass(extra?: string, border: 'module' | 'plain' | 'none' = 'module') {
   return cn(
-    'bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-md',
+    'bg-(--glass-strong,rgba(255,255,255,0.6)) backdrop-blur-xl backdrop-saturate-150 ring-1 ring-inset ring-(--glass-highlight,rgba(255,255,255,0.65))',
     border === 'module' && 'border border-(--module-border,var(--color-gray-200))',
     border === 'plain' && 'border border-gray-200',
     extra,

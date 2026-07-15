@@ -39,7 +39,7 @@ function TabLink({
   onTabChange?: (tab: string) => void;
 }) {
   const cls = cn(
-    'relative px-6 py-3 text-sm transition-colors whitespace-nowrap flex items-center gap-2',
+    'relative px-6 py-2 text-sm transition-colors whitespace-nowrap flex items-center gap-2',
     isActive ? TAB_ACTIVE : TAB_IDLE,
   );
 

@@ -1,6 +1,6 @@
-import { Figtree } from 'next/font/google';
+import { Roboto_Flex } from 'next/font/google';
 
-export const appFont = Figtree({
+export const appFont = Roboto_Flex({
   subsets: ['latin'],
   variable: '--font-app',
 });

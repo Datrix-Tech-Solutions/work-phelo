@@ -3,7 +3,8 @@
 import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative, PlacementPayment } from '@/types/reinsurance';
-import { useCedants } from '@/hooks';
+import { useCedants, useRiskTypes } from '@/hooks';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -65,6 +66,7 @@ export function PaymentReceiptModal({
   onClose,
 }: PaymentReceiptModalProps) {
   const { data: cedants = [] } = useCedants();
+  const { data: riskTypes = [] } = useRiskTypes();
 
   const {
     currency,
@@ -78,7 +80,10 @@ export function PaymentReceiptModal({
     inceptionDate,
     expiryDate,
     cedant,
+    riskTypeId,
   } = placement;
+
+  const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
   const fullCedant = cedants.find((c) => c.id === cedant.id);
   const primaryAddress =
@@ -164,6 +169,12 @@ export function PaymentReceiptModal({
       isOpen={isOpen}
       title={`Payment Receipt — ${reference}`}
       documentTitle="Payment Receipt"
+      fileName={buildDocumentFileName(
+        'Payment Receipt',
+        policyNumber ?? reference,
+        riskTypeName,
+        title,
+      )}
       onPrint={onPrint}
       onClose={onClose}
       afterContent={afterContent}

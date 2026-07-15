@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { TreatyStatusBadge } from '@/components/molecules/reinsurance/TreatyStatusBadge';
 import { TreatyTypeSelectorModal } from '@/components/organisms/reinsurance/TreatyTypeSelectorModal';
 import { CreateQuotaSharePanel } from '@/components/organisms/reinsurance/panels/CreateQuotaSharePanel';
@@ -152,11 +153,20 @@ export function TreatiesTable() {
           setSearch(q);
           setPage(1);
         }}
-        filterOptions={STATUS_FILTER_OPTIONS}
-        onFilter={(v) => {
-          setStatusFilter(v);
-          setPage(1);
-        }}
+        extraFilters={
+          <div>
+            <SearchSelect
+              size="sm"
+              placeholder="Status"
+              options={STATUS_FILTER_OPTIONS}
+              value={statusFilter}
+              onChange={(v) => {
+                setStatusFilter(v);
+                setPage(1);
+              }}
+            />
+          </div>
+        }
         onExport={() => {
           /* TODO: implement export */
         }}

@@ -10,6 +10,15 @@ function fmt(val: number | null, currency: string | null) {
   return `${prefix}${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function fmtDate(iso: string | null) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 interface ClaimSummaryProps {
   placement?: Facultative | null;
 }
@@ -24,7 +33,9 @@ export function ClaimSummary({ placement }: ClaimSummaryProps) {
     currency,
     premium,
     sumInsured,
-    status,
+    // status,
+    inceptionDate,
+    expiryDate,
   } = placement ?? {
     reference: null,
     policyNumber: null,
@@ -35,6 +46,8 @@ export function ClaimSummary({ placement }: ClaimSummaryProps) {
     premium: null,
     sumInsured: null,
     status: null,
+    inceptionDate: null,
+    expiryDate: null,
   };
 
   return (
@@ -61,6 +74,11 @@ export function ClaimSummary({ placement }: ClaimSummaryProps) {
             )}
           </div>
           <hr className="border-gray-100" />
+          <DetailField
+            horizontal
+            label="Period of Insurance"
+            value={`${fmtDate(inceptionDate)} – ${fmtDate(expiryDate)}`}
+          />
         </>
       ) : (
         <p className="text-sm text-gray-400">Select a placement to see its summary.</p>
@@ -72,7 +90,7 @@ export function ClaimSummary({ placement }: ClaimSummaryProps) {
         label="Premium"
         value={<span className="font-semibold text-gray-900">{fmt(premium, currency)}</span>}
       />
-      <DetailField horizontal label="Status" value={status ?? '—'} />
+      {/* <DetailField horizontal label="Status" value={status ?? '—'} /> */}
     </div>
   );
 }

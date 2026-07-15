@@ -6,9 +6,12 @@ import { cardClass } from '@/lib/utils';
 
 type AmountRow = Currency & { amount: number | null };
 
-function fmtAmount(amount: number, symbol: string | null, isoCode: string): string {
-  const prefix = symbol ? `${symbol} ` : `${isoCode} `;
-  return `${prefix}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmtAmount(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${(value / 1_000).toFixed(2)}K`;
+  return value.toFixed(2);
 }
 
 function buildColumns(label: string): Column<AmountRow>[] {
@@ -17,12 +20,7 @@ function buildColumns(label: string): Column<AmountRow>[] {
       key: 'currency',
       label: 'Currency',
       width: '1fr',
-      render: (row) => (
-        <span>
-          <span className="font-medium text-gray-900">{row.isoCode}</span>
-          <span className="ml-2 text-xs text-gray-400">{row.name}</span>
-        </span>
-      ),
+      render: (row) => <span className="font-medium text-gray-900">{row.isoCode}</span>,
     },
     {
       key: 'amount',
@@ -31,7 +29,7 @@ function buildColumns(label: string): Column<AmountRow>[] {
       className: 'text-right',
       render: (row) => (
         <span className="font-medium text-gray-900">
-          {row.amount != null ? fmtAmount(row.amount, row.symbol, row.isoCode) : '—'}
+          {row.amount != null ? fmtAmount(row.amount) : '—'}
         </span>
       ),
     },

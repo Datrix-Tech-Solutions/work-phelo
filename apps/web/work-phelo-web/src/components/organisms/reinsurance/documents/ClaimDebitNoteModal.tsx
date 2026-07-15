@@ -3,7 +3,8 @@
 import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative, PlacementParticipant } from '@/types/reinsurance';
-import { useReinsurers } from '@/hooks';
+import { useReinsurers, useRiskTypes } from '@/hooks';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -41,6 +42,7 @@ export function ClaimDebitNoteModal({
   onClose,
 }: ClaimDebitNoteModalProps) {
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: riskTypes = [] } = useRiskTypes();
   const reinsurer = reinsurers.find((r) => r.id === participant.counterpartyId);
   const addr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
   const reinsurerCity = addr?.city ?? null;
@@ -55,7 +57,10 @@ export function ClaimDebitNoteModal({
     inceptionDate,
     expiryDate,
     cedant,
+    riskTypeId,
   } = placement;
+
+  const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
   const sharePercent = parseFloat(participant.sharePercent ?? '0');
   const amountDue = claimAmount != null ? (sharePercent / 100) * claimAmount : null;
@@ -91,6 +96,12 @@ export function ClaimDebitNoteModal({
       isOpen={isOpen}
       title={`Claim Debit Note — ${reference}`}
       documentTitle="Claim Debit Note"
+      fileName={buildDocumentFileName(
+        'Claim Debit Note',
+        policyNumber ?? reference,
+        riskTypeName,
+        title,
+      )}
       onPrint={onPrint}
       onClose={onClose}
       afterContent={afterContent}

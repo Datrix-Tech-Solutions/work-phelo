@@ -29,15 +29,15 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       primary:
-        'bg-(--module-btn-bg,var(--color-brand)) text-white hover:bg-(--module-btn-bg-hover,var(--color-brand-hover)) focus:ring-(--module-btn-bg,var(--color-brand)) shadow-[0_4px_12px_-2px_color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_50%,transparent)] hover:shadow-[0_8px_18px_-4px_color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_60%,transparent)]',
+        'bg-(--module-btn-bg,var(--color-brand)) text-white border border-(--glass-border,rgba(255,255,255,0.55)) hover:bg-(--module-btn-bg-hover,var(--color-brand-hover)) focus:ring-(--module-btn-bg,var(--color-brand)) shadow-[0_4px_12px_-2px_color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_50%,transparent)] hover:shadow-[0_8px_18px_-4px_color-mix(in_oklab,var(--module-btn-bg,var(--color-brand))_60%,transparent)]',
       secondary:
-        'bg-gray-100 text-gray-900 border border-gray-400 hover:bg-(--module-tint,var(--color-brand-tint)) hover:border-(--module-btn-bg,var(--color-brand)) focus:ring-(--focus-ring,var(--color-gray-400))',
+        'bg-gray-100 text-gray-900 border border-(--glass-border,rgba(255,255,255,0.55)) hover:bg-(--module-tint,var(--color-brand-tint)) hover:border-(--module-btn-bg,var(--color-brand)) focus:ring-(--focus-ring,var(--color-gray-400))',
       outline:
-        'border border-gray-300 text-gray-700 hover:bg-(--surface-hover-subtle,var(--color-gray-50)) focus:ring-(--focus-ring,var(--color-gray-400))',
+        'border border-(--glass-border,rgba(255,255,255,0.55)) text-gray-700 hover:bg-(--surface-hover-subtle,var(--color-gray-50)) focus:ring-(--focus-ring,var(--color-gray-400))',
       ghost:
-        'text-gray-700 hover:bg-(--surface-hover,var(--color-gray-100)) focus:ring-(--focus-ring,var(--color-gray-400)) shadow-none hover:shadow-none',
+        'text-gray-700 border border-(--glass-border,rgba(255,255,255,0.55)) hover:bg-(--surface-hover,var(--color-gray-100)) focus:ring-(--focus-ring,var(--color-gray-400)) shadow-none hover:shadow-none',
       danger:
-        'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-[0_4px_12px_-2px_rgba(220,38,38,0.4)] hover:shadow-[0_8px_18px_-4px_rgba(220,38,38,0.5)]',
+        'bg-red-600 text-white border border-(--glass-border,rgba(255,255,255,0.55)) hover:bg-red-700 focus:ring-red-500 shadow-[0_4px_12px_-2px_rgba(220,38,38,0.4)] hover:shadow-[0_8px_18px_-4px_rgba(220,38,38,0.5)]',
     };
 
     const sizes = {

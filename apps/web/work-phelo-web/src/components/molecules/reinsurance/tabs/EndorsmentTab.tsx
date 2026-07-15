@@ -629,7 +629,7 @@ function EndorsementCard({
               variant="blue"
               onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
             >
-              View Document
+              View Endorsement
             </TableButton>
           );
         }

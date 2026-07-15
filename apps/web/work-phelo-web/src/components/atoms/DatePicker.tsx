@@ -17,6 +17,8 @@ interface DatePickerProps {
   disableFuture?: boolean;
   disablePast?: boolean;
   minDate?: string; // ISO: YYYY-MM-DD — disables all days before this date
+  /** 'md' (default) keeps the standard px-4 py-3 sizing; 'sm' matches FormField/SearchSelect's compact px-2 py-2 sizing. */
+  size?: 'sm' | 'md';
 }
 
 export function DatePicker({
@@ -28,6 +30,7 @@ export function DatePicker({
   disableFuture = false,
   disablePast = false,
   minDate,
+  size = 'sm',
 }: DatePickerProps) {
   const today = new Date();
   const parsed = value ? new Date(value) : null;
@@ -157,7 +160,8 @@ export function DatePicker({
           setView('days');
         }}
         className={cn(
-          'w-full flex items-center justify-between px-4 py-3 border rounded-input text-sm transition-colors',
+          'w-full flex items-center justify-between border rounded-input text-sm transition-colors',
+          size === 'sm' ? 'px-2 py-2' : 'px-4 py-3',
           open
             ? 'bg-white border-(--module-btn-bg,var(--color-brand)) ring-2 ring-(--module-btn-bg,var(--color-brand))/30'
             : error
@@ -167,7 +171,7 @@ export function DatePicker({
         )}
       >
         <span>{displayValue || placeholder}</span>
-        <Calendar className="w-5 h-5 text-gray-400" />
+        <Calendar className={cn('text-gray-400', size === 'sm' ? 'w-4 h-4' : 'w-5 h-5')} />
       </button>
 
       {error && <p className="text-xs text-red-500">{error}</p>}

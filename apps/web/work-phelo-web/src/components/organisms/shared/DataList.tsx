@@ -138,12 +138,12 @@ export function DataList<T extends { id: string | number }>({
               >
                 <div
                   className={cardClass(
-                    'absolute inset-y-0.5 left-4 right-4 rounded-lg bg-(--table-header-bg,var(--color-gray-200)) opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 pointer-events-none',
+                    'absolute inset-y-0.5 left-1 right-1 rounded-lg bg-(--table-header-bg,var(--color-gray-200)) opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 pointer-events-none',
                     'glass',
                   )}
                 />
                 <div
-                  className="relative grid px-6 py-4 items-center text-sm text-gray-800"
+                  className="relative grid px-4 py-2 items-center text-sm text-gray-800"
                   style={{ gridTemplateColumns: gridCols }}
                 >
                   {columns.map((col) => (

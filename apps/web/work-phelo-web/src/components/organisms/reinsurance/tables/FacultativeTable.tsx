@@ -4,10 +4,11 @@ import { useState, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useQueries } from '@tanstack/react-query';
 import { api } from '@/lib/api';
-import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { DataTable, Column, RowAction } from '@/components/organisms/shared/DataTable';
 import { Badge } from '@/components/atoms/Badge';
 import { Button } from '@/components/atoms/Button';
 import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
+import { SearchSelect } from '@/components/atoms/SearchSelect';
 import { Modal } from '@/components/organisms/shared/Modal';
 import { CreateFacultativePanel } from '@/components/organisms/reinsurance/panels/CreateFacultativePanel';
 import { EditFacultativePanel } from '@/components/organisms/reinsurance/panels/EditFacultativePanel';
@@ -24,6 +25,7 @@ import {
   useFacultatives,
   usePlacementPayments,
   useRestoreFacultative,
+  useUpdateFacultativeStatus,
 } from '@/hooks';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
 import { useToast } from '@/hooks/useToast';
@@ -61,6 +63,7 @@ const RAW_STATUS_VARIANT_MAP: Record<
 const PLACEMENTS_FILTER_OPTIONS = [
   { value: 'Open', label: 'Open' },
   { value: 'Draft', label: 'Draft' },
+  { value: 'Partially Placed', label: 'Partially Placed' },
 ];
 
 const CLOSING_FILTER_OPTIONS = [
@@ -72,9 +75,9 @@ const CLOSING_FILTER_OPTIONS = [
 type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
-  Outstanding: 'text-xs text-gray-400',
-  'Part Payment': 'text-xs text-yellow-600 font-medium',
-  Paid: 'text-xs text-green-600 font-medium',
+  Outstanding: 'text-[10px] text-gray-400',
+  'Part Payment': 'text-[10px] text-yellow-600 font-medium',
+  Paid: 'text-[10px] text-green-600 font-medium',
 };
 
 function netPremiumFor(row: Facultative, deductionRate: number): number {
@@ -106,7 +109,7 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
   else if (paid > 0) paymentStatus = 'Part Payment';
 
   return (
-    <div className="flex flex-col gap-1 items-start">
+    <div className="flex flex-col gap-1">
       <Badge
         label={toStatusLabel(placement.status)}
         variant={RAW_STATUS_VARIANT_MAP[placement.status]}
@@ -212,20 +215,36 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'status',
     label: 'Status',
-    width: '100px',
+    width: '120px',
     render: (row) => <PaymentStatusCell placement={row} />,
   },
 ];
 
-const PLACEMENT_STATUSES: FacultativeStatus[] = ['DRAFT', 'MARKETING'];
+const SUM_INSURED_COLUMN: Column<Facultative> = {
+  key: 'sumInsured',
+  label: '100% Sum Insured',
+  width: '150px',
+  className: 'pr-6',
+  render: (row) => (
+    <span className="font-semibold text-gray-900">
+      {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
+    </span>
+  ),
+};
+
+const PLACEMENT_STATUSES: FacultativeStatus[] = ['DRAFT', 'MARKETING', 'PARTIALLY_PLACED'];
 const CLOSING_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
   'PLACED',
   'CLOSING',
   'CLOSED',
   'DECLINED',
   'CANCELLED',
 ];
+
+// Row-action grouping only — statuses that get the "closed" action set (View/Reopen/Partial Edit
+// or the paid variant). Distinct from toStatusLabel()'s badge grouping, which still shows
+// "Closing" as its own label.
+const CLOSED_UMBRELLA_STATUSES: FacultativeStatus[] = ['PLACED', 'CLOSING', 'CLOSED'];
 
 export function FacultativeTable({
   tab = 'placements',
@@ -242,6 +261,7 @@ export function FacultativeTable({
   const [editTarget, setEditTarget] = useState<Facultative | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<Facultative | null>(null);
   const [restoreTarget, setRestoreTarget] = useState<Facultative | null>(null);
+  const [reopenTarget, setReopenTarget] = useState<Facultative | null>(null);
   const [archiveReason, setArchiveReason] = useState('');
 
   const { data: activeRows = [], isLoading: loadingActive } = useFacultatives();
@@ -251,6 +271,9 @@ export function FacultativeTable({
   const { data: cedants = [] } = useCedants();
   const { mutate: archivePlacement, isPending: isArchiving } = useDeleteFacultative();
   const { mutate: restorePlacement, isPending: isRestoring } = useRestoreFacultative();
+  const { mutate: reopenPlacement, isPending: isReopening } = useUpdateFacultativeStatus(
+    reopenTarget?.id ?? '',
+  );
 
   const allRows = tab === 'archived' ? archivedRows : activeRows;
   const isLoading = tab === 'archived' ? loadingArchived : loadingActive;
@@ -312,6 +335,8 @@ export function FacultativeTable({
       if (tab === 'placements') {
         if (statusFilter === 'Open') rows = rows.filter((r) => r.status === 'MARKETING');
         else if (statusFilter === 'Draft') rows = rows.filter((r) => r.status === 'DRAFT');
+        else if (statusFilter === 'Partially Placed')
+          rows = rows.filter((r) => r.status === 'PARTIALLY_PLACED');
       } else {
         if (statusFilter === 'Placed') {
           rows = rows.filter((r) =>
@@ -333,6 +358,10 @@ export function FacultativeTable({
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const columns = useMemo<Column<Facultative>[]>(() => {
+    if (tab === 'closing') {
+      return COLUMNS.map((col) => (col.key === 'totalAcceptedPercent' ? SUM_INSURED_COLUMN : col));
+    }
+
     if (tab !== 'archived') return COLUMNS;
 
     const ARCHIVED_HIDDEN_KEYS = new Set(['totalAcceptedPercent', 'participants', 'status']);
@@ -392,6 +421,59 @@ export function FacultativeTable({
     });
   };
 
+  const handleReopen = () => {
+    if (!reopenTarget) return;
+    reopenPlacement(
+      { status: 'CLOSING' },
+      {
+        onSuccess: () => {
+          toast.success('Offer reopened for editing');
+          setReopenTarget(null);
+        },
+        onError: (err) => toast.error(extractError(err, 'Failed to reopen offer')),
+      },
+    );
+  };
+
+  const getRowActions = (row: Facultative): RowAction[] => {
+    if (tab === 'archived') {
+      return [{ label: 'Restore', onClick: () => setRestoreTarget(row) }];
+    }
+
+    const detailUrl = `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${
+      tab === 'closing' ? '?from=closing' : ''
+    }`;
+
+    if (tab === 'closing' && CLOSED_UMBRELLA_STATUSES.includes(row.status)) {
+      const paymentStatus = paymentStatusMap.get(row.id) ?? 'Outstanding';
+      const partialEditAction: RowAction = { label: 'Partial Edit', onClick: () => {} };
+
+      if (paymentStatus === 'Paid' || paymentStatus === 'Part Payment') {
+        return [{ label: 'View Offer', onClick: () => router.push(detailUrl) }, partialEditAction];
+      }
+
+      return [
+        { label: 'View Offer Details', onClick: () => router.push(detailUrl) },
+        { label: 'Reopen Offer', onClick: () => setReopenTarget(row) },
+        partialEditAction,
+      ];
+    }
+
+    if (tab === 'placements') {
+      return [
+        { label: 'View Offer', onClick: () => router.push(detailUrl) },
+        { label: 'Edit Offer', onClick: () => setEditTarget(row) },
+        { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
+      ];
+    }
+
+    return [
+      { label: 'View', onClick: () => router.push(detailUrl) },
+      { label: 'Edit Slip', onClick: () => setEditTarget(row) },
+      { label: 'Archive', onClick: () => setArchiveTarget(row), danger: true },
+    ];
+  };
+
   return (
     <>
       <DataTable
@@ -412,49 +494,28 @@ export function FacultativeTable({
           setSearch(q);
           setPage(1);
         }}
-        filterOptions={
-          tab === 'placements'
-            ? PLACEMENTS_FILTER_OPTIONS
-            : tab === 'closing'
-              ? CLOSING_FILTER_OPTIONS
-              : undefined
+        extraFilters={
+          (tab === 'placements' || tab === 'closing') && (
+            <div>
+              <SearchSelect
+                size="sm"
+                placeholder="Status"
+                options={tab === 'placements' ? PLACEMENTS_FILTER_OPTIONS : CLOSING_FILTER_OPTIONS}
+                value={statusFilter}
+                onChange={(v) => {
+                  setStatusFilter(v);
+                  setPage(1);
+                }}
+              />
+            </div>
+          )
         }
-        onFilter={(v) => {
-          setStatusFilter(v);
-          setPage(1);
-        }}
         actionButton={
           tab === 'placements'
             ? { label: 'New Offer', onClick: () => setPanelOpen(true) }
             : undefined
         }
-        rowActions={(row) =>
-          tab === 'archived'
-            ? [
-                {
-                  label: 'Restore',
-                  onClick: () => setRestoreTarget(row),
-                },
-              ]
-            : [
-                {
-                  label: 'View',
-                  onClick: () =>
-                    router.push(
-                      `/${tenantSlug}/operations/reinsurance/facultative/${row.id}${tab === 'closing' ? '?from=closing' : ''}`,
-                    ),
-                },
-                {
-                  label: 'Edit Slip',
-                  onClick: () => setEditTarget(row),
-                },
-                {
-                  label: 'Archive',
-                  onClick: () => setArchiveTarget(row),
-                  danger: true,
-                },
-              ]
-        }
+        rowActions={getRowActions}
         emptyMessage={
           tab === 'archived'
             ? 'No archived facultative placements found'
@@ -522,6 +583,23 @@ export function FacultativeTable({
             </Button>
             <Button isLoading={isRestoring} loadingText="Restoring…" onClick={handleRestore}>
               Restore
+            </Button>
+          </div>
+        }
+      />
+
+      <Modal
+        isOpen={!!reopenTarget}
+        onClose={() => setReopenTarget(null)}
+        title="Reopen Offer?"
+        description={`Reopen "${reopenTarget?.reference}" for editing? It will move back to Closing status.`}
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setReopenTarget(null)} disabled={isReopening}>
+              Cancel
+            </Button>
+            <Button isLoading={isReopening} loadingText="Reopening…" onClick={handleReopen}>
+              Reopen
             </Button>
           </div>
         }

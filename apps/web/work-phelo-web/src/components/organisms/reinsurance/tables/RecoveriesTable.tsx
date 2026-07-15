@@ -1,50 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
 import { TableButton } from '@/components/atoms/TableButton';
+import { EndorsedReferencePill } from '@/components/atoms/EndorsedReferencePill';
 import { FormField } from '@/components/molecules/shared/FormField';
 import { DatePicker } from '@/components/atoms/DatePicker';
 import { SearchSelect } from '@/components/atoms/SearchSelect';
-import { Facultative } from '@/types/reinsurance';
 import {
-  useReinsurerClaims,
-  useReinsurerClaimPayments,
+  useFacultatives,
+  useAllReinsurerClaims,
+  useAllReinsurerClaimPayments,
   useCreatePlacementPayment,
   useCurrencyOptions,
-  ReinsurerClaimRow,
+  RecoveryRow,
 } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import { useToastStore } from '@/store/toast.store';
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-}
+const PAGE_SIZE = 10;
 
 function fmtAmount(val: number, currency: string) {
   return `${currency} ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-interface RecoveryRow extends ReinsurerClaimRow {
+interface RecoveryTableRow extends RecoveryRow {
   paid: number;
   outstanding: number;
 }
 
 interface RecordPaymentValues {
   paymentType: string;
-  // cheque fields
   chequeNumber: string;
   valueDate: string;
-  // bank transfer fields
   paymentDate: string;
-  // shared
   amount: string;
   bankName: string;
   currency: string;
@@ -80,11 +72,9 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 
 function RecordRecoveryPaymentModal({
   row,
-  reinsurerId,
   onClose,
 }: {
-  row: RecoveryRow | null;
-  reinsurerId: string;
+  row: RecoveryTableRow | null;
   onClose: () => void;
 }) {
   const {
@@ -134,7 +124,7 @@ function RecordRecoveryPaymentModal({
         placementId: row.placementId,
         type: 'CLAIM_SETTLEMENT',
         direction: 'INBOUND',
-        counterpartyId: reinsurerId,
+        counterpartyId: row.reinsurerId,
         amount,
         currency: row.currency,
         paymentDate: new Date(resolvedDate).toISOString(),
@@ -293,7 +283,7 @@ function RecordRecoveryPaymentModal({
       isOpen={!!row}
       onClose={handleClose}
       title="Record Recovery Payment"
-      description={row ? `${row.placementReference} — ${row.claimNumber}` : undefined}
+      description={row ? `${row.reinsurerName} — ${row.claimNumber}` : undefined}
       footer={
         <div className="flex items-center justify-end gap-3">
           <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
@@ -312,8 +302,8 @@ function RecordRecoveryPaymentModal({
       >
         {row && (
           <div className="grid grid-cols-2 gap-3">
-            <ReadOnlyField label="Offer" value={row.placementReference} />
-            <ReadOnlyField label="Cedant" value={row.cedantName} />
+            <ReadOnlyField label="Policy Number" value={row.policyNumber} />
+            <ReadOnlyField label="Reinsurer" value={row.reinsurerName} />
             <ReadOnlyField label="Claim Number" value={row.claimNumber} />
             <ReadOnlyField label="Outstanding" value={fmtAmount(row.outstanding, row.currency)} />
           </div>
@@ -343,63 +333,113 @@ function RecordRecoveryPaymentModal({
   );
 }
 
-interface ReinsurerRecoveriesTabProps {
-  placements: Facultative[];
-  reinsurerId: string;
-}
+export function RecoveriesTable() {
+  const [search, setSearch] = useState('');
+  const [reinsurerFilter, setReinsurerFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [paymentRow, setPaymentRow] = useState<RecoveryTableRow | null>(null);
 
-export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRecoveriesTabProps) {
-  const { rows, isLoading } = useReinsurerClaims(placements, reinsurerId);
-  const { paidByPlacementId } = useReinsurerClaimPayments(placements, reinsurerId);
-  const [paymentRow, setPaymentRow] = useState<RecoveryRow | null>(null);
+  const { data: allPlacements = [], isLoading: loadingPlacements } = useFacultatives();
 
-  const recoveryRows: RecoveryRow[] = rows.map((row) => {
-    const paid = Math.min(paidByPlacementId.get(row.placementId) ?? 0, row.recoveryAmount);
-    return { ...row, paid, outstanding: Math.max(0, row.recoveryAmount - paid) };
-  });
+  const reinsuredPlacements = useMemo(
+    () =>
+      allPlacements.filter((p) =>
+        p.participants.some((pt) => pt.status === 'ACCEPTED' || pt.status === 'CLOSED'),
+      ),
+    [allPlacements],
+  );
 
-  const columns: Column<RecoveryRow>[] = [
+  const { rows, isLoading: loadingClaims } = useAllReinsurerClaims(reinsuredPlacements);
+  const { paidMap, isLoading: loadingPayments } = useAllReinsurerClaimPayments(reinsuredPlacements);
+
+  const isLoading = loadingPlacements || loadingClaims || loadingPayments;
+
+  const recoveryRows: RecoveryTableRow[] = useMemo(
+    () =>
+      rows.map((row) => {
+        const paid = Math.min(
+          paidMap.get(`${row.placementId}:${row.reinsurerId}`) ?? 0,
+          row.recoveryAmount,
+        );
+        return { ...row, paid, outstanding: Math.max(0, row.recoveryAmount - paid) };
+      }),
+    [rows, paidMap],
+  );
+
+  const reinsurerOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const r of recoveryRows) seen.set(r.reinsurerId, r.reinsurerName);
+    return Array.from(seen.entries())
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [recoveryRows]);
+
+  const filtered = useMemo(() => {
+    let rows = recoveryRows;
+    if (search) {
+      const q = search.toLowerCase();
+      rows = rows.filter(
+        (r) =>
+          r.policyNumber.toLowerCase().includes(q) ||
+          r.insuredTitle.toLowerCase().includes(q) ||
+          r.reinsurerName.toLowerCase().includes(q) ||
+          r.claimNumber.toLowerCase().includes(q),
+      );
+    }
+    if (reinsurerFilter) {
+      rows = rows.filter((r) => r.reinsurerId === reinsurerFilter);
+    }
+    return rows;
+  }, [recoveryRows, search, reinsurerFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const columns: Column<RecoveryTableRow>[] = [
     {
-      key: 'placementReference',
-      label: 'Offer',
-      width: 'minmax(130px, 1fr)',
-      render: (row) => <span className="font-medium text-gray-900">{row.placementReference}</span>,
+      key: 'policyNumber',
+      label: 'Policy Number',
+      width: 'minmax(150px, 1fr)',
+      render: (row) => <EndorsedReferencePill id={row.placementId} reference={row.policyNumber} />,
     },
     {
-      key: 'cedantName',
-      label: 'Cedant',
-      width: 'minmax(130px, 1fr)',
-      render: (row) => <span className="text-gray-700">{row.cedantName}</span>,
+      key: 'insuredTitle',
+      label: 'Insured / Risk Type',
+      width: 'minmax(150px, 1fr)',
+      render: (row) => (
+        <div className="flex flex-col gap-0.5">
+          <span className="font-semibold text-gray-900 leading-tight">{row.insuredTitle}</span>
+          <span className="text-xs text-gray-400">{row.riskType ?? '—'}</span>
+        </div>
+      ),
     },
     {
-      key: 'occurrenceDate',
-      label: 'Occurrence Date',
-      width: '100px',
-      render: (row) => <span className="text-gray-700">{fmtDate(row.occurrenceDate)}</span>,
+      key: 'reinsurerName',
+      label: 'Reinsurer',
+      width: 'minmax(130px, 1fr)',
+      render: (row) => <span className="text-gray-700">{row.reinsurerName}</span>,
+    },
+    {
+      key: 'claimNumber',
+      label: 'Claim Number',
+      width: '140px',
+      render: (row) => <span className="text-gray-700">{row.claimNumber}</span>,
     },
     {
       key: 'sharePercent',
       label: 'Share (%)',
-      width: '90px',
+      width: '100px',
       className: 'text-center',
       render: (row) => <span className="text-gray-600 block text-center">{row.sharePercent}%</span>,
     },
     {
       key: 'recoveryAmount',
       label: 'Recovery Amount',
-      width: '150px',
+      width: '170px',
       render: (row) => (
         <span className="font-medium text-gray-900 block">
           {fmtAmount(row.recoveryAmount, row.currency)}
         </span>
-      ),
-    },
-    {
-      key: 'paid',
-      label: 'Paid',
-      width: '150px',
-      render: (row) => (
-        <span className="text-gray-700 block">{fmtAmount(row.paid, row.currency)}</span>
       ),
     },
     {
@@ -408,7 +448,7 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
       width: '150px',
       render: (row) => (
         <span
-          className={` font-medium ${row.outstanding > 0 ? 'text-orange-600' : 'text-gray-900'}`}
+          className={`font-medium ${row.outstanding > 0 ? 'text-orange-600' : 'text-gray-900'}`}
         >
           {fmtAmount(row.outstanding, row.currency)}
         </span>
@@ -417,7 +457,7 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
     {
       key: 'actions',
       label: 'Actions',
-      width: '120px',
+      width: '160px',
       render: (row) => <TableButton onClick={() => setPaymentRow(row)}>Record Payment</TableButton>,
     },
   ];
@@ -426,19 +466,36 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
     <>
       <DataTable
         columns={columns}
-        data={recoveryRows}
-        emptyMessage={isLoading ? 'Loading…' : 'No offers with claims yet'}
-        currentPage={1}
-        totalPages={0}
-        onPageChange={() => {}}
+        data={paged}
+        isLoading={isLoading}
+        searchPlaceholder="Search recoveries…"
+        searchValue={search}
         noInternalScroll
+        onSearch={(q) => {
+          setSearch(q);
+          setPage(1);
+        }}
+        extraFilters={
+          <div>
+            <SearchSelect
+              size="sm"
+              placeholder="Reinsurers"
+              options={reinsurerOptions}
+              value={reinsurerFilter}
+              onChange={(v) => {
+                setReinsurerFilter(v);
+                setPage(1);
+              }}
+            />
+          </div>
+        }
+        emptyMessage="No recoveries found"
+        currentPage={page}
+        totalPages={totalPages}
+        onPageChange={setPage}
       />
 
-      <RecordRecoveryPaymentModal
-        row={paymentRow}
-        reinsurerId={reinsurerId}
-        onClose={() => setPaymentRow(null)}
-      />
+      <RecordRecoveryPaymentModal row={paymentRow} onClose={() => setPaymentRow(null)} />
     </>
   );
 }

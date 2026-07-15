@@ -3,8 +3,9 @@
 import Image from 'next/image';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Facultative } from '@/types/reinsurance';
-import { useReinsurers } from '@/hooks';
+import { useReinsurers, useRiskTypes } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 
 function fmtFieldValue(val: unknown): string {
   if (val == null) return '—';
@@ -60,6 +61,7 @@ export function CreditNoteModal({
   onClose,
 }: CreditNoteModalProps) {
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: riskTypes = [] } = useRiskTypes();
   const reinsurer = reinsurers.find((r) => r.id === counterpartyId);
   const addr = reinsurer?.addresses?.find((a) => a.isPrimary) ?? reinsurer?.addresses?.[0];
   const reinsurerCity = addr?.city ?? null;
@@ -72,12 +74,16 @@ export function CreditNoteModal({
     classOfBusiness,
     title,
     reference,
+    policyNumber,
     inceptionDate,
     expiryDate,
     cedant,
     businessDetails,
     offerDetails,
+    riskTypeId,
   } = placement;
+
+  const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
 
   const riskDetailRows: CreditNoteRow[] = [
     ...placementDetailEntries(businessDetails),
@@ -138,6 +144,7 @@ export function CreditNoteModal({
       isOpen={isOpen}
       title={`Closings — ${reference}`}
       documentTitle="Closings"
+      fileName={buildDocumentFileName('Closings', policyNumber ?? reference, riskTypeName, title)}
       afterContent={
         <div
           style={{
