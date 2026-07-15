@@ -8,6 +8,10 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementDocumentStatus,
+  PlacementDocumentType,
+  PlacementNoteStatus,
+  PlacementNoteType,
   PlacementParticipantRole,
   PlacementParticipantStatus,
   PlacementStatus,
@@ -157,6 +161,7 @@ describe('PlacementsService', () => {
       create: PrismaMethod;
       findFirst: PrismaMethod;
       update: PrismaMethod;
+      updateMany: PrismaMethod;
       delete: PrismaMethod;
     };
     placementClosing: {
@@ -164,10 +169,12 @@ describe('PlacementsService', () => {
       count: PrismaMethod;
       create: PrismaMethod;
       update: PrismaMethod;
+      updateMany: PrismaMethod;
     };
     placementNote: {
       count: PrismaMethod;
       findFirst: PrismaMethod;
+      updateMany: PrismaMethod;
     };
     placementPayment: {
       count: PrismaMethod;
@@ -235,6 +242,9 @@ describe('PlacementsService', () => {
         create: jest.fn<Promise<unknown>, [unknown]>(),
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
         delete: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementClosing: {
@@ -242,12 +252,18 @@ describe('PlacementsService', () => {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
       },
       placementNote: {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
         findFirst: jest
           .fn<Promise<unknown>, [unknown]>()
           .mockResolvedValue(null),
+        updateMany: jest
+          .fn<Promise<unknown>, [unknown]>()
+          .mockResolvedValue({ count: 0 }),
       },
       placementPayment: {
         count: jest.fn<Promise<unknown>, [unknown]>().mockResolvedValue(0),
@@ -1089,49 +1105,23 @@ describe('PlacementsService', () => {
     });
   });
 
-  it('reopens a safely editable placement with active participants to marketing and voids stale offer slips', async () => {
+  it('reopens a safely editable placement with active participants to marketing and supersedes market artifacts', async () => {
     const placedWithoutImmutableActivity = {
-      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
       status: PlacementStatus.PARTIALLY_PLACED,
     };
     const reopened = {
       ...placedWithoutImmutableActivity,
-      title: 'Reopened Placement',
+      description: 'Internal admin note',
       status: PlacementStatus.MARKETING,
     };
     prisma.placement.findFirst.mockResolvedValue(
       placedWithoutImmutableActivity,
     );
     prisma.placement.update.mockResolvedValue(reopened);
-    prisma.placementDocument.findMany.mockResolvedValue([
-      {
-        id: 'offer-slip-current',
-        participantId: 'participant-1',
-        closingId: null,
-        noteId: null,
-        endorsementId: null,
-        endorsementClosingId: null,
-        claimId: null,
-        claimCashCallId: null,
-        version: 2,
-        createdAt: new Date('2026-05-28T10:05:00.000Z'),
-      },
-      {
-        id: 'offer-slip-historical',
-        participantId: 'participant-1',
-        closingId: null,
-        noteId: null,
-        endorsementId: null,
-        endorsementClosingId: null,
-        claimId: null,
-        claimCashCallId: null,
-        version: 1,
-        createdAt: new Date('2026-05-28T10:00:00.000Z'),
-      },
-    ]);
 
     const result = await service.update(user, 'placement-1', {
-      title: 'Reopened Placement',
+      description: 'Internal admin note',
     });
 
     expect(result.status).toBe(PlacementStatus.MARKETING);
@@ -1146,7 +1136,42 @@ describe('PlacementsService', () => {
       placementId: 'placement-1',
       fromStatus: PlacementStatus.PARTIALLY_PLACED,
       toStatus: PlacementStatus.MARKETING,
-      note: 'Placement edited and returned to Open Offers',
+      note: 'Placement edited and returned to Open Offers (administrative edit)',
+    });
+
+    expect(prisma.placementClosing.updateMany.mock.calls[0]?.[0]).toMatchObject(
+      {
+        where: {
+          tenantId: 'tenant-1',
+          placementId: 'placement-1',
+          status: {
+            in: [
+              PlacementClosingStatus.DRAFT,
+              PlacementClosingStatus.ISSUED,
+              PlacementClosingStatus.CONFIRMED,
+            ],
+          },
+        },
+        data: { status: PlacementClosingStatus.VOID },
+      },
+    );
+
+    expect(prisma.placementNote.updateMany.mock.calls[0]?.[0]).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        endorsementId: null,
+        type: {
+          in: [PlacementNoteType.DEBIT_NOTE, PlacementNoteType.CREDIT_NOTE],
+        },
+        status: {
+          in: [PlacementNoteStatus.DRAFT, PlacementNoteStatus.ISSUED],
+        },
+      },
+      data: {
+        status: PlacementNoteStatus.VOID,
+        voidReason: 'Placement edited; note superseded',
+      },
     });
 
     const documentArgs = prisma.placementDocument.updateMany.mock
@@ -1159,11 +1184,37 @@ describe('PlacementsService', () => {
     expect(documentArgs?.where).toMatchObject({
       tenantId: 'tenant-1',
       placementId: 'placement-1',
-      id: { in: ['offer-slip-current'] },
+      endorsementId: null,
+      type: {
+        in: [
+          PlacementDocumentType.OFFER_SLIP,
+          PlacementDocumentType.CLOSING_SLIP,
+          PlacementDocumentType.DEBIT_NOTE,
+          PlacementDocumentType.CREDIT_NOTE,
+        ],
+      },
+      status: {
+        in: [
+          PlacementDocumentStatus.DRAFT,
+          PlacementDocumentStatus.GENERATED,
+          PlacementDocumentStatus.FAILED,
+        ],
+      },
     });
     expect(documentArgs?.data).toMatchObject({
-      status: 'VOID',
-      voidReason: 'Placement edited; offer slip superseded',
+      status: PlacementDocumentStatus.VOID,
+      voidReason: 'Placement edited; document superseded',
+    });
+
+    expect(
+      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
+    ).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        status: PlacementParticipantStatus.CLOSED,
+      },
+      data: { status: PlacementParticipantStatus.ACCEPTED },
     });
   });
 
@@ -1183,20 +1234,170 @@ describe('PlacementsService', () => {
     expect(prisma.placementStatusHistory.create).not.toHaveBeenCalled();
   });
 
-  it('rejects direct placement edits when a confirmed closing exists', async () => {
+  it('allows direct placement edits with closings and issued notes when no financial/downstream lock exists', async () => {
     prisma.placement.findFirst.mockResolvedValue(
       placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
     );
-    prisma.placementClosing.findFirst.mockResolvedValueOnce({
-      id: 'closing-1',
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      title: 'Safe Update',
     });
 
-    await expect(
-      service.update(user, 'placement-1', { title: 'Unsafe Update' }),
-    ).rejects.toThrow(
-      'This placement has progressed beyond negotiation and cannot be edited directly. Create an endorsement instead.',
+    await service.update(user, 'placement-1', { title: 'Safe Update' });
+
+    expect(prisma.placementClosing.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { status: PlacementClosingStatus.VOID },
+      }),
     );
-    expect(prisma.placement.update).not.toHaveBeenCalled();
+    const noteArgs = prisma.placementNote.updateMany.mock.calls[0]?.[0] as
+      | { data: Record<string, unknown> }
+      | undefined;
+    expect(noteArgs?.data).toMatchObject({
+      status: PlacementNoteStatus.VOID,
+    });
+    expect(prisma.placement.update).toHaveBeenCalled();
+  });
+
+  it('resets accepted and closed participants to offer-sent when premium changes', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
+      premium: '1000.00',
+      status: PlacementStatus.PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.OFFER_SENT),
+      premium: '1250.00',
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', { premium: 1250 });
+
+    expect(
+      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
+    ).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        placementId: 'placement-1',
+        status: {
+          in: [
+            PlacementParticipantStatus.CLOSED,
+            PlacementParticipantStatus.ACCEPTED,
+            PlacementParticipantStatus.QUOTED,
+          ],
+        },
+      },
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
+    });
+    const historyArgs = prisma.placementStatusHistory.create.mock
+      .calls[0]?.[0] as
+      | {
+          data: Record<string, unknown>;
+        }
+      | undefined;
+    expect(historyArgs?.data).toMatchObject({
+      note: 'Placement edited and returned to Open Offers (material edit: premium)',
+    });
+  });
+
+  it('resets accepted participants to offer-sent when expiry date changes', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      expiryDate: new Date('2027-05-31T00:00:00.000Z'),
+      status: PlacementStatus.PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.OFFER_SENT),
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', {
+      expiryDate: '2027-06-30T00:00:00.000Z',
+    });
+
+    expect(
+      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
+    ).toMatchObject({
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
+    });
+  });
+
+  it('resets quoted participants to offer-sent when business details change', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.QUOTED),
+      businessDetails: { occupancy: 'Warehouse' },
+      status: PlacementStatus.PARTIALLY_PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.OFFER_SENT),
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', {
+      businessDetails: { occupancy: 'Factory' },
+    });
+
+    expect(
+      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
+    ).toMatchObject({
+      data: { status: PlacementParticipantStatus.OFFER_SENT },
+    });
+  });
+
+  it('does not treat decimal and date formatting-only differences as material edits', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.CLOSED),
+      premium: '1000.00',
+      expiryDate: new Date('2027-05-31T00:00:00.000Z'),
+      status: PlacementStatus.PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.ACCEPTED),
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', {
+      premium: 1000,
+      expiryDate: '2027-05-31T00:00:00.000Z',
+    });
+
+    expect(
+      prisma.placementParticipant.updateMany.mock.calls[0]?.[0],
+    ).toMatchObject({
+      where: {
+        status: PlacementParticipantStatus.CLOSED,
+      },
+      data: { status: PlacementParticipantStatus.ACCEPTED },
+    });
+  });
+
+  it('leaves invited and declined participants out of material reoffer resets', async () => {
+    prisma.placement.findFirst.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.INVITED),
+      premium: '1000.00',
+      status: PlacementStatus.PLACED,
+    });
+    prisma.placement.update.mockResolvedValue({
+      ...placementWithParticipant(PlacementParticipantStatus.INVITED),
+      status: PlacementStatus.MARKETING,
+    });
+
+    await service.update(user, 'placement-1', { premium: 1250 });
+
+    const participantArgs = prisma.placementParticipant.updateMany.mock
+      .calls[0]?.[0] as
+      | {
+          where: {
+            status?: { in?: PlacementParticipantStatus[] };
+          };
+        }
+      | undefined;
+    expect(participantArgs?.where.status?.in).not.toContain(
+      PlacementParticipantStatus.INVITED,
+    );
+    expect(participantArgs?.where.status?.in).not.toContain(
+      PlacementParticipantStatus.DECLINED,
+    );
   });
 
   it('exposes direct edit blocking reason through lock status', async () => {
@@ -1206,7 +1407,7 @@ describe('PlacementsService', () => {
       status: PlacementStatus.MARKETING,
       archivedAt: null,
     });
-    prisma.placementNote.findFirst.mockResolvedValueOnce({ id: 'note-1' });
+    prisma.placementClaim.findFirst.mockResolvedValueOnce({ id: 'claim-1' });
 
     const status = await service.getLockStatus('tenant-1', 'placement-1');
 
@@ -1216,7 +1417,7 @@ describe('PlacementsService', () => {
       endorsementRequired: true,
       editRequiresEndorsement: true,
       lockSource: 'DOWNSTREAM_ACTIVITY',
-      editBlockedReason: 'Issued debit or credit note exists.',
+      editBlockedReason: 'Claim exists.',
     });
   });
 
