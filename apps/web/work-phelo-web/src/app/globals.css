@@ -23,9 +23,6 @@
   --module-accounting: #064707;  /* green — Accounting  064707*/
   --module-operations: #1E3A8A;  /* purple — Operations */
 
-  /* App shell background — single color for the whole app; use bg-app-shell / <AppBackground> */
-  --app-shell: #f3f6f4;  /* bg-gray-100 */
-
   /* Module palette fallbacks — used outside any layout class (brand colors) */
   --module-btn-bg:       var(--brand);
   --module-btn-bg-hover: var(--brand-hover);
@@ -77,7 +74,6 @@
 :root[data-theme='dark'] {
   --background: #0a0a0a;
   --foreground: #ededed;
-  --app-shell: #14161a;
 
   --surface-hover-subtle: rgba(255, 255, 255, 0.05);
   --surface-hover:        rgba(255, 255, 255, 0.08);
@@ -138,9 +134,6 @@
   --color-module-marketing:  var(--module-marketing);
   --color-module-accounting: var(--module-accounting);
   --color-module-operations: var(--module-operations);
-
-  /* App shell background token */
-  --color-app-shell: var(--app-shell);
 }
 
 /* Module layout classes — each defines the full derived palette from its identity color.
@@ -190,9 +183,10 @@
 
 /* Dark-mode module overrides — only the tokens previously mixed toward *white*
    (table-header-bg, tint, border) need a dark-appropriate replacement.
-   --module-accent is deliberately left alone: the app-blob backgrounds read it
-   too, and blobs must look identical in both themes. --module-btn-bg-hover and
-   --module-gradient-end already mix toward black, so they stay as-is.
+   --module-accent is deliberately left alone: <AppBackground> reads it directly
+   as the app shell background color, and it must look identical in both themes.
+   --module-btn-bg-hover and --module-gradient-end already mix toward black, so
+   they stay as-is.
 
    table-header-bg doubles as the row-hover highlight in DataTable (same token,
    see the hover overlay in DataTable.tsx), so it needs to read as a *lighter*
@@ -223,8 +217,9 @@
   --module-border:    color-mix(in oklch, var(--module-marketing) 32%, black);
 }
 
-/* Animated blobs behind <AppBackground> content — colors pick up the active .layout-* module vars,
-   so they re-tint per module. Kept subtle/slow since pages are read for long stretches. */
+/* Slow-drifting shapes behind <AppBackground> content — same hue as the flat fill
+   (--module-accent), just mixed lighter/darker, so they read as gentle movement in
+   the fill rather than distinct colored blobs. */
 .app-blob-layer {
   position: absolute;
   inset: 0;
@@ -236,36 +231,27 @@
 .app-blob {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(90px);
-  opacity: 0.25;
+  filter: blur(70px);
+  opacity: 0.6;
   will-change: transform;
 }
 
 .app-blob-1 {
-  top: -12%;
+  top: -10%;
   left: -10%;
-  width: 50rem;
-  height: 50rem;
-  background: var(--module-accent, var(--brand-accent));
-  animation: blob-drift-a 150s ease-in-out infinite;
+  width: 45vmax;
+  height: 45vmax;
+  background: color-mix(in oklch, var(--module-accent, var(--brand-accent)) 55%, var(--background));
+  animation: blob-drift-a 10s ease-in-out infinite;
 }
 
 .app-blob-2 {
-  bottom: -14%;
-  right: -18%;
-  width: 25rem;
-  height: 30rem;
-  background: var(--module-accent, var(--brand-accent));
-  animation: blob-drift-b 10s ease-in-out infinite;
-}
-
-.app-blob-3 {
-  top: 45%;
-  left: 50%;
-  width: 40rem;
-  height: 40rem;
-  background: var(--module-accent, var(--brand-accent));
-  animation: blob-drift-c 10s ease-in-out infinite;
+  bottom: -15%;
+  right: -12%;
+  width: 38vmax;
+  height: 38vmax;
+  background: color-mix(in oklch, var(--module-accent, var(--brand-accent)) 55%, var(--background));
+  animation: blob-drift-b 14s ease-in-out infinite;
 }
 
 @keyframes blob-drift-a {
@@ -274,7 +260,7 @@
     transform: translate(0, 0) scale(1);
   }
   50% {
-    transform: translate(30%, 34%) scale(1.15);
+    transform: translate(40%, 45%) scale(1.25);
   }
 }
 
@@ -284,17 +270,7 @@
     transform: translate(0, 0) scale(1);
   }
   50% {
-    transform: translate(-32%, -26%) scale(0.88);
-  }
-}
-
-@keyframes blob-drift-c {
-  0%,
-  100% {
-    transform: translate(0, 0) scale(1);
-  }
-  50% {
-    transform: translate(-24%, 36%) scale(1.08);
+    transform: translate(-35%, -40%) scale(0.8);
   }
 }
 

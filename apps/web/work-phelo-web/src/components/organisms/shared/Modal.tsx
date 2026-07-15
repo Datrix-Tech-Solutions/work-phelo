@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Icons } from '@/components/atoms/icons';
 
@@ -46,9 +47,9 @@ export function Modal({
     };
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || typeof document === 'undefined') return null;
 
-  return (
+  return createPortal(
     <div
       className={cn(
         'fixed inset-0 z-50',
@@ -102,6 +103,7 @@ export function Modal({
           <div className="mt-auto pt-6 shrink-0 flex items-center justify-end gap-3">{footer}</div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -63,6 +63,7 @@ const RAW_STATUS_VARIANT_MAP: Record<
 const PLACEMENTS_FILTER_OPTIONS = [
   { value: 'Open', label: 'Open' },
   { value: 'Draft', label: 'Draft' },
+  { value: 'Partially Placed', label: 'Partially Placed' },
 ];
 
 const CLOSING_FILTER_OPTIONS = [
@@ -74,9 +75,9 @@ const CLOSING_FILTER_OPTIONS = [
 type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
-  Outstanding: 'text-xs text-gray-400',
-  'Part Payment': 'text-xs text-yellow-600 font-medium',
-  Paid: 'text-xs text-green-600 font-medium',
+  Outstanding: 'text-[10px] text-gray-400',
+  'Part Payment': 'text-[10px] text-yellow-600 font-medium',
+  Paid: 'text-[10px] text-green-600 font-medium',
 };
 
 function netPremiumFor(row: Facultative, deductionRate: number): number {
@@ -108,7 +109,7 @@ function PaymentStatusCell({ placement }: { placement: Facultative }) {
   else if (paid > 0) paymentStatus = 'Part Payment';
 
   return (
-    <div className="flex flex-col gap-1 items-start">
+    <div className="flex flex-col gap-1">
       <Badge
         label={toStatusLabel(placement.status)}
         variant={RAW_STATUS_VARIANT_MAP[placement.status]}
@@ -214,14 +215,25 @@ const COLUMNS: Column<Facultative>[] = [
   {
     key: 'status',
     label: 'Status',
-    width: '100px',
+    width: '120px',
     render: (row) => <PaymentStatusCell placement={row} />,
   },
 ];
 
-const PLACEMENT_STATUSES: FacultativeStatus[] = ['DRAFT', 'MARKETING'];
+const SUM_INSURED_COLUMN: Column<Facultative> = {
+  key: 'sumInsured',
+  label: '100% Sum Insured',
+  width: '150px',
+  className: 'pr-6',
+  render: (row) => (
+    <span className="font-semibold text-gray-900">
+      {row.sumInsured != null ? `${row.currency ?? ''} ${fmtAmount(row.sumInsured)}` : '—'}
+    </span>
+  ),
+};
+
+const PLACEMENT_STATUSES: FacultativeStatus[] = ['DRAFT', 'MARKETING', 'PARTIALLY_PLACED'];
 const CLOSING_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
   'PLACED',
   'CLOSING',
   'CLOSED',
@@ -232,12 +244,7 @@ const CLOSING_STATUSES: FacultativeStatus[] = [
 // Row-action grouping only — statuses that get the "closed" action set (View/Reopen/Partial Edit
 // or the paid variant). Distinct from toStatusLabel()'s badge grouping, which still shows
 // "Closing" as its own label.
-const CLOSED_UMBRELLA_STATUSES: FacultativeStatus[] = [
-  'PARTIALLY_PLACED',
-  'PLACED',
-  'CLOSING',
-  'CLOSED',
-];
+const CLOSED_UMBRELLA_STATUSES: FacultativeStatus[] = ['PLACED', 'CLOSING', 'CLOSED'];
 
 export function FacultativeTable({
   tab = 'placements',
@@ -328,6 +335,8 @@ export function FacultativeTable({
       if (tab === 'placements') {
         if (statusFilter === 'Open') rows = rows.filter((r) => r.status === 'MARKETING');
         else if (statusFilter === 'Draft') rows = rows.filter((r) => r.status === 'DRAFT');
+        else if (statusFilter === 'Partially Placed')
+          rows = rows.filter((r) => r.status === 'PARTIALLY_PLACED');
       } else {
         if (statusFilter === 'Placed') {
           rows = rows.filter((r) =>
@@ -349,6 +358,10 @@ export function FacultativeTable({
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const columns = useMemo<Column<Facultative>[]>(() => {
+    if (tab === 'closing') {
+      return COLUMNS.map((col) => (col.key === 'totalAcceptedPercent' ? SUM_INSURED_COLUMN : col));
+    }
+
     if (tab !== 'archived') return COLUMNS;
 
     const ARCHIVED_HIDDEN_KEYS = new Set(['totalAcceptedPercent', 'participants', 'status']);

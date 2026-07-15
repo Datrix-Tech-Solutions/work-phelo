@@ -13,6 +13,8 @@ interface DocumentPreviewModalProps {
   isOpen: boolean;
   title: string;
   documentTitle: string;
+  /** Name used for the saved PDF when printing — e.g. "Debit Note-POL123-Acme Ltd". Falls back to documentTitle. */
+  fileName?: string;
   onPrint: () => void;
   onClose: () => void;
   children: ReactNode;
@@ -23,6 +25,7 @@ export function DocumentPreviewModal({
   isOpen,
   title,
   documentTitle,
+  fileName,
   onPrint,
   onClose,
   children,
@@ -31,7 +34,10 @@ export function DocumentPreviewModal({
   const handlePrint = () => {
     const el = document.getElementById('irisk-print-root');
     if (el) el.style.display = 'block';
+    const previousTitle = document.title;
+    document.title = fileName ?? documentTitle;
     window.print();
+    document.title = previousTitle;
     if (el) el.style.display = 'none';
     onPrint();
   };

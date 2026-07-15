@@ -16,6 +16,7 @@ import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreview
 import { ClaimDebitNoteModal } from '@/components/organisms/reinsurance/documents/ClaimDebitNoteModal';
 import { useReinsurers, useCedants, useClaimAllocations } from '@/hooks';
 import { isForeignCedant, FOREIGN_CEDANT_DEDUCTION_RATE } from '@/lib/reinsuranceTax';
+import { cardClass } from '@/lib/utils';
 
 const CLAIM_STATUS_VARIANT: Record<
   PlacementClaimStatus,
@@ -83,7 +84,7 @@ function ClaimDetailsPanel({
       : facPremium;
 
   return (
-    <div className="bg-white rounded-xl p-5 flex flex-col gap-3">
+    <div className={cardClass('flex flex-col gap-3 p-5')}>
       <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-gray-900">{placement.reference ?? '—'}</span>
@@ -116,6 +117,11 @@ function ClaimDetailsPanel({
         value={facultativeOffer != null ? `${facultativeOffer}%` : '—'}
       />
       <DetailField horizontal label="Fac. Sum Insured" value={fmt(facSumInsured, currency)} />
+      <DetailField
+        horizontal
+        label="Period of Insurance"
+        value={`${fmtDate(placement.inceptionDate ?? '')} – ${fmtDate(placement.expiryDate ?? '')}`}
+      />
       <DetailField
         horizontal
         label="Fac. Premium"
@@ -358,7 +364,7 @@ export function ClaimOverviewSection({ placement, claim }: ClaimOverviewSectionP
   }, [placement.participants, claimAmount]);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-col gap-4">
+    <div className={cardClass('flex flex-col gap-4 p-4')}>
       <div className="flex flex-col md:flex-row gap-4 items-start">
         <div className="w-full md:flex-1 min-w-0">
           <ClaimDetailsPanel placement={placement} claim={claim} deductionRate={deductionRate} />

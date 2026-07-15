@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -82,7 +82,6 @@ function RecordRecoveryPaymentModal({
     control,
     handleSubmit,
     reset,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<RecordPaymentValues>({ defaultValues: RECORD_PAYMENT_DEFAULTS });
 
@@ -90,8 +89,8 @@ function RecordRecoveryPaymentModal({
   const { data: currencyOptions = [] } = useCurrencyOptions();
   const addToast = useToastStore((s) => s.addToast);
 
-  const paymentType = watch('paymentType');
-  const paymentCurrency = watch('currency');
+  const paymentType = useWatch({ control, name: 'paymentType' });
+  const paymentCurrency = useWatch({ control, name: 'currency' });
 
   useEffect(() => {
     if (row) {

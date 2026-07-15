@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
 import { SidePanel } from '@/components/organisms/shared/SidePanel';
 import { Button } from '@/components/atoms/Button';
@@ -92,7 +92,6 @@ function RecordRecoveryPaymentModal({
     control,
     handleSubmit,
     reset,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<RecordPaymentValues>({ defaultValues: RECORD_PAYMENT_DEFAULTS });
 
@@ -100,8 +99,8 @@ function RecordRecoveryPaymentModal({
   const { data: currencyOptions = [] } = useCurrencyOptions();
   const addToast = useToastStore((s) => s.addToast);
 
-  const paymentType = watch('paymentType');
-  const paymentCurrency = watch('currency');
+  const paymentType = useWatch({ control, name: 'paymentType' });
+  const paymentCurrency = useWatch({ control, name: 'currency' });
 
   useEffect(() => {
     if (row) {
@@ -363,7 +362,7 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
     {
       key: 'placementReference',
       label: 'Offer',
-      width: 'minmax(190px, 1fr)',
+      width: 'minmax(130px, 1fr)',
       render: (row) => <span className="font-medium text-gray-900">{row.placementReference}</span>,
     },
     {
@@ -373,28 +372,22 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
       render: (row) => <span className="text-gray-700">{row.cedantName}</span>,
     },
     {
-      key: 'claimNumber',
-      label: 'Claim Number',
-      width: '130px',
-      render: (row) => <span className="text-gray-700">{row.claimNumber}</span>,
-    },
-    {
       key: 'occurrenceDate',
       label: 'Occurrence Date',
-      width: '160px',
+      width: '100px',
       render: (row) => <span className="text-gray-700">{fmtDate(row.occurrenceDate)}</span>,
     },
     {
       key: 'sharePercent',
       label: 'Share (%)',
-      width: '100px',
+      width: '90px',
       className: 'text-center',
       render: (row) => <span className="text-gray-600 block text-center">{row.sharePercent}%</span>,
     },
     {
       key: 'recoveryAmount',
       label: 'Recovery Amount',
-      width: '170px',
+      width: '150px',
       render: (row) => (
         <span className="font-medium text-gray-900 block">
           {fmtAmount(row.recoveryAmount, row.currency)}
@@ -424,7 +417,7 @@ export function ReinsurerRecoveriesTab({ placements, reinsurerId }: ReinsurerRec
     {
       key: 'actions',
       label: 'Actions',
-      width: '160px',
+      width: '120px',
       render: (row) => <TableButton onClick={() => setPaymentRow(row)}>Record Payment</TableButton>,
     },
   ];

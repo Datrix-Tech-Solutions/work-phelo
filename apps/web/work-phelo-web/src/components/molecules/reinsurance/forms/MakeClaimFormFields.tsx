@@ -112,7 +112,19 @@ export function MakeClaimFormFields({
       <Controller
         name="occurrenceDate"
         control={control}
-        rules={{ required: 'Occurrence date is required' }}
+        rules={{
+          required: 'Occurrence date is required',
+          validate: (value) => {
+            const date = new Date(value);
+            if (placement.inceptionDate && date < new Date(placement.inceptionDate)) {
+              return `Occurrence date cannot be before the inception date (${new Date(placement.inceptionDate).toLocaleDateString()})`;
+            }
+            if (placement.expiryDate && date > new Date(placement.expiryDate)) {
+              return `Occurrence date cannot be after the end date (${new Date(placement.expiryDate).toLocaleDateString()})`;
+            }
+            return true;
+          },
+        }}
         render={({ field }) => (
           <DatePicker
             label="Occurrence Date"

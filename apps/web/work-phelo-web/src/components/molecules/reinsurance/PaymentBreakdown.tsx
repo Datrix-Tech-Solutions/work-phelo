@@ -2,6 +2,7 @@
 
 import { Facultative } from '@/types/reinsurance';
 import { DetailField } from '@/components/atoms/DetailField';
+import { cardClass } from '@/lib/utils';
 
 function fmt(val: number, currency: string | null) {
   const prefix = currency ? `${currency} ` : '';
@@ -50,7 +51,7 @@ export function PaymentBreakdown({ placement, paidAmount }: PaymentBreakdownProp
   const reinsurers = bankBalance;
 
   return (
-    <div className="bg-white rounded-xl p-5 flex flex-col gap-3">
+    <div className={cardClass('flex flex-col gap-3 p-5')}>
       {reference && (
         <>
           <div className="flex flex-col gap-1">

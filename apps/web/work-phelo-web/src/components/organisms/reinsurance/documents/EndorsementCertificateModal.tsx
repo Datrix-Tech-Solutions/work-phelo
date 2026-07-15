@@ -3,6 +3,8 @@
 import React from 'react';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
 import { Counterparty, Facultative, PlacementEndorsement } from '@/types/reinsurance';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
+import { useRiskTypes } from '@/hooks';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—';
@@ -133,6 +135,9 @@ export function EndorsementCertificateModal({
   onPrint,
   onClose,
 }: EndorsementCertificateModalProps) {
+  const { data: riskTypes = [] } = useRiskTypes();
+  const riskTypeName = riskTypes.find((rt) => rt.id === placement.riskTypeId)?.name ?? null;
+
   const originalPlacement = getSnapshotPlacement(endorsement.originalSnapshot);
   const proposed = endorsement.proposedSnapshot
     ? getSnapshotPlacement(endorsement.proposedSnapshot)
@@ -168,6 +173,12 @@ export function EndorsementCertificateModal({
       isOpen={isOpen}
       title={`Endorsement Certificate — ${endorsement.endorsementNumber}`}
       documentTitle="Endorsement Certificate"
+      fileName={buildDocumentFileName(
+        'Endorsement Certificate',
+        placement.policyNumber ?? placement.reference,
+        riskTypeName,
+        placement.title,
+      )}
       onPrint={onPrint}
       onClose={onClose}
     >

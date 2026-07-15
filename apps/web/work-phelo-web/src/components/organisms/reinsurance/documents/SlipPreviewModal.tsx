@@ -3,9 +3,10 @@
 import { DetailField } from '@/components/atoms/DetailField';
 import { Facultative } from '@/types/reinsurance';
 import { DocumentPreviewModal } from '@/components/organisms/reinsurance/documents/DocumentPreviewModal';
-import { useReinsurers } from '@/hooks';
+import { useReinsurers, useRiskTypes } from '@/hooks';
 import { isForeignCedant, NIC_LEVY_RATE, WITHHOLDING_TAX_RATE } from '@/lib/reinsuranceTax';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
+import { buildDocumentFileName } from '@/lib/reinsurance/documentFileName';
 
 function fmtFieldValue(val: unknown): string {
   if (val == null) return '—';
@@ -71,13 +72,17 @@ export function SlipPreviewModal({
     classOfBusiness,
     title,
     reference,
+    policyNumber,
     inceptionDate,
     expiryDate,
     businessDetails,
     offerDetails,
+    riskTypeId,
   } = placement;
 
   const { data: reinsurers = [] } = useReinsurers();
+  const { data: riskTypes = [] } = useRiskTypes();
+  const riskTypeName = riskTypes.find((rt) => rt.id === riskTypeId)?.name ?? null;
   const foreignReinsurer = isForeignCedant(reinsurers.find((r) => r.id === counterpartyId));
 
   const businessEntries = placementDetailEntries(businessDetails);
@@ -106,6 +111,7 @@ export function SlipPreviewModal({
       isOpen={isOpen}
       title={`Offer Slip — ${title}`}
       documentTitle="Facultative Offer Slip"
+      fileName={buildDocumentFileName('Offer Slip', policyNumber ?? reference, riskTypeName, title)}
       onPrint={onPrint}
       onClose={onClose}
     >

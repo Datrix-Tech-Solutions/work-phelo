@@ -1,10 +1,15 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
-import { PlacementParticipant } from '@/types/reinsurance';
+import { useEffect, useMemo, useState } from 'react';
+import { Facultative, PlacementParticipant } from '@/types/reinsurance';
 import { DataTable, Column } from '@/components/organisms/shared/DataTable';
+import { Icons } from '@/components/atoms/icons';
+import { PremiumCreditNoteModal } from '@/components/organisms/reinsurance/documents/PremiumCreditNoteModal';
+import { MailPreviewModal } from '@/components/organisms/reinsurance/MailPreviewModal';
+import { useReinsurers } from '@/hooks';
 
 interface ReinsurersPaymentTableProps {
+  placement: Facultative;
   participants: PlacementParticipant[];
   grossPremium: number;
   commission: number;
@@ -27,6 +32,7 @@ function participantNetPremium(p: PlacementParticipant, grossPremium: number, co
 }
 
 export function ReinsurersPaymentTable({
+  placement,
   participants,
   grossPremium,
   commission,
@@ -35,6 +41,26 @@ export function ReinsurersPaymentTable({
 
   onTotalChange,
 }: ReinsurersPaymentTableProps) {
+  const [creditNoteTarget, setCreditNoteTarget] = useState<PlacementParticipant | null>(null);
+  const [mailTarget, setMailTarget] = useState<PlacementParticipant | null>(null);
+
+  const { data: reinsurers = [] } = useReinsurers();
+
+  const reinsurerEmails = useMemo<Record<string, string[]>>(
+    () =>
+      Object.fromEntries(
+        reinsurers.map((r) => {
+          const emails: string[] = [];
+          if (r.email) emails.push(r.email);
+          r.contacts.forEach((c) => {
+            if (c.email) emails.push(c.email);
+          });
+          return [r.id, emails];
+        }),
+      ),
+    [reinsurers],
+  );
+
   const participants_ = useMemo(
     () =>
       participants.filter(
@@ -96,6 +122,38 @@ export function ReinsurersPaymentTable({
       //     );
       //   },
       // },
+      {
+        key: 'status',
+        label: 'Actions',
+        width: '100px',
+        className: 'pr-6',
+        render: (row) => (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              title="View Document"
+              className="text-blue-500 hover:text-blue-600 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCreditNoteTarget(row);
+              }}
+            >
+              <Icons.Eye className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              title="Send Mail"
+              className="text-green-500 hover:text-green-700 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMailTarget(row);
+              }}
+            >
+              <Icons.Mail className="w-4 h-4" />
+            </button>
+          </div>
+        ),
+      },
     ],
     [grossPremium, commission, currency], //proRataFactor],
   );
@@ -115,6 +173,30 @@ export function ReinsurersPaymentTable({
         onPageChange={() => {}}
         noInternalScroll
       />
+
+      {creditNoteTarget && (
+        <PremiumCreditNoteModal
+          isOpen
+          placement={placement}
+          sharePercent={parseFloat(creditNoteTarget.sharePercent ?? '0')}
+          brokerageFee={parseFloat(creditNoteTarget.brokerageFee ?? '0')}
+          counterpartyId={creditNoteTarget.counterpartyId}
+          reinsurerCompany={creditNoteTarget.counterparty.name}
+          onPrint={() => setCreditNoteTarget(null)}
+          onClose={() => setCreditNoteTarget(null)}
+        />
+      )}
+
+      {mailTarget && (
+        <MailPreviewModal
+          isOpen
+          placement={placement}
+          brokerageFee={parseFloat(mailTarget.brokerageFee ?? '0')}
+          recipients={reinsurerEmails[mailTarget.counterpartyId] ?? []}
+          onSend={() => setMailTarget(null)}
+          onClose={() => setMailTarget(null)}
+        />
+      )}
     </div>
   );
 }
