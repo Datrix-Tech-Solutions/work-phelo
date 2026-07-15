@@ -56,7 +56,7 @@ export function SidePanel({
         className={cn(
           popupClass(
             cn(
-              'fixed z-50 flex flex-col shadow-2xl overflow-hidden border border-gray-100',
+              'fixed z-50 flex flex-col shadow-2xl overflow-hidden border border-(--glass-border,rgba(255,255,255,0.55))',
               'transition-all duration-300 ease-out',
               // Mobile: full screen, no rounding
               'inset-0 rounded-none',
@@ -96,13 +96,9 @@ export function SidePanel({
           <div className="flex flex-col gap-6 h-full">{children}</div>
         </div>
 
-        {/* Footer */}
+        {/* Footer — just a divider within the panel's own glass surface, not a second one */}
         {footer && (
-          <div
-            className={popupClass(
-              'shrink-0 px-3 sm:px-6 py-2 sm:py-2 border-t border-gray-100 rounded-none shadow-none',
-            )}
-          >
+          <div className="shrink-0 px-3 sm:px-6 py-2 sm:py-2 border-t border-(--glass-border,rgba(255,255,255,0.55))">
             {footer}
           </div>
         )}

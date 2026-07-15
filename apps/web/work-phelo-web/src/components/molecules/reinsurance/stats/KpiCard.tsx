@@ -13,7 +13,7 @@ interface KpiCardProps {
   iconColor?: string;
   trend?: number;
   trendTooltip?: string;
-  periodLabel: string;
+  periodLabel?: string;
   isLoading?: boolean;
 }
 
@@ -49,10 +49,12 @@ export function KpiCard({
         ) : (
           <>
             <span className="text-lg font-bold text-gray-900">{value}</span>
-            <div className="flex items-center gap-1">
-              {trend !== undefined && <TrendBadge change={trend} tooltip={trendTooltip} />}
-              <span className="text-[10px] text-gray-400">vs previous {periodLabel}</span>
-            </div>
+            {trend !== undefined && (
+              <div className="flex items-center gap-1">
+                <TrendBadge change={trend} tooltip={trendTooltip} />
+                <span className="text-[10px] text-gray-400">vs previous {periodLabel}</span>
+              </div>
+            )}
           </>
         )}
       </div>

@@ -99,7 +99,7 @@ function SidebarItem({ item, collapsed }: { item: NavItem; collapsed: boolean })
           className={cn(
             baseRow,
             isCurrent
-              ? 'bg-white text-(--module-btn-bg,var(--color-brand)) font-semibold shadow-sm'
+              ? 'bg-white text-(--module-btn-bg,var(--color-brand)) font-semibold shadow-sm border border-(--glass-border,rgba(255,255,255,0.55))'
               : 'text-white/80 hover:bg-white/10 hover:text-white',
           )}
         >
@@ -213,7 +213,7 @@ function SidebarDropdownItem({ item, collapsed }: { item: NavItem; collapsed: bo
           isDeactivated
             ? 'cursor-not-allowed text-white/30'
             : isAnyChildActive
-              ? 'bg-white text-(--module-btn-bg,var(--color-brand)) font-semibold shadow-sm'
+              ? 'bg-white text-(--module-btn-bg,var(--color-brand)) font-semibold shadow-sm border border-(--glass-border,rgba(255,255,255,0.55))'
               : 'text-white/80 hover:bg-white/10 hover:text-white',
         )}
       >
@@ -332,7 +332,7 @@ export function Sidebar({ groups, collapsed = false }: SidebarProps) {
               {effectiveCollapsed ? (
                 <div className="mx-3 my-2 h-px bg-white/20" />
               ) : (
-                <p className="px-5 pt-5 pb-1.5 text-[10px] font-semibold tracking-widest text-white/50 uppercase select-none">
+                <p className="px-5 pt-3 pb-1.5 text-[10px] font-semibold tracking-widest text-white/50 uppercase select-none">
                   {group.label}
                 </p>
               )}

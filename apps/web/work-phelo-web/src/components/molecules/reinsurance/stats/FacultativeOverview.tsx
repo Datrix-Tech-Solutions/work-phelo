@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { DetailField } from '@/components/atoms/DetailField';
 import { Badge } from '@/components/atoms/Badge';
 import { CollapsibleOverview } from '@/components/atoms/CollapsibleOverview';
@@ -8,7 +8,7 @@ import { Facultative, FacultativeStatus, toStatusLabel } from '@/types/reinsuran
 import { usePlacementEndorsements, usePlacementPayments } from '@/hooks';
 import { placementDetailEntries } from '@/lib/reinsurance/placementFormDetails';
 
-type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
+export type PaymentStatus = 'Outstanding' | 'Part Payment' | 'Paid';
 
 const PAYMENT_STATUS_CLASS: Record<PaymentStatus, string> = {
   Outstanding: 'text-xs text-gray-400',
@@ -50,9 +50,13 @@ const STATUS_VARIANT_MAP: Record<FacultativeStatus, 'success' | 'warning' | 'neu
 
 interface FacultativeOverviewProps {
   placement: Facultative;
+  onPaymentStatusChange?: (status: PaymentStatus) => void;
 }
 
-export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
+export function FacultativeOverview({
+  placement,
+  onPaymentStatusChange,
+}: FacultativeOverviewProps) {
   const { data: payments = [] } = usePlacementPayments(placement.id);
   const { data: endorsements = [] } = usePlacementEndorsements(placement.id);
   const endorsementCount = endorsements.filter((e) => e.status !== 'VOID').length;
@@ -71,6 +75,10 @@ export function FacultativeOverview({ placement }: FacultativeOverviewProps) {
     if (paid > 0) return 'Part Payment';
     return 'Outstanding';
   }, [payments, placement.premium, placement.facultativeOffer, placement.commission]);
+
+  useEffect(() => {
+    onPaymentStatusChange?.(paymentStatus);
+  }, [paymentStatus, onPaymentStatusChange]);
 
   const facOffer = placement.facultativeOffer ?? 0;
   const facSumInsured =

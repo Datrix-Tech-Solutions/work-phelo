@@ -1,6 +1,7 @@
 'use client';
 
 import { ClaimsTable } from '@/components/organisms/reinsurance/tables/Claimstable';
+import { ClaimsStatsRow } from '@/components/molecules/reinsurance/stats/ClaimsStatsRow';
 
 export default function ReinsuranceClaimsPage() {
   return (
@@ -9,6 +10,7 @@ export default function ReinsuranceClaimsPage() {
         <h2 className="text-base font-semibold text-gray-900">Claims</h2>
         <p className="text-sm text-gray-500 mt-0.5">Manage claim submissions and processing</p>
       </div>
+      <ClaimsStatsRow />
       <ClaimsTable />
     </div>
   );

@@ -56,6 +56,17 @@
      surfaces above. Still gets a touch of blur so it doesn't look totally flat. */
   --glass-solid: rgba(255, 255, 255, 0.9);
 
+  /* cardClass()'s 'module' (default) border — the outer glass-card edge. Kept a touch
+     more opaque than the border-white/40 used by cardClass()'s 'glass' variant (inner
+     highlight pills, small stat cards), so bigger outer cards still read as separated
+     from the app-shell background without falling back to a solid --module-border color. */
+  --glass-border: rgba(255, 255, 255, 0.55);
+
+  /* Specular highlight along the top inner edge of a glass card — the light-catching rim
+     that sells the iOS "Liquid Glass" look. Paired with the outer shadow in cardClass()
+     as an inset box-shadow, not a border, so it doesn't fight with --glass-border. */
+  --glass-highlight: rgba(255, 255, 255, 0.65);
+
   /* Deliberately-dark chip color (tooltips, selected-score buttons) — intentionally NOT
      overridden below, so these stay dark regardless of theme instead of inverting along
      with --color-gray-900 and ending up as a pale chip with unreadable white text. */
@@ -78,6 +89,8 @@
   /* Near-solid dark, not a white tint — a light popup floating over a dark app would
      clash, so "close to solid" in dark mode means a solid dark surface instead. */
   --glass-solid:          rgba(20, 22, 26, 0.95);
+  --glass-border:         rgba(255, 255, 255, 0.16);
+  --glass-highlight:      rgba(255, 255, 255, 0.14);
 
   /* Invert the neutral gray scale itself — every text-gray, bg-gray, and border-gray
      utility across the app reads this variable, so this is what actually makes body
@@ -130,9 +143,13 @@
   --color-app-shell: var(--app-shell);
 }
 
-/* Module layout classes — each defines the full derived palette from its identity color */
+/* Module layout classes — each defines the full derived palette from its identity color.
+   --table-header-shadow mixes the same identity color toward transparent (rather than
+   white/black like the other tokens) so it reads as a colored ambient glow under the
+   DataTable header pill — see the drop-shadow-[...] on the header bg in DataTable.tsx. */
 .layout-hr {
-  --table-header-bg:     color-mix(in oklch, var(--module-hr) 6%, white);
+  --table-header-bg:     color-mix(in oklch, var(--module-hr) 20%, white);
+  --table-header-shadow: color-mix(in oklch, var(--module-hr) 45%, transparent);
   --module-btn-bg:       var(--module-hr);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-hr) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-hr) 12%, white);
@@ -141,7 +158,8 @@
   --module-border:       color-mix(in oklch, var(--module-hr) 28%, white);
 }
 .layout-operations {
-  --table-header-bg:     color-mix(in oklch, var(--module-operations) 6%, white);
+  --table-header-bg:     color-mix(in oklch, var(--module-operations) 20%, white);
+  --table-header-shadow: color-mix(in oklch, var(--module-operations) 45%, transparent);
   --module-btn-bg:       var(--module-operations);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-operations) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-operations) 12%, white);
@@ -150,7 +168,8 @@
   --module-border:       color-mix(in oklch, var(--module-operations) 28%, white);
 }
 .layout-accounting {
-  --table-header-bg:     color-mix(in oklch, var(--module-accounting) 6%, white);
+  --table-header-bg:     color-mix(in oklch, var(--module-accounting) 20%, white);
+  --table-header-shadow: color-mix(in oklch, var(--module-accounting) 45%, transparent);
   --module-btn-bg:       var(--module-accounting);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-accounting) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-accounting) 12%, white);
@@ -159,7 +178,8 @@
   --module-border:       color-mix(in oklch, var(--module-accounting) 28%, white);
 }
 .layout-marketing {
-  --table-header-bg:     color-mix(in oklch, var(--module-marketing) 6%, white);
+  --table-header-bg:     color-mix(in oklch, var(--module-marketing) 20%, white);
+  --table-header-shadow: color-mix(in oklch, var(--module-marketing) 45%, transparent);
   --module-btn-bg:       var(--module-marketing);
   --module-btn-bg-hover: color-mix(in oklch, var(--module-marketing) 82%, black);
   --module-tint:         color-mix(in oklch, var(--module-marketing) 12%, white);
@@ -177,24 +197,28 @@
    table-header-bg doubles as the row-hover highlight in DataTable (same token,
    see the hover overlay in DataTable.tsx), so it needs to read as a *lighter*
    raised strip against the card — mixing toward black made it read as a punched-
-   out void instead, which is what showed up as a jarring near-black header/hover. */
+   out void instead, which is what showed up as a jarring near-black header/hover.
+
+   --table-header-shadow is deliberately NOT overridden here, same reasoning as
+   --module-accent above: it's mixed toward transparent rather than white/black,
+   so its intensity already reads consistently against either theme. */
 :root[data-theme='dark'] .layout-hr {
-  --table-header-bg: color-mix(in oklch, var(--module-hr) 22%, #3f4046);
+  --table-header-bg: color-mix(in oklch, var(--module-hr) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-hr) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-hr) 32%, black);
 }
 :root[data-theme='dark'] .layout-operations {
-  --table-header-bg: color-mix(in oklch, var(--module-operations) 22%, #3f4046);
+  --table-header-bg: color-mix(in oklch, var(--module-operations) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-operations) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-operations) 32%, black);
 }
 :root[data-theme='dark'] .layout-accounting {
-  --table-header-bg: color-mix(in oklch, var(--module-accounting) 22%, #3f4046);
+  --table-header-bg: color-mix(in oklch, var(--module-accounting) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-accounting) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-accounting) 32%, black);
 }
 :root[data-theme='dark'] .layout-marketing {
-  --table-header-bg: color-mix(in oklch, var(--module-marketing) 22%, #3f4046);
+  --table-header-bg: color-mix(in oklch, var(--module-marketing) 30%, #3f4046);
   --module-tint:      color-mix(in oklch, var(--module-marketing) 24%, black);
   --module-border:    color-mix(in oklch, var(--module-marketing) 32%, black);
 }
@@ -220,8 +244,8 @@
 .app-blob-1 {
   top: -12%;
   left: -10%;
-  width: 500rem;
-  height: 500rem;
+  width: 50rem;
+  height: 50rem;
   background: var(--module-accent, var(--brand-accent));
   animation: blob-drift-a 150s ease-in-out infinite;
 }
@@ -229,8 +253,8 @@
 .app-blob-2 {
   bottom: -14%;
   right: -18%;
-  width: 250rem;
-  height: 300rem;
+  width: 25rem;
+  height: 30rem;
   background: var(--module-accent, var(--brand-accent));
   animation: blob-drift-b 10s ease-in-out infinite;
 }
@@ -238,8 +262,8 @@
 .app-blob-3 {
   top: 45%;
   left: 50%;
-  width: 140rem;
-  height: 400rem;
+  width: 40rem;
+  height: 40rem;
   background: var(--module-accent, var(--brand-accent));
   animation: blob-drift-c 10s ease-in-out infinite;
 }

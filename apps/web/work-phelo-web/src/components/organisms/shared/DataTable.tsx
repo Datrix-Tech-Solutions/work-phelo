@@ -260,7 +260,10 @@ export function DataTable<T extends { id: string | number }>({
             <div className="relative shrink-0">
               <div
                 className={cardClass(
-                  'absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg',
+                  cn(
+                    'absolute inset-y-0 left-4 right-4 bg-(--table-header-bg,var(--color-gray-200)) rounded-lg',
+                    'drop-shadow-[0_4px_6px_var(--table-header-shadow,transparent)]',
+                  ),
                   'glass',
                 )}
               />

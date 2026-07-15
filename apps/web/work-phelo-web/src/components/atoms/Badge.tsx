@@ -7,21 +7,20 @@ interface BadgeProps {
 
 export function Badge({ label, variant = 'neutral' }: BadgeProps) {
   const variants = {
-    success: 'bg-green-100 text-green-700',
-    warning: 'bg-yellow-100 text-yellow-700',
-    danger: 'bg-red-100 text-red-700',
-    info: 'bg-blue-100 text-blue-700',
-    neutral: 'bg-gray-100 text-blue-700',
+    success: 'border-green-300 text-green-800',
+    warning: 'border-amber-300 text-amber-800',
+    danger: 'border-red-300 text-red-800',
+    info: 'border-blue-300 text-blue-800',
+    neutral: 'border-gray-300 text-gray-600',
   };
 
   return (
     <span
       className={cn(
-        'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+        'inline-flex items-center px-2 py-px rounded-full border text-xs font-semibold w-fit',
         variants[variant],
       )}
     >
-      <span className="w-1.5 h-1.5 rounded-full bg-current mr-1" />
       {label}
     </span>
   );

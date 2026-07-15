@@ -55,7 +55,7 @@ export function useReversePayment() {
   });
 }
 
-const CLOSING_STATUSES: FacultativeStatus[] = [
+export const CLOSING_STATUSES: FacultativeStatus[] = [
   'PARTIALLY_PLACED',
   'PLACED',
   'CLOSING',
@@ -120,6 +120,44 @@ export function useCedantPlacementPaymentStatuses(
     });
     return map;
   }, [relevantPlacements, paymentQueries]);
+}
+
+export interface PremiumsSummary {
+  totalDue: number;
+  totalPaid: number;
+  isLoading: boolean;
+}
+
+/**
+ * Aggregates net premium due vs. recorded payments across the given placements. Uses the same
+ * query keys as usePlacementPayments so results share the cache. Expects `placements` to
+ * already be filtered to the set worth querying (e.g. placed/closing offers).
+ */
+export function usePremiumsSummary(placements: Facultative[]): PremiumsSummary {
+  const paymentQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: paymentsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
+  const isLoading = paymentQueries.some((q) => q.isLoading);
+
+  const summary = useMemo(() => {
+    let totalDue = 0;
+    let totalPaid = 0;
+    placements.forEach((p, i) => {
+      const payments = paymentQueries[i]?.data ?? [];
+      totalDue += netPremiumFor(p);
+      totalPaid += totalPaidFor(payments);
+    });
+    return { totalDue, totalPaid };
+  }, [placements, paymentQueries]);
+
+  return { ...summary, isLoading };
 }
 
 /**
@@ -227,6 +265,50 @@ export function useReinsurerClaimPayments(
   }, [reinsuredPlacements, paymentQueries, reinsurerId]);
 
   return { paidByPlacementId, isLoading };
+}
+
+/**
+ * Returns recorded claim recovery payments (CLAIM_SETTLEMENT / INBOUND) across every reinsurer
+ * on the given placements, keyed by `${placementId}:${reinsurerId}`. Uses the same query keys
+ * as usePlacementPayments so results share the cache. Expects `placements` to already be
+ * filtered to the set worth querying.
+ */
+export function useAllReinsurerClaimPayments(placements: Facultative[]): {
+  paidMap: Map<string, number>;
+  isLoading: boolean;
+} {
+  const paymentQueries = useQueries({
+    queries: placements.map((p) => ({
+      queryKey: paymentsKey(p.id),
+      queryFn: async () => {
+        const res = await api.get(`${BASE}/${p.id}/payments`);
+        return (res.data?.items ?? res.data ?? []) as PlacementPayment[];
+      },
+    })),
+  });
+
+  const isLoading = paymentQueries.some((q) => q.isLoading);
+
+  const paidMap = useMemo(() => {
+    const map = new Map<string, number>();
+    placements.forEach((p, i) => {
+      const payments = paymentQueries[i]?.data ?? [];
+      payments
+        .filter(
+          (pmt) =>
+            pmt.type === 'CLAIM_SETTLEMENT' &&
+            pmt.direction === 'INBOUND' &&
+            pmt.status === 'RECORDED',
+        )
+        .forEach((pmt) => {
+          const key = `${p.id}:${pmt.counterpartyId}`;
+          map.set(key, (map.get(key) ?? 0) + parseFloat(pmt.amount));
+        });
+    });
+    return map;
+  }, [placements, paymentQueries]);
+
+  return { paidMap, isLoading };
 }
 
 /**
