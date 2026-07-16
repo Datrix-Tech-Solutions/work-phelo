@@ -279,6 +279,31 @@ describe('PlacementDocumentTemplateRegistry', () => {
     expect(html).toContain('Licensed insurance broker');
   });
 
+  it('renders legacy note payloads with null applied charges without recalculating', () => {
+    const html = registry.renderHtml(
+      PlacementDocumentType.DEBIT_NOTE,
+      {
+        ...notePayload(PlacementDocumentType.DEBIT_NOTE),
+        note: {
+          ...notePayload(PlacementDocumentType.DEBIT_NOTE).note,
+          appliedCharges: null,
+        },
+      },
+      {
+        documentNumber: 'DOC-DN-LEGACY',
+        title: 'Debit Note',
+        generatedAt: '2026-06-12T00:00:00.000Z',
+      },
+    );
+
+    expect(html).toContain('DOC-DN-LEGACY');
+    expect(html).toContain('NIC Levy');
+    expect(html).toContain('50.00');
+    expect(html).toContain('Withholding Tax');
+    expect(html).toContain('100.00');
+    expect(html).not.toContain('NaN');
+  });
+
   it('rejects unsupported document types', () => {
     expect(() =>
       registry.renderHtml(

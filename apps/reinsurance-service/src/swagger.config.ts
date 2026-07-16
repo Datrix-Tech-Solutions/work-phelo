@@ -50,8 +50,11 @@ document registry entries, emails, payments, debit notes or credit notes.
 Debit and credit note endpoints persist financial note records generated from
 confirmed closing snapshots. Debit notes are placement-level cedant notes.
 Credit notes are per confirmed reinsurer closing. NIC levy and withholding tax
-are fixed at 0 in the MVP. Note generation, issuing and voiding do not
-financially lock a placement; payments remain the only hard-lock trigger.
+are tenant-configurable charges selected by effective date and currency.
+Generated notes snapshot the applied charge configuration and calculated
+amounts, so historical notes are not recalculated after settings changes. Note
+generation, issuing and voiding do not financially lock a placement; payments
+remain the only hard-lock trigger.
 
 ### Claims
 Claim endpoints record loss events first. They capture occurrence details,

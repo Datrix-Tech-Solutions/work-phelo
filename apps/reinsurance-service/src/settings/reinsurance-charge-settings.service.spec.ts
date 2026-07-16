@@ -59,6 +59,10 @@ describe('ReinsuranceChargeSettingsService', () => {
       create: PrismaMethod;
       update: PrismaMethod;
     };
+    $executeRaw: jest.MockedFunction<(...args: unknown[]) => Promise<number>>;
+    $transaction: jest.MockedFunction<
+      (callback: (tx: unknown) => Promise<unknown>) => Promise<unknown>
+    >;
   };
   let service: ReinsuranceChargeSettingsService;
 
@@ -71,6 +75,10 @@ describe('ReinsuranceChargeSettingsService', () => {
         create: jest.fn<Promise<unknown>, [unknown]>(),
         update: jest.fn<Promise<unknown>, [unknown]>(),
       },
+      $executeRaw: jest.fn<Promise<number>, unknown[]>().mockResolvedValue(0),
+      $transaction: jest.fn((callback: (tx: unknown) => Promise<unknown>) =>
+        callback(prisma),
+      ),
     };
     service = new ReinsuranceChargeSettingsService(
       prisma as unknown as PrismaService,
@@ -123,6 +131,92 @@ describe('ReinsuranceChargeSettingsService', () => {
         effectiveTo: '2026-12-31T23:59:59.000Z',
       }),
     ).rejects.toThrow(ConflictException);
+  });
+
+  it('serializes create overlap checks with a transaction-scoped advisory lock', async () => {
+    prisma.reinsuranceChargeConfiguration.findFirst.mockResolvedValue(null);
+    prisma.reinsuranceChargeConfiguration.create.mockResolvedValue(config);
+
+    await service.create(user, {
+      code: ReinsuranceChargeCode.NIC_LEVY,
+      name: 'NIC Levy',
+      chargeType: ReinsuranceChargeType.LEVY,
+      rateType: ReinsuranceChargeRateType.PERCENTAGE,
+      rate: 1,
+      calculationBasis: ReinsuranceChargeCalculationBasis.NET_BEFORE_CHARGES,
+      direction: ReinsuranceChargeDirection.DEDUCTION,
+      currency: 'GHS',
+      effectiveFrom: '2026-01-01T00:00:00.000Z',
+      effectiveTo: null,
+    });
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      prisma.reinsuranceChargeConfiguration.findFirst.mock
+        .invocationCallOrder[0],
+    );
+  });
+
+  it('rejects overlapping updates while excluding the updated record', async () => {
+    prisma.reinsuranceChargeConfiguration.findFirst
+      .mockResolvedValueOnce(config)
+      .mockResolvedValueOnce({ id: 'other-config' });
+
+    await expect(
+      service.update(user, config.id, {
+        effectiveFrom: '2026-06-01T00:00:00.000Z',
+        effectiveTo: null,
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(
+      prisma.reinsuranceChargeConfiguration.findFirst.mock.calls[1]?.[0],
+    ).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        code: ReinsuranceChargeCode.NIC_LEVY,
+        currency: null,
+        id: { not: config.id },
+      },
+    });
+    expect(prisma.reinsuranceChargeConfiguration.update).not.toHaveBeenCalled();
+  });
+
+  it('allows adjacent periods and currency-specific configs beside all-currency configs', async () => {
+    prisma.reinsuranceChargeConfiguration.findFirst.mockResolvedValue(null);
+    prisma.reinsuranceChargeConfiguration.create.mockResolvedValue({
+      ...config,
+      currency: 'GHS',
+    });
+
+    await service.create(user, {
+      code: ReinsuranceChargeCode.NIC_LEVY,
+      name: 'NIC Levy GHS',
+      chargeType: ReinsuranceChargeType.LEVY,
+      rateType: ReinsuranceChargeRateType.PERCENTAGE,
+      rate: 1,
+      calculationBasis: ReinsuranceChargeCalculationBasis.NET_BEFORE_CHARGES,
+      direction: ReinsuranceChargeDirection.DEDUCTION,
+      currency: 'GHS',
+      effectiveFrom: '2027-01-01T00:00:00.000Z',
+      effectiveTo: null,
+    });
+
+    expect(
+      prisma.reinsuranceChargeConfiguration.findFirst.mock.calls[0]?.[0],
+    ).toMatchObject({
+      where: {
+        tenantId: 'tenant-1',
+        code: ReinsuranceChargeCode.NIC_LEVY,
+        currency: 'GHS',
+        OR: [
+          { effectiveTo: null },
+          { effectiveTo: { gte: new Date('2027-01-01T00:00:00.000Z') } },
+        ],
+      },
+    });
+    expect(prisma.reinsuranceChargeConfiguration.create).toHaveBeenCalled();
   });
 
   it('rejects activation when another configuration overlaps the same code and currency', async () => {
@@ -223,13 +317,89 @@ describe('ReinsuranceChargeSettingsService', () => {
     });
   });
 
-  it('rounds according to configuration mode', async () => {
+  it('defensively ignores disabled, future and expired configs when calculating', async () => {
+    prisma.reinsuranceChargeConfiguration.findMany.mockResolvedValue([
+      { ...config, id: 'disabled', isEnabled: false },
+      {
+        ...config,
+        id: 'future',
+        effectiveFrom: new Date('2027-01-01T00:00:00.000Z'),
+      },
+      {
+        ...config,
+        id: 'expired',
+        effectiveFrom: new Date('2025-01-01T00:00:00.000Z'),
+        effectiveTo: new Date('2025-12-31T23:59:59.000Z'),
+      },
+    ]);
+
+    const result = await service.calculateCharges('tenant-1', {
+      currency: 'USD',
+      grossAmount: 1000,
+      commissionAmount: 100,
+      brokerageAmount: 50,
+      effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+    });
+
+    expect(result.charges).toEqual([]);
+    expect(result.additions).toBe(0);
+    expect(result.deductions).toBe(0);
+    expect(result.netAmount).toBe(850);
+  });
+
+  it('orders multiple charges predictably and supports basis variants', async () => {
+    prisma.reinsuranceChargeConfiguration.findMany.mockResolvedValue([
+      {
+        ...config,
+        id: 'gross-addition',
+        code: ReinsuranceChargeCode.NIC_LEVY,
+        name: 'Gross Fee',
+        direction: ReinsuranceChargeDirection.ADDITION,
+        calculationBasis: ReinsuranceChargeCalculationBasis.GROSS_AMOUNT,
+        rate: new Prisma.Decimal('1'),
+        displayOrder: 2,
+      },
+      {
+        ...config,
+        id: 'commission-deduction',
+        code: ReinsuranceChargeCode.WITHHOLDING_TAX,
+        name: 'Commission Withholding',
+        chargeType: ReinsuranceChargeType.TAX,
+        direction: ReinsuranceChargeDirection.DEDUCTION,
+        calculationBasis: ReinsuranceChargeCalculationBasis.COMMISSION_AMOUNT,
+        rate: new Prisma.Decimal('10'),
+        displayOrder: 1,
+      },
+    ]);
+
+    const result = await service.calculateCharges('tenant-1', {
+      currency: 'USD',
+      grossAmount: 1000,
+      commissionAmount: 100,
+      brokerageAmount: 50,
+      effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
+    });
+
+    expect(result.charges.map((charge) => charge.configurationId)).toEqual([
+      'commission-deduction',
+      'gross-addition',
+    ]);
+    expect(result.charges[0]).toMatchObject({ basisAmount: 100, amount: 10 });
+    expect(result.charges[1]).toMatchObject({ basisAmount: 1000, amount: 10 });
+    expect(result.netAmount).toBe(850);
+  });
+
+  it.each([
+    [ReinsuranceChargeRoundingMode.UP, 2],
+    [ReinsuranceChargeRoundingMode.DOWN, 1],
+    [ReinsuranceChargeRoundingMode.HALF_UP, 1],
+  ])('rounds according to %s mode', async (roundingMode, expectedAmount) => {
     prisma.reinsuranceChargeConfiguration.findMany.mockResolvedValue([
       {
         ...config,
         rate: new Prisma.Decimal('1.111'),
         decimalPlaces: 0,
-        roundingMode: ReinsuranceChargeRoundingMode.UP,
+        roundingMode,
       },
     ]);
 
@@ -239,7 +409,6 @@ describe('ReinsuranceChargeSettingsService', () => {
       effectiveAt: new Date('2026-06-01T00:00:00.000Z'),
     });
 
-    expect(result.charges[0].amount).toBe(2);
-    expect(result.netAmount).toBe(98);
+    expect(result.charges[0].amount).toBe(expectedAmount);
   });
 });

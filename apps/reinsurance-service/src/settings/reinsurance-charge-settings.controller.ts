@@ -71,7 +71,11 @@ export class ReinsuranceChargeSettingsController {
 
   @Get()
   @RequirePermissions(ReinsuranceChargeSettingsPermission.VIEW)
-  @ApiOperation({ summary: 'List tenant reinsurance charge configurations' })
+  @ApiOperation({
+    summary: 'List tenant reinsurance charge configurations',
+    description:
+      'Lists tenant-scoped, effective-dated taxes, levies and charges. Currency-specific configurations are stored separately from all-currency configurations.',
+  })
   @ApiOkResponse({ type: [ReinsuranceChargeConfigurationResponseDto] })
   findAll(
     @Query() query: QueryReinsuranceChargeConfigurationsDto,
@@ -82,7 +86,11 @@ export class ReinsuranceChargeSettingsController {
 
   @Post()
   @RequirePermissions(ReinsuranceChargeSettingsPermission.CREATE)
-  @ApiOperation({ summary: 'Create a reinsurance charge configuration' })
+  @ApiOperation({
+    summary: 'Create a reinsurance charge configuration',
+    description:
+      'Creates a tenant-approved percentage or fixed-amount charge. Overlapping periods are rejected for the same tenant, charge code and currency scope.',
+  })
   @ApiCreatedResponse({ type: ReinsuranceChargeConfigurationResponseDto })
   @ApiBadRequestResponse({ type: ApiErrorResponseDto })
   @ApiConflictResponse({ type: ApiErrorResponseDto })
@@ -95,7 +103,11 @@ export class ReinsuranceChargeSettingsController {
 
   @Post('preview')
   @RequirePermissions(ReinsuranceChargeSettingsPermission.VIEW)
-  @ApiOperation({ summary: 'Preview configured charge calculation' })
+  @ApiOperation({
+    summary: 'Preview configured charge calculation',
+    description:
+      'Runs the same calculation engine used when debit and credit notes snapshot applied charges. Preview never persists notes or configuration.',
+  })
   @ApiOkResponse({
     description:
       'Calculated charge lines and net amount using enabled configurations effective at the requested date.',
@@ -122,7 +134,11 @@ export class ReinsuranceChargeSettingsController {
 
   @Patch(':id')
   @RequirePermissions(ReinsuranceChargeSettingsPermission.EDIT)
-  @ApiOperation({ summary: 'Update one charge configuration' })
+  @ApiOperation({
+    summary: 'Update one charge configuration',
+    description:
+      'Updates a tenant charge configuration while preserving non-overlap rules for the resulting effective period and currency scope.',
+  })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiOkResponse({ type: ReinsuranceChargeConfigurationResponseDto })
   @ApiBadRequestResponse({ type: ApiErrorResponseDto })

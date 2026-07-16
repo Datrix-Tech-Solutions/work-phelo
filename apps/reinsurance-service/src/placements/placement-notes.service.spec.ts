@@ -312,6 +312,12 @@ describe('PlacementNotesService', () => {
       withholdingTaxAmount: 0,
       netAmount: 6750,
     });
+    expect(createArgs.data.appliedCharges).toMatchObject({
+      version: 1,
+      additions: 0,
+      deductions: 0,
+      charges: [],
+    });
     expect(result.noteNumber).toBe('DN-001');
   });
 

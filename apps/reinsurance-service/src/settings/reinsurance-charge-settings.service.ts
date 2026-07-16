@@ -138,8 +138,9 @@ export class ReinsuranceChargeSettingsService {
   async findOne(
     tenantId: string,
     id: string,
+    client: PrismaLike = this.prisma,
   ): Promise<ReinsuranceChargeConfiguration> {
-    const config = await this.prisma.reinsuranceChargeConfiguration.findFirst({
+    const config = await client.reinsuranceChargeConfiguration.findFirst({
       where: { id, tenantId },
     });
     if (!config) {
@@ -153,33 +154,39 @@ export class ReinsuranceChargeSettingsService {
     dto: CreateReinsuranceChargeConfigurationDto,
   ): Promise<ReinsuranceChargeConfiguration> {
     const period = this.parsePeriod(dto.effectiveFrom, dto.effectiveTo);
-    await this.assertNoOverlap(
-      user.tenantId,
-      dto.code,
-      dto.currency ?? null,
-      period,
-    );
+    const currency = dto.currency ?? null;
 
-    return this.prisma.reinsuranceChargeConfiguration.create({
-      data: {
-        tenantId: user.tenantId,
-        code: dto.code,
-        name: dto.name,
-        chargeType: dto.chargeType,
-        rateType: dto.rateType,
-        rate: dto.rate,
-        calculationBasis: dto.calculationBasis,
-        direction: dto.direction,
-        currency: dto.currency ?? null,
-        effectiveFrom: period.effectiveFrom,
-        effectiveTo: period.effectiveTo,
-        roundingMode: dto.roundingMode ?? ReinsuranceChargeRoundingMode.HALF_UP,
-        decimalPlaces: dto.decimalPlaces ?? 2,
-        isEnabled: dto.isEnabled ?? true,
-        displayOrder: dto.displayOrder ?? 0,
-        createdByUserId: user.id,
-        updatedByUserId: user.id,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      await this.acquireConfigurationScopeLock(
+        tx,
+        user.tenantId,
+        dto.code,
+        currency,
+      );
+      await this.assertNoOverlap(tx, user.tenantId, dto.code, currency, period);
+
+      return tx.reinsuranceChargeConfiguration.create({
+        data: {
+          tenantId: user.tenantId,
+          code: dto.code,
+          name: dto.name,
+          chargeType: dto.chargeType,
+          rateType: dto.rateType,
+          rate: dto.rate,
+          calculationBasis: dto.calculationBasis,
+          direction: dto.direction,
+          currency,
+          effectiveFrom: period.effectiveFrom,
+          effectiveTo: period.effectiveTo,
+          roundingMode:
+            dto.roundingMode ?? ReinsuranceChargeRoundingMode.HALF_UP,
+          decimalPlaces: dto.decimalPlaces ?? 2,
+          isEnabled: dto.isEnabled ?? true,
+          displayOrder: dto.displayOrder ?? 0,
+          createdByUserId: user.id,
+          updatedByUserId: user.id,
+        },
+      });
     });
   }
 
@@ -192,55 +199,66 @@ export class ReinsuranceChargeSettingsService {
       throw new BadRequestException('At least one field is required');
     }
 
-    const existing = await this.findOne(user.tenantId, id);
-    const effectiveFrom = dto.effectiveFrom
-      ? new Date(dto.effectiveFrom)
-      : existing.effectiveFrom;
-    const effectiveTo =
-      dto.effectiveTo !== undefined
-        ? dto.effectiveTo
-          ? new Date(dto.effectiveTo)
-          : null
-        : existing.effectiveTo;
-    this.assertValidPeriod(effectiveFrom, effectiveTo);
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await this.findOne(user.tenantId, id, tx);
+      const effectiveFrom = dto.effectiveFrom
+        ? new Date(dto.effectiveFrom)
+        : existing.effectiveFrom;
+      const effectiveTo =
+        dto.effectiveTo !== undefined
+          ? dto.effectiveTo
+            ? new Date(dto.effectiveTo)
+            : null
+          : existing.effectiveTo;
+      this.assertValidPeriod(effectiveFrom, effectiveTo);
 
-    const code = existing.code;
-    const currency =
-      dto.currency !== undefined ? (dto.currency ?? null) : existing.currency;
-    await this.assertNoOverlap(
-      user.tenantId,
-      code,
-      currency,
-      { effectiveFrom, effectiveTo },
-      id,
-    );
+      const code = existing.code;
+      const currency =
+        dto.currency !== undefined ? (dto.currency ?? null) : existing.currency;
+      await this.acquireConfigurationScopeLock(
+        tx,
+        user.tenantId,
+        code,
+        currency,
+      );
+      await this.assertNoOverlap(
+        tx,
+        user.tenantId,
+        code,
+        currency,
+        { effectiveFrom, effectiveTo },
+        id,
+      );
 
-    return this.prisma.reinsuranceChargeConfiguration.update({
-      where: { id_tenantId: { id, tenantId: user.tenantId } },
-      data: {
-        ...(dto.name !== undefined ? { name: dto.name } : {}),
-        ...(dto.chargeType !== undefined ? { chargeType: dto.chargeType } : {}),
-        ...(dto.rateType !== undefined ? { rateType: dto.rateType } : {}),
-        ...(dto.rate !== undefined ? { rate: dto.rate } : {}),
-        ...(dto.calculationBasis !== undefined
-          ? { calculationBasis: dto.calculationBasis }
-          : {}),
-        ...(dto.direction !== undefined ? { direction: dto.direction } : {}),
-        ...(dto.currency !== undefined ? { currency } : {}),
-        ...(dto.effectiveFrom !== undefined ? { effectiveFrom } : {}),
-        ...(dto.effectiveTo !== undefined ? { effectiveTo } : {}),
-        ...(dto.roundingMode !== undefined
-          ? { roundingMode: dto.roundingMode }
-          : {}),
-        ...(dto.decimalPlaces !== undefined
-          ? { decimalPlaces: dto.decimalPlaces }
-          : {}),
-        ...(dto.isEnabled !== undefined ? { isEnabled: dto.isEnabled } : {}),
-        ...(dto.displayOrder !== undefined
-          ? { displayOrder: dto.displayOrder }
-          : {}),
-        updatedByUserId: user.id,
-      },
+      return tx.reinsuranceChargeConfiguration.update({
+        where: { id_tenantId: { id, tenantId: user.tenantId } },
+        data: {
+          ...(dto.name !== undefined ? { name: dto.name } : {}),
+          ...(dto.chargeType !== undefined
+            ? { chargeType: dto.chargeType }
+            : {}),
+          ...(dto.rateType !== undefined ? { rateType: dto.rateType } : {}),
+          ...(dto.rate !== undefined ? { rate: dto.rate } : {}),
+          ...(dto.calculationBasis !== undefined
+            ? { calculationBasis: dto.calculationBasis }
+            : {}),
+          ...(dto.direction !== undefined ? { direction: dto.direction } : {}),
+          ...(dto.currency !== undefined ? { currency } : {}),
+          ...(dto.effectiveFrom !== undefined ? { effectiveFrom } : {}),
+          ...(dto.effectiveTo !== undefined ? { effectiveTo } : {}),
+          ...(dto.roundingMode !== undefined
+            ? { roundingMode: dto.roundingMode }
+            : {}),
+          ...(dto.decimalPlaces !== undefined
+            ? { decimalPlaces: dto.decimalPlaces }
+            : {}),
+          ...(dto.isEnabled !== undefined ? { isEnabled: dto.isEnabled } : {}),
+          ...(dto.displayOrder !== undefined
+            ? { displayOrder: dto.displayOrder }
+            : {}),
+          updatedByUserId: user.id,
+        },
+      });
     });
   }
 
@@ -248,20 +266,29 @@ export class ReinsuranceChargeSettingsService {
     user: RequestUser,
     id: string,
   ): Promise<ReinsuranceChargeConfiguration> {
-    const existing = await this.findOne(user.tenantId, id);
-    await this.assertNoOverlap(
-      user.tenantId,
-      existing.code,
-      existing.currency,
-      {
-        effectiveFrom: existing.effectiveFrom,
-        effectiveTo: existing.effectiveTo,
-      },
-      id,
-    );
-    return this.prisma.reinsuranceChargeConfiguration.update({
-      where: { id_tenantId: { id, tenantId: user.tenantId } },
-      data: { isEnabled: true, updatedByUserId: user.id },
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await this.findOne(user.tenantId, id, tx);
+      await this.acquireConfigurationScopeLock(
+        tx,
+        user.tenantId,
+        existing.code,
+        existing.currency,
+      );
+      await this.assertNoOverlap(
+        tx,
+        user.tenantId,
+        existing.code,
+        existing.currency,
+        {
+          effectiveFrom: existing.effectiveFrom,
+          effectiveTo: existing.effectiveTo,
+        },
+        id,
+      );
+      return tx.reinsuranceChargeConfiguration.update({
+        where: { id_tenantId: { id, tenantId: user.tenantId } },
+        data: { isEnabled: true, updatedByUserId: user.id },
+      });
     });
   }
 
@@ -396,7 +423,9 @@ export class ReinsuranceChargeSettingsService {
       ReinsuranceChargeCode,
       ReinsuranceChargeConfiguration
     >();
-    for (const config of configs) {
+    for (const config of configs.filter((candidate) =>
+      this.isConfigurationApplicable(candidate, currency, effectiveAt),
+    )) {
       const existing = byCode.get(config.code);
       if (!existing || (!existing.currency && config.currency === currency)) {
         byCode.set(config.code, config);
@@ -411,6 +440,7 @@ export class ReinsuranceChargeSettingsService {
   }
 
   private async assertNoOverlap(
+    client: PrismaLike,
     tenantId: string,
     code: ReinsuranceChargeCode,
     currency: string | null,
@@ -431,7 +461,7 @@ export class ReinsuranceChargeSettingsService {
         { effectiveTo: { gte: period.effectiveFrom } },
       ],
     };
-    const overlap = await this.prisma.reinsuranceChargeConfiguration.findFirst({
+    const overlap = await client.reinsuranceChargeConfiguration.findFirst({
       where,
       select: { id: true },
     });
@@ -440,6 +470,48 @@ export class ReinsuranceChargeSettingsService {
         `A ${code} charge configuration already exists for this currency and effective period`,
       );
     }
+  }
+
+  private async acquireConfigurationScopeLock(
+    client: Prisma.TransactionClient,
+    tenantId: string,
+    code: ReinsuranceChargeCode,
+    currency: string | null,
+  ): Promise<void> {
+    const scope = `${tenantId}:${code}:${currency ?? 'ALL'}`;
+    const [namespace, key] = this.advisoryLockKeys(scope);
+    await client.$executeRaw(
+      Prisma.sql`SELECT pg_advisory_xact_lock(${namespace}, ${key})`,
+    );
+  }
+
+  private advisoryLockKeys(scope: string): [number, number] {
+    return [
+      this.hashToSignedInt(`reinsurance-charge:${scope}`),
+      this.hashToSignedInt(scope),
+    ];
+  }
+
+  private hashToSignedInt(value: string): number {
+    let hash = 0x811c9dc5;
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return hash | 0;
+  }
+
+  private isConfigurationApplicable(
+    config: ReinsuranceChargeConfiguration,
+    currency: string,
+    effectiveAt: Date,
+  ): boolean {
+    return (
+      config.isEnabled &&
+      config.effectiveFrom <= effectiveAt &&
+      (!config.effectiveTo || config.effectiveTo >= effectiveAt) &&
+      (config.currency === currency || config.currency === null)
+    );
   }
 
   private parsePeriod(effectiveFrom: string, effectiveTo?: string | null) {
