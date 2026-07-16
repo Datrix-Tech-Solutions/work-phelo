@@ -40,6 +40,7 @@ function toIsoDate(value: string): string {
 }
 
 function toPayload(values: LevyTaxFormValues): ReinsuranceChargePayload {
+  const currency = values.currency.trim().toUpperCase();
   return {
     code: values.code,
     name: values.name,
@@ -48,7 +49,7 @@ function toPayload(values: LevyTaxFormValues): ReinsuranceChargePayload {
     rate: Number(values.rate),
     calculationBasis: values.calculationBasis,
     direction: values.direction,
-    currency: values.currency.trim() || null,
+    currency: currency || null,
     effectiveFrom: toIsoDate(values.effectiveFrom),
     effectiveTo: values.effectiveTo ? toIsoDate(values.effectiveTo) : null,
     roundingMode: values.roundingMode,
@@ -296,8 +297,12 @@ export function LevyTaxesForm() {
             <FormField
               label="Currency (optional)"
               registration={register('currency', {
-                setValueAs: (value) => String(value ?? '').toUpperCase(),
-                maxLength: { value: 3, message: 'Use a 3-letter ISO code' },
+                setValueAs: (value) =>
+                  String(value ?? '')
+                    .trim()
+                    .toUpperCase(),
+                validate: (value) =>
+                  !value || /^[A-Z]{3}$/.test(value) || 'Use a 3-letter ISO currency code',
               })}
               error={errors.currency}
               placeholder="Blank = all currencies"

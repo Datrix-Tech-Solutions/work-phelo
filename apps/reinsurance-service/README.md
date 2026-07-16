@@ -584,8 +584,16 @@ Debit notes:
 - `grossAmount` is the sum of confirmed closing `grossPremium`.
 - `commissionAmount` is the sum of confirmed closing `commissionAmount`.
 - `brokerageAmount` is `null` for the MVP debit note.
-- NIC levy and withholding tax are fixed at `0` in the MVP.
-- `netAmount = grossAmount - commissionAmount - nicLevyAmount - withholdingTaxAmount`.
+- NIC levy, withholding tax and future tenant-approved charges are selected from
+  effective-dated Reinsurance charge configuration.
+- Currency-specific charge configurations override all-currency configurations
+  for the same tenant and charge code.
+- Percentage and fixed-amount additions/deductions are supported.
+- Generated notes snapshot the exact applied charge configuration and amounts,
+  so changing settings later does not recalculate historical notes.
+- When no charge configuration applies, `appliedCharges.charges` is empty and
+  the note preserves the source closing totals.
+- `netAmount = grossAmount - commissionAmount + additions - deductions`.
 
 Credit notes:
 
@@ -596,6 +604,8 @@ Credit notes:
   `brokeragePercent`, `brokerageAmount`, `netPremium` and `currency` from the
   closing snapshot.
 - Do not recalculate from live placement or participant values.
+- Apply tenant charge configuration in the same snapshot-safe way as debit
+  notes when a configuration is effective for the note date and currency.
 
 Note lifecycle:
 

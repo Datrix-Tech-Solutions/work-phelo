@@ -15,7 +15,7 @@ export default function ReinsuranceSettingsLayout({ children }: { children: Reac
     { key: 'risk-types', label: 'Risk Types', href: `${base}/risk-types` },
     { key: 'currency', label: 'Currency', href: `${base}/currency` },
     // { key: 'banks', label: 'Banks', href: `${base}/banks` },
-    { key: 'levytaxes', label: 'Liabilities', href: `${base}/levytaxes` },
+    { key: 'levytaxes', label: 'Taxes and Levies', href: `${base}/levytaxes` },
   ];
 
   return (
