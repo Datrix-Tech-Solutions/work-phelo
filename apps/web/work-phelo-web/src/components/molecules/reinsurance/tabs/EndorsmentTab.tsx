@@ -115,6 +115,12 @@ function EffectivePlacementSection({
   }
 
   const totals = view.effectiveTotals;
+  const capacity = view.capacityBreakdown;
+  const participationLabels: Record<string, string> = {
+    ORIGINAL: 'Original',
+    REVISED: 'Revised',
+    ADDED: 'New',
+  };
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-5 flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -132,9 +138,13 @@ function EffectivePlacementSection({
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          ['Facultative Offer', `${totals.facultativeOfferPercent}%`],
+          ['Original Capacity', `${capacity.originalCapacityPercent ?? '—'}%`],
+          ['Effective Capacity', `${capacity.effectiveTotalCapacityPercent}%`],
+          ['Confirmed Endorsement Capacity', `${capacity.confirmedEndorsementCapacityPercent}%`],
+          ['Remaining Capacity', `${capacity.remainingCapacityPercent}%`],
           ['Sum Insured', fmtMoney(totals.sumInsured, totals.currency)],
           ['Effective Premium', fmtMoney(totals.premium, totals.currency)],
+          ['Closing Gross Premium', fmtMoney(totals.grossPremium, totals.currency)],
           ['Closing Net Premium', fmtMoney(totals.netPremium, totals.currency)],
         ].map(([label, value]) => (
           <div key={label} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
@@ -157,7 +167,13 @@ function EffectivePlacementSection({
                 key={participant.counterpartyId}
                 className="py-2 flex items-center justify-between gap-3"
               >
-                <span className="text-sm text-gray-700">{participant.counterparty.name}</span>
+                <div>
+                  <span className="text-sm text-gray-700">{participant.counterparty.name}</span>
+                  <p className="text-[11px] text-gray-400">
+                    {participationLabels[participant.participationType] ??
+                      participant.participationType}
+                  </p>
+                </div>
                 <div className="text-right">
                   <p className="text-sm font-semibold text-gray-900">
                     {participant.signedLinePercent}%
@@ -182,6 +198,12 @@ function EffectivePlacementSection({
               )
               .join(', ')}
           </p>
+          {capacity.acceptedEndorsementCapacityPercent > 0 && (
+            <p className="text-xs text-amber-700 mt-1">
+              Accepted but not yet effective capacity: {capacity.acceptedEndorsementCapacityPercent}
+              %
+            </p>
+          )}
         </div>
       )}
 

@@ -3,6 +3,7 @@ import {
   CounterpartyType,
   PlacementClosingStatus,
   PlacementEndorsementImpactType,
+  PlacementEndorsementParticipantStatus,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
   Prisma,
@@ -46,6 +47,11 @@ type EndorsementForEffectiveView = {
     endorsementParticipant: {
       counterpartyId: string;
     };
+  }>;
+  participants: Array<{
+    id: string;
+    status: PlacementEndorsementParticipantStatus;
+    signedLinePercent: Prisma.Decimal | null;
   }>;
 };
 
@@ -145,12 +151,32 @@ export class PlacementEffectiveViewService {
         snapshots,
         counterparties,
       );
+      const acceptedEndorsementCapacityPercent =
+        this.sumAcceptedPendingEndorsementCapacity(
+          endorsements,
+          appliedEndorsements,
+        );
+      const confirmedEndorsementCapacityPercent = this.money.roundMoney(
+        effectiveEndorsementSnapshots.reduce(
+          (total, snapshot) => total + snapshot.signedLinePercent,
+          0,
+        ),
+      );
       const facultativeOfferPercent = this.money.roundMoney(
         effectiveFinancials.facultativeOfferPercent ??
           effectiveParticipants.reduce(
             (total, participant) => total + participant.signedLinePercent,
             0,
           ),
+      );
+      const effectivePlacedPercent = this.money.roundMoney(
+        effectiveParticipants.reduce(
+          (total, participant) => total + participant.signedLinePercent,
+          0,
+        ),
+      );
+      const remainingCapacityPercent = this.money.roundMoney(
+        Math.max(0, facultativeOfferPercent - effectivePlacedPercent),
       );
       const snapshotCurrencyCodes = new Set(
         snapshots
@@ -183,6 +209,12 @@ export class PlacementEffectiveViewService {
         },
         effectiveTotals: {
           facultativeOfferPercent,
+          originalFacultativeOfferPercent: this.money.toOptionalNumber(
+            placement.facultativeOffer,
+          ),
+          acceptedEndorsementCapacityPercent,
+          confirmedEndorsementCapacityPercent,
+          remainingCapacityPercent,
           participantCount: effectiveParticipants.length,
           sumInsured: effectiveFinancials.sumInsured,
           premium: effectiveFinancials.premium,
@@ -193,6 +225,15 @@ export class PlacementEffectiveViewService {
           commissionAmount: this.sumMoney(snapshots, 'commissionAmount'),
           brokerageAmount: this.sumMoney(snapshots, 'brokerageAmount'),
           netPremium: this.sumMoney(snapshots, 'netPremium'),
+        },
+        capacityBreakdown: {
+          originalCapacityPercent: this.money.toOptionalNumber(
+            placement.facultativeOffer,
+          ),
+          acceptedEndorsementCapacityPercent,
+          confirmedEndorsementCapacityPercent,
+          remainingCapacityPercent,
+          effectiveTotalCapacityPercent: facultativeOfferPercent,
         },
         effectiveParticipants,
         appliedEndorsements: this.mapAppliedEndorsements(appliedEndorsements),
@@ -255,6 +296,14 @@ export class PlacementEffectiveViewService {
             endorsementParticipant: {
               select: { counterpartyId: true },
             },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+        participants: {
+          select: {
+            id: true,
+            status: true,
+            signedLinePercent: true,
           },
           orderBy: { createdAt: 'asc' },
         },
@@ -400,6 +449,7 @@ export class PlacementEffectiveViewService {
           closingId: string;
           participantId?: string;
           endorsementParticipantId?: string;
+          originalParticipantId?: string | null;
           signedLinePercent: number;
         }>;
       }
@@ -437,6 +487,9 @@ export class PlacementEffectiveViewService {
         ...(snapshot.endorsementParticipantId
           ? { endorsementParticipantId: snapshot.endorsementParticipantId }
           : {}),
+        ...(snapshot.originalParticipantId
+          ? { originalParticipantId: snapshot.originalParticipantId }
+          : {}),
         signedLinePercent: this.money.roundMoney(snapshot.signedLinePercent),
       });
       byCounterparty.set(snapshot.counterpartyId, existing);
@@ -445,6 +498,7 @@ export class PlacementEffectiveViewService {
     return [...byCounterparty.values()]
       .map((participant) => ({
         ...participant,
+        participationType: this.deriveParticipationType(participant.sources),
         signedLinePercent: this.money.roundMoney(participant.signedLinePercent),
         grossPremium: this.money.roundMoney(participant.grossPremium),
         commissionAmount: this.money.roundMoney(participant.commissionAmount),
@@ -452,6 +506,49 @@ export class PlacementEffectiveViewService {
         netPremium: this.money.roundMoney(participant.netPremium),
       }))
       .sort((a, b) => a.counterparty.name.localeCompare(b.counterparty.name));
+  }
+
+  private deriveParticipationType(
+    sources: Array<{
+      sourceType: 'PLACEMENT_CLOSING' | 'ENDORSEMENT_CLOSING';
+      originalParticipantId?: string | null;
+    }>,
+  ): 'ORIGINAL' | 'REVISED' | 'ADDED' {
+    const endorsementSource = sources.find(
+      (source) => source.sourceType === 'ENDORSEMENT_CLOSING',
+    );
+    if (!endorsementSource) return 'ORIGINAL';
+    return endorsementSource.originalParticipantId ? 'REVISED' : 'ADDED';
+  }
+
+  private sumAcceptedPendingEndorsementCapacity(
+    endorsements: EndorsementForEffectiveView[],
+    appliedEndorsements: EndorsementForEffectiveView[],
+  ): number {
+    const appliedIds = new Set(
+      appliedEndorsements.map((endorsement) => endorsement.id),
+    );
+    const acceptedStatuses = new Set<PlacementEndorsementParticipantStatus>([
+      PlacementEndorsementParticipantStatus.ACCEPTED,
+      PlacementEndorsementParticipantStatus.CLOSED,
+    ]);
+    return this.money.roundMoney(
+      endorsements
+        .filter(
+          (endorsement) =>
+            !appliedIds.has(endorsement.id) &&
+            endorsement.status !== PlacementEndorsementStatus.VOID &&
+            endorsement.status !== PlacementEndorsementStatus.DECLINED,
+        )
+        .flatMap((endorsement) => endorsement.participants)
+        .filter((participant) => acceptedStatuses.has(participant.status))
+        .reduce(
+          (total, participant) =>
+            total +
+            (this.money.toOptionalNumber(participant.signedLinePercent) ?? 0),
+          0,
+        ),
+    );
   }
 
   private mapAppliedEndorsements(endorsements: EndorsementForEffectiveView[]) {

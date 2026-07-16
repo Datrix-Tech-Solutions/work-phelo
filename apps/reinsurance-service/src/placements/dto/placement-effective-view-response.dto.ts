@@ -41,6 +41,30 @@ export class EffectivePlacementTotalsDto {
   @ApiProperty({ example: 70 })
   facultativeOfferPercent!: number;
 
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 60 })
+  originalFacultativeOfferPercent!: number | null;
+
+  @ApiProperty({
+    example: 10,
+    description:
+      'Accepted endorsement participant capacity that is not yet effective because it has not been confirmed into endorsement closings.',
+  })
+  acceptedEndorsementCapacityPercent!: number;
+
+  @ApiProperty({
+    example: 10,
+    description:
+      'Confirmed endorsement closing capacity included in the effective placement view.',
+  })
+  confirmedEndorsementCapacityPercent!: number;
+
+  @ApiProperty({
+    example: 0,
+    description:
+      'Effective facultative offer percentage less currently confirmed effective participant lines.',
+  })
+  remainingCapacityPercent!: number;
+
   @ApiProperty({ example: 2 })
   participantCount!: number;
 
@@ -72,6 +96,23 @@ export class EffectivePlacementTotalsDto {
   netPremium!: number;
 }
 
+export class EffectivePlacementCapacityBreakdownDto {
+  @ApiPropertyOptional({ type: Number, nullable: true, example: 60 })
+  originalCapacityPercent!: number | null;
+
+  @ApiProperty({ example: 10 })
+  acceptedEndorsementCapacityPercent!: number;
+
+  @ApiProperty({ example: 10 })
+  confirmedEndorsementCapacityPercent!: number;
+
+  @ApiProperty({ example: 0 })
+  remainingCapacityPercent!: number;
+
+  @ApiProperty({ example: 70 })
+  effectiveTotalCapacityPercent!: number;
+}
+
 export class EffectiveParticipantCounterpartyDto {
   @ApiProperty({ format: 'uuid' })
   id!: string;
@@ -99,6 +140,9 @@ export class EffectiveParticipantSourceDto {
   @ApiPropertyOptional({ format: 'uuid' })
   endorsementParticipantId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  originalParticipantId?: string | null;
+
   @ApiProperty({ example: 30 })
   signedLinePercent!: number;
 }
@@ -112,6 +156,9 @@ export class EffectiveParticipantDto {
 
   @ApiProperty({ example: 40 })
   signedLinePercent!: number;
+
+  @ApiProperty({ enum: ['ORIGINAL', 'REVISED', 'ADDED'], example: 'REVISED' })
+  participationType!: 'ORIGINAL' | 'REVISED' | 'ADDED';
 
   @ApiProperty({ example: 28000 })
   grossPremium!: number;
@@ -198,6 +245,9 @@ export class EffectivePlacementViewResponseDto {
 
   @ApiProperty({ type: EffectivePlacementTotalsDto })
   effectiveTotals!: EffectivePlacementTotalsDto;
+
+  @ApiProperty({ type: EffectivePlacementCapacityBreakdownDto })
+  capacityBreakdown!: EffectivePlacementCapacityBreakdownDto;
 
   @ApiProperty({ type: [EffectiveParticipantDto] })
   effectiveParticipants!: EffectiveParticipantDto[];

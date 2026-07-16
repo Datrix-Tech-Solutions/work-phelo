@@ -2,6 +2,7 @@ import {
   CounterpartyType,
   PlacementClosingStatus,
   PlacementEndorsementImpactType,
+  PlacementEndorsementParticipantStatus,
   PlacementEndorsementStatus,
   PlacementEndorsementType,
 } from '../../prisma/generated/client';
@@ -108,6 +109,13 @@ describe('PlacementEffectiveViewService', () => {
           endorsementParticipant: { counterpartyId: 'reinsurer-c' },
         },
       ],
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.CLOSED,
+          signedLinePercent: '10.0000',
+        },
+      ],
       ...overrides,
     }) as never;
 
@@ -165,6 +173,13 @@ describe('PlacementEffectiveViewService', () => {
       }),
     );
     expect(result.effectiveTotals.facultativeOfferPercent).toBe(60);
+    expect(result.capacityBreakdown).toMatchObject({
+      originalCapacityPercent: 60,
+      acceptedEndorsementCapacityPercent: 0,
+      confirmedEndorsementCapacityPercent: 0,
+      remainingCapacityPercent: 0,
+      effectiveTotalCapacityPercent: 60,
+    });
     expect(result.effectiveTotals.grossPremium).toBe(60000);
     expect(result.effectiveParticipants).toHaveLength(2);
     expect(result.appliedEndorsements).toEqual([]);
@@ -197,9 +212,21 @@ describe('PlacementEffectiveViewService', () => {
     const result = await service.getEffectiveView(tenantId, placementId);
 
     expect(result.effectiveTotals.facultativeOfferPercent).toBe(70);
+    expect(result.capacityBreakdown).toMatchObject({
+      originalCapacityPercent: 60,
+      acceptedEndorsementCapacityPercent: 0,
+      confirmedEndorsementCapacityPercent: 10,
+      remainingCapacityPercent: 0,
+      effectiveTotalCapacityPercent: 70,
+    });
     expect(result.effectiveTotals.sumInsured).toBe(1500000);
     expect(result.effectiveTotals.premium).toBe(150000);
     expect(result.effectiveParticipants).toHaveLength(3);
+    expect(
+      result.effectiveParticipants.find(
+        (participant) => participant.counterpartyId === 'reinsurer-c',
+      )?.participationType,
+    ).toBe('ADDED');
     expect(result.appliedEndorsements).toHaveLength(1);
     expect(result.appliedEndorsements[0].confirmedClosings[0]).toMatchObject({
       id: 'endorsement-closing-1',
@@ -249,12 +276,43 @@ describe('PlacementEffectiveViewService', () => {
     );
 
     expect(avenue?.signedLinePercent).toBe(50);
+    expect(avenue?.participationType).toBe('REVISED');
     expect(avenue?.sources).toEqual([
       expect.objectContaining({
         sourceType: 'ENDORSEMENT_CLOSING',
+        originalParticipantId: 'participant-a',
         signedLinePercent: 50,
       }),
     ]);
+  });
+
+  it('reports accepted endorsement capacity separately until it is confirmed into closings', async () => {
+    tx.placementEndorsement.findMany.mockResolvedValue([
+      makeConfirmedEndorsement({
+        status: PlacementEndorsementStatus.MARKETING,
+        closings: [],
+        participants: [
+          {
+            id: 'endorsement-participant-1',
+            status: PlacementEndorsementParticipantStatus.ACCEPTED,
+            signedLinePercent: '10.0000',
+          },
+        ],
+      }),
+    ]);
+
+    const result = await service.getEffectiveView(tenantId, placementId);
+
+    expect(result.effectiveTotals.facultativeOfferPercent).toBe(60);
+    expect(result.capacityBreakdown).toMatchObject({
+      originalCapacityPercent: 60,
+      acceptedEndorsementCapacityPercent: 10,
+      confirmedEndorsementCapacityPercent: 0,
+      remainingCapacityPercent: 0,
+      effectiveTotalCapacityPercent: 60,
+    });
+    expect(result.appliedEndorsements).toEqual([]);
+    expect(result.pendingEndorsements).toHaveLength(1);
   });
 
   it('replaces an absolute revised facultative offer instead of adding it to the base', async () => {
@@ -314,6 +372,7 @@ describe('PlacementEffectiveViewService', () => {
       expect.objectContaining({
         counterpartyId: 'reinsurer-a',
         signedLinePercent: 45,
+        participationType: 'REVISED',
       }),
     ]);
   });
@@ -396,6 +455,7 @@ describe('PlacementEffectiveViewService', () => {
       expect.objectContaining({
         counterpartyId: 'reinsurer-a',
         signedLinePercent: 50,
+        participationType: 'REVISED',
       }),
     ]);
   });
