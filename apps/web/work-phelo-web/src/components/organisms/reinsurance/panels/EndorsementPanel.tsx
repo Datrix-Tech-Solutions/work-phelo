@@ -8,7 +8,7 @@ import { DatePicker } from '@/components/atoms/DatePicker';
 import { FormSection } from '@/components/atoms/FormSection';
 import FacultativeFormFields from '@/components/molecules/reinsurance/forms/FacultativeFormFields';
 import { Facultative, FacultativeFormValues, FACULTATIVE_FORM_DEFAULTS } from '@/types/reinsurance';
-import { useCreateEndorsement, useUpdateFacultative, useRiskTypes } from '@/hooks';
+import { useCreateEndorsement, useRiskTypes } from '@/hooks';
 import { extractError } from '@/lib/extractError';
 import {
   mergePlacementRiskDetails,
@@ -47,7 +47,6 @@ function placementToFormValues(placement: Facultative): EndorsementFormValues {
 
 export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPanelProps) {
   const { mutateAsync: createEndorsement, isPending } = useCreateEndorsement(placement.id);
-  const { mutateAsync: updateFacultative } = useUpdateFacultative();
   const { data: allRiskTypes = [] } = useRiskTypes();
   const toast = useToastStore.getState;
 
@@ -80,8 +79,8 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
         values.extraRiskFields ?? [],
       );
 
-      const placementUpdate = {
-        id: placement.id,
+      const proposedSnapshot = {
+        cedantId: values.insuranceCompany || undefined,
         riskTypeId: values.riskType || undefined,
         reference: values.reference,
         title: values.title,
@@ -102,25 +101,32 @@ export function EndorsementPanel({ isOpen, placement, onClose }: EndorsementPane
         effectiveDate: new Date(values.effectiveDate).toISOString(),
         reason: values.comment?.trim() || 'Policy endorsement',
         proposedSnapshot: {
-          riskTypeId: placementUpdate.riskTypeId,
-          reference: placementUpdate.reference,
-          title: placementUpdate.title,
-          sumInsured: placementUpdate.sumInsured,
-          rate: placementUpdate.rate,
-          premium: placementUpdate.premium,
-          facultativeOffer: placementUpdate.facultativeOffer,
-          commission: placementUpdate.commission,
-          currency: placementUpdate.currency,
-          inceptionDate: placementUpdate.inceptionDate,
-          expiryDate: placementUpdate.expiryDate,
+          riskTypeId: proposedSnapshot.riskTypeId,
+          cedantId: proposedSnapshot.cedantId,
+          reference: proposedSnapshot.reference,
+          title: proposedSnapshot.title,
+          sumInsured: proposedSnapshot.sumInsured,
+          rate: proposedSnapshot.rate,
+          premium: proposedSnapshot.premium,
+          facultativeOffer: proposedSnapshot.facultativeOffer,
+          commission: proposedSnapshot.commission,
+          currency: proposedSnapshot.currency,
+          inceptionDate: proposedSnapshot.inceptionDate,
+          expiryDate: proposedSnapshot.expiryDate,
           ...(businessDetails ? { businessDetails } : {}),
           ...(offerDetails ? { offerDetails } : {}),
         },
+        targetPercent:
+          values.facultativeOffer === '' || values.facultativeOffer == null
+            ? undefined
+            : Number(values.facultativeOffer),
       });
 
-      await updateFacultative(placementUpdate);
-
-      toast().addToast({ message: 'Endorsement created successfully', type: 'success' });
+      toast().addToast({
+        message:
+          'Endorsement created. The original placement remains unchanged until the endorsement is completed.',
+        type: 'success',
+      });
       handleClose();
     } catch (error) {
       toast().addToast({ message: extractError(error), type: 'error' });
