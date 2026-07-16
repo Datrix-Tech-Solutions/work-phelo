@@ -1297,6 +1297,13 @@ function EndorsementCard({
                   const premium = Number(closing.premiumSnapshot);
                   const netPremium =
                     closing.netPremium === null ? null : Number(closing.netPremium);
+                  const financialImpact = closing.financialImpactSnapshot ?? {};
+                  const isReturnPremium =
+                    financialImpact.calculationType === 'RETURN_PREMIUM' || premium < 0;
+                  const effectivePremium =
+                    typeof financialImpact.effectivePremiumSnapshot === 'number'
+                      ? financialImpact.effectivePremiumSnapshot
+                      : null;
                   return (
                     <div
                       key={closing.id}
@@ -1317,7 +1324,9 @@ function EndorsementCard({
                         <p className="text-sm text-gray-700">{closing.signedLinePercent}%</p>
                       </div>
                       <div>
-                        <p className="text-xs text-gray-400">Premium / Net</p>
+                        <p className="text-xs text-gray-400">
+                          {isReturnPremium ? 'Return Premium / Net' : 'Premium / Net'}
+                        </p>
                         <p className="text-sm text-gray-700">
                           {fmtMoney(Number.isFinite(premium) ? premium : null, closing.currency)}
                         </p>
@@ -1330,6 +1339,11 @@ function EndorsementCard({
                         </p>
                       </div>
                       <div className="sm:text-right">
+                        {effectivePremium !== null && (
+                          <p className="text-xs text-gray-400">
+                            Effective {fmtMoney(effectivePremium, closing.currency)}
+                          </p>
+                        )}
                         <Badge
                           label={
                             closing.status === 'CONFIRMED'

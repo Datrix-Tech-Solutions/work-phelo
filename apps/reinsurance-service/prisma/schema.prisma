@@ -852,6 +852,7 @@ model PlacementEndorsementClosing {
   brokeragePercent         Decimal?                        @db.Decimal(5, 2)
   brokerageAmount          Decimal?                        @db.Decimal(18, 2)
   netPremium               Decimal?                        @db.Decimal(18, 2)
+  financialImpactSnapshot  Json?
   currency                 String?
   issuedAt                 DateTime?
   confirmedAt              DateTime?

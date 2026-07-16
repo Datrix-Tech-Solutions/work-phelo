@@ -107,6 +107,7 @@ export class ClosingSnapshotReader {
         brokeragePercent: true,
         brokerageAmount: true,
         netPremium: true,
+        financialImpactSnapshot: true,
         currency: true,
         endorsementParticipant: {
           select: {
@@ -117,21 +118,49 @@ export class ClosingSnapshotReader {
       },
     });
 
-    return closings.map((closing) => ({
-      sourceType: 'ENDORSEMENT_CLOSING',
-      closingId: closing.id,
-      endorsementParticipantId: closing.endorsementParticipantId,
-      originalParticipantId:
-        closing.endorsementParticipant.originalParticipantId,
-      counterpartyId: closing.endorsementParticipant.counterpartyId,
-      signedLinePercent: this.money.toNumber(closing.signedLinePercent),
-      premium: this.money.toOptionalNumber(closing.premiumSnapshot),
-      commissionPercent: this.money.toOptionalNumber(closing.commissionPercent),
-      commissionAmount: this.money.toOptionalNumber(closing.commissionAmount),
-      brokeragePercent: this.money.toOptionalNumber(closing.brokeragePercent),
-      brokerageAmount: this.money.toOptionalNumber(closing.brokerageAmount),
-      netPremium: this.money.toOptionalNumber(closing.netPremium),
-      currency: closing.currency,
-    }));
+    return closings.map((closing) => {
+      const financialImpact = this.asRecord(closing.financialImpactSnapshot);
+      return {
+        sourceType: 'ENDORSEMENT_CLOSING',
+        closingId: closing.id,
+        endorsementParticipantId: closing.endorsementParticipantId,
+        originalParticipantId:
+          closing.endorsementParticipant.originalParticipantId,
+        counterpartyId: closing.endorsementParticipant.counterpartyId,
+        signedLinePercent: this.money.toNumber(closing.signedLinePercent),
+        premium:
+          this.jsonNumber(financialImpact.effectivePremiumSnapshot) ??
+          this.money.toOptionalNumber(closing.premiumSnapshot),
+        commissionPercent: this.money.toOptionalNumber(
+          closing.commissionPercent,
+        ),
+        commissionAmount:
+          this.jsonNumber(financialImpact.effectiveCommissionAmount) ??
+          this.money.toOptionalNumber(closing.commissionAmount),
+        brokeragePercent: this.money.toOptionalNumber(closing.brokeragePercent),
+        brokerageAmount:
+          this.jsonNumber(financialImpact.effectiveBrokerageAmount) ??
+          this.money.toOptionalNumber(closing.brokerageAmount),
+        netPremium:
+          this.jsonNumber(financialImpact.effectiveNetPremium) ??
+          this.money.toOptionalNumber(closing.netPremium),
+        currency: closing.currency,
+      };
+    });
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  }
+
+  private jsonNumber(value: unknown): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string') {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
   }
 }

@@ -813,16 +813,16 @@ export class PlacementNotesService {
 
     return {
       currency: closing.currency,
-      grossAmount: this.toNumber(closing.premiumSnapshot),
+      grossAmount: Math.abs(this.toNumber(closing.premiumSnapshot)),
       commissionPercent: this.toOptionalNumber(closing.commissionPercent),
-      commissionAmount: this.toOptionalNumber(closing.commissionAmount),
+      commissionAmount: this.absOptionalNumber(closing.commissionAmount),
       brokeragePercent: this.toOptionalNumber(closing.brokeragePercent),
-      brokerageAmount: this.toOptionalNumber(closing.brokerageAmount),
+      brokerageAmount: this.absOptionalNumber(closing.brokerageAmount),
       nicLevyPercent: 0,
       nicLevyAmount: 0,
       withholdingTaxPercent: 0,
       withholdingTaxAmount: 0,
-      netAmount: this.toNumber(closing.netPremium),
+      netAmount: Math.abs(this.toNumber(closing.netPremium)),
     };
   }
 
@@ -842,6 +842,13 @@ export class PlacementNotesService {
     if (typeof value === 'number') return Number.isFinite(value) ? value : null;
     const parsed = Number(value.toString());
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  private absOptionalNumber(
+    value: Prisma.Decimal | number | string | null | undefined,
+  ): number | null {
+    const parsed = this.toOptionalNumber(value);
+    return parsed === null ? null : Math.abs(parsed);
   }
 
   private cleanRequired(value: string): string {

@@ -811,6 +811,7 @@ export interface EndorsementParticipantClosing {
   brokeragePercent: string | null;
   brokerageAmount: string | null;
   netPremium: string | null;
+  financialImpactSnapshot?: Record<string, unknown> | null;
   currency: string | null;
   issuedAt: string | null;
   confirmedAt: string | null;

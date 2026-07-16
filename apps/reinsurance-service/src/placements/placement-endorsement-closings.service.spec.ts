@@ -38,7 +38,10 @@ describe('PlacementEndorsementClosingsService', () => {
     id: 'endorsement-1',
     tenantId: 'tenant-1',
     placementId: 'placement-1',
+    impactType: 'CAPACITY_INCREASE',
     status: PlacementEndorsementStatus.CLOSING,
+    effectiveDate: new Date('2026-06-05T00:00:00.000Z'),
+    createdAt: new Date('2026-06-05T08:00:00.000Z'),
     proposedSnapshot: {
       sumInsured: '150000.00',
       premium: '30000.00',
@@ -53,7 +56,17 @@ describe('PlacementEndorsementClosingsService', () => {
         commission: '8.0000',
         preliminaryBrokerage: '5.00',
         currency: 'USD',
+        inceptionDate: '2026-01-01T00:00:00.000Z',
+        expiryDate: '2027-01-01T00:00:00.000Z',
       },
+      participants: [
+        {
+          id: 'participant-1',
+          counterpartyId: 'reinsurer-1',
+          signedLinePercent: '40.0000',
+          sharePercent: '40.0000',
+        },
+      ],
     },
   };
 
@@ -95,6 +108,7 @@ describe('PlacementEndorsementClosingsService', () => {
     brokeragePercent: '7.50',
     brokerageAmount: '675.00',
     netPremium: '7425.00',
+    financialImpactSnapshot: null,
     currency: 'USD',
     issuedAt: null,
     confirmedAt: null,
@@ -106,7 +120,10 @@ describe('PlacementEndorsementClosingsService', () => {
 
   let prisma: {
     placement: { findFirst: PrismaMethod };
-    placementEndorsement: { findFirst: PrismaMethod };
+    placementEndorsement: {
+      findFirst: PrismaMethod;
+      findMany: PrismaMethod;
+    };
     placementEndorsementParticipant: {
       findFirst: PrismaMethod;
       findMany: PrismaMethod;
@@ -149,6 +166,7 @@ describe('PlacementEndorsementClosingsService', () => {
       },
       placementEndorsement: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
+        findMany: jest.fn<Promise<unknown>, [unknown]>(),
       },
       placementEndorsementParticipant: {
         findFirst: jest.fn<Promise<unknown>, [unknown]>(),
@@ -181,6 +199,7 @@ describe('PlacementEndorsementClosingsService', () => {
         callback(prisma),
       ),
     };
+    prisma.placementEndorsement.findMany.mockResolvedValue([]);
     endorsementsService = {
       getSummary: jest.fn().mockResolvedValue({
         id: 'endorsement-1',
@@ -279,6 +298,7 @@ describe('PlacementEndorsementClosingsService', () => {
   describe('create', () => {
     beforeEach(() => {
       prisma.placementEndorsement.findFirst.mockResolvedValue(endorsement);
+      prisma.placementEndorsement.findMany.mockResolvedValue([]);
       prisma.placementEndorsementParticipant.findFirst.mockResolvedValue(
         acceptedParticipant,
       );
@@ -321,6 +341,287 @@ describe('PlacementEndorsementClosingsService', () => {
         currency: 'USD',
       });
       expect(result.status).toBe(PlacementClosingStatus.DRAFT);
+    });
+
+    it('creates a signed negative return premium closing for decrease endorsements using exact unearned days', async () => {
+      prisma.placementEndorsement.findFirst.mockResolvedValue({
+        ...endorsement,
+        impactType: 'DECREASE_OR_CANCELLATION',
+        effectiveDate: new Date('2026-07-02T00:00:00.000Z'),
+        proposedSnapshot: {
+          premium: '10000.00',
+          sumInsured: '50000.00',
+          commission: '10.0000',
+          preliminaryBrokerage: '5.00',
+          currency: 'USD',
+        },
+        originalSnapshot: {
+          placement: {
+            premium: '20000.00',
+            sumInsured: '100000.00',
+            commission: '10.0000',
+            preliminaryBrokerage: '5.00',
+            currency: 'USD',
+            inceptionDate: '2026-01-01T00:00:00.000Z',
+            expiryDate: '2027-01-01T00:00:00.000Z',
+          },
+          participants: [
+            {
+              id: 'participant-1',
+              signedLinePercent: '40.0000',
+              sharePercent: '40.0000',
+            },
+          ],
+        },
+      });
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        signedLinePercent: '30.0000',
+        sharePercent: '40.0000',
+      });
+
+      await service.create(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      const createArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingCreateArgs>(
+          prisma.placementEndorsementClosing.create,
+        );
+      expect(createArgs.data).toMatchObject({
+        signedLinePercent: 30,
+        premiumSnapshot: -501.37,
+        commissionAmount: -50.14,
+        brokerageAmount: -25.07,
+        netPremium: -426.16,
+      });
+      expect(createArgs.data.financialImpactSnapshot).toMatchObject({
+        calculationType: 'RETURN_PREMIUM',
+        totalPolicyDays: 365,
+        earnedDays: 182,
+        unearnedDays: 183,
+        unearnedFraction: 0.50136986,
+        premiumReduction: 10000,
+        impactLinePercent: 10,
+        effectivePremiumSnapshot: 3000,
+      });
+    });
+
+    it('allows full cancellation at inception with a zero revised signed line', async () => {
+      prisma.placementEndorsement.findFirst.mockResolvedValue({
+        ...endorsement,
+        impactType: 'DECREASE_OR_CANCELLATION',
+        effectiveDate: new Date('2026-01-01T00:00:00.000Z'),
+        proposedSnapshot: {
+          premium: '0.00',
+          commission: '10.0000',
+          preliminaryBrokerage: '5.00',
+          currency: 'USD',
+        },
+        originalSnapshot: {
+          placement: {
+            premium: '20000.00',
+            commission: '10.0000',
+            preliminaryBrokerage: '5.00',
+            currency: 'USD',
+            inceptionDate: '2026-01-01T00:00:00.000Z',
+            expiryDate: '2027-01-01T00:00:00.000Z',
+          },
+          participants: [
+            {
+              id: 'participant-1',
+              signedLinePercent: '40.0000',
+              sharePercent: '40.0000',
+            },
+          ],
+        },
+      });
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        signedLinePercent: '0.0000',
+        sharePercent: '40.0000',
+      });
+
+      await service.create(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      const createArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingCreateArgs>(
+          prisma.placementEndorsementClosing.create,
+        );
+      expect(createArgs.data).toMatchObject({
+        signedLinePercent: 0,
+        premiumSnapshot: -8000,
+        netPremium: -6800,
+      });
+      expect(createArgs.data.financialImpactSnapshot).toMatchObject({
+        unearnedFraction: 1,
+        impactLinePercent: 40,
+        effectivePremiumSnapshot: 0,
+      });
+    });
+
+    it('applies flat non-refundable deductions after pro-rata return premium', async () => {
+      prisma.placementEndorsement.findFirst.mockResolvedValue({
+        ...endorsement,
+        impactType: 'DECREASE_OR_CANCELLATION',
+        effectiveDate: new Date('2026-01-01T00:00:00.000Z'),
+        proposedSnapshot: {
+          premium: '0.00',
+          commission: '0.0000',
+          preliminaryBrokerage: '0.00',
+          currency: 'USD',
+          returnPremiumAdjustments: [
+            {
+              amount: '100.00',
+              treatment: 'FLAT',
+              direction: 'DEDUCTION',
+              refundable: false,
+            },
+          ],
+        },
+        originalSnapshot: {
+          placement: {
+            premium: '1000.00',
+            commission: '0.0000',
+            preliminaryBrokerage: '0.00',
+            currency: 'USD',
+            inceptionDate: '2026-01-01T00:00:00.000Z',
+            expiryDate: '2027-01-01T00:00:00.000Z',
+          },
+          participants: [
+            {
+              id: 'participant-1',
+              signedLinePercent: '100.0000',
+              sharePercent: '100.0000',
+            },
+          ],
+        },
+      });
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        signedLinePercent: '0.0000',
+        sharePercent: '100.0000',
+      });
+
+      await service.create(
+        user,
+        'placement-1',
+        'endorsement-1',
+        'endorsement-participant-1',
+      );
+
+      const createArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingCreateArgs>(
+          prisma.placementEndorsementClosing.create,
+        );
+      expect(createArgs.data).toMatchObject({
+        premiumSnapshot: -1000,
+        netPremium: -900,
+      });
+      expect(createArgs.data.financialImpactSnapshot).toMatchObject({
+        flatNonRefundableDeductions: 100,
+        netReturnPremium: 900,
+      });
+    });
+
+    it('calculates sequential decreases from the prior effective endorsement state', async () => {
+      prisma.placementEndorsement.findFirst.mockResolvedValue({
+        ...endorsement,
+        id: 'endorsement-2',
+        impactType: 'DECREASE_OR_CANCELLATION',
+        effectiveDate: new Date('2026-01-01T00:00:00.000Z'),
+        createdAt: new Date('2026-02-01T00:00:00.000Z'),
+        proposedSnapshot: {
+          premium: '600.00',
+          commission: '0.0000',
+          preliminaryBrokerage: '0.00',
+          currency: 'USD',
+        },
+        originalSnapshot: {
+          placement: {
+            premium: '1000.00',
+            commission: '0.0000',
+            preliminaryBrokerage: '0.00',
+            currency: 'USD',
+            inceptionDate: '2026-01-01T00:00:00.000Z',
+            expiryDate: '2027-01-01T00:00:00.000Z',
+          },
+          participants: [
+            {
+              id: 'participant-1',
+              counterpartyId: 'reinsurer-1',
+              signedLinePercent: '100.0000',
+              sharePercent: '100.0000',
+            },
+          ],
+        },
+      });
+      prisma.placementEndorsement.findMany.mockResolvedValue([
+        {
+          id: 'endorsement-1',
+          impactType: 'DECREASE_OR_CANCELLATION',
+          status: PlacementEndorsementStatus.CLOSED,
+          effectiveDate: new Date('2026-01-01T00:00:00.000Z'),
+          createdAt: new Date('2026-01-15T00:00:00.000Z'),
+          proposedSnapshot: {
+            premium: '800.00',
+            commission: '0.0000',
+            preliminaryBrokerage: '0.00',
+            currency: 'USD',
+          },
+          closings: [
+            {
+              status: PlacementClosingStatus.CONFIRMED,
+              signedLinePercent: new Prisma.Decimal('80.0000'),
+              endorsementParticipant: {
+                originalParticipantId: 'participant-1',
+                counterpartyId: 'reinsurer-1',
+              },
+            },
+          ],
+        },
+      ]);
+      prisma.placementEndorsementParticipant.findFirst.mockResolvedValue({
+        ...acceptedParticipant,
+        endorsementId: 'endorsement-2',
+        signedLinePercent: '60.0000',
+        sharePercent: '80.0000',
+      });
+
+      await service.create(
+        user,
+        'placement-1',
+        'endorsement-2',
+        'endorsement-participant-1',
+      );
+
+      const createArgs =
+        firstCallArg<Prisma.PlacementEndorsementClosingCreateArgs>(
+          prisma.placementEndorsementClosing.create,
+        );
+      expect(createArgs.data).toMatchObject({
+        signedLinePercent: 60,
+        premiumSnapshot: -40,
+        netPremium: -40,
+      });
+      expect(createArgs.data.financialImpactSnapshot).toMatchObject({
+        calculationType: 'RETURN_PREMIUM',
+        originalPremium: 800,
+        revisedPremium: 600,
+        premiumReduction: 200,
+        originalLinePercent: 80,
+        revisedLinePercent: 60,
+        impactLinePercent: 20,
+        effectivePremiumSnapshot: 360,
+      });
     });
 
     it('does not mutate original placement records when creating an endorsement closing', async () => {

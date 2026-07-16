@@ -90,6 +90,7 @@ describe('ClosingSnapshotReader', () => {
         brokeragePercent: new Prisma.Decimal('7.5000'),
         brokerageAmount: new Prisma.Decimal('90.00'),
         netPremium: new Prisma.Decimal('990.00'),
+        financialImpactSnapshot: null,
         currency: 'GHS',
         endorsementParticipant: {
           counterpartyId: 'reinsurer-2',
@@ -130,5 +131,46 @@ describe('ClosingSnapshotReader', () => {
         currency: 'GHS',
       },
     ]);
+  });
+
+  it('uses effective exposure values from return-premium impact snapshots', async () => {
+    tx.placementEndorsementClosing.findMany.mockResolvedValue([
+      {
+        id: 'endorsement-closing-1',
+        endorsementParticipantId: 'endorsement-participant-1',
+        signedLinePercent: new Prisma.Decimal('30.0000'),
+        premiumSnapshot: new Prisma.Decimal('-501.37'),
+        commissionPercent: new Prisma.Decimal('10.0000'),
+        commissionAmount: new Prisma.Decimal('-50.14'),
+        brokeragePercent: new Prisma.Decimal('5.0000'),
+        brokerageAmount: new Prisma.Decimal('-25.07'),
+        netPremium: new Prisma.Decimal('-426.16'),
+        financialImpactSnapshot: {
+          calculationType: 'RETURN_PREMIUM',
+          effectivePremiumSnapshot: 3000,
+          effectiveCommissionAmount: 300,
+          effectiveBrokerageAmount: 150,
+          effectiveNetPremium: 2550,
+        },
+        currency: 'GHS',
+        endorsementParticipant: {
+          counterpartyId: 'reinsurer-1',
+          originalParticipantId: 'participant-1',
+        },
+      },
+    ]);
+
+    const snapshots = await reader.findConfirmedEndorsementClosingSnapshots(
+      tx as unknown as Prisma.TransactionClient,
+      'tenant-1',
+      'placement-1',
+    );
+
+    expect(snapshots[0]).toMatchObject({
+      premium: 3000,
+      commissionAmount: 300,
+      brokerageAmount: 150,
+      netPremium: 2550,
+    });
   });
 });

@@ -646,6 +646,51 @@ describe('PlacementNotesService', () => {
     });
   });
 
+  it('creates endorsement credit note with positive return premium values from signed negative closing impact', async () => {
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      id: 'endorsement-1',
+      impactType: PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION,
+    });
+    prisma.placementNote.findFirst.mockResolvedValue(null);
+    prisma.placementEndorsementClosing.findFirst.mockResolvedValue({
+      ...confirmedEndorsementClosing,
+      premiumSnapshot: new Prisma.Decimal('-501.37'),
+      commissionAmount: new Prisma.Decimal('-50.14'),
+      brokerageAmount: new Prisma.Decimal('-25.07'),
+      netPremium: new Prisma.Decimal('-426.16'),
+    });
+    prisma.placementNote.count.mockResolvedValue(0);
+    prisma.placementNote.create.mockResolvedValue({
+      ...note,
+      id: 'endorsement-credit-note-1',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      noteNumber: 'ECN-001',
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      counterpartyId: 'reinsurer-1',
+    });
+
+    await service.createEndorsementCreditNote(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+
+    const createArgs = firstCallArg<Prisma.PlacementNoteCreateArgs>(
+      prisma.placementNote.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      grossAmount: 501.37,
+      commissionAmount: 50.14,
+      brokerageAmount: 25.07,
+      netAmount: 426.16,
+    });
+  });
+
   it('rejects endorsement credit note for non-confirmed or wrong-tenant closing', async () => {
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',

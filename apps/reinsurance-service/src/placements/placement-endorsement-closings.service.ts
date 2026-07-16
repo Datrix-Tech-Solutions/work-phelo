@@ -7,6 +7,7 @@ import {
 import { RequestUser } from '@work-phelo/types';
 import {
   PlacementClosingStatus,
+  PlacementEndorsementImpactType,
   PlacementEndorsementParticipantStatus,
   PlacementEndorsementStatus,
   Prisma,
@@ -53,10 +54,92 @@ type EndorsementForClosing = {
   id: string;
   tenantId: string;
   placementId: string;
+  impactType: PlacementEndorsementImpactType;
   status: PlacementEndorsementStatus;
+  effectiveDate: Date;
+  createdAt: Date;
   targetPercent: Prisma.Decimal | null;
   originalSnapshot: Prisma.JsonValue;
   proposedSnapshot: Prisma.JsonValue | null;
+};
+
+type EndorsementSnapshotSource = {
+  impactType: PlacementEndorsementImpactType;
+  premium: number;
+  sumInsured: number | null;
+  commission: number | null;
+  brokeragePercent: number | null;
+  currency: string | null;
+  originalPremium: number | null;
+  revisedPremium: number | null;
+  originalSumInsured: number | null;
+  revisedSumInsured: number | null;
+  policyInceptionDate: Date | null;
+  policyExpiryDate: Date | null;
+  endorsementEffectiveDate: Date;
+  flatNonRefundableDeductions: number;
+  flatRefundableAmounts: number;
+  originalParticipants: Array<Record<string, unknown>>;
+};
+
+type PriorEndorsementForSnapshotBasis = {
+  id: string;
+  impactType: PlacementEndorsementImpactType;
+  status: PlacementEndorsementStatus;
+  effectiveDate: Date;
+  createdAt: Date;
+  proposedSnapshot: Prisma.JsonValue | null;
+  closings: Array<{
+    status: PlacementClosingStatus;
+    signedLinePercent: Prisma.Decimal;
+    endorsementParticipant: {
+      originalParticipantId: string | null;
+      counterpartyId: string;
+    };
+  }>;
+};
+
+type EndorsementSnapshotBasis = {
+  premium: number | null;
+  sumInsured: number | null;
+  commission: number | null;
+  brokeragePercent: number | null;
+  currency: string | null;
+  participants: Array<Record<string, unknown>>;
+};
+
+type EndorsementFinancialImpactSnapshot = {
+  impactType: PlacementEndorsementImpactType;
+  calculationType: 'ADDITIONAL_PREMIUM' | 'RETURN_PREMIUM';
+  dateBoundaryConvention: 'START_INCLUSIVE_EXPIRY_EXCLUSIVE';
+  policyInceptionDate: string | null;
+  policyExpiryDate: string | null;
+  endorsementEffectiveDate: string;
+  totalPolicyDays: number | null;
+  earnedDays: number | null;
+  unearnedDays: number | null;
+  earnedFraction: number;
+  unearnedFraction: number;
+  originalPremium: number | null;
+  revisedPremium: number | null;
+  premiumReduction: number;
+  refundableProRataAmount: number;
+  flatNonRefundableDeductions: number;
+  flatRefundableAmounts: number;
+  grossReturnPremium: number;
+  taxesAndLeviesAdjustment: number;
+  netReturnPremium: number;
+  originalLinePercent: number | null;
+  revisedLinePercent: number;
+  impactLinePercent: number;
+  effectivePremiumSnapshot: number;
+  effectiveCommissionAmount: number;
+  effectiveBrokerageAmount: number;
+  effectiveNetPremium: number;
+  signedPremiumImpact: number;
+  signedCommissionImpact: number;
+  signedBrokerageImpact: number;
+  signedNetPremiumImpact: number;
 };
 
 export type ValidateEndorsementParticipantResult = {
@@ -148,9 +231,18 @@ export class PlacementEndorsementClosingsService {
 
     const signedLinePercent = this.toNumber(participant.signedLinePercent);
     const sharePercent = this.toOptionalNumber(participant.sharePercent);
-    if (signedLinePercent <= 0 || signedLinePercent > 100) {
+    if (signedLinePercent < 0 || signedLinePercent > 100) {
       throw new BadRequestException(
-        'Endorsement participant signed line percentage must be greater than zero and at most 100',
+        'Endorsement participant signed line percentage must be at least zero and at most 100',
+      );
+    }
+    if (
+      signedLinePercent === 0 &&
+      endorsement.impactType !==
+        PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION
+    ) {
+      throw new BadRequestException(
+        'Endorsement participant signed line percentage must be greater than zero',
       );
     }
     if (sharePercent !== null && signedLinePercent > sharePercent) {
@@ -158,13 +250,6 @@ export class PlacementEndorsementClosingsService {
         'Endorsement participant signed line percentage cannot exceed offered share percentage',
       );
     }
-
-    const snapshotSource = this.buildSnapshotSource(endorsement);
-    const snapshot = this.computeSnapshot(
-      snapshotSource,
-      participant,
-      signedLinePercent,
-    );
 
     return this.prisma.$transaction(async (tx) => {
       const existingActive = await tx.placementEndorsementClosing.findFirst({
@@ -182,6 +267,12 @@ export class PlacementEndorsementClosingsService {
         );
       }
 
+      const snapshotSource = await this.buildSnapshotSource(tx, endorsement);
+      const snapshot = this.computeSnapshot(
+        snapshotSource,
+        participant,
+        signedLinePercent,
+      );
       const count = await tx.placementEndorsementClosing.count({
         where: { tenantId: user.tenantId, placementId },
       });
@@ -367,9 +458,18 @@ export class PlacementEndorsementClosingsService {
 
     const signedLinePercent = this.toNumber(participant.signedLinePercent);
     const sharePercent = this.toOptionalNumber(participant.sharePercent);
-    if (signedLinePercent <= 0 || signedLinePercent > 100) {
+    if (signedLinePercent < 0 || signedLinePercent > 100) {
       throw new BadRequestException(
-        'Endorsement participant signed line percentage must be greater than zero and at most 100',
+        'Endorsement participant signed line percentage must be at least zero and at most 100',
+      );
+    }
+    if (
+      signedLinePercent === 0 &&
+      endorsement.impactType !==
+        PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION
+    ) {
+      throw new BadRequestException(
+        'Endorsement participant signed line percentage must be greater than zero',
       );
     }
     if (sharePercent !== null && signedLinePercent > sharePercent) {
@@ -377,18 +477,23 @@ export class PlacementEndorsementClosingsService {
         'Endorsement participant signed line percentage cannot exceed offered share percentage',
       );
     }
-    await this.assertAcceptedCapacityWithinTarget(
-      tx,
-      user.tenantId,
-      endorsementId,
-      endorsement.targetPercent,
-      signedLinePercent,
-      participantId,
-    );
+    if (
+      endorsement.impactType !==
+      PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION
+    ) {
+      await this.assertAcceptedCapacityWithinTarget(
+        tx,
+        user.tenantId,
+        endorsementId,
+        endorsement.targetPercent,
+        signedLinePercent,
+        participantId,
+      );
+    }
 
     let closing = existingActive;
     if (!closing) {
-      const snapshotSource = this.buildSnapshotSource(endorsement);
+      const snapshotSource = await this.buildSnapshotSource(tx, endorsement);
       const snapshot = this.computeSnapshot(
         snapshotSource,
         participant,
@@ -473,7 +578,10 @@ export class PlacementEndorsementClosingsService {
         id: true,
         tenantId: true,
         placementId: true,
+        impactType: true,
         status: true,
+        effectiveDate: true,
+        createdAt: true,
         targetPercent: true,
         originalSnapshot: true,
         proposedSnapshot: true,
@@ -509,7 +617,10 @@ export class PlacementEndorsementClosingsService {
         id: true,
         tenantId: true,
         placementId: true,
+        impactType: true,
         status: true,
+        effectiveDate: true,
+        createdAt: true,
         targetPercent: true,
         originalSnapshot: true,
         proposedSnapshot: true,
@@ -670,68 +781,302 @@ export class PlacementEndorsementClosingsService {
     }
   }
 
-  private buildSnapshotSource(endorsement: EndorsementForClosing) {
+  private async buildSnapshotSource(
+    tx: Prisma.TransactionClient,
+    endorsement: EndorsementForClosing,
+  ): Promise<EndorsementSnapshotSource> {
     const proposed = this.asRecord(endorsement.proposedSnapshot);
     const original = this.asRecord(endorsement.originalSnapshot);
     const originalPlacement = this.asRecord(original.placement);
+    const proposedPlacement = this.asRecord(proposed.placement);
+    const basis = await this.buildPreEndorsementSnapshotBasis(
+      tx,
+      endorsement,
+      originalPlacement,
+      original,
+    );
 
     const premium = this.firstNumber(
       proposed.premium,
-      this.asRecord(proposed.placement).premium,
-      originalPlacement.premium,
+      proposedPlacement.premium,
+      basis.premium,
     );
     if (premium === null) {
       throw new BadRequestException(
         'Endorsement premium snapshot is required before creating an endorsement closing',
       );
     }
-    if (premium <= 0) {
+    if (
+      premium <= 0 &&
+      endorsement.impactType !==
+        PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION
+    ) {
       throw new BadRequestException(
         'Endorsement premium snapshot must be greater than zero before creating an endorsement closing',
       );
     }
 
+    const originalPremium = basis.premium;
+    const revisedPremium = this.firstOptionalNumber(
+      proposed.premium,
+      proposedPlacement.premium,
+      basis.premium,
+    );
+
     return {
+      impactType: endorsement.impactType,
       premium,
+      originalPremium,
+      revisedPremium,
+      originalSumInsured: basis.sumInsured,
+      revisedSumInsured: this.firstOptionalNumber(
+        proposed.sumInsured,
+        proposedPlacement.sumInsured,
+        basis.sumInsured,
+      ),
       sumInsured: this.firstOptionalNumber(
         proposed.sumInsured,
-        this.asRecord(proposed.placement).sumInsured,
-        originalPlacement.sumInsured,
+        proposedPlacement.sumInsured,
+        basis.sumInsured,
       ),
       commission: this.firstOptionalNumber(
         proposed.commission,
-        this.asRecord(proposed.placement).commission,
-        originalPlacement.commission,
+        proposedPlacement.commission,
+        basis.commission,
       ),
       brokeragePercent: this.firstOptionalNumber(
         proposed.brokeragePercent,
         proposed.preliminaryBrokerage,
-        this.asRecord(proposed.placement).brokeragePercent,
-        this.asRecord(proposed.placement).preliminaryBrokerage,
-        originalPlacement.preliminaryBrokerage,
+        proposedPlacement.brokeragePercent,
+        proposedPlacement.preliminaryBrokerage,
+        basis.brokeragePercent,
       ),
       currency: this.firstString(
         proposed.currency,
-        this.asRecord(proposed.placement).currency,
-        originalPlacement.currency,
+        proposedPlacement.currency,
+        basis.currency,
       ),
+      policyInceptionDate: this.parseDate(originalPlacement.inceptionDate),
+      policyExpiryDate: this.parseDate(originalPlacement.expiryDate),
+      endorsementEffectiveDate: endorsement.effectiveDate,
+      originalParticipants: basis.participants,
+      ...this.extractFlatReturnAdjustments(proposed, proposedPlacement),
     };
+  }
+
+  private async buildPreEndorsementSnapshotBasis(
+    tx: Prisma.TransactionClient,
+    endorsement: EndorsementForClosing,
+    originalPlacement: Record<string, unknown>,
+    originalSnapshot: Record<string, unknown>,
+  ): Promise<EndorsementSnapshotBasis> {
+    const basis: EndorsementSnapshotBasis = {
+      premium: this.firstOptionalNumber(originalPlacement.premium),
+      sumInsured: this.firstOptionalNumber(originalPlacement.sumInsured),
+      commission: this.firstOptionalNumber(originalPlacement.commission),
+      brokeragePercent: this.firstOptionalNumber(
+        originalPlacement.brokeragePercent,
+        originalPlacement.preliminaryBrokerage,
+      ),
+      currency: this.firstString(originalPlacement.currency),
+      participants: this.asRecordArray(originalSnapshot.participants),
+    };
+
+    const priorEndorsements = await tx.placementEndorsement.findMany({
+      where: {
+        tenantId: endorsement.tenantId,
+        placementId: endorsement.placementId,
+        id: { not: endorsement.id },
+        status: {
+          notIn: [
+            PlacementEndorsementStatus.DECLINED,
+            PlacementEndorsementStatus.VOID,
+          ],
+        },
+      },
+      select: {
+        id: true,
+        impactType: true,
+        status: true,
+        effectiveDate: true,
+        createdAt: true,
+        proposedSnapshot: true,
+        closings: {
+          where: { status: PlacementClosingStatus.CONFIRMED },
+          select: {
+            status: true,
+            signedLinePercent: true,
+            endorsementParticipant: {
+              select: {
+                originalParticipantId: true,
+                counterpartyId: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ effectiveDate: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    for (const prior of priorEndorsements) {
+      if (!this.isPriorToCurrentEndorsement(prior, endorsement)) continue;
+      if (!this.isFinanciallyAppliedPriorEndorsement(prior)) continue;
+      this.applyPriorProposedSnapshotToBasis(basis, prior.proposedSnapshot);
+      this.applyPriorClosingLinesToBasis(basis, prior.closings);
+    }
+
+    return basis;
+  }
+
+  private isPriorToCurrentEndorsement(
+    prior: { id: string; effectiveDate: Date; createdAt: Date },
+    current: EndorsementForClosing,
+  ): boolean {
+    const priorEffective = this.startOfUtcDay(prior.effectiveDate).getTime();
+    const currentEffective = this.startOfUtcDay(
+      current.effectiveDate,
+    ).getTime();
+    if (priorEffective !== currentEffective)
+      return priorEffective < currentEffective;
+    if (prior.createdAt.getTime() !== current.createdAt.getTime()) {
+      return prior.createdAt.getTime() < current.createdAt.getTime();
+    }
+    return prior.id < current.id;
+  }
+
+  private isFinanciallyAppliedPriorEndorsement(
+    endorsement: PriorEndorsementForSnapshotBasis,
+  ): boolean {
+    if (
+      endorsement.status === PlacementEndorsementStatus.DECLINED ||
+      endorsement.status === PlacementEndorsementStatus.VOID
+    ) {
+      return false;
+    }
+    if (
+      endorsement.impactType === PlacementEndorsementImpactType.TERMS_ONLY ||
+      endorsement.impactType === PlacementEndorsementImpactType.ADMINISTRATIVE
+    ) {
+      return endorsement.status === PlacementEndorsementStatus.CLOSED;
+    }
+    return endorsement.closings.length > 0;
+  }
+
+  private applyPriorProposedSnapshotToBasis(
+    basis: EndorsementSnapshotBasis,
+    proposedSnapshot: Prisma.JsonValue | null,
+  ): void {
+    const proposed = this.asRecord(proposedSnapshot);
+    const proposedPlacement = this.asRecord(proposed.placement);
+
+    basis.premium = this.firstOptionalNumber(
+      proposed.premium,
+      proposedPlacement.premium,
+      basis.premium,
+    );
+    basis.sumInsured = this.firstOptionalNumber(
+      proposed.sumInsured,
+      proposedPlacement.sumInsured,
+      basis.sumInsured,
+    );
+    basis.commission = this.firstOptionalNumber(
+      proposed.commission,
+      proposedPlacement.commission,
+      basis.commission,
+    );
+    basis.brokeragePercent = this.firstOptionalNumber(
+      proposed.brokeragePercent,
+      proposed.preliminaryBrokerage,
+      proposedPlacement.brokeragePercent,
+      proposedPlacement.preliminaryBrokerage,
+      basis.brokeragePercent,
+    );
+    basis.currency = this.firstString(
+      proposed.currency,
+      proposedPlacement.currency,
+      basis.currency,
+    );
+  }
+
+  private applyPriorClosingLinesToBasis(
+    basis: EndorsementSnapshotBasis,
+    closings: PriorEndorsementForSnapshotBasis['closings'],
+  ): void {
+    for (const closing of closings) {
+      const participant = closing.endorsementParticipant;
+      const revisedLinePercent = this.toNumber(closing.signedLinePercent);
+      const originalParticipantId = participant.originalParticipantId;
+      const counterpartyId = participant.counterpartyId;
+
+      const existingIndex = basis.participants.findIndex((item) => {
+        if (
+          originalParticipantId &&
+          typeof item.id === 'string' &&
+          item.id === originalParticipantId
+        ) {
+          return true;
+        }
+        return (
+          typeof item.counterpartyId === 'string' &&
+          item.counterpartyId === counterpartyId
+        );
+      });
+
+      const nextParticipant = {
+        ...(existingIndex >= 0 ? basis.participants[existingIndex] : {}),
+        id:
+          existingIndex >= 0
+            ? basis.participants[existingIndex].id
+            : (originalParticipantId ?? counterpartyId),
+        counterpartyId,
+        signedLinePercent: revisedLinePercent,
+        sharePercent: revisedLinePercent,
+      };
+
+      if (existingIndex >= 0) {
+        basis.participants[existingIndex] = nextParticipant;
+      } else {
+        basis.participants.push(nextParticipant);
+      }
+    }
   }
 
   private computeSnapshot(
     source: {
+      impactType: PlacementEndorsementImpactType;
       premium: number;
       sumInsured: number | null;
       commission: number | null;
       brokeragePercent: number | null;
       currency: string | null;
+      originalPremium?: number | null;
+      revisedPremium?: number | null;
+      originalSumInsured?: number | null;
+      revisedSumInsured?: number | null;
+      policyInceptionDate?: Date | null;
+      policyExpiryDate?: Date | null;
+      endorsementEffectiveDate?: Date;
+      flatNonRefundableDeductions?: number;
+      flatRefundableAmounts?: number;
     },
     participant: {
       sharePercent: Prisma.Decimal | null;
       signedLinePercent: Prisma.Decimal | null;
+      originalParticipantId?: string | null;
     },
     signedLinePercent: number,
   ) {
+    if (
+      source.impactType ===
+      PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION
+    ) {
+      return this.computeReturnPremiumSnapshot(
+        source as EndorsementSnapshotSource,
+        participant,
+        signedLinePercent,
+      );
+    }
+
     const sharePercent = this.toOptionalNumber(participant.sharePercent);
     const commissionPct = source.commission ?? 0;
     const brokeragePct = source.brokeragePercent ?? 0;
@@ -751,6 +1096,149 @@ export class PlacementEndorsementClosingsService {
       brokeragePercent: brokeragePct,
       brokerageAmount,
       netPremium,
+      financialImpactSnapshot: {
+        impactType: source.impactType,
+        calculationType: 'ADDITIONAL_PREMIUM',
+        signedPremiumImpact: premiumSnapshot,
+        signedCommissionImpact: commissionAmount,
+        signedBrokerageImpact: brokerageAmount,
+        signedNetPremiumImpact: netPremium,
+        effectivePremiumSnapshot: premiumSnapshot,
+        effectiveCommissionAmount: commissionAmount,
+        effectiveBrokerageAmount: brokerageAmount,
+        effectiveNetPremium: netPremium,
+      } satisfies Partial<EndorsementFinancialImpactSnapshot>,
+      currency: source.currency,
+    };
+  }
+
+  private computeReturnPremiumSnapshot(
+    source: EndorsementSnapshotSource,
+    participant: {
+      sharePercent: Prisma.Decimal | null;
+      signedLinePercent: Prisma.Decimal | null;
+      originalParticipantId?: string | null;
+    },
+    revisedLinePercent: number,
+  ) {
+    const sharePercent = this.toOptionalNumber(participant.sharePercent);
+    const commissionPct = source.commission ?? 0;
+    const brokeragePct = source.brokeragePercent ?? 0;
+    const originalLinePercent =
+      this.findOriginalParticipantLinePercent(source, participant) ??
+      sharePercent ??
+      revisedLinePercent;
+    const impactLinePercent = Math.max(
+      0,
+      this.roundNumber(originalLinePercent - revisedLinePercent, 4),
+    );
+    if (impactLinePercent <= 0 && source.revisedPremium !== 0) {
+      throw new BadRequestException(
+        'Decrease or cancellation endorsement requires a reduced signed line or cancellation impact',
+      );
+    }
+    if (source.originalPremium === null || source.revisedPremium === null) {
+      throw new BadRequestException(
+        'Original and revised premium snapshots are required for decrease or cancellation endorsement closings',
+      );
+    }
+
+    const dateBreakdown = this.calculatePolicyDayFractions(source);
+    const premiumReduction = Math.max(
+      0,
+      this.roundMoney(source.originalPremium - source.revisedPremium),
+    );
+    const refundableProRataAmount = this.roundMoney(
+      premiumReduction * dateBreakdown.unearnedFraction,
+    );
+    const grossReturnPremium = this.roundMoney(
+      refundableProRataAmount + source.flatRefundableAmounts,
+    );
+    const taxesAndLeviesAdjustment = 0;
+    const netReturnPremium = this.roundMoney(
+      grossReturnPremium -
+        source.flatNonRefundableDeductions +
+        taxesAndLeviesAdjustment,
+    );
+
+    const signedPremiumImpact = -this.roundMoney(
+      grossReturnPremium * (impactLinePercent / 100),
+    );
+    const signedCommissionImpact = this.roundMoney(
+      (commissionPct / 100) * signedPremiumImpact,
+    );
+    const signedBrokerageImpact = this.roundMoney(
+      (brokeragePct / 100) * signedPremiumImpact,
+    );
+    const signedFlatDeductionImpact = this.roundMoney(
+      source.flatNonRefundableDeductions * (impactLinePercent / 100),
+    );
+    const signedNetPremiumImpact = this.roundMoney(
+      signedPremiumImpact -
+        signedCommissionImpact -
+        signedBrokerageImpact +
+        signedFlatDeductionImpact,
+    );
+    const effectivePremiumSnapshot = this.roundMoney(
+      (revisedLinePercent / 100) * (source.revisedPremium ?? 0),
+    );
+    const effectiveCommissionAmount = this.roundMoney(
+      (commissionPct / 100) * effectivePremiumSnapshot,
+    );
+    const effectiveBrokerageAmount = this.roundMoney(
+      (brokeragePct / 100) * effectivePremiumSnapshot,
+    );
+    const effectiveNetPremium = this.roundMoney(
+      effectivePremiumSnapshot -
+        effectiveCommissionAmount -
+        effectiveBrokerageAmount,
+    );
+
+    const financialImpactSnapshot: EndorsementFinancialImpactSnapshot = {
+      impactType: source.impactType,
+      calculationType: 'RETURN_PREMIUM',
+      dateBoundaryConvention: 'START_INCLUSIVE_EXPIRY_EXCLUSIVE',
+      policyInceptionDate: source.policyInceptionDate?.toISOString() ?? null,
+      policyExpiryDate: source.policyExpiryDate?.toISOString() ?? null,
+      endorsementEffectiveDate: source.endorsementEffectiveDate.toISOString(),
+      totalPolicyDays: dateBreakdown.totalPolicyDays,
+      earnedDays: dateBreakdown.earnedDays,
+      unearnedDays: dateBreakdown.unearnedDays,
+      earnedFraction: dateBreakdown.earnedFraction,
+      unearnedFraction: dateBreakdown.unearnedFraction,
+      originalPremium: source.originalPremium,
+      revisedPremium: source.revisedPremium,
+      premiumReduction,
+      refundableProRataAmount,
+      flatNonRefundableDeductions: source.flatNonRefundableDeductions,
+      flatRefundableAmounts: source.flatRefundableAmounts,
+      grossReturnPremium,
+      taxesAndLeviesAdjustment,
+      netReturnPremium,
+      originalLinePercent,
+      revisedLinePercent,
+      impactLinePercent,
+      effectivePremiumSnapshot,
+      effectiveCommissionAmount,
+      effectiveBrokerageAmount,
+      effectiveNetPremium,
+      signedPremiumImpact,
+      signedCommissionImpact,
+      signedBrokerageImpact,
+      signedNetPremiumImpact,
+    };
+
+    return {
+      signedLinePercent: revisedLinePercent,
+      sharePercent,
+      sumInsuredSnapshot: source.revisedSumInsured ?? source.sumInsured,
+      premiumSnapshot: signedPremiumImpact,
+      commissionPercent: commissionPct,
+      commissionAmount: signedCommissionImpact,
+      brokeragePercent: brokeragePct,
+      brokerageAmount: signedBrokerageImpact,
+      netPremium: signedNetPremiumImpact,
+      financialImpactSnapshot,
       currency: source.currency,
     };
   }
@@ -759,6 +1247,175 @@ export class PlacementEndorsementClosingsService {
     return value && typeof value === 'object' && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
+  }
+
+  private asRecordArray(value: unknown): Array<Record<string, unknown>> {
+    return Array.isArray(value)
+      ? value
+          .map((item) => this.asRecord(item))
+          .filter((item) => Object.keys(item).length > 0)
+      : [];
+  }
+
+  private findOriginalParticipantLinePercent(
+    source: EndorsementSnapshotSource,
+    participant: { originalParticipantId?: string | null },
+  ): number | null {
+    if (!participant.originalParticipantId) return null;
+    const originalParticipant = source.originalParticipants.find(
+      (item) =>
+        typeof item.id === 'string' &&
+        item.id === participant.originalParticipantId,
+    );
+    if (!originalParticipant) return null;
+    return this.firstOptionalNumber(
+      originalParticipant.signedLinePercent,
+      originalParticipant.sharePercent,
+    );
+  }
+
+  private calculatePolicyDayFractions(source: EndorsementSnapshotSource) {
+    const inception = source.policyInceptionDate;
+    const expiry = source.policyExpiryDate;
+    const effective = source.endorsementEffectiveDate;
+    if (!inception || !expiry) {
+      throw new BadRequestException(
+        'Original policy inception and expiry dates are required for return premium calculation',
+      );
+    }
+
+    const totalPolicyDays = this.daysBetween(inception, expiry);
+    if (totalPolicyDays <= 0) {
+      throw new BadRequestException(
+        'Original policy expiry date must be after inception date for return premium calculation',
+      );
+    }
+
+    if (this.startOfUtcDay(effective) < this.startOfUtcDay(inception)) {
+      throw new BadRequestException(
+        'Endorsement effective date cannot be before original policy inception date',
+      );
+    }
+    if (this.startOfUtcDay(effective) > this.startOfUtcDay(expiry)) {
+      throw new BadRequestException(
+        'Endorsement effective date cannot be after original policy expiry date',
+      );
+    }
+
+    const earnedDays = Math.min(
+      totalPolicyDays,
+      Math.max(0, this.daysBetween(inception, effective)),
+    );
+    const unearnedDays = Math.min(
+      totalPolicyDays,
+      Math.max(0, this.daysBetween(effective, expiry)),
+    );
+
+    return {
+      totalPolicyDays,
+      earnedDays,
+      unearnedDays,
+      earnedFraction: this.roundNumber(earnedDays / totalPolicyDays, 8),
+      unearnedFraction: this.roundNumber(unearnedDays / totalPolicyDays, 8),
+    };
+  }
+
+  private daysBetween(start: Date, end: Date): number {
+    const msPerDay = 24 * 60 * 60 * 1000;
+    return Math.round(
+      (this.startOfUtcDay(end).getTime() -
+        this.startOfUtcDay(start).getTime()) /
+        msPerDay,
+    );
+  }
+
+  private startOfUtcDay(date: Date): Date {
+    return new Date(
+      Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
+  }
+
+  private parseDate(value: unknown): Date | null {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+    if (typeof value === 'string' || typeof value === 'number') {
+      const parsed = new Date(value);
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }
+    return null;
+  }
+
+  private extractFlatReturnAdjustments(
+    proposed: Record<string, unknown>,
+    proposedPlacement: Record<string, unknown>,
+  ): {
+    flatNonRefundableDeductions: number;
+    flatRefundableAmounts: number;
+  } {
+    const adjustmentCandidates: unknown[] = [
+      proposed.returnPremiumAdjustments,
+      proposed.financialAdjustments,
+      proposed.flatAdjustments,
+      proposedPlacement.returnPremiumAdjustments,
+      proposedPlacement.financialAdjustments,
+      proposedPlacement.flatAdjustments,
+    ].flatMap((value): unknown[] => (Array.isArray(value) ? value : []));
+
+    return adjustmentCandidates.reduce<{
+      flatNonRefundableDeductions: number;
+      flatRefundableAmounts: number;
+    }>(
+      (totals, item) => {
+        const adjustment = this.asRecord(item);
+        const amount = this.firstOptionalNumber(adjustment.amount);
+        if (amount === null || amount === 0) return totals;
+        const treatment = this.cleanString(
+          adjustment.treatment ??
+            adjustment.calculationTreatment ??
+            adjustment.calculationBasis ??
+            '',
+        ).toUpperCase();
+        const isFlat =
+          treatment.includes('FLAT') ||
+          treatment.includes('NON_PRO_RATA') ||
+          treatment.includes('NON-PRORATA');
+        if (!isFlat) return totals;
+
+        const direction = this.cleanString(
+          adjustment.direction ?? adjustment.returnTreatment ?? '',
+        ).toUpperCase();
+        const refundable = adjustment.refundable === true;
+        const nonRefundable = adjustment.refundable === false;
+
+        if (
+          nonRefundable ||
+          direction.includes('DEDUCTION') ||
+          direction.includes('NON_REFUNDABLE')
+        ) {
+          totals.flatNonRefundableDeductions = this.roundMoney(
+            totals.flatNonRefundableDeductions + Math.abs(amount),
+          );
+        } else if (refundable || direction.includes('REFUND')) {
+          totals.flatRefundableAmounts = this.roundMoney(
+            totals.flatRefundableAmounts + Math.abs(amount),
+          );
+        }
+        return totals;
+      },
+      { flatNonRefundableDeductions: 0, flatRefundableAmounts: 0 },
+    );
+  }
+
+  private roundMoney(value: number): number {
+    return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private cleanString(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+  }
+
+  private roundNumber(value: number, decimalPlaces: number): number {
+    const factor = 10 ** decimalPlaces;
+    return Math.round((value + Number.EPSILON) * factor) / factor;
   }
 
   private firstNumber(...values: unknown[]): number | null {

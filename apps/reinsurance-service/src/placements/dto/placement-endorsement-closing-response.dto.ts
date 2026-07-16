@@ -116,6 +116,14 @@ export class PlacementEndorsementClosingResponseDto {
   @ApiPropertyOptional({ type: String, nullable: true, example: '7425.00' })
   netPremium!: string | null;
 
+  @ApiPropertyOptional({
+    type: Object,
+    nullable: true,
+    description:
+      'Immutable backend calculation breakdown for signed endorsement financial impact. Present for newly generated endorsement closings.',
+  })
+  financialImpactSnapshot!: Record<string, unknown> | null;
+
   @ApiPropertyOptional({ type: String, nullable: true, example: 'USD' })
   currency!: string | null;
 
