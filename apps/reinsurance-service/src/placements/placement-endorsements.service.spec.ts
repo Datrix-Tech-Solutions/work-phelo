@@ -248,6 +248,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -277,6 +278,7 @@ describe('PlacementEndorsementsService', () => {
       impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
       status: PlacementEndorsementStatus.CLOSED,
       targetPercent: 10,
+      acceptedPercent: 10,
       placedPercent: 10,
       remainingPercent: 0,
       participants: { total: 2, accepted: 1, declined: 1 },
@@ -314,6 +316,38 @@ describe('PlacementEndorsementsService', () => {
     expect(result.isComplete).toBe(false);
   });
 
+  it('does not count accepted participants as placed before confirmed endorsement closings exist', async () => {
+    prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
+    prisma.placementEndorsement.findFirst.mockResolvedValue({
+      ...endorsement,
+      status: PlacementEndorsementStatus.MARKETING,
+      impactType: PlacementEndorsementImpactType.CAPACITY_INCREASE,
+      targetPercent: new Prisma.Decimal('10.0000'),
+      participants: [
+        {
+          id: 'endorsement-participant-1',
+          status: PlacementEndorsementParticipantStatus.ACCEPTED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
+        },
+      ],
+      closings: [],
+      notes: [],
+    });
+
+    const result = await service.getSummary(
+      'tenant-1',
+      'placement-1',
+      'endorsement-1',
+    );
+
+    expect(result.acceptedPercent).toBe(10);
+    expect(result.placedPercent).toBe(0);
+    expect(result.remainingPercent).toBe(10);
+    expect(result.pendingActions).toContain('CREATE_CLOSING');
+    expect(result.pendingActions).not.toContain('ADD_CAPACITY');
+    expect(result.isComplete).toBe(false);
+  });
+
   it('reports pending actions for unconfirmed closings and missing endorsement notes', async () => {
     prisma.placement.findFirst.mockResolvedValue({ id: 'placement-1' });
     prisma.placementEndorsement.findFirst.mockResolvedValue({
@@ -337,11 +371,13 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
         {
           id: 'endorsement-closing-2',
           endorsementParticipantId: 'endorsement-participant-2',
           status: PlacementClosingStatus.ISSUED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -360,7 +396,10 @@ describe('PlacementEndorsementsService', () => {
       'endorsement-1',
     );
 
-    expect(result.remainingPercent).toBe(0);
+    expect(result.acceptedPercent).toBe(20);
+    expect(result.placedPercent).toBe(10);
+    expect(result.remainingPercent).toBe(10);
+    expect(result.pendingActions).not.toContain('ADD_CAPACITY');
     expect(result.pendingActions).toEqual(
       expect.arrayContaining([
         'CONFIRM_CLOSING',
@@ -389,6 +428,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -435,6 +475,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -508,6 +549,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
@@ -536,6 +578,7 @@ describe('PlacementEndorsementsService', () => {
       accepted: 1,
       declined: 1,
     });
+    expect(result.acceptedPercent).toBe(10);
     expect(result.placedPercent).toBe(10);
     expect(result.remainingPercent).toBe(0);
     expect(result.pendingActions).toEqual([]);
@@ -560,6 +603,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.VOID,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [],
@@ -594,6 +638,7 @@ describe('PlacementEndorsementsService', () => {
           id: 'endorsement-closing-1',
           endorsementParticipantId: 'endorsement-participant-1',
           status: PlacementClosingStatus.CONFIRMED,
+          signedLinePercent: new Prisma.Decimal('10.0000'),
         },
       ],
       notes: [
