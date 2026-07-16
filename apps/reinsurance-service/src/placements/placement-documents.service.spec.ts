@@ -692,6 +692,85 @@ describe('PlacementDocumentsService', () => {
     });
   });
 
+  it('reuses an active note document for the same backend note', async () => {
+    prisma.placementNote.findFirst.mockResolvedValue({
+      id: 'note-1',
+      placementId: 'placement-1',
+      closingId: null,
+      participantId: null,
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      noteNumber: 'ECN-001',
+      type: PlacementNoteType.ENDORSEMENT_CREDIT_NOTE,
+      direction: PlacementNoteDirection.BROKER_TO_REINSURER,
+      status: PlacementNoteStatus.ISSUED,
+      currency: 'USD',
+      grossAmount: new Prisma.Decimal('2500.00'),
+      commissionAmount: new Prisma.Decimal('250.00'),
+      brokerageAmount: new Prisma.Decimal('125.00'),
+      nicLevyAmount: new Prisma.Decimal('0'),
+      withholdingTaxAmount: new Prisma.Decimal('0'),
+      netAmount: new Prisma.Decimal('2125.00'),
+      noteDate: new Date('2026-06-12T00:00:00.000Z'),
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+      },
+      counterparty: {
+        id: 'reinsurer-1',
+        name: 'Avenue Re',
+        registrationNumber: 'RE-001',
+      },
+      closing: null,
+      participant: null,
+      endorsement: {
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        type: 'ADDITION',
+        impactType: 'CAPACITY_INCREASE',
+        effectiveDate: new Date('2026-06-01T00:00:00.000Z'),
+      },
+      endorsementClosing: {
+        id: 'endorsement-closing-1',
+        closingNumber: 'END-CLO-001',
+      },
+      endorsementParticipant: {
+        id: 'endorsement-participant-1',
+        counterpartyId: 'reinsurer-1',
+      },
+    });
+    const existingDocument = {
+      ...document,
+      id: 'document-existing',
+      noteId: 'note-1',
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      type: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+    };
+    prisma.placementDocument.findFirst.mockResolvedValue(existingDocument);
+
+    const result = await service.generateNoteDocument(
+      user,
+      'placement-1',
+      'note-1',
+    );
+
+    expect(result).toBe(existingDocument);
+    const findFirstArgs = firstCallArg<Prisma.PlacementDocumentFindFirstArgs>(
+      prisma.placementDocument.findFirst,
+    );
+    expect(findFirstArgs.where).toMatchObject({
+      tenantId: 'tenant-1',
+      placementId: 'placement-1',
+      type: PlacementDocumentType.ENDORSEMENT_CREDIT_NOTE,
+      status: { not: PlacementDocumentStatus.VOID },
+      noteId: 'note-1',
+    });
+    expect(prisma.placementDocument.create).not.toHaveBeenCalled();
+  });
+
   it('generates endorsement slip and endorsement closing slip documents', async () => {
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',

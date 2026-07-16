@@ -8,6 +8,7 @@ import { RequestUser } from '@work-phelo/types';
 import {
   CounterpartyType,
   PlacementClosingStatus,
+  PlacementEndorsementImpactType,
   PlacementNoteDirection,
   PlacementNoteStatus,
   PlacementNoteType,
@@ -262,7 +263,19 @@ export class PlacementNotesService {
     endorsementId: string,
   ): Promise<PlacementNoteRecord> {
     const placement = await this.findPlacement(user.tenantId, placementId);
-    await this.assertEndorsement(user.tenantId, placementId, endorsementId);
+    const endorsement = await this.assertEndorsement(
+      user.tenantId,
+      placementId,
+      endorsementId,
+    );
+    if (
+      endorsement.impactType ===
+      PlacementEndorsementImpactType.DECREASE_OR_CANCELLATION
+    ) {
+      throw new BadRequestException(
+        'Endorsement debit notes are not required for decrease or cancellation endorsements',
+      );
+    }
 
     return this.prisma.$transaction(async (tx) => {
       await this.assertNoActiveEndorsementDebitNote(
@@ -297,10 +310,7 @@ export class PlacementNotesService {
         placementId,
         PlacementNoteType.ENDORSEMENT_DEBIT_NOTE,
       );
-      const snapshot = this.endorsementDebitSnapshot(
-        placement.currency,
-        closings,
-      );
+      const snapshot = this.endorsementDebitSnapshot(closings);
 
       return tx.placementNote.create({
         data: {
@@ -547,7 +557,7 @@ export class PlacementNotesService {
     tenantId: string,
     placementId: string,
     endorsementId: string,
-  ): Promise<void> {
+  ): Promise<{ id: string; impactType: PlacementEndorsementImpactType }> {
     const endorsement = await this.prisma.placementEndorsement.findFirst({
       where: {
         id: endorsementId,
@@ -555,10 +565,11 @@ export class PlacementNotesService {
         placementId,
         placement: { archivedAt: null },
       },
-      select: { id: true },
+      select: { id: true, impactType: true },
     });
     if (!endorsement)
       throw new NotFoundException('Placement endorsement not found');
+    return endorsement;
   }
 
   private async assertNoActiveDebitNote(
@@ -742,15 +753,21 @@ export class PlacementNotesService {
   }
 
   private endorsementDebitSnapshot(
-    placementCurrency: string | null,
     closings: EndorsementDebitClosingSnapshot[],
   ) {
-    const currency = placementCurrency ?? closings[0]?.currency;
-    if (!currency) {
+    const currencies = closings.map((closing) => closing.currency);
+    if (currencies.some((currency) => !currency)) {
       throw new BadRequestException(
         'Confirmed endorsement closing currency is required before creating a debit note',
       );
     }
+    const uniqueCurrencies = new Set(currencies);
+    if (uniqueCurrencies.size !== 1) {
+      throw new BadRequestException(
+        'Endorsement debit note requires confirmed endorsement closings in a single currency',
+      );
+    }
+    const [currency] = Array.from(uniqueCurrencies) as [string];
 
     const grossAmount = closings.reduce(
       (total, closing) => total + this.toNumber(closing.premiumSnapshot),
