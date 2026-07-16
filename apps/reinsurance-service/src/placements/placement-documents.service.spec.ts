@@ -775,9 +775,35 @@ describe('PlacementDocumentsService', () => {
     prisma.placementEndorsement.findFirst.mockResolvedValue({
       id: 'endorsement-1',
       endorsementNumber: 'END-001',
+      type: 'ADDITION',
+      impactType: 'CAPACITY_INCREASE',
+      status: 'CLOSED',
+      effectiveDate: new Date('2026-06-12T00:00:00.000Z'),
+      originalSnapshot: {
+        placement: {
+          title: 'Engineering Risk',
+          premium: 1000,
+          currency: 'GHS',
+        },
+      },
+      proposedSnapshot: {
+        placement: {
+          title: 'Engineering Risk',
+          premium: 1200,
+          currency: 'GHS',
+        },
+      },
       currency: null,
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+        currency: 'GHS',
+        cedant: { id: 'cedant-1', name: 'Acme Insurance' },
+      },
       participants: [],
       closings: [],
+      notes: [],
     });
     prisma.placementDocument.create
       .mockResolvedValueOnce({
@@ -829,6 +855,99 @@ describe('PlacementDocumentsService', () => {
       endorsementClosingId: 'endorsement-closing-1',
       type: PlacementDocumentType.CLOSING_SLIP,
       documentNumber: 'DOC-CS-001',
+    });
+  });
+
+  it('generates endorsement certificate documents from confirmed endorsement closing snapshots', async () => {
+    prisma.placementEndorsementClosing.findFirst.mockResolvedValue({
+      id: 'endorsement-closing-1',
+      endorsementId: 'endorsement-1',
+      endorsementParticipantId: 'endorsement-participant-1',
+      closingNumber: 'ENC-001',
+      status: 'CONFIRMED',
+      signedLinePercent: new Prisma.Decimal('10.0000'),
+      sharePercent: new Prisma.Decimal('10.0000'),
+      premiumSnapshot: new Prisma.Decimal('1200.00'),
+      commissionAmount: new Prisma.Decimal('120.00'),
+      brokerageAmount: new Prisma.Decimal('60.00'),
+      netPremium: new Prisma.Decimal('1020.00'),
+      currency: 'GHS',
+      placement: {
+        id: 'placement-1',
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+        currency: 'GHS',
+        cedant: { id: 'cedant-1', name: 'Acme Insurance' },
+      },
+      endorsement: {
+        id: 'endorsement-1',
+        endorsementNumber: 'END-001',
+        type: 'ADDITION',
+        impactType: 'CAPACITY_INCREASE',
+        status: 'CLOSED',
+        effectiveDate: new Date('2026-06-12T00:00:00.000Z'),
+        reason: 'Additional capacity',
+        originalSnapshot: {
+          placement: {
+            title: 'Engineering Risk',
+            premium: 1000,
+            currency: 'GHS',
+          },
+        },
+        proposedSnapshot: {
+          placement: {
+            title: 'Engineering Risk',
+            premium: 1200,
+            currency: 'GHS',
+          },
+        },
+      },
+      endorsementParticipant: {
+        id: 'endorsement-participant-1',
+        counterpartyId: 'reinsurer-1',
+        counterparty: { id: 'reinsurer-1', name: 'Avenue Re' },
+        originalParticipant: {
+          id: 'participant-1',
+          signedLinePercent: new Prisma.Decimal('5.0000'),
+        },
+      },
+      notes: [],
+    });
+    prisma.placementDocument.create.mockResolvedValue({
+      ...document,
+      type: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+      documentNumber: 'DOC-ECF-001',
+    });
+
+    await service.generateEndorsementCertificate(
+      user,
+      'placement-1',
+      'endorsement-1',
+      'endorsement-closing-1',
+    );
+
+    const createArgs = firstCallArg<Prisma.PlacementDocumentCreateArgs>(
+      prisma.placementDocument.create,
+    );
+    expect(createArgs.data).toMatchObject({
+      endorsementId: 'endorsement-1',
+      endorsementClosingId: 'endorsement-closing-1',
+      type: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+      documentNumber: 'DOC-ECF-001',
+      currency: 'GHS',
+    });
+    expect(jsonRecord(createArgs.data.renderPayload)).toMatchObject({
+      documentType: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+      endorsementCertificate: {
+        closingNumber: 'ENC-001',
+        endorsement: { endorsementNumber: 'END-001' },
+        endorsementParticipant: {
+          counterparty: { name: 'Avenue Re' },
+        },
+      },
+      branding: {
+        productName: 'Broker Ltd',
+      },
     });
   });
 
@@ -1304,7 +1423,7 @@ describe('PlacementDocumentsService', () => {
   it('rejects unsupported document types for PDF rendering', async () => {
     prisma.placementDocument.findFirst.mockResolvedValue({
       ...document,
-      type: PlacementDocumentType.ENDORSEMENT_SLIP,
+      type: PlacementDocumentType.CLAIM_NOTICE,
     });
 
     await expect(

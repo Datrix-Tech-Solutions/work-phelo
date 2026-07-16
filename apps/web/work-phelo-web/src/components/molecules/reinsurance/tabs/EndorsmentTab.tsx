@@ -11,6 +11,7 @@ import {
   Facultative,
   EffectivePlacementView,
   PlacementEndorsement,
+  PlacementDocument,
   PlacementNote,
   ENDORSEMENT_TYPE_LABELS,
   ENDORSEMENT_STATUS_LABELS,
@@ -18,11 +19,12 @@ import {
 } from '@/types/reinsurance';
 import {
   findActivePlacementNoteDocument,
-  useCedants,
   useEndorsementClosings,
   useEndorsementNotes,
   useGenerateEndorsementCreditNote,
   useGenerateEndorsementDebitNote,
+  useGenerateEndorsementCertificateDocument,
+  useGenerateEndorsementSlipDocument,
   useGeneratePlacementNoteDocument,
   useIssueEndorsementNote,
   usePlacementDocuments,
@@ -43,8 +45,6 @@ import { TableButton } from '@/components/atoms/TableButton';
 import { extractError } from '@/lib/extractError';
 import { openPdfBlob } from '@/lib/openPdfBlob';
 import { useToastStore } from '@/store/toast.store';
-import { EndorsementCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementCertificateModal';
-import { EndorsementReinsurerCertificateModal } from '@/components/organisms/reinsurance/documents/EndorsementReinsurerCertificateModal';
 import { AddEndorsementReinsurerPanel } from '@/components/organisms/reinsurance/panels/AddEndorsementReinsurerPanel';
 
 interface EndorsementTabProps {
@@ -309,7 +309,7 @@ function EndorsementCard({
   endorsement: PlacementEndorsement;
   placement: Facultative;
 }) {
-  const [cedantDocOpen, setCedantDocOpen] = useState(false);
+  const [isOpeningEndorsementSlip, setIsOpeningEndorsementSlip] = useState(false);
   const [editPanelOpen, setEditPanelOpen] = useState(false);
   const [addReinsurerOpen, setAddReinsurerOpen] = useState(false);
   const [participantsExpanded, setParticipantsExpanded] = useState(false);
@@ -324,15 +324,15 @@ function EndorsementCard({
   }, [participantsExpanded]);
   const [revisedShares, setRevisedShares] = useState<Record<string, string>>({});
   const [busyEPIds, setBusyEPIds] = useState<Set<string>>(new Set());
-  const [tableDocCounterpartyId, setTableDocCounterpartyId] = useState<string | null>(null);
+  const [openingCertificateClosingId, setOpeningCertificateClosingId] = useState<string | null>(
+    null,
+  );
   const [isOpeningDebitNote, setIsOpeningDebitNote] = useState(false);
   const [openingCreditNoteId, setOpeningCreditNoteId] = useState<string | null>(null);
   const debitNoteInFlightRef = useRef(false);
   const creditNoteInFlightRef = useRef<Set<string>>(new Set());
 
   const { data: reinsurers = [] } = useReinsurers();
-  const { data: cedants = [] } = useCedants();
-  const fullCedant = cedants.find((c) => c.id === placement.cedant.id);
   const {
     mutate: updateStatus,
     mutateAsync: updateStatusAsync,
@@ -374,6 +374,14 @@ function EndorsementCard({
     endorsement.id,
   );
   const generateNoteDocument = useGeneratePlacementNoteDocument(placement.id);
+  const generateEndorsementSlipDocument = useGenerateEndorsementSlipDocument(
+    placement.id,
+    endorsement.id,
+  );
+  const generateEndorsementCertificateDocument = useGenerateEndorsementCertificateDocument(
+    placement.id,
+    endorsement.id,
+  );
   const renderDocumentPdf = useRenderPlacementDocumentPdf(placement.id);
   const issueEndorsementNote = useIssueEndorsementNote(placement.id, endorsement.id);
   const voidEndorsementNote = useVoidEndorsementNote(placement.id, endorsement.id);
@@ -556,6 +564,16 @@ function EndorsementCard({
       isNewReinsurer: true,
     }));
   const endorsementRows = [...snapshotRows, ...newReinsurerRows];
+  const getConfirmedClosingForRow = (row: EndorsementParticipantRow) => {
+    const participant = endorsementParticipants.find(
+      (item) => item.counterpartyId === row.counterpartyId,
+    );
+    if (!participant) return undefined;
+    return endorsementClosings.find(
+      (closing) =>
+        closing.endorsementParticipantId === participant.id && closing.status === 'CONFIRMED',
+    );
+  };
 
   const handleAcceptEndorsement = async (row: EndorsementParticipantRow) => {
     setBusyEPIds((prev) => new Set([...prev, row.counterpartyId]));
@@ -720,9 +738,14 @@ function EndorsementCard({
             <div className="flex items-center gap-2">
               <TableButton
                 variant="blue"
-                onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
+                isLoading={openingCertificateClosingId === getConfirmedClosingForRow(row)?.id}
+                disabled={!getConfirmedClosingForRow(row)}
+                onClick={() => {
+                  const closing = getConfirmedClosingForRow(row);
+                  if (closing) void handleViewEndorsementCertificate(closing.id);
+                }}
               >
-                Preview Only
+                View Certificate
               </TableButton>
               <Badge label="Closed" variant="success" />
             </div>
@@ -741,9 +764,14 @@ function EndorsementCard({
             <div className="flex items-center gap-2">
               <TableButton
                 variant="blue"
-                onClick={() => setTableDocCounterpartyId(row.counterpartyId)}
+                isLoading={openingCertificateClosingId === getConfirmedClosingForRow(row)?.id}
+                disabled={!getConfirmedClosingForRow(row)}
+                onClick={() => {
+                  const closing = getConfirmedClosingForRow(row);
+                  if (closing) void handleViewEndorsementCertificate(closing.id);
+                }}
               >
-                Preview Only
+                View Certificate
               </TableButton>
               {isValidated ? (
                 <Badge label="Validated" variant="success" />
@@ -767,11 +795,6 @@ function EndorsementCard({
     },
   ];
 
-  const tableDocEP = endorsementParticipants.find(
-    (p) => p.counterpartyId === tableDocCounterpartyId,
-  );
-  const tableDocReinsurer = reinsurers.find((r) => r.id === tableDocCounterpartyId);
-  const tableDocRow = endorsementRows.find((r) => r.counterpartyId === tableDocCounterpartyId);
   const confirmedEndorsementClosings = endorsementClosings.filter(
     (closing) => closing.status === 'CONFIRMED',
   );
@@ -854,6 +877,22 @@ function EndorsementCard({
     return latest.data ?? [];
   };
 
+  const findActiveDocument = (
+    type: PlacementDocument['type'],
+    matcher: (document: PlacementDocument) => boolean,
+    source = documents,
+  ) =>
+    source
+      .filter(
+        (document) => document.type === type && document.status !== 'VOID' && matcher(document),
+      )
+      .sort((a, b) => b.version - a.version || b.createdAt.localeCompare(a.createdAt))[0];
+
+  const openOfficialDocumentPdf = async (document: PlacementDocument) => {
+    const pdf = await renderDocumentPdf.mutateAsync(document.id);
+    openPdfBlob(pdf, `${document.documentNumber}.pdf`);
+  };
+
   const ensureNoteDocument = async (note: PlacementNote) => {
     let document = findActivePlacementNoteDocument(documents, note);
     if (!document) {
@@ -872,8 +911,87 @@ function EndorsementCard({
 
   const openOfficialNotePdf = async (note: PlacementNote) => {
     const document = await ensureNoteDocument(note);
-    const pdf = await renderDocumentPdf.mutateAsync(document.id);
-    openPdfBlob(pdf, `${document.documentNumber}.pdf`);
+    await openOfficialDocumentPdf(document);
+  };
+
+  const handleViewEndorsementSlip = async () => {
+    setIsOpeningEndorsementSlip(true);
+    try {
+      let document = findActiveDocument(
+        'ENDORSEMENT_SLIP',
+        (item) => item.endorsementId === endorsement.id,
+      );
+      if (!document) {
+        document = findActiveDocument(
+          'ENDORSEMENT_SLIP',
+          (item) => item.endorsementId === endorsement.id,
+          await getLatestPlacementDocuments(),
+        );
+      }
+      if (!document) {
+        try {
+          document = await generateEndorsementSlipDocument.mutateAsync();
+        } catch (error) {
+          document = findActiveDocument(
+            'ENDORSEMENT_SLIP',
+            (item) => item.endorsementId === endorsement.id,
+            await getLatestPlacementDocuments(),
+          );
+          if (!document) throw error;
+        }
+      }
+      await openOfficialDocumentPdf(document);
+      useToastStore
+        .getState()
+        .addToast({ message: 'Official endorsement slip PDF opened', type: 'success' });
+    } catch (error) {
+      useToastStore.getState().addToast({
+        message: extractError(error, 'Failed to open endorsement slip PDF'),
+        type: 'error',
+      });
+    } finally {
+      setIsOpeningEndorsementSlip(false);
+    }
+  };
+
+  const handleViewEndorsementCertificate = async (closingId: string) => {
+    setOpeningCertificateClosingId(closingId);
+    try {
+      let document = findActiveDocument(
+        'ENDORSEMENT_CERTIFICATE',
+        (item) => item.endorsementClosingId === closingId,
+      );
+      if (!document) {
+        document = findActiveDocument(
+          'ENDORSEMENT_CERTIFICATE',
+          (item) => item.endorsementClosingId === closingId,
+          await getLatestPlacementDocuments(),
+        );
+      }
+      if (!document) {
+        try {
+          document = await generateEndorsementCertificateDocument.mutateAsync(closingId);
+        } catch (error) {
+          document = findActiveDocument(
+            'ENDORSEMENT_CERTIFICATE',
+            (item) => item.endorsementClosingId === closingId,
+            await getLatestPlacementDocuments(),
+          );
+          if (!document) throw error;
+        }
+      }
+      await openOfficialDocumentPdf(document);
+      useToastStore
+        .getState()
+        .addToast({ message: 'Official endorsement certificate PDF opened', type: 'success' });
+    } catch (error) {
+      useToastStore.getState().addToast({
+        message: extractError(error, 'Failed to open endorsement certificate PDF'),
+        type: 'error',
+      });
+    } finally {
+      setOpeningCertificateClosingId(null);
+    }
   };
 
   const handleViewEndorsementDebitNote = async () => {
@@ -990,8 +1108,13 @@ function EndorsementCard({
               </>
             )}
             {endorsement.status !== 'DRAFT' && (
-              <Button size="sm" variant="secondary" onClick={() => setCedantDocOpen(true)}>
-                Preview Only Certificate
+              <Button
+                size="sm"
+                variant="secondary"
+                isLoading={isOpeningEndorsementSlip}
+                onClick={() => void handleViewEndorsementSlip()}
+              >
+                View Endorsement Slip
               </Button>
             )}
             {endorsement.status !== 'CLOSED' && (
@@ -1321,35 +1444,6 @@ function EndorsementCard({
           reinsurerOptions={availableReinsurerOptions}
           onClose={() => setAddReinsurerOpen(false)}
           onAdd={handleAddReinsurer}
-        />
-      )}
-
-      {/* Cedant document */}
-      <EndorsementCertificateModal
-        isOpen={cedantDocOpen}
-        placement={placement}
-        endorsement={endorsement}
-        cedant={fullCedant}
-        onPrint={() => setCedantDocOpen(false)}
-        onClose={() => setCedantDocOpen(false)}
-      />
-
-      {/* Reinsurer certificate preview, opened from the endorsement participant table. */}
-      {tableDocCounterpartyId && tableDocReinsurer && tableDocRow && (
-        <EndorsementReinsurerCertificateModal
-          isOpen={!!tableDocCounterpartyId}
-          placement={placement}
-          endorsement={endorsement}
-          counterpartyId={tableDocCounterpartyId}
-          reinsurerName={tableDocReinsurer.name}
-          sharePercent={parseFloat(
-            tableDocEP?.signedLinePercent ??
-              tableDocEP?.sharePercent ??
-              String(tableDocRow.originalShare),
-          )}
-          brokerageFee={tableDocRow.brokerageFee}
-          onPrint={() => setTableDocCounterpartyId(null)}
-          onClose={() => setTableDocCounterpartyId(null)}
         />
       )}
     </>

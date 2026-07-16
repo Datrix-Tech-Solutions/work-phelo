@@ -112,6 +112,125 @@ describe('PlacementDocumentTemplateRegistry', () => {
       documentFamily: 'Reinsurance Operations',
     },
   });
+  const endorsementSlipPayload = {
+    documentType: PlacementDocumentType.ENDORSEMENT_SLIP,
+    endorsement: {
+      endorsementNumber: 'END-001',
+      type: 'ADDITION',
+      impactType: 'CAPACITY_INCREASE',
+      status: 'CLOSED',
+      effectiveDate: '2026-06-12T00:00:00.000Z',
+      originalSnapshot: {
+        placement: {
+          title: 'Engineering Risk',
+          premium: '1000',
+          currency: 'GHS',
+          facultativeOffer: '40',
+        },
+      },
+      proposedSnapshot: {
+        placement: {
+          title: 'Engineering Risk',
+          premium: '1200',
+          currency: 'GHS',
+          facultativeOffer: '45',
+        },
+      },
+      placement: {
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+        currency: 'GHS',
+        cedant: { name: 'Acme Insurance' },
+      },
+      participants: [
+        {
+          status: 'CLOSED',
+          sharePercent: '10',
+          signedLinePercent: '10',
+          counterparty: { name: 'Avenue Re' },
+        },
+      ],
+      closings: [
+        {
+          closingNumber: 'ENC-001',
+          status: 'CONFIRMED',
+          signedLinePercent: '10',
+          premiumSnapshot: '1200',
+          netPremium: '1020',
+          currency: 'GHS',
+          endorsementParticipant: {
+            counterparty: { name: 'Avenue Re' },
+          },
+        },
+      ],
+      notes: [
+        {
+          noteNumber: 'ECN-001',
+          type: 'ENDORSEMENT_CREDIT_NOTE',
+          status: 'ISSUED',
+          netAmount: '1020',
+          currency: 'GHS',
+        },
+      ],
+    },
+    branding: {
+      productName: 'WorkPhelo',
+      authorizedSignatoryName: 'Ama Broker',
+      authorizedSignatoryTitle: 'Principal Officer',
+    },
+  };
+  const endorsementCertificatePayload = {
+    documentType: PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+    endorsementCertificate: {
+      closingNumber: 'ENC-001',
+      status: 'CONFIRMED',
+      signedLinePercent: '10',
+      sharePercent: '10',
+      premiumSnapshot: '1200',
+      commissionPercent: '10',
+      commissionAmount: '120',
+      brokeragePercent: '5',
+      brokerageAmount: '60',
+      netPremium: '1020',
+      currency: 'GHS',
+      placement: {
+        reference: 'FAC-001',
+        title: 'Engineering Risk',
+        currency: 'GHS',
+        cedant: { name: 'Acme Insurance' },
+      },
+      endorsement: {
+        endorsementNumber: 'END-001',
+        type: 'ADDITION',
+        impactType: 'CAPACITY_INCREASE',
+        effectiveDate: '2026-06-12T00:00:00.000Z',
+        originalSnapshot: {
+          placement: { premium: '1000', currency: 'GHS' },
+        },
+        proposedSnapshot: {
+          placement: { premium: '1200', currency: 'GHS' },
+        },
+      },
+      endorsementParticipant: {
+        counterparty: { name: 'Avenue Re' },
+        originalParticipant: { signedLinePercent: '5' },
+      },
+      notes: [
+        {
+          noteNumber: 'ECN-001',
+          type: 'ENDORSEMENT_CREDIT_NOTE',
+          status: 'ISSUED',
+          netAmount: '1020',
+          currency: 'GHS',
+        },
+      ],
+    },
+    branding: {
+      productName: 'WorkPhelo',
+      authorizedSignatoryName: 'Ama Broker',
+      authorizedSignatoryTitle: 'Principal Officer',
+    },
+  };
 
   it('resolves CLOSING_SLIP templates', () => {
     const html = registry.renderHtml(
@@ -210,14 +329,50 @@ describe('PlacementDocumentTemplateRegistry', () => {
     }
   });
 
+  it('resolves ENDORSEMENT_SLIP templates', () => {
+    const html = registry.renderHtml(
+      PlacementDocumentType.ENDORSEMENT_SLIP,
+      endorsementSlipPayload,
+      {
+        documentNumber: 'DOC-ES-001',
+        title: 'Endorsement Slip',
+        generatedAt: null,
+      },
+    );
+
+    expect(html).toContain('Endorsement Slip');
+    expect(html).toContain('END-001');
+    expect(html).toContain('Original and Revised Terms');
+    expect(html).toContain('Confirmed Endorsement Closings');
+    expect(html).toContain('Ama Broker');
+  });
+
+  it('resolves ENDORSEMENT_CERTIFICATE templates', () => {
+    const html = registry.renderHtml(
+      PlacementDocumentType.ENDORSEMENT_CERTIFICATE,
+      endorsementCertificatePayload,
+      {
+        documentNumber: 'DOC-ECF-001',
+        title: 'Endorsement Certificate',
+        generatedAt: null,
+      },
+    );
+
+    expect(html).toContain('Endorsement Certificate');
+    expect(html).toContain('ENC-001');
+    expect(html).toContain('Avenue Re');
+    expect(html).toContain('Confirmed Reinsurer Participation');
+    expect(html).toContain('Ama Broker');
+  });
+
   it('rejects unsupported document types', () => {
     expect(() =>
       registry.renderHtml(
-        PlacementDocumentType.ENDORSEMENT_SLIP,
-        { documentType: PlacementDocumentType.ENDORSEMENT_SLIP },
+        PlacementDocumentType.CLAIM_NOTICE,
+        { documentType: PlacementDocumentType.CLAIM_NOTICE },
         {
-          documentNumber: 'DOC-ES-001',
-          title: 'Endorsement Slip',
+          documentNumber: 'DOC-CLM-001',
+          title: 'Claim Notice',
           generatedAt: null,
         },
       ),

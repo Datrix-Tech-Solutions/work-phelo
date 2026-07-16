@@ -49,6 +49,8 @@ const PDF_TYPES = new Set<PlacementDocumentType>([
   'CLOSING_SLIP',
   'DEBIT_NOTE',
   'CREDIT_NOTE',
+  'ENDORSEMENT_SLIP',
+  'ENDORSEMENT_CERTIFICATE',
   'ENDORSEMENT_DEBIT_NOTE',
   'ENDORSEMENT_CREDIT_NOTE',
 ]);
@@ -59,6 +61,8 @@ const DOCUMENT_TYPE_FILTER_OPTIONS: { value: DocumentTypeFilter; label: string }
   { value: 'CLOSING_SLIP', label: 'Closing Slip' },
   { value: 'DEBIT_NOTE', label: 'Debit Note' },
   { value: 'CREDIT_NOTE', label: 'Credit Note' },
+  { value: 'ENDORSEMENT_SLIP', label: 'Endorsement Slip' },
+  { value: 'ENDORSEMENT_CERTIFICATE', label: 'Endorsement Certificate' },
   { value: 'ENDORSEMENT_DEBIT_NOTE', label: 'Endorsement Debit Note' },
   { value: 'ENDORSEMENT_CREDIT_NOTE', label: 'Endorsement Credit Note' },
 ];
@@ -121,6 +125,8 @@ function documentReference(document: PlacementDocument) {
   return (
     nestedString(payload, ['closing', 'closingNumber']) ??
     nestedString(payload, ['endorsementClosing', 'closingNumber']) ??
+    nestedString(payload, ['endorsementCertificate', 'closingNumber']) ??
+    nestedString(payload, ['endorsement', 'endorsementNumber']) ??
     nestedString(payload, ['note', 'noteNumber']) ??
     nestedString(payload, ['placement', 'reference']) ??
     '—'
@@ -137,6 +143,7 @@ function documentTypeLabel(document: PlacementDocument) {
     DEBIT_NOTE: 'Debit Note',
     CREDIT_NOTE: 'Credit Note',
     ENDORSEMENT_SLIP: 'Endorsement Slip',
+    ENDORSEMENT_CERTIFICATE: 'Endorsement Certificate',
     ENDORSEMENT_DEBIT_NOTE: 'Endorsement Debit Note',
     ENDORSEMENT_CREDIT_NOTE: 'Endorsement Credit Note',
     CLAIM_CASH_CALL: 'Claim Cash Call',
@@ -434,6 +441,8 @@ export function PlacementDocumentCentreTab({
     (document) =>
       (document.endorsementId || document.endorsementClosingId) &&
       (document.type === 'CLOSING_SLIP' ||
+        document.type === 'ENDORSEMENT_SLIP' ||
+        document.type === 'ENDORSEMENT_CERTIFICATE' ||
         document.type === 'ENDORSEMENT_DEBIT_NOTE' ||
         document.type === 'ENDORSEMENT_CREDIT_NOTE'),
   );

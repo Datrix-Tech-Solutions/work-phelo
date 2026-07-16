@@ -758,6 +758,7 @@ Document types:
 - `DEBIT_NOTE`
 - `CREDIT_NOTE`
 - `ENDORSEMENT_SLIP`
+- `ENDORSEMENT_CERTIFICATE`
 - `ENDORSEMENT_DEBIT_NOTE`
 - `ENDORSEMENT_CREDIT_NOTE`
 - `CLAIM_CASH_CALL`
@@ -770,6 +771,7 @@ Numbering:
 - `DEBIT_NOTE`: `DOC-DN-001`
 - `CREDIT_NOTE`: `DOC-CN-001`
 - `ENDORSEMENT_SLIP`: `DOC-ES-001`
+- `ENDORSEMENT_CERTIFICATE`: `DOC-ECF-001`
 - `ENDORSEMENT_DEBIT_NOTE`: `DOC-EDN-001`
 - `ENDORSEMENT_CREDIT_NOTE`: `DOC-ECN-001`
 - `CLAIM_CASH_CALL`: `DOC-CCL-001`
@@ -791,8 +793,9 @@ Document rules:
 
 PDF rendering:
 
-- `CLOSING_SLIP` is the only supported PDF document type in this first
-  rendering foundation.
+- `OFFER_SLIP`, `CLOSING_SLIP`, `DEBIT_NOTE`, `CREDIT_NOTE`,
+  `ENDORSEMENT_SLIP`, `ENDORSEMENT_CERTIFICATE`,
+  `ENDORSEMENT_DEBIT_NOTE` and `ENDORSEMENT_CREDIT_NOTE` are supported.
 - Rendering uses HTML + Playwright Chromium via `playwright-core`.
 - Runtime containers must provide a Chromium binary. The service Dockerfile
   installs Alpine `chromium` and sets

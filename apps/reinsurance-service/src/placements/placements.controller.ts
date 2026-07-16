@@ -660,6 +660,42 @@ export class PlacementsController {
     );
   }
 
+  @Post(
+    ':id/endorsements/:endorsementId/closings/:closingId/documents/endorsement-certificate',
+  )
+  @ApiTags('Reinsurance - Documents')
+  @RequirePermissions(PlacementPermission.EDIT)
+  @ApiOperation({
+    summary: 'Generate endorsement certificate document registry entry',
+    description:
+      'Creates a GENERATED ENDORSEMENT_CERTIFICATE document row from the immutable confirmed PlacementEndorsementClosing snapshot.',
+  })
+  @ApiParam({ name: 'id', format: 'uuid', description: 'Placement ID.' })
+  @ApiParam({
+    name: 'endorsementId',
+    format: 'uuid',
+    description: 'Placement endorsement ID.',
+  })
+  @ApiParam({
+    name: 'closingId',
+    format: 'uuid',
+    description: 'Confirmed endorsement closing ID.',
+  })
+  @ApiCreatedResponse({ type: PlacementDocumentResponseDto })
+  generateEndorsementCertificateDocument(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('endorsementId', ParseUUIDPipe) endorsementId: string,
+    @Param('closingId', ParseUUIDPipe) closingId: string,
+    @Req() request: Request & { user: RequestUser },
+  ) {
+    return this.documentsService.generateEndorsementCertificate(
+      request.user,
+      id,
+      endorsementId,
+      closingId,
+    );
+  }
+
   @Post(':id/claims/:claimId/documents/claim-notice')
   @ApiTags('Reinsurance - Documents')
   @RequirePermissions(PlacementPermission.EDIT)

@@ -94,6 +94,47 @@ export function useGeneratePlacementNoteDocument(placementId: string) {
   });
 }
 
+export function useGenerateEndorsementSlipDocument(placementId: string, endorsementId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await api.post(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/documents/endorsement-slip`,
+      );
+      return res.data as PlacementDocument;
+    },
+    onSuccess: (document) => {
+      queryClient.setQueryData<PlacementDocument[]>(
+        placementDocumentsKey(placementId),
+        (current = []) => [document, ...current.filter((item) => item.id !== document.id)],
+      );
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
+export function useGenerateEndorsementCertificateDocument(
+  placementId: string,
+  endorsementId: string,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (closingId: string) => {
+      const res = await api.post(
+        `${BASE}/${placementId}/endorsements/${endorsementId}/closings/${closingId}/documents/endorsement-certificate`,
+      );
+      return res.data as PlacementDocument;
+    },
+    onSuccess: (document) => {
+      queryClient.setQueryData<PlacementDocument[]>(
+        placementDocumentsKey(placementId),
+        (current = []) => [document, ...current.filter((item) => item.id !== document.id)],
+      );
+      queryClient.invalidateQueries({ queryKey: placementDocumentsKey(placementId) });
+    },
+  });
+}
+
 export function useRenderPlacementDocumentPdf(placementId: string) {
   return useMutation({
     mutationFn: async (documentId: string) => {
